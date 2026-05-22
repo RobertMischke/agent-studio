@@ -18,12 +18,20 @@ namespace OrchestratorApi.Services.Jobs;
 public class JobStateMachine
 {
     private readonly JobScannerService _scanner;
+    private readonly LaneMutexRegistry _laneMutex;
     private readonly ILogger<JobStateMachine> _logger;
 
-    public JobStateMachine(JobScannerService scanner, ILogger<JobStateMachine> logger)
+    public JobStateMachine(
+        JobScannerService scanner,
+        ILogger<JobStateMachine> logger,
+        LaneMutexRegistry? laneMutex = null)
     {
         _scanner = scanner;
         _logger = logger;
+        // F21: tolerate a missing registry so existing tests that
+        // construct JobStateMachine with the original two-arg signature
+        // keep compiling. Production wiring always passes the singleton.
+        _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
     }
 
     public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null)
@@ -35,8 +43,19 @@ public class JobStateMachine
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
         if (info.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: info.FolderPath);
 
-        var jobFolderName = Path.GetFileName(info.FolderPath);
-        var targetDir = Path.Combine(info.WatchPath, targetState, jobFolderName);
+        // F21: serialise all lane writers on this project's watch path so a
+        // concurrent CrashRecovery/StaleProgressArchiver/runner sweep cannot
+        // race the same source slug. Re-check existence inside the mutex
+        // because another writer may have moved the source out from under us
+        // while we waited.
+        using var _ = _laneMutex.Acquire(info.WatchPath);
+
+        var recheck = _scanner.FindJob(jobId, watchPath);
+        if (recheck == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+        if (recheck.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
+
+        var jobFolderName = Path.GetFileName(recheck.FolderPath);
+        var targetDir = Path.Combine(recheck.WatchPath, targetState, jobFolderName);
 
         // A pre-existing target folder almost always means a stale duplicate of the same
         // slug was left behind in another state — Directory.Move would throw a generic
@@ -55,7 +74,7 @@ public class JobStateMachine
 
         try
         {
-            Directory.Move(info.FolderPath, targetDir);
+            Directory.Move(recheck.FolderPath, targetDir);
             JobJsonFile.UpdateField(targetDir, "state", targetState, _logger);
             // Cycle 2: invalidate the cache synchronously so a POST-then-GET
             // sequence (e.g. drag a card, frontend re-polls) never sees the
@@ -303,6 +322,13 @@ public class JobStateMachine
         if (string.IsNullOrEmpty(watchPath))
             return new MoveJobOutcome(MoveJobStatus.Failure, "Source folder is not under a state directory");
 
+        // F21: serialise lane writers on this watch path. Re-check the
+        // source existence inside the mutex because the StaleProgressArchiver
+        // and the runner pickup loop can both target the same folder at boot.
+        using var _ = _laneMutex.Acquire(watchPath);
+        if (!Directory.Exists(sourceFolder))
+            return new MoveJobOutcome(MoveJobStatus.NotFound);
+
         var targetDir = Path.Combine(watchPath, targetState, newSlug);
         if (Directory.Exists(targetDir))
         {
@@ -346,9 +372,16 @@ public class JobStateMachine
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
 
+        // F21: serialise with concurrent lane writers (move, archive,
+        // dead-letter) so we cannot delete a folder a peer thread is in
+        // the middle of renaming.
+        using var _ = _laneMutex.Acquire(info.WatchPath);
+        var recheck = _scanner.FindJob(jobId, watchPath);
+        if (recheck == null) return false;
+
         try
         {
-            Directory.Delete(info.FolderPath, true);
+            Directory.Delete(recheck.FolderPath, true);
             _scanner.InvalidateCache();
             return true;
         }
@@ -369,16 +402,31 @@ public class JobStateMachine
         if (info == null) return false;
         if (info.WatchPath == targetWatchPath) return true;
 
-        var jobFolderName = Path.GetFileName(info.FolderPath);
-        var targetDir = Path.Combine(targetWatchPath, info.State, jobFolderName);
+        // F21: take both source and target lane mutexes. Lock order is
+        // ordinal-lowercased ascending so two simultaneous cross-project
+        // moves (A->B and B->A) cannot deadlock.
+        var (firstKey, secondKey) = string.CompareOrdinal(
+            info.WatchPath.ToLowerInvariant(),
+            targetWatchPath.ToLowerInvariant()) <= 0
+            ? (info.WatchPath, targetWatchPath)
+            : (targetWatchPath, info.WatchPath);
+        using var _outerLock = _laneMutex.Acquire(firstKey);
+        using var _innerLock = _laneMutex.Acquire(secondKey);
+
+        var recheck = _scanner.FindJob(jobId, watchPath);
+        if (recheck == null) return false;
+        if (recheck.WatchPath == targetWatchPath) return true;
+
+        var jobFolderName = Path.GetFileName(recheck.FolderPath);
+        var targetDir = Path.Combine(targetWatchPath, recheck.State, jobFolderName);
 
         if (Directory.Exists(targetDir)) return false;
 
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
-            CopyDirectory(info.FolderPath, targetDir);
-            Directory.Delete(info.FolderPath, true);
+            CopyDirectory(recheck.FolderPath, targetDir);
+            Directory.Delete(recheck.FolderPath, true);
             _scanner.InvalidateCache();
             return true;
         }

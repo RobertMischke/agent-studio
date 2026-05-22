@@ -111,6 +111,11 @@ builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
+// F21: per-project write mutex for the lane tree. Must be registered
+// before JobStateMachine / JobMutationService / TaskAccessService so
+// every lane-mutating service can take it as a dependency. See
+// docs/architecture-3-progress-lane-writers.md.
+builder.Services.AddSingleton<LaneMutexRegistry>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
@@ -316,6 +321,14 @@ app.Services.GetRequiredService<JobStateMachine>().EnsureStateFoldersAndMigrate(
 // crash-recovery author tag so a second crash mid-recovery is itself
 // recoverable on the next boot. Sync wait is intentional: we want the
 // runner to see the recovered state on its first scan.
+//
+// F21 boot order: CrashRecoveryService runs before StaleProgressArchiver
+// because crash-recovery may complete a half-finished transition
+// (3-progress -> 4-auto-review) that the archiver would otherwise mistake
+// for a stuck orphan. The two services also share the per-project
+// LaneMutexRegistry, so even an accidental reorder cannot produce a
+// concurrent rename against the same slug - the sequential ordering is
+// belt-and-braces.
 try
 {
     app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();

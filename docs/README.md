@@ -32,6 +32,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [agent-contract-pattern.md](agent-contract-pattern.md) | Contract-bounded agents (ADR-0032): three-zone pattern (Pre-Guard → Agent → Decider+Post-Guard), schemas, decider table, self-heal allow-list, worked example for pickup-failed. The agent classifies, the rule engine decides. |
 | [run-outcome-contract.md](run-outcome-contract.md) | Single post-run classification shared by lane routing, `status.md`, and frontend failure-toast surfacing. |
 | [loop-inventory.md](loop-inventory.md) | Registry of every place work can re-enter itself (retry, requeue, replay). Each entry carries kind, code anchor, budget constant, breaker test. CI-enforced via `LoopInventoryConsistencyTest`. |
+| [architecture-3-progress-lane-writers.md](architecture-3-progress-lane-writers.md) | Inventory of every service that mutates the `3-progress` lane, the boot sequence that orders them, and the `LaneMutexRegistry` (F21) that serialises them per-project. Required reading before adding a seventh writer. |
 | [protocol-style.md](protocol-style.md) | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | [commit-push-doctrine.md](commit-push-doctrine.md) | Who owns the git commit + push boundary (the platform, not the CLI). When a CLI is allowed to commit (almost never). |
 | [skills-architecture.md](skills-architecture.md) | Portable-skills doctrine: central library plus per-target lookup contract. |

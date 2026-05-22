@@ -33,6 +33,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     private readonly JobStateMachine _states;
     private readonly JobTransitionService _transitions;
     private readonly JobIndexCache _indexCache;
+    private readonly LaneMutexRegistry _laneMutex;
     private readonly ILogger<TaskAccessService> _logger;
 
     private long _snapshotVersion;
@@ -55,7 +56,8 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         JobStateMachine states,
         JobTransitionService transitions,
         JobIndexCache indexCache,
-        ILogger<TaskAccessService> logger)
+        ILogger<TaskAccessService> logger,
+        LaneMutexRegistry? laneMutex = null)
     {
         _scanner = scanner;
         _mutations = mutations;
@@ -63,6 +65,9 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         _transitions = transitions;
         _indexCache = indexCache;
         _logger = logger;
+        // F21: tolerate a missing registry so existing tests that
+        // build TaskAccessService directly keep compiling.
+        _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
 
         // Wire the transition event so lane moves performed via the
         // existing JobTransitionService (e.g. through the /api/jobs/{id}/move
@@ -645,6 +650,13 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = "watchPath, lane, slug are required" };
         if (!JobStates.All.Contains(lane))
             return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = $"Unknown lane '{lane}'" };
+
+        // F21: serialise with the lane-tree writer chain (JobStateMachine
+        // and friends). The post-move skeleton cleanup in ProjectRunner is
+        // the canonical caller; without the mutex, the runner could try to
+        // delete a folder that StaleProgressArchiver or a manual API move
+        // is in the middle of renaming.
+        using var _ = _laneMutex.Acquire(watchPath);
 
         var folder = Path.Combine(watchPath, lane, slug);
         if (!Directory.Exists(folder))
