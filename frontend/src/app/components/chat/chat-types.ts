@@ -126,4 +126,13 @@ export interface ChatEvent {
    * (Slice E click-through to the new bug task's detail panel).
    */
   actionLabel?: string;
+  /**
+   * F15: only meaningful for `kind === 'decision'`. Carries the
+   * orchestrator's decision subtype (`decision`, `reissue`, `heuristic`,
+   * `giveup`) so the inline card can render
+   * `"<icon> Orchestrator: <decisionType> - <summary>"` and pick a
+   * subtype-specific glyph. Source: `OrchestratorDecisionEvent.decisionType`
+   * in the project-conversation projection.
+   */
+  decisionType?: string;
 }

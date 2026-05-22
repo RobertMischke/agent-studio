@@ -21,53 +21,6 @@
           }
           @for (item of windowedItems(); track item.id) {
             @switch (item.kind) {
-              @case ('super-phase') {
-                <!-- Outer "session" divider: opens whenever there's a
-                     >=15 min idle gap between phases. Tooltip carries
-                     phase count, message count, duration, participants. -->
-                <div class="chat__super-divider"
-                     [appTooltip]="item.tooltip"
-                     [attr.data-testid]="'chat-super-divider-' + item.id"
-                     [attr.data-super-id]="item.id">
-                  <span class="chat__super-divider-line" aria-hidden="true"></span>
-                  <span class="chat__super-divider-label">
-                    <span class="chat__super-divider-name">Session {{ item.index }}</span>
-                    <span class="chat__super-divider-sep" aria-hidden="true">·</span>
-                    <span class="chat__super-divider-stats">
-                      {{ item.superPhase.phases.length }} phases · {{ item.superPhase.messageCount }} msgs
-                    </span>
-                    <span class="chat__super-divider-sep" aria-hidden="true">·</span>
-                    <time class="chat__super-divider-time">{{ formatTime(item.superPhase.startTs) }}</time>
-                  </span>
-                  <span class="chat__super-divider-line" aria-hidden="true"></span>
-                </div>
-              }
-              @case ('phase') {
-                <!-- Inline phase divider, one per user-anchored phase.
-                     Participants render as inline role badges; full meta
-                     lives in the tooltip and the verbose debug overlay. -->
-                <div class="chat__phase-divider"
-                     [appTooltip]="item.tooltip"
-                     [attr.data-testid]="'chat-phase-divider-' + item.id"
-                     [attr.data-phase-id]="item.id">
-                  <span class="chat__phase-divider-line" aria-hidden="true"></span>
-                  <span class="chat__phase-divider-label">
-                    <span class="chat__phase-divider-index">Phase {{ item.indexInSuper }}</span>
-                    @if (item.phase.participants.length > 0) {
-                      <span class="chat__phase-divider-roles">
-                        @for (role of item.phase.participants; track role.id) {
-                          @if (role.id !== 'user') {
-                            <app-role-badge [author]="role.id" />
-                          }
-                        }
-                      </span>
-                    }
-                    <span class="chat__phase-divider-stats">{{ item.phase.messageCount }} msg</span>
-                    <time class="chat__phase-divider-time">{{ formatTime(item.phase.startTs) }}</time>
-                  </span>
-                  <span class="chat__phase-divider-line" aria-hidden="true"></span>
-                </div>
-              }
               @case ('message') {
                 <article class="chat__msg"
                          [class.chat__msg--user]="item.message.role === 'user'"
@@ -134,9 +87,11 @@
                          [class.chat__event--session-recovered]="item.event.kind === 'session-recovered'"
                          [class.chat__event--memory-refreshed]="item.event.kind === 'memory-refreshed'"
                          [class.chat__event--tool]="item.event.kind === 'tool-call'"
+                         [class.chat__event--decision]="item.event.kind === 'decision'"
                          [class.chat__event--expanded]="item.expanded"
                          [attr.data-testid]="'chat-event-' + item.event.kind"
                          [attr.data-event-id]="item.event.id"
+                         [attr.data-decision-type]="item.event.kind === 'decision' ? (item.event.decisionType ?? null) : null"
                          [attr.data-expanded]="item.expanded ? 'true' : 'false'">
                   <button type="button"
                           class="chat__event-head"
@@ -144,8 +99,8 @@
                           [attr.aria-expanded]="item.expanded"
                           [disabled]="!item.detailHtml"
                           (click)="toggleEventExpanded(item.event.id)">
-                    <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event.kind) }}</span>
-                    <span class="chat__event-kind">{{ eventLabel(item.event.kind) }}</span>
+                    <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event) }}</span>
+                    <span class="chat__event-kind">{{ eventLabel(item.event) }}</span>
                     <span class="chat__event-summary">{{ item.event.summary }}</span>
                     <span class="chat__event-time">{{ formatTime(item.event.timestamp) }}</span>
                     @if (item.detailHtml) {

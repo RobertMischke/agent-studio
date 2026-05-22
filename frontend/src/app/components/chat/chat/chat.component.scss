@@ -62,87 +62,12 @@
   position: relative;
   color: var(--studio-fg, #e2e8f0);
 }
-// --------------------------------------------------------------------
-// Inline phase / super-phase dividers
-// Replaces the old master-strip phase-summary-list. Phases are now woven
-// into the chat stream as horizontal hairline dividers carrying minimal
-// inline metadata (index, participants, message count, time). Full
-// summary + participant names live in the native tooltip; deep meta is
-// in the verbose-debug overlay.
-// --------------------------------------------------------------------
-.chat__super-divider,
-.chat__phase-divider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0;
-  font-size: 11px;
-  color: var(--studio-fg-dim, #94a3b8);
-  user-select: none;
-}
-.chat__super-divider-line,
-.chat__phase-divider-line {
-  flex: 1 1 auto;
-  height: 1px;
-  background: var(--studio-border-strong, rgba(255, 255, 255, 0.12));
-}
-.chat__super-divider {
-  // Heavier — the session boundary should read like a chapter break.
-  margin: 14px 0 8px;
-  font-size: 12px;
-  color: var(--studio-fg, #cbd5e1);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.chat__super-divider-line {
-  background: var(--studio-accent, #d97757);
-  opacity: 0.45;
-}
-.chat__super-divider-label,
-.chat__phase-divider-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: var(--studio-bg-sidebar, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.08));
-  white-space: nowrap;
-}
-.chat__super-divider-label {
-  background: color-mix(in srgb, var(--studio-accent, #d97757) 12%, transparent);
-  border-color: color-mix(in srgb, var(--studio-accent, #d97757) 40%, transparent);
-}
-.chat__super-divider-name {
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--studio-accent, #d97757);
-  font-weight: 700;
-}
-.chat__super-divider-sep,
-.chat__phase-divider-time {
-  color: var(--studio-fg-muted, #64748b);
-}
-.chat__phase-divider-index {
-  font-weight: 600;
-  color: var(--studio-fg, #cbd5e1);
-}
-.chat__phase-divider-roles {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.chat__phase-divider-stats,
-.chat__super-divider-stats {
-  color: var(--studio-fg-dim, #94a3b8);
-  font-variant-numeric: tabular-nums;
-}
-.chat__phase-divider-time,
-.chat__super-divider-time {
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-}
+// F15: inline phase / super-phase dividers were removed. In the
+// orchestrator chat every "phase" is one Q-A pair, so the bracket was
+// visual noise. The grouping data still lives on the chat component's
+// `phases()` / `superPhases()` computed signals (used for the F7
+// stale-error cutoff and consumed by the verbose-debug overlay's
+// Phases tab); only the inline divider chrome is gone.
 
 // F7: dim error/warn bubbles that belong to a previous session
 // (super-phase). Keeps the historical context visible without making
@@ -341,14 +266,47 @@
   border-left-color: var(--studio-accent-3, #569cd6);
 }
 
+/* F15: decision events are subtle inline rows in the chat. They share
+   the compact tool-call shape (no rounded card frame, dim chrome) but
+   keep the orchestrator's accent on the left rail so the verdict
+   stands apart from raw tool calls. */
+.chat__event--decision {
+  border: 0;
+  border-left: 2px solid var(--studio-accent, #d97757);
+  background: transparent;
+  border-radius: 0;
+  font-size: 11.5px;
+  margin-left: 4px;
+}
+.chat__event--decision .chat__event-head {
+  padding: 2px 8px;
+  min-height: 22px;
+  grid-template-columns: 16px auto 1fr auto auto;
+  gap: 6px;
+}
+.chat__event--decision .chat__event-icon {
+  color: var(--studio-accent, #d97757);
+}
+.chat__event--decision .chat__event-kind {
+  color: var(--studio-accent, #d97757);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 10.5px;
+}
+.chat__event--decision .chat__event-summary {
+  color: var(--studio-fg, #e2e8f0);
+}
+
 /* Tool-call variant: a tool invocation should read as a side-note in
    the agent's stream, not as a peer message. Smaller, monospaced
-   target text, dimmer background, no rounded "card" feel. Expand
-   reveals the full args / result in the same shared event detail
-   block so the user can still drill in. */
+   target text, dimmer background, no rounded "card" feel. The left
+   accent uses `--studio-accent-3` (blue) so the side-note still reads
+   as distinct from neighbouring message bubbles once the phase /
+   super-phase brackets are gone (F15 sweep). Expand reveals the full
+   args / result in the same shared event detail block. */
 .chat__event--tool {
   border: 0;
-  border-left: 2px solid var(--studio-fg-muted, #64748b);
+  border-left: 2px solid var(--studio-accent-3, #569cd6);
   background: transparent;
   border-radius: 0;
   font-size: 11px;

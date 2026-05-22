@@ -475,6 +475,39 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
           + '- `ROADMAP.md`\n\n'
           + 'Working memory updated; the next agent reply will reflect\n'
           + 'the latest project state.'
+      },
+      // F15: decision-event seeds. Each `decisionType` picks a distinct
+      // glyph in the chat head row; covers the four orchestrator-side
+      // verdict kinds (decision, reissue, heuristic, giveup).
+      {
+        id: 'demo-decision-1',
+        kind: 'decision',
+        decisionType: 'decision',
+        timestamp: iso(180_000),
+        summary: 'accept-as-done after 1 reissue',
+      },
+      {
+        id: 'demo-decision-2',
+        kind: 'decision',
+        decisionType: 'reissue',
+        timestamp: iso(210_000),
+        summary: 'fast NoOp on UserContinue with follow-up; re-issuing once',
+      },
+      {
+        id: 'demo-decision-3',
+        kind: 'decision',
+        decisionType: 'heuristic',
+        timestamp: iso(240_000),
+        summary: 'no sentinel matched; falling back to heuristic verdict',
+        severity: 'warn',
+      },
+      {
+        id: 'demo-decision-4',
+        kind: 'decision',
+        decisionType: 'giveup',
+        timestamp: iso(270_000),
+        summary: 'second reissue produced no progress; asking user',
+        severity: 'warn',
       }
     ]);
   }

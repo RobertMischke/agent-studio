@@ -22,7 +22,6 @@ import { TooltipDirective } from '../../tooltip';
 import {
   ChatDraftAttachment,
   ChatEvent,
-  ChatEventKind,
   ChatMessage,
   ChatRole,
   ChatSubmitEvent,
@@ -68,35 +67,7 @@ interface RenderedEvent {
   staleError: boolean;
 }
 
-interface RenderedSuperPhaseDivider {
-  kind: 'super-phase';
-  id: string;
-  /** Anchored to the super-phase's first message timestamp. */
-  timestamp: string;
-  superPhase: SuperPhase;
-  /** 1-based index for the visible "Session N" label. */
-  index: number;
-  /** Tooltip pre-rendered once per pass. */
-  tooltip: string;
-}
-
-interface RenderedPhaseDivider {
-  kind: 'phase';
-  id: string;
-  /** Anchored to the phase's first message timestamp. */
-  timestamp: string;
-  phase: ChatPhase;
-  /** Phase index within its containing super-phase, 1-based. */
-  indexInSuper: number;
-  /** Tooltip pre-rendered once per pass. */
-  tooltip: string;
-}
-
-type RenderedItem =
-  | RenderedMessage
-  | RenderedEvent
-  | RenderedSuperPhaseDivider
-  | RenderedPhaseDivider;
+type RenderedItem = RenderedMessage | RenderedEvent;
 
 /**
  * Source-line threshold above which non-user turns auto-collapse with a
@@ -295,73 +266,14 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
       expanded: expandedEvents.has(event.id),
       staleError: isStaleError(event.timestamp, event.severity === 'error' || event.severity === 'warn'),
     }));
-    const merged = mergeByTimestamp(messageItems, eventItems);
-
-    // Phases / super-phases are anchored by the FIRST message id of each
-    // group. We walk the merged stream once and insert dividers right
-    // before the matching message. This keeps the rendered() array in
-    // strict chronological order while letting the same merge already
-    // resolve all message-vs-event interleavings. `superPhases` was
-    // already computed above for the F7 stale-error cutoff; reuse it.
-    const phases = this.phases();
-    if (phases.length === 0) return merged;
-
-    const firstMsgIdToPhase = new Map<string, ChatPhase>();
-    for (const phase of phases) {
-      const first = phase.messageIds[0];
-      if (first) firstMsgIdToPhase.set(first, phase);
-    }
-    const phaseIdToSuperIndex = new Map<string, { sup: SuperPhase; supIndex: number; phaseIndexInSup: number }>();
-    superPhases.forEach((sup, sIdx) => {
-      sup.phases.forEach((p, pIdx) => {
-        phaseIdToSuperIndex.set(p.id, { sup, supIndex: sIdx + 1, phaseIndexInSup: pIdx + 1 });
-      });
-    });
-
-    const out: RenderedItem[] = [];
-    for (const item of merged) {
-      if (item.kind === 'message') {
-        const phase = firstMsgIdToPhase.get(item.id);
-        if (phase) {
-          const meta = phaseIdToSuperIndex.get(phase.id);
-          if (meta && meta.phaseIndexInSup === 1) {
-            // First phase in a super-phase → emit the super-phase divider
-            // immediately before the phase divider.
-            out.push({
-              kind: 'super-phase',
-              id: meta.sup.id,
-              timestamp: meta.sup.startTs,
-              superPhase: meta.sup,
-              index: meta.supIndex,
-              tooltip: this.buildSuperPhaseTooltip(meta.sup, meta.supIndex),
-            });
-          }
-          out.push({
-            kind: 'phase',
-            id: phase.id,
-            timestamp: phase.startTs,
-            phase,
-            indexInSuper: meta?.phaseIndexInSup ?? 1,
-            tooltip: this.buildPhaseTooltip(phase, meta?.phaseIndexInSup ?? 1),
-          });
-        }
-      }
-      out.push(item);
-    }
-    return out;
+    // F15: phase / super-phase dividers no longer render inline in the
+    // chat stream — in the orchestrator chat every "phase" is a single
+    // Q-A pair, so the bracket is visual noise. The `phases()` and
+    // `superPhases()` computed signals stay alive: they still drive
+    // the F7 stale-error cutoff above, and the verbose-debug overlay's
+    // Phases tab computes its own grouping over the same shape.
+    return mergeByTimestamp(messageItems, eventItems);
   });
-
-  private buildPhaseTooltip(phase: ChatPhase, indexInSuper: number): string {
-    const names = phase.participants.map((r) => r.label).join(', ') || '—';
-    const range = `${formatTimeOfDay(phase.startTs)}–${formatTimeOfDay(phase.endTs)}`;
-    return `Phase ${indexInSuper} · ${range}\nParticipants: ${names}\n${phase.summary}`;
-  }
-
-  private buildSuperPhaseTooltip(sup: SuperPhase, index: number): string {
-    const names = sup.participants.map((r) => r.label).join(', ') || '—';
-    const range = `${formatTimeOfDay(sup.startTs)}–${formatTimeOfDay(sup.endTs)}`;
-    return `Session ${index} · ${range}\n${sup.summary}\nParticipants: ${names}`;
-  }
 
   /**
    * Rendered() slice the template actually loops over when virtualised
@@ -608,30 +520,40 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     this.expandedEventIds.set(next);
   }
 
-  eventIcon(kind: ChatEventKind): string {
-    switch (kind) {
+  eventIcon(event: ChatEvent): string {
+    // F15: decision events pick a subtype-specific glyph so the
+    // inline orchestrator card communicates the verdict at a glance
+    // without forcing the operator to expand the detail body.
+    if (event.kind === 'decision') return decisionIcon(event.decisionType);
+    switch (event.kind) {
       case 'tool-call':         return '🔧';
       case 'watchdog':          return '⏱';
       case 'rate-limit':        return '⏳';
-      case 'decision':          return '⚙';
       case 'update':            return '↻';
       case 'task':              return '🎯';
       case 'session-recovered': return '⟳';
       case 'memory-refreshed':  return '⊕';
     }
+    return '•';
   }
 
-  eventLabel(kind: ChatEventKind): string {
-    switch (kind) {
+  eventLabel(event: ChatEvent): string {
+    // F15: render decision events as "Orchestrator: <decisionType>" so
+    // the kind chip is self-describing in the merged chat stream.
+    if (event.kind === 'decision') {
+      const sub = (event.decisionType ?? '').trim();
+      return sub ? `Orchestrator: ${sub}` : 'Orchestrator';
+    }
+    switch (event.kind) {
       case 'tool-call':         return 'Tool call';
       case 'watchdog':          return 'Watchdog';
       case 'rate-limit':        return 'Rate limit';
-      case 'decision':          return 'Decision';
       case 'update':            return 'Update';
       case 'task':              return 'Task';
       case 'session-recovered': return 'Session recovered';
       case 'memory-refreshed':  return 'Memory refreshed';
     }
+    return '';
   }
 
   private scheduleScrollToBottom(): void {
@@ -674,14 +596,25 @@ function makeId(): string {
   return Math.random().toString(36).slice(2, 14);
 }
 
-function formatTimeOfDay(iso: string): string {
-  if (!iso) return '';
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return iso;
+/**
+ * Decision-event glyph dispatcher. The orchestrator currently emits four
+ * `decisionType` values (see `OrchestratorChatLog.cs`); each one gets a
+ * distinct one-character chrome so a glance at the chat stream tells the
+ * operator what happened without expanding the detail body:
+ *   `decision`  → ⚙  (a deliberate verdict)
+ *   `reissue`   → ↻  (re-run with stronger framing)
+ *   `heuristic` → ◌  (fallback, low confidence)
+ *   `giveup`    → ⊘  (terminal; ask the human)
+ * Unknown subtypes fall back to ⚙ so a new backend kind never renders
+ * as the empty string in the head row.
+ */
+function decisionIcon(decisionType: string | undefined): string {
+  switch ((decisionType ?? '').toLowerCase()) {
+    case 'reissue':   return '↻';
+    case 'heuristic': return '◌';
+    case 'giveup':    return '⊘';
+    case 'decision':  return '⚙';
+    default:          return '⚙';
   }
 }
 

@@ -3,19 +3,21 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Ad-hoc verification: orchestrator chat now renders phase + super-phase
- * dividers INLINE in the continuous stream (instead of the old master-
- * strip phase-summary-list above the chat body). Drives the page, opens
- * the orchestrator rail, asserts:
+ * F15 sweep: the orchestrator chat no longer renders inline phase /
+ * super-phase dividers. In the orchestrator chat every phase was a
+ * single Q-A pair, so the bracket was visual noise. The grouping data
+ * still lives on the chat component's `phases()` / `superPhases()`
+ * computed signals (used by the verbose-debug overlay's Phases tab);
+ * only the inline divider chrome is gone. This spec asserts:
  *   - the legacy <app-phase-summary-list> is gone from the orchestrator
  *     chat surface,
- *   - at least one phase divider is rendered inside the chat body when
- *     there is any conversation history,
- *   - the Phases tab in the verbose-debug overlay exists.
+ *   - NO `chat-phase-divider-*` / `chat-super-divider-*` testids render
+ *     inside the chat body (regardless of conversation length),
+ *   - the Phases tab in the verbose-debug overlay still works.
  * Captures screenshots as evidence.
  */
 
-test('orchestrator chat shows inline phase dividers + no master strip', async ({ page }) => {
+test('orchestrator chat renders no inline phase/super-phase dividers', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/');
   await expect(page.locator('[data-studio="root"]')).toBeVisible({ timeout: 15_000 });
@@ -36,10 +38,11 @@ test('orchestrator chat shows inline phase dividers + no master strip', async ({
 
   const outDir = join(process.cwd(), 'test-results', 'orch-phases-continuous');
   mkdirSync(outDir, { recursive: true });
-  await page.screenshot({ path: join(outDir, 'orch-with-inline-phases.png'), fullPage: false });
+  await page.screenshot({ path: join(outDir, 'orch-no-inline-phases.png'), fullPage: false });
 
-  // If the chat has any history, at least one phase divider should
-  // render inline. Empty conversation is also a valid state.
+  // F15: phase / super-phase dividers MUST NOT render inline in the
+  // orchestrator chat. Both counts must be zero regardless of
+  // conversation length.
   const phaseDividers = rail.locator('[data-testid^="chat-phase-divider-"]');
   const phaseCount = await phaseDividers.count();
   const superDividers = rail.locator('[data-testid^="chat-super-divider-"]');
@@ -48,8 +51,8 @@ test('orchestrator chat shows inline phase dividers + no master strip', async ({
     join(outDir, 'counts.json'),
     JSON.stringify({ phaseDividers: phaseCount, superDividers: superCount }, null, 2)
   );
-  // Sanity: super-phase count should never exceed phase count.
-  expect(superCount).toBeLessThanOrEqual(Math.max(1, phaseCount));
+  expect(phaseCount, 'no inline chat-phase-divider rows after F15').toBe(0);
+  expect(superCount, 'no inline chat-super-divider rows after F15').toBe(0);
 });
 
 test('verbose debug overlay has Phases tab populated from chat events', async ({ page }) => {
