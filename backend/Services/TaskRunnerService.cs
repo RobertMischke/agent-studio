@@ -249,7 +249,7 @@ public class TaskRunnerService : BackgroundService
         return new RunnerStatus { Projects = projects };
     }
 
-    public bool SetMode(string projectName, string mode)
+    public bool SetMode(string projectName, string mode, string? reason = null)
     {
         if (!_runners.TryGetValue(projectName, out var runner)) return false;
         var validModes = new[] { "manual", "auto-single", "auto-continuous", "paused" };
@@ -265,7 +265,7 @@ public class TaskRunnerService : BackgroundService
             try { _infraBreaker.OnOperatorResumeAuto(projectName); }
             catch (Exception ex) { _logger.LogWarning(ex, "CrossSlugInfraCircuitBreaker reset failed for {Project}", projectName); }
         }
-        runner.SetMode(mode);
+        runner.SetMode(mode, string.IsNullOrWhiteSpace(reason) ? "api: PUT /api/runner/{project}/mode" : reason);
         return true;
     }
 
@@ -685,14 +685,14 @@ public class TaskRunnerService : BackgroundService
     public bool StartRunner(string projectName)
     {
         if (!_runners.TryGetValue(projectName, out var runner)) return false;
-        runner.SetMode("auto-single");
+        runner.SetMode("auto-single", "api: POST /api/runner/{project}/start");
         return true;
     }
 
     public bool StopRunner(string projectName)
     {
         if (!_runners.TryGetValue(projectName, out var runner)) return false;
-        runner.SetMode("paused");
+        runner.SetMode("paused", "api: POST /api/runner/{project}/stop");
         return true;
     }
 }

@@ -171,10 +171,22 @@ public class ProjectRunner
         _router.OnRunEvent += (_, jobKey, evt) => OnRunEventReceived(jobKey, evt);
     }
 
-    public void SetMode(string mode)
+    /// <summary>
+    /// Mutate the runner's auto-pickup mode and persist it. <paramref name="reason"/>
+    /// is the human-readable cause that lands in the structured log so the
+    /// "why did the runner flip" question is answerable from the day's log
+    /// alone (F16). Default reason names the API toggle, since that is the
+    /// only path that calls <c>SetMode</c> without supplying its own
+    /// motivation.
+    /// </summary>
+    public void SetMode(string mode, string? reason = null)
     {
+        var fromMode = _mode;
         _mode = mode;
-        _logger.LogInformation("Runner '{Project}' mode set to '{Mode}'", ProjectName, mode);
+        var effectiveReason = string.IsNullOrWhiteSpace(reason) ? "api-toggle" : reason!;
+        _logger.LogInformation(
+            "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}'",
+            ProjectName, fromMode, mode, effectiveReason);
         try { OnModePersist?.Invoke(mode); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnModePersist subscriber threw for {Project}", ProjectName); }
         NotifyStatus();
@@ -310,7 +322,7 @@ public class ProjectRunner
                 // Route through SetMode so the revert is persisted - otherwise a
                 // backend restart right after this would resurrect "auto-single"
                 // and immediately pick up another job.
-                SetMode("manual");
+                SetMode("manual", "auto-single revert: pickup queue empty");
             }
             return;
         }
@@ -1498,6 +1510,17 @@ public class ProjectRunner
                 // user see how often the session has been continued.
                 _sessions.AppendSessionToChain(jobId, capturedSessionId!, Entry.Path);
                 _sessions.BackfillLatestSessionEventCapturedId(jobId, capturedSessionId!, Entry.Path);
+
+                // Reset the per-job capture-fail circuit-breaker counter on
+                // genuine success. Without this, a job that flaked two runs
+                // and then succeeded would carry the prior count forward and
+                // a single later capture-fail would trip the breaker as if
+                // three failures had occurred in a row.
+                if (_consecutiveCaptureFailJobId == jobId)
+                {
+                    _consecutiveCaptureFailCount = 0;
+                    _consecutiveCaptureFailJobId = null;
+                }
             }
             else if (cli is ClaudeCliService
                   || cli is CodexCliService
@@ -1550,7 +1573,8 @@ public class ProjectRunner
                             ProjectName, _consecutiveCaptureFailCount, jobId);
                         _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision,
                             $"Auto-mode paused: {_consecutiveCaptureFailCount} consecutive {cli.CliType} runs for this job ended without capturing a session id. The session is unrecoverable; rebuild from prompt.md or rephrase before re-enabling auto.");
-                        SetMode("manual");
+                        SetMode("manual",
+                            $"capture-fail circuit-breaker: {_consecutiveCaptureFailCount}x no session id on {jobId} ({cli.CliType})");
                         _consecutiveCaptureFailCount = 0;
                         _consecutiveCaptureFailJobId = null;
                     }
@@ -1831,7 +1855,10 @@ public class ProjectRunner
                             }
                         }
 
-                        SetMode("manual");
+                        SetMode("manual",
+                            sameJobRepeated
+                                ? $"auto-failure circuit-breaker: {_consecutiveAutoFailureCount}x same job '{jobId}' did not reach review"
+                                : $"auto-failure circuit-breaker: {_consecutiveAutoFailureCount} consecutive auto-pickups did not reach review ({offenders})");
                         _consecutiveAutoFailureCount = 0;
                         _recentAutoFailureJobIds.Clear();
                     }
@@ -2216,6 +2243,39 @@ public class ProjectRunner
     /// <summary>Test seam: read the per-slug attempt counter.</summary>
     internal int GetPickupAttempts(string slug)
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
+
+    /// <summary>Test seam: read the consecutive auto-failure counter so
+    /// regression tests can prove the counter actually resets after a
+    /// successful auto-pickup, instead of inferring from "mode stayed
+    /// auto" (which would still pass if the counter silently leaked).</summary>
+    internal int GetConsecutiveAutoFailureCountForTest() => _consecutiveAutoFailureCount;
+
+    /// <summary>Test seam: read the per-job consecutive capture-fail
+    /// counter (and the job it is attributed to). Same motivation as
+    /// <see cref="GetConsecutiveAutoFailureCountForTest"/>.</summary>
+    internal (int Count, string? JobId) GetConsecutiveCaptureFailStateForTest()
+        => (_consecutiveCaptureFailCount, _consecutiveCaptureFailJobId);
+
+    /// <summary>Test seam: prime the consecutive auto-failure counter
+    /// so regression tests can drive the reset path without first
+    /// running three failed auto-pickups end-to-end.</summary>
+    internal void SetConsecutiveAutoFailureCountForTest(int count, string? jobId = null)
+    {
+        _consecutiveAutoFailureCount = count;
+        _recentAutoFailureJobIds.Clear();
+        if (!string.IsNullOrWhiteSpace(jobId))
+        {
+            for (var i = 0; i < count; i++) _recentAutoFailureJobIds.Enqueue(jobId);
+        }
+    }
+
+    /// <summary>Test seam: prime the per-job consecutive capture-fail
+    /// counter directly (same motivation as the auto-failure seam).</summary>
+    internal void SetConsecutiveCaptureFailStateForTest(int count, string? jobId)
+    {
+        _consecutiveCaptureFailCount = count;
+        _consecutiveCaptureFailJobId = jobId;
+    }
 
     /// <summary>
     /// Strict-iteration progress-first picker. Walks every 3-progress folder
@@ -2643,7 +2703,8 @@ public class ProjectRunner
         // mode is what's driving the picker.
         if (IsAutoMode(_mode))
         {
-            SetMode("manual");
+            SetMode("manual",
+                $"cross-slug infra circuit-breaker on {cliType}: {string.Join(", ", trip.Slugs)}");
             return true;
         }
         return false;

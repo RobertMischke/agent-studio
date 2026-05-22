@@ -114,7 +114,7 @@ public sealed class SupervisorInterventionService
 
         try
         {
-            _taskRunner.SetMode(project, "paused");
+            _taskRunner.SetMode(project, "paused", $"supervisor pause: {reason} (source={source})");
         }
         catch (Exception ex)
         {
@@ -172,7 +172,7 @@ public sealed class SupervisorInterventionService
 
         try
         {
-            _taskRunner.SetMode(project, "auto-continuous");
+            _taskRunner.SetMode(project, "auto-continuous", $"supervisor resume: {reason} (source={source})");
         }
         catch (Exception ex)
         {
