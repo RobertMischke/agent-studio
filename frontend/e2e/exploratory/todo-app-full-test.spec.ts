@@ -17,7 +17,10 @@ import { join } from 'node:path';
  * the screenshots afterward.
  */
 
-const ARTIFACT_DIR = String.raw`c:\Projects\agent-taskboard-devspace\artifacts\test-runs\20260521-0923-todo-app`;
+// Override at run time via PROBE_ARTIFACT_DIR=... env var; otherwise
+// the spec writes into the current "latest" run dir.
+const ARTIFACT_DIR = process.env['PROBE_ARTIFACT_DIR']
+  ?? String.raw`c:\Projects\agent-taskboard-devspace\artifacts\test-runs\20260522-postfix-probe`;
 
 /**
  * Probes target the dedicated "Playwright Test" project (configured in
@@ -169,15 +172,18 @@ test('full lifecycle: create → steer → complete (runbook project)', async ({
       }
     }
 
-    // Look for the task in the review lane (3-review).
-    const reviewCards = page.locator('[data-testid="lane-group-3-active"] [data-testid^="job-card-"]');
+    // Look for our task across ALL human-review-state lanes via the
+    // F9 data-states mapping (lane-group-decide contains state
+    // 5-human-review where the auto-review sends jobs).
+    const reviewCards = page.locator(
+      '[data-states*="5-human-review"] [data-testid^="job-card-"]'
+    );
     const totalReview = await reviewCards.count();
     if (totalReview > 0) {
-      const titles = await reviewCards.allInnerTexts();
-      const ourCard = titles.findIndex((t) => t.includes('Playwright probe'));
-      if (ourCard >= 0) {
-        logEvent(`found our task in 3-active lane (index ${ourCard})`);
-        await reviewCards.nth(ourCard).click();
+      const ourCard = reviewCards.filter({ hasText: 'Playwright probe' }).first();
+      if (await ourCard.isVisible().catch(() => false)) {
+        logEvent('found our task in 5-human-review lane');
+        await ourCard.click();
         await page.waitForTimeout(1000);
         await snapshot(page, ++seq, 'opened detail in review');
 

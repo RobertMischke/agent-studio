@@ -150,7 +150,6 @@ export class JobCardComponent implements OnInit, OnDestroy {
         ghost: true,
         concern: false,
         unparseable: false,
-        concern: false,
         tooltip: `Unknown tag '${id}'; registry entry was removed`
       };
     });

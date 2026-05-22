@@ -6,6 +6,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   output,
   signal,
   untracked,
@@ -84,6 +85,14 @@ function cliColorFor(cli: string): string {
 export class StudioShellComponent {
   private readonly jobService = inject(JobService);
   readonly clientService = inject(ClientService);
+
+  /**
+   * Backend-known project names (from the WatchPaths config). The
+   * shell uses this so projects with zero working-set jobs still
+   * appear in the picker / explorer. Defaults to [] so legacy hosts
+   * that don't pass it keep their job-derived behaviour.
+   */
+  readonly knownProjectNames = input<readonly string[]>([]);
   private readonly featureFlags = inject(FeatureFlagsService);
   private readonly tabState = inject(StudioTabStateService);
   private readonly panelState = inject(StudioPanelStateService);
@@ -378,7 +387,15 @@ export class StudioShellComponent {
    *  completed runs and was inflating the count (e.g. "Agent Software
    *  Studio: 447" → working set ~67 + ~380 archived). Operator now
    *  sees the working-set count by default; the picker dropdown can
-   *  surface the full total separately when needed. */
+   *  surface the full total separately when needed.
+   *
+   *  D5 follow-up: also include projects that the backend knows about
+   *  but have zero working-set jobs (a fresh sandbox like
+   *  `Playwright Test` lives entirely in 7-archive or has nothing yet —
+   *  it must still render as a picker target for the probe to land
+   *  tasks). The set of "known projects" comes from
+   *  `JobService.getWatchPaths()` via the shell's `projectNames` input
+   *  the host passes in app.html. */
   readonly projectRows = computed<ProjectSidebarRow[]>(() => {
     const grouped = this.grouped();
     const projects = new Map<string, number>();
@@ -388,6 +405,12 @@ export class StudioShellComponent {
         const name = job.projectName ?? '';
         projects.set(name, (projects.get(name) ?? 0) + 1);
       }
+    }
+    // Ensure every backend-known project gets a row, even when its
+    // working-set count is zero. Without this the project disappears
+    // from the picker until it has at least one non-archive job.
+    for (const name of this.knownProjectNames()) {
+      if (!projects.has(name)) projects.set(name, 0);
     }
     // Light up the pill for whichever project the active tab is contextually
     // "in" — board, hub, task, and activity tabs all map to a project.
