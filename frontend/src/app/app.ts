@@ -1545,8 +1545,25 @@ export class App implements OnInit, OnDestroy {
   setTaskNavCollapsed(collapsed: boolean): void {
     this.uiPrefs.setTaskNavCollapsed(collapsed);
   }
+  /**
+   * F24: toggle the card-density preference. When the orchestrator
+   * side-sheet is open the `effectiveCompactCards` computed forces
+   * compact rendering regardless of the pref (see `effectiveCompactCards`
+   * above), which made the toggle look broken: clicking "Full" updated
+   * `compactCards()` but the cards stayed compact. Surface that
+   * divergence as an info toast so the operator knows the pref WAS
+   * saved and that closing the rail will reveal the change.
+   */
   toggleCompactCards(): void {
     this.uiPrefs.toggleCompactCards();
+    const pref = this.uiPrefs.compactCards();
+    const effective = this.effectiveCompactCards();
+    if (pref !== effective) {
+      this.notifications.info(
+        'Cards stay compact while the orchestrator rail is open. Close the rail to apply the Full preference.',
+        'Preference saved',
+      );
+    }
   }
   startResize(event: MouseEvent): void {
     this.uiPrefs.startResize(event);

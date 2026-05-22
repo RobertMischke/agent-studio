@@ -21,24 +21,69 @@ import { Injectable, signal } from '@angular/core';
  * directly call `sideSheetWidth.set` on every mousemove and persist
  * on mouseup; keeping that flow inside the service avoids leaking
  * "I am editing the side-sheet width right now" state into the shell.
+ *
+ * F24: a `storage` listener mirrors writes from sibling browser tabs
+ * back into the local signals so two tabs of the same app converge on
+ * a shared UI posture within a single event loop. localStorage is
+ * already the persistence channel; the `storage` event is the only
+ * way one tab finds out the other one wrote.
  */
+const STORAGE_KEY_TASK_NAV = 'taskNavCollapsed';
+const STORAGE_KEY_COMPACT_CARDS = 'compactCards';
+const STORAGE_KEY_SIDE_SHEET_WIDTH = 'sideSheetWidth';
+
 @Injectable({ providedIn: 'root' })
 export class UiPreferencesService {
-  readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
-  readonly compactCards = signal<boolean>(localStorage.getItem('compactCards') === '1');
-  readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
+  readonly taskNavCollapsed = signal<boolean>(localStorage.getItem(STORAGE_KEY_TASK_NAV) === '1');
+  readonly compactCards = signal<boolean>(localStorage.getItem(STORAGE_KEY_COMPACT_CARDS) === '1');
+  readonly sideSheetWidth = signal<number>(
+    parseInt(localStorage.getItem(STORAGE_KEY_SIDE_SHEET_WIDTH) ?? '280'),
+  );
 
   private resizing = false;
 
+  constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', this.onStorageEvent);
+    }
+  }
+
+  /**
+   * F24: cross-tab sync. The `storage` event only fires in OTHER tabs
+   * when localStorage changes - never in the tab that did the write -
+   * so we can mirror unconditionally without re-entry. We tolerate
+   * `null` newValue (key cleared) by falling back to the documented
+   * default; corrupt int parses fall back to the same default the
+   * constructor used.
+   */
+  private readonly onStorageEvent = (e: StorageEvent): void => {
+    if (e.storageArea !== null && e.storageArea !== localStorage) return;
+    switch (e.key) {
+      case STORAGE_KEY_TASK_NAV:
+        this.taskNavCollapsed.set(e.newValue === '1');
+        return;
+      case STORAGE_KEY_COMPACT_CARDS:
+        this.compactCards.set(e.newValue === '1');
+        return;
+      case STORAGE_KEY_SIDE_SHEET_WIDTH: {
+        const parsed = parseInt(e.newValue ?? '280');
+        this.sideSheetWidth.set(Number.isFinite(parsed) ? parsed : 280);
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
   setTaskNavCollapsed(collapsed: boolean): void {
     this.taskNavCollapsed.set(collapsed);
-    localStorage.setItem('taskNavCollapsed', collapsed ? '1' : '0');
+    localStorage.setItem(STORAGE_KEY_TASK_NAV, collapsed ? '1' : '0');
   }
 
   toggleCompactCards(): void {
     const next = !this.compactCards();
     this.compactCards.set(next);
-    localStorage.setItem('compactCards', next ? '1' : '0');
+    localStorage.setItem(STORAGE_KEY_COMPACT_CARDS, next ? '1' : '0');
   }
 
   /**
@@ -65,7 +110,7 @@ export class UiPreferencesService {
     const onMouseUp = () => {
       this.resizing = false;
       document.body.classList.remove('resizing');
-      localStorage.setItem('sideSheetWidth', this.sideSheetWidth().toString());
+      localStorage.setItem(STORAGE_KEY_SIDE_SHEET_WIDTH, this.sideSheetWidth().toString());
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
     };
