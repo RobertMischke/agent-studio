@@ -183,6 +183,13 @@
         }
       </div>
 
+      <!-- Generic projection slot for host-specific content rendered
+           directly above the composer (e.g. orchestrator side sheet's
+           subtle context indicator). The chat surface stays agent- and
+           model-agnostic; hosts use this slot for surface-specific
+           affordances that should sit immediately above the input. -->
+      <ng-content select="[chat-above-composer]"></ng-content>
+
       <form class="chat__composer"
             [class.chat__composer--drag]="isDragging()"
             (submit)="onSubmit($event)"

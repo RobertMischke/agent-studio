@@ -233,6 +233,47 @@
   border-radius: 8px;
   background: var(--studio-bg-hover);
 }
+/* F14: subtle context indicator rendered directly above the composer
+   via the chat surface's `[chat-above-composer]` projection slot. Tiny
+   11px muted text so the operator can read which (project · view/task)
+   the next send will carry without the indicator stealing attention
+   from the conversation. No pulse, no blink — content updates via
+   signal on picker change. */
+.sheet__context-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 4px;
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  min-width: 0;
+}
+.sheet__context-chip-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheet__context-chip-close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.sheet__context-chip-close:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  opacity: 1;
+}
+
 .sheet__draft-actions {
   display: flex;
   justify-content: flex-end;

@@ -13,7 +13,7 @@
        (mousedown)="startResize($event)"></div>
 }
 <app-sidesheet title="Orchestrator"
-               subtitle="Runbook · canonical session"
+               [subtitle]="subtitleText()"
                testid="orch-side-sheet"
                (closeRequest)="hide()">
   <div header-actions class="sheet__header-extras">
@@ -137,7 +137,26 @@
             [routingLabel]="composerRoutingLabel()"
             (submitMessage)="onSubmit($event)"
             (eventAction)="onChatEventAction($event)"
-            (toolbarAction)="onChatToolbarAction($event)" />
+            (toolbarAction)="onChatToolbarAction($event)">
+            <!-- F14: subtle one-line context indicator projected
+                 directly above the composer. Stays hidden when the
+                 operator has dismissed it for the current picker
+                 state, and re-appears on the next picker move. -->
+            @if (contextChipVisible()) {
+              <div chat-above-composer
+                   class="sheet__context-chip"
+                   data-testid="orch-side-sheet-context-chip">
+                <span class="sheet__context-chip-text"
+                      data-testid="orch-side-sheet-context-chip-text">{{ contextChipText() }}</span>
+                <button type="button"
+                        class="sheet__context-chip-close"
+                        (click)="dismissContextChip()"
+                        [appTooltip]="'Hide the context block for the next send'"
+                        aria-label="Hide context"
+                        data-testid="orch-side-sheet-context-chip-close">×</button>
+              </div>
+            }
+          </app-chat>
         }
 
         <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">

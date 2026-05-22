@@ -122,6 +122,17 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly errorMsg = signal<string | null>(null);
 
   /**
+   * F14 context-chip + send caching. The chip dedupes consecutive sends
+   * that would ship the same `navigationContext`: first send on a
+   * (project, task) pair carries the full block, identical subsequent
+   * sends carry `null`. Dismiss forces the next send to `null` even on
+   * a context change; switching project or task re-arms the chip.
+   */
+  readonly contextDismissed = signal(false);
+  private readonly lastSentContextSignature = signal<string | null>(null);
+  private lastSentProjectForSignature: string | null = null;
+
+  /**
    * Slice D virtualised chat list. Off by default so the existing
    * non-virtualised surface (and its Playwright coverage) stays as-is
    * while the new endpoints + index settle. The flag is read once at
@@ -273,6 +284,26 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     return 'No conversation yet. Ask the orchestrator about this project.';
   });
 
+  // F14: subtitle tracks the active picker (was hardcoded before).
+  readonly subtitleText = computed<string>(() => {
+    const proj = this.activeProject();
+    return proj ? `${proj} · canonical session` : 'canonical session';
+  });
+
+  readonly contextChipText = computed<string | null>(() => {
+    const proj = this.activeProject();
+    if (!proj) return null;
+    const tail = this.activeJobId() && this.activeJobTitle()
+      ? `Task '${this.activeJobTitle()}'`
+      : 'Board';
+    return `Context: ${proj} · ${tail}`;
+  });
+
+  readonly contextChipVisible = computed<boolean>(() => {
+    if (this.contextDismissed()) return false;
+    return this.contextChipText() != null;
+  });
+
   readonly canCreateTaskFromReply = computed(() => {
     const last = [...this.turns()].reverse().find(
       (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
@@ -310,6 +341,21 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.localTurns.set([]);
         this.refresh(false);
       }
+    });
+
+    // F14: any picker move (project or task) re-arms the context chip
+    // and (on project change) clears the cache so the new thread sees
+    // a fresh context block on its first send.
+    effect(() => {
+      const proj = this.activeProject();
+      this.activeJobId();
+      untracked(() => {
+        if (this.contextDismissed()) this.contextDismissed.set(false);
+        if (proj !== this.lastSentProjectForSignature) {
+          this.lastSentContextSignature.set(null);
+          this.lastSentProjectForSignature = proj;
+        }
+      });
     });
 
     /**
@@ -559,6 +605,17 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.openSettings.emit();
   }
 
+  dismissContextChip(): void {
+    this.contextDismissed.set(true);
+  }
+
+  private currentContextSignature(): string {
+    const proj = (this.activeProject() ?? '').trim();
+    const jobId = (this.activeJobId() ?? '').trim();
+    const jobTitle = (this.activeJobTitle() ?? '').trim();
+    return `${proj}|${jobId}|${jobTitle}`;
+  }
+
   onOpenVerboseDebug(): void {
     const jobId = this.activeJobId();
     const watchPath = this.activeWatchPath();
@@ -670,15 +727,27 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // F14: ship full nav context only on the first send per (project,
+    // task) pair; identical sends and dismissed sends ship `null`.
+    const contextSignature = this.currentContextSignature();
+    const shouldShipContext =
+      !this.contextDismissed() && contextSignature !== this.lastSentContextSignature();
+    const contextPayload = shouldShipContext
+      ? buildChatNavigationContext({
+          activeJobId: this.activeJobId(),
+          activeJobTitle: this.activeJobTitle()
+        })
+      : null;
+
     this.jobService.sendOrchestratorChat(proj, {
       text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined,
-      navigationContext: buildChatNavigationContext({
-        activeJobId: this.activeJobId(),
-        activeJobTitle: this.activeJobTitle()
-      })
+      navigationContext: contextPayload
     }).subscribe({
       next: () => {
+        if (shouldShipContext) {
+          this.lastSentContextSignature.set(contextSignature);
+        }
         this.sending.set(false);
         // Pre-decode the persisted attachment URL(s) so the upcoming swap
         // from the local blob bubble to the server turn uses byte-identical

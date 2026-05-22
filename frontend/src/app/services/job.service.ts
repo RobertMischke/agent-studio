@@ -1073,7 +1073,7 @@ export class JobService {
         inlineBase64?: string | null;
         mimeType?: string | null;
       }[];
-      navigationContext?: import('../features/orchestrator').ChatNavigationContext;
+      navigationContext?: import('../features/orchestrator').ChatNavigationContext | null;
     },
   ) {
     return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
