@@ -222,32 +222,54 @@
       color: #fda4af;
     }
 
-    // F5: "Pick next" affordance, only rendered for 2-ready cards.
-    // Same hover-reveal pattern as delete; brand-accent tint on hover.
+    // F5 + A5 (2026-05-21): "Pick next" affordance for 2-ready cards.
+    // Idle: small icon-only pill. Hover/focus: text "Next" expands in
+    // place so the operator doesn't have to guess what "⤴" does.
+    // Width transitions smoothly via display:flex + max-width; the
+    // label is hidden via opacity + width: 0 in the idle state.
     .job-card__pick-next {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 22px;
+      padding: 0 6px;
       background: transparent;
       border: 1px solid transparent;
       color: var(--studio-fg-muted);
-      width: 22px;
-      height: 22px;
-      padding: 0;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 11px;
+      font-weight: 600;
       line-height: 1;
-      display: grid;
-      place-items: center;
       opacity: 0;
       transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .job-card__pick-next-glyph { font-size: 13px; line-height: 1; }
+    .job-card__pick-next-label {
+      overflow: hidden;
+      max-width: 0;
+      opacity: 0;
+      white-space: nowrap;
+      transition: max-width 0.18s ease, opacity 0.12s ease;
     }
     .job-card:hover .job-card__pick-next,
     .job-card__pick-next:focus-visible {
       opacity: 1;
     }
-    .job-card__pick-next:hover {
+    .job-card__pick-next:hover,
+    .job-card__pick-next:focus-visible {
       background: color-mix(in srgb, var(--studio-accent, #d97757) 18%, transparent);
       border-color: color-mix(in srgb, var(--studio-accent, #d97757) 45%, transparent);
       color: var(--studio-accent, #d97757);
+    }
+    .job-card__pick-next:hover .job-card__pick-next-label,
+    .job-card__pick-next:focus-visible .job-card__pick-next-label {
+      max-width: 60px;
+      opacity: 1;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .job-card__pick-next,
+      .job-card__pick-next-label { transition: none; }
     }
 
     .job-card__title {
@@ -534,6 +556,23 @@
     .job-card__tag-chip-warn {
       font-size: 10px;
       line-height: 1;
+    }
+    // A1 (2026-05-21): visually-distinct chip for review:unparseable.
+    // Indigo/violet tint communicates "format issue" instead of the
+    // amber "quality concern" tone — the operator can tell at a glance
+    // which kind of auto-review verdict landed.
+    .job-card__tag-chip--unparseable {
+      color: #c7d2fe;
+      background: rgba(129, 140, 248, 0.12);
+      border: 1px dashed rgba(129, 140, 248, 0.55);
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .job-card__tag-chip-unparseable-glyph {
+      font-size: 10px;
+      line-height: 1;
+      opacity: 0.8;
     }
     .job-card__meta {
       display: flex;

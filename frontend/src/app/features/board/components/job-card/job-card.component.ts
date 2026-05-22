@@ -97,6 +97,22 @@ export class JobCardComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return [];
     const byId = this.tagRegistry.byId();
     return ids.map(id => {
+      // A1 (2026-05-21): review:unparseable is a structurally different
+      // signal from {namespace}:concerns — the model didn't follow the
+      // verdict format, NOT a real quality concern. Render it as its own
+      // chip variant so the operator can sort/scan past "format
+      // violations" without conflating them with model-flagged issues.
+      if (id === 'review:unparseable') {
+        return {
+          id,
+          label: 'review:unparseable',
+          color: '#a5b4fc',
+          ghost: false,
+          concern: false,
+          unparseable: true,
+          tooltip: 'Auto-review could not parse the model\'s verdict (no [[ASPECT_VERDICT]] sentinel). NOT a quality concern; the model just did not follow the format. See aspect-*.md for the raw reply.'
+        };
+      }
       // Auto-review concern tags use the `<namespace>:concerns` shape and
       // are not in the registry by design (they are ephemeral findings,
       // not curated taxonomy). The card renders them with a small ⚠ chip
@@ -111,6 +127,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
           color: '#fbbf24',
           ghost: false,
           concern: true,
+          unparseable: false,
           tooltip: `Auto-review aspect '${ns}' flagged concerns. Open the job and read aspect-*.md for details.`
         };
       }
@@ -122,6 +139,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
           color: entry.color,
           ghost: false,
           concern: false,
+          unparseable: false,
           tooltip: entry.description ? `${entry.label}: ${entry.description}` : entry.label
         };
       }
@@ -130,6 +148,8 @@ export class JobCardComponent implements OnInit, OnDestroy {
         label: id,
         color: '#475569',
         ghost: true,
+        concern: false,
+        unparseable: false,
         concern: false,
         tooltip: `Unknown tag '${id}'; registry entry was removed`
       };

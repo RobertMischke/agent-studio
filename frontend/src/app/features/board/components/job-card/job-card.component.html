@@ -35,7 +35,10 @@
               data-testid="job-card-pick-next"
               [appTooltip]="'Pick next — bump to the front of the runner queue'"
               aria-label="Pick next"
-              (click)="onPickNextClick($event)">⤴</button>
+              (click)="onPickNextClick($event)">
+        <span class="job-card__pick-next-glyph" aria-hidden="true">⤴</span>
+        <span class="job-card__pick-next-label">Next</span>
+      </button>
     }
     <button type="button"
             class="job-card__delete"
@@ -186,12 +189,13 @@
     <div class="job-card__tags" data-testid="job-card-tags">
       @for (tg of tagChips(); track tg.id) {
         <span class="job-card__tag-chip"
-              [class.job-card__tag-chip--ghost]="tg.ghost && !tg.concern"
+              [class.job-card__tag-chip--ghost]="tg.ghost && !tg.concern && !tg.unparseable"
               [class.job-card__tag-chip--concern]="tg.concern"
+              [class.job-card__tag-chip--unparseable]="tg.unparseable"
               [attr.data-tag-id]="tg.id"
-              [attr.data-testid]="tg.concern ? 'job-card-concern-chip' : null"
+              [attr.data-testid]="tg.concern ? 'job-card-concern-chip' : (tg.unparseable ? 'job-card-unparseable-chip' : null)"
               [style.--tag-color]="tg.color"
-              [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="job-card__tag-chip-warn" aria-hidden="true">⚠</span> }{{ tg.label }}</span>
+              [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="job-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="job-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
       }
     </div>
   }
