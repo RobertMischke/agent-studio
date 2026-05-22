@@ -1,3 +1,5 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Services.Runner;
@@ -18,19 +20,22 @@ public sealed class GlobalOrchestratorBootstrap
     private readonly OrchestratorRunner _runner;
     private readonly JobScannerService _scanner;
     private readonly IConfiguration _config;
+    private readonly ClientIdentityStore? _identityStore;
 
     public GlobalOrchestratorBootstrap(
         ILogger<GlobalOrchestratorBootstrap> logger,
         GlobalOrchestratorSessionStore store,
         OrchestratorRunner runner,
         JobScannerService scanner,
-        IConfiguration config)
+        IConfiguration config,
+        ClientIdentityStore? identityStore = null)
     {
         _logger = logger;
         _store = store;
         _runner = runner;
         _scanner = scanner;
         _config = config;
+        _identityStore = identityStore;
     }
 
     public async Task BootAsync(CancellationToken ct)
@@ -103,8 +108,24 @@ public sealed class GlobalOrchestratorBootstrap
             if (!string.IsNullOrWhiteSpace(e.RootPath)) sb.AppendLine($"    working directory: {e.RootPath}");
             if (!string.IsNullOrWhiteSpace(e.RepositoryPath)) sb.AppendLine($"    git repository:    {e.RepositoryPath}");
             sb.AppendLine($"    task folder:       {e.Path}");
+            if (IsSelfModificationTarget(e))
+            {
+                sb.AppendLine("    NOTE: this project is the tool itself - any change here affects your own runtime.");
+                sb.AppendLine("          Prefer splitting risky changes into smaller tasks; flag self-mod scope explicitly.");
+            }
         }
         sb.AppendLine();
+
+        // User preferences (bootstrap-time defaults). The per-turn prompt
+        // re-emits a fresher block based on the chatting client's identity,
+        // so this acts as the "no client context yet" fallback.
+        AppendBootUserPreferences(sb);
+
+        // Inline tool inventory so the orchestrator does not assume it
+        // lacks API access. Without this, a "create me three tasks" request
+        // gets refused with "you have to do it yourself in the UI" because
+        // the model has no representation of the local HTTP surface.
+        AppendToolInventory(sb);
 
         // Light project-state snapshot so the orchestrator is grounded in
         // current reality rather than a one-time enumeration. Cap to a few
@@ -133,6 +154,78 @@ public sealed class GlobalOrchestratorBootstrap
         sb.AppendLine();
         sb.AppendLine("Acknowledge readiness with one short sentence naming how many projects you saw.");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Resolve the "boot-time" user defaults from the bootstrap identity
+    /// (<see cref="DefaultClientIdentity.Id"/>). Falls back to the historic
+    /// hardcoded pair (claude / opus-4-7) so a fresh install with no
+    /// identity record still produces a well-formed block.
+    /// </summary>
+    internal static (string cli, string model) ResolveBootDefaults(ClientIdentityStore? identityStore)
+    {
+        var rec = identityStore?.Find(DefaultClientIdentity.Id);
+        var cli = !string.IsNullOrWhiteSpace(rec?.DefaultCliType) ? rec!.DefaultCliType! : "claude";
+        var model = !string.IsNullOrWhiteSpace(rec?.DefaultModel) ? rec!.DefaultModel! : OrchestratorRunner.DefaultModel;
+        return (cli, model);
+    }
+
+    private void AppendBootUserPreferences(System.Text.StringBuilder sb)
+    {
+        var (cli, model) = ResolveBootDefaults(_identityStore);
+        AppendUserPreferencesBlock(sb, header: "=== USER PREFERENCES ===", cli, model);
+    }
+
+    /// <summary>
+    /// Shared renderer for the user-preferences block. Used at boot with the
+    /// bootstrap identity, and re-emitted on every chat turn with the live
+    /// values for the active client. Kept in one place so the two emissions
+    /// can't drift on wording.
+    /// </summary>
+    internal static void AppendUserPreferencesBlock(System.Text.StringBuilder sb, string header, string cli, string model)
+    {
+        sb.AppendLine(header);
+        sb.AppendLine($"Default CLI: {cli}");
+        sb.AppendLine($"Default model: {model}");
+        sb.AppendLine("If the user asks you to create a task without naming a CLI or model, use these defaults.");
+        sb.AppendLine("Do not invent other models; if the user wants a different one they will say so.");
+        sb.AppendLine();
+    }
+
+    private static void AppendToolInventory(System.Text.StringBuilder sb)
+    {
+        sb.AppendLine("=== AVAILABLE TOOLS ===");
+        sb.AppendLine("You have:");
+        sb.AppendLine("- Read, Edit, Write, Bash, Glob, Grep (standard Claude tools).");
+        sb.AppendLine("- HTTP via Bash: you can POST/PUT/GET against http://127.0.0.1:5030/api/* with header X-Client-Id: <the user's id> (the user's identity is forwarded).");
+        sb.AppendLine("- To create a task: POST /api/jobs with JSON body { id, title, watchPath, agent, cliType, model, targetState, promptMarkdown }. Pick cliType/model from the USER PREFERENCES block above unless the user names a different one.");
+        sb.AppendLine("- To move a task between lanes: POST /api/jobs/{id}/move?watchPath=... with { targetState }.");
+        sb.AppendLine("- To set a task's model: PUT /api/jobs/{id}/model?watchPath=... with { model }.");
+        sb.AppendLine("- To change a runner's mode: PUT /api/runner/{projectName}/mode with { mode: \"auto-continuous\" | \"auto-single\" | \"manual\" | \"paused\" }.");
+        sb.AppendLine();
+        sb.AppendLine("If the user asks you to create N tasks, do it yourself via the API (one POST per task) and report what you did.");
+        sb.AppendLine("Do NOT tell them they have to do it manually in the UI - that is wrong, you have the API.");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Heuristic: is the watched entry the agent-orchestrator codebase
+    /// itself? Matched on either the working directory name or the task
+    /// folder name. Kept case-insensitive and tolerant to either checkout
+    /// flavour (dev vs stable) so future renames don't silently disable
+    /// the warning.
+    /// </summary>
+    internal static bool IsSelfModificationTarget(WatchPathEntry e)
+    {
+        bool Matches(string? p)
+        {
+            if (string.IsNullOrWhiteSpace(p)) return false;
+            var leaf = System.IO.Path.GetFileName(p.TrimEnd('/', '\\'));
+            if (string.IsNullOrWhiteSpace(leaf)) return false;
+            return leaf.StartsWith("agent-taskboard", StringComparison.OrdinalIgnoreCase)
+                || leaf.StartsWith("agent-orchestrator", StringComparison.OrdinalIgnoreCase);
+        }
+        return Matches(e.RootPath) || Matches(e.RepositoryPath) || Matches(e.Path) || Matches(e.Name);
     }
 
     private string ResolveWorkingDirectory()

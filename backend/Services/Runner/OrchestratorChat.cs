@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli.OneShot;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.ProjectChat;
 
@@ -361,6 +362,7 @@ public class OrchestratorChatService
     private readonly JobScannerService _scanner;
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorChatService> _logger;
+    private readonly ClientIdentityStore? _identityStore;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls because the
@@ -389,7 +391,8 @@ public class OrchestratorChatService
         GlobalOrchestratorBootstrap bootstrap,
         JobScannerService scanner,
         IConfiguration config,
-        ILogger<OrchestratorChatService> logger)
+        ILogger<OrchestratorChatService> logger,
+        ClientIdentityStore? identityStore = null)
     {
         _chat = chat;
         _runner = runner;
@@ -398,14 +401,23 @@ public class OrchestratorChatService
         _scanner = scanner;
         _config = config;
         _logger = logger;
+        _identityStore = identityStore;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
+
+    public Task<OrchestratorChatTurn> SendAsync(
+        string projectName,
+        string watchPath,
+        SendOrchestratorChatRequest req,
+        CancellationToken ct)
+        => SendAsync(projectName, watchPath, req, clientId: null, ct);
 
     public async Task<OrchestratorChatTurn> SendAsync(
         string projectName,
         string watchPath,
         SendOrchestratorChatRequest req,
+        string? clientId,
         CancellationToken ct)
     {
         // Append the user turn outside the gate so the audit log records
@@ -447,7 +459,7 @@ public class OrchestratorChatService
                 return failure;
             }
 
-            var prompt = BuildPrompt(projectName, watchPath, req);
+            var prompt = BuildPrompt(projectName, watchPath, req, clientId);
             var modelId = _config["GlobalOrchestrator:Model"] ?? OrchestratorRunner.DefaultModel;
             var workingDirectory = ResolveWorkingDirectory(watchPath);
             var inlineImages = ExtractInlineImages(req.Attachments);
@@ -567,7 +579,7 @@ public class OrchestratorChatService
         }
     }
 
-    private string BuildPrompt(string projectName, string watchPath, SendOrchestratorChatRequest req)
+    private string BuildPrompt(string projectName, string watchPath, SendOrchestratorChatRequest req, string? clientId)
     {
         var sb = new StringBuilder();
         sb.AppendLine("=== ACTIVE PROJECT CONTEXT ===");
@@ -588,6 +600,14 @@ public class OrchestratorChatService
             // Best-effort: missing snapshot is fine; the orchestrator can
             // still answer general questions from session memory.
         }
+
+        // Per-turn refresh of the user's CLI / model defaults. The boot
+        // prompt embeds a stale snapshot, but the user can flip the default
+        // from the UI at any time; without this block the orchestrator
+        // would keep proposing the boot-time default forever. The block
+        // also names the X-Client-Id the orchestrator should forward when
+        // hitting /api/jobs on the user's behalf.
+        AppendCurrentUserPreferences(sb, clientId, _identityStore);
 
         AppendNavigationContext(sb, req.NavigationContext);
 
@@ -657,6 +677,46 @@ public class OrchestratorChatService
         }
         sb.AppendLine("Use these exact numbers. Any counts you remember from earlier in this session are stale and must be ignored.");
         sb.AppendLine("These items are called \"tasks\" (not \"jobs\") in the user-facing vocabulary.");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Render the per-turn user-preferences block. Reads the live default
+    /// CLI / model for the chatting client from <paramref name="store"/>;
+    /// if no client id is available (anonymous read path, legacy callers)
+    /// or the record has no defaults set, falls back to the same
+    /// bootstrap-identity defaults the boot prompt used.
+    ///
+    /// Kept static + internal so unit tests can pin the shape without
+    /// having to spin up a real chat service.
+    /// </summary>
+    internal static void AppendCurrentUserPreferences(StringBuilder sb, string? clientId, ClientIdentityStore? store)
+    {
+        string? cli = null;
+        string? model = null;
+
+        if (!string.IsNullOrWhiteSpace(clientId) && store is not null)
+        {
+            var rec = store.Find(clientId!);
+            cli = rec?.DefaultCliType;
+            model = rec?.DefaultModel;
+        }
+
+        // Always fall back so the block is well-formed even on a fresh
+        // install with no recorded defaults.
+        var (fallbackCli, fallbackModel) = GlobalOrchestratorBootstrap.ResolveBootDefaults(store);
+        var effectiveCli = string.IsNullOrWhiteSpace(cli) ? fallbackCli : cli!;
+        var effectiveModel = string.IsNullOrWhiteSpace(model) ? fallbackModel : model!;
+
+        sb.AppendLine("=== CURRENT USER PREFERENCES ===");
+        sb.AppendLine($"Default CLI: {effectiveCli}");
+        sb.AppendLine($"Default model: {effectiveModel}");
+        if (!string.IsNullOrWhiteSpace(clientId))
+        {
+            sb.AppendLine($"Active client id (forward as X-Client-Id when calling /api/* on the user's behalf): {clientId}");
+        }
+        sb.AppendLine("These supersede any defaults named in the boot prompt for this turn.");
+        sb.AppendLine("If the user asks you to create a task without naming a CLI or model, use these.");
         sb.AppendLine();
     }
 

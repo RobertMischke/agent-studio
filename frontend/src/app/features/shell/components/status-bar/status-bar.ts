@@ -13,6 +13,7 @@ import {
   signal,
 } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
+import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import type { CliType } from '../../../../models/job.model';
 import { CLI_TYPES } from '../../../../models/job.model';
@@ -50,6 +51,7 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 })
 export class StatusBarComponent implements OnInit {
   private readonly jobService = inject(JobService);
+  private readonly clientDefaults = inject(ClientDefaultsService);
 
   readonly projectNames = input<string[]>([]);
 
@@ -102,6 +104,16 @@ export class StatusBarComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadModels(this.defaultCli());
+    // Pull the canonical defaults from the backend so a value changed in a
+    // different browser session (or by the orchestrator itself) overrides
+    // the localStorage cache. After hydrate(), re-read the cache so the
+    // signals reflect the freshly-written values.
+    void this.clientDefaults.hydrate().then(() => {
+      const cli = this.readDefaultCli();
+      this.defaultCli.set(cli);
+      this.defaultModel.set(this.readDefaultModel(cli));
+      this.loadModels(cli);
+    });
   }
 
   // Status-bar dropdowns register on the modal stack while open so they
@@ -168,6 +180,9 @@ export class StatusBarComponent implements OnInit {
     this.defaultModel.set(this.readDefaultModel(t));
     this.loadModels(t);
     this.defaultCliChange.emit(t);
+    // Mirror to the backend so the orchestrator's per-turn USER PREFERENCES
+    // block picks up the new value on the next chat send.
+    void this.clientDefaults.pushDefaultCli(t);
   }
 
   setDefaultModel(modelId: string) {
@@ -180,6 +195,7 @@ export class StatusBarComponent implements OnInit {
     }
     this.modelMenuOpen.set(false);
     this.defaultModelChange.emit({ cliType: cli, model: modelId });
+    void this.clientDefaults.pushDefaultModel(modelId);
   }
 
   refreshModels(ev: Event) {

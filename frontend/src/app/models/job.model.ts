@@ -157,6 +157,18 @@ export interface ClientSummary {
   lastSeenAt: string | null;
   tokenBudgetMonthly: number | null;
   notes: string | null;
+  defaultCliType?: string | null;
+  defaultModel?: string | null;
+}
+
+/**
+ * Body returned by GET/PUT /api/clients/{id}/defaults. Keep in sync with the
+ * backend `ClientDefaultsResponse` record.
+ */
+export interface ClientDefaultsResponse {
+  id: string;
+  defaultCliType: string | null;
+  defaultModel: string | null;
 }
 
 /**

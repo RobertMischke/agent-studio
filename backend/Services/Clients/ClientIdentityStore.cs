@@ -231,6 +231,29 @@ public class ClientIdentityStore
     }
 
     /// <summary>
+    /// Persist the user's preferred CLI + model for new-task creation.
+    /// Either argument may be null to clear that side without touching the
+    /// other; passing both as null clears both. Returns the updated record,
+    /// or null if the identity does not exist.
+    /// </summary>
+    public ClientIdentity? SetDefaults(string id, string? defaultCliType, string? defaultModel, bool clearCli = false, bool clearModel = false)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            if (!_byId.TryGetValue(id, out var existing)) return null;
+            var updated = existing with
+            {
+                DefaultCliType = clearCli ? null : (defaultCliType ?? existing.DefaultCliType),
+                DefaultModel = clearModel ? null : (defaultModel ?? existing.DefaultModel)
+            };
+            _byId[id] = updated;
+            TryWriteLocked(updated);
+            return updated;
+        }
+    }
+
+    /// <summary>
     /// Stamp <c>lastSeenAt</c> on the identity. Called by the access-log
     /// middleware on every authenticated read or write so the GET listing
     /// can show who has been talking to the API and when.

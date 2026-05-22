@@ -41,9 +41,9 @@ export class ClientService {
    * identity has not yet loaded (or the job points at an unknown id).
    */
   resolve(clientId: string | null | undefined): ClientSummary {
-    if (!clientId) return { id: 'unknown', displayName: 'unknown', emoji: '·', colour: null, kind: 'service', registeredAt: '', lastSeenAt: null, tokenBudgetMonthly: null, notes: null };
+    if (!clientId) return { id: 'unknown', displayName: 'unknown', emoji: '·', colour: null, kind: 'service', registeredAt: '', lastSeenAt: null, tokenBudgetMonthly: null, notes: null, defaultCliType: null, defaultModel: null };
     const found = this.byId().get(clientId);
     if (found) return found;
-    return { id: clientId, displayName: clientId, emoji: '·', colour: null, kind: 'service', registeredAt: '', lastSeenAt: null, tokenBudgetMonthly: null, notes: null };
+    return { id: clientId, displayName: clientId, emoji: '·', colour: null, kind: 'service', registeredAt: '', lastSeenAt: null, tokenBudgetMonthly: null, notes: null, defaultCliType: null, defaultModel: null };
   }
 }

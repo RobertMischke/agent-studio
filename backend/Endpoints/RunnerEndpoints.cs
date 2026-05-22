@@ -221,7 +221,7 @@ public static class RunnerEndpoints
             });
 
         runnerGroup.MapPost("/{projectName}/orchestrator-chat",
-            async (string projectName, SendOrchestratorChatRequest req, JobScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+            async (string projectName, SendOrchestratorChatRequest req, HttpContext ctx, JobScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
             {
                 if (req == null || string.IsNullOrWhiteSpace(req.Text))
                     return Results.BadRequest(new { error = "text is required" });
@@ -229,7 +229,11 @@ public static class RunnerEndpoints
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
-                var reply = await chatService.SendAsync(projectName, entry.Path, req, ct);
+                // Forward the registered X-Client-Id so the orchestrator's
+                // per-turn USER PREFERENCES block resolves to the live
+                // defaults of the user who is actually chatting.
+                var clientId = ctx.Items["ClientId"] as string;
+                var reply = await chatService.SendAsync(projectName, entry.Path, req, clientId, ct);
                 return Results.Ok(new { project = projectName, reply });
             });
 

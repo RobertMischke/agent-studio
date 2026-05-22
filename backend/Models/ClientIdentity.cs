@@ -42,6 +42,20 @@ public record ClientIdentity
 
     /// <summary>Free-form operator notes.</summary>
     public string? Notes { get; init; }
+
+    /// <summary>
+    /// User's preferred CLI for new tasks ("claude", "codex", "copilot",
+    /// "gemini"). The orchestrator reads this on every chat turn so a
+    /// "create me three tasks" request lands on the user's actual default
+    /// instead of the hardcoded "claude" fallback. Null until first set.
+    /// </summary>
+    public string? DefaultCliType { get; init; }
+
+    /// <summary>
+    /// User's preferred model id for new tasks (e.g. "claude-opus-4-7").
+    /// Surfaced into the per-turn orchestrator prompt. Null until first set.
+    /// </summary>
+    public string? DefaultModel { get; init; }
 }
 
 public enum ClientIdentityKind
@@ -104,6 +118,8 @@ public record ClientSummary
     public DateTime? LastSeenAt { get; init; }
     public long? TokenBudgetMonthly { get; init; }
     public string? Notes { get; init; }
+    public string? DefaultCliType { get; init; }
+    public string? DefaultModel { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {
@@ -122,8 +138,32 @@ public record ClientSummary
         RegisteredAt = i.RegisteredAt,
         LastSeenAt = i.LastSeenAt,
         TokenBudgetMonthly = i.TokenBudgetMonthly,
-        Notes = i.Notes
+        Notes = i.Notes,
+        DefaultCliType = i.DefaultCliType,
+        DefaultModel = i.DefaultModel
     };
+}
+
+/// <summary>
+/// Body for <c>PUT /api/clients/{id}/defaults</c>. Each field is independent;
+/// omit a field to leave it untouched. Set a field to an empty string to
+/// clear that side.
+/// </summary>
+public record SetClientDefaultsRequest
+{
+    public string? DefaultCliType { get; init; }
+    public string? DefaultModel { get; init; }
+}
+
+/// <summary>
+/// Read-side shape of <c>GET /api/clients/{id}/defaults</c>. Always returns
+/// the (possibly null) current values for the identity.
+/// </summary>
+public record ClientDefaultsResponse
+{
+    public string Id { get; init; } = "";
+    public string? DefaultCliType { get; init; }
+    public string? DefaultModel { get; init; }
 }
 
 public record ClientDetail
