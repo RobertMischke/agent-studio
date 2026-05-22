@@ -28,3 +28,25 @@
   font-size: 0.78rem;
 }
 .pws__error { color: #fecaca; }
+
+.pws__danger {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pws__delete {
+  align-self: flex-start;
+  border: 1px solid rgba(243,139,168,0.45);
+  border-radius: 6px;
+  background: transparent;
+  color: #fecaca;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.pws__delete:hover:not(:disabled) { background: rgba(243,139,168,0.14); }
+.pws__delete:disabled { opacity: 0.45; cursor: not-allowed; }

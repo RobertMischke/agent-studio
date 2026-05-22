@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { JobService } from '../../../../services/job.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
+import { WorkspaceManagerService } from '../../../shell';
 import type { JobInfo, WatchPathEntry } from '../../../../models/job.model';
 import { TooltipDirective } from '../../../../components/tooltip';
 
@@ -27,11 +29,14 @@ export class ProjectWorkspaceSectionComponent implements OnInit {
 
   private readonly jobService = inject(JobService);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly workspaceManager = inject(WorkspaceManagerService);
 
   readonly watchPaths = signal<readonly WatchPathEntry[]>([]);
   readonly draft = signal<string>('');
   readonly saving = signal(false);
   readonly errorMsg = signal<string | null>(null);
+  readonly deleting = signal(false);
+  readonly deleteErrorMsg = signal<string | null>(null);
 
   readonly canSave = computed(() => {
     const d = this.draft();
@@ -138,5 +143,65 @@ export class ProjectWorkspaceSectionComponent implements OnInit {
         this.errorMsg.set('Move failed; the workspace was not changed.');
       },
     });
+  }
+
+  /** True when the current project workspace is empty and so eligible
+   *  for deletion. Mirrors the backend rule: a workspace can be deleted
+   *  only when no job folders sit under any lane. The client-side check
+   *  is a UX hint (button enabled state + tooltip); the server still
+   *  enforces the count on submit. */
+  readonly canDelete = computed(() => {
+    if (this.deleting()) return false;
+    if (this.saving()) return false;
+    return this.jobsInProject().length === 0;
+  });
+
+  /** Tooltip explaining why the delete button is disabled. */
+  readonly deleteTooltip = computed(() => {
+    const count = this.jobsInProject().length;
+    if (count === 0) {
+      return 'Delete this workspace. Removes the entry from appsettings.Local.json; the folder on disk is left in place so a re-create is reversible.';
+    }
+    return `This workspace still contains ${count} job${count === 1 ? '' : 's'}. Move or delete them first.`;
+  });
+
+  async onDelete(): Promise<void> {
+    if (!this.canDelete()) return;
+    const projectName = this.projectName();
+    const ok = await this.confirmDialog.confirm({
+      title: 'Delete this workspace?',
+      message:
+        `Removes "${projectName}" from the project picker by dropping its entry from appsettings.Local.json. ` +
+        'The on-disk folder is left in place so a workspace with the same name can be re-created later.',
+      detail: 'Only allowed when the workspace is empty.',
+      confirmLabel: 'Delete workspace',
+      kind: 'danger',
+    });
+    if (!ok) return;
+
+    this.deleting.set(true);
+    this.deleteErrorMsg.set(null);
+    this.jobService.deleteWorkspace(projectName).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.workspaceManager.refreshAfterDelete();
+        this.deleteErrorMsg.set(null);
+      },
+      error: (err: unknown) => {
+        this.deleting.set(false);
+        this.deleteErrorMsg.set(this.formatDeleteError(err));
+      },
+    });
+  }
+
+  private formatDeleteError(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const body = err.error as { error?: string; jobCount?: number } | null;
+      if (body?.error) return body.error;
+      if (err.status === 404) return 'Workspace not found (was it already deleted?).';
+      if (err.status === 0) return 'Backend unreachable. Try again in a moment.';
+      return `Delete failed (HTTP ${err.status}).`;
+    }
+    return 'Delete failed.';
   }
 }

@@ -339,6 +339,9 @@
       <app-update-center />
       <app-update-block-modal />
       <app-confirm-dialog />
+      @if (workspaceManager.createOpen()) {
+        <app-workspace-create-dialog />
+      }
       <app-notification-stack />
       <app-media-lightbox />
       @if (errorDialog.activeError(); as error) {
@@ -823,6 +826,9 @@
       }
 
       <app-confirm-dialog />
+      @if (workspaceManager.createOpen()) {
+        <app-workspace-create-dialog />
+      }
       <app-notification-stack />
       <app-media-lightbox />
 

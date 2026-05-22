@@ -366,6 +366,30 @@ export class JobService {
     return this.http.get<WatchPathEntry[]>(`${this.baseUrl}/watch-paths`);
   }
 
+  /**
+   * Create a new (empty) workspace. The backend slugs the name into a
+   * folder under `{TaskRepository}/projects/{slug}`, materialises the
+   * directory, and appends a `WatchPathEntry` to `appsettings.Local.json`.
+   * Returns the resolved entry; throws via HttpClient on validation
+   * (400) or name collision (409).
+   */
+  createWorkspace(name: string) {
+    return this.http.post<WatchPathEntry>(`${this.baseUrl}/watch-paths`, { name });
+  }
+
+  /**
+   * Remove a workspace by name. The backend refuses (HTTP 409) when the
+   * workspace still contains job folders, returning the live `jobCount`
+   * in the error body so the UI can render a clear "still has N jobs"
+   * message. The on-disk folder is left in place so a re-create with
+   * the same name is reversible.
+   */
+  deleteWorkspace(name: string) {
+    return this.http.delete<{ name: string }>(
+      `${this.baseUrl}/watch-paths/${encodeURIComponent(name)}`,
+    );
+  }
+
   createJob(req: CreateJobRequest) {
     return this.http.post<{ id: string }>(`${this.baseUrl}/jobs`, req);
   }

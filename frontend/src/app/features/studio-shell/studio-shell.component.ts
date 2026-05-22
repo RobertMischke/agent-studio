@@ -26,6 +26,7 @@ import { UiPreferencesService } from '../shell';
 import { BoardFiltersService } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { WorkspaceManagerService } from '../shell';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
@@ -101,6 +102,7 @@ export class StudioShellComponent {
   readonly boardFilters = inject(BoardFiltersService);
   readonly updateClient = inject(UpdateClientService);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly workspaceManager = inject(WorkspaceManagerService);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
@@ -616,25 +618,14 @@ export class StudioShellComponent {
   }
 
   /**
-   * Hook for the "+" icon next to the Workspace group head in the
-   * Explorer. We don't yet have an in-app endpoint to register a new
-   * watch path (projects are configured via `backend/appsettings.Local.json`
-   * + backend restart, see docs/setup/onboard-a-project.md), so the
-   * action surfaces the steps in a confirm dialog instead of silently
-   * doing nothing.
+   * Hook for the "+ Workspace" titlebar button and the "+" icon next to
+   * the Workspace group head in the Explorer. Opens the in-app
+   * create-workspace dialog (POST /api/watch-paths under the hood); no
+   * backend restart needed since the WatchPaths config reload is
+   * synchronous on the server side.
    */
-  async onAddWorkspace(): Promise<void> {
-    await this.confirmDialog.confirm({
-      title: 'Add a project',
-      message:
-        'Projects are configured via WatchPaths in backend/appsettings.Local.json. ' +
-        'Add the project name and absolute path, then restart the backend so the new ' +
-        'runner is created. See docs/setup/onboard-a-project.md for the full guide.',
-      detail: 'A guided in-app onboarding flow lands in a follow-up slice.',
-      confirmLabel: 'Got it',
-      cancelLabel: 'Close',
-      kind: 'primary',
-    });
+  onAddWorkspace(): void {
+    this.workspaceManager.openCreate();
   }
 
   /** Forces a fresh /api/jobs/grouped pull so the Explorer re-counts. */

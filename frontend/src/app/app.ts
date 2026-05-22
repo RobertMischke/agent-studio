@@ -48,6 +48,8 @@ import {
   StatusBarComponent,
   UiPreferencesService,
   WorkspaceBannerComponent,
+  WorkspaceCreateDialogComponent,
+  WorkspaceManagerService,
   WorkspaceOverlaysComponent,
   WorkspaceOverlaysService,
 } from './features/shell';
@@ -122,6 +124,7 @@ interface VerboseDebugContext {
     E2ECleanupDialogComponent,
     WorkspaceOverlaysComponent,
     WorkspaceBannerComponent,
+    WorkspaceCreateDialogComponent,
     UpdateBannerComponent,
     UpdateVersionBadgeComponent,
     UpdateCenterComponent,
@@ -239,6 +242,14 @@ export class App implements OnInit, OnDestroy {
    * `<app-workspace-overlays />` container owns the actual rendering.
    */
   private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
+  /**
+   * Owns the create-workspace modal visibility. Public so the template
+   * can bind <code>workspaceManager.createOpen()</code> for the
+   * <code>@if</code> guard around <code>&lt;app-workspace-create-dialog&gt;</code>;
+   * the studio-shell calls into it via <code>openCreate()</code> when
+   * the "+ Add workspace" affordance fires.
+   */
+  readonly workspaceManager = inject(WorkspaceManagerService);
   readonly workspaceTokensOpen = this.workspaceOverlays.tokensOpen;
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;

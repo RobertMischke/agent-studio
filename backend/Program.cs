@@ -108,6 +108,7 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) =>
 
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
+builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 builder.Services.AddSingleton<JobStateMachine>();

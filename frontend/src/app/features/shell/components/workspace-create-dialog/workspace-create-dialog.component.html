@@ -1,0 +1,49 @@
+<app-dialog
+  eyebrow="Workspace"
+  title="Create a new workspace"
+  subtitle="An empty workspace appears in the project picker until you add a task."
+  kind="primary"
+  testid="workspace-create-dialog"
+  (closeRequest)="onCancel()"
+  (backdropClick)="onCancel()">
+  <div class="wcd__form" (keydown)="onKeydown($event)">
+    <label class="wcd__field">
+      <span class="wcd__label">Workspace name</span>
+      <input #nameInput
+             type="text"
+             class="wcd__input"
+             data-testid="workspace-create-name"
+             autocomplete="off"
+             spellcheck="false"
+             maxlength="64"
+             [ngModel]="draftName()"
+             (ngModelChange)="draftName.set($event)"
+             [disabled]="submitting()"
+             placeholder="My new workspace" />
+    </label>
+    @if (clientErrorMsg(); as msg) {
+      <p class="wcd__hint wcd__hint--error" data-testid="workspace-create-client-error">{{ msg }}</p>
+    } @else if (errorMsg(); as msg) {
+      <p class="wcd__hint wcd__hint--error" data-testid="workspace-create-server-error">{{ msg }}</p>
+    } @else {
+      <p class="wcd__hint">
+        Names are case-insensitively unique. The resolved folder is
+        <code>&#123;TaskRepository&#125;/projects/&lt;slug&gt;</code>.
+      </p>
+    }
+  </div>
+  <div footer class="wcd__actions">
+    <button type="button"
+            class="wcd__btn wcd__btn--ghost"
+            data-testid="workspace-create-cancel"
+            [disabled]="submitting()"
+            (click)="onCancel()">Cancel</button>
+    <button type="button"
+            class="wcd__btn wcd__btn--primary"
+            data-testid="workspace-create-submit"
+            [disabled]="!canSubmit()"
+            (click)="onSubmit()">
+      {{ submitting() ? 'Creating…' : 'Create workspace' }}
+    </button>
+  </div>
+</app-dialog>

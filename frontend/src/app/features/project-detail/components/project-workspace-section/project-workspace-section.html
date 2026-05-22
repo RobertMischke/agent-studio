@@ -24,4 +24,18 @@
   @if (errorMsg(); as err) {
     <p class="pws__hint pws__error" data-testid="project-detail-workspace-error">{{ err }}</p>
   }
+
+  <div class="pws__danger">
+    <button type="button"
+            class="pws__delete"
+            data-testid="project-detail-workspace-delete"
+            [appTooltip]="deleteTooltip()"
+            [disabled]="!canDelete()"
+            (click)="onDelete()">
+      {{ deleting() ? 'Deleting...' : 'Delete this workspace' }}
+    </button>
+    @if (deleteErrorMsg(); as err) {
+      <p class="pws__hint pws__error" data-testid="project-detail-workspace-delete-error">{{ err }}</p>
+    }
+  </div>
 </section>

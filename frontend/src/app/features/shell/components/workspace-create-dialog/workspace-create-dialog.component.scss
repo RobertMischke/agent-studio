@@ -1,0 +1,99 @@
+.wcd {
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-width: 24rem;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  &__label {
+    font-size: 0.78rem;
+    color: var(--app-muted-text);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  &__input {
+    background: var(--app-input-bg, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--app-input-border, rgba(255, 255, 255, 0.12));
+    border-radius: 4px;
+    color: var(--app-text);
+    font: inherit;
+    padding: 0.45rem 0.6rem;
+    transition: border-color 0.12s ease;
+
+    &:focus {
+      outline: none;
+      border-color: var(--app-accent, #89b4fa);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &__hint {
+    font-size: 0.78rem;
+    color: var(--app-muted-text);
+    margin: 0;
+    line-height: 1.4;
+
+    code {
+      font-family: var(--app-font-mono, monospace);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 0 0.25rem;
+      border-radius: 3px;
+    }
+
+    &--error {
+      color: var(--app-danger, #f38ba8);
+    }
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  &__btn {
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font: inherit;
+    border: 1px solid transparent;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    &--ghost {
+      background: transparent;
+      color: var(--app-text);
+      border-color: var(--app-input-border, rgba(255, 255, 255, 0.16));
+
+      &:not(:disabled):hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+    }
+
+    &--primary {
+      background: var(--app-accent, #89b4fa);
+      color: var(--app-accent-fg, #11111b);
+      border-color: var(--app-accent, #89b4fa);
+
+      &:not(:disabled):hover {
+        filter: brightness(1.07);
+      }
+    }
+  }
+}

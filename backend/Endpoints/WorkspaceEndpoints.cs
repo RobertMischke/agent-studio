@@ -1,9 +1,18 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Configuration;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
 using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Endpoints;
+
+/// <summary>
+/// Body for <c>POST /api/watch-paths</c>. Only the display name is
+/// configurable today; the resolved path is derived from
+/// <c>TaskRepository</c> + slug(name) by
+/// <see cref="WorkspaceManagementService"/>.
+/// </summary>
+public sealed record CreateWorkspaceRequest(string? Name);
 
 /// <summary>
 /// Workspace-wide read surfaces under <c>/api/workspace</c>: views that
@@ -105,6 +114,48 @@ public static class WorkspaceEndpoints
                     Screenshots = entries.ToList()
                 });
             });
+
+        // Create a new (empty) workspace. The Name is the only knob the
+        // caller chooses; the resolved path is derived under
+        // TaskRepository/projects/{slug}. Validation lives in the
+        // service: empty name, name length, slug uniqueness, name
+        // uniqueness (case-insensitive). 201 on success, 400 for
+        // validation failures, 409 when the name or slug collides.
+        app.MapPost("/api/watch-paths", (CreateWorkspaceRequest req, WorkspaceManagementService workspaces) =>
+        {
+            var result = workspaces.Create(req?.Name);
+            return result.Outcome switch
+            {
+                WorkspaceManagementOutcome.Created =>
+                    Results.Created($"/api/watch-paths/{Uri.EscapeDataString(result.Entry!.Name)}", result.Entry),
+                WorkspaceManagementOutcome.BadRequest =>
+                    Results.BadRequest(new { error = result.Error }),
+                WorkspaceManagementOutcome.Conflict =>
+                    Results.Conflict(new { error = result.Error }),
+                _ => Results.Problem("Unexpected outcome from workspace create.")
+            };
+        });
+
+        // Delete a workspace by name. Refuses (409) when the workspace
+        // still contains job folders so the user cannot orphan work by
+        // mistake; the on-disk folder is left in place so a re-create
+        // with the same name is reversible.
+        app.MapDelete("/api/watch-paths/{name}", (string name, WorkspaceManagementService workspaces) =>
+        {
+            var result = workspaces.Delete(name);
+            return result.Outcome switch
+            {
+                WorkspaceManagementOutcome.Ok =>
+                    Results.Ok(new { name = result.Entry!.Name }),
+                WorkspaceManagementOutcome.NotFound =>
+                    Results.NotFound(new { error = result.Error }),
+                WorkspaceManagementOutcome.Conflict =>
+                    Results.Conflict(new { error = result.Error, jobCount = result.JobCount }),
+                WorkspaceManagementOutcome.BadRequest =>
+                    Results.BadRequest(new { error = result.Error }),
+                _ => Results.Problem("Unexpected outcome from workspace delete.")
+            };
+        });
 
         // Workspace executive summary. Folds per-project activity
         // (job moves, supervisor advisories, repository commits) plus
