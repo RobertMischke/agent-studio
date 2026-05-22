@@ -84,7 +84,7 @@ async function snapshot(page: Page, seq: number, note: string): Promise<void> {
   logEvent(`shot-${String(seq).padStart(2, '0')} ${note}`);
 }
 
-test('full lifecycle: create → steer → complete (runbook project)', async ({ page }) => {
+test('full lifecycle: create → steer → complete (Playwright Test sandbox)', async ({ page }) => {
   test.setTimeout(15 * 60 * 1000); // 15 min budget — claude can be slow
   mkdirSync(ARTIFACT_DIR, { recursive: true });
   writeFileSync(join(ARTIFACT_DIR, 'run.log'), `=== TODO-app probe ${new Date().toISOString()} ===\n`);
@@ -144,17 +144,70 @@ test('full lifecycle: create → steer → complete (runbook project)', async ({
   }
   await snapshot(page, ++seq, 'auto pickup armed');
 
-  // ----- Watch the lanes change. Loop with snapshots every 20s. -----
+  // ----- Watch the lifecycle. -----
+  //
+  // G1 (2026-05-22): the old loop polled the UI every 20 s, which is
+  // longer than a fast agent run. The 15 s todo-app run completed in
+  // one poll window and slipped past every snapshot. Two-track polling:
+  //
+  //   - Fast track (3 s): hit the API for the task's state. As soon as
+  //     it's >= 4-auto-review or any terminal state, break out and act.
+  //   - Slow track (every Nth tick ≈ 18 s): take a screenshot for the
+  //     post-mortem timeline. Steer message goes out at ~30 s.
+  //
+  // Using API state as the source of truth (vs. scanning the rendered
+  // board) means we no longer rely on the UI's polling tick to refresh
+  // the DOM before we look — the backend's state machine moves first.
+  const watchPath = await page.evaluate<string | null>(async () => {
+    const res = await fetch('/api/jobs/playwright-probe-tiny-todo-sandbox', {
+      headers: { 'X-Client-Id': 'local-default' },
+    }).catch(() => null);
+    if (!res || !res.ok) return null;
+    const j = await res.json().catch(() => null);
+    return (j as { watchPath?: string } | null)?.watchPath ?? null;
+  });
+  if (!watchPath) {
+    logEvent('WARN: could not resolve watchPath for the probe job — falling back to UI-only scan');
+  }
+  const fetchState = async (): Promise<string | null> => {
+    if (!watchPath) return null;
+    const json = await page.evaluate<{ state?: string } | null>(
+      async (wp: string) => {
+        const url = `/api/jobs/playwright-probe-tiny-todo-sandbox?watchPath=${encodeURIComponent(wp)}`;
+        const res = await fetch(url, { headers: { 'X-Client-Id': 'local-default' } }).catch(() => null);
+        if (!res || !res.ok) return null;
+        return res.json().catch(() => null);
+      },
+      watchPath,
+    );
+    return json?.state ?? null;
+  };
+
   const deadline = Date.now() + 10 * 60 * 1000; // 10 min for agent work
+  const POLL_MS = 3_000;
+  const SNAPSHOT_EVERY = 6; // → snapshot every 18 s
   let steered = false;
   let completed = false;
+  let lastObservedState: string | null = null;
+  let tick = 0;
 
   while (Date.now() < deadline) {
-    await page.waitForTimeout(20_000);
-    await snapshot(page, ++seq, 'lane-poll');
+    await page.waitForTimeout(POLL_MS);
+    tick++;
 
-    // At the ~80s mark, send a steer message via the orchestrator.
-    if (!steered && seq >= 8) {
+    const state = await fetchState();
+    if (state && state !== lastObservedState) {
+      logEvent(`state-change: ${lastObservedState ?? '∅'} → ${state}`);
+      lastObservedState = state;
+      // On every state transition, also take a screenshot so the
+      // post-mortem timeline captures the change visually.
+      await snapshot(page, ++seq, `state-change → ${state}`);
+    } else if (tick % SNAPSHOT_EVERY === 0) {
+      await snapshot(page, ++seq, 'periodic');
+    }
+
+    // Steer once, ~30 s in (about tick 10 on the 3 s cadence).
+    if (!steered && tick >= 10) {
       try {
         await page.getByTestId('studio-titlebar-chat').click();
         const rail = page.locator('app-orchestrator-side-sheet');
@@ -172,15 +225,15 @@ test('full lifecycle: create → steer → complete (runbook project)', async ({
       }
     }
 
-    // Look for our task across ALL human-review-state lanes via the
-    // F9 data-states mapping (lane-group-decide contains state
-    // 5-human-review where the auto-review sends jobs).
-    const reviewCards = page.locator(
-      '[data-states*="5-human-review"] [data-testid^="job-card-"]'
-    );
-    const totalReview = await reviewCards.count();
-    if (totalReview > 0) {
-      const ourCard = reviewCards.filter({ hasText: 'Playwright probe' }).first();
+    // Once the state machine reports human-review, find the card in the
+    // board and click Complete. The F9 data-states attribute is the
+    // canonical lookup for "the lane group containing state X" — see
+    // docs/frontend-testids.md.
+    if (lastObservedState === '5-human-review') {
+      const ourCard = page
+        .locator('[data-states*="5-human-review"] [data-testid^="job-card-"]')
+        .filter({ hasText: 'Playwright probe' })
+        .first();
       if (await ourCard.isVisible().catch(() => false)) {
         logEvent('found our task in 5-human-review lane');
         await ourCard.click();
@@ -198,10 +251,18 @@ test('full lifecycle: create → steer → complete (runbook project)', async ({
           logEvent('complete button not visible — possibly in different sub-state');
           break;
         }
+      } else {
+        logEvent('state == 5-human-review but card not yet in DOM; will retry next tick');
       }
+    }
+
+    // Hard-stop on a terminal-from-our-POV state we don't act on.
+    if (lastObservedState === '6-completed' || lastObservedState === '7-archive') {
+      logEvent(`state reached ${lastObservedState} externally; exiting watch`);
+      break;
     }
   }
 
   await snapshot(page, ++seq, completed ? 'COMPLETED' : 'TIMEOUT/end-of-window');
-  logEvent(`finished: completed=${completed} seq=${seq}`);
+  logEvent(`finished: completed=${completed} lastState=${lastObservedState} ticks=${tick}`);
 });

@@ -2,17 +2,43 @@
 
 Playwright + visual-probe automation needs to find a board lane by its
 job state id (`2-ready`, `3-progress`, `4-auto-review`, `5-human-review`,
-etc.), but the board groups several lanes together under a higher-level
-"lane group". This document is the single source of truth for that
-mapping.
+etc.). The board renders LANE GROUPS (`backlog | active | decide`) each
+containing one or more lanes, so the obvious `lane-group-{name}` testid
+is one level above the state. This document is the single source of
+truth for that mapping.
+
+## Quick reference
+
+### The standard lookup — use this
+
+```ts
+// Find the lane GROUP containing a given state:
+page.locator('[data-states*="5-human-review"]')
+
+// Find the SPECIFIC lane:
+page.locator('[data-testid="lane-5-human-review"]')
+
+// Find a card by title across all lanes:
+page.locator('[data-testid^="job-card-"]').filter({ hasText: 'My title' }).first()
+
+// Wait for a job to reach a target state (API-based — see G1 below):
+const url = `/api/jobs/${id}?watchPath=${encodeURIComponent(wp)}`;
+const state = await page.evaluate(
+  async (u) => (await (await fetch(u)).json()).state,
+  url
+);
+```
+
+Use the `[data-states*="..."]` selector even if you know the group id —
+it survives ADR-0026 lane-group reshuffles and makes the test self-
+documenting ("the lane group containing state 5-human-review").
 
 ## Lane groups (top level)
 
-The board renders three lane groups, each containing one or more lanes.
-The group's DOM element carries:
+Each `<section class="lane-group">` carries:
 
-- `data-testid="lane-group-{group-id}"`
-- `data-states="{comma-separated list of contained state ids}"`
+- `data-testid="lane-group-{group-id}"`           ← human-readable label
+- `data-states="{comma-separated state ids}"`     ← ← prefer this lookup
 
 | Group id  | Visible label   | States it contains                                                                  |
 |-----------|-----------------|-------------------------------------------------------------------------------------|
@@ -20,56 +46,49 @@ The group's DOM element carries:
 | `active`  | Active          | `3-progress`, `3a-failed-pickup`?, `4-auto-review`                                  |
 | `decide`  | Done & Decide   | `5-human-review`, `6-completed`, `7-archive`                                        |
 
-States marked `?` only render when the lane has at least one job.
+States marked `?` render only when at least one job lives there.
 
 ## Individual lanes
 
-Each lane inside a group is an `<app-job-column>` instance. Its outer
-element carries:
+Each lane is an `<app-job-column>` instance. Its outer element carries:
 
-- `data-testid="lane-{state-id}"`     (e.g. `lane-2-ready`)
+- `data-testid="lane-{state-id}"`            (e.g. `lane-2-ready`)
 - `data-state="{state-id}"`
-- a rail element at `[data-testid="lane-rail-{state-id}"]` with the
-  lane head + counters.
+- a rail `[data-testid="lane-rail-{state-id}"]` for head + counters.
 
 ## Job cards
-
-Cards inside a lane carry:
 
 - `data-testid="job-card-{job-id}"`
 - `data-job-id`, `data-job-key`, `data-state`
 
-## Recipes
+## Patterns to AVOID
 
-Find the lane containing a given state:
+| ❌ Anti-pattern | ✅ Why it's bad | Use instead |
+|---|---|---|
+| `lane-group-decide` to find a human-review card | Couples your test to the lane GROUPING (subject to ADR-0026 reshuffles). | `[data-states*="5-human-review"]` |
+| Wait for a state transition by polling DOM | UI poll rate (≥ 1 s) can be slower than backend state machine; fast lifecycles slip past every tick. See G1 below. | Poll `/api/jobs/{id}` directly, react to state change |
+| `getByRole({name:'Create'})` on the create dialog | i18n-fragile + breaks if label changes. | `getByTestId('create-submit')` |
 
-```ts
-page.locator('[data-states*="5-human-review"]') // → lane-group-decide
-page.locator('[data-testid="lane-5-human-review"]') // → the lane itself
-```
+## G1 — API state vs DOM scan
 
-Find a specific card by title across all lanes:
+A probe writing a 60-line file can finish in 15 seconds. The full
+lifecycle 2-ready → 3-progress → 4-auto-review → 5-human-review can
+collapse into a single 20-second UI-poll window. If your test relies on
+seeing a card "in the In-Progress lane" to decide what to do, you will
+miss it.
 
-```ts
-page.locator('[data-testid^="job-card-"]')
-  .filter({ hasText: 'Playwright probe' })
-  .first()
-```
+Pattern: poll `/api/jobs/{id}` every 2-3 s for state changes, and only
+use the DOM to act once the state is the one you want (e.g. click
+Complete from `5-human-review`).
 
-Wait for a job to reach a target state:
-
-```ts
-await page.locator(
-  `[data-testid="lane-${targetState}"] [data-job-id="${jobId}"]`
-).waitFor({ timeout: 5 * 60_000 });
-```
+The [`todo-app-full-test`](../frontend/e2e/exploratory/todo-app-full-test.spec.ts)
+probe demonstrates this pattern.
 
 ## Why this layer exists
 
-The lane-group ids (`backlog | active | decide`) are stable user-facing
-labels chosen by ADR-0026. The state ids (`0-backlog` … `7-archive`) are
-the runtime tags on disk and in the API. The two are intentionally
-decoupled: lane groups can move between layouts without renaming the
-underlying state machine. Automation needs both views — the `data-states`
-attribute exposes the bridge in the DOM so probes don't have to hardcode
-the mapping.
+The lane-group ids (`backlog | active | decide`) are user-facing labels
+chosen by ADR-0026. The state ids (`0-backlog` … `7-archive`) are the
+runtime tags on disk and in the API. The two are deliberately decoupled
+so lane groups can move between layouts without renaming the underlying
+state machine. Automation needs both views — `data-states` is the bridge
+exposed in the DOM so probes don't hardcode the mapping.
