@@ -178,7 +178,20 @@ if [[ "$shim_ok" -eq 0 ]]; then
 
   if [[ -n "$alt_claude" ]] && "$alt_claude" --version >/dev/null 2>&1; then
     ver="$("$alt_claude" --version 2>/dev/null | tr -d '\r' | head -1)"
-    echo "[check-cli-shims] npm shim missing/broken at $SHIM_CMD; using PATH-resolved claude at $alt_claude ($ver)."
+    # A6 (2026-05-22): the fallback-to-PATH-claude message printed every
+    # boot, even when the install hadn't changed. Quiet it down: store
+    # the resolved path + version under $TMPDIR (or $NPM_BIN if writable)
+    # and only re-print when the fallback target changes from the last
+    # boot. Override with ATP_CLI_SHIM_VERBOSE=1 to always print.
+    cache_dir="${TMPDIR:-$NPM_BIN}"
+    cache_file="$cache_dir/.atp-claude-fallback"
+    cache_line="$alt_claude|$ver"
+    prev_line=""
+    [[ -f "$cache_file" ]] && prev_line="$(cat "$cache_file" 2>/dev/null | head -1)"
+    if [[ "${ATP_CLI_SHIM_VERBOSE:-0}" == "1" || "$cache_line" != "$prev_line" ]]; then
+      echo "[check-cli-shims] npm shim missing/broken at $SHIM_CMD; using PATH-resolved claude at $alt_claude ($ver)."
+      echo "$cache_line" > "$cache_file" 2>/dev/null || true
+    fi
     exit 0
   fi
 
