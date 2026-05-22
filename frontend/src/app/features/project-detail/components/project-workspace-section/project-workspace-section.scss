@@ -1,0 +1,30 @@
+:host { display: block; margin-bottom: 14px; }
+.pws { display: flex; flex-direction: column; gap: 6px; }
+.pws h3 { margin: 0 0 4px; font-size: 0.92rem; color: var(--studio-fg-strong, #f8fafc); }
+.pws__row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pws__select {
+  background: rgba(0,0,0,0.30);
+  color: #cdd6f4;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+.pws__save {
+  border: 1px solid rgba(137,180,250,0.40);
+  border-radius: 6px;
+  background: rgba(137,180,250,0.14);
+  color: #cbd5f5;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.pws__save:hover:not(:disabled) { background: rgba(137,180,250,0.24); }
+.pws__save:disabled { opacity: 0.45; cursor: not-allowed; }
+.pws__hint {
+  margin: 4px 0 0;
+  color: rgba(255,255,255,0.55);
+  font-size: 0.78rem;
+}
+.pws__error { color: #fecaca; }

@@ -172,6 +172,7 @@
       </div>
       <p class="proj-detail__hint">{{ modeHint() }}</p>
     </section>
+    <app-project-workspace-section [projectName]="projectName()" [currentWatchPath]="paths().path" />
 
     <section class="proj-detail__group">
       <h3>Orchestrator model</h3>
@@ -184,9 +185,7 @@
             <option [value]="opt.id">{{ opt.label }}</option>
           }
         </select>
-        <span class="proj-detail__hint proj-detail__hint--inline">
-          Used when the orchestrator decides on your behalf in auto mode.
-        </span>
+        <span class="proj-detail__hint proj-detail__hint--inline">Used when the orchestrator decides on your behalf in auto mode.</span>
       </div>
     </section>
 

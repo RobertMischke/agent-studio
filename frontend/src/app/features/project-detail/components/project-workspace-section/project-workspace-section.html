@@ -1,0 +1,27 @@
+<section class="pws" data-testid="project-detail-workspace">
+  <h3>Workspace</h3>
+  <div class="pws__row">
+    <select class="pws__select"
+            data-testid="project-detail-workspace-select"
+            [(ngModel)]="draft"
+            [disabled]="saving() || watchPaths().length === 0">
+      @for (wp of watchPaths(); track wp.path) {
+        <option [value]="wp.path">{{ wp.name }}</option>
+      }
+    </select>
+    <button type="button"
+            class="pws__save"
+            data-testid="project-detail-workspace-save"
+            [appTooltip]="'Move all jobs in this project to the selected workspace via the change-project endpoint (mirrors cross-project drag and drop).'"
+            [disabled]="!canSave()"
+            (click)="onSave()">
+      {{ saving() ? 'Moving...' : 'Save' }}
+    </button>
+  </div>
+  <p class="pws__hint">
+    Reassign this project to another workspace. Save moves every job ({{ jobsInProject().length }} currently) using the per-job change-project path the cross-project drag-and-drop uses.
+  </p>
+  @if (errorMsg(); as err) {
+    <p class="pws__hint pws__error" data-testid="project-detail-workspace-error">{{ err }}</p>
+  }
+</section>

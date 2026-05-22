@@ -13,9 +13,9 @@ import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-
 import { ProjectSupervisorSectionComponent } from '../project-supervisor-section/project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from '../project-meta-cycle-section/project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from '../project-analysis-reports-section/project-analysis-reports-section';
+import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/project-workspace-section';
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
-
 import { TooltipDirective } from '../../../../components/tooltip';
 interface ProjectSettingsRow {
   autoCommit: boolean;
@@ -59,6 +59,7 @@ export type ProjectDetailView =
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
+    ProjectWorkspaceSectionComponent,
     AutonomySliderComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-detail.html',
