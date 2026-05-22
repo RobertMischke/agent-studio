@@ -1,0 +1,40 @@
+name: Frontend lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-lint.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-lint.yml'
+
+jobs:
+  scss-tokens:
+    name: SCSS design-token gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Blocking step: any new hex / named-color / non-token colour expression
+      # in a non-exempt SCSS file fails the build. Legacy files in the
+      # `.stylelintrc.json` overrides[].files list run at severity: warning so
+      # this step exits 0 while the migration backlog drains. See
+      # docs/frontend-scss-quality.md for the two-tier token system.
+      - name: SCSS lint (design tokens)
+        run: npm run lint:scss

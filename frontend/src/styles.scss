@@ -1,3 +1,10 @@
+// Design tokens — Tier 1 + Tier 2 must load before any consumer.
+// Tier 1 declares the raw palette (`--color-*`, `--shadow-*`); Tier 2 declares
+// purpose-named aliases (`--studio-*`, `--diff-*`, `--elevation-*`, `--severity-*`,
+// `--lane-*`). The two files are the single source of truth — components never
+// hardcode hex / rgba literals (enforced by stylelint).
+@use 'styles/tokens-primitives';
+@use 'styles/tokens-semantic';
 @use 'styles/markdown-body';
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

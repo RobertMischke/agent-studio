@@ -3,12 +3,57 @@
 A working playbook every agent (and human) should consult before touching SCSS in this repo. It pairs three things:
 
 1. **Concrete state** — the SCSS surface as it stands today, measured.
-2. **Guidelines** — the rules new code must follow.
+2. **Guidelines** — the rules new code must follow (now machine-enforced).
 3. **Refactor plan** — the next steps that close the gap between today and the guidelines.
 
 Skim section 1 to understand why the rules in section 2 exist. Use section 3 as the ordered backlog when a slice has the budget for cleanup.
 
 Related docs: [design-system.md](design-system.md) carries the visual contract (token vocabulary, shape scale, type scale, component inventory); this doc is its operational counterpart for SCSS authoring.
+
+## 0. Two-tier token system (TL;DR)
+
+The colour + shadow palette lives in two files; **never reach past them from a component**:
+
+| Tier | File                                           | Purpose                                                                                              |
+| ---- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1    | `frontend/src/styles/_tokens-primitives.scss`  | Raw palette + 5-step shadow scale. `--color-orange-500`, `--shadow-200`. No semantic meaning.        |
+| 2    | `frontend/src/styles/_tokens-semantic.scss`    | Purpose aliases. `--studio-accent`, `--elevation-card`, `--diff-add-bg`. Reads Tier 1 via `var()`.   |
+
+The light theme rewrites Tier 2 only (`[data-studio-theme='light']` block at the bottom of `_tokens-semantic.scss`). Tier 1 is frozen. This is the standard industry pattern (W3C Design Tokens spec, IBM Carbon, Adobe Spectrum, Material 3, Tailwind themes).
+
+Both files are loaded once globally via `src/styles.scss`. Components do **not** redeclare tokens, do **not** read Tier 1 directly, and do **not** introduce private hex literals — stylelint blocks all three.
+
+**Adding a new token**:
+1. Confirm an existing Tier 2 alias really doesn't fit.
+2. Confirm the primitive you need is in Tier 1 (add it there first if missing).
+3. Declare the alias in `_tokens-semantic.scss` in BOTH the `:root` and `[data-studio-theme='light']` blocks if it differs by theme.
+4. Consume from the component via `var(--<your-alias>)`. Never go back to raw hex.
+
+**Elevations** (drop shadows) use the same pattern:
+- Tier 1: `--shadow-100` (resting card) → `--shadow-500` (floating modal).
+- Tier 2: `--elevation-card`, `--elevation-popover`, `--elevation-dropdown`, `--elevation-modal`, `--elevation-tooltip`, `--elevation-floating`.
+
+A component with a drop shadow reads `box-shadow: var(--elevation-modal)`, never an inline `0 24px 64px rgba(...)`.
+
+### Machine-enforced (`npm run lint:scss`)
+
+The contract is checked by stylelint with the `stylelint-declaration-strict-value` plugin. The rule:
+
+- `color-no-hex`: ERROR — no `#rgb`, `#rrggbb`, `#rgba`, `#rrggbbaa` literals.
+- `color-named`: ERROR — no `white`, `black`, `red`, etc.
+- `scale-unlimited/declaration-strict-value` (color, background, border-color, fill, stroke): ERROR — value must be `var(...)`, `transparent`, `currentColor`, `color-mix(...)`, a gradient, `none`, or `0`.
+
+Three carve-outs:
+
+1. `_tokens-primitives.scss` and `_tokens-semantic.scss` — disabled (they declare the tokens themselves).
+2. `_markdown-body.scss` — disabled (legacy `--md-*` palette inline; pending migration to Tier 2).
+3. **Legacy file list** in `.stylelintrc.json` — `severity: warning` while migration is in progress. New SCSS files never appear here. As a file is migrated, remove its entry — the strict ERROR severity kicks in automatically.
+
+The mockup tree (`src/mockups/**`) is exempt entirely; it's design scratch space, not production.
+
+**Box-shadow** is not in the rule's property list (multi-part shadows like `0 1px 2px var(--c)` are awkward for the per-token parser). It is policed by convention: any component shadow must be `var(--elevation-*)`. PR review enforces this until a custom rule covers it.
+
+CI runs `npm run lint:scss` as a blocking step ([.github/workflows/lint.yml](../.github/workflows/lint.yml)). A pull request that introduces a hex literal in a non-exempt component goes red.
 
 ## 1. Current state (measured)
 
@@ -58,14 +103,14 @@ These 10 colours alone appear **993 times**. They should resolve to ~6 design to
 
 ### Existing token namespaces (good baseline to build on)
 
-- `--studio-*` — studio shell chrome (surface / border / fg / accent / size). Declared in `app/features/studio-shell/studio-shell.component.scss`.
-- `--md-*` — markdown body palette. Declared in `styles/_markdown-body.scss`.
-- `--column-bg`, `--card-bg`, `--surface*`, `--border*`, `--text-*`, `--bg-page`, `--header-bg` — flat design tokens. Declared in `styles.scss` light theme bridge.
-- `--accent`, `--bg`, `--danger`, `--line`, `--line-strong` — partial namespace, scattered.
-- `--header-btn-*` — local naming on header buttons.
-- `--md-*` — markdown body palette.
+- `--color-*`, `--shadow-*`, `--alpha-*` — **Tier 1 primitives**. Declared in `styles/_tokens-primitives.scss`. Components never read these directly.
+- `--studio-*`, `--severity-*`, `--lane-*`, `--diff-*`, `--elevation-*` — **Tier 2 semantic aliases**. Declared in `styles/_tokens-semantic.scss`. This is what components consume.
+- `--md-*` — markdown body palette. Declared in `styles/_markdown-body.scss` (legacy; pending Tier-2 migration).
+- `--column-bg`, `--card-bg`, `--surface*`, `--border*`, `--text-*`, `--bg-page`, `--header-bg` — flat design tokens. Declared in `styles.scss` light theme bridge (legacy bridge zone).
+- `--accent`, `--bg`, `--danger`, `--line`, `--line-strong` — partial namespace, scattered (legacy).
+- `--header-btn-*` — local naming on header buttons (legacy).
 
-The proliferation is the root cause: every refactor in the past introduced its own prefix instead of consolidating.
+The proliferation is the root cause: every refactor in the past introduced its own prefix instead of consolidating. Tier 1 + Tier 2 is the consolidation. New tokens land there exclusively.
 
 ### HTML duplication hotspots (observed)
 
@@ -109,7 +154,8 @@ Severity colours (success/warn/error/info) live in tokens `--studio-accent-succe
 Diff-line backgrounds and foregrounds are token-bound. Both the
 `run-git-viewer` modal (protocol pane) and the studio Diff tab read
 the same tokens so add/remove lines share one palette per theme and
-WCAG AA contrast is enforced in the bridge instead of per-file.
+WCAG AA contrast is enforced in `_tokens-semantic.scss` instead of
+per-file.
 
 | Token            | Dark default      | Light override (`[data-studio-theme='light']`) | Use                                              |
 | ---------------- | ----------------- | ---------------------------------------------- | ------------------------------------------------ |
@@ -125,9 +171,9 @@ columns, inline diff renderers), reach for these six tokens. Don't
 add a private `rgba(34, 197, 94, …)` literal in a component SCSS;
 that's the pattern the F18 incident (2026-05-22) was filed against -
 the light-theme path looked broken because every diff renderer had
-its own hand-tuned palette. Cf. `studio-shell.component.scss` for
-the token declarations and `run-git-viewer.component.scss` /
-`diff-tab-view.component.scss` for the first consumers.
+its own hand-tuned palette. Token declarations live in
+`_tokens-semantic.scss`; first consumers are
+`run-git-viewer.component.scss` and `diff-tab-view.component.scss`.
 
 ### Rule 1a — No hex / rgb literal outside the token block
 
@@ -137,21 +183,45 @@ the rule new SCSS most often breaks:
 > Component SCSS may contain **zero** hex colours and **zero** `rgb()` /
 > `rgba()` literals. The only allowed colour expressions are
 > `var(--studio-*)`, `var(--diff-*)`, `var(--severity-*)`,
-> `var(--lane-*)`, and `color-mix(in srgb, var(--…) X%, transparent)`.
+> `var(--lane-*)`, `var(--elevation-*)`, and
+> `color-mix(in srgb, var(--…) X%, transparent)`.
 
-Exceptions:
+Enforced by `npm run lint:scss` (`color-no-hex` + `color-named` +
+`scale-unlimited/declaration-strict-value`). The pre-commit and CI
+gate exits non-zero on any new hex outside the carve-outs.
 
-- The token block in `studio-shell.component.scss` is the one place
-  where raw hex values live (declaring the tokens themselves).
-- The light-theme bridge in `src/styles.scss` may use raw hex for
-  legacy components still pending Wave-A migration; new components
-  must not lean on the bridge.
+Exceptions (each one is allowlisted in `.stylelintrc.json`):
+
+- `_tokens-primitives.scss` and `_tokens-semantic.scss` declare the
+  tokens themselves; raw hex / rgba lives there and nowhere else.
+- `_markdown-body.scss` carries the legacy `--md-*` palette pending
+  Tier-2 migration.
+- A small **legacy file list** under `overrides[].files` runs the rule
+  at `severity: warning`. New SCSS files never land in that list -
+  they conform from day one.
 
 Diff-specific palette (the F18 case): every diff renderer must read
 `--diff-add-bg` / `--diff-add-fg` / `--diff-rem-bg` / `--diff-rem-fg`
-/ `--diff-hunk-bg` / `--diff-hunk-fg` from
-`studio-shell.component.scss`. Adding a private green/red literal
-re-opens the WCAG-AA regression the tokens were created to fix.
+/ `--diff-hunk-bg` / `--diff-hunk-fg` from `_tokens-semantic.scss`.
+Adding a private green/red literal re-opens the WCAG-AA regression
+the tokens were created to fix.
+
+### Rule 1b — When is a component-local token override justified?
+
+**Answer: never.** If a component needs a value that doesn't fit any
+existing Tier-2 alias, the right move is to add a new alias to
+`_tokens-semantic.scss` (and the primitive it points at in
+`_tokens-primitives.scss` if needed), not to invent a one-off
+`--some-thing` inside the component.
+
+If a slice of the codebase legitimately needs a *family* of extension
+tokens that don't fit the standard semantic vocabulary (e.g. a
+specific marketing or onboarding section), create
+`src/styles/_tokens-overrides.scss` with its own `:root` block,
+declare the extension tokens there, and `@use` it from `styles.scss`.
+This keeps every token-defining file visible in one directory instead
+of scattered across components, which is the failure mode the
+two-tier system exists to prevent.
 
 ### Rule 2 — Three-layer SCSS strategy
 
@@ -208,14 +278,18 @@ Six waves, ordered by ratio of "user-visible improvement" / "engineer hours". Ea
 
 ### Wave A — Top-10 colour token consolidation (highest ratio)
 
-Goal: collapse the 993 occurrences of the top-10 hex literals into 6 tokens.
+Goal: collapse the ~1 400 remaining occurrences of the top-10 hex literals into the existing Tier-2 aliases. The two-tier system + stylelint gate landed in F19 (2026-05-22); the migration backlog is now an ordered list of files in `.stylelintrc.json` under `overrides[].files`. Each removed entry is one Wave-A commit.
 
 Steps:
-1. Add to `studio-shell.component.scss` `:root` and the `[data-studio-theme='light']` override block any tokens still missing (e.g. `--studio-accent-warn`, `--studio-accent-success`).
-2. Sweep one file at a time, ordered by hex-literal count from section 1's table. For each: replace `#cdd6f4` with `var(--studio-fg)`, `#94a3b8` with `var(--studio-fg-dim)`, etc. Each file becomes one commit.
-3. After each file, delete the matching `!important` rule from `styles.scss` if it exists.
+1. Pick a file from the legacy list (start with the highest hex count from section 1's table for the biggest user-visible win).
+2. Sweep its hex literals: `#cdd6f4` → `var(--studio-fg)`, `#94a3b8` → `var(--studio-fg-dim)`, `#1a1a1a` → `var(--studio-on-accent)` or `var(--studio-fg-strong)`, etc. Use `_tokens-semantic.scss` as the lookup table; never introduce a new private hex.
+3. Replace any raw `rgba(0, 0, 0, ...)` hover / overlay tints with the corresponding `var(--alpha-black-NN)` primitive or a `--studio-bg-hover` / `--studio-bg-selected` alias if one fits.
+4. Replace box-shadows (`0 1px 2px rgba(...)`) with `var(--elevation-card)` / `--elevation-popover` / `--elevation-modal`.
+5. Remove the file from the legacy list in `.stylelintrc.json` so the strict ERROR severity takes effect.
+6. Run `npm run lint:scss` (expect 0 errors) and the matching Playwright spec for the surface.
+7. After each file, delete the matching `!important` rule from `styles.scss` if it exists.
 
-Expected outcome: ~993 hex occurrences → ~50 (theme override declarations only). 54 → 20 `!important`.
+Expected outcome: each removed legacy entry shrinks the warning count and adds ~10-150 hex replacements. The end-state legacy list is empty.
 
 ### Wave B — Sidesheet skeleton component
 

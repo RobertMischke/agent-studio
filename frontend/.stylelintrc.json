@@ -1,5 +1,6 @@
 {
   "extends": ["stylelint-config-standard-scss"],
+  "plugins": ["stylelint-declaration-strict-value"],
   "rules": {
     "selector-class-pattern": null,
     "selector-id-pattern": null,
@@ -37,7 +38,7 @@
     "length-zero-no-unit": null,
     "comment-whitespace-inside": null,
     "selector-pseudo-element-no-unknown": [true, { "ignorePseudoElements": ["ng-deep"] }],
-    "selector-pseudo-class-no-unknown": [true, { "ignorePseudoClasses": ["host", "host-context", "deep"] }],
+    "selector-pseudo-class-no-unknown": [true, { "ignorePseudoClasses": ["host", "host-context", "deep", "global"] }],
     "property-no-vendor-prefix": null,
     "value-no-vendor-prefix": null,
     "selector-no-vendor-prefix": null,
@@ -54,14 +55,158 @@
     "declaration-property-value-no-unknown": null,
     "declaration-block-no-duplicate-properties": null,
     "custom-property-empty-line-before": null,
-    "selector-pseudo-class-no-unknown": [true, { "ignorePseudoClasses": ["host", "host-context", "deep", "global"] }],
     "scss/dollar-variable-colon-space-after": null,
     "scss/dollar-variable-colon-space-before": null,
     "scss/dollar-variable-empty-line-before": null,
     "scss/dollar-variable-default": null,
     "font-family-name-quotes": null,
-    "font-family-no-missing-generic-family-keyword": null
+    "font-family-no-missing-generic-family-keyword": null,
+
+    "color-no-hex": true,
+    "color-named": ["never", { "ignore": ["inside-function"] }],
+    "scale-unlimited/declaration-strict-value": [
+      ["/color$/", "background", "background-color", "border-color", "fill", "stroke"],
+      {
+        "ignoreValues": [
+          "transparent", "currentColor", "inherit", "initial", "unset", "none", "revert", "revert-layer", "0",
+          "/^color-mix\\(/",
+          "/^linear-gradient\\(/",
+          "/^radial-gradient\\(/",
+          "/^conic-gradient\\(/",
+          "/^url\\(/"
+        ],
+        "ignoreFunctions": false,
+        "disableFix": true,
+        "severity": "error"
+      }
+    ]
   },
+
+  "overrides": [
+    {
+      "files": [
+        "src/styles/_tokens-primitives.scss",
+        "src/styles/_tokens-semantic.scss",
+        "src/styles/_markdown-body.scss"
+      ],
+      "rules": {
+        "color-no-hex": null,
+        "scale-unlimited/declaration-strict-value": null
+      }
+    },
+    {
+      "comment": "Mockup tree (next-gen-chat). Not shipped to production; keeps designer-friendly raw hex. Exempt entirely.",
+      "files": [
+        "src/mockups/**/*.scss"
+      ],
+      "rules": {
+        "color-no-hex": null,
+        "scale-unlimited/declaration-strict-value": null
+      }
+    },
+    {
+      "comment": "Legacy SCSS files pending Tier-1/Tier-2 migration. Each removed entry below is a migration win. New SCSS files are NOT added here; they conform from day one. Track progress under `docs/frontend-scss-quality.md` Wave A.",
+      "files": [
+        "src/styles.scss",
+        "src/app/app.scss",
+        "src/app/components/chat-row/chat-row.component.scss",
+        "src/app/components/chat/chat/chat.component.scss",
+        "src/app/components/chat/conversation-view/conversation-view.component.scss",
+        "src/app/components/chat/tool-burst-chip/tool-burst-chip.component.scss",
+        "src/app/components/concept-help/concept-help.component.scss",
+        "src/app/components/info-button/info-button.component.scss",
+        "src/app/components/markdown-rich-editor/markdown-rich-editor.scss",
+        "src/app/components/media-lightbox/media-lightbox.component.scss",
+        "src/app/features/board/components/board-search-icon/board-search-icon.component.scss",
+        "src/app/features/board/components/filters-dropdown/filters-dropdown.component.scss",
+        "src/app/features/board/components/job-card/job-card.component.scss",
+        "src/app/features/board/components/job-column/job-column.scss",
+        "src/app/features/board/components/kanban-filter-sidesheet/kanban-filter-sidesheet.component.scss",
+        "src/app/features/cli/components/cli-admin-panel/cli-admin-panel.scss",
+        "src/app/features/cli/components/cli-console/cli-console.scss",
+        "src/app/features/cli/components/cli-sessions-panel/cli-sessions-panel.scss",
+        "src/app/features/cli/components/cli-usage-sheet/cli-usage-sheet.scss",
+        "src/app/features/dev-tools/components/e2e-cleanup-dialog/e2e-cleanup-dialog.component.scss",
+        "src/app/features/dev-tools/components/update-stable-console/update-stable-console.component.scss",
+        "src/app/features/job-detail/components/activity-log-view/activity-log-view.scss",
+        "src/app/features/job-detail/components/beautiful-results/beautiful-results.component.scss",
+        "src/app/features/job-detail/components/detail-header/detail-header.component.scss",
+        "src/app/features/job-detail/components/git-pane/git-file-tree/git-file-tree.component.scss",
+        "src/app/features/job-detail/components/hygiene-strip/project-hygiene-badge/project-hygiene-badge.component.scss",
+        "src/app/features/job-detail/components/prompt-pane/prompt-pane.component.scss",
+        "src/app/features/job-detail/components/protocol-pane/code-review-panel/code-review-panel.component.scss",
+        "src/app/features/job-detail/components/protocol-pane/protocol-pane/protocol-pane.component.scss",
+        "src/app/features/job-detail/components/protocol-pane/review-evidence-panel/review-evidence-panel.component.scss",
+        "src/app/features/job-detail/components/protocol-pane/run-timeline/run-timeline.component.scss",
+        "src/app/features/job-detail/components/triage-panel/triage-panel.component.scss",
+        "src/app/features/job-detail/job-detail.scss",
+        "src/app/features/orchestrator/components/global-orchestrator-card/global-orchestrator-card.scss",
+        "src/app/features/orchestrator/components/orchestrator-feed/orchestrator-feed.scss",
+        "src/app/features/orchestrator/components/orchestrator-logic-panel/orchestrator-logic-panel.component.scss",
+        "src/app/features/orchestrator/components/orchestrator-settings-modal/orchestrator-settings-modal.component.scss",
+        "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.scss",
+        "src/app/features/project-chat/components/project-chat-list/project-chat-list.component.scss",
+        "src/app/features/project-chat/components/project-chat-rail/project-chat-rail.component.scss",
+        "src/app/features/project-detail/components/analysis-report-drilldown/analysis-report-drilldown.scss",
+        "src/app/features/project-detail/components/autonomy-slider/autonomy-slider.scss",
+        "src/app/features/project-detail/components/project-analysis-reports-section/project-analysis-reports-section.scss",
+        "src/app/features/project-detail/components/project-architecture-section/project-architecture-section.scss",
+        "src/app/features/project-detail/components/project-detail/project-detail.scss",
+        "src/app/features/project-detail/components/project-drift-overview-section/project-drift-overview-section.scss",
+        "src/app/features/project-detail/components/project-drift-section/project-drift-section.scss",
+        "src/app/features/project-detail/components/project-meta-cycle-section/project-meta-cycle-section.scss",
+        "src/app/features/project-detail/components/project-observability/project-observability-panel.component.scss",
+        "src/app/features/project-detail/components/project-product-runtime/project-product-runtime-panel.component.scss",
+        "src/app/features/project-detail/components/project-security-section/project-security-section.scss",
+        "src/app/features/project-detail/components/project-shell/project-shell.component.scss",
+        "src/app/features/project-detail/components/project-skill-readiness-section/project-skill-readiness-section.scss",
+        "src/app/features/project-detail/components/project-steering-docs-section/project-steering-docs-section.scss",
+        "src/app/features/project-detail/components/project-supervisor-section/project-supervisor-section.scss",
+        "src/app/features/project-detail/components/project-workspace-section/project-workspace-section.scss",
+        "src/app/features/project-detail/components/security-panel/security-panel.component.scss",
+        "src/app/features/project-detail/components/uxui-panel/uxui-panel.component.scss",
+        "src/app/features/project-token-usage/components/project-token-usage-panel/project-token-usage-panel.component.scss",
+        "src/app/features/screenshots/components/screenshot-strip/screenshot-strip.component.scss",
+        "src/app/features/screenshots/components/workspace-screenshots/workspace-screenshots.scss",
+        "src/app/features/shell/components/auto-review-indicator/auto-review-indicator.scss",
+        "src/app/features/shell/components/status-bar/status-bar.scss",
+        "src/app/features/shell/components/workspace-banner/workspace-banner.scss",
+        "src/app/features/shell/components/workspace-create-dialog/workspace-create-dialog.component.scss",
+        "src/app/features/studio-shell/studio-shell.component.scss",
+        "src/app/features/tokens/components/cli-usage-detail-modal/cli-usage-detail-modal.scss",
+        "src/app/features/tokens/components/token-summary-block/token-summary-block.scss",
+        "src/app/features/tokens/components/workspace-token-timeline/workspace-token-timeline.scss",
+        "src/app/features/update/components/update-banner/update-banner.component.scss",
+        "src/app/features/update/components/update-block-modal/update-block-modal.component.scss",
+        "src/app/features/update/components/update-center/update-center.component.scss",
+        "src/app/features/update/components/update-version-badge/update-version-badge.component.scss",
+        "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.scss",
+        "src/app/features/workforce/components/phase-summary-list/phase-summary-list.component.scss",
+        "src/app/features/workforce/components/role-badge/role-badge.component.scss"
+      ],
+      "rules": {
+        "color-no-hex": [true, { "severity": "warning" }],
+        "color-named": ["never", { "ignore": ["inside-function"], "severity": "warning" }],
+        "scale-unlimited/declaration-strict-value": [
+          ["/color$/", "background", "background-color", "border-color", "fill", "stroke"],
+          {
+            "ignoreValues": [
+              "transparent", "currentColor", "inherit", "initial", "unset", "none", "revert", "revert-layer", "0",
+              "/^color-mix\\(/",
+              "/^linear-gradient\\(/",
+              "/^radial-gradient\\(/",
+              "/^conic-gradient\\(/",
+              "/^url\\(/"
+            ],
+            "ignoreFunctions": false,
+            "disableFix": true,
+            "severity": "warning"
+          }
+        ]
+      }
+    }
+  ],
+
   "ignoreFiles": [
     "node_modules/**",
     "dist/**",

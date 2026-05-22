@@ -1,0 +1,205 @@
+// stylelint-disable color-no-hex scale-unlimited/declaration-strict-value
+//
+// =============================================================================
+// Design tokens — Tier 2: Semantic aliases
+// =============================================================================
+//
+// Aliases that describe purpose ("--studio-bg-editor", "--elevation-modal").
+// Every component reads from this file — never from primitives, never from
+// raw hex literals.
+//
+// Themes (this file) overwrite Tier 2; primitives (Tier 1) stay frozen.
+//
+// Two blocks below:
+//   1. :root  — dark theme, the daily driver.
+//   2. [data-studio-theme='light']  — light theme override.
+//
+// Reach for a NEW alias by:
+//   - confirming an existing Tier-2 alias really doesn't fit ("bg-elevated"
+//     vs "bg-card"? prefer reuse.),
+//   - confirming the primitive you need is in Tier 1 (add it there if not),
+//   - declaring the alias here in BOTH theme blocks if it differs by theme.
+//
+// =============================================================================
+
+@use './tokens-primitives';
+
+:root {
+  // ---------------------------------------------------------------------------
+  // Surfaces
+  // ---------------------------------------------------------------------------
+  --studio-bg-titlebar:     var(--color-mocha-mantle);    // surface-1
+  --studio-bg-activitybar:  var(--color-mocha-mantle);    // surface-1
+  --studio-bg-sidebar:      var(--color-mocha-mantle);    // surface-1
+  --studio-bg-editor:       var(--color-mocha-base-0);    // surface-0 — body
+  --studio-bg-elevated:     var(--color-mocha-base);      // surface-2
+  --studio-bg-tab-active:   var(--color-mocha-base);      // surface-2
+  --studio-bg-tab-inactive: var(--color-mocha-mantle);    // surface-1
+  --studio-bg-hover:        var(--alpha-white-04);
+  --studio-bg-selected:     var(--color-mocha-base-3);    // surface-3
+
+  // ---------------------------------------------------------------------------
+  // Borders
+  // ---------------------------------------------------------------------------
+  --studio-border:        var(--alpha-white-06);
+  --studio-border-strong: var(--alpha-white-10);
+
+  // ---------------------------------------------------------------------------
+  // Scrim — backdrop behind modal / dialog overlays
+  // ---------------------------------------------------------------------------
+  --studio-scrim:         rgba(2, 6, 23, 0.65);
+  --studio-scrim-soft:    var(--alpha-black-40);
+
+  // ---------------------------------------------------------------------------
+  // Foreground (text)
+  // ---------------------------------------------------------------------------
+  --studio-fg:        var(--color-slate-200);
+  --studio-fg-strong: var(--color-slate-50);
+  --studio-fg-dim:    var(--color-slate-400);
+  --studio-fg-muted:  var(--color-slate-500);
+
+  // ---------------------------------------------------------------------------
+  // Accents (brand + semantic)
+  // ---------------------------------------------------------------------------
+  --studio-accent:         var(--color-orange-500);   // brand orange
+  --studio-accent-2:       var(--color-green-vscode); // teal — legacy success alias
+  --studio-accent-3:       var(--color-blue-400);     // info
+  --studio-accent-4:       var(--color-purple-vscode);
+  --studio-accent-warn:    var(--color-yellow-vscode);
+  --studio-accent-success: var(--color-green-600);
+  --studio-accent-6:       var(--color-red-500);
+
+  // Text to use ON an accent fill (a brand-orange button etc.). Tuned for dark
+  // text on the saturated accent in both themes.
+  --studio-on-accent: var(--color-grey-950);
+
+  // ---------------------------------------------------------------------------
+  // Severity — pass / warn / high / info / pending verdict colours
+  // ---------------------------------------------------------------------------
+  --severity-pass:    var(--color-green-400);
+  --severity-warn:    var(--color-yellow-200);
+  --severity-high:    var(--color-mocha-red);
+  --severity-info:    var(--color-mocha-blue);
+  --severity-pending: var(--color-violet-300);
+
+  // ---------------------------------------------------------------------------
+  // Lane palette — kanban / board states
+  // ---------------------------------------------------------------------------
+  --lane-backlog:      #9d9d9d;
+  --lane-prep:         #d1bfa5;
+  --lane-ready:        var(--color-green-vscode);
+  --lane-progress:     var(--color-blue-400);
+  --lane-auto-review:  var(--color-yellow-200);
+  --lane-human-review: var(--color-purple-vscode);
+  --lane-completed:    #5fbf80;
+  --lane-archive:      #6e6e6e;
+  --lane-failed:       var(--color-mocha-red);
+
+  // ---------------------------------------------------------------------------
+  // Diff palette — unified diff & side-by-side renderers (F18)
+  // ---------------------------------------------------------------------------
+  --diff-add-bg:  rgba(34, 197, 94, 0.18);
+  --diff-add-fg:  #bbf7d0;
+  --diff-rem-bg:  rgba(220, 38, 38, 0.20);
+  --diff-rem-fg:  #fecaca;
+  --diff-hunk-bg: rgba(56, 189, 248, 0.08);
+  --diff-hunk-fg: var(--color-blue-300);
+
+  // ---------------------------------------------------------------------------
+  // Elevations — shadow tokens by USE-CASE (Tier-2 alias over --shadow-*).
+  //
+  // When a component needs a drop shadow, pick the elevation matching the
+  // layer's purpose. Never pick a numeric Tier-1 `--shadow-*` directly from a
+  // component — that's how the dark/light variants stay in sync.
+  // ---------------------------------------------------------------------------
+  --elevation-resting:  none;
+  --elevation-card:     var(--shadow-100);
+  --elevation-popover:  var(--shadow-200);
+  --elevation-dropdown: var(--shadow-300);
+  --elevation-modal:    var(--shadow-400);
+  --elevation-tooltip:  var(--shadow-200);
+  --elevation-floating: var(--shadow-500);
+
+  // ---------------------------------------------------------------------------
+  // Type families
+  // ---------------------------------------------------------------------------
+  --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  // ---------------------------------------------------------------------------
+  // Layout sizes
+  // ---------------------------------------------------------------------------
+  --studio-activitybar-w: 48px;
+  --studio-titlebar-h:    36px;
+  --studio-tabbar-h:      36px;
+}
+
+// =============================================================================
+// Light theme — overrides only Tier 2. Tier-1 primitives stay frozen.
+// =============================================================================
+[data-studio-theme='light'] {
+  // Surfaces
+  --studio-bg-titlebar:     var(--color-grey-150);
+  --studio-bg-activitybar:  var(--color-grey-200);
+  --studio-bg-sidebar:      var(--color-grey-100);
+  --studio-bg-editor:       var(--color-grey-50);
+  --studio-bg-elevated:     var(--color-grey-200);
+  --studio-bg-tab-active:   var(--color-grey-50);
+  --studio-bg-tab-inactive: var(--color-grey-200);
+  --studio-bg-hover:        var(--alpha-black-05);
+  --studio-bg-selected:     rgba(217, 119, 87, 0.15);
+
+  // Borders
+  --studio-border:        var(--color-grey-400);
+  --studio-border-strong: var(--color-grey-500);
+
+  // Scrim — lighter overlay over a white shell.
+  --studio-scrim:         var(--alpha-black-40);
+  --studio-scrim-soft:    var(--alpha-black-20);
+
+  // Foreground
+  --studio-fg:        var(--color-grey-900);
+  --studio-fg-strong: var(--color-grey-950);
+  --studio-fg-dim:    var(--color-grey-800);
+  --studio-fg-muted:  var(--color-grey-600);
+
+  // Accents — slightly darker on light so tinted-low-alpha pills stay legible.
+  --studio-accent-warn:    var(--color-yellow-700);
+  --studio-accent-success: var(--color-green-700);
+  --studio-accent-6:       var(--color-red-700);
+
+  // Severity — darker variants for readable pills + verdict-banner stripe.
+  --severity-pass:    var(--color-green-600);
+  --severity-warn:    var(--color-amber-700);
+  --severity-high:    var(--color-red-800);
+  --severity-info:    var(--color-blue-700);
+  --severity-pending: var(--color-violet-700);
+
+  // Lane palette — desaturated for the white shell.
+  --lane-backlog:      #6e6e6e;
+  --lane-prep:         #92745a;
+  --lane-ready:        var(--color-green-700);
+  --lane-progress:     var(--color-blue-700);
+  --lane-auto-review:  var(--color-yellow-700);
+  --lane-human-review: #7c3aed;
+  --lane-completed:    var(--color-green-700);
+  --lane-archive:      var(--color-grey-850);
+  --lane-failed:       var(--color-red-700);
+
+  // Diff palette — soft pastel tint + dark text so diff content stays legible
+  // (WCAG AA against --diff-add-bg / --diff-rem-bg). F18 fix.
+  --diff-add-bg:  var(--color-green-100);
+  --diff-add-fg:  var(--color-green-900);
+  --diff-rem-bg:  var(--color-red-100);
+  --diff-rem-fg:  var(--color-red-900);
+  --diff-hunk-bg: var(--color-sky-100);
+  --diff-hunk-fg: var(--color-sky-800);
+
+  // Elevations — softer drop shadows on white. Same use-case aliases as dark.
+  --elevation-card:     var(--shadow-100-light);
+  --elevation-popover:  var(--shadow-200-light);
+  --elevation-dropdown: var(--shadow-300-light);
+  --elevation-modal:    var(--shadow-400-light);
+  --elevation-tooltip:  var(--shadow-200-light);
+  --elevation-floating: var(--shadow-500-light);
+}

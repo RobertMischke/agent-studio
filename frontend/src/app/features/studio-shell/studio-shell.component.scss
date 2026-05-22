@@ -3,145 +3,15 @@
 // =========================================================================
 // Studio shell — Agent Software Studio (VS-Code-inspired)
 //
-// Design tokens follow .reference-layout/styles.css. Light theme overrides
-// live at the bottom under [data-studio-theme="light"] so flipping the
-// titlebar toggle re-skins the entire shell without re-rendering.
+// Design tokens (--studio-*, --severity-*, --lane-*, --diff-*, --elevation-*)
+// live in `src/styles/_tokens-primitives.scss` (Tier 1, raw palette + shadow
+// scale) and `src/styles/_tokens-semantic.scss` (Tier 2, purpose aliases +
+// `[data-studio-theme='light']` overrides). Both files are loaded globally
+// via `styles.scss` so EVERY component reads from `var(--studio-*)` directly.
+//
+// See `docs/frontend-scss-quality.md` for the Tier-1 / Tier-2 contract and
+// the enforced stylelint rules.
 // =========================================================================
-
-/*
- * Studio shell tokens — the canonical palette. Every other SCSS file
- * should read these via `var(--studio-*)` instead of hardcoding a hex.
- * See docs/frontend-scss-quality.md for the migration plan.
- *
- * Layer-by-layer:
- *   bg-*        surfaces
- *   border-*    separators
- *   fg-*        foreground text
- *   accent-*    brand + semantic accents (success/warn/error/info)
- *   on-accent   text colour to use ON an accent-coloured fill
- *   size tokens layout dimensions
- */
-:root {
-  // surfaces — Catppuccin-tuned palette, per
-  // docs/mockups/vscode-layout/ui.html. The previous values were a
-  // plain VS-Code-grey set that drifted from the mockup's slightly
-  // violet-tinted surfaces and warmer text.
-  --studio-bg-titlebar:    #181825;  /* surface-1 */
-  --studio-bg-activitybar: #181825;  /* surface-1 */
-  --studio-bg-sidebar:     #181825;  /* surface-1 */
-  --studio-bg-editor:      #0f0f1a;  /* surface-0 — body / editor base */
-  --studio-bg-elevated:    #1e1e2e;  /* surface-2 */
-  --studio-bg-tab-active:   #1e1e2e;  /* surface-2 (slightly raised) */
-  --studio-bg-tab-inactive: #181825;  /* surface-1 */
-  --studio-bg-hover:    rgba(255, 255, 255, 0.04);
-  --studio-bg-selected: #252537;     /* surface-3 (selected row) */
-  // separators
-  --studio-border:        rgba(255, 255, 255, 0.06);  /* border-1 */
-  --studio-border-strong: rgba(255, 255, 255, 0.10);  /* border-2 */
-  // foreground — text-0/1/2 from the mockup palette
-  --studio-fg:        #e2e8f0;  /* text-0 */
-  --studio-fg-strong: #f8fafc;  /* whiter for emphasis */
-  --studio-fg-dim:    #94a3b8;  /* text-1 — section heads, meta */
-  --studio-fg-muted:  #64748b;  /* text-2 — most muted, timestamps */
-  // accents — brand + semantic; alpha derivatives use color-mix()
-  --studio-accent:         #d97757;  /* brand orange */
-  --studio-accent-2:       #4ec9b0;  /* teal — also legacy 'success' alias */
-  --studio-accent-3:       #569cd6;  /* blue — info */
-  --studio-accent-4:       #c586c0;  /* purple */
-  --studio-accent-warn:    #cca700;  /* yellow */
-  --studio-accent-success: #16a34a;  /* green */
-  --studio-accent-6:       #ef4444;  /* red */
-  /* Text to use ON an accent fill (e.g. a brand-orange button). The
-   * accent colours are tuned to take dark text, so this is dark in
-   * both themes. */
-  --studio-on-accent: #1a1a1a;
-  // ---- Severity (passes / fails / warnings on cards + verdicts) ----
-  // Always read these via `var(--severity-*)`; never repeat the hex.
-  --severity-pass:      #4ade80;  /* green-400 — happy path */
-  --severity-warn:      #f9e2af;  /* yellow-200 — deferred / quiet */
-  --severity-high:      #f38ba8;  /* pink-300 — fail / blocking */
-  --severity-info:      #89b4fa;  /* blue-300 — neutral notice */
-  --severity-pending:   #c4b5fd;  /* violet-300 — running / pending */
-  // ---- Lane palette (kanban states) ----
-  --lane-backlog:       #9d9d9d;
-  --lane-prep:          #d1bfa5;
-  --lane-ready:         #4ec9b0;
-  --lane-progress:      #569cd6;
-  --lane-auto-review:   #f9e2af;
-  --lane-human-review:  #c586c0;
-  --lane-completed:     #5fbf80;
-  --lane-archive:       #6e6e6e;
-  --lane-failed:        #f38ba8;
-  // ---- Diff palette (unified diff + side-by-side renderers) ----
-  // Always read these via `var(--diff-*)`; never repeat the hex. Used by
-  // the run-git-viewer (protocol-pane modal) and the studio diff tab so
-  // both surfaces share one palette per theme. See
-  // docs/frontend-scss-quality.md "Diff tokens".
-  --diff-add-bg:        rgba(34, 197, 94, 0.18);
-  --diff-add-fg:        #bbf7d0;
-  --diff-rem-bg:        rgba(220, 38, 38, 0.20);
-  --diff-rem-fg:        #fecaca;
-  --diff-hunk-bg:       rgba(56, 189, 248, 0.08);
-  --diff-hunk-fg:       #93c5fd;
-  // ---- Type families ----
-  // Two canonical stacks. Inline `font-family:` declarations across
-  // the codebase should resolve to one of these — see
-  // docs/frontend-scss-quality.md Tier 3.2.
-  --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
-  // layout
-  --studio-activitybar-w: 48px;
-  --studio-titlebar-h:    36px;
-  --studio-tabbar-h:      36px;
-}
-
-[data-studio-theme='light'] {
-  --studio-bg-titlebar:     #f3f3f3;
-  --studio-bg-activitybar:  #ececec;
-  --studio-bg-sidebar:      #f8f8f8;
-  --studio-bg-editor:       #ffffff;
-  --studio-bg-elevated:     #ececec;
-  --studio-bg-tab-active:   #ffffff;
-  --studio-bg-tab-inactive: #ececec;
-  --studio-bg-hover:    rgba(0, 0, 0, 0.05);
-  --studio-bg-selected: rgba(217, 119, 87, 0.15);
-  --studio-border:        #d4d4d4;
-  --studio-border-strong: #b4b4b4;
-  --studio-fg:        #333333;
-  --studio-fg-strong: #1a1a1a;
-  --studio-fg-dim:    #555555;
-  --studio-fg-muted:  #888888;
-  // Semantic accents land slightly darker on light surfaces so the
-  // text stays readable on a tinted-low-alpha pill.
-  --studio-accent-warn:    #a16207;  /* yellow-700 */
-  --studio-accent-success: #15803d;  /* green-700 */
-  --studio-accent-6:       #b91c1c;  /* red-700 */
-  // Severity palette darkens for light surfaces so tinted pills stay
-  // readable + the verdict-banner stripe gets a saturated edge.
-  --severity-pass:    #16a34a;  /* green-600 */
-  --severity-warn:    #b45309;  /* amber-700 */
-  --severity-high:    #be123c;  /* rose-700 */
-  --severity-info:    #1d4ed8;  /* blue-700 */
-  --severity-pending: #6d28d9;  /* violet-700 */
-  // Lane palette desaturates for the white shell.
-  --lane-backlog:       #6e6e6e;
-  --lane-prep:          #92745a;
-  --lane-ready:         #15803d;
-  --lane-progress:      #1d4ed8;
-  --lane-auto-review:   #a16207;
-  --lane-human-review:  #7c3aed;
-  --lane-completed:     #15803d;
-  --lane-archive:       #4a4a4a;
-  --lane-failed:        #b91c1c;
-  // Diff palette: zarte Pastell-Tint, dunkler Text so der Code im Diff
-  // lesbar bleibt (WCAG AA gegen --diff-add-bg / --diff-rem-bg).
-  --diff-add-bg:        #dcfce7;  /* green-100 */
-  --diff-add-fg:        #14532d;  /* green-900 */
-  --diff-rem-bg:        #fee2e2;  /* red-100 */
-  --diff-rem-fg:        #7f1d1d;  /* red-900 */
-  --diff-hunk-bg:       #e0f2fe;  /* sky-100 */
-  --diff-hunk-fg:       #075985;  /* sky-800 */
-}
 
 .studio {
   display: grid;
