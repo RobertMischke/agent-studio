@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli.OneShot;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.ProjectChat;
 
@@ -62,13 +63,19 @@ public class OrchestratorChat
             var path = ResolvePath(watchPath);
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
-            var line = JsonSerializer.Serialize(turn, WriteOpts) + Environment.NewLine;
+            // Strip inline-base64 / mime before persisting: the jsonl log is
+            // the long-lived audit trail and embedding multi-MB base64 blobs
+            // in it makes every subsequent read O(N) over the image bytes.
+            // The frontend can still render the picture via RelativePath
+            // through the existing GET attachments route.
+            var persisted = StripInlineBytes(turn);
+            var line = JsonSerializer.Serialize(persisted, WriteOpts) + Environment.NewLine;
             File.AppendAllText(path, line, Encoding.UTF8);
 
             // Slice D mirror: also write the per-turn markdown file so the
             // new file-tree + FTS index stay current as turns are appended.
             // Best-effort; legacy JSONL remains the fallback if this fails.
-            MirrorToProjectChat(watchPath, turn);
+            MirrorToProjectChat(watchPath, persisted);
             return true;
         }
         catch (Exception ex)
@@ -76,6 +83,22 @@ public class OrchestratorChat
             _logger.LogWarning(ex, "Failed to append orchestrator chat turn under {WatchPath}", watchPath);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Drop the in-flight inline base64 / mime fields so the on-disk audit
+    /// log stays small. Returns the input unchanged when no attachment
+    /// carries inline bytes (the common case before the multimodal path).
+    /// </summary>
+    internal static OrchestratorChatTurn StripInlineBytes(OrchestratorChatTurn turn)
+    {
+        if (turn.Attachments == null || turn.Attachments.Count == 0) return turn;
+        var hasInline = turn.Attachments.Any(a => !string.IsNullOrEmpty(a.InlineBase64));
+        if (!hasInline) return turn;
+        var stripped = turn.Attachments
+            .Select(a => new OrchestratorChatAttachment { Alt = a.Alt, RelativePath = a.RelativePath })
+            .ToList();
+        return turn with { Attachments = stripped };
     }
 
     private void MirrorToProjectChat(string watchPath, OrchestratorChatTurn turn)
@@ -246,11 +269,35 @@ public record OrchestratorChatTurn
 /// Today the only carrier is an image stored in the watch path's
 /// <c>.orchestrator/attachments/</c> folder; <see cref="RelativePath"/> is
 /// the path the frontend resolves through the existing image-serving route.
+///
+/// <para>
+/// <see cref="InlineBase64"/> + <see cref="MimeType"/> are the multimodal
+/// fast path: when the frontend ships the raw image bytes, the backend
+/// hands them straight to the CLI as a Claude image content block via the
+/// <c>--input-format stream-json</c> envelope, so the model sees the image
+/// in the same message it sees the text - no Read tool call required.
+/// These fields are stripped before the turn is appended to the per-project
+/// chat jsonl so the audit log stays text-only and small; the persisted
+/// <see cref="RelativePath"/> (when present) remains the long-lived
+/// reference.
+/// </para>
 /// </summary>
 public record OrchestratorChatAttachment
 {
     public string Alt { get; init; } = "";
     public string RelativePath { get; init; } = "";
+
+    /// <summary>
+    /// Base64-encoded image bytes for the multimodal fast path. Set by the
+    /// frontend when an image is pasted into the composer. Not persisted.
+    /// </summary>
+    public string? InlineBase64 { get; init; }
+
+    /// <summary>
+    /// MIME type of <see cref="InlineBase64"/> (e.g. <c>image/png</c>). Not
+    /// persisted; only meaningful in flight.
+    /// </summary>
+    public string? MimeType { get; init; }
 }
 
 public static class OrchestratorChatRoles
@@ -403,6 +450,7 @@ public class OrchestratorChatService
             var prompt = BuildPrompt(projectName, watchPath, req);
             var modelId = _config["GlobalOrchestrator:Model"] ?? OrchestratorRunner.DefaultModel;
             var workingDirectory = ResolveWorkingDirectory(watchPath);
+            var inlineImages = ExtractInlineImages(req.Attachments);
 
             // Track whether the resume was rejected so we can persist a
             // fresh session record after a successful fallback instead of
@@ -427,6 +475,7 @@ public class OrchestratorChatService
                     },
                     modelId,
                     workingDirectory,
+                    inlineImages,
                     ct);
             }
             catch (Exception ex)
@@ -548,7 +597,19 @@ public class OrchestratorChatService
 
         if (req.Attachments != null && req.Attachments.Count > 0)
         {
-            sb.AppendLine($"User attached {req.Attachments.Count} image(s):");
+            var inlineCount = req.Attachments.Count(a => !string.IsNullOrEmpty(a.InlineBase64));
+            if (inlineCount > 0)
+            {
+                // Inline images travel as Anthropic content blocks alongside
+                // the text in the same user message - the model has the
+                // pixels in context already. Telling it that explicitly
+                // avoids a wasted Read tool call against the archived copy.
+                sb.AppendLine($"User attached {req.Attachments.Count} image(s); {inlineCount} delivered as inline content block(s) above this text. The archived copies (for reference) are:");
+            }
+            else
+            {
+                sb.AppendLine($"User attached {req.Attachments.Count} image(s):");
+            }
             foreach (var a in req.Attachments)
             {
                 sb.AppendLine($"- {a.Alt} ({a.RelativePath})");
@@ -642,5 +703,28 @@ public class OrchestratorChatService
         return !string.IsNullOrWhiteSpace(entry?.RootPath)
             ? entry!.RootPath
             : Path.GetTempPath();
+    }
+
+    /// <summary>
+    /// Lift the inline-base64 attachments out of the request and into the
+    /// shape <see cref="OrchestratorRunner"/> hands to the Claude one-shot
+    /// driver. Returns null when no attachment carried inline bytes, so
+    /// the caller can pass null through to the existing text-only path.
+    /// Strips entries that look malformed (empty base64 / non-image mime)
+    /// rather than passing them through and letting the CLI fail later.
+    /// </summary>
+    internal static IReadOnlyList<CliOneShotImage>? ExtractInlineImages(
+        IEnumerable<OrchestratorChatAttachment>? attachments)
+    {
+        if (attachments == null) return null;
+        var result = new List<CliOneShotImage>();
+        foreach (var a in attachments)
+        {
+            if (string.IsNullOrWhiteSpace(a.InlineBase64)) continue;
+            var mime = string.IsNullOrWhiteSpace(a.MimeType) ? "image/png" : a.MimeType!;
+            if (!mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) continue;
+            result.Add(new CliOneShotImage(a.InlineBase64!, mime));
+        }
+        return result.Count == 0 ? null : result;
     }
 }

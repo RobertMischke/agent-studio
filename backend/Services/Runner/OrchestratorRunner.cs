@@ -84,7 +84,21 @@ public class OrchestratorRunner
         string? model,
         string workingDirectory,
         CancellationToken ct = default)
-        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: null, ct);
+        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: null, inlineImages: null, ct);
+
+    /// <summary>
+    /// Variant of <see cref="DecideAsync"/> that attaches inline image
+    /// content blocks to the user message. The orchestrator chat path
+    /// uses this when the user pastes a screenshot into the composer: the
+    /// model sees the image alongside the text, no Read tool call needed.
+    /// </summary>
+    public virtual Task<OrchestratorDecisionResult> DecideAsync(
+        string prompt,
+        string? model,
+        string workingDirectory,
+        IReadOnlyList<CliOneShotImage>? inlineImages,
+        CancellationToken ct = default)
+        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: null, inlineImages, ct);
 
     /// <summary>
     /// Resume an existing orchestrator session via <c>claude -r &lt;sessionId&gt;</c>.
@@ -98,7 +112,20 @@ public class OrchestratorRunner
         string? model,
         string workingDirectory,
         CancellationToken ct = default)
-        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: sessionId, ct);
+        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: sessionId, inlineImages: null, ct);
+
+    /// <summary>
+    /// Variant of <see cref="ResumeAsync"/> that attaches inline image
+    /// content blocks to the resumed user message.
+    /// </summary>
+    public virtual Task<OrchestratorDecisionResult> ResumeAsync(
+        string sessionId,
+        string prompt,
+        string? model,
+        string workingDirectory,
+        IReadOnlyList<CliOneShotImage>? inlineImages,
+        CancellationToken ct = default)
+        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: sessionId, inlineImages, ct);
 
     /// <summary>
     /// Resume a session and transparently fall back to a fresh one-shot if
@@ -121,7 +148,7 @@ public class OrchestratorRunner
     /// network) propagate as-is without firing the callback.
     /// </para>
     /// </summary>
-    public virtual async Task<OrchestratorDecisionResult> ResumeWithFallbackAsync(
+    public virtual Task<OrchestratorDecisionResult> ResumeWithFallbackAsync(
         string sessionId,
         string resumePrompt,
         Func<string> fallbackPromptBuilder,
@@ -129,8 +156,24 @@ public class OrchestratorRunner
         string? model,
         string workingDirectory,
         CancellationToken ct = default)
+        => ResumeWithFallbackAsync(sessionId, resumePrompt, fallbackPromptBuilder, onSessionRejected, model, workingDirectory, inlineImages: null, ct);
+
+    /// <summary>
+    /// Variant of <see cref="ResumeWithFallbackAsync"/> that carries inline
+    /// image content blocks on both the resume attempt and the fallback
+    /// one-shot. Used by the orchestrator chat multimodal path.
+    /// </summary>
+    public virtual async Task<OrchestratorDecisionResult> ResumeWithFallbackAsync(
+        string sessionId,
+        string resumePrompt,
+        Func<string> fallbackPromptBuilder,
+        Action onSessionRejected,
+        string? model,
+        string workingDirectory,
+        IReadOnlyList<CliOneShotImage>? inlineImages,
+        CancellationToken ct = default)
     {
-        var result = await ResumeAsync(sessionId, resumePrompt, model, workingDirectory, ct).ConfigureAwait(false);
+        var result = await ResumeAsync(sessionId, resumePrompt, model, workingDirectory, inlineImages, ct).ConfigureAwait(false);
         if (result.Success || !IsSessionRejection(result.ErrorMessage))
             return result;
 
@@ -142,7 +185,7 @@ public class OrchestratorRunner
         catch (Exception ex) { _logger.LogDebug(ex, "onSessionRejected callback threw"); }
 
         var fallbackPrompt = fallbackPromptBuilder();
-        return await DecideAsync(fallbackPrompt, model, workingDirectory, ct).ConfigureAwait(false);
+        return await DecideAsync(fallbackPrompt, model, workingDirectory, inlineImages, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -176,6 +219,7 @@ public class OrchestratorRunner
         string? model,
         string workingDirectory,
         string? resumeSessionId,
+        IReadOnlyList<CliOneShotImage>? inlineImages,
         CancellationToken ct)
     {
         var modelId = string.IsNullOrWhiteSpace(model) ? DefaultModel : model!.Trim();
@@ -197,6 +241,7 @@ public class OrchestratorRunner
                 WorkingDirectory = workingDirectory,
                 Timeout = DefaultTimeout,
                 ExtraArgs = extras,
+                InlineImages = inlineImages,
                 RecordUsage = false, // The orchestrator path has its own bookkeeping
             }, ct).ConfigureAwait(false);
 

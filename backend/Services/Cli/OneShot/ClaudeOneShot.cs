@@ -118,6 +118,17 @@ public sealed class ClaudeOneShot : ICliOneShot
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(request.Model);
         psi.ArgumentList.Add("--dangerously-skip-permissions");
+        var multimodal = request.InlineImages is { Count: > 0 };
+        if (multimodal)
+        {
+            // Switch to stream-json input so the prompt + image content
+            // blocks land on the model as one user message instead of a
+            // text-only stdin pipe. See BuildStreamJsonUserMessage for the
+            // exact envelope shape.
+            psi.ArgumentList.Add("--input-format");
+            psi.ArgumentList.Add("stream-json");
+            psi.ArgumentList.Add("--verbose");
+        }
         if (request.ExtraArgs is { Count: > 0 } extras)
         {
             foreach (var arg in extras) psi.ArgumentList.Add(arg);
@@ -141,9 +152,22 @@ public sealed class ClaudeOneShot : ICliOneShot
             }
 
             // stdin-piped prompt. See class-level remarks for the why.
+            // Multimodal path emits a single NDJSON line wrapping the
+            // prompt + image content blocks in the stream-json envelope
+            // the Claude CLI expects when --input-format stream-json is
+            // active. Text-only path stays as a raw prompt string so the
+            // existing CLI defaults (input-format text) apply unchanged.
             try
             {
-                await p.StandardInput.WriteAsync(request.Prompt.AsMemory(), effectiveCt).ConfigureAwait(false);
+                if (multimodal)
+                {
+                    var envelope = BuildStreamJsonUserMessage(request.Prompt, request.InlineImages!);
+                    await p.StandardInput.WriteAsync(envelope.AsMemory(), effectiveCt).ConfigureAwait(false);
+                }
+                else
+                {
+                    await p.StandardInput.WriteAsync(request.Prompt.AsMemory(), effectiveCt).ConfigureAwait(false);
+                }
                 await p.StandardInput.FlushAsync(effectiveCt).ConfigureAwait(false);
             }
             finally
@@ -259,6 +283,52 @@ public sealed class ClaudeOneShot : ICliOneShot
             ok: result.Ok,
             project: request.Project,
             jobId: request.JobId);
+    }
+
+    /// <summary>
+    /// Build the single-line NDJSON envelope the Claude CLI expects when
+    /// <c>--input-format stream-json</c> is active. The envelope wraps the
+    /// prompt as a text content block plus one image content block per
+    /// supplied <see cref="CliOneShotImage"/>; this is the exact shape the
+    /// Anthropic SDK uses for multimodal user messages, so the model sees
+    /// the image alongside the text in the same turn.
+    /// <para>
+    /// Public so a unit test can pin the envelope shape - a regression
+    /// here is silently caught by the CLI as "Invalid input format" and
+    /// the orchestrator chat falls back to a content-less reply, which is
+    /// hard to bisect after the fact.
+    /// </para>
+    /// </summary>
+    public static string BuildStreamJsonUserMessage(string prompt, IReadOnlyList<CliOneShotImage> images)
+    {
+        var content = new List<object>
+        {
+            new { type = "text", text = prompt ?? string.Empty }
+        };
+        foreach (var img in images)
+        {
+            if (img == null || string.IsNullOrEmpty(img.Base64)) continue;
+            content.Add(new
+            {
+                type = "image",
+                source = new
+                {
+                    type = "base64",
+                    media_type = string.IsNullOrWhiteSpace(img.MediaType) ? "image/png" : img.MediaType,
+                    data = img.Base64
+                }
+            });
+        }
+        var envelope = new
+        {
+            type = "user",
+            message = new
+            {
+                role = "user",
+                content = content
+            }
+        };
+        return JsonSerializer.Serialize(envelope) + "\n";
     }
 
     /// <summary>

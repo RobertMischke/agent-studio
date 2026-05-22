@@ -1067,7 +1067,12 @@ export class JobService {
     projectName: string,
     body: {
       text: string;
-      attachments?: { alt: string; relativePath: string }[];
+      attachments?: {
+        alt: string;
+        relativePath: string;
+        inlineBase64?: string | null;
+        mimeType?: string | null;
+      }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext;
     },
   ) {

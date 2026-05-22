@@ -637,12 +637,29 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // Upload each pasted/dropped image first so the chat message can
     // reference real files. We do this sequentially to keep error
     // surfaces simple and the frontend code small; orchestrator chats
-    // rarely carry more than 1-2 images per turn.
-    const uploaded: { alt: string; relativePath: string }[] = [];
+    // rarely carry more than 1-2 images per turn. We also read each file
+    // as base64 in parallel so the same POST can carry the bytes inline:
+    // the backend uses the inline bytes to build an Anthropic image
+    // content block (model sees the picture without a Read tool call),
+    // while the uploaded copy stays as the archived reference.
+    const uploaded: {
+      alt: string;
+      relativePath: string;
+      inlineBase64?: string | null;
+      mimeType?: string | null;
+    }[] = [];
     try {
       for (const att of event.attachments) {
-        const resp = await this.uploadOne(proj, att.file);
-        uploaded.push({ alt: att.alt, relativePath: resp.relativePath });
+        const [resp, inline] = await Promise.all([
+          this.uploadOne(proj, att.file),
+          this.readAsBase64(att.file).catch(() => null)
+        ]);
+        uploaded.push({
+          alt: att.alt,
+          relativePath: resp.relativePath,
+          inlineBase64: inline?.base64 ?? null,
+          mimeType: inline?.mimeType ?? att.file.type ?? null
+        });
       }
     } catch (err) {
       this.sending.set(false);
@@ -856,6 +873,33 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         next: (resp) => resolve({ relativePath: resp.relativePath, url: resp.url }),
         error: (err) => reject(new Error(err?.error?.error || err?.message || 'Upload failed'))
       });
+    });
+  }
+
+  /**
+   * Read a pasted/dropped file as a base64 payload for the multimodal
+   * fast path. Strips the `data:<mime>;base64,` prefix so the backend
+   * only sees the raw base64. Files larger than 10 MB resolve to null
+   * so the inline path is skipped and the chat falls back to the
+   * archived-only behaviour (matches the backend upload cap).
+   */
+  private readAsBase64(file: File): Promise<{ base64: string; mimeType: string } | null> {
+    return new Promise((resolve) => {
+      if (file.size > 10 * 1024 * 1024) {
+        resolve(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const comma = result.indexOf(',');
+        const base64 = comma >= 0 ? result.substring(comma + 1) : result;
+        const mimeMatch = /^data:([^;]+);base64,/.exec(result);
+        const mimeType = mimeMatch?.[1] ?? file.type ?? 'image/png';
+        resolve({ base64, mimeType });
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
     });
   }
 

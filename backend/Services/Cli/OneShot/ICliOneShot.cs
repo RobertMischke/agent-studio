@@ -79,7 +79,27 @@ public sealed record CliOneShotRequest(
     /// passed through ProcessStartInfo.ArgumentList so no manual quoting
     /// is required.</summary>
     public IReadOnlyList<string>? ExtraArgs { get; init; }
+
+    /// <summary>
+    /// Multimodal fast path. When non-empty, the one-shot driver switches
+    /// to <c>--input-format stream-json</c> and writes a single user
+    /// message envelope to stdin containing <see cref="Prompt"/> as a text
+    /// content block followed by one image content block per entry. The
+    /// model sees the images in the same turn as the text - no Read tool
+    /// call required. Capability is Claude-only; other CLIs ignore this
+    /// field today and fall back to text-only stdin.
+    /// </summary>
+    public IReadOnlyList<CliOneShotImage>? InlineImages { get; init; }
 }
+
+/// <summary>
+/// One image attached to a one-shot CLI call. <see cref="Base64"/> is the
+/// raw image bytes encoded without any data-URL prefix; <see cref="MediaType"/>
+/// is the MIME type the Claude SDK expects in the
+/// <c>{"type":"image","source":{...}}</c> block (e.g. <c>image/png</c>,
+/// <c>image/jpeg</c>, <c>image/gif</c>, <c>image/webp</c>).
+/// </summary>
+public sealed record CliOneShotImage(string Base64, string MediaType);
 
 /// <summary>Full result envelope. All fields are populated even on
 /// failure so call sites can log a consistent shape.</summary>
