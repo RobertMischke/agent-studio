@@ -53,14 +53,18 @@
 
   &:hover,
   &:active {
-    background: rgba(217, 119, 87, 0.30); // var(--studio-accent) at α30
+    background: color-mix(in srgb, var(--studio-accent) 30%, transparent);
   }
 }
 
 .sidesheet {
-  --orch-accent: #f46943;
-  --orch-soft: rgba(244, 105, 67, 0.12);
-  --orch-line: rgba(244, 105, 67, 0.24);
+  // Local accent aliases — derived from the studio brand orange so they
+  // flip cleanly with the theme. The fixed RGB shorthand on the soft/line
+  // tints comes from the dark-mode reading of --studio-accent; on light
+  // theme the lower alphas still read as a soft tint over the white shell.
+  --orch-accent: var(--studio-accent);
+  --orch-soft: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+  --orch-line: color-mix(in srgb, var(--studio-accent) 24%, transparent);
 }
 
 // Header BEM (`sheet__header`, `sheet__title-block`, `sheet__eyebrow`,
@@ -109,12 +113,12 @@
   font-size: 12px;
 }
 .sheet__combo-wrap--active {
-  border-color: rgba(125, 211, 252, 0.42);
-  background: rgba(14, 165, 233, 0.10);
+  border-color: color-mix(in srgb, var(--studio-accent-3) 42%, transparent);
+  background: color-mix(in srgb, var(--studio-accent-3) 10%, transparent);
 }
 .sheet__combo-wrap--open {
-  border-color: rgba(196, 181, 253, 0.72);
-  box-shadow: 0 0 0 1px rgba(196, 181, 253, 0.25);
+  border-color: color-mix(in srgb, var(--studio-accent-4) 72%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--studio-accent-4) 25%, transparent);
 }
 .sheet__select-icon,
 .sheet__select-caret { flex: 0 0 auto; opacity: 0.85; }
@@ -206,7 +210,7 @@
   white-space: nowrap;
 }
 .sheet__memory::first-letter {
-  color: #10b981;
+  color: var(--studio-accent-success);
 }
 .sheet__error {
   margin: 0 0 10px;
@@ -298,7 +302,7 @@
 .sheet__draft-btn--primary {
   background: var(--studio-accent);
   border-color: var(--studio-accent);
-  color: var(--studio-on-accent, #1a1a1a);
+  color: var(--studio-on-accent);
 }
 
 /* Narrow-viewport collapse: keep the tab strip horizontal but let the

@@ -123,7 +123,7 @@
   // clashed with the rest of the studio chrome.
   background: var(--studio-accent);
   border-color: var(--studio-accent);
-  color: var(--studio-on-accent, #1a1a1a);
+  color: var(--studio-on-accent);
   font-weight: 600;
 }
 .sheet__chip-icon { font-size: 12px; }

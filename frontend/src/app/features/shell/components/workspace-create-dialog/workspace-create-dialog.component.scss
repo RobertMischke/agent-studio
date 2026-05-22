@@ -20,17 +20,17 @@
   }
 
   &__input {
-    background: var(--app-input-bg, rgba(255, 255, 255, 0.04));
-    border: 1px solid var(--app-input-border, rgba(255, 255, 255, 0.12));
+    background: var(--app-input-bg, var(--studio-bg-hover));
+    border: 1px solid var(--app-input-border, var(--studio-border-strong));
     border-radius: 4px;
-    color: var(--app-text);
+    color: var(--app-text, var(--studio-fg));
     font: inherit;
     padding: 0.45rem 0.6rem;
     transition: border-color 0.12s ease;
 
     &:focus {
       outline: none;
-      border-color: var(--app-accent, #89b4fa);
+      border-color: var(--app-accent, var(--studio-accent));
     }
 
     &:disabled {
@@ -41,19 +41,19 @@
 
   &__hint {
     font-size: 0.78rem;
-    color: var(--app-muted-text);
+    color: var(--app-muted-text, var(--studio-fg-muted));
     margin: 0;
     line-height: 1.4;
 
     code {
       font-family: var(--app-font-mono, monospace);
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--studio-bg-hover);
       padding: 0 0.25rem;
       border-radius: 3px;
     }
 
     &--error {
-      color: var(--app-danger, #f38ba8);
+      color: var(--app-danger, var(--studio-accent-6));
     }
   }
 
@@ -78,18 +78,18 @@
 
     &--ghost {
       background: transparent;
-      color: var(--app-text);
-      border-color: var(--app-input-border, rgba(255, 255, 255, 0.16));
+      color: var(--app-text, var(--studio-fg));
+      border-color: var(--app-input-border, var(--studio-border-strong));
 
       &:not(:disabled):hover {
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--studio-bg-hover);
       }
     }
 
     &--primary {
-      background: var(--app-accent, #89b4fa);
-      color: var(--app-accent-fg, #11111b);
-      border-color: var(--app-accent, #89b4fa);
+      background: var(--app-accent, var(--studio-accent));
+      color: var(--app-accent-fg, var(--studio-on-accent));
+      border-color: var(--app-accent, var(--studio-accent));
 
       &:not(:disabled):hover {
         filter: brightness(1.07);

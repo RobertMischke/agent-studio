@@ -20,7 +20,7 @@
  * targeted DOM that this component no longer renders. They were all
  * deleted; what's left below is what the live HTML actually uses.
  */
-.seg + .seg { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.seg + .seg { border-top: 1px solid var(--studio-border); }
 .seg__head {
   display: flex;
   align-items: center;
@@ -29,11 +29,11 @@
   padding: 8px 14px;
   background: transparent;
   border: 0;
-  color: #e2e8f0;
+  color: var(--studio-fg);
   cursor: pointer;
 }
-.seg__head:hover { background: rgba(255, 255, 255, 0.04); }
-.seg__chev { font-size: 10px; color: #64748b; width: 10px; }
+.seg__head:hover { background: var(--studio-bg-hover); }
+.seg__chev { font-size: 10px; color: var(--studio-fg-muted); width: 10px; }
 .seg__title {
   font-weight: 700;
   text-transform: uppercase;
@@ -43,17 +43,17 @@
 .seg__hint {
   margin-left: auto;
   font-size: 11px;
-  color: #64748b;
+  color: var(--studio-fg-muted);
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
 }
 
 .sheet__detail-empty {
-  color: #64748b;
+  color: var(--studio-fg-muted);
   font-size: 11px;
   line-height: 1.4;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--studio-bg-hover);
 }
