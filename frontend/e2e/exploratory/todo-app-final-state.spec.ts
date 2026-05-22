@@ -12,7 +12,7 @@ test('capture final state and render of the produced todo app', async ({ page })
   await page.goto('/');
   await page.locator('[data-studio="root"]').waitFor({ state: 'visible', timeout: 15_000 });
   await page.getByTestId('studio-project-picker-trigger').click();
-  await page.getByTestId('studio-project-picker-Runbook').click();
+  await page.getByTestId('studio-project-picker-item-Runbook').click();
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(ARTIFACT_DIR, 'final-board.png'), fullPage: false });
 

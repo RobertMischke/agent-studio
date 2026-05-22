@@ -481,52 +481,22 @@
             ＋ Add Task
           </button>
           <div class="devtools-menu">
-            <button class="devtools-menu__trigger"
+            <button #devtoolsTrigger
+                    class="devtools-menu__trigger"
                     data-testid="devtools-menu-trigger"
                     [appTooltip]="'Dev tools'"
                     [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
                     (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" tabindex="0" (keydown.enter)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" (keydown.space)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation(); $event.preventDefault()">⋮</button>
-            @if (devToolsMenuOpen()) {
-              <div class="devtools-menu__backdrop"
-                   tabindex="0"
-                   (click)="devToolsMenuOpen.set(false)"
-                   (keydown.enter)="devToolsMenuOpen.set(false)"
-                   (keydown.space)="devToolsMenuOpen.set(false); $event.preventDefault()"></div>
-              <div class="devtools-menu__panel"
-                   tabindex="-1"
-                   (click)="$event.stopPropagation()"
-                   (keydown)="$event.stopPropagation()">
-                <div class="devtools-menu__header">System</div>
-                <button class="devtools-menu__item"
-                        data-testid="devtool-orch-config"
-                        (click)="onPickOrchestratorConfig()">
-                  <span class="devtools-menu__icon">⚙</span>
-                  <span class="devtools-menu__label">Orchestrator config</span>
-                  <span class="devtools-menu__hint">supervisor + meta-cycle flags</span>
-                </button>
-                @if (devToolsFlags().updateStableEnabled || devToolsFlags().deleteE2EJobsEnabled) {
-                  <div class="devtools-menu__header">Dev tools</div>
-                }
-                @if (devToolsFlags().updateStableEnabled) {
-                  <button class="devtools-menu__item"
-                          data-testid="devtool-update-stable"
-                          (click)="onPickUpdateStable()">
-                    <span class="devtools-menu__icon">⟳</span>
-                    <span class="devtools-menu__label">Update Stable</span>
-                    <span class="devtools-menu__hint">open resilient update center</span>
-                  </button>
-                }
-                @if (devToolsFlags().deleteE2EJobsEnabled) {
-                  <button class="devtools-menu__item devtools-menu__item--danger"
-                          data-testid="devtool-delete-e2e"
-                          (click)="onPickDeleteE2E()">
-                    <span class="devtools-menu__icon">🧹</span>
-                    <span class="devtools-menu__label">Delete E2E Jobs</span>
-                    <span class="devtools-menu__hint">across all projects</span>
-                  </button>
-                }
-              </div>
-            }
+            <app-menu
+              [items]="devtoolsMenuItems()"
+              [open]="devToolsMenuOpen()"
+              [anchorEl]="devtoolsTrigger"
+              placement="below"
+              testIdPrefix="devtools-menu"
+              ariaLabel="Dev tools menu"
+              [minWidth]="240"
+              (itemClick)="onDevtoolsMenuItemClick($event)"
+              (closeRequest)="devToolsMenuOpen.set(false)" />
           </div>
         </div>
       </header>

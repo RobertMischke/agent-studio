@@ -311,47 +311,10 @@
   align-items: center;
   gap: 6px;
 }
-.studio-titlebar__picker-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 240px;
-  max-width: 360px;
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
-  padding: 4px;
-  z-index: 80;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.studio-titlebar__picker-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--studio-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  text-align: left;
-  white-space: nowrap;
-
-  &:hover {
-    background: var(--studio-bg-hover);
-    color: var(--studio-fg-strong);
-  }
-
-  &--active {
-    background: var(--studio-bg-selected);
-    color: var(--studio-fg-strong);
-  }
-}
+// F23: project picker dropdown content moved to the shared <app-menu>
+// component. The `.studio-titlebar__picker-menu` / `__picker-item` blocks
+// previously here are dead — the picker now renders through <app-menu>'s
+// styles in src/app/components/menu/menu.component.scss.
 
 // Auto-pickup toggle next to the project picker. The dot lights up
 // (brand-orange) when auto is enabled. Click cycles auto ⇄ paused via
@@ -1296,51 +1259,9 @@
   }
 }
 
-.studio-tab-ctx-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  background: transparent;
-}
-
-.studio-tab-ctx {
-  position: fixed;
-  z-index: 91;
-  min-width: 180px;
-  padding: 4px 0;
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-
-  &__item {
-    display: block;
-    width: 100%;
-    padding: 6px 14px;
-    font-size: 12px;
-    color: var(--studio-fg);
-    text-align: left;
-    background: transparent;
-    border: 0;
-    cursor: pointer;
-
-    &:hover:not([disabled]) {
-      background: var(--studio-bg-selected);
-    }
-
-    &[disabled] {
-      color: var(--studio-fg-disabled, var(--studio-fg-muted));
-      cursor: default;
-      opacity: 0.5;
-    }
-  }
-
-  &__sep {
-    height: 1px;
-    background: var(--studio-border);
-    margin: 4px 0;
-  }
-}
+// F23: tab right-click context-menu now renders through the shared
+// <app-menu> component. The `.studio-tab-ctx` / `.studio-tab-ctx-backdrop`
+// blocks previously here are dead — see src/app/components/menu/menu.component.scss.
 
 // Note: the BEM members below are nested under a second `.studio-tree-row`
 // declaration earlier in this file (around line 526). Keep that file's

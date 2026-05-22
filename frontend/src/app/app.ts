@@ -93,6 +93,7 @@ import type { CliOutputLine } from './models/job.model';
 import type { RunTimeline } from './features/run-timeline';
 import type { JobScreenshot } from './features/screenshots';
 import { TooltipDirective } from './components/tooltip';
+import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
 import type { JobTokenSummary } from './features/tokens'; // verbose-debug overlay context types
 
 interface VerboseDebugContext {
@@ -133,6 +134,7 @@ interface VerboseDebugContext {
     FiltersDropdownComponent,
     KanbanFilterSidesheetComponent,
     TooltipDirective,
+    MenuComponent,
     StudioShellComponent,
     ProjectHubViewComponent,
     StudioDiffViewComponent,
@@ -661,6 +663,62 @@ export class App implements OnInit, OnDestroy {
   }
 
   readonly devToolsFlags = computed(() => this.devTools.flags());
+
+  /**
+   * F23: typed menu-item list driving the shared <app-menu> in the header.
+   * Replaces the inline button-per-row markup that lived directly in
+   * app.html (and its companion .devtools-menu* SCSS block).
+   */
+  readonly devtoolsMenuItems = computed<readonly MenuItem[]>(() => {
+    const flags = this.devToolsFlags();
+    const items: MenuItem[] = [
+      { kind: 'header', label: 'System' },
+      {
+        kind: 'row',
+        id: 'orch-config',
+        label: 'Orchestrator config',
+        hint: 'supervisor + meta-cycle flags',
+        icon: '⚙',
+      },
+    ];
+    if (flags.updateStableEnabled || flags.deleteE2EJobsEnabled) {
+      items.push({ kind: 'header', label: 'Dev tools' });
+    }
+    if (flags.updateStableEnabled) {
+      items.push({
+        kind: 'row',
+        id: 'update-stable',
+        label: 'Update Stable',
+        hint: 'open resilient update center',
+        icon: '⟳',
+      });
+    }
+    if (flags.deleteE2EJobsEnabled) {
+      items.push({
+        kind: 'row',
+        id: 'delete-e2e',
+        label: 'Delete E2E Jobs',
+        hint: 'across all projects',
+        icon: '🧹',
+        danger: true,
+      });
+    }
+    return items;
+  });
+
+  onDevtoolsMenuItemClick(ev: MenuItemClickEvent): void {
+    switch (ev.id) {
+      case 'orch-config':
+        this.onPickOrchestratorConfig();
+        break;
+      case 'update-stable':
+        this.onPickUpdateStable();
+        break;
+      case 'delete-e2e':
+        this.onPickDeleteE2E();
+        break;
+    }
+  }
 
   onPickUpdateStable(): void {
     this.devToolsMenuOpen.set(false);

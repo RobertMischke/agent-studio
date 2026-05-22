@@ -1,0 +1,63 @@
+@if (open()) {
+  <div class="app-menu__backdrop"
+       data-testid="app-menu-backdrop"
+       (mousedown)="onBackdropClick(); $event.preventDefault()"
+       (contextmenu)="$event.preventDefault(); onBackdropClick()"></div>
+  <div #panel
+       class="app-menu__panel"
+       role="menu"
+       tabindex="-1"
+       [attr.aria-label]="ariaLabel()"
+       [attr.data-testid]="panelTestId()"
+       [style.top]="panelStyle().top"
+       [style.left]="panelStyle().left"
+       [style.min-width]="panelStyle().minWidth || null"
+       (keydown)="onPanelKeyDown($event)"
+       (mousedown)="$event.stopPropagation()"
+       (click)="$event.stopPropagation()">
+    @for (item of items(); track $index; let i = $index) {
+      @switch (item.kind) {
+        @case ('header') {
+          <div class="app-menu__header" role="presentation">{{ item.label }}</div>
+        }
+        @case ('separator') {
+          <div class="app-menu__separator" role="separator"></div>
+        }
+        @case ('row') {
+          <button type="button"
+                  class="app-menu__row"
+                  [class.app-menu__row--disabled]="item.disabled"
+                  [class.app-menu__row--danger]="item.danger"
+                  [class.app-menu__row--active]="item.active"
+                  [class.app-menu__row--has-glyph]="!!item.leadingGlyph"
+                  [class.app-menu__row--has-hint]="!!item.hint"
+                  role="menuitem"
+                  tabindex="-1"
+                  [attr.data-menu-row-index]="i"
+                  [attr.data-testid]="rowTestId(item)"
+                  [attr.aria-disabled]="item.disabled ? 'true' : null"
+                  [attr.aria-current]="item.active ? 'true' : null"
+                  [disabled]="item.disabled"
+                  [appTooltip]="item.tooltip ?? ''"
+                  (click)="onRowClick(i)"
+                  (mouseenter)="onRowMouseEnter(i)">
+            @if (item.leadingGlyph; as g) {
+              <span class="app-menu__glyph"
+                    aria-hidden="true"
+                    [style.background]="g.background">{{ g.initial }}</span>
+            } @else if (item.icon) {
+              <span class="app-menu__icon" aria-hidden="true">{{ item.icon }}</span>
+            }
+            <span class="app-menu__label">{{ item.label }}</span>
+            @if (item.hint) {
+              <span class="app-menu__hint">{{ item.hint }}</span>
+            }
+            @if (item.trailingBadge) {
+              <span class="app-menu__badge" aria-hidden="true">{{ item.trailingBadge }}</span>
+            }
+          </button>
+        }
+      }
+    }
+  </div>
+}

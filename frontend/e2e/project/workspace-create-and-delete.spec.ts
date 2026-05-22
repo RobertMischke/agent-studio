@@ -91,7 +91,7 @@ test('create workspace via "+" button, then delete it via the per-project settin
 
     // Picker visibility: open the picker and confirm the new entry is there.
     await page.getByTestId('studio-project-picker-trigger').click();
-    await expect(page.getByTestId(`studio-project-picker-${newName}`)).toBeVisible();
+    await expect(page.getByTestId(`studio-project-picker-item-${newName}`)).toBeVisible();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-picker-lit-up.png'), fullPage: true });
     // Close picker by clicking the trigger again.
     await page.getByTestId('studio-project-picker-trigger').click();

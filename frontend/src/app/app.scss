@@ -523,6 +523,8 @@
       align-items: center;
       justify-content: center;
     }
+    // F23: rows / panel / header / icon styling now live on <app-menu>. This
+    // block keeps the trigger button styling that wraps the dropdown anchor.
     .devtools-menu { position: relative; display: inline-flex; }
     .devtools-menu__trigger {
       background: transparent;
@@ -550,55 +552,6 @@
       border-color: rgba(255,255,255,0.22);
       color: var(--studio-fg-strong);
     }
-    .devtools-menu__backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 90;
-      background: transparent;
-    }
-    .devtools-menu__panel {
-      position: absolute;
-      top: calc(100% + 6px);
-      right: 0;
-      z-index: 100;
-      min-width: 240px;
-      background: #181825;
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 10px;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
-      padding: 6px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .devtools-menu__header {
-      padding: 6px 10px 4px;
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--studio-fg-muted);
-    }
-    .devtools-menu__item {
-      display: grid;
-      grid-template-columns: 18px 1fr;
-      grid-template-rows: auto auto;
-      column-gap: 10px;
-      align-items: center;
-      background: transparent;
-      border: 0;
-      color: var(--studio-fg);
-      padding: 8px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      text-align: left;
-      font-family: inherit;
-    }
-    .devtools-menu__item:hover { background: rgba(255,255,255,0.06); }
-    .devtools-menu__icon { grid-row: 1 / span 2; font-size: 14px; }
-    .devtools-menu__label { font-size: 13px; font-weight: 600; }
-    .devtools-menu__hint { font-size: 11px; color: var(--studio-fg-muted); grid-column: 2; }
-    .devtools-menu__item--danger .devtools-menu__label { color: #fecaca; }
-    .devtools-menu__item--danger:hover { background: rgba(244,63,94,0.14); }
     .btn--primary {
       background: #6366f1;
       border-color: #818cf8;

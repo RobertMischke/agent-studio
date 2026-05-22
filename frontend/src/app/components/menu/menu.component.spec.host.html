@@ -1,0 +1,8 @@
+<button #trigger data-testid="host-trigger">trigger</button>
+<app-menu
+  [items]="items()"
+  [open]="open()"
+  [anchorEl]="trigger"
+  testIdPrefix="probe"
+  (itemClick)="lastClick.set($event)"
+  (closeRequest)="open.set(false)" />

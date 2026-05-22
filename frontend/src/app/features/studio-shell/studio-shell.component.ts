@@ -28,6 +28,8 @@ import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
+import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
+import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.menu-builders';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
 import {
@@ -77,7 +79,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent, MenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -662,18 +664,39 @@ export class StudioShellComponent {
     this.tabContextMenu.set(null);
   }
 
-  /** Helpers the context menu uses to enable/disable Close-to-X items. */
-  tabIndexOf(key: string): number {
-    return this.tabs().findIndex(t => studioTabKey(t) === key);
+  // F23: shared <app-menu> driven via pure builders in studio-shell.menu-builders.ts.
+  readonly tabCtxMenuItems = computed<readonly MenuItem[]>(() => {
+    const ctx = this.tabContextMenu();
+    if (!ctx) return [];
+    const tabs = this.tabs();
+    const idx = tabs.findIndex(t => studioTabKey(t) === ctx.key);
+    return buildTabCtxMenuItems({
+      totalTabs: tabs.length,
+      hasTabsToRight: idx >= 0 && idx < tabs.length - 1,
+      hasTabsToLeft: idx > 0,
+    });
+  });
+  readonly tabCtxMenuPosition = computed(() => {
+    const c = this.tabContextMenu();
+    return c ? { x: c.x, y: c.y } : null;
+  });
+  onTabCtxMenuItemClick(ev: MenuItemClickEvent): void {
+    const ctx = this.tabContextMenu();
+    if (!ctx) return;
+    if (ev.id === 'close') this.closeTab(ctx.key);
+    else if (ev.id === 'close-others') this.closeOthers(ctx.key);
+    else if (ev.id === 'close-right') this.closeRight(ctx.key);
+    else if (ev.id === 'close-left') this.closeLeft(ctx.key);
+    else if (ev.id === 'close-all') this.closeAll();
   }
-
-  hasTabsToRightOf(key: string): boolean {
-    const idx = this.tabIndexOf(key);
-    return idx >= 0 && idx < this.tabs().length - 1;
-  }
-
-  hasTabsToLeftOf(key: string): boolean {
-    return this.tabIndexOf(key) > 0;
+  readonly projectPickerItems = computed<readonly MenuItem[]>(() => buildProjectPickerItems({
+    rows: this.projectRows(),
+    totalProjectJobs: this.totalProjectJobs(),
+    allProjectsActive: this.activeBoardProject() === null && this.activeTab()?.kind === 'board',
+    activeTabKind: this.activeTab()?.kind,
+  }));
+  onProjectPickerItemClick(ev: MenuItemClickEvent): void {
+    this.pickProject(ev.id === '__all__' ? null : ev.id);
   }
 
   togglePanel(panel: StudioActivityPanelKey | 'settings'): void {

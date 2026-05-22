@@ -98,7 +98,7 @@ test('full lifecycle: create → steer → complete (Playwright Test sandbox)', 
 
   // ----- Pick the dedicated sandbox project -----
   await page.getByTestId('studio-project-picker-trigger').click();
-  await page.getByTestId(`studio-project-picker-${PROBE_PROJECT}`).click();
+  await page.getByTestId(`studio-project-picker-item-${PROBE_PROJECT}`).click();
   await page.waitForTimeout(500);
   await snapshot(page, ++seq, `picked ${PROBE_PROJECT} project`);
 

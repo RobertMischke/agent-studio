@@ -70,7 +70,7 @@ test.describe('Orchestrator logic config (side-sheet Logic tab)', () => {
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 10_000 });
 
     await page.getByTestId('devtools-menu-trigger').click();
-    const menuItem = page.getByTestId('devtool-orch-config');
+    const menuItem = page.getByTestId('devtools-menu-item-orch-config');
     await expect(menuItem).toBeVisible();
     await menuItem.click();
 
@@ -93,7 +93,7 @@ test.describe('Orchestrator logic config (side-sheet Logic tab)', () => {
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 10_000 });
 
     await page.getByTestId('devtools-menu-trigger').click();
-    await page.getByTestId('devtool-orch-config').click();
+    await page.getByTestId('devtools-menu-item-orch-config').click();
 
     const panel = page.getByTestId('orchestrator-logic-panel');
     await expect(panel).toBeVisible();
