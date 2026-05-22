@@ -106,6 +106,23 @@
   --diff-hunk-fg: var(--color-blue-300);
 
   // ---------------------------------------------------------------------------
+  // Syntax-highlight palette (F20) — used by hljs surfaces that show source
+  // code (run-git-viewer diff body, future beautiful-results migration).
+  // Theme-aware so token colours stay legible on both Mocha (dark) and the
+  // F19 light surface, also when overlaid by --diff-add-bg / --diff-rem-bg.
+  // ---------------------------------------------------------------------------
+  --syntax-comment:  var(--color-mocha-overlay2);
+  --syntax-keyword:  var(--color-mocha-mauve);
+  --syntax-type:     var(--color-mocha-yellow);
+  --syntax-string:   var(--color-mocha-green);
+  --syntax-number:   var(--color-mocha-peach);
+  --syntax-title:    var(--color-mocha-blue);
+  --syntax-variable: var(--color-mocha-flamingo);
+  --syntax-meta:     var(--color-mocha-teal);
+  --syntax-tag:      var(--color-mocha-sky);
+  --syntax-selector: var(--color-mocha-pink);
+
+  // ---------------------------------------------------------------------------
   // Elevations — shadow tokens by USE-CASE (Tier-2 alias over --shadow-*).
   //
   // When a component needs a drop shadow, pick the elevation matching the
@@ -194,6 +211,20 @@
   --diff-rem-fg:  var(--color-red-900);
   --diff-hunk-bg: var(--color-sky-100);
   --diff-hunk-fg: var(--color-sky-800);
+
+  // Syntax tokens — darker pigments for the light surface (F20). Picked
+  // for WCAG-AA contrast against --studio-bg-editor AND the soft pastel
+  // diff backgrounds so highlighted code stays readable on both.
+  --syntax-comment:  var(--color-slate-500);
+  --syntax-keyword:  var(--color-violet-700);
+  --syntax-type:     var(--color-amber-700);
+  --syntax-string:   var(--color-green-700);
+  --syntax-number:   var(--color-orange-900);
+  --syntax-title:    var(--color-blue-700);
+  --syntax-variable: var(--color-red-800);
+  --syntax-meta:     var(--color-sky-800);
+  --syntax-tag:      var(--color-sky-800);
+  --syntax-selector: var(--color-violet-700);
 
   // Elevations — softer drop shadows on white. Same use-case aliases as dark.
   --elevation-card:     var(--shadow-100-light);

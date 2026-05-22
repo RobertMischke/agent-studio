@@ -104,9 +104,67 @@
   line-height: 1.55; white-space: pre;
   color: var(--studio-fg);
 }
-.rgv__line { display: block; padding: 0 4px; }
-.rgv__line--add { background: var(--diff-add-bg); color: var(--diff-add-fg); }
-.rgv__line--del { background: var(--diff-rem-bg); color: var(--diff-rem-fg); }
-.rgv__line--hunk { color: var(--diff-hunk-fg); background: var(--diff-hunk-bg); }
+/* F20: add/rem are now BACKGROUND-only overlays so the per-line hljs
+ * spans below show through with full syntax colour. The previous
+ * `color: var(--diff-*-fg)` is dropped here; the prefix glyph gets
+ * its own colour via `.rgv__line-prefix` below to keep it visible. */
+.rgv__line { display: block; padding: 0 4px; color: var(--studio-fg); }
+.rgv__line--add { background: var(--diff-add-bg); }
+.rgv__line--del { background: var(--diff-rem-bg); }
+.rgv__line--hunk { color: var(--diff-hunk-fg); background: var(--diff-hunk-bg); font-weight: 500; }
 .rgv__line--meta { color: var(--studio-fg-dim); }
-.rgv__line--ctx { color: var(--studio-fg); }
+.rgv__line--ctx { /* default colour from .rgv__line; hljs spans override per-token */ }
+
+/* Diff prefix glyph (+/-/ ). Coloured by line kind so the +/- still
+ * read at-a-glance even though the body underneath is syntax-coloured. */
+.rgv__line-prefix {
+  display: inline-block;
+  width: 1ch;
+  user-select: none;
+  color: var(--studio-fg-muted);
+}
+.rgv__line--add .rgv__line-prefix { color: var(--diff-add-fg); font-weight: 600; }
+.rgv__line--del .rgv__line-prefix { color: var(--diff-rem-fg); font-weight: 600; }
+
+.rgv__line-code { white-space: pre; }
+
+/* New-file diff: every body line is an add, so the green tint is
+ * visual noise. Strip it and let the syntax highlighter carry the
+ * full file (matches VS Code's behaviour for added files). */
+.rgv__body--new-file .rgv__line--add { background: transparent; }
+.rgv__body--new-file .rgv__line--add .rgv__line-prefix { color: var(--studio-fg-muted); font-weight: 400; }
+
+/* ---------- highlight.js theme (scoped to the diff body) ----------
+ * Token colours are driven by Tier-2 --syntax-* aliases (F20). Those
+ * aliases flip under [data-studio-theme='light'] so a single block
+ * here covers both themes. */
+.rgv__diff-body .hljs-comment,
+.rgv__diff-body .hljs-quote { color: var(--syntax-comment); font-style: italic; }
+.rgv__diff-body .hljs-keyword,
+.rgv__diff-body .hljs-selector-tag,
+.rgv__diff-body .hljs-section { color: var(--syntax-keyword); }
+.rgv__diff-body .hljs-built_in,
+.rgv__diff-body .hljs-type { color: var(--syntax-type); }
+.rgv__diff-body .hljs-string,
+.rgv__diff-body .hljs-attr,
+.rgv__diff-body .hljs-template-tag,
+.rgv__diff-body .hljs-template-variable { color: var(--syntax-string); }
+.rgv__diff-body .hljs-number,
+.rgv__diff-body .hljs-literal { color: var(--syntax-number); }
+.rgv__diff-body .hljs-title,
+.rgv__diff-body .hljs-title.class_,
+.rgv__diff-body .hljs-title.function_ { color: var(--syntax-title); }
+.rgv__diff-body .hljs-variable,
+.rgv__diff-body .hljs-name,
+.rgv__diff-body .hljs-attribute { color: var(--syntax-variable); }
+.rgv__diff-body .hljs-symbol,
+.rgv__diff-body .hljs-bullet,
+.rgv__diff-body .hljs-meta { color: var(--syntax-meta); }
+.rgv__diff-body .hljs-tag { color: var(--syntax-tag); }
+.rgv__diff-body .hljs-selector-class,
+.rgv__diff-body .hljs-selector-id,
+.rgv__diff-body .hljs-selector-attr,
+.rgv__diff-body .hljs-selector-pseudo { color: var(--syntax-selector); }
+.rgv__diff-body .hljs-doctag { color: var(--syntax-meta); }
+.rgv__diff-body .hljs-emphasis { font-style: italic; }
+.rgv__diff-body .hljs-strong { font-weight: 700; }

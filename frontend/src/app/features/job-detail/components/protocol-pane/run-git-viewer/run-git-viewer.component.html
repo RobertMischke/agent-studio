@@ -26,7 +26,7 @@
           <button class="rgv__close" type="button" (click)="closeRequest.emit()" aria-label="Close">✕</button>
         </header>
 
-        <div class="rgv__body">
+        <div class="rgv__body" [class.rgv__body--new-file]="isNewFile()">
           <aside class="rgv__tree" data-testid="rgv-tree">
             @if (filesState() === 'loading') {
               <div class="rgv__placeholder">Loading file list…</div>
@@ -86,8 +86,9 @@
                 <code class="rgv__diff-path">{{ selectedPath() }}</code>
                 <button class="rgv__copy" type="button" (click)="copyDiff()">{{ copyLabel() }}</button>
               </div>
-              <pre class="rgv__diff-body" data-testid="rgv-diff-body"><code>@for (line of diffLines(); track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">{{ line.text }}
-</span>}</code></pre>
+              <pre class="rgv__diff-body" data-testid="rgv-diff-body"><code>@if (highlightedLines(); as hl) {@for (line of hl; track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}@if (line.highlightedHtml !== null) {<span class="rgv__line-code" [innerHTML]="line.highlightedHtml"></span>} @else {<span class="rgv__line-code">{{ line.body }}</span>}
+</span>}} @else {@for (line of diffLines(); track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}<span class="rgv__line-code">{{ line.body }}</span>
+</span>}}</code></pre>
             }
           </section>
         </div>
