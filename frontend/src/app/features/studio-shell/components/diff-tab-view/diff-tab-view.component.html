@@ -9,7 +9,18 @@
     </header>
     <div class="diff__body">
       @if (o.commit.message) {
-        <p class="diff__message">{{ o.commit.message }}</p>
+        <button type="button"
+                class="diff__message"
+                [class.diff__message--expanded]="messageExpanded()"
+                [class.diff__message--collapsed]="!messageExpanded()"
+                data-testid="diff-commit-message"
+                [attr.aria-expanded]="messageExpanded()"
+                (click)="toggleMessage()">
+          <span class="diff__message-body">{{ o.commit.message }}</span>
+          @if (hasMoreLines(o.commit.message)) {
+            <span class="diff__message-caret" aria-hidden="true">{{ messageExpanded() ? '▾' : '▸' }}</span>
+          }
+        </button>
       }
       <dl class="diff__facts">
         <dt>Task</dt>

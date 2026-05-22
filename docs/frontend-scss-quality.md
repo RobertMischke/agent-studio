@@ -104,6 +104,55 @@ Type vocabulary is from `design-system.md` (Inter for UI, JetBrains Mono for cod
 
 Severity colours (success/warn/error/info) live in tokens `--studio-accent-success`, `--studio-accent-warn`, `--studio-accent-6`, `--studio-accent-3`. If the value is needed at low alpha, derive with `color-mix(in srgb, var(--studio-accent-warn) 12%, transparent)` rather than a hardcoded `rgba()`.
 
+#### Diff tokens
+
+Diff-line backgrounds and foregrounds are token-bound. Both the
+`run-git-viewer` modal (protocol pane) and the studio Diff tab read
+the same tokens so add/remove lines share one palette per theme and
+WCAG AA contrast is enforced in the bridge instead of per-file.
+
+| Token            | Dark default      | Light override (`[data-studio-theme='light']`) | Use                                              |
+| ---------------- | ----------------- | ---------------------------------------------- | ------------------------------------------------ |
+| `--diff-add-bg`  | `rgba(34,197,94,0.18)` | `#dcfce7`  (green-100)                    | Hinzugefügte Zeile, Hintergrund.                 |
+| `--diff-add-fg`  | `#bbf7d0`         | `#14532d`  (green-900)                         | Hinzugefügte Zeile, Text.                        |
+| `--diff-rem-bg`  | `rgba(220,38,38,0.20)` | `#fee2e2`  (red-100)                      | Entfernte Zeile, Hintergrund.                    |
+| `--diff-rem-fg`  | `#fecaca`         | `#7f1d1d`  (red-900)                           | Entfernte Zeile, Text.                           |
+| `--diff-hunk-bg` | `rgba(56,189,248,0.08)` | `#e0f2fe`  (sky-100)                     | `@@ hunk @@`-Header-Hintergrund.                 |
+| `--diff-hunk-fg` | `#93c5fd`         | `#075985`  (sky-800)                           | `@@ hunk @@`-Header-Text.                        |
+
+**Rule.** When you add diff-rendering CSS (status pills, side-by-side
+columns, inline diff renderers), reach for these six tokens. Don't
+add a private `rgba(34, 197, 94, …)` literal in a component SCSS;
+that's the pattern the F18 incident (2026-05-22) was filed against -
+the light-theme path looked broken because every diff renderer had
+its own hand-tuned palette. Cf. `studio-shell.component.scss` for
+the token declarations and `run-git-viewer.component.scss` /
+`diff-tab-view.component.scss` for the first consumers.
+
+### Rule 1a — No hex / rgb literal outside the token block
+
+A stricter restatement of Rule 1, called out separately because it is
+the rule new SCSS most often breaks:
+
+> Component SCSS may contain **zero** hex colours and **zero** `rgb()` /
+> `rgba()` literals. The only allowed colour expressions are
+> `var(--studio-*)`, `var(--diff-*)`, `var(--severity-*)`,
+> `var(--lane-*)`, and `color-mix(in srgb, var(--…) X%, transparent)`.
+
+Exceptions:
+
+- The token block in `studio-shell.component.scss` is the one place
+  where raw hex values live (declaring the tokens themselves).
+- The light-theme bridge in `src/styles.scss` may use raw hex for
+  legacy components still pending Wave-A migration; new components
+  must not lean on the bridge.
+
+Diff-specific palette (the F18 case): every diff renderer must read
+`--diff-add-bg` / `--diff-add-fg` / `--diff-rem-bg` / `--diff-rem-fg`
+/ `--diff-hunk-bg` / `--diff-hunk-fg` from
+`studio-shell.component.scss`. Adding a private green/red literal
+re-opens the WCAG-AA regression the tokens were created to fix.
+
 ### Rule 2 — Three-layer SCSS strategy
 
 A new style rule belongs in exactly one of these layers. Pick before you write.

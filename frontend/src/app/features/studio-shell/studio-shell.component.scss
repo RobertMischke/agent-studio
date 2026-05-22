@@ -72,6 +72,17 @@
   --lane-completed:     #5fbf80;
   --lane-archive:       #6e6e6e;
   --lane-failed:        #f38ba8;
+  // ---- Diff palette (unified diff + side-by-side renderers) ----
+  // Always read these via `var(--diff-*)`; never repeat the hex. Used by
+  // the run-git-viewer (protocol-pane modal) and the studio diff tab so
+  // both surfaces share one palette per theme. See
+  // docs/frontend-scss-quality.md "Diff tokens".
+  --diff-add-bg:        rgba(34, 197, 94, 0.18);
+  --diff-add-fg:        #bbf7d0;
+  --diff-rem-bg:        rgba(220, 38, 38, 0.20);
+  --diff-rem-fg:        #fecaca;
+  --diff-hunk-bg:       rgba(56, 189, 248, 0.08);
+  --diff-hunk-fg:       #93c5fd;
   // ---- Type families ----
   // Two canonical stacks. Inline `font-family:` declarations across
   // the codebase should resolve to one of these — see
@@ -122,6 +133,14 @@
   --lane-completed:     #15803d;
   --lane-archive:       #4a4a4a;
   --lane-failed:        #b91c1c;
+  // Diff palette: zarte Pastell-Tint, dunkler Text so der Code im Diff
+  // lesbar bleibt (WCAG AA gegen --diff-add-bg / --diff-rem-bg).
+  --diff-add-bg:        #dcfce7;  /* green-100 */
+  --diff-add-fg:        #14532d;  /* green-900 */
+  --diff-rem-bg:        #fee2e2;  /* red-100 */
+  --diff-rem-fg:        #7f1d1d;  /* red-900 */
+  --diff-hunk-bg:       #e0f2fe;  /* sky-100 */
+  --diff-hunk-fg:       #075985;  /* sky-800 */
 }
 
 .studio {
