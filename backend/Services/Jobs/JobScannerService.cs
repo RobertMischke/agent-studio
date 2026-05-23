@@ -216,6 +216,7 @@ public class JobScannerService
             {
                 Id = resolvedId,
                 JobKey = JobIdentity.CreateKey(entry.Path, resolvedId),
+                Key = ReadReferenceKey(raw),
                 OwnerClientId = ownerClientId,
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
                 State = state,

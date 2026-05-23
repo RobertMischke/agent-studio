@@ -4,6 +4,16 @@ public record JobInfo
 {
     public string Id { get; init; } = "";
     public string JobKey { get; init; } = "";
+    /// <summary>
+    /// Stable Linear-style reference key minted from the project's prefix
+    /// plus a monotonic counter (<c>ATP-130</c>, <c>RB-42</c>). Unique
+    /// within one project; persisted as the <c>"key"</c> field in
+    /// <c>job.json</c> and assigned at create time or by the F33 boot
+    /// migration. Null when the job pre-dates the migration on a project
+    /// that has not yet been swept; the UI falls back to <see cref="Id"/>
+    /// in that window.
+    /// </summary>
+    public string? Key { get; init; }
     public string Title { get; init; } = "";
     public string State { get; init; } = "draft";
     public int Order { get; init; } = 999;
