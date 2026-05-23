@@ -32,10 +32,8 @@ import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/me
 import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.menu-builders';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
-import {
-  StudioTab,
-  studioTabKey,
-} from './studio-shell.types';
+import { ExplorerSectionsService } from './services/explorer-sections.service';
+import { StudioTab, studioTabKey } from './studio-shell.types';
 
 interface ProjectSidebarRow {
   name: string;
@@ -113,6 +111,7 @@ export class StudioShellComponent {
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
   readonly updateClient = inject(UpdateClientService);
+  readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
 

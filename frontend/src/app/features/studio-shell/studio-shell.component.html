@@ -196,19 +196,30 @@
           @switch (activePanel()) {
             @case ('explorer') {
               <section class="studio-explorer">
-                <!-- Workspace group head — adopts the shared
-                     <app-section-header> component. The chevron is
-                     omitted since the explorer's projects-list lives
-                     directly below; clicking the header selects
-                     "All projects" (mirrors the titlebar picker). -->
+                <!-- Workspace group head (F27): collapsible folder
+                     header. Chevron OR label click toggles the
+                     project-rows list. The "All projects" affordance
+                     moves to an inline icon-button on the right so the
+                     header click is unambiguously a collapse-toggle. -->
                 <app-section-header
-                  [interactive]="true"
-                  iconChar="▼"
+                  [collapsible]="true"
+                  [collapsed]="explorerSections.isCollapsed('workspace')"
                   title="Workspace"
                   [count]="projectRows().length"
-                  [active]="activeProjectName() === null && activeTab()?.kind === 'board'"
                   testid="studio-explorer-workspace-head"
-                  (click)="pickProject(null)" />
+                  (collapsedChange)="explorerSections.setCollapsed('workspace', $event)">
+                  <button actions
+                          type="button"
+                          class="studio-sidebar__action studio-sidebar__action--inline"
+                          [class.studio-sidebar__action--active]="activeProjectName() === null && activeTab()?.kind === 'board'"
+                          data-testid="studio-explorer-show-all-projects"
+                          title="Show all projects (open the cross-project board)"
+                          aria-label="Show all projects"
+                          (click)="pickProject(null); $event.stopPropagation()">
+                    <app-studio-icon name="grid" [size]="11"></app-studio-icon>
+                  </button>
+                </app-section-header>
+                @if (!explorerSections.isCollapsed('workspace')) {
                 @for (p of projectRows(); track p.name) {
                   <div class="studio-tree-project"
                        draggable="true"
@@ -224,6 +235,9 @@
                        (dragleave)="onProjectDragLeave(p.name)"
                        (drop)="onProjectDrop($event, p.name)"
                        (dragend)="onProjectDragEnd()">
+                    <!-- F27: label click toggles expand/collapse (was: open board).
+                         Double-click on the label opens the board. The Hub
+                         stays reachable via the inline hub-link icon below. -->
                     <app-tree-row level="root"
                                   [chevron]="isProjectExpanded(p.name) ? 'expanded' : 'collapsed'"
                                   [glyphChar]="p.initial"
@@ -233,8 +247,8 @@
                                   [active]="p.isActive"
                                   [testid]="'studio-explorer-project-' + p.name"
                                   (chevronClick)="toggleProjectExpanded(p.name, $event)"
-                                  (selectRequest)="openBoard(p.name)"
-                                  (secondary)="openHub(p.name)">
+                                  (selectRequest)="toggleProjectExpanded(p.name, $event)"
+                                  (secondary)="openBoard(p.name)">
                       <button type="button"
                               class="studio-tree-row__hub-link"
                               title="Open Project Hub"
@@ -271,18 +285,24 @@
                 @if (projectRows().length === 0) {
                   <app-empty-state>No projects loaded</app-empty-state>
                 }
+                } <!-- /Workspace section collapse @if -->
                 @if (moveErrorMessage(); as msg) {
                   <div class="studio-explorer__move-error"
                        role="alert"
                        data-testid="studio-explorer-move-error">{{ msg }}</div>
                 }
                 @if (tabs().length > 0) {
+                  <!-- F27: Open tabs header is collapsible too. -->
                   <app-section-header
-                    iconChar="▼"
+                    [collapsible]="true"
+                    [collapsed]="explorerSections.isCollapsed('open-tabs')"
                     title="Open tabs"
                     [count]="tabs().length"
-                    class="studio-explorer__group-head--mt" />
+                    testid="studio-explorer-open-tabs-head"
+                    class="studio-explorer__group-head--mt"
+                    (collapsedChange)="explorerSections.setCollapsed('open-tabs', $event)" />
 
+                  @if (!explorerSections.isCollapsed('open-tabs')) {
                   @for (t of tabs(); track tabKey(t)) {
                     <button type="button"
                             class="studio-tree-row studio-tree-row--child"
@@ -293,6 +313,7 @@
                             (click)="closeTab(tabKey(t), $event)"
                             aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>
                     </button>
+                  }
                   }
                 }
               </section>

@@ -35,6 +35,14 @@
     color: var(--studio-fg-strong);
   }
 
+  &__chev {
+    display: inline-grid;
+    place-items: center;
+    width: 12px;
+    color: var(--studio-fg-muted);
+    flex-shrink: 0;
+  }
+
   &__icon {
     display: inline-grid;
     place-items: center;

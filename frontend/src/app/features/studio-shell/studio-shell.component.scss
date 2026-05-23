@@ -553,6 +553,20 @@
 
   &__action {
     @include m.icon-button(22px);
+
+    /* Compact variant for buttons embedded inside a section-header
+       row (F27). The header is ~22 px tall, so the default 22 px
+       icon-button is visually flush. Sized down so it sits flush
+       without expanding the header. */
+    &--inline {
+      width: 18px;
+      height: 18px;
+    }
+
+    &--active {
+      background: var(--studio-bg-selected);
+      color: var(--studio-fg-strong);
+    }
   }
 
   &__body {

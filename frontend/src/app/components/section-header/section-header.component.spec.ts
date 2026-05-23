@@ -44,3 +44,62 @@ describe('SectionHeaderComponent (smoke)', () => {
     }
   });
 });
+
+/**
+ * F27: Collapsible mode contract.
+ *
+ * - `collapsible=true` renders the header as a button with a leading
+ *   chevron, regardless of `interactive`.
+ * - Clicking the host button emits `collapsedChange` with the FLIPPED
+ *   collapsed state so the parent can update its persisted map.
+ * - The chevron icon mirrors the `collapsed` input (chevronRight when
+ *   collapsed, chevronDown when expanded).
+ */
+describe('SectionHeaderComponent collapsible (F27)', () => {
+  async function mount(initialCollapsed: boolean) {
+    await TestBed.configureTestingModule({
+      imports: [SectionHeaderComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(SectionHeaderComponent);
+    fixture.componentRef.setInput('collapsible', true);
+    fixture.componentRef.setInput('collapsed', initialCollapsed);
+    fixture.componentRef.setInput('title', 'Workspace');
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders as a button with the chev when collapsible', async () => {
+    const fixture = await mount(false);
+    const root: HTMLElement = fixture.nativeElement;
+    const btn = root.querySelector('button.section-header--collapsible');
+    expect(btn).toBeTruthy();
+    const chev = root.querySelector('.section-header__chev');
+    expect(chev).toBeTruthy();
+    expect(btn?.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('emits collapsedChange = true when expanded and the user clicks', async () => {
+    const fixture = await mount(false);
+    const emitted: boolean[] = [];
+    fixture.componentInstance.collapsedChange.subscribe((v: boolean) => emitted.push(v));
+    const btn = fixture.nativeElement.querySelector('button.section-header--collapsible') as HTMLButtonElement;
+    btn.click();
+    expect(emitted).toEqual([true]);
+  });
+
+  it('emits collapsedChange = false when collapsed and the user clicks', async () => {
+    const fixture = await mount(true);
+    const emitted: boolean[] = [];
+    fixture.componentInstance.collapsedChange.subscribe((v: boolean) => emitted.push(v));
+    const btn = fixture.nativeElement.querySelector('button.section-header--collapsible') as HTMLButtonElement;
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    btn.click();
+    expect(emitted).toEqual([false]);
+  });
+});
