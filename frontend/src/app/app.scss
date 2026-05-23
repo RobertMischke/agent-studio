@@ -1165,7 +1165,10 @@
     .app-notify {
       pointer-events: auto;
       display: grid;
-      grid-template-columns: auto 1fr auto;
+      /* `minmax(0, 1fr)` lets the body column actually shrink below its
+         intrinsic content size; without it a long auto-review message
+         expands the toast past max-width and overflows the viewport. */
+      grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 12px;
       align-items: flex-start;
       padding: 12px 14px;
@@ -1197,7 +1200,28 @@
       margin-bottom: 2px;
     }
     .app-notify__message {
+      /* Clamp the body to 4 lines + ellipsis so a very long auto-review
+         verdict (full aspect list, multi-sentence summary) cannot grow
+         the toast into a wall of text. The complete message is
+         preserved in the orchestrator chat and decision journal. */
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
       word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .app-notify__source {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--studio-fg-dim);
+      letter-spacing: 0.02em;
+      /* Source labels (typically a project / job slug) stay on a
+         single visible line; very long slugs are truncated rather than
+         folded into another row. */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .app-notify__close {
       background: transparent;

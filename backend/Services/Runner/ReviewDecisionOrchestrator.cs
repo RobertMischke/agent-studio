@@ -667,12 +667,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         // Append the operator-facing chat-log line ONLY after the lane move
         // has succeeded, so the banner cannot fire while the task is still
-        // in 4-auto-review.
-        var aspectsSuffix = AspectSummaryLine(report);
+        // in 4-auto-review. F29: keep the headline short (one sentence +
+        // count) so the workspace banner / notification toast stays
+        // readable. The full per-aspect verdict list lives in the
+        // aspect-*.md files inside the job folder and on the decision
+        // record below.
         var titleAccept = string.IsNullOrWhiteSpace(movedInfo.Title) ? movedInfo.Id : movedInfo.Title;
         var verdictNote = report.Overall == AspectStatus.Concerns
-            ? $"Auto-review accepted \"{titleAccept}\" as done with concerns. Moved to 5-human-review for your approval. Aspects: {aspectsSuffix}. Tags: {string.Join(", ", report.ConcernTagIds)}"
-            : $"Auto-review accepted \"{titleAccept}\" as done. Moved to 5-human-review for your approval. Aspects: {aspectsSuffix}";
+            ? $"Auto-review accepted \"{titleAccept}\" with concerns ({FormatConcernCount(report)}). Moved to 5-human-review for your approval."
+            : $"Auto-review accepted \"{titleAccept}\" as done. Moved to 5-human-review for your approval.";
         _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision, verdictNote);
 
         if (report.Overall == AspectStatus.Concerns)
@@ -719,9 +722,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
+        // F29: keep the operator-facing reissue note short. The full
+        // per-aspect verdict list is in the decision journal record below
+        // and in the aspect-*.md files written by the runner.
         var titleReissue = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        var blockCount = report.Verdicts.Count(v => v.Status == AspectStatus.Block);
+        var blockNoun = blockCount == 1 ? "aspect" : "aspects";
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
-            $"Auto-review sent \"{titleReissue}\" back to 2-ready for another attempt. Reason: multi-aspect block ({AspectSummaryLine(report)})");
+            $"Auto-review sent \"{titleReissue}\" back to 2-ready ({blockCount} blocking {blockNoun}).");
 
         _statusSnapshot.RecordReissue();
 
@@ -741,6 +749,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (report.Verdicts.Count == 0) return "(no aspects ran)";
         return string.Join(", ", report.Verdicts.Select(v =>
             $"{v.Aspect}={AspectVerdictParsing.StatusToken(v.Status)}"));
+    }
+
+    /// <summary>
+    /// F29: produce a compact aspect-count phrase for the operator-facing
+    /// verdict toast ("2 of 4 aspects flagged"). Keeps the headline a
+    /// single sentence; the full per-aspect list stays on
+    /// <see cref="AspectSummaryLine"/> for the decision journal.
+    /// </summary>
+    private static string FormatConcernCount(AspectRunReport report)
+    {
+        if (report.Verdicts.Count == 0) return "no aspects ran";
+        var concerns = report.Verdicts.Count(v => v.Status == AspectStatus.Concerns);
+        if (concerns == 0) return $"0 of {report.Verdicts.Count} aspects flagged";
+        var noun = concerns == 1 ? "aspect" : "aspects";
+        return $"{concerns} of {report.Verdicts.Count} {noun} flagged";
     }
 
     private static string LoadStatusSummary(string folderPath)

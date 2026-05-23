@@ -10,6 +10,9 @@
           <div class="app-notify__title" data-testid="notification-title">{{ n.title }}</div>
         }
         <div class="app-notify__message" data-testid="notification-message">{{ n.message }}</div>
+        @if (n.source) {
+          <div class="app-notify__source" data-testid="notification-source">{{ n.source }}</div>
+        }
       </div>
       <button class="app-notify__close"
               type="button"

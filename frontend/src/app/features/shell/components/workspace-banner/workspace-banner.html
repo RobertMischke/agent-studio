@@ -4,8 +4,10 @@
        role="status"
        data-testid="workspace-banner">
     <span class="banner__icon" aria-hidden="true">{{ iconFor(msg.topic) }}</span>
-    <span class="banner__text" data-testid="workspace-banner-text">{{ headlineFor(msg) }}</span>
-    <span class="banner__project" data-testid="workspace-banner-project">in {{ msg.project }}</span>
+    <div class="banner__body">
+      <div class="banner__text" data-testid="workspace-banner-text">{{ headlineFor(msg) }}</div>
+      <div class="banner__project" data-testid="workspace-banner-project">in {{ msg.project }}</div>
+    </div>
     <button type="button"
             class="banner__close"
             aria-label="Dismiss"
@@ -13,4 +15,3 @@
             (click)="dismiss()">×</button>
   </div>
 }
-  

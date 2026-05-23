@@ -37,6 +37,14 @@ export interface NotificationOptions {
    * service picks a sensible default per `kind` (errors stay longer).
    */
   durationMs?: number;
+  /**
+   * Optional small caption rendered as its own sub-line under the
+   * message (typically the project / job slug that produced the
+   * notification). Callers must put it here instead of concatenating
+   * "... in <project>" onto `message` so the toast layout can clamp the
+   * body independently of the source label.
+   */
+  source?: string;
 }
 
 export interface NotificationState extends NotificationOptions {
