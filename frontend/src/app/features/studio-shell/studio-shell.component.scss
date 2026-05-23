@@ -573,6 +573,10 @@
     flex: 1;
     overflow: auto;
     padding: 6px 0;
+    // F28: dezent scrollbar — transparent thumb that only fades in on
+    // hover so the sidebar tree doesn't show a permanent scroll track
+    // when the project list fits.
+    @include m.thin-scroll;
   }
 
   &__resize {
@@ -1711,6 +1715,8 @@
     padding: 8px 0;
     display: flex;
     flex-direction: column;
+    // F28: dezent scrollbar — matches the lane / chat / sidebar idiom.
+    @include m.thin-scroll;
   }
 }
 

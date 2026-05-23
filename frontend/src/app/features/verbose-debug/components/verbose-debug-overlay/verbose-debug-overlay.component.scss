@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
     :host { position: fixed; inset: 0; z-index: 6000; display: block; }
     .vdbg {
       position: fixed;
@@ -123,6 +125,9 @@
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 14px;
       align-content: start;
+      // F28: dezent scrollbar — overlay surface stays clean when the
+      // debug cards fit without overflow.
+      @include m.thin-scroll;
     }
     .vdbg__card {
       background: var(--vdbg-surface);

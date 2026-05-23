@@ -93,3 +93,35 @@
   line-height: 1.5;
   font-style: italic;
 }
+
+/* ---------------------------------------------------------------------
+ * thin-scroll
+ *
+ * Dezent scroll-container styling: no visible track, transparent thumb
+ * that fades in only when the cursor enters the container. Matches the
+ * Slack/GitHub/VS Code-Web idiom — scrollbars stop competing with the
+ * content for attention but stay reachable on hover.
+ *
+ * Pair with `scrollbar-gutter: stable` at the call site if the host
+ * needs to reserve gutter width (so layout does not shift between
+ * empty and full states). The mixin intentionally does NOT set
+ * `scrollbar-gutter` because reserving gutter is a per-surface
+ * decision: column bodies need it, the chat body and verbose-debug
+ * cards don't.
+ * ------------------------------------------------------------------- */
+@mixin thin-scroll($thumb: var(--studio-border-strong)) {
+  scrollbar-color: $thumb transparent;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    transition: background 0.15s ease;
+  }
+  &:hover::-webkit-scrollbar-thumb { background: $thumb; }
+}

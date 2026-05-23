@@ -22,6 +22,8 @@
  * (`.chat__event`); their compact-by-default shape is shared with the
  * other agent state events (session-recovered, memory-refreshed).
  */
+@use '../../../../styles/mixins' as m;
+
 :host {
   display: flex;
   flex-direction: column;
@@ -61,6 +63,10 @@
   scroll-behavior: smooth;
   position: relative;
   color: var(--studio-fg, #e2e8f0);
+  // F28: dezent scrollbar — transparent thumb that fades in on hover so
+  // the conversation surface is not bordered by a permanent scroll
+  // track. Matches the same idiom as `.column__body` lanes.
+  @include m.thin-scroll;
 }
 // F15: inline phase / super-phase dividers were removed. In the
 // orchestrator chat every "phase" is one Q-A pair, so the bracket was

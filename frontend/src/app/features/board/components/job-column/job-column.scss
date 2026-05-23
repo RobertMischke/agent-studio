@@ -1,3 +1,5 @@
+@use '../../../../../styles/mixins' as m;
+
     .column {
       background: var(--column-bg, #181825);
       // Slightly tighter than the previous 16 px so lane radius is
@@ -130,14 +132,24 @@
        * got a per-lane scrollbar; everything else scrolled the entire
        * page. The user reported that as a broken / inconsistent feel.
        *
-       * The 4 px right padding leaves room for the WebKit scrollbar so
-       * cards do not slide under it on hover; min-width: 0 lets the
-       * body shrink below its content's intrinsic min-width so card
-       * content cannot widen the column past its flex share.
+       * scrollbar-gutter: stable reserves the scrollbar's width whether
+       * or not the lane currently overflows. That keeps the lane width
+       * identical between empty and full states (no layout shift as
+       * cards land) AND, crucially, removes the redundant 4 px right
+       * padding the previous fix used as a manual gutter — Chromium
+       * was painting an empty scrollbar track inside that reserved
+       * strip on lanes with only 2-3 cards (F28). With
+       * `scrollbar-gutter` the gutter is reserved at the layout level
+       * but no track is painted unless overflow exists.
+       *
+       * min-width: 0 lets the body shrink below its content's
+       * intrinsic min-width so card content cannot widen the column
+       * past its flex share.
        */
       overflow-y: auto;
+      scrollbar-gutter: stable;
       min-width: 0;
-      padding-right: 4px;
+      @include m.thin-scroll;
     }
     .column__empty {
       text-align: center;
