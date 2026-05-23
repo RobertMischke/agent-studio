@@ -1,12 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
+import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 import { JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
 import type { JobScreenshot } from '../../../screenshots';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
 import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel/review-evidence-panel.component';
 import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel/code-review-panel.component';
-import { markdownToHtml } from '../../../../components/markdown-utils';
-import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
@@ -35,7 +34,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, StudioIconComponent, PaneHeaderComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
+  imports: [MarkdownRichEditorComponent, MarkdownViewComponent, StudioIconComponent, PaneHeaderComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -96,13 +95,14 @@ export class PromptPaneComponent {
     return sev === 'high' ? 'pass-fail' : sev === 'warn' ? 'pass-defer' : 'pass-info';
   }
 
-  renderMarkdown(md: string): string {
+  /** Resolver factory for prompt-history image refs (`attachments/foo.png` ->
+   *  job-folder API URL). Stable identity per render so `<app-markdown>`'s
+   *  signal doesn't churn unnecessarily. */
+  readonly imageResolver = computed<(src: string) => string>(() => {
     const jobId = this.jobId();
     const watchPath = this.watchPath();
-    return markdownToHtml(md ?? '', {
-      resolveImageSrc: (src) => resolveProtocolImageSrc(src, jobId, watchPath),
-    });
-  }
+    return (src: string) => resolveProtocolImageSrc(src, jobId, watchPath);
+  });
 
   formatTime(iso: string): string {
     if (!iso) return '';

@@ -8,7 +8,7 @@ import {
   SteeringDocsSource,
   SteeringDocsWarning,
 } from '../../../../models/steering-docs.model';
-import { markdownToHtml } from '../../../../components/markdown-utils';
+import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 /**
@@ -51,7 +51,7 @@ const ACTIONS: SteeringAction[] = [
 @Component({
   selector: 'app-project-steering-docs-section',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, MarkdownViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-steering-docs-section.html',
   styleUrl: './project-steering-docs-section.scss'
@@ -291,10 +291,6 @@ ${warnings || '_(no warnings at queue time)_'}
   // ----------------------------------------------------------------------
   // Display helpers
   // ----------------------------------------------------------------------
-
-  renderMarkdown(content: string): string {
-    try { return markdownToHtml(content); } catch { return content; }
-  }
 
   formatTime(iso: string | null | undefined): string {
     if (!iso) return '';

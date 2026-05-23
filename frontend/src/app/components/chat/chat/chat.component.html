@@ -43,14 +43,18 @@
                     }
                     <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
                   </header>
-                  <div class="chat__msg-body"
-                       appMarkdownLightbox
-                       [class.chat__msg-body--markdown]="item.message.role !== 'user'"
-                       [class.markdown-body]="item.message.role !== 'user'"
-                       [class.markdown-body--dense]="item.message.role !== 'user'"
-                       [class.chat__msg-body--collapsed]="item.collapsed"
-                       [attr.data-testid]="item.message.role !== 'user' ? 'chat-turn-md' : null"
-                       [innerHTML]="item.bodyHtml"></div>
+                  @if (item.message.role === 'user') {
+                    <div class="chat__msg-body"
+                         [class.chat__msg-body--collapsed]="item.collapsed"
+                         [innerHTML]="item.bodyHtml"></div>
+                  } @else {
+                    <app-markdown class="chat__msg-body chat__msg-body--markdown"
+                                  [class.chat__msg-body--collapsed]="item.collapsed"
+                                  [source]="item.message.text"
+                                  [dense]="true"
+                                  [codeLineNumbers]="true"
+                                  testId="chat-turn-md" />
+                  }
                   @if (item.collapsible) {
                     <button type="button"
                             class="chat__msg-toggle"
@@ -115,11 +119,12 @@
                       {{ item.event.actionLabel }} →
                     </button>
                   }
-                  @if (item.expanded && item.detailHtml) {
-                    <div class="chat__event-detail"
-                         appMarkdownLightbox
-                         data-testid="chat-event-detail"
-                         [innerHTML]="item.detailHtml"></div>
+                  @if (item.expanded && item.event.detail) {
+                    <app-markdown class="chat__event-detail"
+                                  [source]="item.event.detail"
+                                  [dense]="true"
+                                  [codeLineNumbers]="true"
+                                  testId="chat-event-detail" />
                   }
                 </article>
               }

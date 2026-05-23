@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import { SecurityMeta, SecurityOverview } from '../../../../models/project-docs.model';
-import { markdownToHtml } from '../../../../components/markdown-utils';
+import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 
 /**
  * Project-level Security section: meta header (last review, rating,
@@ -15,7 +15,7 @@ import { markdownToHtml } from '../../../../components/markdown-utils';
 @Component({
   selector: 'app-project-security-section',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, MarkdownViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-security-section.html',
   styleUrl: './project-security-section.scss'
@@ -35,12 +35,6 @@ export class ProjectSecuritySectionComponent {
   newFileName = '';
   editorDraft = '';
   metaDraft: SecurityMeta = { lastReviewDate: null, rating: null, summary: null };
-
-  readonly renderedHtml = computed(() => {
-    const c = this.openedContent();
-    if (!c) return '';
-    try { return markdownToHtml(c); } catch { return c; }
-  });
 
   constructor() {
     // Auto-load whenever the project input changes.

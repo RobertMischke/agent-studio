@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
-import { markdownToHtml } from '../../markdown-utils';
+import { MarkdownViewComponent } from '../../markdown-view/markdown-view.component';
 import { ToolBurstChipComponent } from '../tool-burst-chip/tool-burst-chip.component';
 import { TooltipDirective } from '../../tooltip';
 import type {
@@ -23,7 +22,7 @@ import type {
 } from '../conversation-event';
 
 type RenderRow =
-  | { kind: 'message'; event: MessageEvent; bodyHtml: SafeHtml }
+  | { kind: 'message'; event: MessageEvent }
   | { kind: 'toolBurst'; event: ToolBurstEvent }
   | { kind: 'runMarker'; event: RunMarkerEvent }
   | { kind: 'taskMarker'; event: TaskMarkerEvent }
@@ -66,7 +65,7 @@ type RenderRow =
   selector: 'app-conversation-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ToolBurstChipComponent, TooltipDirective],
+  imports: [MarkdownViewComponent, ToolBurstChipComponent, TooltipDirective],
   templateUrl: './conversation-view.component.html',
   styleUrl: './conversation-view.component.scss',
 })
@@ -78,8 +77,6 @@ export class ConversationViewComponent {
   readonly openTrace = output<RawLineRange | null>();
   readonly openVerboseDebug = output<void>();
 
-  private readonly sanitizer = inject(DomSanitizer);
-
   readonly rows = computed<RenderRow[]>(() => {
     const out: RenderRow[] = [];
     for (const e of this.events()) {
@@ -89,11 +86,7 @@ export class ConversationViewComponent {
         case 'message.orchestrator':
         case 'message.supervisor':
         case 'message.supportingAgent':
-          out.push({
-            kind: 'message',
-            event: e,
-            bodyHtml: this.sanitizer.bypassSecurityTrustHtml(markdownToHtml(e.body ?? '')),
-          });
+          out.push({ kind: 'message', event: e });
           break;
         case 'toolBurst':
           out.push({ kind: 'toolBurst', event: e });

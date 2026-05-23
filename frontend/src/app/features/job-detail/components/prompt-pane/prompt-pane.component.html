@@ -96,9 +96,11 @@
                   <span class="prompt-history__badge">{{ entry.fileName }}</span>
                   <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
                 </header>
-                <div class="prompt-history__body markdown markdown-body markdown-body--dense"
-                     appMarkdownLightbox
-                     [innerHTML]="renderMarkdown(entry.markdown)"></div>
+                <app-markdown class="prompt-history__body"
+                              [source]="entry.markdown"
+                              [dense]="true"
+                              [resolveImageSrc]="imageResolver()" />
+
               </article>
             }
           </section>

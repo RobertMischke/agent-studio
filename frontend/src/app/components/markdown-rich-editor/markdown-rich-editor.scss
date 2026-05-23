@@ -87,10 +87,14 @@
   width: 100%;
   min-height: 150px;
   box-sizing: border-box;
-  border: 1px solid rgba(255,255,255,0.06);
+  // F31: theme-aware tokens. The previous hard-coded rgba(0,0,0,0.18)
+  // background painted a grey wash on the light shell that wrapped every
+  // heading / list in the rendered prose; the studio editor token follows
+  // the active theme so the editor surface blends with the pane instead.
+  border: 1px solid var(--studio-border, rgba(255,255,255,0.06));
   border-radius: 10px;
-  background: rgba(0,0,0,0.18);
-  color: #cbd5e1;
+  background: var(--studio-bg-editor, rgba(0,0,0,0.18));
+  color: var(--studio-fg, #cbd5e1);
   overflow: auto;
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }

@@ -13,10 +13,10 @@
       "total": 4521
     },
     "src/app/components/chat/chat/chat.component.ts": {
-      "typeScript": 634,
-      "template": 243,
-      "styles": 735,
-      "total": 1612
+      "typeScript": 635,
+      "template": 248,
+      "styles": 741,
+      "total": 1624
     },
     "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
       "typeScript": 464,

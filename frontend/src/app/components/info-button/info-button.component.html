@@ -28,8 +28,8 @@
         <p class="info-btn__loading">Loading…</p>
       } @else if (errorMessage(); as msg) {
         <p class="info-btn__error">{{ msg }}</p>
-      } @else if (bodyHtml(); as html) {
-        <div class="info-btn__rendered" appMarkdownLightbox [innerHTML]="html"></div>
+      } @else if (body(); as md) {
+        <app-markdown class="info-btn__rendered" [source]="md" />
       }
     </div>
   </aside>

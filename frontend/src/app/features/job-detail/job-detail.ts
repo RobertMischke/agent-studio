@@ -64,7 +64,6 @@ import {
   rateLimitTooltip,
   stateLabel,
 } from './services/job-detail-formatters';
-import { markdownToHtml } from '../../components/markdown-utils';
 
 import { TooltipDirective } from '../../components/tooltip';
 @Component({
@@ -1101,10 +1100,6 @@ export class JobDetailComponent implements OnDestroy {
       event.preventDefault();
       this.saveFile(fileName);
     }
-  }
-
-  renderMarkdown(markdown: string): string {
-    return markdownToHtml(markdown);
   }
 
   // === 3-pane layout — facades for LayoutPanesService ====================

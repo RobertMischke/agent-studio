@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
-import { ArchitectureDecisionSummary, ArchitectureOverview } from '../../../../models/project-docs.model';
-import { markdownToHtml } from '../../../../components/markdown-utils';
+import { ArchitectureOverview } from '../../../../models/project-docs.model';
+import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 
 /**
  * Project-level Architecture section: browse the project's
@@ -13,6 +13,7 @@ import { markdownToHtml } from '../../../../components/markdown-utils';
 @Component({
   selector: 'app-project-architecture-section',
   standalone: true,
+  imports: [MarkdownViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-architecture-section.html',
   styleUrl: './project-architecture-section.scss'
@@ -57,10 +58,6 @@ export class ProjectArchitectureSectionComponent {
     if (k.includes('super')) return 'superseded';
     if (k.includes('depr')) return 'deprecated';
     return 'other';
-  }
-
-  renderedFor(d: ArchitectureDecisionSummary): string {
-    try { return markdownToHtml(d.body); } catch { return d.body; }
   }
 
   noteFor(id: string): string { return this.notes()[id] ?? ''; }

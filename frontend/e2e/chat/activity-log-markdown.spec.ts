@@ -114,7 +114,7 @@ test.describe('Activity log — Conversation markdown rendering', () => {
     // At least one agent turn must render. We look at the .markdown body
     // class (set on agent turns by the template) so the assertion survives
     // user / system / tools turns that don't go through the markdown renderer.
-    const agentBodies = convo.locator('.convo-turn--agent .markdown');
+    const agentBodies = convo.locator('.convo-turn--agent .markdown-body');
     await expect(agentBodies.first()).toBeVisible({ timeout: 5_000 });
 
     // Structural checks: at least the most basic markdown wrappers should
@@ -152,7 +152,7 @@ test.describe('Activity log — Conversation markdown rendering', () => {
     const convo = page.getByTestId('activity-log-conversation');
     await expect(convo).toBeVisible();
 
-    const agentBodies = convo.locator('.convo-turn--agent .markdown');
+    const agentBodies = convo.locator('.convo-turn--agent .markdown-body');
     await expect(agentBodies.first()).toBeVisible({ timeout: 5_000 });
 
     // Soft test: at least one agent turn with code spans should exist when
@@ -185,7 +185,7 @@ test.describe('Activity log — Conversation markdown rendering', () => {
     // just can't pass the "stable for 0.5s" gate.
     await page.getByTestId('activity-log-mode-conversation').click({ force: true });
 
-    const links = page.locator('.convo-turn--agent .markdown a');
+    const links = page.locator('.convo-turn--agent .markdown-body a');
     const count = await links.count();
     if (count === 0) {
       test.info().annotations.push({

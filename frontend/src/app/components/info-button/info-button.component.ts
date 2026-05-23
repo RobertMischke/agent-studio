@@ -10,10 +10,8 @@ import {
 } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { TooltipDirective } from '../tooltip';
-import { MarkdownImageLightboxDirective } from '../../directives/markdown-image-lightbox.directive';
-import { markdownToHtml } from '../markdown-utils';
+import { MarkdownViewComponent } from '../markdown-view/markdown-view.component';
 import { ModalStackService } from '../../services/modal-stack.service';
 
 interface ConceptDocPayload {
@@ -36,14 +34,13 @@ interface ConceptDocPayload {
 @Component({
   selector: 'app-info-button',
   standalone: true,
-  imports: [TooltipDirective, MarkdownImageLightboxDirective],
+  imports: [TooltipDirective, MarkdownViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './info-button.component.html',
   styleUrl: './info-button.component.scss'
 })
 export class InfoButtonComponent {
   private readonly http = inject(HttpClient);
-  private readonly sanitizer = inject(DomSanitizer);
 
   readonly topic = input.required<string>();
 
@@ -53,11 +50,7 @@ export class InfoButtonComponent {
   private readonly doc = signal<ConceptDocPayload | null>(null);
 
   readonly title = computed(() => this.doc()?.title ?? 'About this lane');
-  readonly bodyHtml = computed<SafeHtml | null>(() => {
-    const d = this.doc();
-    if (!d) return null;
-    return this.sanitizer.bypassSecurityTrustHtml(markdownToHtml(d.body));
-  });
+  readonly body = computed<string | null>(() => this.doc()?.body ?? null);
 
   toggle(event: Event): void {
     event.stopPropagation();

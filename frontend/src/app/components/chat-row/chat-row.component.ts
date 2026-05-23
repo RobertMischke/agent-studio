@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
-import { markdownToHtml } from '../markdown-utils';
+import { MarkdownViewComponent } from '../markdown-view/markdown-view.component';
 import { RoleBadgeComponent } from '../../features/workforce';
 
 /**
@@ -58,7 +58,7 @@ export interface ChatRowInput {
 @Component({
   selector: 'app-chat-row',
   standalone: true,
-  imports: [RoleBadgeComponent],
+  imports: [RoleBadgeComponent, MarkdownViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './chat-row.component.html',
   styleUrl: './chat-row.component.scss',
@@ -68,14 +68,17 @@ export class ChatRowComponent {
 
   private readonly sanitizer = inject(DomSanitizer);
 
-  readonly bodySafe = computed<SafeHtml>(() => {
+  /**
+   * Pre-sanitised HTML when the caller passes `bodyHtml` directly. The
+   * markdown render path goes through `<app-markdown>` instead so chat
+   * rows share the canonical surface with every other markdown host.
+   */
+  readonly preRenderedHtml = computed<SafeHtml | null>(() => {
     const r = this.row();
-    if (r.bodyHtml != null) {
-      return typeof r.bodyHtml === 'string'
-        ? this.sanitizer.bypassSecurityTrustHtml(r.bodyHtml)
-        : r.bodyHtml;
-    }
-    return this.sanitizer.bypassSecurityTrustHtml(markdownToHtml(r.body ?? ''));
+    if (r.bodyHtml == null) return null;
+    return typeof r.bodyHtml === 'string'
+      ? this.sanitizer.bypassSecurityTrustHtml(r.bodyHtml)
+      : r.bodyHtml;
   });
 
   readonly formattedTs = computed<string>(() => {

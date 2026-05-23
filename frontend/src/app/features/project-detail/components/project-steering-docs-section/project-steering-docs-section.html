@@ -86,14 +86,14 @@
                     }
                   </ul>
                   @if (childContent(); as cc) {
-                    <article class="psd__body psd__body--child"
-                             data-testid="project-steering-docs-child-content"
-                             [innerHTML]="renderMarkdown(cc.content)"></article>
+                    <app-markdown class="psd__body psd__body--child"
+                                  testId="project-steering-docs-child-content"
+                                  [source]="cc.content" />
                   }
                 } @else if (fileContent(); as fc) {
-                  <article class="psd__body"
-                           data-testid="project-steering-docs-content"
-                           [innerHTML]="renderMarkdown(fc.content)"></article>
+                  <app-markdown class="psd__body"
+                                testId="project-steering-docs-content"
+                                [source]="fc.content" />
                 } @else if (fileLoading()) {
                   <p class="psd__empty">Loading file…</p>
                 } @else if (fileError()) {

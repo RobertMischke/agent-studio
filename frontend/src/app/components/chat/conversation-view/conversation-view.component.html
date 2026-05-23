@@ -53,7 +53,8 @@
                 }
                 <time class="msg__time">{{ formatTime(row.event.timestamp) }}</time>
               </header>
-              <div class="msg__body" [innerHTML]="row.bodyHtml"></div>
+              <app-markdown class="msg__body" [source]="row.event.body" />
+
               @if (row.event.attachments?.length) {
                 <ul class="msg__attachments" aria-label="Attachments">
                   @for (a of row.event.attachments ?? []; track a) {

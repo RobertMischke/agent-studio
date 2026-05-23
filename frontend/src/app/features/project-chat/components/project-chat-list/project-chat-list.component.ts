@@ -17,7 +17,6 @@ import { FormsModule } from '@angular/forms';
 import { JobService } from '../../../../services/job.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import type { ProjectChatSearchHit, ProjectChatTurn } from '../../../../features/project-chat';
-import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
 import { decideLoadAction, formatLoadedSummary } from './load-strategy';
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -498,11 +497,6 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
     this.flashTurnId.set(turnId);
     if (this.flashTimer != null) clearTimeout(this.flashTimer);
     this.flashTimer = setTimeout(() => this.flashTurnId.set(null), 1500);
-  }
-
-  // ── Rendering ─────────────────────────────────────────────────────
-  renderBody(body: string): string {
-    return markdownToHtml(body || '');
   }
 
   /** Adapter from the project-chat turn shape to the shared row shape. */

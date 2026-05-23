@@ -1,0 +1,27 @@
+/*
+ * <app-markdown> wrapper.
+ *
+ * The shared prose typography (h1..h6, p, ul/ol, code, pre, table, blockquote,
+ * a, img — plus dense / editor variants and the light-theme palette flip)
+ * lives in `src/styles/_markdown-body.scss` and is loaded globally from
+ * `src/styles.scss`. That keeps a single source of truth for every surface
+ * that paints markdown, whether it goes through this component or whether
+ * it carries the `.markdown-body` class directly while a host migrates.
+ *
+ * This file intentionally only owns the wrapper's own layout contract:
+ *
+ *   - the host renders as a block so it occupies the host container's full
+ *     width (chat bubble, prompt-history card, info-button drawer)
+ *   - the body itself is transparent so the surrounding surface (chat
+ *     bubble background, history card colour, side-sheet panel) paints
+ *     through. The "grey layer around headings/lists" regression came
+ *     from per-host backgrounds leaking onto the markdown wrapper —
+ *     pinning transparent here stops it recurring.
+ */
+:host {
+  display: block;
+}
+
+:host > .markdown-body {
+  background: transparent;
+}

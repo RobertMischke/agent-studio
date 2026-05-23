@@ -20,5 +20,11 @@
     }
     <time class="chat-row__ts" [attr.datetime]="r.ts">{{ formattedTs() }}</time>
   </header>
-  <div class="chat-row__body" [innerHTML]="bodySafe()"></div>
+  @if (preRenderedHtml(); as pre) {
+    <div class="chat-row__body" [innerHTML]="pre"></div>
+  } @else {
+    <app-markdown class="chat-row__body"
+                  [source]="r.body ?? ''"
+                  [dense]="true" />
+  }
 </article>

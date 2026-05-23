@@ -17,8 +17,7 @@ import {
   parseActivityLog,
   parseOrchestratorSteer
 } from '../activity-log.parser';
-import { markdownToHtml } from '../../../../components/markdown-utils';
-import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
+import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 import {
   RenderedTurn,
   buildToolChips,
@@ -50,7 +49,7 @@ type ViewMode = 'conversation' | 'trace';
 @Component({
   selector: 'app-activity-log-view',
   standalone: true,
-  imports: [ScrollingModule, MarkdownImageLightboxDirective, TooltipDirective],
+  imports: [ScrollingModule, MarkdownViewComponent, TooltipDirective],
   // Cycle 7b: OnPush. The activity log re-derives conversation turns
   // from a capped lines() signal whenever new CLI output arrives. With
   // default CD, every parent change-detection pass also walked through
@@ -364,12 +363,14 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
         };
       }
     }
-    const html = turn.kind === 'agent'
-      ? this.sanitizer.bypassSecurityTrustHtml(markdownToHtml(turn.text))
-      // For user/system we keep plain text but still need SafeHtml in the
-      // template path. We escape ourselves and bypassSecurityTrustHtml so the
-      // template binding doesn't double-escape.
-      : this.sanitizer.bypassSecurityTrustHtml(escapeForPlain(turn.text));
+    // Agent turns delegate markdown rendering to <app-markdown> in the
+    // template, so bodyHtml stays null for that branch. User/system/
+    // orchestrator-non-steer turns remain plain escaped text via the
+    // inline [innerHTML] binding.
+    if (turn.kind === 'agent') {
+      return { turn, bodyHtml: null, toolChips: [], toolDuration: '', toolBins: [] };
+    }
+    const html = this.sanitizer.bypassSecurityTrustHtml(escapeForPlain(turn.text));
     return { turn, bodyHtml: html, toolChips: [], toolDuration: '', toolBins: [] };
   }
 

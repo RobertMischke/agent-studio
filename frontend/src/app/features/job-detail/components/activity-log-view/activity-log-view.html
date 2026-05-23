@@ -88,9 +88,9 @@
                       <span class="convo-turn__role">Agent</span>
                       <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </header>
-                    <div class="convo-turn__body convo-turn__body--agent markdown markdown-body markdown-body--dense"
-                         appMarkdownLightbox
-                         [innerHTML]="item.bodyHtml"></div>
+                    <app-markdown class="convo-turn__body convo-turn__body--agent"
+                                  [source]="item.turn.text"
+                                  [dense]="true" />
                   }
                   @case ('system') {
                     <header class="convo-turn__head">
@@ -150,7 +150,6 @@
                         <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                       </header>
                       <div class="convo-turn__body convo-turn__body--orchestrator"
-                           appMarkdownLightbox
                            [innerHTML]="item.bodyHtml"></div>
                     }
                   }
