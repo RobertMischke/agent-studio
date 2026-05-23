@@ -420,6 +420,19 @@ public class JobScannerService
     }
 
     /// <summary>
+    /// Reads the F33 Linear-style reference key (<c>ATP-130</c>, <c>RB-42</c>)
+    /// from <c>job.json</c>. Returns null when the field is absent or
+    /// non-string so the UI can fall back to <see cref="JobInfo.Id"/>.
+    /// </summary>
+    private static string? ReadReferenceKey(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("key", out var k)) return null;
+        if (k.ValueKind != JsonValueKind.String) return null;
+        var value = k.GetString();
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    /// <summary>
     /// Reads the optional <c>tags</c> string array from <c>job.json</c>. Drops
     /// non-string entries. Returns an empty list when the field is absent or
     /// the wrong shape; never throws on a malformed value.

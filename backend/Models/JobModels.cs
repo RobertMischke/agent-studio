@@ -976,6 +976,202 @@ public record ProjectSettings
     /// task in the expanded-lifecycle-lanes plan.
     /// </summary>
     public bool? IntakeEnabled { get; init; }
+
+    /// <summary>
+    /// F35: per-lane sort strategy override. Map of lane key
+    /// (<see cref="JobStates.Backlog"/> .. <see cref="JobStates.Archive"/>)
+    /// to a strategy id from <see cref="LaneSortStrategies"/>. Null or a
+    /// missing lane key falls back to <see cref="LaneSortStrategies.GetDefaultForLane"/>.
+    /// Used by the kanban grouped endpoint when ordering jobs inside a lane;
+    /// the runner's pickup loop keeps its own deterministic order and is
+    /// unaffected.
+    /// </summary>
+    public Dictionary<string, string>? LaneSortStrategyOverrides { get; init; }
+}
+
+public static class LaneSortStrategies
+{
+    /// <summary>
+    /// User-managed order. Sort by <c>order</c> ASC + <c>key</c> desc as
+    /// tiebreaker. Drag-and-drop on the kanban is only enabled on lanes set
+    /// to this strategy.
+    /// </summary>
+    public const string Manual = "manual";
+
+    /// <summary>Newest key on top. Sort by <c>key</c> desc + <c>createdAt</c> desc.</summary>
+    public const string NewestFirst = "newest-first";
+
+    /// <summary>Oldest key on top (FIFO triage). Sort by <c>key</c> asc + <c>createdAt</c> asc.</summary>
+    public const string OldestFirst = "oldest-first";
+
+    /// <summary>Most-recent activity on top. Sort by <c>lastActivity</c> desc + <c>order</c> asc.</summary>
+    public const string LastActivity = "last-activity";
+
+    /// <summary>
+    /// Internal auto-pickup priority. Sort by <c>order</c> asc + <c>lastActivity</c>
+    /// asc. Reserved for the runner; not selectable in the project-settings UI.
+    /// </summary>
+    public const string PickupPriority = "pickup-priority";
+
+    /// <summary>All strategies including the internal pickup-priority.</summary>
+    public static readonly string[] All =
+        [Manual, NewestFirst, OldestFirst, LastActivity, PickupPriority];
+
+    /// <summary>Strategies surfaced in the project-settings UI dropdown.</summary>
+    public static readonly string[] UserVisible =
+        [Manual, NewestFirst, OldestFirst, LastActivity];
+
+    /// <summary>
+    /// Default strategy used when a lane has no explicit override in
+    /// <see cref="ProjectSettings.LaneSortStrategies"/>. Picked to match the
+    /// operator mental model: newest-first for the queue lanes, last-activity
+    /// for the working lanes, oldest-first for the review FIFO, manual
+    /// otherwise.
+    /// </summary>
+    public static string GetDefaultForLane(string lane)
+    {
+        return lane switch
+        {
+            JobStates.Backlog => NewestFirst,
+            JobStates.Preparation => NewestFirst,
+            JobStates.OrchestratorPrep => NewestFirst,
+            JobStates.NeedsHumanReview => NewestFirst,
+            JobStates.Ready => NewestFirst,
+            JobStates.Progress => LastActivity,
+            JobStates.FailedPickup => NewestFirst,
+            JobStates.AutoReview => LastActivity,
+            JobStates.HumanReview => OldestFirst,
+            JobStates.Completed => LastActivity,
+            JobStates.Archive => LastActivity,
+            _ => Manual,
+        };
+    }
+
+    /// <summary>
+    /// Returns the configured strategy for a lane, falling back to
+    /// <see cref="GetDefaultForLane"/> when the project has no override.
+    /// Unknown strategy ids fall back to the default too.
+    /// </summary>
+    public static string Resolve(ProjectSettings settings, string lane)
+    {
+        if (settings.LaneSortStrategyOverrides != null
+            && settings.LaneSortStrategyOverrides.TryGetValue(lane, out var configured)
+            && IsValid(configured))
+        {
+            return configured;
+        }
+        return GetDefaultForLane(lane);
+    }
+
+    public static bool IsValid(string? strategy)
+        => !string.IsNullOrWhiteSpace(strategy)
+           && All.Contains(strategy, StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsUserSelectable(string? strategy)
+        => !string.IsNullOrWhiteSpace(strategy)
+           && UserVisible.Contains(strategy, StringComparer.OrdinalIgnoreCase);
+
+    public static string Normalize(string? strategy)
+    {
+        if (string.IsNullOrWhiteSpace(strategy)) return Manual;
+        var v = strategy.Trim();
+        foreach (var s in All)
+            if (string.Equals(s, v, StringComparison.OrdinalIgnoreCase))
+                return s;
+        return Manual;
+    }
+
+    /// <summary>
+    /// Returns the comparer that implements <paramref name="strategy"/> for
+    /// <see cref="JobInfo"/>. Unknown strategy ids fall back to manual.
+    /// </summary>
+    public static IComparer<JobInfo> GetComparer(string strategy)
+    {
+        return Normalize(strategy) switch
+        {
+            NewestFirst => Comparer<JobInfo>.Create(CompareNewestFirst),
+            OldestFirst => Comparer<JobInfo>.Create(CompareOldestFirst),
+            LastActivity => Comparer<JobInfo>.Create(CompareLastActivityDesc),
+            PickupPriority => Comparer<JobInfo>.Create(ComparePickupPriority),
+            _ => Comparer<JobInfo>.Create(CompareManual),
+        };
+    }
+
+    private static int CompareManual(JobInfo a, JobInfo b)
+    {
+        var byOrder = a.Order.CompareTo(b.Order);
+        if (byOrder != 0) return byOrder;
+        // Stable tiebreaker: newer key on top so two cards at order 999
+        // sort consistently. CompareKeyDesc handles null keys safely.
+        return CompareKeyDesc(a, b);
+    }
+
+    private static int CompareNewestFirst(JobInfo a, JobInfo b)
+    {
+        var byKey = CompareKeyDesc(a, b);
+        if (byKey != 0) return byKey;
+        return b.CreatedAt.CompareTo(a.CreatedAt);
+    }
+
+    private static int CompareOldestFirst(JobInfo a, JobInfo b)
+    {
+        var byKey = CompareKeyAsc(a, b);
+        if (byKey != 0) return byKey;
+        return a.CreatedAt.CompareTo(b.CreatedAt);
+    }
+
+    private static int CompareLastActivityDesc(JobInfo a, JobInfo b)
+    {
+        var byActivity = b.LastActivity.CompareTo(a.LastActivity);
+        if (byActivity != 0) return byActivity;
+        return a.Order.CompareTo(b.Order);
+    }
+
+    private static int ComparePickupPriority(JobInfo a, JobInfo b)
+    {
+        var byOrder = a.Order.CompareTo(b.Order);
+        if (byOrder != 0) return byOrder;
+        return a.LastActivity.CompareTo(b.LastActivity);
+    }
+
+    /// <summary>
+    /// Compare reference keys (e.g. <c>ATP-130</c>) in semantic order: split
+    /// at the dash so the numeric suffix sorts numerically, not
+    /// lexicographically. Jobs with a null key fall to the end of the lane.
+    /// </summary>
+    private static int CompareKeyAsc(JobInfo a, JobInfo b)
+    {
+        var ka = a.Key;
+        var kb = b.Key;
+        if (string.IsNullOrEmpty(ka) && string.IsNullOrEmpty(kb)) return 0;
+        if (string.IsNullOrEmpty(ka)) return 1;
+        if (string.IsNullOrEmpty(kb)) return -1;
+        return KeyComparer.Compare(ka, kb);
+    }
+
+    private static int CompareKeyDesc(JobInfo a, JobInfo b) => CompareKeyAsc(b, a);
+
+    private static class KeyComparer
+    {
+        public static int Compare(string a, string b)
+        {
+            var dashA = a.LastIndexOf('-');
+            var dashB = b.LastIndexOf('-');
+            if (dashA > 0 && dashB > 0)
+            {
+                var prefixA = a.AsSpan(0, dashA);
+                var prefixB = b.AsSpan(0, dashB);
+                var byPrefix = prefixA.CompareTo(prefixB, StringComparison.OrdinalIgnoreCase);
+                if (byPrefix != 0) return byPrefix;
+                if (int.TryParse(a.AsSpan(dashA + 1), out var nA)
+                    && int.TryParse(b.AsSpan(dashB + 1), out var nB))
+                {
+                    return nA.CompareTo(nB);
+                }
+            }
+            return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }
 
 public static class AutoPushStrategies
@@ -1019,6 +1215,17 @@ public record SetOrchestratorModelRequest
 public record SetAutonomyLevelRequest
 {
     public int Level { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/lane-sort-strategy</c> (F35). When
+/// <see cref="Strategy"/> is null or empty, the explicit override is cleared
+/// and the lane reverts to its default.
+/// </summary>
+public record SetLaneSortStrategyRequest
+{
+    public string Lane { get; init; } = "";
+    public string? Strategy { get; init; }
 }
 
 /// <summary>

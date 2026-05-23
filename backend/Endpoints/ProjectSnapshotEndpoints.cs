@@ -120,7 +120,14 @@ public static class ProjectSnapshotEndpoints
                     autoCommit = settings.AutoCommit,
                     autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy),
                     runnerMode = settings.RunnerMode,
-                    orchestratorModel = settings.OrchestratorModel
+                    orchestratorModel = settings.OrchestratorModel,
+                    // F35: every lane resolved to its effective strategy.
+                    // The kanban renders the lane-header icon and the
+                    // drag-disabled hint from this map.
+                    laneSortStrategies = JobStates.All.ToDictionary(
+                        lane => lane,
+                        lane => LaneSortStrategies.Resolve(settings, lane),
+                        StringComparer.OrdinalIgnoreCase)
                 },
                 runnerStatus = projectRunner == null ? null : new
                 {

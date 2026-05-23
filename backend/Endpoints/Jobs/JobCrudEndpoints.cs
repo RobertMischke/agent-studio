@@ -28,42 +28,61 @@ public static class JobCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
+        group.MapGet("/grouped", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();
+            // F35: each lane is sorted using a per-project strategy. The kanban
+            // mixes projects inside one lane, so the sort groups by project,
+            // applies that project's resolved strategy, then concatenates the
+            // groups in alphabetical project order for a deterministic global
+            // result. Settings are cached in-memory (single lock) so the
+            // per-project lookup is essentially free.
+            var settingsByProject = new Dictionary<string, ProjectSettings>(StringComparer.OrdinalIgnoreCase);
+            ProjectSettings SettingsFor(string projectName)
+            {
+                if (!settingsByProject.TryGetValue(projectName, out var s))
+                {
+                    s = projectSettings.Get(projectName);
+                    settingsByProject[projectName] = s;
+                }
+                return s;
+            }
+            List<JobInfo> SortLane(string lane)
+                => LaneSortApplier.Sort(jobs.Where(j => j.State == lane), lane, SettingsFor).ToList();
+
             // ADR-0025: explicit AutoReview + HumanReview lanes. The legacy
             // "Review" key is kept (auto-review only) so older clients that
             // only know the four pre-ADR-0025 lane names keep getting a
             // populated bucket and don't crash on a missing field.
-            var autoReview = jobs.Where(j => j.State == JobStates.AutoReview).OrderBy(j => j.Order).ToList();
-            var humanReview = jobs.Where(j => j.State == JobStates.HumanReview).OrderBy(j => j.Order).ToList();
+            var autoReview = SortLane(JobStates.AutoReview);
+            var humanReview = SortLane(JobStates.HumanReview);
             var grouped = new
             {
                 // Backlog: triage staging area, the leftmost lane and the
                 // default landing for new jobs.
-                Backlog = jobs.Where(j => j.State == JobStates.Backlog).OrderBy(j => j.Order).ToList(),
-                Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
+                Backlog = SortLane(JobStates.Backlog),
+                Preparation = SortLane(JobStates.Preparation),
                 // ADR-0026: orchestrator-prep + needs-human-review lanes.
                 // Empty by default; clients render NeedsHumanReview only when
                 // it has at least one job (hide-when-empty rule).
-                OrchestratorPrep = jobs.Where(j => j.State == JobStates.OrchestratorPrep).OrderBy(j => j.Order).ToList(),
-                NeedsHumanReview = jobs.Where(j => j.State == JobStates.NeedsHumanReview).OrderBy(j => j.Order).ToList(),
-                Ready = jobs.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList(),
-                Progress = jobs.Where(j => j.State == JobStates.Progress).OrderBy(j => j.Order).ToList(),
+                OrchestratorPrep = SortLane(JobStates.OrchestratorPrep),
+                NeedsHumanReview = SortLane(JobStates.NeedsHumanReview),
+                Ready = SortLane(JobStates.Ready),
+                Progress = SortLane(JobStates.Progress),
                 // ADR-0028: 3a-failed-pickup is a hide-when-empty lane that
                 // surfaces orphan boot-sweep verdicts the runner used to hide
                 // in 7-archive. Empty by default; clients render it only when
                 // it has at least one job.
-                FailedPickup = jobs.Where(j => j.State == JobStates.FailedPickup).OrderBy(j => j.Order).ToList(),
+                FailedPickup = SortLane(JobStates.FailedPickup),
                 AutoReview = autoReview,
                 HumanReview = humanReview,
                 Review = autoReview, // legacy alias for pre-ADR-0025 clients
-                Completed = jobs.Where(j => j.State == JobStates.Completed).OrderBy(j => j.Order).ToList(),
-                Archive = jobs.Where(j => j.State == JobStates.Archive).OrderBy(j => j.Order).ToList()
+                Completed = SortLane(JobStates.Completed),
+                Archive = SortLane(JobStates.Archive)
             };
             return Results.Ok(grouped);
         });

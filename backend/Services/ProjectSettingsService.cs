@@ -137,6 +137,36 @@ public class ProjectSettingsService
     /// entry (revert to "disabled" default). Every project starts with no
     /// schedules so reports never auto-run without an explicit opt-in.
     /// </summary>
+    /// <summary>
+    /// F35: writes the sort strategy override for a single lane. A null or
+    /// empty <paramref name="strategy"/> clears the override (the lane
+    /// reverts to <see cref="LaneSortStrategies.GetDefaultForLane"/>).
+    /// Invalid strategy ids are rejected by the caller; this method
+    /// normalises to ensure only canonical ids land on disk.
+    /// </summary>
+    public void SetLaneSortStrategy(string projectName, string lane, string? strategy)
+    {
+        if (string.IsNullOrWhiteSpace(lane)) return;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var map = current.LaneSortStrategyOverrides is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(current.LaneSortStrategyOverrides, StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(strategy))
+            {
+                map.Remove(lane.Trim());
+            }
+            else
+            {
+                map[lane.Trim()] = LaneSortStrategies.Normalize(strategy);
+            }
+            _cache[projectName] = current with { LaneSortStrategyOverrides = map.Count == 0 ? null : map };
+            Persist();
+        }
+    }
+
     public void SetAnalysisSchedule(string projectName, string topic, string? cadence)
     {
         if (string.IsNullOrWhiteSpace(topic)) return;

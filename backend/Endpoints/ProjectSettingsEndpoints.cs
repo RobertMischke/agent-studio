@@ -37,7 +37,27 @@ public static class ProjectSettingsEndpoints
         // in one shot without N round-trips.
         app.MapGet("/api/projects/settings", (ProjectSettingsService settings) =>
         {
-            return Results.Ok(settings.GetAll());
+            var all = settings.GetAll();
+            var projected = all.ToDictionary(
+                kv => kv.Key,
+                kv => new
+                {
+                    autoCommit = kv.Value.AutoCommit,
+                    autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
+                    runnerMode = kv.Value.RunnerMode,
+                    orchestratorModel = kv.Value.OrchestratorModel,
+                    intakeEnabled = kv.Value.IntakeEnabled,
+                    autonomyLevel = kv.Value.AutonomyLevel,
+                    // F35: resolved per-lane strategy map (defaults filled in).
+                    // The board uses this for the lane-header icon + the
+                    // drag-disabled hint without a per-project round-trip.
+                    laneSortStrategies = JobStates.All.ToDictionary(
+                        lane => lane,
+                        lane => LaneSortStrategies.Resolve(kv.Value, lane),
+                        StringComparer.OrdinalIgnoreCase),
+                },
+                StringComparer.OrdinalIgnoreCase);
+            return Results.Ok(projected);
         });
 
         app.MapPut("/api/projects/{projectName}/auto-commit", (string projectName, SetAutoCommitRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
@@ -95,6 +115,55 @@ public static class ProjectSettingsEndpoints
 
             settings.SetAutonomyLevel(projectName, req.Level);
             return Results.Ok(new { level = settings.Get(projectName).AutonomyLevel ?? 2 });
+        });
+
+        // F35: per-lane sort strategy. GET returns the resolved map (every
+        // lane key present, defaults filled in) so the settings UI can render
+        // a dropdown per lane without a second round-trip. PUT writes one
+        // lane at a time; an empty/null strategy clears the override and the
+        // lane reverts to its default.
+        app.MapGet("/api/projects/{projectName}/lane-sort-strategies", (string projectName, ProjectSettingsService settings, JobScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var s = settings.Get(projectName);
+            var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var lane in JobStates.All)
+                resolved[lane] = LaneSortStrategies.Resolve(s, lane);
+            return Results.Ok(new
+            {
+                resolved,
+                overrides = s.LaneSortStrategyOverrides ?? new Dictionary<string, string>(),
+                available = LaneSortStrategies.UserVisible,
+            });
+        });
+
+        app.MapPut("/api/projects/{projectName}/lane-sort-strategy", (string projectName, SetLaneSortStrategyRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            if (string.IsNullOrWhiteSpace(req.Lane))
+                return Results.BadRequest(new { error = "lane is required" });
+            if (!JobStates.All.Contains(req.Lane, StringComparer.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = $"Unknown lane '{req.Lane}'" });
+            // Empty/null clears. Non-empty must be user-selectable; the
+            // internal pickup-priority strategy is not exposed to the UI.
+            if (!string.IsNullOrWhiteSpace(req.Strategy)
+                && !LaneSortStrategies.IsUserSelectable(req.Strategy))
+            {
+                return Results.BadRequest(new { error = $"Unsupported sort strategy '{req.Strategy}'" });
+            }
+
+            settings.SetLaneSortStrategy(projectName, req.Lane, req.Strategy);
+            var s = settings.Get(projectName);
+            return Results.Ok(new
+            {
+                lane = req.Lane,
+                strategy = LaneSortStrategies.Resolve(s, req.Lane),
+                @override = s.LaneSortStrategyOverrides?.GetValueOrDefault(req.Lane)
+            });
         });
 
         // Per-project orchestrator intake toggle (ready-orchestrator-intake-lane).
