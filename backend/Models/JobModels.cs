@@ -1149,7 +1149,17 @@ public static class LaneSortStrategies
         return KeyComparer.Compare(ka, kb);
     }
 
-    private static int CompareKeyDesc(JobInfo a, JobInfo b) => CompareKeyAsc(b, a);
+    private static int CompareKeyDesc(JobInfo a, JobInfo b)
+    {
+        // Keep "null keys to the bottom" regardless of direction; a naive
+        // CompareKeyAsc(b, a) would float nulls to the top in desc order.
+        var ka = a.Key;
+        var kb = b.Key;
+        if (string.IsNullOrEmpty(ka) && string.IsNullOrEmpty(kb)) return 0;
+        if (string.IsNullOrEmpty(ka)) return 1;
+        if (string.IsNullOrEmpty(kb)) return -1;
+        return -KeyComparer.Compare(ka, kb);
+    }
 
     private static class KeyComparer
     {
