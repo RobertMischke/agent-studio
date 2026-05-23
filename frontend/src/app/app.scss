@@ -1150,7 +1150,13 @@
       border-color: color-mix(in srgb, var(--studio-accent-6) 100%, transparent);
     }
 
-    /* Notification stack: top-right, vertical pile, manual or auto-dismiss. */
+    /* Notification stack: top-right, vertical pile, manual or auto-dismiss.
+       The per-toast chrome (background, border, severity tints, icon
+       bubble, close button, animation) moved to <app-notification>
+       (F37) so the stack only owns positioning. The `.app-notify` BEM
+       node below survives as a no-op host class so legacy Playwright
+       selectors keep matching while we migrate them; new specs target
+       `[data-testid^="notification-"]` directly. */
     .app-notify-stack {
       position: fixed;
       top: 14px;
@@ -1164,110 +1170,20 @@
     }
     .app-notify {
       pointer-events: auto;
-      display: grid;
-      /* `minmax(0, 1fr)` lets the body column actually shrink below its
-         intrinsic content size; without it a long auto-review message
-         expands the toast past max-width and overflows the viewport. */
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: flex-start;
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: rgba(17,17,27,0.96);
-      border: 1px solid rgba(255,255,255,0.08);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.45);
-      color: var(--studio-fg);
-      font-size: 13px;
-      line-height: 1.45;
-      animation: app-notify-in 0.18s ease-out;
+      display: block;
     }
-    .app-notify__icon {
-      font-size: 16px;
-      line-height: 1.2;
-      width: 22px;
-      height: 22px;
-      display: grid;
-      place-items: center;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.06);
-      color: var(--studio-fg-dim);
-      flex-shrink: 0;
-    }
-    .app-notify__body { min-width: 0; }
-    .app-notify__title {
-      font-weight: 600;
-      color: var(--studio-fg-strong);
-      margin-bottom: 2px;
-    }
-    .app-notify__message {
-      /* Clamp the body to 4 lines + ellipsis so a very long auto-review
-         verdict (full aspect list, multi-sentence summary) cannot grow
-         the toast into a wall of text. The complete message is
-         preserved in the orchestrator chat and decision journal. */
-      display: -webkit-box;
-      -webkit-line-clamp: 4;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
+    /* Source caption lives in the projected `[notification-source]`
+       slot. Layout details stay here so the stack-level concern of
+       "clamp long slugs to one line" is not baked into the generic
+       notification component. */
     .app-notify__source {
       margin-top: 4px;
       font-size: 11px;
       color: var(--studio-fg-dim);
       letter-spacing: 0.02em;
-      /* Source labels (typically a project / job slug) stay on a
-         single visible line; very long slugs are truncated rather than
-         folded into another row. */
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    .app-notify__close {
-      background: transparent;
-      border: none;
-      color: var(--studio-fg-dim);
-      cursor: pointer;
-      font-size: 13px;
-      line-height: 1;
-      padding: 2px 4px;
-      border-radius: 4px;
-    }
-    .app-notify__close:hover {
-      background: rgba(255,255,255,0.08);
-      color: var(--studio-fg-strong);
-    }
-    .app-notify--success {
-      border-color: rgba(74,222,128,0.32);
-    }
-    .app-notify--success .app-notify__icon {
-      background: rgba(74,222,128,0.16);
-      color: #86efac;
-    }
-    .app-notify--info {
-      border-color: rgba(129,140,248,0.32);
-    }
-    .app-notify--info .app-notify__icon {
-      background: rgba(129,140,248,0.16);
-      color: #c7d2fe;
-    }
-    .app-notify--warning {
-      border-color: rgba(251,191,36,0.32);
-    }
-    .app-notify--warning .app-notify__icon {
-      background: rgba(251,191,36,0.16);
-      color: #fde68a;
-    }
-    .app-notify--error {
-      border-color: rgba(248,113,113,0.4);
-    }
-    .app-notify--error .app-notify__icon {
-      background: rgba(248,113,113,0.18);
-      color: #fda4af;
-    }
-    @keyframes app-notify-in {
-      from { opacity: 0; transform: translateY(-6px); }
-      to   { opacity: 1; transform: translateY(0); }
     }
     .create-cli-picker {
       display: inline-flex;

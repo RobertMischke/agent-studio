@@ -123,6 +123,46 @@
   --syntax-selector: var(--color-mocha-pink);
 
   // ---------------------------------------------------------------------------
+  // Notifications & banners (F37) — surface + per-severity tints for the
+  // unified `<app-notification>` component (toast + banner layouts). Each
+  // kind has a matching bg / border / icon-bg / icon-fg quartet so the
+  // component picks one variable name per slot and the theme block below
+  // overrides them for the white shell.
+  // ---------------------------------------------------------------------------
+  --notify-surface-bg:          rgba(17, 17, 27, 0.96);
+  --notify-surface-border:      var(--alpha-white-08);
+  --notify-surface-fg:          var(--studio-fg);
+  --notify-surface-fg-strong:   var(--studio-fg-strong);
+  --notify-surface-fg-dim:      var(--studio-fg-dim);
+  --notify-icon-bg-neutral:     var(--alpha-white-06);
+  --notify-icon-fg-neutral:     var(--studio-fg-dim);
+
+  --notify-success-border:      rgba(74, 222, 128, 0.32);
+  --notify-success-icon-bg:     rgba(74, 222, 128, 0.16);
+  --notify-success-icon-fg:     var(--color-green-300);
+  --notify-success-tint:        rgba(74, 222, 128, 0.10);
+
+  --notify-info-border:         rgba(129, 140, 248, 0.32);
+  --notify-info-icon-bg:        rgba(129, 140, 248, 0.16);
+  --notify-info-icon-fg:        var(--color-mocha-lavender);
+  --notify-info-tint:           rgba(129, 140, 248, 0.10);
+
+  --notify-warning-border:      rgba(251, 191, 36, 0.32);
+  --notify-warning-icon-bg:     rgba(251, 191, 36, 0.16);
+  --notify-warning-icon-fg:     var(--color-mocha-yellow);
+  --notify-warning-tint:        rgba(251, 191, 36, 0.10);
+
+  --notify-error-border:        rgba(248, 113, 113, 0.40);
+  --notify-error-icon-bg:       rgba(248, 113, 113, 0.18);
+  --notify-error-icon-fg:       var(--color-red-300);
+  --notify-error-tint:          rgba(248, 113, 113, 0.12);
+
+  --notify-accent-border:       rgba(139, 92, 246, 0.45);
+  --notify-accent-icon-bg:      rgba(139, 92, 246, 0.18);
+  --notify-accent-icon-fg:      var(--color-violet-300);
+  --notify-accent-tint:         rgba(139, 92, 246, 0.18);
+
+  // ---------------------------------------------------------------------------
   // Elevations — shadow tokens by USE-CASE (Tier-2 alias over --shadow-*).
   //
   // When a component needs a drop shadow, pick the elevation matching the
@@ -233,4 +273,43 @@
   --elevation-modal:    var(--shadow-400-light);
   --elevation-tooltip:  var(--shadow-200-light);
   --elevation-floating: var(--shadow-500-light);
+
+  // Notifications & banners (F37) — tints + borders re-pitched for the
+  // white shell. Surface picks a paper-tone elevated card instead of the
+  // dark Mocha panel; per-kind tints stay subtle (~10-14% saturation) so a
+  // toast stack does not overpower the underlying board content. Icon
+  // pigments use the F19 darker severity primitives so the glyph itself
+  // stays legible against the light background.
+  --notify-surface-bg:          var(--studio-bg-elevated);
+  --notify-surface-border:      var(--studio-border-strong);
+  --notify-surface-fg:          var(--studio-fg);
+  --notify-surface-fg-strong:   var(--studio-fg-strong);
+  --notify-surface-fg-dim:      var(--studio-fg-muted);
+  --notify-icon-bg-neutral:     var(--alpha-black-06);
+  --notify-icon-fg-neutral:     var(--studio-fg-muted);
+
+  --notify-success-border:      rgba(21, 128, 61, 0.45);
+  --notify-success-icon-bg:     rgba(21, 128, 61, 0.14);
+  --notify-success-icon-fg:     var(--color-green-700);
+  --notify-success-tint:        rgba(21, 128, 61, 0.08);
+
+  --notify-info-border:         rgba(29, 78, 216, 0.40);
+  --notify-info-icon-bg:        rgba(29, 78, 216, 0.12);
+  --notify-info-icon-fg:        var(--color-blue-700);
+  --notify-info-tint:           rgba(29, 78, 216, 0.06);
+
+  --notify-warning-border:      rgba(180, 83, 9, 0.45);
+  --notify-warning-icon-bg:     rgba(180, 83, 9, 0.14);
+  --notify-warning-icon-fg:     var(--color-amber-700);
+  --notify-warning-tint:        rgba(180, 83, 9, 0.08);
+
+  --notify-error-border:        rgba(185, 28, 28, 0.50);
+  --notify-error-icon-bg:       rgba(185, 28, 28, 0.14);
+  --notify-error-icon-fg:       var(--color-red-700);
+  --notify-error-tint:          rgba(185, 28, 28, 0.08);
+
+  --notify-accent-border:       rgba(109, 40, 217, 0.50);
+  --notify-accent-icon-bg:      rgba(109, 40, 217, 0.14);
+  --notify-accent-icon-fg:      var(--color-violet-700);
+  --notify-accent-tint:         rgba(109, 40, 217, 0.10);
 }

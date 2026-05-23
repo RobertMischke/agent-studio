@@ -347,6 +347,23 @@ Steps:
 
 Expected outcome: 54 → 0 `!important` in styles.scss.
 
+### Wave G — Unified notification / banner primitive (F37)
+
+Goal: every transient notification / banner surface (toast stack, workspace verdict banner, update strip, failed-pickup banner, triage toast) consumes the shared `<app-notification>` presentation primitive so per-severity colour, light/dark theming, icon bubble, and close affordance live in one file.
+
+Landed:
+1. `frontend/src/app/components/notification/notification.component.{ts,html,scss,spec.ts}` — `[kind] [layout='toast'|'banner'] [icon] [title] [closable] (closeRequest)` plus default slot + `[notification-source]` / `[notification-actions]` slots.
+2. New Tier-2 tokens in `_tokens-semantic.scss`: `--notify-surface-*`, `--notify-{success,info,warning,error,accent}-{border,icon-bg,icon-fg,tint}` (declared in BOTH theme blocks).
+3. `<app-notification-stack>` rebuilt to mount one `<app-notification>` per active toast; `.app-notify-*` chrome dropped from `app.scss` (positioning + source caption stay).
+4. `<app-workspace-banner>` (F29) migrated to `<app-notification layout="banner">`; topic-to-severity map (`accept` / `decision` → success, `reissue` → info, `escalate` → warning, `giveup` → error, unknown → accent). The local SCSS now only owns the float-right positioning + a tighter 3-line clamp.
+5. `frontend/e2e/system/f37-notification-themes.spec.ts` locks the dark + light contracts: every severity icon clears WCAG-style contrast against the surface in both themes; the four kinds render one element each.
+
+Remaining (do not bundle into the same task):
+- `<app-update-banner>` carries its own picker / verification-failure list — refactor on its own slice when the update surface is rebuilt.
+- `.failed-pickup-banner` (in `app.scss`) and `.triage-toast` (also `app.scss`) are inline one-off surfaces; sweep their hex literals to `--notify-*` tokens or migrate to `<app-notification>` whenever the surrounding area is being touched anyway.
+
+Expected outcome: any new transient surface reaches for `<app-notification kind="…">` instead of re-implementing the icon bubble + close + per-severity colours; theme support is automatic.
+
 ## 4. Pre-merge checklist
 
 Before merging any SCSS change:

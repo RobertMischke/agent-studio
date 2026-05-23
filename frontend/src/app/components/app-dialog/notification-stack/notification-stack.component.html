@@ -1,24 +1,17 @@
 <div class="app-notify-stack" data-testid="notification-stack">
   @for (n of notifications(); track n.id) {
-    <div class="app-notify app-notify--{{ n.kind }}"
-         role="status"
-         [attr.aria-live]="ariaLiveFor(n.kind)"
-         [attr.data-testid]="'notification-' + n.kind">
-      <span class="app-notify__icon" aria-hidden="true">{{ iconFor(n.kind) }}</span>
-      <div class="app-notify__body">
-        @if (n.title) {
-          <div class="app-notify__title" data-testid="notification-title">{{ n.title }}</div>
-        }
-        <div class="app-notify__message" data-testid="notification-message">{{ n.message }}</div>
-        @if (n.source) {
-          <div class="app-notify__source" data-testid="notification-source">{{ n.source }}</div>
-        }
-      </div>
-      <button class="app-notify__close"
-              type="button"
-              aria-label="Dismiss"
-              [attr.data-testid]="'notification-dismiss-' + n.id"
-              (click)="dismiss(n.id)">✕</button>
-    </div>
+    <app-notification
+      class="app-notify"
+      [kind]="n.kind"
+      layout="toast"
+      [title]="n.title ?? null"
+      [closable]="true"
+      [testid]="'notification-' + n.kind"
+      (closeRequest)="dismiss(n.id)">
+      <span data-testid="notification-message">{{ n.message }}</span>
+      @if (n.source) {
+        <div class="app-notify__source" notification-source data-testid="notification-source">{{ n.source }}</div>
+      }
+    </app-notification>
   }
 </div>

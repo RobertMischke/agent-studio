@@ -1,17 +1,17 @@
 @if (displayed(); as msg) {
-  <div class="banner"
-       [class]="'banner--' + msg.topic"
-       role="status"
-       data-testid="workspace-banner">
-    <span class="banner__icon" aria-hidden="true">{{ iconFor(msg.topic) }}</span>
-    <div class="banner__body">
-      <div class="banner__text" data-testid="workspace-banner-text">{{ headlineFor(msg) }}</div>
-      <div class="banner__project" data-testid="workspace-banner-project">in {{ msg.project }}</div>
-    </div>
-    <button type="button"
-            class="banner__close"
-            aria-label="Dismiss"
-            data-testid="workspace-banner-close"
-            (click)="dismiss()">×</button>
+  <div class="workspace-banner-host">
+    <app-notification
+      class="workspace-banner"
+      layout="banner"
+      [kind]="kindFor(msg.topic)"
+      [icon]="iconFor(msg.topic)"
+      [closable]="true"
+      testid="workspace-banner"
+      (closeRequest)="dismiss()">
+      <span data-testid="workspace-banner-text">{{ headlineFor(msg) }}</span>
+      <div notification-source
+           class="workspace-banner__project"
+           data-testid="workspace-banner-project">in {{ msg.project }}</div>
+    </app-notification>
   </div>
 }

@@ -165,7 +165,6 @@
         "src/app/features/screenshots/components/workspace-screenshots/workspace-screenshots.scss",
         "src/app/features/shell/components/auto-review-indicator/auto-review-indicator.scss",
         "src/app/features/shell/components/status-bar/status-bar.scss",
-        "src/app/features/shell/components/workspace-banner/workspace-banner.scss",
         "src/app/features/studio-shell/studio-shell.component.scss",
         "src/app/features/tokens/components/cli-usage-detail-modal/cli-usage-detail-modal.scss",
         "src/app/features/tokens/components/token-summary-block/token-summary-block.scss",

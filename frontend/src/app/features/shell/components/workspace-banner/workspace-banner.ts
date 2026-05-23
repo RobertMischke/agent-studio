@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { NotificationComponent, NotificationKind } from '../../../../components/notification/notification.component';
 
 /**
  * Slim workspace top-banner that surfaces the latest orchestrator-review
@@ -59,6 +60,7 @@ const BANNER_TOPICS: ReadonlySet<string> = new Set([
 @Component({
   selector: 'app-workspace-banner',
   standalone: true,
+  imports: [NotificationComponent],
   templateUrl: './workspace-banner.html',
   styleUrl: './workspace-banner.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -112,6 +114,26 @@ export class WorkspaceBannerComponent implements OnInit, OnDestroy {
       case 'giveup':    return '✕';
       case 'heuristic': return '~';
       default:          return '🤖';
+    }
+  }
+
+  /**
+   * Map an orchestrator-verdict topic to the unified notification's
+   * severity variant. `accept` / `decision` land on `success` (the
+   * verdict is positive); `reissue` is `info` (a neutral retry);
+   * `escalate` is `warning`; `giveup` is `error`. Unknown topics fall
+   * back to `accent` so a never-seen topic still renders with a
+   * distinctive border instead of looking like a benign info note.
+   */
+  kindFor(topic: string): NotificationKind {
+    switch (topic) {
+      case 'accept':
+      case 'accept-as-done':
+      case 'decision':  return 'success';
+      case 'reissue':   return 'info';
+      case 'escalate':  return 'warning';
+      case 'giveup':    return 'error';
+      default:          return 'accent';
     }
   }
 
