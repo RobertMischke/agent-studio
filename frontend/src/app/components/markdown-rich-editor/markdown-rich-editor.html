@@ -14,23 +14,18 @@
     </div>
   }
   <!--
-    Chat-first redesign: the toolbar is a tight icon strip; tooltips
-    carry the labels the verbose row used to render in visible text.
-    Save state is a small coloured dot rather than a long pill. -->
+    Single-row toolbar: a `bar-prefix` ng-content slot carries any
+    host-provided meta strip (e.g. the prompt pane's "#id · created Xh
+    ago · lane") on the left, action icons sit on the right. The
+    Markdown ↔ rich-text mode toggle is hidden behind the overflow
+    button so the visible chrome stays calm. -->
   <div class="md-editor__bar md-editor__bar--compact">
-    <div class="md-editor__tabs">
-      <button class="md-editor__tab md-editor__tab--icon"
-              [class.md-editor__tab--active]="mode() === 'rich'"
-              (click)="setMode('rich')"
-              aria-label="Rich text editor"
-              [appTooltip]="'Rich text editor'">P</button>
-      <button class="md-editor__tab md-editor__tab--icon"
-              [class.md-editor__tab--active]="mode() === 'source'"
-              (click)="setMode('source')"
-              aria-label="Markdown source editor"
-              [appTooltip]="'Markdown source editor'">M</button>
+    <div class="md-editor__bar-start">
+      <ng-content select="[bar-prefix]"></ng-content>
+    </div>
+    <div class="md-editor__bar-end">
       @if (canAttach()) {
-        <button class="md-editor__tab md-editor__tab--icon md-editor__tab--upload"
+        <button class="md-editor__icon-btn"
                 type="button"
                 [disabled]="readOnly() || uploading()"
                 (click)="triggerFilePicker()"
@@ -40,27 +35,44 @@
           {{ uploading() ? '⏳' : '📎' }}
         </button>
       }
-    </div>
-    <div class="md-editor__status" data-testid="prompt-editor-status">
-      @switch (state()) {
-        @case ('dirty') {
-          <span class="md-editor__dot md-editor__dot--dirty" [appTooltip]="'Unsaved changes'" aria-label="Unsaved changes"></span>
+      <span class="md-editor__status" data-testid="prompt-editor-status">
+        @switch (state()) {
+          @case ('dirty') {
+            <span class="md-editor__dot md-editor__dot--dirty" [appTooltip]="'Unsaved changes'" aria-label="Unsaved changes"></span>
+          }
+          @case ('saved') {
+            <span class="md-editor__dot md-editor__dot--saved" [appTooltip]="'Saved'" aria-label="Saved"></span>
+          }
+          @default {
+            <span class="md-editor__dot" [appTooltip]="'Saved'" aria-label="Saved"></span>
+          }
         }
-        @case ('saved') {
-          <span class="md-editor__dot md-editor__dot--saved" [appTooltip]="'Saved'" aria-label="Saved"></span>
-        }
-        @default {
-          <span class="md-editor__dot" [appTooltip]="'Saved'" aria-label="Saved"></span>
-        }
-      }
-      <button class="md-editor__save md-editor__save--icon"
-              (click)="emitSave()"
-              [disabled]="readOnly()"
-              data-testid="prompt-editor-save"
-              aria-label="Save (Ctrl+S)"
-              [appTooltip]="'Save (Ctrl+S)'">💾</button>
+        <button class="md-editor__icon-btn"
+                (click)="emitSave()"
+                [disabled]="readOnly()"
+                data-testid="prompt-editor-save"
+                aria-label="Save (Ctrl+S)"
+                [appTooltip]="'Save (Ctrl+S)'">💾</button>
+      </span>
+      <button #modeMenuTrigger
+              class="md-editor__icon-btn"
+              type="button"
+              data-testid="prompt-editor-mode-toggle"
+              aria-label="View options"
+              [attr.aria-expanded]="modeMenuOpen()"
+              [appTooltip]="'View options'"
+              (click)="toggleModeMenu()">…</button>
     </div>
   </div>
+
+  <app-menu [items]="modeMenuItems()"
+            [open]="modeMenuOpen()"
+            [anchorEl]="modeMenuTrigger"
+            placement="below"
+            testIdPrefix="prompt-editor-mode-menu"
+            ariaLabel="View as"
+            (itemClick)="onModeMenuClick($event)"
+            (closeRequest)="modeMenuOpen.set(false)" />
 
   <div class="md-editor__content">
     <div #editorHost class="md-editor__rich" [class.md-editor__rich--hidden]="mode() !== 'rich'"></div>
@@ -87,4 +99,3 @@
          class="md-editor__file"
          (change)="onFileInputChange($event)" />
 </div>
-  

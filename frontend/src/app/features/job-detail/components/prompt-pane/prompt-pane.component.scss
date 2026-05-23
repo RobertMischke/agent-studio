@@ -20,32 +20,37 @@
   gap: 0;
 }
 
+/*
+ * Tab strip mirrors the studio editor-tabbar idiom: inactive tabs sit
+ * transparent against the pane-header chrome with dimmed text; active
+ * tab gets the `--studio-bg-tab-active` body colour + a 2 px accent
+ * bottom border so the tab visually "lifts" into the body below. No
+ * surrounding frame — the only chrome is the pane-header's own bottom
+ * border.
+ */
 .pane-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 14px;
+  padding: 0 12px;
   height: 100%;
   background: transparent;
   border: 0;
   border-bottom: 2px solid transparent;
   font-size: 12px;
-  // `--studio-fg-dim` flips per theme (#9d9d9d dark / #555 light) so the
-  // inactive tab keeps a calm grey in both. Previously this read an
-  // undefined `--text-muted` token and fell back to a hardcoded grey.
   color: var(--studio-fg-dim);
   cursor: pointer;
   white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 
   &:hover {
-    // `--studio-fg-strong` flips (#fff dark / #1a1a1a light). The old
-    // fallback `#1a1a1a` was invisible on the dark shell.
     color: var(--studio-fg-strong);
     background: var(--studio-bg-hover);
   }
 
   &--active {
     color: var(--studio-fg-strong);
+    background: var(--studio-bg-tab-active);
     border-bottom-color: var(--studio-accent, #d97757);
     font-weight: 600;
   }
@@ -82,22 +87,23 @@
   }
 }
 
-/* Meta strip rendered between the description tab header and the
- * markdown body — "#ID · created Xh ago · ● Lane state". Mirrors the
- * agent-orchestrator.zip detail-v2 mockup so the user can see the task
- * identity + lane state on the Description tab without leaving for the
- * detail-header. Lane-state colour comes from the same --lane-* tokens
- * the kanban column chips use, so the eye reads board + detail as one
- * cue. */
+/* Single-row task meta strip projected into the editor toolbar via the
+ * `bar-prefix` slot — "#ID · created Xh ago · ● Lane state". Lane-state
+ * colour comes from the same --lane-* tokens the kanban column chips
+ * use, so the eye reads board + detail as one cue. */
 .desc-meta {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 4px 0 16px;
-  padding: 0 4px;
-  font-size: 12.5px;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
   color: var(--studio-fg-dim);
-  flex-wrap: wrap;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .desc-meta__id {
   font-family: var(--font-mono);

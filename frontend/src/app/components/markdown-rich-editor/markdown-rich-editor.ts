@@ -7,6 +7,7 @@ import { CLIENT_ID } from '../../services/client-id.interceptor';
 import { MediaLightboxService } from '../../services/media-lightbox.service';
 
 import { TooltipDirective } from '../tooltip';
+import { MenuComponent, MenuItem, MenuItemClickEvent } from '../menu';
 type EditorState = 'idle' | 'dirty' | 'saved';
 
 const ATTACHMENTS_PREFIX = 'attachments/';
@@ -14,7 +15,7 @@ const ATTACHMENTS_PREFIX = 'attachments/';
 @Component({
   selector: 'app-markdown-rich-editor',
   standalone: true,
-  imports: [FormsModule, TooltipDirective],
+  imports: [FormsModule, TooltipDirective, MenuComponent],
   templateUrl: './markdown-rich-editor.html',
   styleUrl: './markdown-rich-editor.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -32,6 +33,18 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   readonly uploading = signal(false);
   readonly uploadError = signal<string | null>(null);
   readonly isDragging = signal(false);
+
+  /** Overflow `…` menu that hosts the rich ↔ markdown-source toggle. */
+  readonly modeMenuOpen = signal(false);
+  readonly modeMenuItems = computed<MenuItem[]>(() => [
+    { kind: 'row', id: 'rich',   label: 'View as rich text',       icon: 'P', active: this.mode() === 'rich'   },
+    { kind: 'row', id: 'source', label: 'View as Markdown source', icon: 'M', active: this.mode() === 'source' },
+  ]);
+  toggleModeMenu(): void { this.modeMenuOpen.update(v => !v); }
+  onModeMenuClick(ev: MenuItemClickEvent): void {
+    if (ev.id === 'rich' || ev.id === 'source') this.setMode(ev.id);
+    this.modeMenuOpen.set(false);
+  }
 
   // Last value the parent told us about — anything diverging from this is "dirty".
   private readonly committedValue = signal('');

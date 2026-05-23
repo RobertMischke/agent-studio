@@ -64,7 +64,8 @@ test.describe('Prompt editor — lock semantics', () => {
 
       // Drive the editor through the source textarea (more deterministic
       // than TipTap's contenteditable) and save via Ctrl+S.
-      await editor.getByRole('button', { name: 'Markdown', exact: true }).click();
+      await editor.getByTestId('prompt-editor-mode-toggle').click();
+      await page.getByTestId('prompt-editor-mode-menu-item-source').click();
       const source = page.getByTestId('prompt-editor-source');
       await expect(source).toBeVisible();
 

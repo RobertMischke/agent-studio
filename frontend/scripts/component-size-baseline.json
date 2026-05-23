@@ -19,10 +19,10 @@
       "total": 1612
     },
     "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
-      "typeScript": 451,
-      "template": 91,
-      "styles": 242,
-      "total": 784
+      "typeScript": 464,
+      "template": 102,
+      "styles": 180,
+      "total": 746
     },
     "src/app/features/board/components/job-card/job-card.component.ts": {
       "typeScript": 449,

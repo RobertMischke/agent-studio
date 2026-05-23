@@ -52,25 +52,27 @@ test.describe('Prompt editor — Ctrl+S save & visual feedback', () => {
 
       // Switch to Markdown mode so we can type into a plain textarea — more
       // reliable across browsers than driving TipTap's contenteditable.
-      await editor.getByRole('button', { name: 'Markdown', exact: true }).click();
+      await editor.getByTestId('prompt-editor-mode-toggle').click();
+      await page.getByTestId('prompt-editor-mode-menu-item-source').click();
       const source = page.getByTestId('prompt-editor-source');
       await expect(source).toBeVisible();
 
       const newBody = `# Updated by e2e\n\nrun-${Date.now()}`;
       await source.fill(newBody);
 
-      // Editor should now report a dirty state.
+      // Editor should now report a dirty state (status surfaces as the
+      // dot's aria-label after the F30 redesign — no inline text).
       await expect(editor).toHaveAttribute('data-state', 'dirty');
-      await expect(page.getByTestId('prompt-editor-status')).toContainText(/unsaved/i);
+      await expect(page.getByTestId('prompt-editor-status').locator('[aria-label="Unsaved changes"]')).toBeVisible();
 
       // Move focus OFF the editor — Ctrl+S should still work globally.
       await page.locator('body').click({ position: { x: 2, y: 2 } });
 
       await page.keyboard.press('Control+s');
 
-      // Saved state should appear (green pill / data-state=saved).
+      // Saved state should appear (data-state=saved + green dot).
       await expect(editor).toHaveAttribute('data-state', 'saved', { timeout: 3_000 });
-      await expect(page.getByTestId('prompt-editor-status')).toContainText(/saved/i);
+      await expect(page.getByTestId('prompt-editor-status').locator('.md-editor__dot--saved')).toBeVisible();
 
       // Backend should have received the update.
       await expect.poll(async () => {
@@ -94,7 +96,8 @@ test.describe('Prompt editor — Ctrl+S save & visual feedback', () => {
       const editor = page.getByTestId('prompt-editor');
       await expect(editor).toBeVisible({ timeout: 10_000 });
 
-      await editor.getByRole('button', { name: 'Markdown', exact: true }).click();
+      await editor.getByTestId('prompt-editor-mode-toggle').click();
+      await page.getByTestId('prompt-editor-mode-menu-item-source').click();
       const source = page.getByTestId('prompt-editor-source');
       await source.fill(`# Click-save ${Date.now()}`);
       await expect(editor).toHaveAttribute('data-state', 'dirty');
@@ -115,7 +118,8 @@ test.describe('Prompt editor — Ctrl+S save & visual feedback', () => {
       const editor = page.getByTestId('prompt-editor');
       await expect(editor).toBeVisible({ timeout: 10_000 });
 
-      await editor.getByRole('button', { name: 'Markdown', exact: true }).click();
+      await editor.getByTestId('prompt-editor-mode-toggle').click();
+      await page.getByTestId('prompt-editor-mode-menu-item-source').click();
       const source = page.getByTestId('prompt-editor-source');
       await expect(source).toBeVisible();
 
@@ -124,7 +128,7 @@ test.describe('Prompt editor — Ctrl+S save & visual feedback', () => {
 
       // No Ctrl+S, no button click — wait for autosave (debounce is 600ms).
       await expect(editor).toHaveAttribute('data-state', 'saved', { timeout: 4_000 });
-      await expect(page.getByTestId('prompt-editor-status')).toContainText(/saved/i);
+      await expect(page.getByTestId('prompt-editor-status').locator('.md-editor__dot--saved')).toBeVisible();
 
       // Backend must have the updated content.
       await expect.poll(async () => {

@@ -147,7 +147,8 @@ test.describe('Prompt editor — screenshot attachments', () => {
 
       // Source view must contain a relative `attachments/<file>.png` reference
       // — that's the form prompt.md keeps on disk for the CLI agent.
-      await editor.getByRole('button', { name: 'Markdown', exact: true }).click();
+      await editor.getByTestId('prompt-editor-mode-toggle').click();
+      await page.getByTestId('prompt-editor-mode-menu-item-source').click();
       const source = page.getByTestId('prompt-editor-source');
       await expect(source).toBeVisible();
       const sourceText = await source.inputValue();

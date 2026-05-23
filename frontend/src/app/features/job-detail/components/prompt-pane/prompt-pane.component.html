@@ -40,24 +40,6 @@
   <div class="pane__body">
     @switch (activeTab()) {
       @case ('description') {
-        @if (job(); as info) {
-          <!-- Meta strip per mockup detail-v2: "#ID · created Xh ago · ● Lane state".
-               Sits between the pane-header tab strip and the markdown body so
-               the user can see the task identity + lane state without leaving
-               the Description tab. -->
-          <div class="desc-meta" data-testid="desc-meta">
-            <span class="desc-meta__id mono">#{{ info.order }}</span>
-            <span class="desc-meta__sep" aria-hidden="true">·</span>
-            <span class="desc-meta__time">created {{ formatRelativeTime(info.createdAt) }}</span>
-            <span class="desc-meta__sep" aria-hidden="true">·</span>
-            <span class="desc-meta__state"
-                  [attr.data-state]="info.state"
-                  [class]="'desc-meta__state state--' + info.state">
-              <span class="desc-meta__state-dot" aria-hidden="true">●</span>
-              {{ laneLabel(info.state) }}
-            </span>
-          </div>
-        }
         @if (titleHistory().length > 0) {
           <section class="title-history" data-testid="title-history">
             <header class="title-history__head">
@@ -82,7 +64,25 @@
                                   [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
                                   [jobId]="jobId()"
                                   [watchPath]="watchPath()"
-                                  (save)="save.emit($event)" />
+                                  (save)="save.emit($event)">
+          @if (job(); as info) {
+            <!-- Single-row task meta strip projected into the editor toolbar:
+                 "#ID · created Xh ago · ● Lane state". Collapses the previous
+                 two-line "desc-meta + editor toolbar" stack into one calm row. -->
+            <div bar-prefix class="desc-meta" data-testid="desc-meta">
+              <span class="desc-meta__id mono">#{{ info.order }}</span>
+              <span class="desc-meta__sep" aria-hidden="true">·</span>
+              <span class="desc-meta__time">created {{ formatRelativeTime(info.createdAt) }}</span>
+              <span class="desc-meta__sep" aria-hidden="true">·</span>
+              <span class="desc-meta__state"
+                    [attr.data-state]="info.state"
+                    [class]="'desc-meta__state state--' + info.state">
+                <span class="desc-meta__state-dot" aria-hidden="true">●</span>
+                {{ laneLabel(info.state) }}
+              </span>
+            </div>
+          }
+        </app-markdown-rich-editor>
 
         @if (history().length > 0) {
           <section class="prompt-history" data-testid="prompt-history">
