@@ -720,35 +720,11 @@
       align-items: flex-start;
       gap: 16px;
     }
-    .inspector__tabs {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-    .inspector__tab {
-      background: var(--studio-bg-hover);
-      border: 1px solid var(--studio-border);
-      color: var(--studio-fg-dim);
-      padding: 4px 10px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 11.5px;
-      font-weight: 600;
-      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-    }
-    .inspector__tab:hover {
-      background: var(--studio-bg-elevated);
-      color: var(--studio-fg-strong);
-    }
-    .inspector__tab--active {
-      // Brand-orange accent on the active inspector tab, matching the
-      // rest of the studio. Old indigo/lavender clashed with the orange
-      // active states elsewhere on the detail page.
-      background: var(--studio-bg-selected);
-      border-color: var(--studio-accent);
-      color: var(--studio-fg-strong);
-    }
+    /*
+     * Inspector tabs (Protocol / Activity) ride on `<app-pane-tabs
+     * variant="pill">` since F38; the legacy `.inspector__tab` /
+     * `.inspector__tab--active` BEM block was removed.
+     */
     .inspector__body {
       display: flex;
       flex: 1;
@@ -1266,9 +1242,6 @@
       }
       .inspector__header {
         flex-direction: column;
-      }
-      .inspector__tabs {
-        justify-content: flex-start;
       }
     }
     @media (max-width: 720px) {

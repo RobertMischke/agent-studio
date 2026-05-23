@@ -285,7 +285,15 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
     await page.goto(`http://localhost:4010/?job=${encodeURIComponent(TASK_JOB_ID)}&watchPath=${encodeURIComponent(TASK_WATCH_PATH)}`);
     await page.waitForLoadState('domcontentloaded');
 
-    const strip = page.getByTestId('protocol-screenshot-strip');
+    // F38 dedup: the screenshot strip used to render twice (once in the
+    // protocol pane body, once in the prompt pane's Evidence tab).
+    // Visual evidence is now Evidence-tab-only; switch the tab before
+    // asserting on the strip. Wait for the tab strip to mount before
+    // clicking — the detail view loads the prompt pane asynchronously.
+    const evidenceTab = page.getByTestId('prompt-tab-evidence');
+    await expect(evidenceTab).toBeVisible({ timeout: 10_000 });
+    await evidenceTab.click();
+    const strip = page.getByTestId('evidence-view').getByTestId('screenshot-strip');
     await expect(strip).toBeVisible({ timeout: 7_000 });
 
     const thumbs = strip.locator('[data-testid="screenshot-thumb"]');
@@ -342,10 +350,8 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
     await expect(buckets).toHaveCount(2);
 
     // Each bucket carries its own strip; first bucket has 2, second has 1.
-    const stripsInBuckets = buckets.locator('[data-testid="protocol-screenshot-strip"], [data-testid="screenshot-strip"]');
-    // The strip uses data-testid="screenshot-strip"; the protocol-pane
-    // host adds a second testid via attribute, but only on the
-    // protocol surface.
+    // F38 dedup: the protocol pane no longer renders a duplicate strip;
+    // the workspace reel uses the canonical `screenshot-strip` testid.
     await expect(buckets.nth(0).locator('[data-testid="screenshot-thumb"]')).toHaveCount(2);
     await expect(buckets.nth(1).locator('[data-testid="screenshot-thumb"]')).toHaveCount(1);
 

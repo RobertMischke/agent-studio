@@ -7,68 +7,12 @@
 :host { display: contents; }
 
 /*
- * Tab strip projected into the <app-pane-header> `tabs` slot. The
- * header itself owns the surrounding chrome (icon / title / maximize
- * / hide) so this file only declares the tab-specific look.
+ * Tab strip styles moved to `<app-pane-tabs>` (Wave: F38). The prompt
+ * pane projects `<app-pane-tabs variant="header">` into the
+ * `<app-pane-header>` `tabs` slot; visual look stays identical because
+ * the new component preserves the `.pane-tab` / `.pane-tab--active` /
+ * `.pane-tab__badge` class names so existing tests continue to match.
  */
-.pane-tabs {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  gap: 0;
-}
-
-/*
- * Tab strip mirrors the studio editor-tabbar idiom: inactive tabs sit
- * transparent against the pane-header chrome with dimmed text; active
- * tab gets the `--studio-bg-tab-active` body colour + a 2 px accent
- * bottom border so the tab visually "lifts" into the body below. No
- * surrounding frame — the only chrome is the pane-header's own bottom
- * border.
- */
-.pane-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  height: 100%;
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  font-size: 12px;
-  color: var(--studio-fg-dim);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-
-  &:hover {
-    color: var(--studio-fg-strong);
-    background: var(--studio-bg-hover);
-  }
-
-  &--active {
-    color: var(--studio-fg-strong);
-    background: var(--studio-bg-tab-active);
-    border-bottom-color: var(--studio-accent, #d97757);
-    font-weight: 600;
-  }
-
-  &__badge {
-    min-width: 16px;
-    height: 16px;
-    padding: 0 5px;
-    background: var(--studio-accent, #d97757);
-    color: var(--studio-on-accent, #1a1a1a);
-    border-radius: 8px;
-    font-size: 10px;
-    font-weight: 700;
-    display: grid;
-    place-items: center;
-    line-height: 1;
-  }
-}
 
 .evidence-empty {
   padding: 24px;

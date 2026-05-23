@@ -38,8 +38,8 @@ test.describe('Detail inspector — default tab', () => {
       await expect(activityTab).toBeVisible({ timeout: 10_000 });
 
       // Activity tab must be the active one for an in-progress job.
-      await expect(activityTab).toHaveClass(/inspector__tab--active/);
-      await expect(protocolTab).not.toHaveClass(/inspector__tab--active/);
+      await expect(activityTab).toHaveClass(/pane-tab--active/);
+      await expect(protocolTab).not.toHaveClass(/pane-tab--active/);
 
       await page.screenshot({
         path: 'test-results/inspector-tab-default-progress.png',
@@ -71,7 +71,7 @@ test.describe('Detail inspector — default tab', () => {
       await expect(activityTab).toBeVisible({ timeout: 10_000 });
 
       // No status.md yet → activity is the only meaningful tab to land on.
-      await expect(activityTab).toHaveClass(/inspector__tab--active/);
+      await expect(activityTab).toHaveClass(/pane-tab--active/);
     } finally {
       await api(
         `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,
@@ -117,8 +117,8 @@ test.describe('Detail inspector — default tab', () => {
       await expect(protocolTab).toBeVisible({ timeout: 10_000 });
 
       // Initial state: stale summary → Protokoll is active.
-      await expect(protocolTab).toHaveClass(/inspector__tab--active/);
-      await expect(activityTab).not.toHaveClass(/inspector__tab--active/);
+      await expect(protocolTab).toHaveClass(/pane-tab--active/);
+      await expect(activityTab).not.toHaveClass(/pane-tab--active/);
 
       await page.screenshot({
         path: 'test-results/inspector-tab-transition-before.png',
@@ -130,8 +130,8 @@ test.describe('Detail inspector — default tab', () => {
       await moveJob(job.id, watchPath, '3-progress');
 
       // Tab must auto-demote to Aktivität within the next detail-refresh tick.
-      await expect(activityTab).toHaveClass(/inspector__tab--active/, { timeout: 10_000 });
-      await expect(protocolTab).not.toHaveClass(/inspector__tab--active/);
+      await expect(activityTab).toHaveClass(/pane-tab--active/, { timeout: 10_000 });
+      await expect(protocolTab).not.toHaveClass(/pane-tab--active/);
 
       await page.screenshot({
         path: 'test-results/inspector-tab-transition-after.png',
@@ -179,17 +179,17 @@ test.describe('Detail inspector — default tab', () => {
       // User toggles to Aktivität and back to Protokoll — second click marks
       // the choice as user-driven.
       await activityTab.click();
-      await expect(activityTab).toHaveClass(/inspector__tab--active/);
+      await expect(activityTab).toHaveClass(/pane-tab--active/);
       await protocolTab.click();
-      await expect(protocolTab).toHaveClass(/inspector__tab--active/);
+      await expect(protocolTab).toHaveClass(/pane-tab--active/);
 
       await moveJob(job.id, watchPath, '3-progress');
 
       // Manual choice must be respected — give the detail-effect a couple of
       // refresh cycles to (not) demote.
       await page.waitForTimeout(5_000);
-      await expect(protocolTab).toHaveClass(/inspector__tab--active/);
-      await expect(activityTab).not.toHaveClass(/inspector__tab--active/);
+      await expect(protocolTab).toHaveClass(/pane-tab--active/);
+      await expect(activityTab).not.toHaveClass(/pane-tab--active/);
     } finally {
       await api(
         `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,

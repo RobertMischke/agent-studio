@@ -1,11 +1,14 @@
 <header class="pane-header"
+        [class]="modifier() ? 'pane-header pane-header--' + modifier() : 'pane-header'"
         [attr.data-testid]="testid()">
   <!-- Tab strip slot: when present, replaces the icon+title block. -->
   <ng-content select="[tabs]"></ng-content>
 
   @if (title(); as t) {
     <div class="pane-header__title-block">
-      @if (icon(); as i) {
+      @if (iconEmoji(); as ie) {
+        <span class="pane-header__icon-emoji" aria-hidden="true">{{ ie }}</span>
+      } @else if (icon(); as i) {
         <app-studio-icon class="pane-header__icon" [name]="i" [size]="13"></app-studio-icon>
       }
       <span class="pane-header__title">{{ t }}</span>

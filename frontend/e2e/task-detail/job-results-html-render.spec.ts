@@ -87,7 +87,7 @@ test.describe('Beautiful HTML result rendering', () => {
 
       const protocolTab = page.getByTestId('inspector-tab-protocol');
       await expect(protocolTab).toBeVisible({ timeout: 15_000 });
-      await expect(protocolTab).toHaveClass(/inspector__tab--active/);
+      await expect(protocolTab).toHaveClass(/pane-tab--active/);
 
       const view = page.getByTestId('beautiful-results');
       await expect(view).toBeVisible({ timeout: 10_000 });

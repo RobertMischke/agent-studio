@@ -4,38 +4,13 @@
     testid="pane-prompt-header"
     (maximize)="maximizeToggle.emit()"
     (hide)="hide.emit()">
-    <div tabs class="pane-tabs" role="tablist">
-      <button class="pane-tab"
-              role="tab"
-              [class.pane-tab--active]="activeTab() === 'description'"
-              [attr.aria-selected]="activeTab() === 'description'"
-              data-testid="prompt-tab-description"
-              (click)="setTab('description')">
-        <app-studio-icon name="book" [size]="12"></app-studio-icon>
-        <span>Description</span>
-      </button>
-      <button class="pane-tab"
-              role="tab"
-              [class.pane-tab--active]="activeTab() === 'evidence'"
-              [attr.aria-selected]="activeTab() === 'evidence'"
-              data-testid="prompt-tab-evidence"
-              (click)="setTab('evidence')">
-        <app-studio-icon name="check" [size]="12"></app-studio-icon>
-        <span>Evidence</span>
-        @if (evidenceCount() > 0) {
-          <span class="pane-tab__badge" data-testid="prompt-tab-evidence-badge">{{ evidenceCount() }}</span>
-        }
-      </button>
-      <button class="pane-tab"
-              role="tab"
-              [class.pane-tab--active]="activeTab() === 'code-review'"
-              [attr.aria-selected]="activeTab() === 'code-review'"
-              data-testid="prompt-tab-code-review"
-              (click)="setTab('code-review')">
-        <app-studio-icon name="diff" [size]="12"></app-studio-icon>
-        <span>Code Review</span>
-      </button>
-    </div>
+    <ng-container tabs>
+      <app-pane-tabs variant="header"
+                     ariaLabel="Prompt pane tabs"
+                     [tabs]="promptTabs()"
+                     [activeTabId]="activeTab()"
+                     (tabChange)="onPromptTabChange($event)" />
+    </ng-container>
   </app-pane-header>
   <div class="pane__body">
     @switch (activeTab()) {

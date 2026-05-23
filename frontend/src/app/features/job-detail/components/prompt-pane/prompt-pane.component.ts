@@ -7,8 +7,8 @@ import { ScreenshotStripComponent } from '../../../screenshots/components/screen
 import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel/review-evidence-panel.component';
 import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel/code-review-panel.component';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
-import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
+import { PaneTabsComponent, PaneTabDef } from '../../../../components/pane-tabs/pane-tabs.component';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -34,7 +34,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownViewComponent, StudioIconComponent, PaneHeaderComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
+  imports: [MarkdownRichEditorComponent, MarkdownViewComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -72,8 +72,38 @@ export class PromptPaneComponent {
     try { window.localStorage?.setItem('atp.detail.left-tab', tab); } catch { /* ignore */ }
   }
 
+  /** Type-safe bridge from the generic pane-tabs `tabChange` event. */
+  onPromptTabChange(id: string): void {
+    if (id === 'description' || id === 'evidence' || id === 'code-review') {
+      this.setTab(id);
+    }
+  }
+
   /** Total evidence count for the tab badge. */
   readonly evidenceCount = computed(() => this.reviewEvidence().length);
+
+  /** Tab definitions for the shared {@link PaneTabsComponent}. */
+  readonly promptTabs = computed<readonly PaneTabDef[]>(() => [
+    {
+      id: 'description',
+      label: 'Description',
+      icon: 'book',
+      testid: 'prompt-tab-description',
+    },
+    {
+      id: 'evidence',
+      label: 'Evidence',
+      icon: 'check',
+      testid: 'prompt-tab-evidence',
+      badge: this.evidenceCount() > 0 ? this.evidenceCount() : null,
+    },
+    {
+      id: 'code-review',
+      label: 'Code Review',
+      icon: 'diff',
+      testid: 'prompt-tab-code-review',
+    },
+  ]);
 
   /** Evidence entries grouped into the reference's Evidence-tab sections. */
   readonly evidenceSections = computed<EvidenceSection[]>(() => {

@@ -24,6 +24,13 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
 })
 export class PaneHeaderComponent {
   readonly icon = input<StudioIconName | null>(null);
+  /**
+   * Optional emoji/glyph icon. Used by panes whose title still carries a
+   * Unicode glyph (e.g. the protocol pane's "📜 Protocol"). Renders next
+   * to or instead of {@link icon} so callers can opt into the legacy
+   * emoji vocabulary without losing the shared chrome.
+   */
+  readonly iconEmoji = input<string | null>(null);
   readonly title = input('');
   readonly maximized = input(false);
   readonly maximizable = input(true);
@@ -32,6 +39,8 @@ export class PaneHeaderComponent {
   readonly subtitle = input<string | null>(null);
   /** data-testid passthrough. */
   readonly testid = input<string | null>(null);
+  /** Optional modifier class applied to the host header (e.g. brand wash). */
+  readonly modifier = input<string | null>(null);
 
   readonly maximize = output<void>();
   readonly hide = output<void>();

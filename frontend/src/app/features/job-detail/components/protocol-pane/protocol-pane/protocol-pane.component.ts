@@ -26,7 +26,6 @@ import { CliOutputPollService } from '../../../../polling/services/cli-output-po
 import { SessionEventsPollService } from '../../../../polling/services/session-events-poll.service';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { ScreenshotsPollService } from '../../../../polling/services/screenshots-poll.service';
-import { ScreenshotStripComponent } from '../../../../../features/screenshots';
 import { NowTickService } from '../../../../../services/now-tick.service';
 import { RunTimelineComponent } from '../run-timeline/run-timeline.component';
 import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.component';
@@ -44,6 +43,7 @@ import { projectConversation } from '../../../../../components/chat/conversation
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { deriveProtocolVerdict, type ProtocolVerdict } from '../protocol-verdict';
 import {
+  buildInspectorTabs,
   claudeSessionTooltip,
   formatIssueTime,
   formatRateWindow,
@@ -54,6 +54,8 @@ import {
 } from './protocol-pane-view-model';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
+import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
+import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
 export type InspectorTab = 'protocol' | 'activity';
 
 /**
@@ -84,11 +86,12 @@ interface InterimSummaryState {
     ConversationViewComponent,
     RunTimelineComponent,
     RunGitViewerComponent,
-    ScreenshotStripComponent,
     VerboseDebugOverlayComponent,
     HygieneStripComponent,
     BeautifulResultsComponent,
     TooltipDirective,
+    PaneHeaderComponent,
+    PaneTabsComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -373,6 +376,22 @@ export class ProtocolPaneComponent implements OnDestroy {
   // came here to see — surface it as the leftmost tab. Outside that state we
   // keep the historical Protocol-first order so the summary stays primary.
   readonly inProgress = computed(() => this.detail().info.state === '3-progress');
+
+  /** Inspector tab strip (Protocol / Activity) for the shared pane-tabs component. */
+  readonly inspectorTabs = computed(() =>
+    buildInspectorTabs({
+      summaryStatus: this.summaryStatus(),
+      hasStatusMarkdown: !!this.detail().statusMarkdown,
+      isRunning: this.isRunning(),
+    }),
+  );
+
+  /** Bridge from the generic pane-tabs change event to the parent. */
+  onInspectorTabChange(id: string): void {
+    if (id === 'protocol' || id === 'activity') {
+      this.activeInspectorTabChange.emit(id);
+    }
+  }
 
   // The button is meaningful only after the task has produced a cli-output.log.
   // We can't see the disk from here, so use "summary has been touched" as a

@@ -1,10 +1,44 @@
-import type { JobOutcomeIssue } from '../../../../../models/job.model';
+import type { JobOutcomeIssue, JobSummaryStatus } from '../../../../../models/job.model';
 import type { ClaudeRateLimitSnapshot, ClaudeSessionInfo } from '../../../../../features/claude';
+import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import {
   formatTokens as fmtTokens,
   formatRateWindow as fmtRateWindow,
   formatResetIn as fmtResetIn,
 } from '../../../../../services/format.util';
+
+/**
+ * Builds the inspector tab strip (Protocol / Activity) for the shared
+ * pane-tabs component. Pure function so the protocol pane controller
+ * stays compact and the tab catalogue is unit-testable in isolation.
+ */
+export function buildInspectorTabs(args: {
+  summaryStatus: JobSummaryStatus;
+  hasStatusMarkdown: boolean;
+  isRunning: boolean;
+}): readonly PaneTabDef[] {
+  const protocolDisabled =
+    !args.hasStatusMarkdown && args.summaryStatus !== 'generating' && args.summaryStatus !== 'failed';
+  return [
+    {
+      id: 'protocol',
+      label: 'Protocol',
+      emoji: '📜',
+      testid: 'inspector-tab-protocol',
+      disabled: protocolDisabled,
+      indicator: args.summaryStatus === 'generating' ? 'spinner' : undefined,
+      modifier: 'protocol',
+    },
+    {
+      id: 'activity',
+      label: 'Activity',
+      emoji: '⚡',
+      testid: 'inspector-tab-activity',
+      indicator: args.isRunning ? 'live' : undefined,
+      modifier: 'activity',
+    },
+  ];
+}
 
 export function formatTokens(n: number): string {
   return fmtTokens(n);

@@ -31,6 +31,27 @@
   flex-shrink: 0;
 }
 
+.pane-header__icon-emoji {
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.15));
+}
+
+/*
+ * Brand-tinted wash for the protocol pane. Reads `--studio-accent` so it
+ * flips with the theme. Kept here (not in protocol-pane.scss) so any
+ * future pane that wants the same identity can opt in via
+ * [modifier]="'cool'" without copying SCSS.
+ */
+.pane-header--cool {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--studio-accent) 8%, transparent),
+    transparent 70%
+  );
+}
+
 .pane-header__title {
   font-weight: 600;
   font-size: 12px;
@@ -55,4 +76,9 @@
 .pane-header__btn {
   @include m.icon-button(24px);
   align-self: center;
+
+  &--active {
+    background: var(--studio-bg-selected, var(--studio-bg-elevated));
+    color: var(--studio-fg-strong);
+  }
 }

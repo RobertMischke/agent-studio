@@ -43,10 +43,10 @@
       "total": 1355
     },
     "src/app/features/job-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
-      "typeScript": 791,
-      "template": 508,
-      "styles": 960,
-      "total": 2259
+      "typeScript": 810,
+      "template": 481,
+      "styles": 882,
+      "total": 2173
     },
     "src/app/features/job-detail/job-detail.ts": {
       "typeScript": 1293,

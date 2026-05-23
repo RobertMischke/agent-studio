@@ -1,0 +1,29 @@
+<div [class]="containerClass()"
+     role="tablist"
+     [attr.aria-label]="ariaLabel()">
+  @for (tab of tabs(); track trackTab($index, tab)) {
+    <button type="button"
+            [ngClass]="tabClass(tab)"
+            role="tab"
+            [disabled]="tab.disabled === true"
+            [attr.aria-selected]="tab.id === activeTabId()"
+            [attr.data-testid]="tab.testid ?? null"
+            (click)="onClick(tab)">
+      @if (tab.icon) {
+        <app-studio-icon class="pane-tab__icon" [name]="tab.icon" [size]="12"></app-studio-icon>
+      } @else if (tab.emoji) {
+        <span class="pane-tab__emoji" aria-hidden="true">{{ tab.emoji }}</span>
+      }
+      <span class="pane-tab__label">{{ tab.label }}</span>
+      @if (tab.badge !== null && tab.badge !== undefined && tab.badge !== '' && tab.badge !== 0) {
+        <span class="pane-tab__badge"
+              [attr.data-testid]="tab.testid ? tab.testid + '-badge' : null">{{ tab.badge }}</span>
+      }
+      @if (tab.indicator === 'spinner') {
+        <span class="pane-tab__spinner" aria-hidden="true"></span>
+      } @else if (tab.indicator === 'live') {
+        <span class="pane-tab__livedot" aria-hidden="true"></span>
+      }
+    </button>
+  }
+</div>

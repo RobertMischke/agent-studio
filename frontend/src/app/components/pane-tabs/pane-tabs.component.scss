@@ -1,0 +1,151 @@
+/*
+ * Shared tab control for the prompt / protocol / future panes. Two
+ * variants, one component:
+ *
+ *   .pane-tabs--header  — full-height tab strip projected into
+ *                         <app-pane-header>'s `tabs` slot. Active tab
+ *                         lifts into the body via a 2px accent
+ *                         bottom-border.
+ *   .pane-tabs--pill    — compact pill toggle group used inside a pane
+ *                         body. Active tab "raises" against the
+ *                         surrounding elevated surface.
+ *
+ * Both variants share .pane-tab and .pane-tab__badge / .pane-tab__icon
+ * so callers get identical typography, icon sizing, and spacing.
+ */
+
+.pane-tabs {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+}
+
+.pane-tabs--header {
+  display: flex;
+  flex: 1;
+  height: 100%;
+}
+
+.pane-tabs--pill {
+  gap: 2px;
+  padding: 2px;
+  background: var(--studio-bg-hover);
+  border-radius: 3px;
+}
+
+/* Re-orders the pill variant so the activity tab leads when the host
+ * task is in 3-progress. Pure data-attribute hook the caller flips via
+ * the `listModifier` input. */
+.pane-tabs--activity-first {
+  .pane-tab--activity { order: 0; }
+  .pane-tab--protocol { order: 1; }
+}
+
+.pane-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+
+  &:hover:not(:disabled) {
+    color: var(--studio-fg-strong);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+/* Header variant — full-height cell, bottom-border accent. */
+.pane-tabs--header .pane-tab {
+  padding: 0 12px;
+  height: 100%;
+  border-bottom: 2px solid transparent;
+
+  &:hover:not(:disabled) {
+    background: var(--studio-bg-hover);
+  }
+
+  &.pane-tab--active {
+    color: var(--studio-fg-strong);
+    background: var(--studio-bg-tab-active);
+    border-bottom-color: var(--studio-accent);
+    font-weight: 600;
+  }
+}
+
+/* Pill variant — compact toggle group inside the pane body. */
+.pane-tabs--pill .pane-tab {
+  padding: 3px 10px;
+  border-radius: 2px;
+  font-size: 0.9em;
+
+  &.pane-tab--active {
+    background: var(--studio-bg-editor);
+    color: var(--studio-fg-strong);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+}
+
+.pane-tab__icon {
+  flex: 0 0 auto;
+}
+
+.pane-tab__emoji {
+  font-size: 12px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.pane-tab__label {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.pane-tab__badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.pane-tab__spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid color-mix(in srgb, var(--studio-accent) 25%, transparent);
+  border-top-color: var(--studio-accent);
+  border-radius: 50%;
+  animation: pane-tab-spin 0.8s linear infinite;
+}
+
+.pane-tab__livedot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--severity-pass);
+  animation: pane-tab-livedot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pane-tab-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pane-tab-livedot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
+}

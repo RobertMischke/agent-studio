@@ -41,13 +41,13 @@ test.describe('Detail view — compact command bar, pane maximize, collapsible t
       await expect(page.getByTestId('pane-prompt')).toBeVisible();
       await expect(page.getByTestId('pane-protocol')).toBeVisible();
 
-      await page.getByTestId('pane-maximize-protocol').click();
+      await page.getByTestId('pane-protocol-header').getByTestId('pane-header-maximize').click();
       await expect(page.getByTestId('pane-protocol')).toBeVisible();
       await expect(page.getByTestId('pane-prompt')).toHaveCount(0);
       await page.screenshot({ path: 'test-results/protocol-maximized.png', fullPage: false });
 
       // Restore.
-      await page.getByTestId('pane-maximize-protocol').click();
+      await page.getByTestId('pane-protocol-header').getByTestId('pane-header-maximize').click();
       await expect(page.getByTestId('pane-prompt')).toBeVisible();
 
       // Show & maximize Git.

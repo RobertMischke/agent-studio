@@ -106,7 +106,7 @@ test.describe('@baseline refactor visual capture', () => {
     try {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-      const max = page.getByTestId('pane-maximize-protocol');
+      const max = page.getByTestId('pane-protocol-header').getByTestId('pane-header-maximize');
       if (await max.isVisible().catch(() => false)) {
         await max.click();
         await page.waitForTimeout(400);

@@ -1967,12 +1967,10 @@
     .app--vscode-layout .pane__body {
       padding: 0;
     }
-    /* Inspector tabs — tighten without changing structure. */
+    /* Inspector tabs ride on `<app-pane-tabs variant="pill">` since F38;
+     * the wrapper container keeps `.inspector__header` for layout. */
     .app--vscode-layout .inspector__header {
       padding: 0;
-    }
-    .app--vscode-layout .inspector__tabs {
-      gap: 0;
     }
 
     /*

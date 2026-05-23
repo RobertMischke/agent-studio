@@ -1,8 +1,13 @@
 <section class="pane pane--protocol" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-protocol">
-  <header class="pane__header pane__header--cool">
-    <div class="pane__title-block">
-      <span class="pane__title-icon">📜</span>
-      <h3 class="pane__title">Protocol</h3>
+  <app-pane-header
+    title="Protocol"
+    iconEmoji="📜"
+    modifier="cool"
+    testid="pane-protocol-header"
+    [maximized]="maximized()"
+    (maximize)="maximizeToggle.emit()"
+    (hide)="hide.emit()">
+    <ng-container actions>
       @if (hasActivity()) {
         <span class="pane__live-dot"
               [class.pane__live-dot--running]="isRunning()"
@@ -21,104 +26,99 @@
               [appTooltip]="detail().summaryState?.errorMessage ?? 'Protocol generation failed — see banner below'"
               aria-label="Protocol generation failed">⚠</span>
       }
-    </div>
-    @if (sessionChip(); as chip) {
-      <span class="pane__telemetry pane__session-chip pane__session-chip--{{ chip.kind }}"
-            [appTooltip]="chip.tooltip"
-            [attr.data-testid]="'session-chip-' + chip.kind">
-        {{ chip.emoji }} {{ chip.label }}
-      </span>
-    }
-    @if (claudeSession(); as cs) {
-      @if (cs.error && !cs.turnCount) {
-        <span class="pane__telemetry pane__telemetry--err"
-              [appTooltip]="'Claude session telemetry: ' + cs.error"
-              data-testid="claude-telemetry-error">⚠ no session yet</span>
-      } @else if (cs.turnCount > 0) {
-        <!--
-          Single-badge telemetry: the verbose multi-chip row used to eat a
-          full line in the protocol-pane header. The hover tooltip carries
-          the full breakdown (input / output / cache / turns / model) so
-          no information is lost — the data is one hover away. -->
-        <span class="pane__telemetry pane__telemetry--badge"
-              [appTooltip]="claudeSessionTooltip()"
-              data-testid="claude-telemetry"
-              role="img"
-              [attr.aria-label]="claudeSessionTooltip()">
-          🪙 {{ formatTokens(cs.outputTokens) }} · {{ cs.turnCount }}t
+      @if (sessionChip(); as chip) {
+        <span class="pane__telemetry pane__session-chip pane__session-chip--{{ chip.kind }}"
+              [appTooltip]="chip.tooltip"
+              [attr.data-testid]="'session-chip-' + chip.kind">
+          {{ chip.emoji }} {{ chip.label }}
         </span>
       }
-    }
-    @if (watchdogPill(); as wp) {
-      @if (wp.visible) {
-        <span class="pane__watchdog"
-              [attr.data-state]="wp.state"
-              [appTooltip]="wp.tooltip"
-              data-testid="watchdog-chip">{{ wp.label }}</span>
+      @if (claudeSession(); as cs) {
+        @if (cs.error && !cs.turnCount) {
+          <span class="pane__telemetry pane__telemetry--err"
+                [appTooltip]="'Claude session telemetry: ' + cs.error"
+                data-testid="claude-telemetry-error">⚠ no session yet</span>
+        } @else if (cs.turnCount > 0) {
+          <!-- Single-badge telemetry: the verbose multi-chip row used to eat a
+               full line in the protocol-pane header. The hover tooltip carries
+               the full breakdown (input / output / cache / turns / model) so
+               no information is lost. -->
+          <span class="pane__telemetry pane__telemetry--badge"
+                [appTooltip]="claudeSessionTooltip()"
+                data-testid="claude-telemetry"
+                role="img"
+                [attr.aria-label]="claudeSessionTooltip()">
+            🪙 {{ formatTokens(cs.outputTokens) }} · {{ cs.turnCount }}t
+          </span>
+        }
       }
-    }
-    @if (outcomeIssue(); as issue) {
-      <button type="button"
-              class="pane__outcome-issue"
-              [class]="'pane__outcome-issue--' + outcomeIssueTone()"
-              [appTooltip]="issue.summary || issue.kind"
-              data-testid="protocol-outcome-issue-chip"
-              (click)="outcomeIssueModalOpen.set(true)">
-        {{ issue.label || issue.kind }}
-      </button>
-    }
-    @if (claudeRateLimit(); as rl) {
-      <span class="pane__telemetry pane__telemetry-rate"
-            [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
-            [class.pane__telemetry-rate--warn]="rl.status && rl.status !== 'allowed'"
-            [appTooltip]="rateLimitTooltip()"
-            data-testid="claude-rate-limit">
-        <span class="pane__telemetry-chip">⏱ {{ formatRateWindow(rl.window) }} · {{ rl.status || '?' }}</span>
-        @if (rl.resetsAt > 0) {
-          <span class="pane__telemetry-chip">reset {{ formatResetIn(rl.resetsAt) }}</span>
+      @if (watchdogPill(); as wp) {
+        @if (wp.visible) {
+          <span class="pane__watchdog"
+                [attr.data-state]="wp.state"
+                [appTooltip]="wp.tooltip"
+                data-testid="watchdog-chip">{{ wp.label }}</span>
         }
-        @if (rl.isUsingOverage) {
-          <span class="pane__telemetry-chip pane__telemetry-chip--overage">overage</span>
-        }
-      </span>
-    }
-    @if (isRunning()) {
-      <button type="button"
-              class="pane__interim-btn"
-              data-testid="protocol-interim-summary"
-              [disabled]="!canRequestInterim()"
-              [appTooltip]="interimInFlight()
-                ? ('Asking Haiku for an interim status... ' + interimElapsedSeconds() + 's')
-                : 'Generate an interim status summary from the current run output. Does not touch status.md.'"
-              (click)="requestInterimSummary()"
-              aria-label="Interim status">
-        @if (interimInFlight()) {
-          <span class="spinner-ring" aria-hidden="true"></span>
-          <span>Interim ({{ interimElapsedSeconds() }}s)</span>
-        } @else {
-          <span aria-hidden="true">📊</span>
-          <span>Interim status</span>
-        }
-      </button>
-    }
-    @if (featureFlags.vsCodeLayout()) {
-      <button class="pane__maximize"
-              data-testid="pane-meta-toggle"
-              (click)="toggleVsCodeMeta()"
-              [class.pane__maximize--active]="featureFlags.vsCodeMetaOpen()"
-              [appTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
-              aria-label="Toggle meta panel">
-        i
-      </button>
-    }
-    <button class="pane__maximize"
-            data-testid="pane-maximize-protocol"
-            (click)="maximizeToggle.emit()"
-            [appTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
-      {{ maximized() ? '⤡' : '⤢' }}
-    </button>
-    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">×</button>
-  </header>
+      }
+      @if (outcomeIssue(); as issue) {
+        <button type="button"
+                class="pane__outcome-issue"
+                [class]="'pane__outcome-issue--' + outcomeIssueTone()"
+                [appTooltip]="issue.summary || issue.kind"
+                data-testid="protocol-outcome-issue-chip"
+                (click)="outcomeIssueModalOpen.set(true)">
+          {{ issue.label || issue.kind }}
+        </button>
+      }
+      @if (claudeRateLimit(); as rl) {
+        <span class="pane__telemetry pane__telemetry-rate"
+              [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
+              [class.pane__telemetry-rate--warn]="rl.status && rl.status !== 'allowed'"
+              [appTooltip]="rateLimitTooltip()"
+              data-testid="claude-rate-limit">
+          <span class="pane__telemetry-chip">⏱ {{ formatRateWindow(rl.window) }} · {{ rl.status || '?' }}</span>
+          @if (rl.resetsAt > 0) {
+            <span class="pane__telemetry-chip">reset {{ formatResetIn(rl.resetsAt) }}</span>
+          }
+          @if (rl.isUsingOverage) {
+            <span class="pane__telemetry-chip pane__telemetry-chip--overage">overage</span>
+          }
+        </span>
+      }
+      @if (isRunning()) {
+        <button type="button"
+                class="pane__interim-btn"
+                data-testid="protocol-interim-summary"
+                [disabled]="!canRequestInterim()"
+                [appTooltip]="interimInFlight()
+                  ? ('Asking Haiku for an interim status... ' + interimElapsedSeconds() + 's')
+                  : 'Generate an interim status summary from the current run output. Does not touch status.md.'"
+                (click)="requestInterimSummary()"
+                aria-label="Interim status">
+          @if (interimInFlight()) {
+            <span class="spinner-ring" aria-hidden="true"></span>
+            <span>Interim ({{ interimElapsedSeconds() }}s)</span>
+          } @else {
+            <span aria-hidden="true">📊</span>
+            <span>Interim status</span>
+          }
+        </button>
+      }
+    </ng-container>
+    <ng-container trailing>
+      @if (featureFlags.vsCodeLayout()) {
+        <button type="button"
+                class="pane-header__btn"
+                data-testid="pane-meta-toggle"
+                (click)="toggleVsCodeMeta()"
+                [class.pane-header__btn--active]="featureFlags.vsCodeMetaOpen()"
+                [appTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
+                aria-label="Toggle meta panel">
+          i
+        </button>
+      }
+    </ng-container>
+  </app-pane-header>
   <div class="pane__body">
     @if (protocolVerdict(); as v) {
       <div class="protocol-verdict"
@@ -206,16 +206,10 @@
         </div>
       }
     }
-    @if (screenshots().length > 0) {
-      <app-screenshot-strip
-        data-testid="protocol-screenshot-strip"
-        [screenshots]="screenshots()"
-        variant="task" />
-    }
-    <!-- Review evidence + Code review panels were moved into the prompt
-         pane's Evidence and Code Review tabs (next to Description) per
-         the user's reference alignment. The protocol pane stays focused
-         on the live run timeline + chat composer. -->
+    <!-- Visual evidence (screenshot strip), review-evidence panel, and
+         code-review panel all live in the prompt pane's Evidence and
+         Code Review tabs (F38: visual-evidence dedup). The protocol
+         pane stays focused on the live run timeline + chat composer. -->
 
     @if (followupCreated(); as fc) {
       <div class="evidence-followup-banner"
@@ -234,33 +228,12 @@
     }
     <section class="inspector">
       <div class="inspector__header">
-        <div class="inspector__tabs inspector__tabs--pill"
-             [class.inspector__tabs--activity-first]="inProgress()"
-             role="tablist">
-          <button class="inspector__tab inspector__tab--protocol"
-                  role="tab"
-                  data-testid="inspector-tab-protocol"
-                  [class.inspector__tab--active]="activeInspectorTab() === 'protocol'"
-                  [disabled]="!detail().statusMarkdown && summaryStatus() !== 'generating' && summaryStatus() !== 'failed'"
-                  [attr.aria-selected]="activeInspectorTab() === 'protocol'"
-                  (click)="activeInspectorTabChange.emit('protocol')">
-            <span>📜 Protocol</span>
-            @if (summaryStatus() === 'generating') {
-              <span class="inspector__tab-spinner" aria-hidden="true"></span>
-            }
-          </button>
-          <button class="inspector__tab inspector__tab--activity"
-                  role="tab"
-                  data-testid="inspector-tab-activity"
-                  [class.inspector__tab--active]="activeInspectorTab() === 'activity'"
-                  [attr.aria-selected]="activeInspectorTab() === 'activity'"
-                  (click)="activeInspectorTabChange.emit('activity')">
-            <span>⚡ Activity</span>
-            @if (isRunning()) {
-              <span class="inspector__tab-livedot" aria-hidden="true"></span>
-            }
-          </button>
-        </div>
+        <app-pane-tabs variant="pill"
+                       ariaLabel="Protocol / Activity inspector"
+                       [tabs]="inspectorTabs()"
+                       [activeTabId]="activeInspectorTab()"
+                       [listModifier]="inProgress() ? 'activity-first' : null"
+                       (tabChange)="onInspectorTabChange($event)" />
       </div>
 
       <div class="inspector__body">
