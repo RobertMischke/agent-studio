@@ -1,0 +1,52 @@
+// F44 — Subtle model + CLI badge for the chat-compose action row.
+//
+// Visual contract: dimmed by default, brightens on hover, opacity-only when
+// disabled mid-run. Token-disciplined (no raw hex) so dark + light themes
+// stay in sync.
+
+:host { display: inline-flex; align-items: center; }
+
+.chat-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--studio-fg-dim);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.chat-model-badge:hover:not(:disabled) {
+  color: var(--studio-fg);
+  background: var(--studio-bg-hover);
+  border-color: var(--studio-border);
+}
+
+.chat-model-badge:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
+
+.chat-model-badge--disabled,
+.chat-model-badge:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chat-model-badge__icon { font-size: 0.9rem; line-height: 1; }
+
+.chat-model-badge__name {
+  white-space: nowrap;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-model-badge__caret { font-size: 0.7rem; opacity: 0.7; }

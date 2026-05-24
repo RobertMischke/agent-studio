@@ -411,6 +411,14 @@
                           (keydown.control.enter)="sendChat.emit()"
                           (keydown.meta.enter)="sendChat.emit()"></textarea>
                 <div class="chat-compose__actions">
+                  <app-chat-model-badge
+                    [cliType]="cliType()"
+                    [model]="model()"
+                    [availableModels]="availableModels()"
+                    [disabled]="isRunning()"
+                    (modelChange)="modelChange.emit($event)"
+                    (cliTypeChange)="cliTypeChange.emit($event)" />
+                  <span class="chat-compose__spacer"></span>
                   @if (isRunning()) {
                     <button type="button"
                             class="btn-sm chat-compose__stop"

@@ -106,6 +106,9 @@
         [canSendChat]="canSendChat()"
         [chatSendLabel]="chatSendLabel()"
         [regenerating]="regeneratingSummary()"
+        [cliType]="cliTypeDraft()"
+        [model]="modelDraft()"
+        [availableModels]="availableModels()"
         (maximizeToggle)="toggleMaximize('protocol')"
         (hide)="togglePane('protocol')"
         (activeInspectorTabChange)="onInspectorTabChange($event)"
@@ -115,6 +118,8 @@
         (sendChat)="sendChatMessage()"
         (stopJob)="stopJob()"
         (regenerateSummary)="regenerateProtocol()"
+        (modelChange)="onModelDraftChange($event)"
+        (cliTypeChange)="onCliTypeChange($event)"
         (evidenceMutated)="fileSaved.emit()"
         (followupCreatedFromEvidence)="fileSaved.emit()" />
     }

@@ -52,6 +52,9 @@
       justify-content: flex-end;
       align-items: center;
     }
+    // F44: flexible spacer between the leading model badge and the
+    // trailing Pause/Send buttons.
+    .chat-compose__spacer { flex: 1 1 auto; }
     .chat-compose__stop {
       background: color-mix(in srgb, var(--studio-accent-4) 14%, transparent);
       color: var(--studio-accent-4);

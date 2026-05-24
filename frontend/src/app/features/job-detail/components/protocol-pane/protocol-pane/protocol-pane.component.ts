@@ -14,7 +14,10 @@ import type {
   JobDetail,
   JobSummaryStatus,
   ReviewEvidenceEntry,
+  CliType,
 } from '../../../../../models/job.model';
+import type { CliModelInfo } from '../../../../cli';
+import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
 import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
@@ -92,6 +95,7 @@ interface InterimSummaryState {
     TooltipDirective,
     PaneHeaderComponent,
     PaneTabsComponent,
+    ChatModelBadgeComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -111,6 +115,10 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly chatSendLabel = input<string>('Send');
 
   readonly regenerating = input(false);
+  // F44: forwarded straight to <app-chat-model-badge>.
+  readonly cliType = input<CliType | null>(null);
+  readonly model = input<string | null>(null);
+  readonly availableModels = input<readonly CliModelInfo[]>([]);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
@@ -127,6 +135,8 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly sendChat = output<void>();
   readonly stopJob = output<void>();
   readonly regenerateSummary = output<void>();
+  readonly modelChange = output<string>(); // F44: '' = clear to CLI default
+  readonly cliTypeChange = output<CliType>();
 
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);

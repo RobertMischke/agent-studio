@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   ViewChild,
@@ -13,6 +14,7 @@ import {
   ChangeDetectorRef,
 } from '@angular/core';
 import { TooltipDirective } from '../tooltip';
+import { ModalStackService } from '../../services/modal-stack.service';
 import {
   MenuItem,
   MenuItemClickEvent,
@@ -76,6 +78,9 @@ export class MenuComponent {
   private panelRef: ElementRef<HTMLDivElement> | null = null;
 
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+  private modalStackDispose: (() => void) | null = null;
 
   /** Computed list of focusable row indices (skips header / separator / disabled). */
   readonly focusableIndices = computed<readonly number[]>(() => {
@@ -104,8 +109,16 @@ export class MenuComponent {
       const open = this.open();
       if (!open) {
         this.focusedIndex.set(null);
+        this.releaseModalStack();
         return;
       }
+      // Register with the modal-stack so Escape closes the menu first instead
+      // of skipping past it to whatever modal hosts the menu (e.g. the
+      // task-detail panel pushed onto the stack by job-detail). Without this
+      // entry the modal-stack's capture-phase Escape handler would close the
+      // host before the menu sees the keystroke, and the host would unmount
+      // the menu's anchor along with itself.
+      this.acquireModalStack();
       // Defer to next microtask so the panel exists in the DOM before we
       // measure it / move focus into it.
       queueMicrotask(() => {
@@ -121,6 +134,24 @@ export class MenuComponent {
         this.cdr.markForCheck();
       });
     });
+  }
+
+  private acquireModalStack(): void {
+    if (this.modalStackDispose !== null) return;
+    this.modalStackDispose = this.modalStack.pushUntilDestroyed(
+      `app-menu:${this.testIdPrefix()}`,
+      () => {
+        this.closeRequest.emit();
+        return true;
+      },
+      this.destroyRef,
+    );
+  }
+
+  private releaseModalStack(): void {
+    if (this.modalStackDispose === null) return;
+    this.modalStackDispose();
+    this.modalStackDispose = null;
   }
 
   // ---------------------------------------------------------------------------

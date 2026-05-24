@@ -1,0 +1,25 @@
+<button type="button"
+        class="chat-model-badge"
+        [class.chat-model-badge--disabled]="disabledReason() !== null"
+        data-testid="chat-compose-model"
+        [attr.aria-label]="ariaLabel()"
+        [attr.aria-haspopup]="'menu'"
+        [attr.aria-expanded]="menuOpen()"
+        [appTooltip]="tooltip()"
+        [disabled]="disabledReason() !== null"
+        (click)="openMenu($event)"
+        (contextmenu)="openMenu($event)">
+  <span class="chat-model-badge__icon" aria-hidden="true">{{ cliEmoji() }}</span>
+  <span class="chat-model-badge__name">{{ displayName() }}</span>
+  <span class="chat-model-badge__caret" aria-hidden="true">▾</span>
+</button>
+
+<app-menu
+  [items]="menuItems()"
+  [open]="menuOpen()"
+  [position]="menuPosition()"
+  testIdPrefix="chat-compose-model-menu"
+  ariaLabel="Model and CLI picker"
+  [minWidth]="220"
+  (itemClick)="onMenuItemClick($event)"
+  (closeRequest)="closeMenu()" />
