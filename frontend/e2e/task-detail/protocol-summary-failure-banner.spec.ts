@@ -46,14 +46,11 @@ test.describe('Protocol pane — summary failure banner', () => {
         `/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(watchPath)}`
       );
 
-      // Header badge is icon-only — the explanation lives in the banner.
-      const failedBadge = page.getByTestId('summary-failed');
-      await expect(failedBadge).toBeVisible({ timeout: 15_000 });
-      await expect(failedBadge).toHaveText('⚠');
-
-      // Tab must be enabled now that the summary is in "failed" state, even
-      // though no status.md has ever been written.
+      // F38 removed the redundant header badge — the failure state is
+      // surfaced by the inline banner inside the Protocol tab body, and
+      // the Protocol tab itself stays enabled in the `failed` state.
       const protocolTab = page.getByTestId('inspector-tab-protocol');
+      await expect(protocolTab).toBeVisible({ timeout: 15_000 });
       await expect(protocolTab).toBeEnabled();
       await protocolTab.click();
 

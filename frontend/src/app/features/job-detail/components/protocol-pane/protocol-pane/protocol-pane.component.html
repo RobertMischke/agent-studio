@@ -1,31 +1,28 @@
 <section class="pane pane--protocol" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-protocol">
+  <!--
+    F38: Protocol / Activity tabs are lifted into the pane-header's
+    `[tabs]` slot so the right pane mirrors the left pane's
+    "header = single row of tabs + trailing actions" pattern. The tab
+    items carry their own live-dot (Activity while running) and
+    spinner (Protocol while summary is generating), so the legacy
+    `pane__live-dot` / `pane__spinner` / `pane__badge--failed` glyphs
+    are gone from the header.
+  -->
   <app-pane-header
-    title="Protocol"
-    iconEmoji="📜"
     modifier="cool"
     testid="pane-protocol-header"
     [maximized]="maximized()"
     (maximize)="maximizeToggle.emit()"
     (hide)="hide.emit()">
-    <ng-container actions>
-      @if (hasActivity()) {
-        <span class="pane__live-dot"
-              [class.pane__live-dot--running]="isRunning()"
-              [appTooltip]="isRunning() ? 'Agent running' : 'Activity present'"
-              data-testid="protocol-live-dot"></span>
-      }
-      @if (summaryStatus() === 'generating') {
-        <span class="pane__spinner" data-testid="summary-generating"
-              [appTooltip]="'The protocol is being summarized from the CLI output.'">
-          <span class="spinner-ring"></span>
-          <span>{{ summarySpinnerLabel() }}</span>
-        </span>
-      }
-      @if (summaryStatus() === 'failed') {
-        <span class="pane__badge pane__badge--failed" data-testid="summary-failed"
-              [appTooltip]="detail().summaryState?.errorMessage ?? 'Protocol generation failed — see banner below'"
-              aria-label="Protocol generation failed">⚠</span>
-      }
+    <ng-container tabs>
+      <app-pane-tabs variant="header"
+                     ariaLabel="Protocol / Activity"
+                     [tabs]="protocolTabs()"
+                     [activeTabId]="activeInspectorTab()"
+                     [listModifier]="inProgress() ? 'activity-first' : null"
+                     (tabChange)="onInspectorTabChange($event)" />
+    </ng-container>
+    <ng-container trailing>
       @if (sessionChip(); as chip) {
         <span class="pane__telemetry pane__session-chip pane__session-chip--{{ chip.kind }}"
               [appTooltip]="chip.tooltip"
@@ -39,10 +36,8 @@
                 [appTooltip]="'Claude session telemetry: ' + cs.error"
                 data-testid="claude-telemetry-error">⚠ no session yet</span>
         } @else if (cs.turnCount > 0) {
-          <!-- Single-badge telemetry: the verbose multi-chip row used to eat a
-               full line in the protocol-pane header. The hover tooltip carries
-               the full breakdown (input / output / cache / turns / model) so
-               no information is lost. -->
+          <!-- Single-badge telemetry: tooltip carries the full breakdown
+               (input / output / cache / turns / model) so no info is lost. -->
           <span class="pane__telemetry pane__telemetry--badge"
                 [appTooltip]="claudeSessionTooltip()"
                 data-testid="claude-telemetry"
@@ -104,8 +99,6 @@
           }
         </button>
       }
-    </ng-container>
-    <ng-container trailing>
       @if (featureFlags.vsCodeLayout()) {
         <button type="button"
                 class="pane-header__btn"
@@ -226,16 +219,10 @@
                 (click)="dismissFollowupBanner()">×</button>
       </div>
     }
+    <!-- Inspector body. Tabs were lifted into the pane-header `[tabs]`
+         slot (F38), so the section is just the content-switching
+         container now. -->
     <section class="inspector">
-      <div class="inspector__header">
-        <app-pane-tabs variant="pill"
-                       ariaLabel="Protocol / Activity inspector"
-                       [tabs]="inspectorTabs()"
-                       [activeTabId]="activeInspectorTab()"
-                       [listModifier]="inProgress() ? 'activity-first' : null"
-                       (tabChange)="onInspectorTabChange($event)" />
-      </div>
-
       <div class="inspector__body">
         @if (activeInspectorTab() === 'protocol') {
           <section class="notes-panel">

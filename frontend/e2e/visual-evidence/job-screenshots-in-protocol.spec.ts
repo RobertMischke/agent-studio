@@ -50,11 +50,13 @@ test.describe('Job artifacts harvesting (images-and-protocol)', () => {
       await startButton.click();
     }
 
-    // Wait for the job to enter running state
+    // F38: the legacy `protocol-live-dot` glyph was replaced by a
+    // pulsing dot on the Activity tab. Wait until that tab carries the
+    // running indicator instead.
     await page.waitForFunction(
       () => {
-        const statusElement = document.querySelector('[data-testid="protocol-live-dot"]');
-        return statusElement?.classList.contains('pane__live-dot--running');
+        const activity = document.querySelector('[data-testid="inspector-tab-activity"]');
+        return activity?.querySelector('.pane-tab__livedot') !== null;
       },
       { timeout: 10000 }
     );

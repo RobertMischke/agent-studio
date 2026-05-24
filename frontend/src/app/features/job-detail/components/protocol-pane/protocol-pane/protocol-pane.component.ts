@@ -377,8 +377,8 @@ export class ProtocolPaneComponent implements OnDestroy {
   // keep the historical Protocol-first order so the summary stays primary.
   readonly inProgress = computed(() => this.detail().info.state === '3-progress');
 
-  /** Inspector tab strip (Protocol / Activity) for the shared pane-tabs component. */
-  readonly inspectorTabs = computed(() =>
+  /** Protocol / Activity tab strip for the shared pane-tabs component. */
+  readonly protocolTabs = computed(() =>
     buildInspectorTabs({
       summaryStatus: this.summaryStatus(),
       hasStatusMarkdown: !!this.detail().statusMarkdown,

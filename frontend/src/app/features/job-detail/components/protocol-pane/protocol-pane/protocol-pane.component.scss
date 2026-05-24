@@ -6,10 +6,12 @@
 :host { display: contents; }
 
 /*
- * Protocol-pane header chrome is now owned by `<app-pane-header
- * modifier="cool" iconEmoji="📜" title="Protocol">`; the brand-tinted
- * wash and emoji icon live in pane-header.component.scss. Only the
- * chip/badge styles that project into the `actions` slot remain here.
+ * Protocol-pane header chrome is owned by `<app-pane-header
+ * modifier="cool">`. Tabs project into its `[tabs]` slot via
+ * `<app-pane-tabs variant="header">`; telemetry chips project into the
+ * `[trailing]` slot. The styles below cover only the telemetry chips
+ * and the activity-panel body — the header itself uses pane-header /
+ * pane-tabs SCSS.
  */
 
 /*
@@ -238,49 +240,12 @@
   }
 }
 
-.pane__live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--studio-fg-muted);
-  display: inline-block;
-
-  &--running {
-    background: var(--severity-pass);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--severity-pass) 70%, transparent);
-    animation: pane-livedot-pulse 1.4s ease-in-out infinite;
-  }
-}
-
-.pane__spinner {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85em;
-  color: var(--studio-fg-dim);
-  background: var(--studio-bg-hover);
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-/* Compact warn dot for "summary failed" — full text used to live here, but
- * the inline banner below already explains the situation, so the header
- * only needs a small affordance that something went wrong. The full reason
- * stays on the title attribute for hover. */
-.pane__badge--failed {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--severity-high);
-  background: color-mix(in srgb, var(--severity-high) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--severity-high) 55%, transparent);
-  border-radius: 50%;
-  cursor: help;
-}
+/*
+ * F38: legacy header indicators (`.pane__live-dot`, `.pane__spinner`,
+ * `.pane__badge--failed`) were dropped — the running / generating /
+ * failed states are now signalled on the Protocol / Activity tab
+ * pills via the shared `<app-pane-tabs>` `indicator` prop.
+ */
 
 .spinner-ring {
   width: 12px;
@@ -689,11 +654,6 @@
   .outcome-dialog__meta {
     grid-template-columns: 1fr;
   }
-}
-
-@keyframes pane-livedot-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.5; transform: scale(0.85); }
 }
 
 @keyframes spinner-ring-spin {
