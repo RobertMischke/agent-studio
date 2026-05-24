@@ -251,13 +251,13 @@ First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagn
 | GET | `/api/cli/quota` | Per-CLI quota windows (used%, reset times). |
 | GET | `/api/cli/{cliType}/models` | Model catalog for one CLI. |
 | GET | `/api/watch-paths` | Configured workspaces (legacy: returns the effective `WatchPaths` plus any pointer resolution). |
-| GET | `/api/workspaces` | Workspace registry with embedded projects (ADR-0037). |
+| GET | `/api/workspaces` | Workspace registry with embedded projects (ADR-0042). |
 | GET | `/api/projects` | Project registry, flat list. Pass `?includeArchived=true` to include archived rows. |
 | GET | `/api/projects/{PROJ-NNN}` | Full project record by canonical id. The route regex is locked to `^PROJ-\d{3,}$` so it cannot collide with the legacy display-name routes. |
 
-`jobId` (URL slug) + `watchPath` (project root) is the addressing scheme today. `jobKey` is `watchPath::jobId` and is used internally only. ADR-0037 introduces a parallel id-based scheme (`PROJ-NNN`); both coexist while consumers are migrated, and resolution flows through [`JobKeyResolver`](backend/Services/Jobs/JobKeyResolver.cs).
+`jobId` (URL slug) + `watchPath` (project root) is the addressing scheme today. `jobKey` is `watchPath::jobId` and is used internally only. ADR-0042 introduces a parallel id-based scheme (`PROJ-NNN`); both coexist while consumers are migrated, and resolution flows through [`JobKeyResolver`](backend/Services/Jobs/JobKeyResolver.cs).
 
-### Project + workspace registry (ADR-0037)
+### Project + workspace registry (ADR-0042)
 
 Workspaces and projects live as registry records under `<TaskRepository>/.metadata/{workspaces.json,projects.json}`. Each project has an immutable id (`PROJ-001`, `PROJ-002`, …), a display name (editable), a short code (used in task keys like `ATP-130`), a workspace membership, an optional color, sort order, and an archived flag. Workspaces are pure metadata (no folder per workspace) with their own ids, sort order, color, and an `IsDefault` flag.
 

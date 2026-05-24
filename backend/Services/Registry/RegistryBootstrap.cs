@@ -41,6 +41,7 @@ public static class RegistryBootstrap
 
         var watchPaths = scanner.GetWatchPaths();
         var discovered = 0;
+        var divergedDisplayNames = 0;
         foreach (var entry in watchPaths)
         {
             if (string.IsNullOrWhiteSpace(entry.Path)) continue;
@@ -50,7 +51,23 @@ public static class RegistryBootstrap
             if (!Directory.Exists(entry.Path)) continue;
 
             var existing = projects.FindByStorageLocation(entry.Path);
-            if (existing != null) continue;
+            if (existing != null)
+            {
+                // F47 / ADR-0042: WatchPaths is BOOTSTRAP-only after the registry
+                // exists. If the operator edited the appsettings entry's Name
+                // after the registry recorded a different DisplayName, the
+                // registry wins. Surface the divergence in the log so the
+                // mismatch is observable.
+                if (!string.IsNullOrWhiteSpace(entry.Name)
+                    && !string.Equals(entry.Name, existing.DisplayName, StringComparison.Ordinal))
+                {
+                    logger.LogWarning(
+                        "registry-bootstrap-watchpath-name-diverges projectId={Id} registryName={RegistryName} watchPathName={WatchPathName} storage={Storage} - registry wins (use the F47 Settings panel to rename)",
+                        existing.Id, existing.DisplayName, entry.Name, entry.Path);
+                    divergedDisplayNames++;
+                }
+                continue;
+            }
 
             var displayName = !string.IsNullOrWhiteSpace(entry.Name)
                 ? entry.Name
@@ -65,10 +82,11 @@ public static class RegistryBootstrap
         }
 
         logger.LogInformation(
-            "registry-bootstrap-complete workspaces={WorkspaceCount} projectsDiscovered={Discovered} projectsTotal={Total}",
+            "registry-bootstrap-complete workspaces={WorkspaceCount} projectsDiscovered={Discovered} projectsTotal={Total} watchPathDisplayNameDivergences={Divergences}",
             workspaces.List().Count,
             discovered,
-            projects.List().Count);
+            projects.List().Count,
+            divergedDisplayNames);
     }
 
     private static string InferDisplayNameFromPath(string path)

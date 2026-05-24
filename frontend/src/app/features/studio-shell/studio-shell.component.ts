@@ -298,18 +298,22 @@ export class StudioShellComponent {
   });
 
   /**
-   * F47 / ADR-0037 — registry-backed workspace list rendered by the
-   * Settings panel "Workspaces" section. Read-only today; the action
-   * buttons (rename / reorder / color / delete) ship with F45b.
+   * F47 / ADR-0042 — registry-backed workspace list rendered by the
+   * Settings panel "Workspaces" section. F45b mutation surface lives
+   * inline in this component: see `createRegistryWorkspace`,
+   * `renameRegistryWorkspace`, `editRegistryWorkspaceColor`,
+   * `moveRegistryWorkspace`, `deleteRegistryWorkspace`.
    */
   readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
   readonly registryWorkspacesLoading = signal(false);
   readonly registryWorkspacesError = signal<string | null>(null);
+  /** Workspace id currently waiting for a mutation response (disables its row buttons). */
+  readonly registryWorkspaceBusyId = signal<string | null>(null);
 
   /**
    * Lazy-load the registry workspaces the first time the Settings panel
-   * opens, then re-pull whenever it re-opens so a future F45b mutation
-   * from another tab is reflected without a full reload.
+   * opens, then re-pull whenever it re-opens so a mutation from another
+   * tab is reflected without a full reload.
    */
   private readonly loadRegistryWorkspacesFx = effect(() => {
     const panel = this.activePanel();
@@ -321,18 +325,185 @@ export class StudioShellComponent {
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);
-    this.jobService.getRegistryWorkspaces().subscribe({
+    this.jobService.getRegistryWorkspaces({ includeArchived: this.showArchivedProjects() }).subscribe({
       next: (ws) => {
         this.registryWorkspaces.set(ws ?? []);
         this.registryWorkspacesLoading.set(false);
       },
       error: (err: unknown) => {
-        this.registryWorkspacesError.set(
-          err instanceof Error ? err.message : 'Failed to load workspaces',
-        );
+        this.registryWorkspacesError.set(this.errMsg(err));
         this.registryWorkspacesLoading.set(false);
       },
     });
+  }
+
+  /** F45b — prompt for a new workspace name and create it. */
+  createRegistryWorkspace(): void {
+    const name = window.prompt('New workspace name')?.trim();
+    if (!name) return;
+    this.jobService.createRegistryWorkspace(name).subscribe({
+      next: () => this.reloadRegistryWorkspaces(),
+      error: (err: unknown) => this.registryWorkspacesError.set(this.errMsg(err)),
+    });
+  }
+
+  /** F45b — prompt-driven rename. */
+  renameRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
+    const name = window.prompt(`Rename workspace "${ws.displayName}"`, ws.displayName)?.trim();
+    if (!name || name === ws.displayName) return;
+    this.registryWorkspaceBusyId.set(ws.id);
+    this.jobService.updateRegistryWorkspace(ws.id, { displayName: name }).subscribe({
+      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
+      error: (err: unknown) => {
+        this.registryWorkspaceBusyId.set(null);
+        this.registryWorkspacesError.set(this.errMsg(err));
+      },
+    });
+  }
+
+  /** F45b — prompt for an accent color hex string. Empty input clears the color. */
+  editRegistryWorkspaceColor(ws: RegistryWorkspaceListItem): void {
+    const input = window.prompt(
+      `Workspace "${ws.displayName}" color (hex like #a78bfa, blank to clear)`,
+      ws.color ?? '');
+    if (input === null) return;
+    const color = input.trim();
+    const patch = color ? { color } : { clearColor: true };
+    this.registryWorkspaceBusyId.set(ws.id);
+    this.jobService.updateRegistryWorkspace(ws.id, patch).subscribe({
+      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
+      error: (err: unknown) => {
+        this.registryWorkspaceBusyId.set(null);
+        this.registryWorkspacesError.set(this.errMsg(err));
+      },
+    });
+  }
+
+  /** F45b — move a workspace one slot up or down. */
+  moveRegistryWorkspace(ws: RegistryWorkspaceListItem, direction: -1 | 1): void {
+    this.registryWorkspaceBusyId.set(ws.id);
+    this.jobService.reorderRegistryWorkspace(ws.id, direction).subscribe({
+      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
+      error: (err: unknown) => {
+        this.registryWorkspaceBusyId.set(null);
+        this.registryWorkspacesError.set(this.errMsg(err));
+      },
+    });
+  }
+
+  /** F45b — delete a workspace after a confirm dialog. Backend refuses 409 if projects are still attached. */
+  deleteRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
+    if (ws.isDefault) return;
+    const ok = window.confirm(
+      `Delete workspace "${ws.displayName}"?\n\nThe registry refuses if any active projects are still assigned; reassign them first via the Project Hub.`);
+    if (!ok) return;
+    this.registryWorkspaceBusyId.set(ws.id);
+    this.jobService.deleteRegistryWorkspace(ws.id).subscribe({
+      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
+      error: (err: unknown) => {
+        this.registryWorkspaceBusyId.set(null);
+        this.registryWorkspacesError.set(this.errMsg(err));
+      },
+    });
+  }
+
+  /** Up arrow is disabled when the workspace is already at the top of the list. */
+  canMoveWorkspaceUp(ws: RegistryWorkspaceListItem): boolean {
+    const list = this.registryWorkspaces();
+    return list.length > 0 && list[0].id !== ws.id;
+  }
+
+  /** Down arrow is disabled when the workspace is already at the bottom of the list. */
+  canMoveWorkspaceDown(ws: RegistryWorkspaceListItem): boolean {
+    const list = this.registryWorkspaces();
+    return list.length > 0 && list[list.length - 1].id !== ws.id;
+  }
+
+  /** F45b — id of the project currently waiting for a mutation response. */
+  readonly registryProjectBusyId = signal<string | null>(null);
+
+  /** F45b — rename a project by prompt. */
+  renameRegistryProject(projId: string, currentDisplayName: string): void {
+    const name = window.prompt(`Rename project "${currentDisplayName}"`, currentDisplayName)?.trim();
+    if (!name || name === currentDisplayName) return;
+    this.runProjectPatch(projId, { displayName: name });
+  }
+
+  /** F45b — change the short code (2-6 chars A-Z 0-9). */
+  editRegistryProjectShortCode(projId: string, currentShortCode: string): void {
+    const code = window.prompt(
+      `Project ${projId} short code (2-6 chars, A-Z and 0-9)`, currentShortCode)?.trim();
+    if (!code || code.toUpperCase() === currentShortCode) return;
+    this.runProjectPatch(projId, { shortCode: code });
+  }
+
+  /** F45b — set or clear the project color. */
+  editRegistryProjectColor(projId: string, currentColor: string | null): void {
+    const input = window.prompt(
+      `Project ${projId} color (hex like #a78bfa, blank to clear)`, currentColor ?? '');
+    if (input === null) return;
+    const color = input.trim();
+    this.runProjectPatch(projId, color ? { color } : { clearColor: true });
+  }
+
+  /** F45b — reassign project to a different workspace via dropdown prompt. */
+  changeRegistryProjectWorkspace(projId: string, currentWorkspaceId: string): void {
+    const options = this.registryWorkspaces();
+    if (options.length < 2) {
+      window.alert('Create another workspace first via "+ New workspace" above.');
+      return;
+    }
+    const list = options
+      .map(w => `  ${w.id} — ${w.displayName}${w.id === currentWorkspaceId ? ' (current)' : ''}`)
+      .join('\n');
+    const choice = window.prompt(
+      `Move project ${projId} to which workspace? Enter id:\n\n${list}`, currentWorkspaceId)?.trim();
+    if (!choice || choice === currentWorkspaceId) return;
+    this.runProjectPatch(projId, { workspaceId: choice });
+  }
+
+  /** F45b — archive (or un-archive) a project. */
+  toggleRegistryProjectArchived(projId: string, archived: boolean): void {
+    const verb = archived ? 'Un-archive' : 'Archive';
+    const ok = window.confirm(`${verb} project ${projId}? Archived projects are hidden from the tree by default.`);
+    if (!ok) return;
+    this.runProjectPatch(projId, { archived: !archived });
+  }
+
+  private runProjectPatch(projId: string, patch: {
+    displayName?: string;
+    shortCode?: string;
+    color?: string | null;
+    clearColor?: boolean;
+    workspaceId?: string;
+    archived?: boolean;
+  }): void {
+    this.registryProjectBusyId.set(projId);
+    this.jobService.updateRegistryProject(projId, patch).subscribe({
+      next: () => { this.registryProjectBusyId.set(null); this.reloadRegistryWorkspaces(); },
+      error: (err: unknown) => {
+        this.registryProjectBusyId.set(null);
+        this.registryWorkspacesError.set(this.errMsg(err));
+      },
+    });
+  }
+
+  /** Toggle whether archived projects are shown in the Settings panel. Off by default. */
+  readonly showArchivedProjects = signal(false);
+  toggleShowArchivedProjects(): void {
+    this.showArchivedProjects.update(v => !v);
+    this.reloadRegistryWorkspaces();
+  }
+
+  private errMsg(err: unknown): string {
+    if (err && typeof err === 'object' && 'error' in err) {
+      const inner = (err as { error?: unknown }).error;
+      if (inner && typeof inner === 'object' && 'error' in inner)
+        return String((inner as { error?: unknown }).error);
+      if (typeof inner === 'string') return inner;
+    }
+    if (err instanceof Error) return err.message;
+    return 'Request failed';
   }
 
   /**

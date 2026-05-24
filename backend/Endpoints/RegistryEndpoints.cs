@@ -20,10 +20,10 @@ public static class RegistryEndpoints
 {
     public static void MapRegistryEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/workspaces", (WorkspaceRegistry workspaces, ProjectRegistry projects) =>
+        app.MapGet("/api/workspaces", (WorkspaceRegistry workspaces, ProjectRegistry projects, bool? includeArchived) =>
         {
             var projectsByWs = projects.List()
-                .Where(p => !p.Archived)
+                .Where(p => includeArchived == true || !p.Archived)
                 .GroupBy(p => p.WorkspaceId, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
@@ -60,7 +60,127 @@ public static class RegistryEndpoints
                 ? Results.NotFound(new { error = $"Unknown projectId '{projId}'" })
                 : Results.Ok(record);
         });
+
+        // ----- F45b workspace mutations (ADR-0042) -----
+
+        app.MapPost("/api/workspaces", (RegistryCreateWorkspaceRequest body, WorkspaceRegistry workspaces) =>
+        {
+            if (body == null || string.IsNullOrWhiteSpace(body.DisplayName))
+                return Results.BadRequest(new { error = "displayName is required" });
+            try
+            {
+                var created = workspaces.Create(body.DisplayName, body.Color);
+                return Results.Created($"/api/workspaces/{created.Id}", created);
+            }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        app.MapPut("/api/workspaces/{id}", (string id, UpdateWorkspaceRequest body, WorkspaceRegistry workspaces) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                WorkspaceRecord? result = null;
+                if (body.DisplayName != null) result = workspaces.Rename(id, body.DisplayName);
+                if (body.Color != null || body.ClearColor == true)
+                    result = workspaces.SetColor(id, body.ClearColor == true ? null : body.Color);
+                if (result == null) result = workspaces.Find(id);
+                return result == null
+                    ? Results.NotFound(new { error = $"Unknown workspaceId '{id}'" })
+                    : Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
+        app.MapPost("/api/workspaces/{id}/reorder", (string id, WorkspaceReorderRequest body, WorkspaceRegistry workspaces) =>
+        {
+            if (body == null || (body.Direction != -1 && body.Direction != 1))
+                return Results.BadRequest(new { error = "direction must be -1 or +1" });
+            try
+            {
+                var list = workspaces.Reorder(id, body.Direction);
+                return Results.Ok(list);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+        });
+
+        app.MapDelete("/api/workspaces/{id}", (string id, WorkspaceRegistry workspaces, ProjectRegistry projects) =>
+        {
+            try
+            {
+                workspaces.Delete(id, projects);
+                return Results.NoContent();
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+        });
+
+        // ----- F45b project mutations (ADR-0042) -----
+
+        app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}", (string projId, UpdateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces) =>
+        {
+            if (body == null) return Results.BadRequest(new { error = "body required" });
+            try
+            {
+                ProjectRecord? result = null;
+                if (body.DisplayName != null) result = projects.Rename(projId, body.DisplayName);
+                if (body.ShortCode != null) result = projects.SetShortCode(projId, body.ShortCode);
+                if (body.Color != null || body.ClearColor == true)
+                    result = projects.SetColor(projId, body.ClearColor == true ? null : body.Color);
+                if (body.WorkspaceId != null) result = projects.SetWorkspace(projId, body.WorkspaceId, workspaces);
+                if (body.Archived.HasValue) result = projects.SetArchived(projId, body.Archived.Value);
+                if (result == null) result = projects.FindById(projId);
+                return result == null
+                    ? Results.NotFound(new { error = $"Unknown projectId '{projId}'" })
+                    : Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+            catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+        });
     }
+}
+
+/// <summary>F45b — POST /api/workspaces payload.</summary>
+public sealed record RegistryCreateWorkspaceRequest
+{
+    public string DisplayName { get; init; } = "";
+    public string? Color { get; init; }
+}
+
+/// <summary>
+/// F45b — PUT /api/workspaces/{id} payload. Each field is optional; only
+/// non-null fields are applied. Set <see cref="ClearColor"/> = true to clear
+/// the color (cannot be expressed by sending null because null also means
+/// "leave unchanged").
+/// </summary>
+public sealed record UpdateWorkspaceRequest
+{
+    public string? DisplayName { get; init; }
+    public string? Color { get; init; }
+    public bool? ClearColor { get; init; }
+}
+
+/// <summary>F45b — POST /api/workspaces/{id}/reorder payload.</summary>
+public sealed record WorkspaceReorderRequest
+{
+    /// <summary>-1 = move up one slot; +1 = move down one slot.</summary>
+    public int Direction { get; init; }
+}
+
+/// <summary>
+/// F45b — PUT /api/projects/{PROJ-NNN} payload. Same optional-field
+/// semantics as <see cref="UpdateWorkspaceRequest"/>.
+/// </summary>
+public sealed record UpdateProjectRequest
+{
+    public string? DisplayName { get; init; }
+    public string? ShortCode { get; init; }
+    public string? Color { get; init; }
+    public bool? ClearColor { get; init; }
+    public string? WorkspaceId { get; init; }
+    public bool? Archived { get; init; }
 }
 
 /// <summary>

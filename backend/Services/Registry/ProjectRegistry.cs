@@ -246,6 +246,75 @@ public sealed class ProjectRegistry
         }
     }
 
+    /// <summary>F45b — rename a project's display name. Id is immutable.</summary>
+    public ProjectRecord Rename(string id, string newDisplayName)
+    {
+        if (string.IsNullOrWhiteSpace(newDisplayName))
+            throw new ArgumentException("newDisplayName is required", nameof(newDisplayName));
+        return MutateLocked(id, p => p with { DisplayName = newDisplayName.Trim() }, "renamed");
+    }
+
+    /// <summary>
+    /// F45b — change the short code (2-6 chars, A-Z and 0-9). Validates and
+    /// rejects duplicates against other active projects.
+    /// </summary>
+    public ProjectRecord SetShortCode(string id, string newShortCode)
+    {
+        if (string.IsNullOrWhiteSpace(newShortCode))
+            throw new ArgumentException("newShortCode is required", nameof(newShortCode));
+        var normalized = newShortCode.Trim().ToUpperInvariant();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, "^[A-Z0-9]{2,6}$"))
+            throw new ArgumentException(
+                "shortCode must be 2-6 chars of A-Z and 0-9", nameof(newShortCode));
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var collision = _state.Projects.FirstOrDefault(p =>
+                !string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(p.ShortCode, normalized, StringComparison.OrdinalIgnoreCase));
+            if (collision != null)
+                throw new InvalidOperationException(
+                    $"shortCode '{normalized}' is already used by {collision.Id}.");
+        }
+        return MutateLocked(id, p => p with { ShortCode = normalized }, "short-code-set");
+    }
+
+    /// <summary>F45b — set the accent color (CSS hex). Pass null to clear.</summary>
+    public ProjectRecord SetColor(string id, string? color)
+        => MutateLocked(id, p => p with { Color = string.IsNullOrWhiteSpace(color) ? null : color }, "color-set");
+
+    /// <summary>F45b — reassign a project to a different workspace.</summary>
+    public ProjectRecord SetWorkspace(string id, string newWorkspaceId, WorkspaceRegistry workspaces)
+    {
+        if (string.IsNullOrWhiteSpace(newWorkspaceId))
+            throw new ArgumentException("newWorkspaceId is required", nameof(newWorkspaceId));
+        if (workspaces.Find(newWorkspaceId) == null)
+            throw new KeyNotFoundException($"Unknown workspaceId: {newWorkspaceId}");
+        return MutateLocked(id, p => p with { WorkspaceId = newWorkspaceId }, "workspace-set");
+    }
+
+    /// <summary>F45b — archive or un-archive a project.</summary>
+    public ProjectRecord SetArchived(string id, bool archived)
+        => MutateLocked(id, p => p with { Archived = archived }, archived ? "archived" : "unarchived");
+
+    private ProjectRecord MutateLocked(string id, Func<ProjectRecord, ProjectRecord> update, string op)
+    {
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(p =>
+                string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) throw new KeyNotFoundException($"Unknown projectId: {id}");
+            var updated = update(_state.Projects[idx]);
+            var next = _state.Projects.ToList();
+            next[idx] = updated;
+            _state = _state with { Projects = next };
+            PersistLocked();
+            _logger.LogInformation("project-registry-{Op} id={Id}", op, id);
+            return updated;
+        }
+    }
+
     /// <summary>F45b hook: append a fully-formed record (used by the CRUD endpoints).</summary>
     internal ProjectRecord Append(ProjectRecord record)
     {

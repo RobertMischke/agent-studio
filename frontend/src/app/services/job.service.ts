@@ -369,12 +369,48 @@ export class JobService {
   }
 
   /**
-   * F45a / ADR-0037 — list workspaces with their embedded projects.
-   * Mutations (create / rename / delete / reorder / color edit) ship
-   * with F45b; today this endpoint is read-only.
+   * F45a / ADR-0042 — list workspaces with their embedded projects.
+   * Pass `includeArchived: true` to surface archived projects too
+   * (default omits them).
    */
-  getRegistryWorkspaces() {
-    return this.http.get<RegistryWorkspaceListItem[]>(`${this.baseUrl}/workspaces`);
+  getRegistryWorkspaces(opts?: { includeArchived?: boolean }) {
+    const params = opts?.includeArchived
+      ? new HttpParams().set('includeArchived', 'true')
+      : undefined;
+    return this.http.get<RegistryWorkspaceListItem[]>(`${this.baseUrl}/workspaces`, { params });
+  }
+
+  /** F45b — create a workspace. Returns the new record. */
+  createRegistryWorkspace(displayName: string, color?: string | null) {
+    return this.http.post<{ id: string; displayName: string }>(
+      `${this.baseUrl}/workspaces`, { displayName, color: color ?? null });
+  }
+
+  /** F45b — patch a workspace (rename / color edit). */
+  updateRegistryWorkspace(id: string, patch: { displayName?: string; color?: string | null; clearColor?: boolean }) {
+    return this.http.put(`${this.baseUrl}/workspaces/${encodeURIComponent(id)}`, patch);
+  }
+
+  /** F45b — reorder a workspace one slot up or down. */
+  reorderRegistryWorkspace(id: string, direction: -1 | 1) {
+    return this.http.post(`${this.baseUrl}/workspaces/${encodeURIComponent(id)}/reorder`, { direction });
+  }
+
+  /** F45b — delete a workspace. Backend refuses 409 if projects are still attached. */
+  deleteRegistryWorkspace(id: string) {
+    return this.http.delete(`${this.baseUrl}/workspaces/${encodeURIComponent(id)}`);
+  }
+
+  /** F45b — patch a project record (rename / short-code / color / workspace / archived). */
+  updateRegistryProject(projId: string, patch: {
+    displayName?: string;
+    shortCode?: string;
+    color?: string | null;
+    clearColor?: boolean;
+    workspaceId?: string;
+    archived?: boolean;
+  }) {
+    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
   }
 
   /**

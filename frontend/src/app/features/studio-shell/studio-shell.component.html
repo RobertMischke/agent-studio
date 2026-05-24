@@ -553,14 +553,16 @@
                   @if (registryWorkspacesError(); as err) {
                     <div class="studio-empty studio-empty--note"
                          data-testid="settings-workspaces-error">{{ err }}</div>
-                  } @else if (registryWorkspacesLoading() && registryWorkspaces().length === 0) {
+                  }
+                  @if (registryWorkspacesLoading() && registryWorkspaces().length === 0) {
                     <div class="studio-empty studio-empty--note">Loading workspaces…</div>
                   } @else if (registryWorkspaces().length === 0) {
                     <div class="studio-empty studio-empty--note"
                          data-testid="settings-workspaces-empty">
-                      No workspaces registered yet. Add a <code>WatchPaths</code> entry to
-                      <code>backend/appsettings.Local.json</code> and restart the backend; the
-                      first boot will seed the default workspace and one project per entry.
+                      No workspaces registered yet. Use "+ New workspace" below or add a
+                      <code>WatchPaths</code> entry to <code>backend/appsettings.Local.json</code>
+                      and restart the backend; the first boot will seed the default workspace and
+                      one project per entry.
                     </div>
                   } @else {
                     <ul class="studio-settings-workspaces__list"
@@ -568,11 +570,16 @@
                       @for (ws of registryWorkspaces(); track ws.id) {
                         <li class="studio-settings-workspace-row"
                             data-testid="settings-workspace-row"
-                            [attr.data-workspace-id]="ws.id">
+                            [attr.data-workspace-id]="ws.id"
+                            [class.studio-settings-workspace-row--busy]="registryWorkspaceBusyId() === ws.id">
                           <span class="studio-settings-workspace-color"
                                 [style.background]="ws.color || 'var(--studio-fg-muted)'"
                                 aria-hidden="true"></span>
-                          <span class="studio-settings-workspace-name">{{ ws.displayName }}</span>
+                          <button type="button"
+                                  class="studio-settings-workspace-name studio-settings-workspace-name--btn"
+                                  data-testid="settings-workspace-rename"
+                                  [appTooltip]="'Click to rename'"
+                                  (click)="renameRegistryWorkspace(ws)">{{ ws.displayName }}</button>
                           <span class="studio-settings-workspace-id mono">{{ ws.id }}</span>
                           <span class="studio-settings-workspace-count">
                             {{ ws.projects.length }} {{ ws.projects.length === 1 ? 'project' : 'projects' }}
@@ -581,36 +588,107 @@
                             <button type="button"
                                     class="studio-settings-workspace-action"
                                     data-testid="settings-workspace-edit-color"
-                                    [appTooltip]="'Set color — ships with F45b'"
-                                    disabled aria-disabled="true">🎨</button>
+                                    [appTooltip]="'Set color'"
+                                    [disabled]="registryWorkspaceBusyId() === ws.id"
+                                    (click)="editRegistryWorkspaceColor(ws)">🎨</button>
                             <button type="button"
                                     class="studio-settings-workspace-action"
                                     data-testid="settings-workspace-move-up"
-                                    [appTooltip]="'Move up — ships with F45b'"
-                                    disabled aria-disabled="true">▲</button>
+                                    [appTooltip]="'Move up'"
+                                    [disabled]="!canMoveWorkspaceUp(ws) || registryWorkspaceBusyId() === ws.id"
+                                    (click)="moveRegistryWorkspace(ws, -1)">▲</button>
                             <button type="button"
                                     class="studio-settings-workspace-action"
                                     data-testid="settings-workspace-move-down"
-                                    [appTooltip]="'Move down — ships with F45b'"
-                                    disabled aria-disabled="true">▼</button>
+                                    [appTooltip]="'Move down'"
+                                    [disabled]="!canMoveWorkspaceDown(ws) || registryWorkspaceBusyId() === ws.id"
+                                    (click)="moveRegistryWorkspace(ws, 1)">▼</button>
                             <button type="button"
-                                    class="studio-settings-workspace-action"
+                                    class="studio-settings-workspace-action studio-settings-workspace-action--danger"
                                     data-testid="settings-workspace-delete"
                                     [appTooltip]="ws.isDefault
                                       ? 'Default workspace cannot be deleted'
-                                      : 'Delete — ships with F45b'"
-                                    disabled aria-disabled="true">×</button>
+                                      : 'Delete'"
+                                    [disabled]="ws.isDefault || registryWorkspaceBusyId() === ws.id"
+                                    (click)="deleteRegistryWorkspace(ws)">×</button>
                           </div>
+                          @if (ws.projects.length > 0) {
+                            <ul class="studio-settings-projects"
+                                data-testid="settings-projects-list"
+                                [attr.data-workspace-id]="ws.id">
+                              @for (p of ws.projects; track p.id) {
+                                <li class="studio-settings-project-row"
+                                    data-testid="settings-project-row"
+                                    [attr.data-project-id]="p.id"
+                                    [class.studio-settings-project-row--busy]="registryProjectBusyId() === p.id"
+                                    [class.studio-settings-project-row--archived]="p.archived">
+                                  <span class="studio-settings-project-color"
+                                        [style.background]="p.color || 'var(--studio-fg-muted)'"
+                                        aria-hidden="true"></span>
+                                  <span class="studio-settings-project-id mono">{{ p.id }}</span>
+                                  <span class="studio-settings-project-code mono">{{ p.shortCode }}</span>
+                                  <span class="studio-settings-project-name">{{ p.displayName }}</span>
+                                  @if (p.archived) { <span class="studio-settings-project-tag">archived</span> }
+                                  <div class="studio-settings-project-actions">
+                                    <button type="button"
+                                            class="studio-settings-workspace-action"
+                                            data-testid="settings-project-rename"
+                                            [appTooltip]="'Rename project'"
+                                            [disabled]="registryProjectBusyId() === p.id"
+                                            (click)="renameRegistryProject(p.id, p.displayName)">✎</button>
+                                    <button type="button"
+                                            class="studio-settings-workspace-action"
+                                            data-testid="settings-project-short-code"
+                                            [appTooltip]="'Edit short code'"
+                                            [disabled]="registryProjectBusyId() === p.id"
+                                            (click)="editRegistryProjectShortCode(p.id, p.shortCode)">#</button>
+                                    <button type="button"
+                                            class="studio-settings-workspace-action"
+                                            data-testid="settings-project-color"
+                                            [appTooltip]="'Set project color'"
+                                            [disabled]="registryProjectBusyId() === p.id"
+                                            (click)="editRegistryProjectColor(p.id, p.color)">🎨</button>
+                                    <button type="button"
+                                            class="studio-settings-workspace-action"
+                                            data-testid="settings-project-workspace"
+                                            [appTooltip]="'Change workspace'"
+                                            [disabled]="registryProjectBusyId() === p.id"
+                                            (click)="changeRegistryProjectWorkspace(p.id, p.workspaceId)">⇄</button>
+                                    <button type="button"
+                                            class="studio-settings-workspace-action studio-settings-workspace-action--danger"
+                                            data-testid="settings-project-archive"
+                                            [appTooltip]="p.archived ? 'Un-archive' : 'Archive'"
+                                            [disabled]="registryProjectBusyId() === p.id"
+                                            (click)="toggleRegistryProjectArchived(p.id, p.archived)">
+                                      {{ p.archived ? '↺' : '🗄' }}
+                                    </button>
+                                  </div>
+                                </li>
+                              }
+                            </ul>
+                          }
                         </li>
                       }
                     </ul>
-                    <p class="studio-settings-workspaces__note"
-                       data-testid="settings-workspaces-note">
-                      Read-only listing of the F45a registry. Create / rename / reorder /
-                      color / delete and the per-project bulk actions (rename, short-code,
-                      workspace move, archive) ship with F45b. See ADR-0037.
-                    </p>
                   }
+                  <div class="studio-settings-workspaces__footer">
+                    <button type="button"
+                            class="studio-button studio-button--ghost studio-settings-workspaces__create"
+                            data-testid="settings-workspace-create"
+                            (click)="createRegistryWorkspace()">+ New workspace</button>
+                    <button type="button"
+                            class="studio-setting__toggle"
+                            data-testid="settings-workspace-show-archived"
+                            [class.studio-setting__toggle--on]="showArchivedProjects()"
+                            (click)="toggleShowArchivedProjects()">
+                      Archived: {{ showArchivedProjects() ? 'shown' : 'hidden' }}
+                    </button>
+                  </div>
+                  <p class="studio-settings-workspaces__note"
+                     data-testid="settings-workspaces-note">
+                    F45b mutation surface (ADR-0042). Click a workspace or project name to rename;
+                    use the action buttons for color, reorder, workspace move, archive, and delete.
+                  </p>
                 </div>
               </section>
             }

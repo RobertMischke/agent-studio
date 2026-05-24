@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
@@ -119,6 +120,58 @@ public class RegistryBootstrapTests : IDisposable
 
         Assert.True(File.Exists(RegistryPaths.WorkspacesFilePath(_root)));
         Assert.True(File.Exists(RegistryPaths.ProjectsFilePath(_root)));
+    }
+
+    [Fact]
+    public void Run_LogsWarning_WhenWatchPathNameDivergesFromRegistry()
+    {
+        // First boot: WatchPath "Demo A" seeds the registry record.
+        var (workspaces, projects, scanner) = Build(("Demo A", _projectA));
+        RegistryBootstrap.Run(workspaces, projects, scanner, NullLogger<RegistryBootstrapTests>.Instance);
+        var seeded = Assert.Single(projects.List());
+        Assert.Equal("Demo A", seeded.DisplayName);
+
+        // Second boot: operator edited WatchPath name to "Demo A Renamed".
+        // Registry still has "Demo A" → divergence warning + registry wins.
+        var (workspaces2, projects2, scanner2) = Build(("Demo A Renamed", _projectA));
+        var capture = new CapturingLogger();
+        RegistryBootstrap.Run(workspaces2, projects2, scanner2, capture);
+
+        var unchanged = Assert.Single(projects2.List());
+        Assert.Equal("Demo A", unchanged.DisplayName); // registry wins
+        Assert.Contains(capture.Warnings, m => m.Contains("registry-bootstrap-watchpath-name-diverges"));
+    }
+
+    [Fact]
+    public void Run_NoWatchPaths_AllProjectsStillLoadFromRegistry()
+    {
+        // Seed registry via the first boot.
+        var (workspaces, projects, scanner) = Build(("Demo A", _projectA));
+        RegistryBootstrap.Run(workspaces, projects, scanner, NullLogger<RegistryBootstrapTests>.Instance);
+
+        // Operator now wipes WatchPaths from appsettings. Registry stays.
+        var (workspaces2, projects2, scanner2) = Build(); // empty
+        RegistryBootstrap.Run(workspaces2, projects2, scanner2, NullLogger<RegistryBootstrapTests>.Instance);
+
+        var list = projects2.List();
+        Assert.Single(list);
+        Assert.Equal("Demo A", list[0].DisplayName);
+    }
+
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<string> Warnings { get; } = [];
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullDisposable.Instance;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning) Warnings.Add(formatter(state, exception));
+        }
+        private sealed class NullDisposable : IDisposable
+        {
+            public static readonly NullDisposable Instance = new();
+            public void Dispose() { }
+        }
     }
 
     [Fact]

@@ -1103,7 +1103,7 @@
   }
 }
 
-// F47 / ADR-0037 — Settings panel "Workspaces" section. Read-only
+// F47 / ADR-0042 — Settings panel "Workspaces" section. Read-only
 // listing of the registry. Action buttons are disabled until the
 // F45b mutation endpoints ship.
 .studio-settings-workspaces {
@@ -1163,6 +1163,93 @@
   white-space: nowrap;
   grid-row: 1;
   grid-column: 2;
+  text-align: left;
+}
+
+.studio-settings-workspace-name--btn {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+
+  &:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+}
+
+.studio-settings-workspace-row--busy {
+  opacity: 0.6;
+}
+
+.studio-settings-workspaces__create {
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
+.studio-settings-workspaces__footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.studio-settings-projects {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 1px solid var(--studio-border);
+  margin-left: 4px;
+  padding-left: 6px;
+}
+
+.studio-settings-project-row {
+  display: grid;
+  grid-template-columns: 8px auto auto 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+
+  &--archived { opacity: 0.55; }
+  &--busy { opacity: 0.6; }
+}
+
+.studio-settings-project-color {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.studio-settings-project-id,
+.studio-settings-project-code {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+}
+
+.studio-settings-project-name {
+  color: var(--studio-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-settings-project-tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg-muted);
+  padding: 0 4px;
+  background: var(--studio-bg-elevated);
+  border-radius: 6px;
+}
+
+.studio-settings-project-actions {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
 }
 
 .studio-settings-workspace-id {
@@ -1196,8 +1283,7 @@
   width: 22px;
   height: 22px;
   border-radius: 3px;
-  cursor: not-allowed;
-  opacity: 0.45;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1209,6 +1295,11 @@
 
   &[disabled] {
     cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  &--danger:hover:not([disabled]) {
+    color: var(--severity-error, #f43f5e);
   }
 }
 

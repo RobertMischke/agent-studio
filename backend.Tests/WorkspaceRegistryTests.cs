@@ -95,6 +95,150 @@ public class WorkspaceRegistryTests : IDisposable
         Assert.NotEmpty(reg.List());
     }
 
+    // ------------------------------------------------------------------
+    // F45b mutation tests (ADR-0042)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Create_AppendsRecord_AndDerivesSlugId()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+
+        var frontend = reg.Create("Frontend");
+
+        Assert.Equal("ws-frontend", frontend.Id);
+        Assert.Equal("Frontend", frontend.DisplayName);
+        Assert.False(frontend.IsDefault);
+        Assert.Equal(1, frontend.SortOrder); // after default (0)
+        Assert.Equal(2, reg.List().Count);
+    }
+
+    [Fact]
+    public void Create_DisambiguatesSlugOnCollision()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        var first = reg.Create("Frontend");
+        var second = reg.Create("Frontend");
+        Assert.Equal("ws-frontend", first.Id);
+        Assert.Equal("ws-frontend-2", second.Id);
+    }
+
+    [Fact]
+    public void Create_RejectsBlankDisplayName()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        Assert.Throws<ArgumentException>(() => reg.Create(""));
+        Assert.Throws<ArgumentException>(() => reg.Create("   "));
+    }
+
+    [Fact]
+    public void Rename_ChangesDisplayName_KeepsId()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        var ws = reg.Create("Old Name");
+
+        var renamed = reg.Rename(ws.Id, "New Name");
+
+        Assert.Equal(ws.Id, renamed.Id);
+        Assert.Equal("New Name", renamed.DisplayName);
+        Assert.Equal("New Name", reg.Find(ws.Id)!.DisplayName);
+    }
+
+    [Fact]
+    public void SetColor_SetsAndClears()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        var ws = reg.Create("Frontend");
+
+        var coloured = reg.SetColor(ws.Id, "#ff8800");
+        Assert.Equal("#ff8800", coloured.Color);
+
+        var cleared = reg.SetColor(ws.Id, null);
+        Assert.Null(cleared.Color);
+    }
+
+    [Fact]
+    public void Reorder_MovesUp_ReassignsSortOrder()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        reg.Create("First");
+        var second = reg.Create("Second");
+
+        var after = reg.Reorder(second.Id, -1);
+        Assert.Equal(second.Id, after[1].Id); // default still 0; Second now 1; First now 2
+        // After move-up, the order is: ws-default (0), Second (1), First (2)
+        Assert.Equal(DefaultWorkspace.Id, after[0].Id);
+        Assert.Equal(second.Id, after[1].Id);
+        Assert.Equal("First", after[2].DisplayName);
+        // SortOrder is reassigned densely:
+        Assert.Equal([0, 1, 2], after.Select(w => w.SortOrder));
+    }
+
+    [Fact]
+    public void Reorder_AtBoundary_IsNoop()
+    {
+        var reg = Build();
+        var def = reg.EnsureDefaultWorkspace();
+        var after = reg.Reorder(def.Id, -1);
+        Assert.Equal(def.Id, after[0].Id);
+    }
+
+    [Fact]
+    public void Reorder_RejectsInvalidDirection()
+    {
+        var reg = Build();
+        var ws = reg.EnsureDefaultWorkspace();
+        Assert.Throws<ArgumentException>(() => reg.Reorder(ws.Id, 0));
+        Assert.Throws<ArgumentException>(() => reg.Reorder(ws.Id, 2));
+    }
+
+    [Fact]
+    public void Delete_RemovesRecord()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        var ws = reg.Create("Frontend");
+        var projects = BuildProjectRegistry();
+
+        reg.Delete(ws.Id, projects);
+
+        Assert.Null(reg.Find(ws.Id));
+    }
+
+    [Fact]
+    public void Delete_RefusesDefaultWorkspace()
+    {
+        var reg = Build();
+        var def = reg.EnsureDefaultWorkspace();
+        var projects = BuildProjectRegistry();
+
+        Assert.Throws<InvalidOperationException>(() => reg.Delete(def.Id, projects));
+    }
+
+    [Fact]
+    public void Delete_RefusesWhenProjectsAssigned()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        var ws = reg.Create("Frontend");
+        var projects = BuildProjectRegistry();
+        projects.EnsureProjectForStorage(
+            storageLocation: Path.Combine(_root, "proj-a"),
+            initialDisplayName: "Proj A",
+            workspaceId: ws.Id);
+
+        Assert.Throws<InvalidOperationException>(() => reg.Delete(ws.Id, projects));
+    }
+
+    private ProjectRegistry BuildProjectRegistry() =>
+        new(_config, NullLogger<ProjectRegistry>.Instance);
+
     [Fact]
     public void List_SortsBySortOrderThenDisplayName()
     {

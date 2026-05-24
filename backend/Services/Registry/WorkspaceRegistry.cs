@@ -155,6 +155,147 @@ public sealed class WorkspaceRegistry
         }
     }
 
+    /// <summary>
+    /// F45b — create a new workspace with the given display name and optional color.
+    /// SortOrder is assigned to the end of the list. Id is derived from the display
+    /// name with a slugify + uniqueness pass (e.g. <c>ws-frontend</c>,
+    /// <c>ws-frontend-2</c> on collision). The default workspace is not affected.
+    /// Returns the persisted record. Throws <see cref="ArgumentException"/> when
+    /// the name is empty or contains only whitespace.
+    /// </summary>
+    public WorkspaceRecord Create(string displayName, string? color = null, TimeProvider? clock = null)
+    {
+        if (string.IsNullOrWhiteSpace(displayName))
+            throw new ArgumentException("displayName is required", nameof(displayName));
+        clock ??= TimeProvider.System;
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var id = AllocateWorkspaceIdLocked(displayName);
+            var record = new WorkspaceRecord
+            {
+                Id = id,
+                DisplayName = displayName.Trim(),
+                SortOrder = _state.Workspaces.Count,
+                IsDefault = false,
+                Color = string.IsNullOrWhiteSpace(color) ? null : color,
+                CreatedAt = clock.GetUtcNow().UtcDateTime,
+            };
+            _state = _state with { Workspaces = [.. _state.Workspaces, record] };
+            PersistLocked();
+            _logger.LogInformation(
+                "workspace-registry-created id={Id} displayName={DisplayName}",
+                record.Id, record.DisplayName);
+            return record;
+        }
+    }
+
+    /// <summary>F45b — rename a workspace. The id never changes.</summary>
+    public WorkspaceRecord Rename(string id, string newDisplayName)
+    {
+        if (string.IsNullOrWhiteSpace(newDisplayName))
+            throw new ArgumentException("newDisplayName is required", nameof(newDisplayName));
+        return MutateLocked(id, w => w with { DisplayName = newDisplayName.Trim() }, "renamed");
+    }
+
+    /// <summary>F45b — set the accent color (CSS hex string). Pass null to clear.</summary>
+    public WorkspaceRecord SetColor(string id, string? color)
+        => MutateLocked(id, w => w with { Color = string.IsNullOrWhiteSpace(color) ? null : color }, "color-set");
+
+    /// <summary>
+    /// F45b — move a workspace one slot up or down in the sort order.
+    /// <paramref name="direction"/> is -1 (up) or +1 (down). No-op if the
+    /// workspace is already at the boundary.
+    /// </summary>
+    public List<WorkspaceRecord> Reorder(string id, int direction)
+    {
+        if (direction != -1 && direction != 1)
+            throw new ArgumentException("direction must be -1 or +1", nameof(direction));
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var sorted = _state.Workspaces
+                .OrderBy(w => w.SortOrder)
+                .ThenBy(w => w.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var idx = sorted.FindIndex(w => string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) throw new KeyNotFoundException($"Unknown workspaceId: {id}");
+            var target = idx + direction;
+            if (target < 0 || target >= sorted.Count) return sorted;
+            (sorted[idx], sorted[target]) = (sorted[target], sorted[idx]);
+            for (var i = 0; i < sorted.Count; i++) sorted[i] = sorted[i] with { SortOrder = i };
+            _state = _state with { Workspaces = sorted };
+            PersistLocked();
+            _logger.LogInformation("workspace-registry-reordered id={Id} dir={Dir}", id, direction);
+            return sorted;
+        }
+    }
+
+    /// <summary>
+    /// F45b — delete a workspace. Refuses to delete the default workspace and
+    /// refuses when projects are still assigned (caller should reassign first
+    /// via <see cref="ProjectRegistry.SetWorkspace"/>).
+    /// </summary>
+    public void Delete(string id, ProjectRegistry projects)
+    {
+        EnsureLoaded();
+        projects.EnsureLoaded();
+        lock (_gate)
+        {
+            var existing = _state.Workspaces.FirstOrDefault(w =>
+                string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (existing == null) throw new KeyNotFoundException($"Unknown workspaceId: {id}");
+            if (existing.IsDefault)
+                throw new InvalidOperationException("Default workspace cannot be deleted");
+            var assigned = projects.List().Count(p =>
+                string.Equals(p.WorkspaceId, id, StringComparison.OrdinalIgnoreCase) && !p.Archived);
+            if (assigned > 0)
+                throw new InvalidOperationException(
+                    $"Workspace {id} still has {assigned} active project(s); reassign them before deleting.");
+            _state = _state with
+            {
+                Workspaces = [.. _state.Workspaces.Where(w =>
+                    !string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase))],
+            };
+            PersistLocked();
+            _logger.LogInformation("workspace-registry-deleted id={Id}", id);
+        }
+    }
+
+    private WorkspaceRecord MutateLocked(string id, Func<WorkspaceRecord, WorkspaceRecord> update, string op)
+    {
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Workspaces.FindIndex(w =>
+                string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) throw new KeyNotFoundException($"Unknown workspaceId: {id}");
+            var updated = update(_state.Workspaces[idx]);
+            var next = _state.Workspaces.ToList();
+            next[idx] = updated;
+            _state = _state with { Workspaces = next };
+            PersistLocked();
+            _logger.LogInformation("workspace-registry-{Op} id={Id}", op, id);
+            return updated;
+        }
+    }
+
+    private string AllocateWorkspaceIdLocked(string displayName)
+    {
+        var baseSlug = "ws-" + new string(displayName.Trim().ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray())
+            .Trim('-');
+        if (baseSlug == "ws-") baseSlug = "ws-workspace";
+        while (baseSlug.Contains("--")) baseSlug = baseSlug.Replace("--", "-");
+        var candidate = baseSlug;
+        var n = 2;
+        while (_state.Workspaces.Any(w => string.Equals(w.Id, candidate, StringComparison.OrdinalIgnoreCase)))
+        {
+            candidate = $"{baseSlug}-{n++}";
+        }
+        return candidate;
+    }
+
     private void PersistLocked()
     {
         if (_taskRepositoryRoot == null) return;
