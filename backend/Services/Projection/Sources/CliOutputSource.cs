@@ -134,11 +134,12 @@ public sealed partial class CliOutputSource : IConversationEventSource
     {
         if (WatchdogPrefix().IsMatch(text))
         {
+            // Default severity for any [watchdog] message is Warn: the watchdog
+            // only logs when something is off (quiet stream, missing capture).
+            // Escalate to Error on confirmed kills.
             var sev = text.Contains("killed", StringComparison.OrdinalIgnoreCase)
                 ? ProjectedEventSeverity.Error
-                : text.Contains("no output for", StringComparison.OrdinalIgnoreCase)
-                    ? ProjectedEventSeverity.Warn
-                    : ProjectedEventSeverity.Info;
+                : ProjectedEventSeverity.Warn;
             return new RawSourceEvent
             {
                 Id = id,
@@ -217,6 +218,12 @@ public sealed partial class CliOutputSource : IConversationEventSource
         if (string.IsNullOrEmpty(text)) return text;
         if (!text.Contains('\\')) return text;
 
+        // Only decode when the line carries the F22 trigger: a literal `\n`
+        // somewhere in the body. Without that signal we assume the line is
+        // ordinary text (e.g. a Windows path like C:\Users\rmisc\file.txt)
+        // and a blanket sweep over \r / \t / \\ would corrupt it.
+        if (!ContainsLiteralBackslashN(text)) return text;
+
         // Walk char-by-char so we never double-decode a real backslash that
         // the user wrote intentionally (e.g. a Windows path inside a code
         // fence). The sequence \\ collapses to a single backslash; anything
@@ -242,6 +249,15 @@ public sealed partial class CliOutputSource : IConversationEventSource
             }
         }
         return sb.ToString();
+    }
+
+    private static bool ContainsLiteralBackslashN(string text)
+    {
+        for (int i = 0; i < text.Length - 1; i++)
+        {
+            if (text[i] == '\\' && text[i + 1] == 'n') return true;
+        }
+        return false;
     }
 
     private static string TrimToSingleLine(string s)
