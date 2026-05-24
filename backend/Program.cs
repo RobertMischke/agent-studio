@@ -11,6 +11,8 @@ using OrchestratorApi.Services.Configuration;
 using OrchestratorApi.Services.Diagnostics;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.ProjectChat;
+using OrchestratorApi.Services.Projection;
+using OrchestratorApi.Services.Projection.Sources;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
@@ -243,6 +245,21 @@ builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
+// F22: server-rendered conversation projection. The projector serves the
+// GET /api/jobs/{id}/conversation endpoint and (when the feature flag is
+// on) broadcasts deltas over JobHub. Sources are registered so the
+// IEnumerable<IConversationEventSource> ctor gets a deterministic order.
+builder.Services.AddSingleton<IMarkdownRenderer, MarkdigRenderer>();
+var projectionCacheSize = int.TryParse(builder.Configuration["ConversationProjection:CacheSize"], out var pcs) ? pcs : 50;
+builder.Services.AddSingleton(new ConversationCache(projectionCacheSize));
+builder.Services.AddSingleton<IConversationEventSource, CliOutputSource>();
+builder.Services.AddSingleton<IConversationEventSource, OrchestratorSource>();
+builder.Services.AddSingleton<IConversationEventSource, AutoReviewSource>();
+builder.Services.AddSingleton<IConversationEventSource, RunnerEventSource>();
+builder.Services.AddSingleton<IConversationEventSource, SystemEventSource>();
+builder.Services.AddSingleton<ConversationProjector>();
+builder.Services.AddSingleton<SourceWatcher>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SourceWatcher>());
 // Companion app sync (ADR-0018). Default-off; the HostedService loop exits
 // immediately when Companion:Enabled is false. Bound from appsettings*.json.
 builder.Services.Configure<CompanionSyncOptions>(builder.Configuration.GetSection(CompanionSyncOptions.SectionName));
@@ -471,6 +488,7 @@ taskRunner.OnRunnerStatusChanged += (projectName, status) =>
     hubContext.Clients.All.SendAsync("runnerStatusChanged", projectName, status.Mode, status.ActiveJobId);
 
 app.MapAllEndpoints();
+app.MapConversationEndpoints();
 app.MapHub<JobHub>("/hubs/jobs");
 
 app.Run();
