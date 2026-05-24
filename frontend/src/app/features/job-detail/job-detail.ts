@@ -166,7 +166,20 @@ export class JobDetailComponent implements OnDestroy {
 
   /** Lane-pager snapshot state for the header (read-only facades). */
   private readonly lanePager = inject(LanePagerService);
-  readonly pagerPosition = this.lanePager.position;
+  /**
+   * Pager position for the current job. Returns the 1-based index when
+   * the job is still part of the snapshot, or 0 when the job has left
+   * the captured iteration (external lane change). The header template
+   * renders 0 as "—" so the user sees "— of N" instead of a stale index.
+   */
+  readonly pagerPosition = computed(() => {
+    const snap = this.lanePager.snapshot();
+    const currentJobKey = this.detail()?.info.jobKey;
+    if (!snap || !currentJobKey) return 0;
+    const idx = snap.jobs.findIndex(j => j.jobKey === currentJobKey);
+    if (idx < 0) return 0;
+    return idx + 1;
+  });
   readonly pagerTotal = this.lanePager.total;
   readonly pagerCanPrev = this.lanePager.canPrev;
   readonly pagerCanNext = this.lanePager.canNext;

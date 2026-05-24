@@ -4,6 +4,7 @@ import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { JobSelectionService } from './job-selection.service';
+import { LanePagerService, LANE_LABELS } from './lane-pager.service';
 
 /**
  * Cycle 10c job-detail-feature controller: orchestrates the triage
@@ -26,6 +27,7 @@ export class TriageController {
   private readonly errorDialog = inject(ErrorDialogService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly jobSelection = inject(JobSelectionService);
+  private readonly lanePager = inject(LanePagerService);
 
   /**
    * Invoked at every triage decision so the JobDetailComponent's
@@ -262,6 +264,40 @@ export class TriageController {
     // Lane cleared — close the panel and toast.
     this.jobSelection.closeDetail();
     this.jobSelection.showTriageToast('Lane cleared.');
+  }
+
+  // ---------- external lane change (stay on current job) ----------
+
+  /**
+   * Called when an open job's lane changes via an external trigger
+   * (runner auto-pickup, another client, state-machine transition).
+   * Keeps the user on the current job; only shrinks the pager snapshot
+   * by removing the job that just left the captured lane. The pager
+   * total decrements by one; the displayed task stays put.
+   */
+  handleExternalLaneChange(originLane: string, jobKey: string): void {
+    const snap = this.lanePager.snapshot();
+    if (snap && snap.jobs.some(j => j.jobKey === jobKey)) {
+      this.lanePager.dropFromSnapshot(jobKey);
+    }
+
+    const sel = this.jobSelection.selected();
+    const newState = sel?.info.state;
+    const newStateLabel = newState
+      ? (LANE_LABELS[newState] ?? newState)
+      : 'another lane';
+
+    // Update triageLaneState to the job's new state so the shell's
+    // external-move effect does not re-fire on the next tick. The pager
+    // snapshot still records the *original* lane for Prev/Next navigation.
+    this.jobSelection.triageLaneState = newState ?? originLane;
+
+    const remaining = this.lanePager.snapshot()?.jobs.length ?? 0;
+    if (remaining > 0) {
+      this.jobSelection.showTriageToast(
+        `Lane changed to ${newStateLabel}. You're still viewing this task.`,
+      );
+    }
   }
 
   // ---------- post-review helper ----------

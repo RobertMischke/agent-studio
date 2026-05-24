@@ -63,7 +63,11 @@ export class DetailHeaderComponent {
     const total = this.pagerTotal();
     if (total <= 0) return '';
     const lane = this.pagerLaneLabel() || 'this lane';
-    return `Iterating jobs in the ${lane} lane. Showing job ${this.pagerPosition()} of ${total} captured when you entered this view.`;
+    const pos = this.pagerPosition();
+    if (pos <= 0) {
+      return `This task has left the ${lane} lane. ${total} job${total === 1 ? '' : 's'} remain in the captured iteration.`;
+    }
+    return `Iterating jobs in the ${lane} lane. Showing job ${pos} of ${total} captured when you entered this view.`;
   });
 
   /**

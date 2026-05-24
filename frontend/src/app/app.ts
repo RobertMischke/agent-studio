@@ -911,21 +911,18 @@ export class App implements OnInit, OnDestroy {
       });
     });
 
-    // Triage auto-advance on external move: when the open job's state
-    // diverges from `triageLaneState` and we did NOT initiate the move
-    // (no actingId in flight), treat it as if the user had hit "next" and
-    // hop to the next peer in the original lane. The toast surfaces the
-    // hand-off so the user knows what happened.
+    // External lane change: when the open job's state diverges from
+    // `triageLaneState` and we did NOT initiate the move (no actingId
+    // in flight), keep the user on this job but shrink the pager
+    // snapshot so Prev/Next navigate the remaining peers.
     effect(() => {
       const sel = this.selectedJob();
       const lane = this.jobSelection.triageLaneState;
       if (!sel || !lane) return;
       if (sel.info.state === lane) return;
       if (this.jobDetailRef?.triageActingId() != null) return;
-      const peers = untracked(() => this.triageLanePeers());
-      // The job no longer matches the lane it was being triaged in; advance.
       untracked(() =>
-        this.triage.advanceToNextInLane(lane, sel.info.jobKey, peers, /*external*/ true),
+        this.triage.handleExternalLaneChange(lane, sel.info.jobKey),
       );
     });
   }

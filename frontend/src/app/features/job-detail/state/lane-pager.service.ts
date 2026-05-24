@@ -31,7 +31,7 @@ export interface LanePagerSnapshot {
 
 const STORAGE_KEY = 'app:lanePager:v1';
 
-const LANE_LABELS: Record<string, string> = {
+export const LANE_LABELS: Record<string, string> = {
   '0-backlog':              'Backlog',
   '1-preparation':          'Preparation',
   '1a-orchestrator-prep':   'Orchestrator Prep',
@@ -155,6 +155,30 @@ export class LanePagerService {
     this.snapshot.set(updated);
     this.persist(updated);
     return newJobs[newIdx];
+  }
+
+  /**
+   * Shrink the snapshot by removing `jobKey` without navigating.
+   * Unlike `removeAndAdvance`, the view stays on the current job even
+   * though it is no longer part of the captured iteration (e.g. an
+   * external lane change while the user is reading). The snapshot's
+   * `index` clamps to `length - 1` so a subsequent Prev/Next step
+   * lands on a valid peer. Clears the snapshot when it becomes empty.
+   */
+  dropFromSnapshot(jobKey: string): void {
+    const s = this.snapshot();
+    if (!s) return;
+    const idx = s.jobs.findIndex(j => j.jobKey === jobKey);
+    if (idx < 0) return;
+    const newJobs = [...s.jobs.slice(0, idx), ...s.jobs.slice(idx + 1)];
+    if (newJobs.length === 0) {
+      this.clear();
+      return;
+    }
+    const newIdx = Math.min(s.index, newJobs.length - 1);
+    const updated: LanePagerSnapshot = { ...s, jobs: newJobs, index: newIdx };
+    this.snapshot.set(updated);
+    this.persist(updated);
   }
 
   /**

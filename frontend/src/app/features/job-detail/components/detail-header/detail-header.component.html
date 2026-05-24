@@ -65,7 +65,7 @@
               (click)="pagerPrev.emit()">‹</button>
       <span class="detail__pager-count"
             data-testid="lane-pager-count"
-            aria-live="polite">{{ pagerPosition() }} / {{ pagerTotal() }}</span>
+            aria-live="polite">{{ pagerPosition() > 0 ? pagerPosition() : '—' }} / {{ pagerTotal() }}</span>
       <button type="button"
               class="detail__pager-btn"
               data-testid="lane-pager-next"
