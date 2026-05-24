@@ -248,6 +248,17 @@ export class TriageController {
       if (external) this.jobSelection.showTriageToast('Job was moved externally; advancing.');
       return;
     }
+    if (external) {
+      // External move (e.g. orchestrator decision) cleared the lane:
+      // follow the job to its new state instead of closing the panel.
+      // The user was looking at this task and wants to see the outcome,
+      // not have the panel vanish from under them.
+      const sel = this.jobSelection.selected();
+      if (sel) {
+        this.jobSelection.triageLaneState = sel.info.state;
+        return;
+      }
+    }
     // Lane cleared — close the panel and toast.
     this.jobSelection.closeDetail();
     this.jobSelection.showTriageToast('Lane cleared.');
