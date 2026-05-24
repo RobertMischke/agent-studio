@@ -40,6 +40,17 @@ export class UiPreferencesService {
     parseInt(localStorage.getItem(STORAGE_KEY_SIDE_SHEET_WIDTH) ?? '280'),
   );
 
+  /**
+   * F43: per-tab override that beats the rail-open auto-compact rule
+   * inside `effectiveCompactCards` (lives in `app.ts`). Set when the
+   * user explicitly toggles to "Full" while the orchestrator rail is
+   * open; cleared the next time the rail closes (handled by the shell).
+   * Not persisted: a fresh tab/reload should re-engage the rail rule.
+   * Not cross-tab synced (would surprise the second tab whose rail is
+   * still closed).
+   */
+  readonly userOverridesCompactWhileRail = signal<boolean>(false);
+
   private resizing = false;
 
   constructor() {
@@ -81,9 +92,18 @@ export class UiPreferencesService {
   }
 
   toggleCompactCards(): void {
-    const next = !this.compactCards();
-    this.compactCards.set(next);
-    localStorage.setItem(STORAGE_KEY_COMPACT_CARDS, next ? '1' : '0');
+    this.setCompactCards(!this.compactCards());
+  }
+
+  /**
+   * F43: explicit setter so callers that already know the intended
+   * next value (e.g. the shell's rail-aware toggle that has to set the
+   * pref to the user's intended effective state, not just flip the
+   * current pref) don't have to read-then-toggle.
+   */
+  setCompactCards(value: boolean): void {
+    this.compactCards.set(value);
+    localStorage.setItem(STORAGE_KEY_COMPACT_CARDS, value ? '1' : '0');
   }
 
   /**

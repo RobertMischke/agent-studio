@@ -1,21 +1,27 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test';
 
 /**
- * F24 regression — operator-reported 2026-05-22.
+ * F24 + F43 regression.
  *
- * Two issues locked here:
+ * Two pieces locked here:
  *
- *  1. Card-density toggle changes did not propagate to a second open
- *     tab. localStorage was updated by the writing tab, but the
- *     sibling tab's UiPreferencesService signal stayed at the previous
- *     value until F5. UiPreferencesService now listens for `storage`
- *     events and mirrors the new value.
+ *  1. F24 — Card-density toggle changes propagate to a second open
+ *     tab. localStorage was the writing channel, but the sibling tab's
+ *     UiPreferencesService signal stayed at the previous value until
+ *     F5. The service now listens for `storage` events and mirrors the
+ *     new value.
  *
- *  2. With the orchestrator side-sheet open, the shell forces compact
- *     rendering regardless of the persisted preference (F4). Clicking
- *     the toggle then looked broken: pref flipped to "full" but the
- *     cards stayed compact. The toggle now surfaces an info toast that
- *     spells out the override.
+ *  2. F43 — With the orchestrator side-sheet open, the shell still
+ *     auto-engages compact rendering, BUT the toolbar toggle now
+ *     reflects + responds to the user's intent. Clicking "Compact" →
+ *     "Full" while the rail is open actually flips the cards to Full
+ *     (the user's explicit override beats the rail-forced default for
+ *     the rest of the rail-open session). Closing and re-opening the
+ *     rail re-engages the auto-compact rule.
+ *
+ * Pre-F43 the click only updated the persisted pref and surfaced an
+ * info toast hinting that the rail was holding compact in place. That
+ * is no longer the behaviour — the toggle does what its label promises.
  *
  * The spec runs against whatever board state the configured backend
  * exposes. Card-density assertions that need actual cards on the board
@@ -112,7 +118,7 @@ test.describe('F24 compact cards: cross-tab + rail-override feedback', () => {
     }
   });
 
-  test('toggle while orchestrator rail open shows info toast + writes the pref', async ({ page }) => {
+  test('F43: toggle while rail open flips cards back to Full (user override beats rail)', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1000 });
     await resetCompactPref(page);
     await gotoBoard(page);
@@ -130,28 +136,50 @@ test.describe('F24 compact cards: cross-tab + rail-override feedback', () => {
     const rail = page.locator('app-orchestrator-side-sheet');
     await expect(rail).toHaveClass(/is-open/, { timeout: 5_000 });
 
-    // Make the toggle starts at "Full".
+    // Persistent pref starts at Full. The rail-forced auto-compact rule
+    // means the toggle visually reads "Compact" right now even though
+    // localStorage isn't set yet.
     expect(await page.evaluate(() => localStorage.getItem('compactCards'))).not.toBe('1');
 
-    // Click the toggle once — pref flips to compact. No toast yet, because
-    // pref + effective both say "compact" (the rail-forced value matches).
     const toggle = await compactToggle(page);
-    await toggle.click();
-    expect(await page.evaluate(() => localStorage.getItem('compactCards'))).toBe('1');
-    // Allow the optimistic notification settle window; we just assert the
-    // negative case here, no toast.
-    await page.waitForTimeout(150);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toContainText('Compact');
 
-    // Click again to switch to "Full" while rail is still open. NOW the
-    // effective value (compact, forced by rail) diverges from the pref
-    // (full). The shell should surface the divergence via an info toast.
+    // Click while rail is open → the user override fires. The toggle
+    // must flip to "Full" *visually* AND the pref must land at '0'.
+    // Pre-F43 this would have stayed on "Compact" and surfaced a toast;
+    // both of those are now regressions, so assert them explicitly.
     await toggle.click();
+
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toContainText('Full');
     expect(await page.evaluate(() => localStorage.getItem('compactCards'))).toBe('0');
 
-    const toast = page.getByTestId('notification-info').last();
-    await expect(toast).toBeVisible({ timeout: 3_000 });
-    await expect(toast).toContainText(/orchestrator rail|rail/i);
-    await expect(toast.getByTestId('notification-title')).toContainText(/Preference saved/i);
-    await page.screenshot({ path: 'test-results/f24-rail-override-toast.png', fullPage: false });
+    // No "Preference saved" toast. The pre-F43 path surfaced one when
+    // pref diverged from effective; the new path doesn't because
+    // effective now matches the user's intent.
+    await page.waitForTimeout(250);
+    const overrideToast = page.getByTestId('notification-info').filter({ hasText: /rail/i });
+    expect(await overrideToast.count()).toBe(0);
+
+    await page.screenshot({ path: 'test-results/f43-rail-override-full.png', fullPage: false });
+
+    // Close the rail → the override clears. The pref is still '0' so
+    // effective stays at Full (no surprise to the user).
+    await chatButton.click();
+    await expect(rail).not.toHaveClass(/is-open/, { timeout: 5_000 });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(toggle).toContainText('Full');
+
+    // Re-open the rail → the auto-compact rule re-engages because the
+    // override cleared on close. Cards become compact again, toggle
+    // visual matches.
+    await chatButton.click();
+    await expect(rail).toHaveClass(/is-open/, { timeout: 5_000 });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toContainText('Compact');
+    // Pref didn't change because the user didn't click anything in
+    // between. The rail rule alone is doing the work.
+    expect(await page.evaluate(() => localStorage.getItem('compactCards'))).toBe('0');
   });
 });

@@ -43,6 +43,43 @@ describe('UiPreferencesService', () => {
     expect(localStorage.getItem('compactCards')).toBe('0');
   });
 
+  it('setCompactCards persists an explicit value (F43 callers that know the next effective state)', () => {
+    const svc = TestBed.inject(UiPreferencesService);
+    svc.setCompactCards(true);
+    expect(svc.compactCards()).toBe(true);
+    expect(localStorage.getItem('compactCards')).toBe('1');
+    svc.setCompactCards(false);
+    expect(svc.compactCards()).toBe(false);
+    expect(localStorage.getItem('compactCards')).toBe('0');
+    // Idempotent: setting the same value twice keeps both the signal
+    // and the storage row stable.
+    svc.setCompactCards(false);
+    expect(svc.compactCards()).toBe(false);
+    expect(localStorage.getItem('compactCards')).toBe('0');
+  });
+
+  it('userOverridesCompactWhileRail is in-memory only, not persisted, not storage-synced (F43)', () => {
+    const svc = TestBed.inject(UiPreferencesService);
+    // Default: no override.
+    expect(svc.userOverridesCompactWhileRail()).toBe(false);
+    // Set it — signal updates, but no localStorage row is written. A
+    // sibling tab whose rail is closed should not inherit the override.
+    svc.userOverridesCompactWhileRail.set(true);
+    expect(svc.userOverridesCompactWhileRail()).toBe(true);
+    expect(localStorage.getItem('userOverridesCompactWhileRail')).toBeNull();
+    // A sibling tab dispatching a storage event for the override key is
+    // ignored — the service only mirrors the documented persistent keys.
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'userOverridesCompactWhileRail',
+        newValue: '0',
+        oldValue: '1',
+        storageArea: localStorage,
+      }),
+    );
+    expect(svc.userOverridesCompactWhileRail()).toBe(true);
+  });
+
   it('mirrors a sibling tab compactCards write via the storage event', () => {
     const svc = TestBed.inject(UiPreferencesService);
     expect(svc.compactCards()).toBe(false);

@@ -311,12 +311,30 @@ export class App implements OnInit, OnDestroy {
    * orchestrator rail is open, we force-engage compact rendering so
    * the lanes don't clip behind the 640 px panel. Closing the rail
    * reverts to the persisted preference automatically.
+   *
+   * F43: the rail-forced compact rule yields when the user explicitly
+   * toggles to "Full" while the rail is open (`userOverridesCompactWhileRail`).
+   * The override clears the next time the rail closes (see the
+   * `clearCompactOverrideOnRailClose` effect below) so re-opening the
+   * rail re-engages the auto-compact rule.
    */
   readonly effectiveCompactCards = computed<boolean>(() => {
     if (this.compactCards()) return true;
-    const ref = this.orchSideSheetSig();
-    return ref?.open() ?? false;
+    const railOpen = this.orchSideSheetSig()?.open() ?? false;
+    if (!railOpen) return false;
+    return !this.uiPrefs.userOverridesCompactWhileRail();
   });
+
+  /**
+   * F43: tooltip text for the toolbar compact toggle. Derived from
+   * `effectiveCompactCards` (not the persisted pref) so the hover text
+   * always matches what the user actually sees on the cards: when the
+   * rail forces compact, the tooltip still says "Show full cards"
+   * because the next click will actually flip the cards to Full.
+   */
+  readonly compactToggleTooltip = computed<string>(() =>
+    this.effectiveCompactCards() ? 'Show full cards' : 'Show compact cards (titles only)',
+  );
   readonly showE2ECleanup = signal(false);
   readonly devToolsMenuOpen = signal(false);
   /**
@@ -874,6 +892,22 @@ export class App implements OnInit, OnDestroy {
         this.jobService.getDetail(latest.id, latest.watchPath).subscribe({
           next: (detail) => this.jobSelection.setSelectedFromAdvance(detail, token),
         });
+      });
+    });
+
+    // F43: clear the user's rail-open compact override the moment the
+    // rail closes. Without this, opening the rail a second time would
+    // skip the auto-compact rule because the override flag from the
+    // previous rail-open session was still latched. The override is
+    // intentionally per-tab and ephemeral.
+    effect(() => {
+      const ref = this.orchSideSheetSig();
+      const railOpen = ref?.open() ?? false;
+      if (railOpen) return;
+      untracked(() => {
+        if (this.uiPrefs.userOverridesCompactWhileRail()) {
+          this.uiPrefs.userOverridesCompactWhileRail.set(false);
+        }
       });
     });
 
@@ -1536,23 +1570,28 @@ export class App implements OnInit, OnDestroy {
     this.uiPrefs.setTaskNavCollapsed(collapsed);
   }
   /**
-   * F24: toggle the card-density preference. When the orchestrator
-   * side-sheet is open the `effectiveCompactCards` computed forces
-   * compact rendering regardless of the pref (see `effectiveCompactCards`
-   * above), which made the toggle look broken: clicking "Full" updated
-   * `compactCards()` but the cards stayed compact. Surface that
-   * divergence as an info toast so the operator knows the pref WAS
-   * saved and that closing the rail will reveal the change.
+   * F43: toggle the card-density preference, honouring the user's
+   * intent even when the orchestrator rail is auto-forcing compact.
+   *
+   * Pre-F43 the toolbar toggle just flipped the persisted pref. With
+   * the rail open the pref no longer drove the effective density, so
+   * "Use full cards" felt broken: pref flipped to false, cards stayed
+   * compact, only a toast hinted that the click had landed somewhere.
+   *
+   * Now: write the pref to the value the user *intends* to see
+   * (`nextEffective`), and register a per-tab override that overrides
+   * the rail-forced compact rule for the rest of this rail-open
+   * session. The override is cleared by the effect below when the
+   * rail closes so re-opening it re-engages the auto-compact rule.
    */
   toggleCompactCards(): void {
-    this.uiPrefs.toggleCompactCards();
-    const pref = this.uiPrefs.compactCards();
-    const effective = this.effectiveCompactCards();
-    if (pref !== effective) {
-      this.notifications.info(
-        'Cards stay compact while the orchestrator rail is open. Close the rail to apply the Full preference.',
-        'Preference saved',
-      );
+    const railOpen = this.orchSideSheetSig()?.open() ?? false;
+    const nextEffective = !this.effectiveCompactCards();
+    this.uiPrefs.setCompactCards(nextEffective);
+    if (railOpen && !nextEffective) {
+      this.uiPrefs.userOverridesCompactWhileRail.set(true);
+    } else if (!railOpen) {
+      this.uiPrefs.userOverridesCompactWhileRail.set(false);
     }
   }
   startResize(event: MouseEvent): void {

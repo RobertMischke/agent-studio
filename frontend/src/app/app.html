@@ -70,7 +70,7 @@
           [activeTagIds]="activeTagFilter()"
           [owners]="clientService.clients()"
           [activeOwnerId]="activeClientFilter()"
-          [compactCards]="compactCards()"
+          [compactCards]="effectiveCompactCards()"
           [hitCount]="filteredJobCount()"
           [totalCount]="totalJobCount()"
           [hasAnyFilter]="hasActiveFiltersOrSearch()"
@@ -87,13 +87,13 @@
           @if (studioTabState.activeTab()?.kind === 'board') {
             <button type="button"
                     class="studio-tab-action"
-                    [class.studio-tab-action--active]="compactCards()"
-                    [attr.aria-pressed]="compactCards()"
+                    [class.studio-tab-action--active]="effectiveCompactCards()"
+                    [attr.aria-pressed]="effectiveCompactCards()"
                     data-testid="studio-board-compact-toggle"
-                    [appTooltip]="compactCards() ? 'Show full cards' : 'Show compact cards (titles only)'"
+                    [appTooltip]="compactToggleTooltip()"
                     (click)="toggleCompactCards()">
-              <span aria-hidden="true">{{ compactCards() ? '▤' : '▥' }}</span>
-              <span>{{ compactCards() ? 'Compact' : 'Full' }}</span>
+              <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
+              <span>{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
             </button>
             <button type="button"
                     class="studio-tab-action studio-tab-action--primary"
@@ -421,12 +421,12 @@
             (toggleTag)="toggleTagFilter($event)" />
           <button class="btn btn--compact-toggle"
                   data-testid="compact-cards-toggle"
-                  [class.btn--compact-toggle--active]="compactCards()"
-                  [attr.aria-pressed]="compactCards()"
-                  [appTooltip]="compactCards() ? 'Show full cards' : 'Show compact cards (titles only)'"
+                  [class.btn--compact-toggle--active]="effectiveCompactCards()"
+                  [attr.aria-pressed]="effectiveCompactCards()"
+                  [appTooltip]="compactToggleTooltip()"
                   (click)="toggleCompactCards()">
-            <span aria-hidden="true">{{ compactCards() ? '▤' : '▥' }}</span>
-            <span class="btn--compact-toggle__label">{{ compactCards() ? 'Compact' : 'Full' }}</span>
+            <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
+            <span class="btn--compact-toggle__label">{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
           </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
