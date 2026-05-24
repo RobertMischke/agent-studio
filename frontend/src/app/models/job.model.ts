@@ -401,6 +401,33 @@ export interface JobLogEntry {
   detail: string | null;
 }
 
+/**
+ * Kind classification used by the Files tab (F48). Mirrors
+ * `JobArtifactKind` on the backend; values arrive as camel-case strings
+ * because of `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`.
+ */
+export type JobArtifactKind = 'prompt' | 'aspect' | 'note' | 'other';
+
+/**
+ * One `.md` file in the job root surfaced by the Files tab. The content
+ * itself is not embedded — the Files tab fetches it lazily through
+ * `GET /api/jobs/{id}/files/{fileName}` only when the user expands the
+ * card (or when it's the sole prompt and auto-expanded).
+ */
+export interface JobArtifact {
+  name: string;
+  sizeBytes: number;
+  mtime: string;
+  kind: JobArtifactKind;
+  /** Set when `kind === 'aspect'`; e.g. `code-quality` for `aspect-code-quality.md`. */
+  aspectName?: string | null;
+}
+
+export interface JobArtifactsResponse {
+  jobId: string;
+  files: JobArtifact[];
+}
+
 export interface GroupedJobs {
   /** Triage staging area; default landing for new jobs, never auto-picked. */
   backlog: JobInfo[];

@@ -22,6 +22,16 @@ public static class JobFilesEndpoints
             return content is null ? Results.NotFound() : Results.Text(content);
         });
 
+        // Lists every `.md` file directly in the job root (status.md excluded).
+        // Drives the detail view's Files tab (F48): prompt + aspect verdicts +
+        // operator notes surface as a sortable, kind-classified manifest, with
+        // content fetched lazily through `/files/{fileName}`.
+        group.MapGet("/{jobId}/artifacts", (string jobId, string? watchPath, JobScannerService scanner) =>
+        {
+            var response = scanner.ListArtifacts(jobId, watchPath);
+            return response is null ? Results.NotFound() : Results.Ok(response);
+        });
+
         group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobMutationService mutations, TaskRunnerService runner) =>
         {
             if (runner.IsJobLive(jobId, watchPath))

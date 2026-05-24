@@ -30,6 +30,7 @@ import { JobService } from '../../services/job.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { NowTickService } from '../../services/now-tick.service';
 import { LayoutPanesService } from './services/layout-panes.service';
+import { JobArtifactsService } from './services/job-artifacts.service';
 import { LanePagerService } from './state/lane-pager.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
 import { SessionEventsPollService } from '../polling/services/session-events-poll.service';
@@ -90,6 +91,7 @@ import { TooltipDirective } from '../../components/tooltip';
     ScreenshotsPollService,
     GitPaneService,
     CliOutputPollService,
+    JobArtifactsService,
   ],
   // Cycle 7b: OnPush. The detail panel mounts seven polling services
   // (claude session, session events, run timeline, screenshots,
@@ -604,6 +606,13 @@ export class JobDetailComponent implements OnDestroy {
     this.screenshotsPoll.syncTo(this.detail()?.info ?? null);
   });
 
+  // F48: Files-tab manifest is owned by JobArtifactsService.
+  private readonly artifactsService = inject(JobArtifactsService);
+  readonly artifacts = this.artifactsService.artifacts;
+  private readonly artifactsEffect = effect(() => {
+    this.artifactsService.syncTo(this.detail()?.info ?? null);
+  });
+
   canStartJob(): boolean {
     const state = this.detail().info.state;
     return (state === '2-ready' || state === '3-progress') && !this.isRunning();
@@ -1089,6 +1098,7 @@ export class JobDetailComponent implements OnDestroy {
       .subscribe({
         next: () => {
           if (fileName === 'prompt.md') this.editingPrompt.set(false);
+          this.artifactsService.reload(this.detail()?.info ?? null);
           this.fileSaved.emit();
         },
         error: (err) => this.showError(err),

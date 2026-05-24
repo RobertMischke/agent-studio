@@ -1,0 +1,97 @@
+<div class="files-pane" data-testid="files-pane">
+  @for (file of artifacts(); track file.name) {
+    <article class="file-card"
+             [class.file-card--prompt]="file.kind === 'prompt'"
+             [class.file-card--aspect]="file.kind === 'aspect'"
+             [class.file-card--note]="file.kind === 'note'"
+             [class.file-card--collapsed]="!isExpanded(file.name)"
+             [class.file-card--expanded]="isExpanded(file.name)"
+             [attr.data-testid]="'file-card-' + file.name">
+      <header class="file-card__head"
+              role="button"
+              tabindex="0"
+              [attr.aria-expanded]="isExpanded(file.name)"
+              (click)="toggleExpanded(file.name)"
+              (keydown.enter)="toggleExpanded(file.name)"
+              (keydown.space)="toggleExpanded(file.name); $event.preventDefault()">
+        <span class="file-card__caret" aria-hidden="true">{{ isExpanded(file.name) ? '▾' : '▸' }}</span>
+        <span class="file-card__icon" aria-hidden="true">{{ fileIcon(file.kind) }}</span>
+        <span class="file-card__name">{{ file.name }}</span>
+        @if (file.kind === 'aspect') {
+          <span class="file-card__chip file-card__chip--aspect">{{ file.aspectName }}</span>
+        } @else if (file.kind === 'note') {
+          <span class="file-card__chip file-card__chip--note">note</span>
+        }
+        <span class="file-card__meta">{{ formatBytes(file.sizeBytes) }} · {{ formatRelative(file.mtime) }}</span>
+
+        @if (isPromptFile(file.name) && isExpanded(file.name) && !isEditing()) {
+          <button type="button"
+                  class="file-card__action"
+                  data-testid="file-card-prompt-edit"
+                  [disabled]="isRunning()"
+                  [title]="isRunning() ? 'Stop the CLI first to edit prompt.md' : 'Edit prompt.md'"
+                  (click)="beginEditPrompt($event)">Edit</button>
+        }
+        @if (isPromptFile(file.name) && isExpanded(file.name) && isEditing()) {
+          <button type="button"
+                  class="file-card__action file-card__action--ghost"
+                  data-testid="file-card-prompt-cancel"
+                  (click)="cancelEditPrompt($event)">Done</button>
+        }
+      </header>
+
+      @if (isExpanded(file.name)) {
+        <div class="file-card__body">
+          @if (isPromptFile(file.name)) {
+            @if (isEditing()) {
+              <app-markdown-rich-editor [value]="promptContent()"
+                                        [readOnly]="isRunning()"
+                                        [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
+                                        [jobId]="jobId()"
+                                        [watchPath]="watchPath()"
+                                        (save)="onPromptSave($event)" />
+            } @else {
+              <app-markdown class="file-card__markdown"
+                            [source]="promptContent()" />
+            }
+          } @else {
+            @if (isLoading(file.name)) {
+              <div class="file-card__loading">Loading…</div>
+            } @else if (bodyFor(file); as content) {
+              <app-markdown class="file-card__markdown"
+                            [source]="content"
+                            [dense]="true" />
+            } @else {
+              <div class="file-card__error">Could not load this file.</div>
+            }
+          }
+        </div>
+      } @else {
+        <div class="file-card__preview">
+          @if (isLoading(file.name)) {
+            <div class="file-card__loading">Loading preview…</div>
+          } @else if (preview(file); as text) {
+            <pre class="file-card__preview-text">{{ text }}</pre>
+            <button type="button" class="file-card__expand-link"
+                    [attr.data-testid]="'file-card-expand-' + file.name"
+                    (click)="toggleExpanded(file.name)">
+              Show full ({{ formatBytes(file.sizeBytes) }})
+            </button>
+          } @else {
+            <div class="file-card__preview-empty">No preview available.</div>
+          }
+        </div>
+      }
+    </article>
+  }
+
+  @if (onlyPrompt()) {
+    <aside class="files-pane__hint" data-testid="files-pane-hint">
+      <span class="files-pane__hint-icon" aria-hidden="true">💡</span>
+      <span>
+        Only the prompt is here. Agents can drop additional <code>.md</code> files into this task's folder
+        (aspect verdicts, review notes, follow-up plans) and they will appear here automatically.
+      </span>
+    </aside>
+  }
+</div>

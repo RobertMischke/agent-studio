@@ -729,10 +729,98 @@ public class JobScannerService
         var info = FindJob(jobId, watchPath);
         if (info == null) return null;
 
+        // Path-traversal guard: only files directly in the job root.
+        if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
+            return null;
+
+        // Editable / always-known files plus any *.md file the agents / operators
+        // drop in the job root (surfaced by the Files tab).
         var allowed = new[] { "prompt.md", "status.md", "job.json" };
-        if (!allowed.Contains(fileName)) return null;
+        var isMarkdown = fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+        if (!allowed.Contains(fileName) && !isMarkdown) return null;
 
         return ReadFileOrNull(Path.Combine(info.FolderPath, fileName));
+    }
+
+    /// <summary>
+    /// Lists every <c>.md</c> file directly in the job root, sorted for the
+    /// Files tab (prompt first, then aspect-* alphabetical, then *_NOTE / *_NOTES
+    /// alphabetical, then everything else alphabetical). <c>status.md</c> is
+    /// excluded because it has its own Protocol tab. Subfolders
+    /// (<c>logs/</c>, <c>results/</c>, <c>attachments/</c>) are out of scope.
+    /// </summary>
+    public JobArtifactsResponse? ListArtifacts(string jobId, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return null;
+
+        var dir = info.FolderPath;
+        if (!Directory.Exists(dir)) return new JobArtifactsResponse { JobId = jobId, Files = [] };
+
+        var artifacts = new List<JobArtifact>();
+        foreach (var path in Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(path);
+            if (string.Equals(name, "status.md", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var (kind, aspectName) = ClassifyArtifact(name);
+            FileInfo fi;
+            try { fi = new FileInfo(path); }
+            catch { continue; }
+
+            artifacts.Add(new JobArtifact
+            {
+                Name = name,
+                SizeBytes = fi.Length,
+                Mtime = fi.LastWriteTimeUtc,
+                Kind = kind,
+                AspectName = aspectName,
+            });
+        }
+
+        artifacts.Sort(CompareArtifactsForFilesTab);
+
+        return new JobArtifactsResponse { JobId = jobId, Files = artifacts };
+    }
+
+    private static (JobArtifactKind Kind, string? AspectName) ClassifyArtifact(string fileName)
+    {
+        if (string.Equals(fileName, "prompt.md", StringComparison.OrdinalIgnoreCase))
+            return (JobArtifactKind.Prompt, null);
+
+        if (fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase) &&
+            fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            var aspect = fileName.Substring("aspect-".Length, fileName.Length - "aspect-".Length - ".md".Length);
+            return (JobArtifactKind.Aspect, aspect);
+        }
+
+        if (fileName.EndsWith("_NOTE.md", StringComparison.OrdinalIgnoreCase) ||
+            fileName.EndsWith("_NOTES.md", StringComparison.OrdinalIgnoreCase))
+            return (JobArtifactKind.Note, null);
+
+        return (JobArtifactKind.Other, null);
+    }
+
+    private static int CompareArtifactsForFilesTab(JobArtifact a, JobArtifact b)
+    {
+        // Prompt always wins; otherwise group by kind ordinal, then by display key.
+        int rank(JobArtifact x) => x.Kind switch
+        {
+            JobArtifactKind.Prompt => 0,
+            JobArtifactKind.Aspect => 1,
+            JobArtifactKind.Note   => 2,
+            _                      => 3,
+        };
+
+        var rA = rank(a);
+        var rB = rank(b);
+        if (rA != rB) return rA.CompareTo(rB);
+
+        // Within aspect group, sort by aspect name; otherwise by file name.
+        var keyA = a.Kind == JobArtifactKind.Aspect ? (a.AspectName ?? a.Name) : a.Name;
+        var keyB = b.Kind == JobArtifactKind.Aspect ? (b.AspectName ?? b.Name) : b.Name;
+        return string.Compare(keyA, keyB, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ReadFileOrNull(string path) =>

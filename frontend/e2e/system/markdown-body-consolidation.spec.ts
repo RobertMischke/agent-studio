@@ -101,6 +101,9 @@ async function deleteJob(id: string, watchPath: string): Promise<void> {
 
 async function openDetail(page: Page, id: string, watchPath: string): Promise<void> {
   await page.goto(`/?job=${encodeURIComponent(id)}&watchPath=${encodeURIComponent(watchPath)}`);
+  // F48: open the prompt editor from the Files-tab card so the assertions
+  // below that probe the ProseMirror surface continue to apply.
+  await page.getByTestId('file-card-prompt-edit').click();
   await expect(page.getByTestId('prompt-editor')).toBeVisible({ timeout: 10_000 });
 }
 

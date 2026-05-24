@@ -909,6 +909,43 @@ public record UpdateJobFileRequest
     public string Content { get; init; } = "";
 }
 
+/// <summary>
+/// Kind classification for a job-folder markdown artifact, used by
+/// <c>GET /api/jobs/{id}/artifacts</c>. The frontend Files tab styles each
+/// card by kind (prompt is editable; aspect carries the auto-review verdict
+/// section; note marks operator/recovery hand-offs).
+/// </summary>
+public enum JobArtifactKind
+{
+    Prompt,
+    Aspect,
+    Note,
+    Other,
+}
+
+/// <summary>
+/// One markdown file in the job root surfaced by the Files tab. The
+/// content is not embedded; the existing
+/// <c>GET /api/jobs/{id}/files/{fileName}</c> endpoint serves it on
+/// demand so the listing stays cheap.
+/// </summary>
+public record JobArtifact
+{
+    public string Name { get; init; } = "";
+    public long SizeBytes { get; init; }
+    public DateTime Mtime { get; init; }
+    public JobArtifactKind Kind { get; init; }
+    /// <summary>Set when <see cref="Kind"/> is <c>Aspect</c>; the part between <c>aspect-</c> and <c>.md</c>.</summary>
+    public string? AspectName { get; init; }
+}
+
+/// <summary>Wire shape for <c>GET /api/jobs/{id}/artifacts</c>.</summary>
+public record JobArtifactsResponse
+{
+    public string JobId { get; init; } = "";
+    public List<JobArtifact> Files { get; init; } = [];
+}
+
 public record GitCommitRequest
 {
     public string Message { get; init; } = "";

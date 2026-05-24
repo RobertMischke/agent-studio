@@ -31,10 +31,15 @@
   }
 }
 
-/* Single-row task meta strip projected into the editor toolbar via the
- * `bar-prefix` slot — "#ID · created Xh ago · ● Lane state". Lane-state
- * colour comes from the same --lane-* tokens the kanban column chips
- * use, so the eye reads board + detail as one cue. */
+/* Single-row task meta strip rendered above the files list (F48 used to
+ * project this into the rich-editor toolbar before the Files tab made
+ * editing a per-card action). Lane-state colour comes from the same
+ * --lane-* tokens the kanban column chips use, so the eye reads board
+ * + detail as one cue. */
+.desc-meta-bar {
+  padding: 8px 14px 0;
+}
+
 .desc-meta {
   display: inline-flex;
   align-items: center;

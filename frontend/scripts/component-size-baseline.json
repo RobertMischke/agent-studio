@@ -49,10 +49,10 @@
       "total": 2183
     },
     "src/app/features/job-detail/job-detail.ts": {
-      "typeScript": 1293,
-      "template": 159,
-      "styles": 1306,
-      "total": 2758
+      "typeScript": 1298,
+      "template": 165,
+      "styles": 1282,
+      "total": 2745
     },
     "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
       "typeScript": 1104,

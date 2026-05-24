@@ -60,6 +60,8 @@ async function deleteJob(id: string, watchPath: string): Promise<void> {
 
 async function openDetail(page: Page, id: string, watchPath: string): Promise<void> {
   await page.goto(`/?job=${encodeURIComponent(id)}&watchPath=${encodeURIComponent(watchPath)}`);
+  // F48: prompt is rendered in a Files-tab card; open the editor on demand.
+  await page.getByTestId('file-card-prompt-edit').click();
   await expect(page.getByTestId('prompt-editor')).toBeVisible({ timeout: 10_000 });
 }
 

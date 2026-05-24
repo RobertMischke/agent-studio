@@ -101,6 +101,9 @@ test.describe('Prompt editor — screenshot attachments', () => {
     try {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
 
+      // F48: open the prompt editor from the Files-tab card.
+      await page.getByTestId('file-card-prompt-edit').click();
+
       const editor = page.getByTestId('prompt-editor');
       await expect(editor).toBeVisible({ timeout: 10_000 });
 

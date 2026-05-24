@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
-import { JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
+import { JobArtifact, JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
 import type { JobScreenshot } from '../../../screenshots';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
 import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel/review-evidence-panel.component';
@@ -9,6 +8,7 @@ import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel/cod
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
 import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent, PaneTabDef } from '../../../../components/pane-tabs/pane-tabs.component';
+import { FilesPaneComponent } from './files-pane/files-pane.component';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -34,7 +34,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownViewComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
+  imports: [FilesPaneComponent, MarkdownViewComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -44,6 +44,7 @@ export class PromptPaneComponent {
   readonly titleHistory = input<JobTitleHistoryEntry[]>([]);
   readonly reviewEvidence = input<ReviewEvidenceEntry[]>([]);
   readonly screenshots = input<JobScreenshot[]>([]);
+  readonly artifacts = input<JobArtifact[]>([]);
   readonly job = input<JobInfo | null>(null);
   readonly maximized = input(false);
   readonly weight = input<number>(1);
@@ -82,13 +83,22 @@ export class PromptPaneComponent {
   /** Total evidence count for the tab badge. */
   readonly evidenceCount = computed(() => this.reviewEvidence().length);
 
-  /** Tab definitions for the shared {@link PaneTabsComponent}. */
+  /** Total file count for the Files-tab badge (only shown when > 1). */
+  readonly filesCount = computed(() => this.artifacts().length);
+
+  /**
+   * Tab definitions for the shared {@link PaneTabsComponent}.
+   * NB: the `description` id is preserved (with its `prompt-tab-description`
+   * testid) for backward-compat with pre-F48 specs; the user-facing label
+   * is now "Files" since the tab carries every `.md` in the job folder.
+   */
   readonly promptTabs = computed<readonly PaneTabDef[]>(() => [
     {
       id: 'description',
-      label: 'Description',
-      icon: 'book',
+      label: 'Files',
+      icon: 'folder',
       testid: 'prompt-tab-description',
+      badge: this.filesCount() > 1 ? this.filesCount() : null,
     },
     {
       id: 'evidence',

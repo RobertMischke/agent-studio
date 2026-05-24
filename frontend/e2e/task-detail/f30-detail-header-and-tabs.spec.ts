@@ -64,20 +64,19 @@ test.describe('F30 — Task-detail header + tabs redesign', () => {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await setTheme(page, theme);
 
+      // F48: prompt is shown as a card; editor opens on demand.
+      await page.getByTestId('file-card-prompt-edit').click();
+
       const editor = page.getByTestId('prompt-editor');
       await expect(editor).toBeVisible({ timeout: 10_000 });
 
-      // Meta strip projected into the editor toolbar; only one instance
-      // exists (the old strip rendered above the editor must be gone).
+      // Meta strip rendered at the top of the Files-tab body; only one
+      // instance exists across the page.
       const meta = page.getByTestId('desc-meta');
       await expect(meta).toHaveCount(1);
       await expect(meta).toContainText(/#\d+/);
       await expect(meta).toContainText(/created/);
       await expect(meta).toContainText(/Human Ready/);
-
-      // The meta strip lives INSIDE the editor host (single-row toolbar).
-      const metaInEditor = editor.getByTestId('desc-meta');
-      await expect(metaInEditor).toHaveCount(1);
 
       // The visible toolbar must no longer carry the old P / M segment
       // tabs — only icon-style action buttons (paperclip + save + mode

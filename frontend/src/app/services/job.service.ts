@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import type {
   CreateJobRequest,
   GroupedJobs,
+  JobArtifactsResponse,
   JobDetail,
   JobInfo,
   WatchPathEntry,
@@ -516,6 +517,31 @@ export class JobService {
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
       { content },
       this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Lists every `.md` file in the job root (status.md excluded). Drives the
+   * Files tab in the detail view; cheap manifest call so the tab can fetch
+   * individual file contents lazily through {@link readJobFile}.
+   */
+  listJobArtifacts(jobId: string, watchPath?: string) {
+    return this.http.get<JobArtifactsResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/artifacts`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Reads one file from the job root. Used by the Files tab to lazily
+   * fetch the content of an aspect / note / other markdown card when the
+   * user expands it. Returns the body as plain text.
+   */
+  readJobFile(jobId: string, fileName: string, watchPath?: string) {
+    const opts = this.withWatchPath(watchPath);
+    return this.http.get(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
+      { ...opts, responseType: 'text' },
     );
   }
 

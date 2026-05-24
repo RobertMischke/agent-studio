@@ -51,6 +51,13 @@ test.describe('Prompt editor — lock semantics', () => {
 
       await page.goto(`/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(watchPath)}`);
 
+      // F48: open the prompt editor from the Files-tab card. Edit button is
+      // disabled iff the CLI is running; with no live CLI it must be enabled.
+      const promptEdit = page.getByTestId('file-card-prompt-edit');
+      await expect(promptEdit).toBeVisible({ timeout: 10_000 });
+      await expect(promptEdit).toBeEnabled();
+      await promptEdit.click();
+
       const editor = page.getByTestId('prompt-editor');
       await expect(editor).toBeVisible({ timeout: 10_000 });
 
