@@ -1135,10 +1135,12 @@
 
 .studio-settings-workspace-row {
   display: grid;
-  grid-template-columns: 12px 1fr auto auto auto;
+  grid-template-columns: 12px 1fr auto;
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 5px 6px;
   border-radius: 4px;
   font-size: 12px;
   background: var(--studio-bg-elevated);
@@ -1149,6 +1151,8 @@
   height: 10px;
   border-radius: 2px;
   display: inline-block;
+  grid-row: 1;
+  grid-column: 1;
 }
 
 .studio-settings-workspace-name {
@@ -1157,25 +1161,31 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  grid-row: 1;
+  grid-column: 2;
 }
 
 .studio-settings-workspace-id {
   color: var(--studio-fg-muted);
   font-family: var(--font-mono);
   font-size: 10px;
+  grid-row: 1;
+  grid-column: 3;
 }
 
 .studio-settings-workspace-count {
   color: var(--studio-fg-muted);
   font-size: 11px;
+  grid-row: 2;
+  grid-column: 2;
 }
 
 .studio-settings-workspace-actions {
   display: flex;
   gap: 2px;
-  grid-column: 1 / -1;
+  grid-row: 2;
+  grid-column: 3;
   justify-content: flex-end;
-  margin-top: 2px;
 }
 
 .studio-settings-workspace-action {
