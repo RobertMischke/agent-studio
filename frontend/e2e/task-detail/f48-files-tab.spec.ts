@@ -1,8 +1,30 @@
 import { test, expect } from '@playwright/test';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { api } from '../helpers/api';
 import { createJob, getJob } from '../helpers/jobs';
+
+/**
+ * Mirror a single page screenshot into the job-folder `results/` directory
+ * when the orchestrator passes `F48_RESULTS_DIR`. The same bytes go into
+ * the Playwright report via `testInfo.attach`, but writing to disk keeps
+ * the F48 acceptance-criteria screenshots co-located with the task.
+ */
+async function captureScreenshot(
+  page: import('@playwright/test').Page,
+  testInfo: import('@playwright/test').TestInfo,
+  fileName: string
+): Promise<void> {
+  const buf = await page.screenshot({ fullPage: false });
+  await testInfo.attach(fileName, { body: buf, contentType: 'image/png' });
+  const dir = process.env.F48_RESULTS_DIR;
+  if (dir) {
+    try {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, fileName), buf);
+    } catch { /* best-effort */ }
+  }
+}
 
 /**
  * F48 — "Files" tab on the task-detail prompt pane. The pane used to render
@@ -36,6 +58,20 @@ async function setTheme(page: import('@playwright/test').Page, theme: 'light' | 
   await page.waitForTimeout(120);
 }
 
+/**
+ * If the auto-update-service banner ("Update failed: verification failed …")
+ * is up — which happens whenever a dev backend's own /api/jobs/grouped
+ * verification check ran slow on a previous boot — dismiss it so the rest
+ * of the detail view is interactable. The banner is harmless to F48 but it
+ * paints over the corner of the layout and would skew screenshots.
+ */
+async function dismissUpdateBannerIfPresent(page: import('@playwright/test').Page): Promise<void> {
+  const dismiss = page.getByRole('button', { name: /^Dismiss$/ });
+  if (await dismiss.count()) {
+    try { await dismiss.first().click({ timeout: 1_500 }); } catch { /* best-effort */ }
+  }
+}
+
 test.describe('F48 Files tab — rename + only-prompt + hint', () => {
   test('tab is labeled "Files" with the legacy data-testid preserved', async ({ page }) => {
     const watchPath = await pickWatchPath();
@@ -50,6 +86,7 @@ test.describe('F48 Files tab — rename + only-prompt + hint', () => {
 
     try {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      await dismissUpdateBannerIfPresent(page);
 
       const tab = page.getByTestId('prompt-tab-description');
       await expect(tab).toBeVisible({ timeout: 10_000 });
@@ -95,7 +132,17 @@ test.describe('F48 Files tab — multi-file display', () => {
       // files into the job folder themselves. This test fixture mirrors that
       // server-side state without going through the (non-existent) write
       // endpoint for them.
-      const planted = await getJob(job.id, watchPath);
+      //
+      // Brief retry so we tolerate the scanner taking a few hundred ms to
+      // index the freshly created job folder on a degraded dev backend.
+      let planted: Awaited<ReturnType<typeof getJob>> | null = null;
+      for (let attempt = 0; attempt < 10 && planted === null; attempt++) {
+        try { planted = await getJob(job.id, watchPath); }
+        catch { await new Promise((r) => setTimeout(r, 500)); }
+      }
+      if (planted === null) {
+        throw new Error(`getJob never returned for ${job.id} after retries`);
+      }
       await writeFile(join(planted.folderPath, 'aspect-requirement-fit.md'),
         '# requirement-fit\n\n- Does the change deliver F48?\n- Yes: prompt + aspects show.\n');
       await writeFile(join(planted.folderPath, 'aspect-code-quality.md'),
@@ -107,6 +154,7 @@ test.describe('F48 Files tab — multi-file display', () => {
 
       await page.setViewportSize({ width: 1600, height: 1000 });
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      await dismissUpdateBannerIfPresent(page);
 
       // Tab badge surfaces the file count once we cross 1.
       const badge = page.getByTestId('prompt-tab-description-badge');
@@ -124,7 +172,9 @@ test.describe('F48 Files tab — multi-file display', () => {
         'file-card-aspect-tests-and-evidence.md',
         'file-card-REVIEW_NOTE.md',
       ];
-      const cards = page.locator('[data-testid^="file-card-"]');
+      // Articles only — the `file-card-prompt-edit`/`-cancel` buttons and the
+      // `file-card-expand-<name>` expand-links inherit the same prefix.
+      const cards = page.locator('article[data-testid^="file-card-"]');
       await expect(cards).toHaveCount(expectedOrder.length);
       const seen = await cards.evaluateAll((nodes) =>
         nodes.map((n) => (n as HTMLElement).getAttribute('data-testid'))
@@ -138,10 +188,7 @@ test.describe('F48 Files tab — multi-file display', () => {
 
       // Light-theme screenshot — multi-file, all collapsed (preview mode).
       await setTheme(page, 'light');
-      await testInfo.attach('f48-files-tab-multi-collapsed-light.png', {
-        body: await page.screenshot({ fullPage: false }),
-        contentType: 'image/png'
-      });
+      await captureScreenshot(page, testInfo, 'f48-files-tab-multi-collapsed-light.png');
 
       // Click an aspect card -> it expands and renders markdown (h1 visible).
       const aspect = page.getByTestId('file-card-aspect-code-quality.md');
@@ -149,18 +196,12 @@ test.describe('F48 Files tab — multi-file display', () => {
       await expect(aspect).toHaveAttribute('class', /file-card--expanded/);
       await expect(aspect.locator('.markdown-body h1')).toBeVisible({ timeout: 5_000 });
 
-      await testInfo.attach('f48-files-tab-aspect-expanded-light.png', {
-        body: await page.screenshot({ fullPage: false }),
-        contentType: 'image/png'
-      });
+      await captureScreenshot(page, testInfo, 'f48-files-tab-aspect-expanded-light.png');
 
       // Dark-theme screenshot — same multi-file shape, all-collapsed.
       await aspect.getByText('aspect-code-quality.md').click(); // collapse again
       await setTheme(page, 'dark');
-      await testInfo.attach('f48-files-tab-multi-collapsed-dark.png', {
-        body: await page.screenshot({ fullPage: false }),
-        contentType: 'image/png'
-      });
+      await captureScreenshot(page, testInfo, 'f48-files-tab-multi-collapsed-dark.png');
     } finally {
       await deleteJob(job.id, watchPath);
     }
@@ -185,15 +226,13 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
       try {
         await page.setViewportSize({ width: 1400, height: 900 });
         await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+        await dismissUpdateBannerIfPresent(page);
         await setTheme(page, theme);
 
         await expect(page.getByTestId('file-card-prompt.md')).toBeVisible({ timeout: 10_000 });
         await expect(page.getByTestId('files-pane-hint')).toBeVisible();
 
-        await testInfo.attach(`f48-files-tab-only-prompt-${theme}.png`, {
-          body: await page.screenshot({ fullPage: false }),
-          contentType: 'image/png'
-        });
+        await captureScreenshot(page, testInfo, `f48-files-tab-only-prompt-${theme}.png`);
       } finally {
         await deleteJob(job.id, watchPath);
       }
@@ -213,6 +252,7 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
 
     try {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      await dismissUpdateBannerIfPresent(page);
 
       // Initially the editor must not be rendered — read-only markdown only.
       await expect(page.getByTestId('prompt-editor')).toHaveCount(0);
