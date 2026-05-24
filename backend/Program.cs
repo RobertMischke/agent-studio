@@ -112,6 +112,11 @@ builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<JobScannerService>();
+// F45a: workspace / project registries + jobKey resolver. Additive layer;
+// not yet load-bearing for the existing lane-folder code paths (F45c).
+builder.Services.AddSingleton<OrchestratorApi.Services.Registry.WorkspaceRegistry>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Registry.ProjectRegistry>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.JobKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
 // before JobStateMachine / JobMutationService / TaskAccessService so
@@ -331,6 +336,22 @@ app.Services.GetRequiredService<ClientIdentityStore>().EnsureLoaded();
 
 // Ensure state folders exist and migrate legacy flat jobs
 app.Services.GetRequiredService<JobStateMachine>().EnsureStateFoldersAndMigrate();
+
+// F45a: populate workspace + project registries from configured WatchPaths.
+// Additive; does not move or rename anything on disk. Writes only to
+// <TaskRepository>/.metadata/. Safe to run on every boot - idempotent.
+try
+{
+    OrchestratorApi.Services.Registry.RegistryBootstrap.Run(
+        app.Services.GetRequiredService<OrchestratorApi.Services.Registry.WorkspaceRegistry>(),
+        app.Services.GetRequiredService<OrchestratorApi.Services.Registry.ProjectRegistry>(),
+        app.Services.GetRequiredService<JobScannerService>(),
+        app.Services.GetRequiredService<ILogger<Program>>());
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("RegistryBootstrap", ex);
+}
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
 // surviving completion-marker.json finishes its 3-progress -> 4-review move
