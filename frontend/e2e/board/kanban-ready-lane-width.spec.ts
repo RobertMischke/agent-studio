@@ -224,6 +224,13 @@ test.describe('Ready lane width parity and lack of horizontal scrollbar', () => 
     await page.addInitScript(() => {
       try {
         window.localStorage.removeItem('collapsedLanes');
+        // Pre-seed the studio tab so the board renders on startup instead
+        // of the Welcome pane (vsCodeLayout is default since 2026).
+        localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+          v: 1,
+          tabs: [{ kind: 'board', projectName: '__all__' }],
+          activeKey: 'board:__all__',
+        }));
       } catch {
         /* ignore */
       }
@@ -233,7 +240,8 @@ test.describe('Ready lane width parity and lack of horizontal scrollbar', () => 
   test('all expanded lanes have equal width and no horizontal overflow at 1920x1080', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto('/');
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="studio-board"], [data-testid="kanban-dashboard"]').first())
+      .toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('lane-2-ready')).toBeVisible();
 
     // Wait for the Ready lane's 60 cards to settle.
