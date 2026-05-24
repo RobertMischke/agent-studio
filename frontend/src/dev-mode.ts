@@ -87,45 +87,59 @@ function setMetaThemeColor(color: string): void {
   if (el) el.content = color;
 }
 
+// F41: theme-aware DEV marker. The original implementation hardcoded
+// `rgba(245, 158, 11, 0.82)` for the badge background, which folded onto
+// the light-theme white shell as a pale orange that washed out the dark
+// brown text — operator reported "DEV not legible" on 2026-05-24.
+//
+// The fix swaps every raw colour to a Tier-2 design token. `--studio-accent`
+// (= --color-orange-500) is intentionally NOT theme-keyed, so the badge
+// stays brand-orange on both themes; `--studio-on-accent` (= --color-grey-950)
+// gives near-black text designed for use on saturated accent fills, which
+// clears WCAG-AA against orange-500 (≈7.4:1) on either page background.
+// The left-edge stripe stays a brand gradient (accent → lane-failed) so the
+// red end of the gradient picks up the theme-aware --lane-failed token.
+const DEV_BANNER_STYLE = `
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--studio-accent), var(--lane-failed));
+    z-index: 9998;
+    pointer-events: none;
+  }
+  .dev-banner {
+    position: fixed;
+    left: 0;
+    top: 96px;
+    width: 18px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0 6px 6px 0;
+    background: var(--studio-accent);
+    color: var(--studio-on-accent);
+    font: 800 10px/1 'Segoe UI', system-ui, sans-serif;
+    letter-spacing: 0.14em;
+    z-index: 9999;
+    pointer-events: none;
+    box-shadow: var(--elevation-popover);
+    text-transform: uppercase;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
+`;
+
 function injectDevBanner(): void {
   // Keep the dev checkout unmistakable without stealing vertical workspace.
   // The marker is intentionally fixed to the left edge and does not mutate
   // body padding, so screenshots and dense workbench views keep their height.
   const style = document.createElement('style');
-  style.textContent = `
-    body::before {
-      content: "";
-      position: fixed;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      width: 3px;
-      background: linear-gradient(180deg, #f59e0b, #dc2626);
-      z-index: 9998;
-      pointer-events: none;
-    }
-    .dev-banner {
-      position: fixed;
-      left: 0;
-      top: 96px;
-      width: 18px;
-      height: 70px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 0 6px 6px 0;
-      background: rgba(245, 158, 11, 0.82);
-      color: #1a1208;
-      font: 800 10px/1 'Segoe UI', system-ui, sans-serif;
-      letter-spacing: 0.14em;
-      z-index: 9999;
-      pointer-events: none;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.22);
-      text-transform: uppercase;
-      writing-mode: vertical-rl;
-      transform: rotate(180deg);
-    }
-  `;
+  style.textContent = DEV_BANNER_STYLE;
   document.head.appendChild(style);
 
   const banner = document.createElement('div');
@@ -135,3 +149,7 @@ function injectDevBanner(): void {
   banner.textContent = 'DEV';
   document.body.appendChild(banner);
 }
+
+// Exported for Playwright theme tests so the spec can mount the exact CSS
+// the app injects without duplicating the rule block in the test harness.
+export const __devBannerStyleForTests = DEV_BANNER_STYLE;
