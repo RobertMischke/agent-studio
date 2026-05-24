@@ -11,6 +11,9 @@
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
      [attr.data-compact]="compact() ? 'true' : null">
+  @if (isRunning()) {
+    <div class="job-card__progress" aria-hidden="true" data-testid="job-card-progress"></div>
+  }
   <div class="job-card__header">
     <span class="job-card__project" data-testid="job-card-project">
       <span class="job-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>

@@ -4,6 +4,10 @@
       border-radius: 10px;
       padding: 14px 16px;
       cursor: pointer;
+      // Card is the positioning context for absolutely-placed children
+      // (running progress bar, token popover anchor stays unaffected
+      // because its own wrapper sets position:relative).
+      position: relative;
       // F3: native CSS virtualisation. The browser skips layout + paint
       // for cards outside the scroll viewport, which is the cheap win
       // for 200+ card lanes without changing the DOM (drag-and-drop,
@@ -40,7 +44,6 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .job-card { transition: none; }
-      .job-card--running { animation: none; }
       .job-card--just-created { animation: none; }
       :host(.drag-source) .job-card { will-change: auto; }
     }
@@ -84,37 +87,89 @@
     .job-card--5-completed { --state-color: #10b981; }
     .job-card--6-completed { --state-color: #10b981; }
 
-    /* Running tasks should jump out of the column. We brighten the surface,
-       widen the state accent, and add a slow breathing glow so the eye is
-       drawn to whatever is happening *right now* without constant motion
-       fatigue. */
-    .job-card--running {
-      background:
-        linear-gradient(180deg, rgba(59,130,246,0.16), rgba(59,130,246,0.04)) ,
-        #1e1e2e;
-      border-color: rgba(59,130,246,0.45);
+    /* F39: running tasks must jump out of the column on BOTH themes. The
+       prior dark-only halo (hardcoded blue rgba + #1e1e2e base) dissolved
+       on the white shell, leaving running cards visually identical to
+       idle ones. The new design stacks three theme-aware semantic tokens:
+         - --studio-bg-running  (tint over --studio-bg-elevated)
+         - --shadow-running     (outline ring + soft outer cast)
+         - --studio-accent-3    (left ribbon + progress-bar pigment)
+       The motion role moves from a breathing box-shadow (poor perf, easy
+       to overlook on white) to a constant indeterminate progress bar at
+       the top edge - see .job-card__progress below.
+
+       Compound selector .job-card.job-card--running is deliberate: the
+       light-theme bridge in styles.scss carries
+       `html[data-studio-theme='light'] .job-card { background: ...; }`
+       at specificity (0,2,1). A bare `.job-card--running[_ngcontent-X]`
+       resolves to (0,2,0) and the bridge wins, blanking the running tint
+       on the light shell. The compound selector lifts the component-side
+       declaration to (0,3,0) so it wins on both themes without !important. */
+    .job-card.job-card--running {
+      background: var(--studio-bg-running);
+      border-color: color-mix(in srgb, var(--studio-accent-3) 45%, transparent);
       border-left-width: 6px;
-      box-shadow:
-        0 0 0 1px rgba(59,130,246,0.18),
-        0 8px 22px rgba(59,130,246,0.20);
-      animation: job-running-glow 2.4s ease-in-out infinite;
+      border-left-color: var(--studio-accent-3);
+      box-shadow: var(--shadow-running);
     }
-    .job-card--running:hover {
+    .job-card.job-card--running:hover {
       transform: translateY(-2px);
       box-shadow:
-        0 0 0 1px rgba(59,130,246,0.30),
-        0 14px 32px rgba(59,130,246,0.30);
+        var(--shadow-running),
+        0 14px 32px color-mix(in srgb, var(--studio-accent-3) 25%, transparent);
     }
-    @keyframes job-running-glow {
-      0%, 100% {
-        box-shadow:
-          0 0 0 1px rgba(59,130,246,0.18),
-          0 8px 22px rgba(59,130,246,0.18);
-      }
-      50% {
-        box-shadow:
-          0 0 0 1px rgba(96,165,250,0.40),
-          0 14px 36px rgba(59,130,246,0.32);
+
+    /* F39: indeterminate progress bar pinned to the top edge of a running
+       card. A 40%-wide gradient stripe slides left -> right on a 1.6 s
+       loop, providing constant "something is happening right now" motion
+       that reads on both themes (the gradient peak is the opaque accent
+       token, so it stays visible on white). Track tint is the same accent
+       at low alpha for contrast against the card surface. Bottom corners
+       stay square; top corners follow the card's 10 px outer radius (the
+       bar sits 1 px inside the top border). Hidden in compact mode (rows
+       are too tight) and pinned-static under prefers-reduced-motion
+       (handled in the media block above). */
+    .job-card__progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      overflow: hidden;
+      border-top-left-radius: 9px;
+      border-top-right-radius: 9px;
+      pointer-events: none;
+      background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
+    }
+    .job-card__progress::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -40%;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        var(--studio-accent-3) 50%,
+        transparent 100%);
+      animation: job-card-progress-slide 1.6s ease-in-out infinite;
+    }
+    @keyframes job-card-progress-slide {
+      0%   { left: -40%; }
+      100% { left: 100%; }
+    }
+    /* F39: under prefers-reduced-motion: reduce we stop the slide but keep
+       the bar statically visible (left:0; width:100%) so the running cue
+       is preserved for operators with motion sensitivity. This block must
+       come AFTER the .job-card__progress::after declaration above so the
+       cascade picks the static state under the media query (equal-
+       specificity rule — last one wins). */
+    @media (prefers-reduced-motion: reduce) {
+      .job-card__progress::after {
+        animation: none;
+        left: 0;
+        width: 100%;
+        opacity: 0.6;
       }
     }
 
@@ -352,9 +407,9 @@
       flex: 0 0 auto;
     }
     .job-card__review-pill--generating {
-      color: #fcd34d;
-      background: rgba(252, 211, 77, 0.14);
-      border-color: rgba(252, 211, 77, 0.32);
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
     }
     .job-card__review-pill--generating .job-card__review-dot {
       animation: pulse-running 1.3s infinite;
@@ -389,9 +444,9 @@
       flex: 0 0 auto;
     }
     .job-card__auto-review-pill--active {
-      color: #fcd34d;
-      background: rgba(252, 211, 77, 0.14);
-      border-color: rgba(252, 211, 77, 0.34);
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
     }
     .job-card__auto-review-pill--active .job-card__auto-review-dot {
       animation: pulse-running 1.3s infinite;
@@ -452,19 +507,28 @@
       background: currentColor;
       flex: 0 0 auto;
     }
+    /* F39: Execution / review pill tokens. The "Running live" pill was the
+       worst Light-Theme offender (sky-300 hex over rgba(14,165,233,...) =
+       washed out to invisible on white). Now it pulls --studio-accent-3
+       for the tint and --studio-accent-3-strong for the text pigment, both
+       of which flip per theme. Same pattern for failed/cancelled (red),
+       review-generating + auto-review-active (warn). Out-of-scope pill
+       states (auto-review queued/done/stale, review ready/failed, issue
+       pill, loop pill) intentionally stay on their old hex values - F39
+       only migrates the running/active/failed family per the brief. */
     .job-card__execution-pill--running {
-      color: #7dd3fc;
-      background: rgba(14, 165, 233, 0.14);
-      border-color: rgba(14, 165, 233, 0.25);
+      color: var(--studio-accent-3-strong);
+      background: color-mix(in srgb, var(--studio-accent-3) 18%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
     }
     .job-card__execution-pill--running .job-card__execution-dot {
       animation: pulse-running 1.3s infinite;
     }
     .job-card__execution-pill--failed,
     .job-card__execution-pill--cancelled {
-      color: #fda4af;
-      background: rgba(244, 63, 94, 0.14);
-      border-color: rgba(244, 63, 94, 0.25);
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
     @keyframes pulse-running {
       0%, 100% { opacity: 1; }
@@ -824,11 +888,11 @@
       white-space: nowrap;
     }
     /* In compact mode the running pulse animation would move every row in
-       a busy column; replace it with a steady accent so the eye is drawn
-       to the running card without a constantly-shifting background. */
-    .job-card--compact.job-card--running {
-      animation: none;
-      background:
-        linear-gradient(180deg, rgba(59,130,246,0.16), rgba(59,130,246,0.04)),
-        #1e1e2e;
+       a busy column; the indeterminate progress stripe is hidden too
+       because a stack of sliding bars in a dense lane is more noise than
+       signal. The steady accent (tinted bg + left ribbon + outline ring
+       from --shadow-running) still marks the row as the active one. */
+    .job-card.job-card--compact.job-card--running {
+      background: var(--studio-bg-running);
     }
+    .job-card--compact .job-card__progress { display: none; }

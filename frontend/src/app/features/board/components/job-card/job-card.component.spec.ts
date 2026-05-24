@@ -189,6 +189,46 @@ describe('JobCardComponent (smoke)', () => {
     expect(tooltip.body).toContain('&lt;img');
   });
 
+  it('renders the indeterminate progress bar on running cards only (F39)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [JobCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      execution: {
+        jobId: 'task-1',
+        jobKey: 'test::task-1',
+        processId: 1234,
+        startedAt: '2026-05-23T07:00:00Z',
+        status: 'running',
+        exitCode: null,
+        durationSeconds: null,
+        model: null,
+        runOutcome: null,
+      },
+    }));
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement.querySelector('[data-testid="job-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('job-card--running')).toBe(true);
+    expect(host?.getAttribute('data-running')).toBe('true');
+    const bar = fixture.nativeElement.querySelector('[data-testid="job-card-progress"]') as HTMLElement | null;
+    expect(bar).not.toBeNull();
+    expect(bar?.getAttribute('aria-hidden')).toBe('true');
+
+    fixture.componentRef.setInput('job', makeJob({ execution: null }));
+    fixture.detectChanges();
+    const barAfter = fixture.nativeElement.querySelector('[data-testid="job-card-progress"]') as HTMLElement | null;
+    expect(barAfter).toBeNull();
+  });
+
   it('renders a runner outcome issue pill', async () => {
     await TestBed.configureTestingModule({
       imports: [JobCardComponent],
