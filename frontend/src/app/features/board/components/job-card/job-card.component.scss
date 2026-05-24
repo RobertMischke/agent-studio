@@ -247,11 +247,16 @@
       font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
-    /* Delete affordance: hidden until card hover so the cards stay calm in
-       the default board view. The button stops propagation so clicking it
-       never opens the detail panel. The confirmation prompt itself lives
-       in the parent component. */
+    /* Delete affordance: positioned absolutely on the card so it survives
+       compact mode (the header is display:none in compact). Hidden until
+       card hover so the cards stay calm in the default board view. The
+       button stops propagation so clicking it never opens the detail panel.
+       The confirmation prompt itself lives in the parent component. */
     .job-card__delete {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 2;
       background: transparent;
       border: 1px solid transparent;
       color: var(--studio-fg-muted);
@@ -266,6 +271,10 @@
       place-items: center;
       opacity: 0;
       transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .job-card--compact .job-card__delete {
+      top: 4px;
+      right: 4px;
     }
     .job-card:hover .job-card__delete,
     .job-card__delete:focus-visible {

@@ -43,13 +43,13 @@
         <span class="job-card__pick-next-label">Next</span>
       </button>
     }
-    <button type="button"
-            class="job-card__delete"
-            data-testid="job-card-delete"
-            [appTooltip]="'Delete task'"
-            aria-label="Delete task"
-            (click)="onDeleteClick($event)">🗑</button>
   </div>
+  <button type="button"
+          class="job-card__delete"
+          data-testid="job-card-delete"
+          [appTooltip]="'Delete task'"
+          aria-label="Delete task"
+          (click)="onDeleteClick($event)">🗑</button>
   <h3 class="job-card__title">
     @if (compact()) {
       <span class="job-card__compact-disk"

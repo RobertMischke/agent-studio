@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';
 import { createJob } from '../helpers/jobs';
 
@@ -21,6 +21,23 @@ async function cleanup(prefix: string, watchPath: string): Promise<void> {
   const all = await api<Array<{ id: string; watchPath: string }>>('/api/jobs?includeFixtures=true');
   const stale = all.filter(j => j.watchPath === watchPath && j.id.startsWith(prefix));
   await Promise.all(stale.map(j => deleteJobApi(j.id, j.watchPath).catch(() => {})));
+}
+
+async function navigateToBoard(page: Page, projectName: string): Promise<void> {
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+
+  const lane = page.locator('[data-testid^="lane-"]').first();
+  const boardVisible = await lane.isVisible({ timeout: 2_000 }).catch(() => false);
+  if (boardVisible) return;
+
+  const welcome = page.locator('[data-testid="studio-welcome"]');
+  if (await welcome.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    const projectBtn = welcome.locator('.studio-welcome__project')
+      .filter({ hasText: projectName });
+    await projectBtn.click();
+  }
+  await expect(lane).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Card delete button', () => {
@@ -48,23 +65,10 @@ test.describe('Card delete button', () => {
     });
 
     try {
-      await page.goto('/');
-      await page.waitForLoadState('domcontentloaded');
-
-      // The VS-Code layout opens on the Welcome tab for a fresh
-      // browser context. Click the project button in the welcome card
-      // to open its board tab.
-      const welcome = page.locator('[data-testid="studio-welcome"]');
-      if (await welcome.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        const projectBtn = welcome.locator('.studio-welcome__project')
-          .filter({ hasText: wp.name });
-        await projectBtn.click();
-      }
-      await page.waitForTimeout(2000);
+      await navigateToBoard(page, wp.name);
 
       const card = page.locator('app-job-card')
         .filter({ hasText: 'Delete test card' });
-
       await expect(card).toBeVisible({ timeout: 10_000 });
 
       await card.hover();
@@ -75,20 +79,13 @@ test.describe('Card delete button', () => {
 
       const dialog = page.locator('[data-testid="confirm-dialog"]');
       await expect(dialog).toBeVisible({ timeout: 3_000 });
+      await expect(page.locator('[data-testid="confirm-dialog-message"]'))
+        .toContainText('removes the job folder');
 
-      const dialogMessage = page.locator('[data-testid="confirm-dialog-message"]');
-      await expect(dialogMessage).toContainText('removes the job folder');
-
-      // Take a screenshot of the confirm dialog
       await page.screenshot({ path: 'test-results/card-delete-confirm-dialog.png' });
 
-      // Cancel the dialog so we don't actually delete
-      const cancelBtn = page.locator('[data-testid="confirm-dialog-cancel"]');
-      await cancelBtn.click();
-
+      await page.locator('[data-testid="confirm-dialog-cancel"]').click();
       await expect(dialog).not.toBeVisible({ timeout: 3_000 });
-
-      // Card should still be on the board after cancel
       await expect(card).toBeVisible({ timeout: 3_000 });
     } finally {
       await deleteJobApi(jobId, wp.path);
@@ -106,41 +103,71 @@ test.describe('Card delete button', () => {
       fixture: false,
     });
 
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-
-    const welcome = page.locator('[data-testid="studio-welcome"]');
-    if (await welcome.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      const projectBtn = welcome.locator('.studio-welcome__project')
-        .filter({ hasText: wp.name });
-      await projectBtn.click();
-    }
-    await page.waitForTimeout(2000);
+    await navigateToBoard(page, wp.name);
 
     const card = page.locator('app-job-card')
       .filter({ hasText: 'Delete confirm test' });
-
     await expect(card).toBeVisible({ timeout: 10_000 });
 
     await card.hover();
     const deleteBtn = card.locator('[data-testid="job-card-delete"]');
-    await expect(deleteBtn).toBeVisible({ timeout: 3_000 });
-
     await deleteBtn.click();
 
     const dialog = page.locator('[data-testid="confirm-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 3_000 });
+    await page.locator('[data-testid="confirm-dialog-confirm"]').click();
 
-    // Confirm the deletion
-    const confirmBtn = page.locator('[data-testid="confirm-dialog-confirm"]');
-    await confirmBtn.click();
-
-    // Dialog should close
     await expect(dialog).not.toBeVisible({ timeout: 3_000 });
-
-    // Card should disappear from the board
     await expect(card).not.toBeVisible({ timeout: 10_000 });
 
     await page.screenshot({ path: 'test-results/card-delete-after-confirm.png' });
+  });
+
+  test('DELETE button works in compact mode', async ({ page }) => {
+    const wp = await firstWatchPath();
+    const jobId = PREFIX + 'compact-' + Date.now();
+    await createJob({
+      id: jobId,
+      title: 'Compact delete test',
+      watchPath: wp.path,
+      targetState: '2-ready',
+      fixture: false,
+    });
+
+    try {
+      await navigateToBoard(page, wp.name);
+
+      const compactToggle =
+        page.getByTestId('studio-board-compact-toggle').or(
+          page.getByTestId('compact-cards-toggle'));
+      await expect(compactToggle).toBeVisible({ timeout: 3_000 });
+      const pressed = await compactToggle.getAttribute('aria-pressed');
+      if (pressed !== 'true') await compactToggle.click();
+      await page.waitForTimeout(500);
+
+      const card = page.locator('app-job-card')
+        .filter({ hasText: 'Compact delete test' });
+      await expect(card).toBeVisible({ timeout: 10_000 });
+
+      await card.hover();
+      const deleteBtn = card.locator('[data-testid="job-card-delete"]');
+      await expect(deleteBtn).toBeVisible({ timeout: 3_000 });
+
+      await page.screenshot({ path: 'test-results/card-delete-compact-hover.png' });
+
+      await deleteBtn.click();
+
+      const dialog = page.locator('[data-testid="confirm-dialog"]');
+      await expect(dialog).toBeVisible({ timeout: 3_000 });
+
+      await page.locator('[data-testid="confirm-dialog-cancel"]').click();
+      await expect(dialog).not.toBeVisible({ timeout: 3_000 });
+
+      // Restore full mode
+      const pressedAfter = await compactToggle.getAttribute('aria-pressed');
+      if (pressedAfter === 'true') await compactToggle.click();
+    } finally {
+      await deleteJobApi(jobId, wp.path);
+    }
   });
 });
