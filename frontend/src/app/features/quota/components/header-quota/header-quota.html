@@ -14,14 +14,28 @@
         }
       </div>
 
-      <span class="hquota__value">{{ card.value }}</span>
-      <span class="hquota__trend" [appTooltip]="card.trendLabel">{{ card.trend }}</span>
-      <span class="hquota__window"
-            [appTooltip]="windowTooltip(card.windowLabel, card.absolute)">{{ card.windowLabel }}</span>
-      <span class="hquota__bar" aria-hidden="true">
-        <span class="hquota__bar-fill" [style.width.%]="card.barPct"></span>
-      </span>
+      <div class="hquota__windows">
+        @if (card.shortWindow; as w) {
+          <span class="hquota__window-cell"
+                [attr.data-testid]="'hquota-' + card.cliType + '-5h'"
+                [attr.data-tone]="w.tone"
+                [appTooltip]="w.tooltip">
+            <span class="hquota__window-value">{{ w.value }}</span>
+            <span class="hquota__window-label">5H</span>
+            <span class="hquota__window-bar"><span class="hquota__window-bar-fill" [style.width.%]="w.barPct"></span></span>
+          </span>
+        }
+        @if (card.weekWindow; as w) {
+          <span class="hquota__window-cell"
+                [attr.data-testid]="'hquota-' + card.cliType + '-wk'"
+                [attr.data-tone]="w.tone"
+                [appTooltip]="w.tooltip">
+            <span class="hquota__window-value">{{ w.value }}</span>
+            <span class="hquota__window-label">WK</span>
+            <span class="hquota__window-bar"><span class="hquota__window-bar-fill" [style.width.%]="w.barPct"></span></span>
+          </span>
+        }
+      </div>
     </div>
   }
 </div>
-  

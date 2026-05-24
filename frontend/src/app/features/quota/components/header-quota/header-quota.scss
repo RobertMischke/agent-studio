@@ -1,8 +1,5 @@
 :host { display: inline-flex; }
 .hquota { display: inline-flex; gap: 6px; align-items: center; }
-// Card chrome reads studio tokens that flip per theme. The old palette
-// (rgba(255,255,255,*) surfaces + Catppuccin pastel text) read as
-// invisible-on-white in the light shell.
 .hquota__card {
   display: inline-flex;
   align-items: center;
@@ -15,7 +12,6 @@
   color: var(--studio-fg);
   font: inherit;
   cursor: pointer;
-  min-width: 138px;
   white-space: nowrap;
 }
 .hquota__card:hover,
@@ -30,7 +26,6 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-width: 62px;
   font-size: 12px;
   color: var(--studio-fg);
   letter-spacing: 0;
@@ -38,43 +33,46 @@
 .hquota__icon { font-size: 12px; }
 .hquota__label { font-weight: 650; }
 .hquota__stale-dot { color: var(--severity-warn); }
-.hquota__value {
-  min-width: 36px;
+
+.hquota__windows {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.hquota__window-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.hquota__window-value {
   color: var(--studio-fg-strong);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  min-width: 28px;
   text-align: right;
 }
-.hquota__trend {
-  width: 12px;
+.hquota__window-cell[data-tone="warn"] .hquota__window-value { color: var(--severity-warn); }
+.hquota__window-cell[data-tone="hot"]  .hquota__window-value { color: var(--severity-high); }
+.hquota__window-label {
   color: var(--studio-fg-dim);
-  font-size: 12px;
-  text-align: center;
-}
-.hquota__window {
-  min-width: 22px;
-  color: var(--studio-fg-dim);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.hquota__bar {
-  width: 34px;
-  height: 4px;
+.hquota__window-bar {
+  width: 24px;
+  height: 3px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--studio-bg-elevated);
 }
-.hquota__bar-fill {
+.hquota__window-bar-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
   background: var(--severity-pass);
 }
-.hquota__card[data-tone="warn"] .hquota__bar-fill { background: var(--severity-warn); }
-.hquota__card[data-tone="hot"]  .hquota__bar-fill { background: var(--severity-high); }
-.hquota__card[data-tone="unknown"] .hquota__bar-fill { background: var(--studio-fg-muted); }
-.hquota__card[data-tone="warn"] .hquota__trend { color: var(--severity-warn); }
-.hquota__card[data-tone="hot"]  .hquota__trend { color: var(--severity-high); }
-  
+.hquota__window-cell[data-tone="warn"] .hquota__window-bar-fill { background: var(--severity-warn); }
+.hquota__window-cell[data-tone="hot"]  .hquota__window-bar-fill { background: var(--severity-high); }
+.hquota__window-cell[data-tone="unknown"] .hquota__window-bar-fill { background: var(--studio-fg-muted); }

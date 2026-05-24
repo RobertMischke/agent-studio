@@ -6,25 +6,27 @@ import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+
+interface QuotaWindowDisplay {
+  value: string;
+  barPct: number;
+  tone: 'ok' | 'warn' | 'hot' | 'unknown';
+  tooltip: string;
+  windowKind: 'five_hour' | 'weekly';
+}
+
 interface QuotaCardModel {
   cliType: CliType;
   icon: string;
   label: string;
   ariaLabel: string;
   plan: string | null;
-  value: string;
-  windowLabel: string;
-  absolute: string | null;
-  barPct: number;
-  trend: string;
-  trendLabel: string;
+  shortWindow?: QuotaWindowDisplay;
+  weekWindow?: QuotaWindowDisplay;
   tone: 'ok' | 'warn' | 'hot' | 'unknown';
   fetchedAt: string | null;
-  /** Whether the snapshot is older than the backend TTL ("stale"). */
   stale: boolean;
-  /** Pretty "x min ago" label. */
   freshness: string;
-  /** Detailed window list for the hover overlay. */
   windows: QuotaWindow[];
   error: string | null;
   source: string | null;
@@ -85,27 +87,6 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     if (this.tickTimer != null) clearInterval(this.tickTimer);
   }
 
-  /**
-   * A3 (2026-05-21): the short window label in the status-bar ("MO",
-   * "WK", "5h", "D", "REST", "PREM") is meant to be compact. Add a
-   * tooltip that spells out what the abbreviation means so first-time
-   * operators don't have to guess.
-   */
-  windowTooltip(short: string, absolute: string | null): string {
-    const expand = (s: string): string => {
-      switch ((s ?? '').toLowerCase()) {
-        case 'mo':   return 'Monthly window';
-        case 'wk':   return 'Weekly window';
-        case '5h':   return '5-hour rolling window';
-        case 'd':    return 'Daily window';
-        case 'rest': return 'Reset window';
-        case 'prem': return 'Premium-request window';
-        default:     return s ? `${s} window` : 'Quota window';
-      }
-    };
-    return absolute ? `${expand(short)} — ${absolute}` : expand(short);
-  }
-
   fetch(): void {
     this.quotaApi.getQuotaReport().subscribe({
       next: (r) => this.report.set(r),
@@ -120,25 +101,18 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const freshness = !s.fetchedAt
       ? 'never refreshed'
       : 'updated ' + this.formatAgo(ageMs);
-    const primary = this.primaryWindow(s.windows);
-    const pct = primary?.usedPct == null ? null : Math.round(primary.usedPct);
-    const tone = this.toneFor(pct);
     const label = this.cliLabel(s.cliType);
-    const value = pct == null ? (s.error ? '!' : '?') : `${pct}%`;
-    const windowLabel = primary ? this.shortLabel(primary.label) : 'quota';
-    const trendLabel = this.trendLabelFor(tone);
+    const shortWindow = this.buildWindowDisplay(s.windows, 'five_hour');
+    const weekWindow = this.buildWindowDisplay(s.windows, 'weekly');
+    const tone = this.cardTone(shortWindow, weekWindow, !!s.error);
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, value, windowLabel, trendLabel),
+      ariaLabel: this.cardAriaLabel(label, shortWindow, weekWindow),
       plan: s.plan,
-      value,
-      windowLabel,
-      absolute: this.absoluteLabel(primary),
-      barPct: Math.max(0, Math.min(100, pct ?? 0)),
-      trend: this.trendFor(tone),
-      trendLabel,
+      shortWindow,
+      weekWindow,
       tone,
       fetchedAt: s.fetchedAt,
       stale,
@@ -151,21 +125,12 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
 
   private emptyCard(cliType: CliType): QuotaCardModel {
     const label = this.cliLabel(cliType);
-    const value = '?';
-    const windowLabel = 'quota';
-    const trendLabel = 'No quota snapshot yet';
     return {
       cliType,
       icon: cliTypeIcon(cliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, value, windowLabel, trendLabel),
+      ariaLabel: `${label} quota: no data yet`,
       plan: null,
-      value,
-      windowLabel,
-      absolute: null,
-      barPct: 0,
-      trend: '→',
-      trendLabel,
       tone: 'unknown',
       fetchedAt: null,
       stale: true,
@@ -176,59 +141,55 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     };
   }
 
-  private cardAriaLabel(label: string, value: string, windowLabel: string, trendLabel: string): string {
-    return `${label} quota detail: ${value} in ${windowLabel}. ${trendLabel}`;
+  private buildWindowDisplay(windows: QuotaWindow[], kind: 'five_hour' | 'weekly'): QuotaWindowDisplay | undefined {
+    const w = this.findWindow(windows, kind);
+    if (!w) return undefined;
+    const pct = w.usedPct == null ? null : Math.round(w.usedPct);
+    const tone = this.toneFor(pct);
+    const value = pct == null ? '—' : `${pct}%`;
+    const barPct = Math.max(0, Math.min(100, pct ?? 0));
+    const kindLabel = kind === 'five_hour' ? '5-hour rolling window' : 'Weekly window';
+    let tooltip = kindLabel;
+    if (w.used != null && w.limit != null) {
+      tooltip += `: ${pct ?? '?'}% used (${w.used}/${w.limit}${w.unit ? ' ' + w.unit : ''})`;
+    }
+    if (w.resetLabel) tooltip += `, reset ${w.resetLabel}`;
+    return { value, barPct, tone, tooltip, windowKind: kind };
   }
 
-  private primaryWindow(windows: QuotaWindow[]): QuotaWindow | null {
-    if (windows.length === 0) return null;
-    return [...windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1))[0] ?? null;
+  private findWindow(windows: QuotaWindow[], kind: 'five_hour' | 'weekly'): QuotaWindow | null {
+    for (const w of windows) {
+      const lower = (w.label ?? '').toLowerCase();
+      if (kind === 'five_hour' && (lower.includes('5h') || lower.includes('5-hour') || lower.includes('session'))) return w;
+      if (kind === 'weekly' && (lower.includes('weekly') || lower.includes('week'))) return w;
+    }
+    return null;
+  }
+
+  private cardTone(sw?: QuotaWindowDisplay, ww?: QuotaWindowDisplay, hasError?: boolean): QuotaCardModel['tone'] {
+    if (hasError && !sw && !ww) return 'unknown';
+    const tones: QuotaCardModel['tone'][] = [];
+    if (sw) tones.push(sw.tone);
+    if (ww) tones.push(ww.tone);
+    if (tones.length === 0) return 'unknown';
+    if (tones.includes('hot')) return 'hot';
+    if (tones.includes('warn')) return 'warn';
+    return 'ok';
+  }
+
+  private cardAriaLabel(label: string, sw?: QuotaWindowDisplay, ww?: QuotaWindowDisplay): string {
+    const parts = [`${label} quota`];
+    if (sw) parts.push(`5h: ${sw.value}`);
+    if (ww) parts.push(`weekly: ${ww.value}`);
+    if (!sw && !ww) parts.push('no data yet');
+    return parts.join(', ');
   }
 
   private toneFor(pct: number | null): QuotaCardModel['tone'] {
-    let tone: QuotaCardModel['tone'];
-    if (pct === null) tone = 'unknown';
-    else if (pct < 70) tone = 'ok';
-    else if (pct < 90) tone = 'warn';
-    else tone = 'hot';
-    return tone;
-  }
-
-  private trendFor(tone: QuotaCardModel['tone']): string {
-    switch (tone) {
-      case 'hot': return '↑';
-      case 'warn': return '↗';
-      case 'ok': return '→';
-      default: return '·';
-    }
-  }
-
-  private trendLabelFor(tone: QuotaCardModel['tone']): string {
-    switch (tone) {
-      case 'hot': return 'Rate-limit pressure is high';
-      case 'warn': return 'Rate-limit pressure is rising';
-      case 'ok': return 'Headroom available';
-      default: return 'Quota pressure unknown';
-    }
-  }
-
-  private absoluteLabel(w: QuotaWindow | null): string | null {
-    if (!w || w.used === null || w.limit === null) return null;
-    return `${w.used}/${w.limit}${w.unit ? ' ' + w.unit : ''}`;
-  }
-
-  /** Compact window label for the status-bar row. */
-  private shortLabel(label: string): string {
-    const lower = (label ?? '').toLowerCase();
-    if (lower.includes('5h') || lower.includes('5-hour') || lower.includes('session')) return '5h';
-    if (lower.includes('weekly') || lower.includes('week')) return 'wk';
-    if (lower.includes('monthly') || lower.includes('month')) return 'mo';
-    if (lower.includes('daily') || lower.includes('day')) return 'd';
-    if (lower.includes('rest')) return 'rest';
-    if (lower.includes('premium')) return 'prem';
-    // Fallback: first short token, capped at 4 chars.
-    const first = (label ?? '').split(/\s+/)[0] ?? '';
-    return first.slice(0, 4) || '?';
+    if (pct === null) return 'unknown';
+    if (pct < 70) return 'ok';
+    if (pct < 90) return 'warn';
+    return 'hot';
   }
 
   private cliLabel(cli: string): string {

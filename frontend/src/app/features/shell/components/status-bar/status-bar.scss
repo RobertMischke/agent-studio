@@ -29,6 +29,9 @@
   justify-content: center;
   overflow: hidden;
 }
+.statusbar__group--spacer {
+  min-width: 40px;
+}
 .statusbar__group--right {
   gap: 2px;
 }
