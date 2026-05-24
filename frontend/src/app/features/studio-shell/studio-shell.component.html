@@ -544,6 +544,74 @@
                         (click)="openUpdateCenter()">
                   Open update history
                 </button>
+
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt"
+                     data-testid="settings-workspaces-head">Workspaces</div>
+                <div class="studio-settings-workspaces"
+                     data-testid="settings-workspaces"
+                     [attr.aria-busy]="registryWorkspacesLoading() ? 'true' : null">
+                  @if (registryWorkspacesError(); as err) {
+                    <div class="studio-empty studio-empty--note"
+                         data-testid="settings-workspaces-error">{{ err }}</div>
+                  } @else if (registryWorkspacesLoading() && registryWorkspaces().length === 0) {
+                    <div class="studio-empty studio-empty--note">Loading workspaces…</div>
+                  } @else if (registryWorkspaces().length === 0) {
+                    <div class="studio-empty studio-empty--note"
+                         data-testid="settings-workspaces-empty">
+                      No workspaces registered yet. Add a <code>WatchPaths</code> entry to
+                      <code>backend/appsettings.Local.json</code> and restart the backend; the
+                      first boot will seed the default workspace and one project per entry.
+                    </div>
+                  } @else {
+                    <ul class="studio-settings-workspaces__list"
+                        data-testid="settings-workspaces-list">
+                      @for (ws of registryWorkspaces(); track ws.id) {
+                        <li class="studio-settings-workspace-row"
+                            data-testid="settings-workspace-row"
+                            [attr.data-workspace-id]="ws.id">
+                          <span class="studio-settings-workspace-color"
+                                [style.background]="ws.color || 'var(--studio-fg-muted)'"
+                                aria-hidden="true"></span>
+                          <span class="studio-settings-workspace-name">{{ ws.displayName }}</span>
+                          <span class="studio-settings-workspace-id mono">{{ ws.id }}</span>
+                          <span class="studio-settings-workspace-count">
+                            {{ ws.projects.length }} {{ ws.projects.length === 1 ? 'project' : 'projects' }}
+                          </span>
+                          <div class="studio-settings-workspace-actions">
+                            <button type="button"
+                                    class="studio-settings-workspace-action"
+                                    data-testid="settings-workspace-edit-color"
+                                    [appTooltip]="'Set color — ships with F45b'"
+                                    disabled aria-disabled="true">🎨</button>
+                            <button type="button"
+                                    class="studio-settings-workspace-action"
+                                    data-testid="settings-workspace-move-up"
+                                    [appTooltip]="'Move up — ships with F45b'"
+                                    disabled aria-disabled="true">▲</button>
+                            <button type="button"
+                                    class="studio-settings-workspace-action"
+                                    data-testid="settings-workspace-move-down"
+                                    [appTooltip]="'Move down — ships with F45b'"
+                                    disabled aria-disabled="true">▼</button>
+                            <button type="button"
+                                    class="studio-settings-workspace-action"
+                                    data-testid="settings-workspace-delete"
+                                    [appTooltip]="ws.isDefault
+                                      ? 'Default workspace cannot be deleted'
+                                      : 'Delete — ships with F45b'"
+                                    disabled aria-disabled="true">×</button>
+                          </div>
+                        </li>
+                      }
+                    </ul>
+                    <p class="studio-settings-workspaces__note"
+                       data-testid="settings-workspaces-note">
+                      Read-only listing of the F45a registry. Create / rename / reorder /
+                      color / delete and the per-project bulk actions (rename, short-code,
+                      workspace move, archive) ship with F45b. See ADR-0037.
+                    </p>
+                  }
+                </div>
               </section>
             }
             @default {

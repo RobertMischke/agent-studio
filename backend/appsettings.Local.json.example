@@ -1,0 +1,31 @@
+{
+  "//Purpose": "Per-checkout local override. This file is gitignored; copy it to appsettings.Local.json and edit. Loaded after appsettings.Development.json so flags here win on the developer's machine.",
+
+  "Environment": {
+    "//IsDev": "Renders the orange DEV stripe + orange PWA icon + (DEV) window title. Set true on the dev checkout, false (or omit the block) on the stable checkout.",
+    "IsDev": true
+  },
+
+  "DevTools": {
+    "//comment": "Devtools knobs are dev-only conveniences. Leave them off on stable.",
+    "UpdateStableEnabled": true,
+    "DeleteE2EJobsEnabled": true
+  },
+
+  "//TaskRepository": "Workspace root. Job folders live under <TaskRepository>/projects/<projectKey>/<lane>/<slug>/. The registry metadata also lives here under <TaskRepository>/.metadata/{workspaces.json,projects.json} (ADR-0037).",
+  "TaskRepository": "C:\\Projects\\agent-taskboard-workspace",
+
+  "//WatchPaths": "ADR-0037: BOOTSTRAP discovery source only - ignored after first run for any RootPath that already has a registry record. Each entry seeds a project record on first boot. After the registry record exists, this entry can be removed without losing the project, and renaming Name here will not propagate to the registry's DisplayName. Use the (forthcoming F45b) /api/projects mutation endpoints to rename, archive, reassign workspace, or change color. Removing an entry here does NOT delete its registry record.",
+  "WatchPaths": [
+    {
+      "//comment": "RootPath is the working directory for CLI runs. RepositoryPath is optional; set it when git operations should run from a parent folder of RootPath.",
+      "Name": "My Project",
+      "RootPath": "C:\\Projects\\my-project\\App",
+      "RepositoryPath": "C:\\Projects\\my-project"
+    }
+  ],
+
+  "Supervisor": {
+    "HardCheckEnabled": true
+  }
+}

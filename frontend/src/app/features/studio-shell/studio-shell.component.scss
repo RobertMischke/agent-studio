@@ -1103,6 +1103,105 @@
   }
 }
 
+// F47 / ADR-0037 — Settings panel "Workspaces" section. Read-only
+// listing of the registry. Action buttons are disabled until the
+// F45b mutation endpoints ship.
+.studio-settings-workspaces {
+  padding: 4px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__note {
+    margin: 4px 0 0;
+    padding: 6px 8px;
+    background: var(--studio-bg-elevated);
+    border-left: 2px solid var(--studio-accent);
+    font-size: 11px;
+    color: var(--studio-fg-dim);
+    border-radius: 2px;
+    line-height: 1.4;
+  }
+}
+
+.studio-settings-workspace-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--studio-bg-elevated);
+}
+
+.studio-settings-workspace-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.studio-settings-workspace-name {
+  color: var(--studio-fg);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-settings-workspace-id {
+  color: var(--studio-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.studio-settings-workspace-count {
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+
+.studio-settings-workspace-actions {
+  display: flex;
+  gap: 2px;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.studio-settings-workspace-action {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--studio-fg-muted);
+  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  cursor: not-allowed;
+  opacity: 0.45;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover:not([disabled]) {
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg);
+  }
+
+  &[disabled] {
+    cursor: not-allowed;
+  }
+}
+
 // Detail view inside the studio editor body — bring the legacy
 // app-job-detail markup closer to the reference (.reference-layout/
 // detail.jsx). Goals: hide / compact the dense top toolbars (command-

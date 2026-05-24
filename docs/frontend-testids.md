@@ -61,6 +61,26 @@ Each lane is an `<app-job-column>` instance. Its outer element carries:
 - `data-testid="job-card-{job-id}"`
 - `data-job-id`, `data-job-key`, `data-state`
 
+## Settings panel — Workspaces section (F47 / ADR-0037)
+
+Read-only listing of the project + workspace registry (backed by
+`GET /api/workspaces`). Mutation buttons are present-but-disabled until
+the F45b endpoints ship.
+
+| Test id                              | Element / meaning                                                                                |
+|--------------------------------------|---------------------------------------------------------------------------------------------------|
+| `settings-workspaces-head`           | Section heading ("Workspaces").                                                                   |
+| `settings-workspaces`                | Section wrapper. Carries `aria-busy="true"` while the initial fetch is in flight.                  |
+| `settings-workspaces-list`           | `<ul>` of workspace rows. Absent when the empty / loading / error state renders instead.           |
+| `settings-workspace-row`             | One `<li>` per workspace. Also carries `data-workspace-id="ws-…"` for direct lookup.               |
+| `settings-workspace-edit-color`      | Disabled color-edit button. Ships with F45b.                                                       |
+| `settings-workspace-move-up`         | Disabled move-up button. Ships with F45b.                                                          |
+| `settings-workspace-move-down`       | Disabled move-down button. Ships with F45b.                                                        |
+| `settings-workspace-delete`          | Disabled delete button (also disabled for the default workspace once F45b ships). Ships with F45b. |
+| `settings-workspaces-note`           | Bottom note that points at ADR-0037 and explains the disabled actions.                             |
+| `settings-workspaces-empty`          | Empty-state message shown when the registry has no entries yet.                                    |
+| `settings-workspaces-error`          | Error message shown when `GET /api/workspaces` fails.                                              |
+
 ## Patterns to AVOID
 
 | ❌ Anti-pattern | ✅ Why it's bad | Use instead |

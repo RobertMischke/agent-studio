@@ -12,7 +12,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { JobInfo, WatchPathEntry } from '../../models/job.model';
+import type { JobInfo, WatchPathEntry, RegistryWorkspaceListItem } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
@@ -29,6 +29,7 @@ import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
+import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
 import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.menu-builders';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
@@ -77,7 +78,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent, MenuComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -295,6 +296,44 @@ export class StudioShellComponent {
   private readonly syncProjectDragWorkspacesFx = effect(() => {
     this.projectDrag.setWorkspaces(this.workspaces());
   });
+
+  /**
+   * F47 / ADR-0037 — registry-backed workspace list rendered by the
+   * Settings panel "Workspaces" section. Read-only today; the action
+   * buttons (rename / reorder / color / delete) ship with F45b.
+   */
+  readonly registryWorkspaces = signal<readonly RegistryWorkspaceListItem[]>([]);
+  readonly registryWorkspacesLoading = signal(false);
+  readonly registryWorkspacesError = signal<string | null>(null);
+
+  /**
+   * Lazy-load the registry workspaces the first time the Settings panel
+   * opens, then re-pull whenever it re-opens so a future F45b mutation
+   * from another tab is reflected without a full reload.
+   */
+  private readonly loadRegistryWorkspacesFx = effect(() => {
+    const panel = this.activePanel();
+    const visible = this.sidebarVisible();
+    if (panel !== 'settings' || !visible) return;
+    this.reloadRegistryWorkspaces();
+  });
+
+  reloadRegistryWorkspaces(): void {
+    this.registryWorkspacesLoading.set(true);
+    this.registryWorkspacesError.set(null);
+    this.jobService.getRegistryWorkspaces().subscribe({
+      next: (ws) => {
+        this.registryWorkspaces.set(ws ?? []);
+        this.registryWorkspacesLoading.set(false);
+      },
+      error: (err: unknown) => {
+        this.registryWorkspacesError.set(
+          err instanceof Error ? err.message : 'Failed to load workspaces',
+        );
+        this.registryWorkspacesLoading.set(false);
+      },
+    });
+  }
 
   /**
    * Track which active-project name we've already auto-expanded for, so

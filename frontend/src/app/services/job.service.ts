@@ -6,6 +6,7 @@ import type {
   JobDetail,
   JobInfo,
   WatchPathEntry,
+  RegistryWorkspaceListItem,
   CliOutputLine,
   RunnerStatus,
   CliSettings,
@@ -364,6 +365,15 @@ export class JobService {
 
   getWatchPaths() {
     return this.http.get<WatchPathEntry[]>(`${this.baseUrl}/watch-paths`);
+  }
+
+  /**
+   * F45a / ADR-0037 — list workspaces with their embedded projects.
+   * Mutations (create / rename / delete / reorder / color edit) ship
+   * with F45b; today this endpoint is read-only.
+   */
+  getRegistryWorkspaces() {
+    return this.http.get<RegistryWorkspaceListItem[]>(`${this.baseUrl}/workspaces`);
   }
 
   /**

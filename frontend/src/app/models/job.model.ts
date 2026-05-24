@@ -468,6 +468,40 @@ export interface WatchPathEntry {
   rootPath: string;
 }
 
+/**
+ * F45a / ADR-0037 — flat project summary returned by `GET /api/projects`
+ * and embedded under `WorkspaceListItem.projects`. Mirrors backend
+ * `ProjectSummary`.
+ */
+export interface RegistryProjectSummary {
+  id: string;
+  displayName: string;
+  shortCode: string;
+  workspaceId: string;
+  color: string | null;
+  cliDefault: string | null;
+  modelDefault: string | null;
+  sortOrder: number;
+  storageLocation: string;
+  archived: boolean;
+  createdAt: string;
+}
+
+/**
+ * F45a / ADR-0037 — workspace listing entry returned by `GET /api/workspaces`.
+ * Mirrors backend `WorkspaceListItem`; embeds the active (non-archived)
+ * projects so the sidebar can render in a single round-trip.
+ */
+export interface RegistryWorkspaceListItem {
+  id: string;
+  displayName: string;
+  sortOrder: number;
+  isDefault: boolean;
+  color: string | null;
+  createdAt: string;
+  projects: RegistryProjectSummary[];
+}
+
 export interface CliExecution {
   jobId: string;
   jobKey: string;

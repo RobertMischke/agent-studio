@@ -250,13 +250,24 @@ First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagn
 | GET | `/api/cli/usage` | Sessions + versions for all CLIs. |
 | GET | `/api/cli/quota` | Per-CLI quota windows (used%, reset times). |
 | GET | `/api/cli/{cliType}/models` | Model catalog for one CLI. |
-| GET | `/api/watch-paths` | Configured workspaces. |
+| GET | `/api/watch-paths` | Configured workspaces (legacy: returns the effective `WatchPaths` plus any pointer resolution). |
+| GET | `/api/workspaces` | Workspace registry with embedded projects (ADR-0037). |
+| GET | `/api/projects` | Project registry, flat list. Pass `?includeArchived=true` to include archived rows. |
+| GET | `/api/projects/{PROJ-NNN}` | Full project record by canonical id. The route regex is locked to `^PROJ-\d{3,}$` so it cannot collide with the legacy display-name routes. |
 
-`jobId` (URL slug) + `watchPath` (project root) is the addressing scheme. `jobKey` is `watchPath::jobId` and is used internally only.
+`jobId` (URL slug) + `watchPath` (project root) is the addressing scheme today. `jobKey` is `watchPath::jobId` and is used internally only. ADR-0037 introduces a parallel id-based scheme (`PROJ-NNN`); both coexist while consumers are migrated, and resolution flows through [`JobKeyResolver`](backend/Services/Jobs/JobKeyResolver.cs).
 
-### Watched workspaces
+### Project + workspace registry (ADR-0037)
 
-Local watch configuration usually lives in gitignored `backend/appsettings.Local.json`. Use `/api/watch-paths` to enumerate effective watch paths at runtime; it includes pointer resolution through `.orchestrator.yml` and `TaskRepository`. Never hardcode paths in tests; read them from there.
+Workspaces and projects live as registry records under `<TaskRepository>/.metadata/{workspaces.json,projects.json}`. Each project has an immutable id (`PROJ-001`, `PROJ-002`, …), a display name (editable), a short code (used in task keys like `ATP-130`), a workspace membership, an optional color, sort order, and an archived flag. Workspaces are pure metadata (no folder per workspace) with their own ids, sort order, color, and an `IsDefault` flag.
+
+The registry is populated by a boot-time pass ([`RegistryBootstrap.Run`](backend/Services/Registry/RegistryBootstrap.cs)) that walks the configured `WatchPaths` and inserts a record for any storage location not already known. Once a record exists, the registry is the source of truth for that project: `WatchPaths` entries that disappear from `appsettings.Local.json` do **not** remove their registry records, and a `WatchPaths` rename does not propagate to the registry's `DisplayName`. **Editing the registry on disk is reserved for migrations and tests**; consumers go through the typed `WorkspaceRegistry` / `ProjectRegistry` singletons or, for read access, the `/api/workspaces` and `/api/projects` endpoints.
+
+Today F45a (the read surface + bootstrap) is in place. The write-side mutations (create / rename / archive / reassign workspace / reorder / color edit), the jobKey-format migration, and the frontend tree integration are tracked under follow-up tasks F45b, F45c, and F46. Until they ship, edits to workspace + project metadata happen through `WatchPaths` (display name and storage path only) and any registry record's `DisplayName` is whatever was inferred at first-boot bootstrap.
+
+### Watched workspaces (legacy bootstrap source)
+
+Local watch configuration lives in gitignored `backend/appsettings.Local.json`. Each `WatchPaths` entry seeds a registry record at first boot (see above). `/api/watch-paths` continues to enumerate the effective watch paths at runtime (including pointer resolution through `.orchestrator.yml` and `TaskRepository`) for legacy consumers. Never hardcode paths in tests; read them from there. New code should prefer `/api/workspaces` / `/api/projects` where it has a choice.
 
 _(Shell policy, Backend Control, Frontend Control, and Build/Test/Verify are documented below under "Shell policy: sh, not PowerShell".)_
 
