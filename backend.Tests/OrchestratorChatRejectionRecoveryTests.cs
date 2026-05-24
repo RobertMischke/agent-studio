@@ -169,8 +169,14 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
             _replyText = replyText;
         }
 
+        // The 6-arg overloads are the ones ResumeWithFallbackAsync actually
+        // calls (the orchestrator-chat path always passes the inlineImages
+        // list, even when null, since commit d28d0b3 added the multimodal
+        // fast path). Overriding the 5-arg variants left them as dead code.
         public override Task<OrchestratorDecisionResult> ResumeAsync(
-            string sessionId, string prompt, string? model, string workingDirectory, CancellationToken ct = default)
+            string sessionId, string prompt, string? model, string workingDirectory,
+            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            CancellationToken ct = default)
         {
             ResumeCalls++;
             LastResumeSessionId = sessionId;
@@ -184,7 +190,9 @@ public class OrchestratorChatRejectionRecoveryTests : IDisposable
         }
 
         public override Task<OrchestratorDecisionResult> DecideAsync(
-            string prompt, string? model, string workingDirectory, CancellationToken ct = default)
+            string prompt, string? model, string workingDirectory,
+            IReadOnlyList<OrchestratorApi.Services.Cli.OneShot.CliOneShotImage>? inlineImages,
+            CancellationToken ct = default)
         {
             DecideCalls++;
             return Task.FromResult(new OrchestratorDecisionResult(

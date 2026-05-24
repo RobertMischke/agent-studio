@@ -208,8 +208,13 @@ public sealed class ClaudeOneShot : ICliOneShot
         catch (Exception ex)
         {
             var completedAt = DateTime.UtcNow;
-            _logger.LogError(ex, "Claude one-shot crashed (source={Source}, job={Job})",
-                request.Source ?? "(none)", request.JobId ?? "(none)");
+            // ExceptionType is named explicitly because the bare message
+            // ("The pipe is being closed.", "Cannot access a closed pipe.")
+            // is ambiguous across IOException / InvalidOperationException /
+            // ObjectDisposedException - the type narrows the post-mortem.
+            _logger.LogError(ex,
+                "Claude one-shot crashed (source={Source}, job={Job}, exceptionType={ExceptionType}): {Raw}",
+                request.Source ?? "(none)", request.JobId ?? "(none)", ex.GetType().Name, ex.Message);
             try { p?.Kill(entireProcessTree: true); } catch { }
             var fail = CliOneShotResult.SpawnFailure(ex.Message, requestedAt, completedAt);
             RecordIfRequested(request, fail);

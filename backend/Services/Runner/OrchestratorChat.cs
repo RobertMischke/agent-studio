@@ -262,6 +262,18 @@ public record OrchestratorChatTurn
     public string? Model { get; init; }
     public OrchestratorTokenUsage? TokenUsage { get; init; }
     public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Raw / technical error detail preserved alongside a friendly
+    /// <see cref="ErrorMessage"/>. The chat bubble shows the friendly
+    /// message; the detail is what a developer needs to bisect (the
+    /// original .NET exception text or CLI stderr). Set whenever
+    /// <see cref="ErrorMessage"/> was produced by
+    /// <see cref="OrchestratorChatErrorTranslator"/>; null on success
+    /// turns and on legacy entries written before the translator existed.
+    /// </summary>
+    public string? ErrorDetail { get; init; }
+
     public List<OrchestratorChatAttachment>? Attachments { get; init; }
 }
 
@@ -492,12 +504,24 @@ public class OrchestratorChatService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Orchestrator chat resume failed for project {Project}", projectName);
+                // Full stacktrace at error level so the backend log is
+                // self-sufficient for bisecting the 2026-05-24 pipe-closed
+                // incident class. The chat bubble itself shows the friendly
+                // translation produced below; the raw .NET message lands in
+                // ErrorDetail (audit log + future UI expander) but never as
+                // the primary bubble text.
+                _logger.LogError(
+                    ex,
+                    "Orchestrator chat send threw for project {Project} ({ExceptionType}): {Raw}",
+                    projectName, ex.GetType().Name, ex.Message);
+                var translation = OrchestratorChatErrorTranslator.Translate(ex.Message);
+                if (translation.SessionLikelyLost) _sessionStore.Clear();
                 var failure = new OrchestratorChatTurn
                 {
                     Role = OrchestratorChatRoles.Orchestrator,
                     Text = "",
-                    ErrorMessage = ex.Message
+                    ErrorMessage = translation.FriendlyMessage,
+                    ErrorDetail = translation.RawDetail
                 };
                 _chat.Append(watchPath, failure);
                 return failure;
@@ -505,16 +529,36 @@ public class OrchestratorChatService
 
             if (!result.Success)
             {
+                _logger.LogError(
+                    "Orchestrator chat call failed for project {Project} (model={Model}): {Raw}",
+                    projectName, result.Model, result.ErrorMessage ?? "(no error message)");
+                var translation = OrchestratorChatErrorTranslator.Translate(result.ErrorMessage);
                 var failure = new OrchestratorChatTurn
                 {
                     Role = OrchestratorChatRoles.Orchestrator,
                     Text = result.ReplyText ?? "",
                     Model = result.Model,
                     TokenUsage = result.TokenUsage,
-                    ErrorMessage = result.ErrorMessage ?? "Orchestrator reply was empty."
+                    ErrorMessage = translation.FriendlyMessage,
+                    ErrorDetail = translation.RawDetail
                 };
                 _chat.Append(watchPath, failure);
-                if (!resumeRejected) UpdateSessionUsage(session, result);
+                // Session-bookkeeping policy on failure:
+                //   - resumeRejected: the runner already rebootstrapped via
+                //     onSessionRejected, so we must not touch the session
+                //     record here.
+                //   - SessionLikelyLost (pipe-broken, spawn-failed, session
+                //     expiry that survived the rebootstrap fallback): clear
+                //     the stored session so the next turn boots a fresh one.
+                //     UpdateSessionUsage would otherwise rewrite the same id
+                //     and pin the user on a dead session indefinitely.
+                //   - otherwise (timeout / rate-limit / unknown): record the
+                //     usage tick so the session bookkeeping stays contiguous.
+                if (!resumeRejected)
+                {
+                    if (translation.SessionLikelyLost) _sessionStore.Clear();
+                    else UpdateSessionUsage(session, result);
+                }
                 return failure;
             }
 
