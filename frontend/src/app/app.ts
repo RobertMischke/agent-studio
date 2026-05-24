@@ -83,6 +83,7 @@ import { ErrorDialogComponent } from './components/error-dialog/error-dialog.com
 import { ConfirmDialogComponent } from './components/app-dialog/confirm-dialog/confirm-dialog.component';
 import { StudioIconComponent } from './components/studio-icon/studio-icon.component';
 import { NotificationStackComponent } from './components/app-dialog/notification-stack/notification-stack.component';
+import { NotificationComponent } from './components/notification/notification.component';
 import { MediaLightboxComponent } from './components/media-lightbox/media-lightbox.component';
 import { UpdateClientService } from './services/update.service';
 import { projectIdentity } from './services/project-identity.util';
@@ -121,6 +122,7 @@ interface VerboseDebugContext {
     ErrorDialogComponent,
     ConfirmDialogComponent,
     NotificationStackComponent,
+    NotificationComponent,
     MediaLightboxComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,

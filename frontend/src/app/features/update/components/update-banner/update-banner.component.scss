@@ -1,101 +1,124 @@
-// Sticky-top notification strip. Always above the kanban; never blocks
-// pointer events for the rest of the page even when visible.
+/*
+ * Update banner host. Visual chrome (surface, border, icon bubble,
+ * per-severity tint, close affordance, light/dark theming) is owned by
+ * <app-notification> (F37). This file now only owns the banner's
+ * full-width positioning at the top of the shell + the picker / failure
+ * list / button styling specific to this surface.
+ *
+ * Tokens: every colour reads through --notify-* / --studio-* aliases.
+ * No raw hex/rgba lives here, so light + dark inherit automatically from
+ * the theme blocks in _tokens-semantic.scss.
+ */
+
+:host {
+  display: block;
+}
+
 .update-banner {
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  width: 100%;
+}
+
+/* Failed banner needs a taller body than the default 4-line clamp — the
+ * verification-failure list and the rollback picker both render inline
+ * and would otherwise be cut off. */
+.update-banner--failed .notification__message {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+
+.update-banner__text {
+  display: inline;
+}
+
+.update-banner__actions {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
 
-  // Light Catppuccin-leaning accents per state. The shell already runs
-  // dark, so backgrounds stay subtle to avoid a marketing feel.
-  &--running { background: rgba(137, 180, 250, 0.14); color: #cdd6f4; }
-  &--behind  { background: rgba(249, 226, 175, 0.10); color: #e6dec0; }
-  &--done    { background: rgba(166, 227, 161, 0.10); color: #cfead0; }
-  &--failed  { background: rgba(243, 139, 168, 0.14); color: #f9c5d5; }
+.update-banner__failures {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  list-style: disc;
 
-  &__spinner {
-    display: inline-block;
-    animation: update-banner-spin 1.4s linear infinite;
+  li { margin-bottom: 0.15rem; }
+  .update-banner__observed {
+    font-family: var(--mono-stack, ui-monospace, monospace);
+    color: var(--notify-surface-fg-strong);
+  }
+  .update-banner__expected { color: var(--notify-surface-fg-dim); }
+}
+
+.update-banner__arrow {
+  color: var(--notify-surface-fg-dim);
+  padding: 0 0.15rem;
+}
+
+.update-banner__head {
+  margin-left: 0.5rem;
+  font-family: var(--mono-stack, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.75rem;
+  color: var(--notify-surface-fg-dim);
+}
+
+.update-banner__picker {
+  margin-top: 0.55rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 4px;
+  background: var(--studio-bg-elevated);
+  border: 1px solid var(--studio-border-subtle);
+  font-size: 0.8125rem;
+
+  &-list {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+
+    li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.2rem 0;
+      border-bottom: 1px dotted var(--studio-border-subtle);
+
+      &:last-child { border-bottom: none; }
+    }
   }
 
-  &__text { flex: 1; }
-  &__failures {
-    margin: 0.4rem 0 0;
-    padding-left: 1.1rem;
-    font-size: 0.8125rem;
-    list-style: disc;
-
-    li { margin-bottom: 0.15rem; }
-    .update-banner__observed { font-family: var(--mono-stack, ui-monospace, monospace); opacity: 0.85; }
-    .update-banner__expected { opacity: 0.7; }
-  }
-  &__arrow { opacity: 0.7; padding: 0 0.15rem; }
-  &__head {
-    margin-left: 0.5rem;
+  &-meta {
+    color: var(--notify-surface-fg-dim);
     font-family: var(--mono-stack, ui-monospace, SFMono-Regular, monospace);
     font-size: 0.75rem;
-    opacity: 0.8;
   }
 
-  &__picker {
-    margin-top: 0.55rem;
-    padding: 0.5rem 0.7rem;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 0.8125rem;
-
-    &-list {
-      margin: 0;
-      padding-left: 0;
-      list-style: none;
-
-      li {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.2rem 0;
-        border-bottom: 1px dotted rgba(255, 255, 255, 0.06);
-
-        &:last-child { border-bottom: none; }
-      }
-    }
-
-    &-meta {
-      opacity: 0.75;
-      font-family: var(--mono-stack, ui-monospace, SFMono-Regular, monospace);
-      font-size: 0.75rem;
-    }
-
-    &-error {
-      opacity: 0.85;
-      color: #f9c5d5;
-    }
-  }
-
-  &__btn {
-    padding: 0.25rem 0.75rem;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.04);
-    color: inherit;
-    cursor: pointer;
-    font-size: 0.8125rem;
-
-    &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
-    &:disabled { cursor: progress; opacity: 0.6; }
-
-    &--primary {
-      border-color: rgba(137, 180, 250, 0.4);
-      background: rgba(137, 180, 250, 0.18);
-      &:hover:not(:disabled) { background: rgba(137, 180, 250, 0.28); }
-    }
+  &-error {
+    color: var(--notify-error-icon-fg);
   }
 }
 
-@keyframes update-banner-spin {
-  to { transform: rotate(360deg); }
+.update-banner__btn {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--studio-border);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-family: var(--font-ui);
+
+  &:hover:not(:disabled) { background: var(--studio-bg-active); }
+  &:disabled { cursor: progress; opacity: 0.6; }
+
+  &--primary {
+    border-color: var(--notify-info-border);
+    background: var(--notify-info-tint);
+    color: var(--notify-surface-fg-strong);
+    &:hover:not(:disabled) { background: var(--notify-info-icon-bg); }
+  }
 }

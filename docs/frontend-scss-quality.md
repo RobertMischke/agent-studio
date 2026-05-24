@@ -358,9 +358,10 @@ Landed:
 4. `<app-workspace-banner>` (F29) migrated to `<app-notification layout="banner">`; topic-to-severity map (`accept` / `decision` → success, `reissue` → info, `escalate` → warning, `giveup` → error, unknown → accent). The local SCSS now only owns the float-right positioning + a tighter 3-line clamp.
 5. `frontend/e2e/system/f37-notification-themes.spec.ts` locks the dark + light contracts: every severity icon clears WCAG-style contrast against the surface in both themes; the four kinds render one element each.
 
-Remaining (do not bundle into the same task):
-- `<app-update-banner>` carries its own picker / verification-failure list — refactor on its own slice when the update surface is rebuilt.
-- `.failed-pickup-banner` (in `app.scss`) and `.triage-toast` (also `app.scss`) are inline one-off surfaces; sweep their hex literals to `--notify-*` tokens or migrate to `<app-notification>` whenever the surrounding area is being touched anyway.
+Follow-up landed (Wave G2 / F40):
+6. `<app-update-banner>` now consumes `<app-notification layout="banner">` per mode (`done` / `done-no-change` → `kind="success"`, `failed` → `kind="error"`). Picker + verification-failure list live inside the default slot; the dismiss / reload / roll-back buttons sit in the `[notification-actions]` slot. The local SCSS drops the per-mode rgba/hex literals and now only owns full-width positioning + button + picker chrome (token-driven).
+7. `.failed-pickup-banner` (in `app.scss`) now wraps `<app-notification kind="warning" layout="banner">` inside the existing `<button>` so the full-width click-to-scroll affordance stays intact while the visual chrome flips with the theme. Hex literals replaced with `--notify-warning-*` tokens; the dot is gone (the notification primitive owns the icon bubble).
+8. `.triage-toast` migrated to `<app-notification kind="info" layout="toast">`; the local rule now only owns position (`absolute; right: 24px; bottom: 24px`) and the `pointer-events: none` pass-through.
 
 Expected outcome: any new transient surface reaches for `<app-notification kind="…">` instead of re-implementing the icon bubble + close + per-severity colours; theme support is automatic.
 

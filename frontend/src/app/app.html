@@ -192,13 +192,19 @@
                         data-testid="failed-pickup-banner"
                         [attr.aria-label]="'Open failed-pickup lane'"
                         (click)="scrollToFailedPickupLane()">
-                  <span class="failed-pickup-banner__dot" aria-hidden="true"></span>
-                  <span class="failed-pickup-banner__text">
-                    <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
-                    {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
-                    Open the failed-pickup lane.
-                  </span>
-                  <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
+                  <app-notification kind="warning"
+                                    layout="banner"
+                                    icon="⚠"
+                                    ariaLive="polite">
+                    <span class="failed-pickup-banner__text">
+                      <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
+                      {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
+                      Open the failed-pickup lane.
+                    </span>
+                    <span notification-actions
+                          class="failed-pickup-banner__chev"
+                          aria-hidden="true">›</span>
+                  </app-notification>
                 </button>
               }
               <main class="dashboard dashboard--studio" data-testid="studio-board"
@@ -582,7 +588,14 @@
                               (nextInLaneRequested)="onTriageNext(detail.info)"
                               (prevInLaneRequested)="onTriagePrev(detail.info)" />
               @if (triageToast(); as toast) {
-                <div class="triage-toast" data-testid="triage-toast" role="status">{{ toast }}</div>
+                <app-notification class="triage-toast"
+                                  kind="info"
+                                  layout="toast"
+                                  icon="✓"
+                                  testid="triage-toast"
+                                  ariaLive="polite">
+                  {{ toast }}
+                </app-notification>
               }
             </main>
           </div>

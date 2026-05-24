@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 
+import { NotificationComponent } from '../../../../components/notification/notification.component';
 import { UpdateClientService } from '../../../../services/update.service';
 import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 
@@ -34,7 +35,7 @@ import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 @Component({
   selector: 'app-update-banner',
   standalone: true,
-  imports: [],
+  imports: [NotificationComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-banner.component.html',
   styleUrl: './update-banner.component.scss',

@@ -1339,45 +1339,48 @@
      * the kanban dashboard. Single amber outline tint matches the
      * failed-pickup lane's treatment per kanban-board-design taxonomy.
      */
+    /*
+     * The visual chrome (icon bubble, surface tint, border, body layout,
+     * light/dark theming) is owned by <app-notification kind="warning">
+     * (F37/F40). The wrapper <button> below still handles full-width
+     * click-to-scroll; only positioning + button reset live here.
+     */
     .failed-pickup-banner {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      display: block;
       width: calc(100% - 32px);
       margin: 12px 16px 0;
-      padding: 10px 14px;
-      background: rgba(245, 158, 11, 0.08);
-      border: 1px solid rgba(245, 158, 11, 0.55);
-      border-radius: 10px;
-      color: #fcd34d;
-      font-size: 13px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: inherit;
       cursor: pointer;
       text-align: left;
-      transition: background 0.15s, border-color 0.15s;
+      font: inherit;
     }
-    .failed-pickup-banner:hover {
-      background: rgba(245, 158, 11, 0.16);
-      border-color: rgba(245, 158, 11, 0.85);
+    .failed-pickup-banner:hover .notification {
+      background: var(--notify-warning-icon-bg);
     }
-    .failed-pickup-banner__dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      background: #f59e0b;
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.20);
-      flex-shrink: 0;
+    .failed-pickup-banner:focus-visible {
+      outline: 2px solid var(--studio-accent);
+      outline-offset: 2px;
+      border-radius: 10px;
     }
-    .failed-pickup-banner__text { flex: 1 1 auto; min-width: 0; }
+    .failed-pickup-banner__text {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
     .failed-pickup-banner__text strong {
-      color: #fbbf24;
+      color: var(--notify-warning-icon-fg);
       font-weight: 700;
       margin-right: 2px;
     }
     .failed-pickup-banner__chev {
-      color: #fbbf24;
+      color: var(--notify-warning-icon-fg);
       font-size: 18px;
       line-height: 1;
       flex-shrink: 0;
+      align-self: center;
+      padding: 0 4px;
     }
     /* Banner click-through pulse: highlights the failed-pickup lane briefly
        so the user's eye lands on it after the smooth scroll completes. */
@@ -1598,26 +1601,19 @@
        move). Sits anchored bottom-right of the detail viewport so the user
        sees it whether they hit a primary action or someone else moved the
        job out from under them. */
+    /*
+     * Transient bottom-right confirmation shown after a triage action
+     * (move, delete, advance). Visual chrome is owned by
+     * <app-notification kind="info" layout="toast"> (F37/F40); this
+     * selector only positions the host and keeps the toast click-through.
+     */
     .triage-toast {
       position: absolute;
       right: 24px;
       bottom: 24px;
       z-index: 60;
-      padding: 8px 14px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.92);
-      border: 1px solid rgba(137, 180, 250, 0.45);
-      color: var(--studio-fg);
-      font-size: 0.82rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      max-width: min(360px, calc(100vw - 48px));
       pointer-events: none;
-      animation: triage-toast-fade 0.18s ease-out;
-    }
-    @keyframes triage-toast-fade {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
     }
     .task-nav {
       background: #181825;
