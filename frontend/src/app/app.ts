@@ -55,7 +55,6 @@ import {
 } from './features/shell';
 import { E2ECleanupDialogComponent } from './features/dev-tools';
 import {
-  UpdateBannerComponent,
   UpdateBlockModalComponent,
   UpdateCenterComponent,
   UpdateVersionBadgeComponent,
@@ -129,7 +128,6 @@ interface VerboseDebugContext {
     WorkspaceOverlaysComponent,
     WorkspaceBannerComponent,
     WorkspaceCreateDialogComponent,
-    UpdateBannerComponent,
     UpdateVersionBadgeComponent,
     UpdateCenterComponent,
     UpdateBlockModalComponent,

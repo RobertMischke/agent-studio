@@ -187,25 +187,25 @@
                 </div>
               }
               @if (failedPickupCount() > 0) {
-                <button type="button"
-                        class="failed-pickup-banner"
-                        data-testid="failed-pickup-banner"
-                        [attr.aria-label]="'Open failed-pickup lane'"
-                        (click)="scrollToFailedPickupLane()">
-                  <app-notification kind="warning"
-                                    layout="banner"
-                                    icon="⚠"
-                                    ariaLive="polite">
-                    <span class="failed-pickup-banner__text">
-                      <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
-                      {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
-                      Open the failed-pickup lane.
-                    </span>
-                    <span notification-actions
-                          class="failed-pickup-banner__chev"
-                          aria-hidden="true">›</span>
-                  </app-notification>
-                </button>
+                <app-notification kind="warning"
+                                  layout="banner"
+                                  icon="⚠"
+                                  testid="failed-pickup-banner"
+                                  ariaLive="polite"
+                                  class="board-banner board-banner--clickable"
+                                  role="button"
+                                  tabindex="0"
+                                  aria-label="Open failed-pickup lane"
+                                  (click)="scrollToFailedPickupLane()"
+                                  (keydown.enter)="scrollToFailedPickupLane()"
+                                  (keydown.space)="scrollToFailedPickupLane(); $event.preventDefault()">
+                  <span>
+                    <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
+                    {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
+                    Open the failed-pickup lane.
+                  </span>
+                  <span notification-actions aria-hidden="true">›</span>
+                </app-notification>
               }
               <main class="dashboard dashboard--studio" data-testid="studio-board"
                     [class.dashboard--has-focus]="focusedContainer() !== null">
@@ -306,7 +306,8 @@
         </div>
       </app-studio-shell>
       <!-- Dialogs / overlays / banners follow regardless of the active shell. -->
-      <app-update-banner />
+<!-- <app-update-banner /> moved into <app-notification-stack> in F40 so
+           the update strip docks alongside other banner notifications. -->
       <app-update-center />
       <app-update-block-modal />
       <app-confirm-dialog />
@@ -481,7 +482,8 @@
         </div>
       }
 
-      <app-update-banner />
+<!-- <app-update-banner /> moved into <app-notification-stack> in F40 so
+           the update strip docks alongside other banner notifications. -->
       <app-update-center />
       <app-update-block-modal />
       <app-workspace-banner [projects]="bannerProjects()" />
@@ -587,33 +589,35 @@
                               (triageStartRequested)="onTriageStart(detail.info, $event)"
                               (nextInLaneRequested)="onTriageNext(detail.info)"
                               (prevInLaneRequested)="onTriagePrev(detail.info)" />
-              @if (triageToast(); as toast) {
-                <app-notification class="triage-toast"
-                                  kind="info"
-                                  layout="toast"
-                                  icon="✓"
-                                  testid="triage-toast"
-                                  ariaLive="polite">
-                  {{ toast }}
-                </app-notification>
-              }
+<!--
+                Triage outcomes now flow through NotificationService (toast in
+                <app-notification-stack>) so the panel-anchored pill no longer
+                competes with the unified notification surface. See
+                JobSelectionService.showTriageToast which raises the toast.
+              -->
             </main>
           </div>
         } @else {
           @if (failedPickupCount() > 0) {
-            <button type="button"
-                    class="failed-pickup-banner"
-                    data-testid="failed-pickup-banner"
-                    [attr.aria-label]="'Open failed-pickup lane'"
-                    (click)="scrollToFailedPickupLane()">
-              <span class="failed-pickup-banner__dot" aria-hidden="true"></span>
-              <span class="failed-pickup-banner__text">
+            <app-notification kind="warning"
+                              layout="banner"
+                              icon="⚠"
+                              testid="failed-pickup-banner"
+                              ariaLive="polite"
+                              class="board-banner board-banner--clickable"
+                              role="button"
+                              tabindex="0"
+                              aria-label="Open failed-pickup lane"
+                              (click)="scrollToFailedPickupLane()"
+                              (keydown.enter)="scrollToFailedPickupLane()"
+                              (keydown.space)="scrollToFailedPickupLane(); $event.preventDefault()">
+              <span>
                 <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
                 {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
                 Open the failed-pickup lane.
               </span>
-              <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
-            </button>
+              <span notification-actions aria-hidden="true">›</span>
+            </app-notification>
           }
           <main class="dashboard" data-testid="kanban-dashboard"
                 [class.dashboard--has-focus]="focusedContainer() !== null">

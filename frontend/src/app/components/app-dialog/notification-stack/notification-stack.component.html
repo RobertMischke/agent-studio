@@ -15,3 +15,10 @@
     </app-notification>
   }
 </div>
+<!--
+  Full-width update strip mounts alongside the toast stack so both
+  surfaces share the same "notifications area" instead of having
+  app.html hardcode the update banner separately. The component reads
+  UpdateClientService.status directly; this container only positions it.
+-->
+<app-update-banner />

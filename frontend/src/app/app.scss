@@ -1340,61 +1340,56 @@
      * failed-pickup lane's treatment per kanban-board-design taxonomy.
      */
     /*
-     * The visual chrome (icon bubble, surface tint, border, body layout,
-     * light/dark theming) is owned by <app-notification kind="warning">
-     * (F37/F40). The wrapper <button> below still handles full-width
-     * click-to-scroll; only positioning + button reset live here.
+     * Above-the-board notification slots. The chrome (icon bubble, tint,
+     * border, body layout, light/dark theming) is owned by
+     * <app-notification> (F37). This class only positions the host so
+     * the banner spans the dashboard width consistently. F40 dropped
+     * the legacy .failed-pickup-banner* block; the warning surface now
+     * uses .board-banner + .board-banner--clickable.
      */
-    .failed-pickup-banner {
+    .board-banner {
       display: block;
+      box-sizing: border-box;
       width: calc(100% - 32px);
       margin: 12px 16px 0;
-      padding: 0;
-      border: none;
-      background: transparent;
-      color: inherit;
-      cursor: pointer;
-      text-align: left;
-      font: inherit;
     }
-    .failed-pickup-banner:hover .notification {
+    .board-banner--clickable {
+      cursor: pointer;
+    }
+    .board-banner--clickable:hover .notification {
       background: var(--notify-warning-icon-bg);
     }
-    .failed-pickup-banner:focus-visible {
+    .board-banner--clickable:focus-visible {
       outline: 2px solid var(--studio-accent);
       outline-offset: 2px;
       border-radius: 10px;
     }
-    .failed-pickup-banner__text {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-    .failed-pickup-banner__text strong {
+    .board-banner--clickable .notification strong {
       color: var(--notify-warning-icon-fg);
       font-weight: 700;
       margin-right: 2px;
     }
-    .failed-pickup-banner__chev {
+    .board-banner--clickable [notification-actions] {
       color: var(--notify-warning-icon-fg);
       font-size: 18px;
       line-height: 1;
-      flex-shrink: 0;
       align-self: center;
       padding: 0 4px;
     }
     /* Banner click-through pulse: highlights the failed-pickup lane briefly
-       so the user's eye lands on it after the smooth scroll completes. */
+       so the user's eye lands on it after the smooth scroll completes.
+       The shadow colour uses the warning-icon-fg token so light + dark
+       themes both get a readable highlight (was a hardcoded amber rgba). */
     .column--failed-pickup-pulse {
       animation: failed-pickup-pulse 1.4s ease-out 1;
     }
     @keyframes failed-pickup-pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.0); }
-      30%  { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.40); }
-      100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.0); }
+      0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--notify-warning-icon-fg) 0%, transparent); }
+      30%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--notify-warning-icon-fg) 40%, transparent); }
+      100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--notify-warning-icon-fg) 0%, transparent); }
     }
     @media (prefers-reduced-motion: reduce) {
       .column--failed-pickup-pulse { animation: none; }
-      .failed-pickup-banner { transition: none; }
     }
     /*
      * Lane groups bundle the individual columns into visually distinct
@@ -1602,19 +1597,12 @@
        sees it whether they hit a primary action or someone else moved the
        job out from under them. */
     /*
-     * Transient bottom-right confirmation shown after a triage action
-     * (move, delete, advance). Visual chrome is owned by
-     * <app-notification kind="info" layout="toast"> (F37/F40); this
-     * selector only positions the host and keeps the toast click-through.
+     * Triage outcomes (move, delete, advance) now flow exclusively
+     * through NotificationService -> <app-notification-stack>. The
+     * panel-anchored .triage-toast surface was removed in F40 to avoid
+     * the double-toast problem (panel pill + corner notification firing
+     * for the same outcome).
      */
-    .triage-toast {
-      position: absolute;
-      right: 24px;
-      bottom: 24px;
-      z-index: 60;
-      max-width: min(360px, calc(100vw - 48px));
-      pointer-events: none;
-    }
     .task-nav {
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);

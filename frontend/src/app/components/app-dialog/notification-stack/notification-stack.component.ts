@@ -5,6 +5,7 @@ import {
 } from '@angular/core';
 import { NotificationService } from '../../../services/notification.service';
 import { NotificationComponent } from '../../notification/notification.component';
+import { UpdateBannerComponent } from '../../../features/update';
 
 /**
  * Stack of transient notification toasts (success / info / warning / error).
@@ -20,7 +21,7 @@ import { NotificationComponent } from '../../notification/notification.component
 @Component({
   selector: 'app-notification-stack',
   standalone: true,
-  imports: [NotificationComponent],
+  imports: [NotificationComponent, UpdateBannerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './notification-stack.component.html',
 })
