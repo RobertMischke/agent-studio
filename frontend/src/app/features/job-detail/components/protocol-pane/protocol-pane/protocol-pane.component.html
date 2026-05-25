@@ -164,7 +164,6 @@
         </div>
       }
     }
-    <app-hygiene-strip [job]="detail().info" [isActiveJob]="isActiveJob()" />
     @if (outcomeIssueModalOpen()) {
       @if (outcomeIssue(); as issue) {
         <div class="outcome-dialog-backdrop"
@@ -258,29 +257,42 @@
                 <p>No protocol yet. It will be generated automatically after the first run.</p>
               </div>
             } @else if (detail().statusMarkdown) {
-              <div class="notes-panel__toolbar">
-                @if (summaryStatus() !== 'failed') {
-                  <button type="button"
-                          class="btn-regen"
-                          data-testid="protocol-regenerate-summary"
-                          [appTooltip]="'Re-summarize the CLI output with Haiku'"
-                          [disabled]="!canRegenerate()"
-                          (click)="regenerateSummary.emit()">
-                    <span class="btn-regen__icon" aria-hidden="true">✨</span>
-                    <span>{{ regenerating() ? 'Generating…' : 'Regenerate' }}</span>
-                  </button>
-                }
+              <div class="notes-panel__toolbar" data-testid="protocol-toolbar">
+                <span class="notes-panel__spacer"></span>
                 <button type="button"
-                        class="btn-sm"
+                        class="btn-icon"
                         data-testid="protocol-copy-markdown"
-                        [appTooltip]="'Copy the protocol markdown to the clipboard'"
-                        (click)="copyProtocolMarkdown()">{{ copyLabel() }}</button>
+                        [appTooltip]="'Copy protocol markdown'"
+                        (click)="copyProtocolMarkdown()">
+                  {{ copyIconLabel() }}
+                </button>
+                <button type="button"
+                        class="btn-icon"
+                        data-testid="protocol-more-actions"
+                        [appTooltip]="'More actions'"
+                        (click)="openProtocolMenu($event)">
+                  ⋯
+                </button>
               </div>
-              <app-beautiful-results class="notes-panel__body"
-                                     data-testid="protocol-beautiful-results"
-                                     [markdown]="detail().statusMarkdown || ''"
-                                     [jobId]="detail().info.id"
-                                     [watchPath]="detail().info.watchPath" />
+              <app-menu
+                [items]="protocolMenuItems()"
+                [open]="protocolMenuOpen()"
+                [position]="protocolMenuPosition()"
+                testIdPrefix="protocol-context-menu"
+                ariaLabel="Protocol actions"
+                [minWidth]="200"
+                (itemClick)="onProtocolMenuItemClick($event)"
+                (closeRequest)="closeProtocolMenu()" />
+              @if (protocolViewMode() === 'raw') {
+                <pre class="notes-panel__body notes-panel__body--raw"
+                     data-testid="protocol-raw-markdown">{{ detail().statusMarkdown }}</pre>
+              } @else {
+                <app-beautiful-results class="notes-panel__body"
+                                       data-testid="protocol-beautiful-results"
+                                       [markdown]="detail().statusMarkdown || ''"
+                                       [jobId]="detail().info.id"
+                                       [watchPath]="detail().info.watchPath" />
+              }
             }
           </section>
         } @else {

@@ -35,7 +35,6 @@ import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.componen
 
 import { FeatureFlagsService } from '../../../../../services/feature-flags.service';
 import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
-import { HygieneStripComponent } from '../../hygiene-strip/hygiene-strip/hygiene-strip.component';
 import { JobService } from '../../../../../services/job.service';
 import type {
   ConversationEvent,
@@ -44,6 +43,8 @@ import type {
 import { ConversationViewComponent } from '../../../../../components/chat/conversation-view/conversation-view.component';
 import { projectConversation } from '../../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import { MenuComponent } from '../../../../../components/menu';
+import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
 import { deriveProtocolVerdict, type ProtocolVerdict } from '../protocol-verdict';
 import {
   buildInspectorTabs,
@@ -90,8 +91,8 @@ interface InterimSummaryState {
     RunTimelineComponent,
     RunGitViewerComponent,
     VerboseDebugOverlayComponent,
-    HygieneStripComponent,
     BeautifulResultsComponent,
+    MenuComponent,
     TooltipDirective,
     PaneHeaderComponent,
     PaneTabsComponent,
@@ -105,7 +106,6 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);
-  /** Whether this job is the runner's currently-active job for its project. Forwarded to the hygiene strip so the worktree-isolation rule kicks in. */
   readonly isActiveJob = input<boolean>(false);
 
   readonly activeInspectorTab = input<InspectorTab>('protocol');
@@ -685,6 +685,70 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (s === 'copied') return '✓ Copied';
     if (s === 'failed') return '⚠ Copy failed';
     return '📋 Copy';
+  }
+
+  copyIconLabel(): string {
+    const s = this.copyState();
+    if (s === 'copied') return '✓';
+    if (s === 'failed') return '⚠';
+    return '📋';
+  }
+
+  // --- Protocol context menu (F54) ---
+  readonly protocolViewMode = signal<'rendered' | 'raw'>('rendered');
+  readonly protocolMenuOpen = signal(false);
+  readonly protocolMenuPosition = signal<{ x: number; y: number } | null>(null);
+
+  readonly protocolMenuItems = computed<readonly MenuItem[]>(() => {
+    const items: MenuItem[] = [
+      {
+        kind: 'row',
+        id: 'regenerate',
+        label: 'Regenerate from CLI output',
+        icon: '✨',
+        disabled: !this.canRegenerate(),
+      },
+      { kind: 'separator' },
+      {
+        kind: 'row',
+        id: 'view-rendered',
+        label: 'View rendered',
+        active: this.protocolViewMode() === 'rendered',
+      },
+      {
+        kind: 'row',
+        id: 'view-raw',
+        label: 'View raw markdown',
+        active: this.protocolViewMode() === 'raw',
+      },
+    ];
+    return items;
+  });
+
+  openProtocolMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.protocolMenuPosition.set({ x: event.clientX, y: event.clientY });
+    this.protocolMenuOpen.set(true);
+  }
+
+  closeProtocolMenu(): void {
+    this.protocolMenuOpen.set(false);
+  }
+
+  onProtocolMenuItemClick(ev: MenuItemClickEvent): void {
+    switch (ev.id) {
+      case 'regenerate':
+        this.regenerateSummary.emit();
+        break;
+      case 'view-rendered':
+        this.protocolViewMode.set('rendered');
+        break;
+      case 'view-raw':
+        this.protocolViewMode.set('raw');
+        break;
+    }
+    this.closeProtocolMenu();
   }
 
   async copyProtocolMarkdown(): Promise<void> {

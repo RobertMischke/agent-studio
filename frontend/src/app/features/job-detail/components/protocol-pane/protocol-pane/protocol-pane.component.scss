@@ -109,8 +109,8 @@
   font-size: 12px;
 
   &[data-kind="ok"] {
-    border-left-color: var(--severity-pass);
-    background: color-mix(in srgb, var(--severity-pass) 8%, transparent);
+    border-left-color: var(--studio-accent-success);
+    background: var(--notify-success-tint);
   }
   &[data-kind="problem"] {
     border-left-color: var(--severity-high);
@@ -358,10 +358,29 @@
 
 .notes-panel__toolbar {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 6px;
+}
+
+.notes-panel__spacer {
+  flex: 1 1 auto;
+}
+
+.notes-panel__body--raw {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--studio-bg-editor);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  line-height: 1.5;
+  color: var(--studio-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 80vh;
 }
 
 /* "Regenerate" — eye-catching gradient pill so the test button stands
