@@ -85,8 +85,8 @@
   // of repeating the color-mix recipe. Built on top of --studio-bg-elevated
   // so card-on-lane stays correct on both themes.
   --studio-bg-running: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
-  --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 35%, transparent),
-                       0 8px 22px color-mix(in srgb, var(--studio-accent-3) 24%, transparent);
+  --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 28%, transparent),
+                       0 4px 12px color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
 
   // Text to use ON an accent fill (a brand-orange button etc.). Tuned for dark
   // text on the saturated accent in both themes.
@@ -262,8 +262,8 @@
   // to a lighter outer-glow + a stronger 1 px outline because the soft
   // halo dissolves on white but the outline does not.
   --studio-bg-running: color-mix(in srgb, var(--studio-accent-3) 10%, var(--studio-bg-elevated));
-  --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 45%, transparent),
-                       0 8px 22px color-mix(in srgb, var(--studio-accent-3) 22%, transparent);
+  --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 35%, transparent),
+                       0 4px 12px color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
 
   // Severity — darker variants for readable pills + verdict-banner stripe.
   --severity-pass:    var(--color-green-600);

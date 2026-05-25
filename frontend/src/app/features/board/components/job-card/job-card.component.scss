@@ -17,6 +17,7 @@
       // full-mode card and ~64 px is roughly compact-mode height.
       content-visibility: auto;
       contain-intrinsic-size: 180px;
+      overflow: hidden;
       /* Compositor-only transitions. transform handles hover lift and
          post-drop settle (CDK rhythm: 180ms cubic-bezier(0,0,0.2,1));
          box-shadow handles depth on hover. background-color is
@@ -380,15 +381,15 @@
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: #a5f3fc;
-      background: rgba(165, 243, 252, 0.10);
-      border: 1px solid rgba(165, 243, 252, 0.28);
+      color: var(--studio-accent-3-strong);
+      background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
+      border: 1px solid color-mix(in srgb, var(--studio-accent-3) 35%, transparent);
       cursor: help;
     }
     .job-card__loop-pill--hot {
-      color: #fde68a;
-      background: rgba(253, 230, 138, 0.12);
-      border-color: rgba(253, 230, 138, 0.32);
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
     }
     /* Auto-review pill: shown while the post-completion summarizer is
        still running on a card that just landed in 4-review (amber, with
@@ -424,14 +425,14 @@
       animation: pulse-running 1.3s infinite;
     }
     .job-card__review-pill--ready {
-      color: #86efac;
-      background: rgba(134, 239, 172, 0.12);
-      border-color: rgba(134, 239, 172, 0.28);
+      color: var(--studio-accent-success-strong);
+      background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
     .job-card__review-pill--failed {
-      color: #fda4af;
-      background: rgba(244, 63, 94, 0.14);
-      border-color: rgba(244, 63, 94, 0.25);
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
     .job-card__auto-review-pill {
       display: inline-flex;
@@ -461,19 +462,19 @@
       animation: pulse-running 1.3s infinite;
     }
     .job-card__auto-review-pill--queued {
-      color: #fbbf24;
-      background: rgba(251, 191, 36, 0.10);
-      border-color: rgba(251, 191, 36, 0.26);
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
     }
     .job-card__auto-review-pill--done {
-      color: #86efac;
-      background: rgba(134, 239, 172, 0.10);
-      border-color: rgba(134, 239, 172, 0.24);
+      color: var(--studio-accent-success-strong);
+      background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
     .job-card__auto-review-pill--stale {
-      color: #fecaca;
-      background: rgba(248, 113, 113, 0.12);
-      border-color: rgba(248, 113, 113, 0.28);
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
     .job-card__issue-pill {
       display: inline-flex;
@@ -488,19 +489,19 @@
       cursor: help;
     }
     .job-card__issue-pill--info {
-      color: #bfdbfe;
-      background: rgba(96, 165, 250, 0.12);
-      border-color: rgba(96, 165, 250, 0.28);
+      color: var(--studio-accent-3-strong);
+      background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-3) 35%, transparent);
     }
     .job-card__issue-pill--warn {
-      color: #fde68a;
-      background: rgba(245, 158, 11, 0.13);
-      border-color: rgba(245, 158, 11, 0.30);
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
     }
     .job-card__issue-pill--high {
-      color: #fecaca;
-      background: rgba(239, 68, 68, 0.14);
-      border-color: rgba(239, 68, 68, 0.34);
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 16%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 40%, transparent);
     }
     .job-card__state-pill {
       background: rgba(255,255,255,0.06);
@@ -516,15 +517,10 @@
       background: currentColor;
       flex: 0 0 auto;
     }
-    /* F39: Execution / review pill tokens. The "Running live" pill was the
-       worst Light-Theme offender (sky-300 hex over rgba(14,165,233,...) =
-       washed out to invisible on white). Now it pulls --studio-accent-3
-       for the tint and --studio-accent-3-strong for the text pigment, both
-       of which flip per theme. Same pattern for failed/cancelled (red),
-       review-generating + auto-review-active (warn). Out-of-scope pill
-       states (auto-review queued/done/stale, review ready/failed, issue
-       pill, loop pill) intentionally stay on their old hex values - F39
-       only migrates the running/active/failed family per the brief. */
+    /* F39/F57: Pill tokens. F39 migrated running/active/failed pills to
+       semantic accent tokens so they flip per theme. F57 completed the
+       migration for all remaining pill variants (loop, auto-review
+       queued/done/stale, review ready/failed, issue, phase, concern). */
     .job-card__execution-pill--running {
       color: var(--studio-accent-3-strong);
       background: color-mix(in srgb, var(--studio-accent-3) 18%, var(--studio-bg-elevated));
@@ -557,19 +553,19 @@
       border-color: rgba(56, 189, 248, 0.28);
     }
     .job-card__phase-pill--intake-running {
-      color: #fcd34d;
-      background: rgba(252, 211, 77, 0.10);
-      border-color: rgba(252, 211, 77, 0.32);
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
     }
     .job-card__phase-pill--intake-blocked {
-      color: #fda4af;
-      background: rgba(244, 63, 94, 0.12);
-      border-color: rgba(244, 63, 94, 0.30);
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
     .job-card__phase-pill--intake-passed {
-      color: #86efac;
-      background: rgba(134, 239, 172, 0.10);
-      border-color: rgba(134, 239, 172, 0.30);
+      color: var(--studio-accent-success-strong);
+      background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
     /* Backlog-lane spec: structural type chip (Bug / Feature / Chore) and the
        lightweight tag chips. The chore variant is deliberately quieter so
@@ -619,9 +615,9 @@
        something" without overwhelming a card that already carries
        ordinary tags. Tooltip names the source aspect. */
     .job-card__tag-chip--concern {
-      color: #fde68a;
-      background: rgba(245, 158, 11, 0.12);
-      border: 1px solid rgba(245, 158, 11, 0.55);
+      color: var(--studio-accent-warn-strong);
+      background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
+      border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 55%, transparent);
       display: inline-flex;
       align-items: center;
       gap: 3px;
