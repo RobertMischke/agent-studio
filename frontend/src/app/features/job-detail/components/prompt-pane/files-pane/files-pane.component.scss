@@ -138,6 +138,16 @@
   display: block;
 }
 
+::ng-deep .file-card__markdown .markdown-body h1 {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-overflow: clip;
+  overflow: visible;
+  line-height: 1.25;
+  max-width: 100%;
+}
+
 .file-card__preview {
   padding: 8px 14px 10px;
   background: var(--studio-bg-editor);

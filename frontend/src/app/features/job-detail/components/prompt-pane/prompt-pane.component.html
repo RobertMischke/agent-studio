@@ -19,9 +19,9 @@
           <div class="desc-meta-bar" data-testid="desc-meta-bar">
             <div class="desc-meta" data-testid="desc-meta">
               <span class="desc-meta__id mono">#{{ info.order }}</span>
-              <span class="desc-meta__sep" aria-hidden="true">·</span>
+              <span class="meta-row__sep" aria-hidden="true">·</span>
               <span class="desc-meta__time">created {{ formatRelativeTime(info.createdAt) }}</span>
-              <span class="desc-meta__sep" aria-hidden="true">·</span>
+              <span class="meta-row__sep" aria-hidden="true">·</span>
               <span class="desc-meta__state"
                     [attr.data-state]="info.state"
                     [class]="'desc-meta__state state--' + info.state">
