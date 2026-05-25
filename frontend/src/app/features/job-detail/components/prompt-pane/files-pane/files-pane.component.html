@@ -71,7 +71,9 @@
           @if (isLoading(file.name)) {
             <div class="file-card__loading">Loading preview…</div>
           } @else if (preview(file); as text) {
-            <pre class="file-card__preview-text">{{ text }}</pre>
+            <div class="file-card__preview-rendered">
+              <app-markdown [source]="text" [dense]="true" />
+            </div>
             <button type="button" class="file-card__expand-link"
                     [attr.data-testid]="'file-card-expand-' + file.name"
                     (click)="toggleExpanded(file.name)">

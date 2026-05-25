@@ -155,16 +155,9 @@
   position: relative;
 }
 
-.file-card__preview-text {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--studio-fg);
-  margin: 0;
+.file-card__preview-rendered {
   max-height: 14em;
   overflow: hidden;
-  white-space: pre-wrap;
-  word-break: break-word;
   mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
 }
