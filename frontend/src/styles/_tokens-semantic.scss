@@ -115,14 +115,18 @@
   --lane-failed:       var(--color-mocha-red);
 
   // ---------------------------------------------------------------------------
-  // Diff palette — unified diff & side-by-side renderers (F18)
+  // Diff palette — unified diff & side-by-side renderers (F18 / F53)
   // ---------------------------------------------------------------------------
-  --diff-add-bg:  rgba(34, 197, 94, 0.18);
-  --diff-add-fg:  #bbf7d0;
-  --diff-rem-bg:  rgba(220, 38, 38, 0.20);
-  --diff-rem-fg:  #fecaca;
-  --diff-hunk-bg: rgba(56, 189, 248, 0.08);
-  --diff-hunk-fg: var(--color-blue-300);
+  --diff-add-bg:      rgba(34, 197, 94, 0.18);
+  --diff-add-fg:      var(--color-green-200);
+  --diff-add-text:    var(--color-slate-200);
+  --diff-add-gutter:  color-mix(in srgb, var(--studio-accent-success) 30%, transparent);
+  --diff-rem-bg:      rgba(220, 38, 38, 0.20);
+  --diff-rem-fg:      var(--color-red-200);
+  --diff-rem-text:    var(--color-slate-200);
+  --diff-rem-gutter:  color-mix(in srgb, var(--studio-accent-6) 30%, transparent);
+  --diff-hunk-bg:     rgba(56, 189, 248, 0.08);
+  --diff-hunk-fg:     var(--color-blue-300);
 
   // ---------------------------------------------------------------------------
   // Syntax-highlight palette (F20) — used by hljs surfaces that show source
@@ -280,13 +284,17 @@
   --lane-failed:       var(--color-red-700);
 
   // Diff palette — soft pastel tint + dark text so diff content stays legible
-  // (WCAG AA against --diff-add-bg / --diff-rem-bg). F18 fix.
-  --diff-add-bg:  var(--color-green-100);
-  --diff-add-fg:  var(--color-green-900);
-  --diff-rem-bg:  var(--color-red-100);
-  --diff-rem-fg:  var(--color-red-900);
-  --diff-hunk-bg: var(--color-sky-100);
-  --diff-hunk-fg: var(--color-sky-800);
+  // (WCAG AA against --diff-add-bg / --diff-rem-bg). F18 / F53.
+  --diff-add-bg:      var(--color-green-100);
+  --diff-add-fg:      var(--color-green-900);
+  --diff-add-text:    var(--color-green-900);
+  --diff-add-gutter:  color-mix(in srgb, var(--studio-accent-success) 50%, transparent);
+  --diff-rem-bg:      var(--color-red-100);
+  --diff-rem-fg:      var(--color-red-900);
+  --diff-rem-text:    var(--color-red-900);
+  --diff-rem-gutter:  color-mix(in srgb, var(--studio-accent-6) 50%, transparent);
+  --diff-hunk-bg:     var(--color-sky-100);
+  --diff-hunk-fg:     var(--color-sky-800);
 
   // Syntax tokens — darker pigments for the light surface (F20). Picked
   // for WCAG-AA contrast against --studio-bg-editor AND the soft pastel

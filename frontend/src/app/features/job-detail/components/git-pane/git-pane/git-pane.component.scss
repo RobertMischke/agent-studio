@@ -160,15 +160,49 @@
 }
 
 /*
- * diff2html dark-mode polish. The library ships a `d2h-dark-color-scheme`
- * variant; we tweak a few colours so the rendered diff sits cleanly on
- * our dark surface without competing with the Catppuccin palette.
+ * diff2html colour overrides. The library is loaded with colorScheme=DARK
+ * but the app flips between dark and light themes. We override the palette
+ * with --diff-* tokens (defined in _tokens-semantic.scss) so add/remove
+ * lines stay WCAG-AA legible in both themes (F53).
  */
 .git-view__diff ::ng-deep .d2h-wrapper { background: transparent; }
 .git-view__diff ::ng-deep .d2h-file-wrapper {
   border: 0;
   border-radius: 0;
   margin: 0;
+}
+.git-view__diff ::ng-deep .d2h-ins,
+.git-view__diff ::ng-deep .d2h-ins.d2h-change {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-text);
+}
+.git-view__diff ::ng-deep .d2h-ins .d2h-code-linenumber,
+.git-view__diff ::ng-deep .d2h-ins .d2h-code-side-linenumber {
+  background: var(--diff-add-gutter);
+  color: var(--diff-add-fg);
+}
+.git-view__diff ::ng-deep .d2h-del,
+.git-view__diff ::ng-deep .d2h-del.d2h-change {
+  background: var(--diff-rem-bg);
+  color: var(--diff-rem-text);
+}
+.git-view__diff ::ng-deep .d2h-del .d2h-code-linenumber,
+.git-view__diff ::ng-deep .d2h-del .d2h-code-side-linenumber {
+  background: var(--diff-rem-gutter);
+  color: var(--diff-rem-fg);
+}
+.git-view__diff ::ng-deep .d2h-info {
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-fg);
+}
+.git-view__diff ::ng-deep .d2h-cntx {
+  color: var(--studio-fg);
+}
+.git-view__diff ::ng-deep .d2h-code-linenumber,
+.git-view__diff ::ng-deep .d2h-code-side-linenumber {
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-muted);
+  border-color: var(--studio-border);
 }
 // When the backend returns a multi-file diff (e.g. a commit diff that
 // covers several files, or any future endpoint that does not filter to
