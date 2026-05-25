@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
 import { JobService } from '../../../../services/job.service';
+import { NotificationService } from '../../../../services/notification.service';
 import { WorkspaceManagerService } from '../../state/workspace-manager.service';
 
 /**
@@ -10,13 +11,14 @@ import { WorkspaceManagerService } from '../../state/workspace-manager.service';
  * <code>WorkspaceManagerService.createOpen</code> signal so any trigger
  * (titlebar "Workspace" button, Explorer "+", future deep link) opens
  * the same surface. Hands off to
- * <code>JobService.createWorkspace</code> on submit, then refreshes
- * the watch-path list so the new workspace lights up in the picker
- * before the dialog closes.
+ * <code>JobService.createRegistryWorkspace</code> on submit, then
+ * refreshes the workspace registry so the new workspace lights up in
+ * the sidebar tree before the dialog closes.
  *
  * Inline validation mirrors the backend rule (non-empty, length capped,
- * unique slug); the UI also pre-checks against the already-loaded watch
- * paths so a likely-doomed submit fails fast without a round trip.
+ * unique slug); the UI also pre-checks against the already-loaded
+ * registry workspaces so a likely-doomed submit fails fast without a
+ * round trip.
  */
 @Component({
   selector: 'app-workspace-create-dialog',
@@ -28,6 +30,7 @@ import { WorkspaceManagerService } from '../../state/workspace-manager.service';
 })
 export class WorkspaceCreateDialogComponent implements AfterViewInit {
   private readonly jobService = inject(JobService);
+  private readonly notifications = inject(NotificationService);
   private readonly manager = inject(WorkspaceManagerService);
 
   readonly draftName = signal('');
@@ -69,14 +72,17 @@ export class WorkspaceCreateDialogComponent implements AfterViewInit {
     const name = this.draftName().trim();
     this.submitting.set(true);
     this.errorMsg.set(null);
-    this.jobService.createWorkspace(name).subscribe({
+    this.jobService.createRegistryWorkspace(name).subscribe({
       next: () => {
         this.submitting.set(false);
+        this.notifications.success(`Workspace "${name}" created.`);
         this.manager.refreshAndClose();
       },
       error: (err: unknown) => {
         this.submitting.set(false);
-        this.errorMsg.set(formatError(err));
+        const msg = formatError(err);
+        this.errorMsg.set(msg);
+        this.notifications.error(`Could not create workspace "${name}": ${msg}`);
       },
     });
   }

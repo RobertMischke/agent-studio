@@ -322,6 +322,14 @@ export class StudioShellComponent {
     this.reloadRegistryWorkspaces();
   });
 
+  /** Reload the registry workspace list whenever the create-dialog or
+   *  delete path bumps the counter via WorkspaceManagerService. */
+  private readonly registryChangedFx = effect(() => {
+    const rev = this.workspaceManager.registryChanged();
+    if (rev === 0) return;
+    untracked(() => this.reloadRegistryWorkspaces());
+  });
+
   reloadRegistryWorkspaces(): void {
     this.registryWorkspacesLoading.set(true);
     this.registryWorkspacesError.set(null);
@@ -942,9 +950,7 @@ export class StudioShellComponent {
   /**
    * Hook for the "+ Workspace" titlebar button and the "+" icon next to
    * the Workspace group head in the Explorer. Opens the in-app
-   * create-workspace dialog (POST /api/watch-paths under the hood); no
-   * backend restart needed since the WatchPaths config reload is
-   * synchronous on the server side.
+   * create-workspace dialog (POST /api/workspaces under the hood).
    */
   onAddWorkspace(): void {
     this.workspaceManager.openCreate();

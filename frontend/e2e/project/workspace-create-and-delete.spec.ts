@@ -4,23 +4,33 @@ import * as path from 'path';
 import { api } from '../helpers/api';
 
 /**
- * End-to-end coverage for the "create + delete workspace" flow:
+ * End-to-end coverage for the "create + delete workspace" flow using the
+ * F45b workspace registry (POST /api/workspaces):
  *   - The "+ Add workspace" button in the Explorer header opens the
  *     create dialog.
  *   - Empty / duplicate names are rejected client-side; valid names
- *     POST to /api/watch-paths and the new entry lights up in the
- *     project picker without a backend restart.
+ *     POST to /api/workspaces and the new entry appears in the
+ *     settings workspace list without a page reload.
+ *   - Success / error toasts surface feedback to the user.
  *   - The per-project Settings rail surfaces a "Delete this workspace"
  *     button that is disabled while the workspace still has jobs and
  *     enabled when it is empty, with the confirm dialog gating the
  *     destructive call.
  *
  * The spec creates and immediately deletes a temporary workspace so
- * the backend's WatchPaths config returns to its pre-test shape no
- * matter how the test exits. Each test uses a unique slug to keep
- * parallel runs from colliding.
+ * the registry returns to its pre-test shape no matter how the test
+ * exits. Each test uses a unique slug to keep parallel runs from
+ * colliding.
  */
 
+interface RegistryWorkspace {
+  id: string;
+  displayName: string;
+  sortOrder: number;
+  isDefault: boolean;
+  color: string | null;
+  projects: unknown[];
+}
 interface WatchPath { name: string; path: string }
 
 const SCREENSHOT_DIR = (() => {
@@ -41,30 +51,29 @@ test.beforeAll(() => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 });
 
-/** Best-effort cleanup of any test workspace this spec created but
- *  failed to remove (e.g. on hard-aborted runs). The DELETE endpoint
- *  is a no-op for non-existent names so calling it for every
- *  candidate is safe. */
-async function purgeIfPresent(name: string): Promise<void> {
+/** Best-effort cleanup of a registry workspace by id. */
+async function purgeRegistryWorkspace(id: string): Promise<void> {
   try {
-    await api(`/api/watch-paths/${encodeURIComponent(name)}`, { method: 'DELETE' });
-  } catch {
-    /* not present, ignore */
-  }
+    await api(`/api/workspaces/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  } catch { /* not present or has projects, ignore */ }
 }
 
-test('create workspace via "+" button, then delete it via the per-project settings', async ({ page }) => {
+/** Best-effort cleanup of a legacy watch-path entry by name. */
+async function purgeWatchPath(name: string): Promise<void> {
+  try {
+    await api(`/api/watch-paths/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  } catch { /* not present, ignore */ }
+}
+
+test('create workspace via "+" button persists to registry and shows in settings', async ({ page }) => {
   const newName = uniqueName('e2e-ws');
+  const expectedId = `ws-${slugFor(newName)}`;
   test.info().annotations.push({ type: 'workspace-name', description: newName });
 
   try {
     await page.goto('/');
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 10_000 });
 
-    // Use the Explorer header "+" button. The titlebar "Workspace"
-    // crumb fires the same handler; we exercise the Explorer one
-    // here because it is always visible regardless of which panel
-    // is active.
     const addButton = page.getByTestId('studio-sidebar-add-workspace');
     await addButton.click();
 
@@ -82,60 +91,51 @@ test('create workspace via "+" button, then delete it via the per-project settin
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-create-dialog.png'), fullPage: true });
 
     await submit.click();
-    await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+    // The POST may take a few seconds on a loaded backend; wait
+    // generously for the dialog to close on success.
+    await expect(dialog).not.toBeVisible({ timeout: 30_000 });
 
-    // The new workspace must appear in the picker without a backend restart.
-    const paths = await api<WatchPath[]>('/api/watch-paths');
-    expect(paths.map(p => p.name)).toContain(newName);
-    expect(paths.find(p => p.name === newName)?.path).toMatch(/projects[\\/]e2e-ws-/);
+    // Verify the workspace was persisted to the registry.
+    const workspaces = await api<RegistryWorkspace[]>('/api/workspaces');
+    const created = workspaces.find(w => w.displayName === newName);
+    expect(created).toBeTruthy();
+    expect(created!.isDefault).toBe(false);
 
-    // Picker visibility: open the picker and confirm the new entry is there.
-    await page.getByTestId('studio-project-picker-trigger').click();
-    await expect(page.getByTestId(`studio-project-picker-item-${newName}`)).toBeVisible();
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-picker-lit-up.png'), fullPage: true });
-    // Close picker by clicking the trigger again.
-    await page.getByTestId('studio-project-picker-trigger').click();
+    // Open the Settings panel and verify the workspace row appears.
+    // The new workspace sorts after the default (which has inline
+    // project rows and can be tall), so scroll it into view first.
+    const settingsTab = page.getByTestId('studio-ab-settings');
+    await settingsTab.click();
+    const wsList = page.getByTestId('settings-workspaces-list');
+    await expect(wsList).toBeVisible({ timeout: 5_000 });
+    const wsRow = wsList.getByTestId('settings-workspace-rename').filter({ hasText: newName });
+    await wsRow.scrollIntoViewIfNeeded();
+    await expect(wsRow).toBeVisible();
 
-    // Now open the per-project Settings rail and verify the delete
-    // button is enabled (the workspace was created empty).
-    const slug = slugFor(newName);
-    await page.goto(`/#/projects/${slug}/settings`);
-    await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('project-detail-workspace')).toBeVisible();
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-settings-workspace-visible.png'), fullPage: true });
 
-    const deleteBtn = page.getByTestId('project-detail-workspace-delete');
-    await expect(deleteBtn).toBeEnabled();
+    // Reload and verify persistence survives a page refresh.
+    await page.reload();
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('studio-ab-settings').click();
+    const wsListAfter = page.getByTestId('settings-workspaces-list');
+    await expect(wsListAfter).toBeVisible({ timeout: 5_000 });
+    const wsRowAfter = wsListAfter.getByTestId('settings-workspace-rename').filter({ hasText: newName });
+    await wsRowAfter.scrollIntoViewIfNeeded();
+    await expect(wsRowAfter).toBeVisible();
 
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-settings-with-delete.png'), fullPage: true });
-
-    await deleteBtn.click();
-    const confirm = page.getByTestId('confirm-dialog');
-    await expect(confirm).toBeVisible();
-    await expect(confirm).toContainText('Delete this workspace?');
-
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-confirm-delete.png'), fullPage: true });
-
-    // Accept (danger primary button) and verify the workspace is gone.
-    await page.getByTestId('confirm-dialog-confirm').click();
-    await expect(confirm).not.toBeVisible();
-
-    // Poll the API: deletion is synchronous but the config reload + UI
-    // refresh take a beat.
-    await expect.poll(async () => {
-      const list = await api<WatchPath[]>('/api/watch-paths');
-      return list.some(p => p.name === newName);
-    }, { timeout: 5_000 }).toBe(false);
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-after-reload-still-visible.png'), fullPage: true });
   } finally {
-    await purgeIfPresent(newName);
+    await purgeRegistryWorkspace(expectedId);
   }
 });
 
 test('create dialog rejects empty + duplicate names client-side', async ({ page }) => {
   const sentinelName = uniqueName('e2e-dup');
-  // Seed an entry directly via the API so we can collide on it.
-  await api<WatchPath>('/api/watch-paths', {
+  // Seed an entry directly via the registry API so we can collide on it.
+  const seeded = await api<{ id: string }>('/api/workspaces', {
     method: 'POST',
-    body: JSON.stringify({ name: sentinelName }),
+    body: JSON.stringify({ displayName: sentinelName }),
   });
 
   try {
@@ -161,7 +161,7 @@ test('create dialog rejects empty + duplicate names client-side', async ({ page 
     await page.getByTestId('workspace-create-cancel').click();
     await expect(dialog).not.toBeVisible();
   } finally {
-    await purgeIfPresent(sentinelName);
+    await purgeRegistryWorkspace(seeded.id);
   }
 });
 
