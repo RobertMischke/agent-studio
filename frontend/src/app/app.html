@@ -186,27 +186,7 @@
                           (click)="clearAllFilters()">Clear all</button>
                 </div>
               }
-              @if (failedPickupCount() > 0) {
-                <app-notification kind="warning"
-                                  layout="banner"
-                                  icon="⚠"
-                                  testid="failed-pickup-banner"
-                                  ariaLive="polite"
-                                  class="board-banner board-banner--clickable"
-                                  role="button"
-                                  tabindex="0"
-                                  aria-label="Open failed-pickup lane"
-                                  (click)="scrollToFailedPickupLane()"
-                                  (keydown.enter)="scrollToFailedPickupLane()"
-                                  (keydown.space)="scrollToFailedPickupLane(); $event.preventDefault()">
-                  <span>
-                    <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
-                    {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
-                    Open the failed-pickup lane.
-                  </span>
-                  <span notification-actions aria-hidden="true">›</span>
-                </app-notification>
-              }
+              <!-- F56: failed-pickup notification moved to toast stack -->
               <main class="dashboard dashboard--studio" data-testid="studio-board"
                     [class.dashboard--has-focus]="focusedContainer() !== null">
                 @for (g of laneGroups(); track g.id) {
@@ -598,27 +578,7 @@
             </main>
           </div>
         } @else {
-          @if (failedPickupCount() > 0) {
-            <app-notification kind="warning"
-                              layout="banner"
-                              icon="⚠"
-                              testid="failed-pickup-banner"
-                              ariaLive="polite"
-                              class="board-banner board-banner--clickable"
-                              role="button"
-                              tabindex="0"
-                              aria-label="Open failed-pickup lane"
-                              (click)="scrollToFailedPickupLane()"
-                              (keydown.enter)="scrollToFailedPickupLane()"
-                              (keydown.space)="scrollToFailedPickupLane(); $event.preventDefault()">
-              <span>
-                <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
-                {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
-                Open the failed-pickup lane.
-              </span>
-              <span notification-actions aria-hidden="true">›</span>
-            </app-notification>
-          }
+          <!-- F56: failed-pickup notification moved to toast stack -->
           <main class="dashboard" data-testid="kanban-dashboard"
                 [class.dashboard--has-focus]="focusedContainer() !== null">
             @for (g of laneGroups(); track g.id) {

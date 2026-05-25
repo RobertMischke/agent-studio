@@ -27,10 +27,36 @@ describe('NotificationService', () => {
   it('auto-dismisses after the per-kind default duration', () => {
     service.success('saved');
     expect(service.notifications()).toHaveLength(1);
-    vi.advanceTimersByTime(3499);
+    vi.advanceTimersByTime(4999);
     expect(service.notifications()).toHaveLength(1);
     vi.advanceTimersByTime(2);
     expect(service.notifications()).toHaveLength(0);
+  });
+
+  it('warning and error are persistent by default (durationMs=0)', () => {
+    service.warning('watch out');
+    service.error('oops');
+    vi.advanceTimersByTime(60_000);
+    expect(service.notifications()).toHaveLength(2);
+  });
+
+  it('actions force persistent (durationMs=0) regardless of kind', () => {
+    service.notify({
+      message: 'reload required',
+      kind: 'success',
+      actions: [{ label: 'Reload', callback: () => {} }],
+    });
+    vi.advanceTimersByTime(60_000);
+    expect(service.notifications()).toHaveLength(1);
+  });
+
+  it('dismissTopmost removes only the first toast', () => {
+    service.success('first');
+    service.info('second');
+    expect(service.notifications()).toHaveLength(2);
+    service.dismissTopmost();
+    expect(service.notifications()).toHaveLength(1);
+    expect(service.notifications()[0].message).toBe('second');
   });
 
   it('respects an explicit durationMs override', () => {

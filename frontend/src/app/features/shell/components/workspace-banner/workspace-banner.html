@@ -1,17 +1,1 @@
-@if (displayed(); as msg) {
-  <div class="workspace-banner-host">
-    <app-notification
-      class="workspace-banner"
-      layout="banner"
-      [kind]="kindFor(msg.topic)"
-      [icon]="iconFor(msg.topic)"
-      [closable]="true"
-      testid="workspace-banner"
-      (closeRequest)="dismiss()">
-      <span data-testid="workspace-banner-text">{{ headlineFor(msg) }}</span>
-      <div notification-source
-           class="workspace-banner__project"
-           data-testid="workspace-banner-project">in {{ msg.project }}</div>
-    </app-notification>
-  </div>
-}
+<!-- F56: verdicts render as toasts via NotificationService; no inline template needed. -->

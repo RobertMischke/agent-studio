@@ -6,10 +6,11 @@ import {
 } from '../models/app-dialog.model';
 
 const DEFAULT_DURATION: Record<NotificationKind, number> = {
-  success: 3500,
-  info: 3500,
-  warning: 5000,
-  error: 6000,
+  success: 5000,
+  info: 5000,
+  warning: 0,
+  error: 0,
+  accent: 0,
 };
 
 /**
@@ -38,7 +39,8 @@ export class NotificationService {
 
   notify(options: NotificationOptions): number {
     const id = this.nextId++;
-    const durationMs = options.durationMs ?? DEFAULT_DURATION[options.kind];
+    const hasActions = options.actions && options.actions.length > 0;
+    const durationMs = hasActions ? 0 : (options.durationMs ?? DEFAULT_DURATION[options.kind]);
     const state: NotificationState = { id, durationMs, ...options };
 
     this.notifications.update((arr) => [...arr, state]);
@@ -47,6 +49,11 @@ export class NotificationService {
       this.timers.set(id, timer);
     }
     return id;
+  }
+
+  dismissTopmost(): void {
+    const all = this.notifications();
+    if (all.length > 0) this.dismiss(all[0].id);
   }
 
   success(message: string, title?: string): number {

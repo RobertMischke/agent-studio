@@ -8,9 +8,16 @@
  * that previously fell back to `window.confirm` and ad-hoc toasts.
  */
 
-export type NotificationKind = 'success' | 'info' | 'warning' | 'error';
+export type NotificationKind = 'success' | 'info' | 'warning' | 'error' | 'accent';
 
 export type ConfirmDialogKind = 'danger' | 'primary';
+
+export interface NotificationAction {
+  label: string;
+  testId?: string;
+  primary?: boolean;
+  callback: () => void;
+}
 
 export interface ConfirmDialogOptions {
   title: string;
@@ -45,6 +52,10 @@ export interface NotificationOptions {
    * body independently of the source label.
    */
   source?: string;
+  /** Optional detail lines rendered below the message (e.g. verification failures). */
+  details?: string[];
+  /** Action buttons rendered in the toast footer. */
+  actions?: NotificationAction[];
 }
 
 export interface NotificationState extends NotificationOptions {

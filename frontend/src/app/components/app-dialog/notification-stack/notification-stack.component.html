@@ -9,16 +9,27 @@
       [testid]="'notification-' + n.kind"
       (closeRequest)="dismiss(n.id)">
       <span data-testid="notification-message">{{ n.message }}</span>
+      @if (n.details && n.details.length > 0) {
+        <ul class="app-notify__details" data-testid="notification-details">
+          @for (d of n.details; track d) {
+            <li>{{ d }}</li>
+          }
+        </ul>
+      }
       @if (n.source) {
         <div class="app-notify__source" notification-source data-testid="notification-source">{{ n.source }}</div>
+      }
+      @if (n.actions && n.actions.length > 0) {
+        <div class="app-notify__actions" notification-actions data-testid="notification-actions">
+          @for (a of n.actions; track a.label) {
+            <button type="button"
+                    class="app-notify__btn"
+                    [class.app-notify__btn--primary]="a.primary"
+                    [attr.data-testid]="a.testId ?? null"
+                    (click)="onAction(a, n.id); $event.stopPropagation()">{{ a.label }}</button>
+          }
+        </div>
       }
     </app-notification>
   }
 </div>
-<!--
-  Full-width update strip mounts alongside the toast stack so both
-  surfaces share the same "notifications area" instead of having
-  app.html hardcode the update banner separately. The component reads
-  UpdateClientService.status directly; this container only positions it.
--->
-<app-update-banner />

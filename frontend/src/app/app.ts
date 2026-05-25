@@ -59,6 +59,8 @@ import {
   UpdateCenterComponent,
   UpdateVersionBadgeComponent,
 } from './features/update';
+// UpdateBannerComponent removed in F56; update notifications now flow through
+// UpdateNotificationBridge → NotificationService → notification-stack toasts.
 import { VerboseDebugOverlayComponent } from './features/verbose-debug';
 import {
   StudioShellComponent,
@@ -82,9 +84,9 @@ import { ErrorDialogComponent } from './components/error-dialog/error-dialog.com
 import { ConfirmDialogComponent } from './components/app-dialog/confirm-dialog/confirm-dialog.component';
 import { StudioIconComponent } from './components/studio-icon/studio-icon.component';
 import { NotificationStackComponent } from './components/app-dialog/notification-stack/notification-stack.component';
-import { NotificationComponent } from './components/notification/notification.component';
 import { MediaLightboxComponent } from './components/media-lightbox/media-lightbox.component';
 import { UpdateClientService } from './services/update.service';
+import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
@@ -121,7 +123,6 @@ interface VerboseDebugContext {
     ErrorDialogComponent,
     ConfirmDialogComponent,
     NotificationStackComponent,
-    NotificationComponent,
     MediaLightboxComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,
@@ -167,6 +168,7 @@ export class App implements OnInit, OnDestroy {
   readonly featureFlags = inject(FeatureFlagsService);
   private readonly _completionSound = inject(JobCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
+  private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
   private readonly studioPanelState = inject(StudioPanelStateService);
 
@@ -924,6 +926,41 @@ export class App implements OnInit, OnDestroy {
       untracked(() =>
         this.triage.handleExternalLaneChange(lane, sel.info.jobKey),
       );
+    });
+
+    // F56: failed-pickup count → toast notification instead of inline banner.
+    let failedPickupToastId: number | null = null;
+    let lastPickupCount = 0;
+    effect(() => {
+      const count = this.failedPickupCount();
+      if (count === lastPickupCount) return;
+      lastPickupCount = count;
+
+      untracked(() => {
+        if (failedPickupToastId !== null) {
+          this.notifications.dismiss(failedPickupToastId);
+          failedPickupToastId = null;
+        }
+        if (count > 0) {
+          failedPickupToastId = this.notifications.notify({
+            kind: 'warning',
+            title: 'Failed pickup',
+            message: `${count} ${count === 1 ? 'job' : 'jobs'} failed to pick up.`,
+            durationMs: 0,
+            actions: [
+              {
+                label: 'Open failed-pickup lane',
+                testId: 'toast-failed-pickup-open-lane',
+                primary: true,
+                callback: () => {
+                  this.scrollToFailedPickupLane();
+                  failedPickupToastId = null;
+                },
+              },
+            ],
+          });
+        }
+      });
     });
   }
 
