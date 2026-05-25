@@ -15,8 +15,6 @@ import { applyHighlighting } from './beautiful-results.highlight';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 
-export type BeautifulResultsViewMode = 'rendered' | 'raw';
-
 interface SentinelMeta {
   kind: SentinelBanner['kind'];
   label: string;
@@ -31,18 +29,11 @@ const SENTINEL_META: Record<SentinelBanner['kind'], SentinelMeta> = {
 };
 
 /**
- * Beautiful, read-only renderer for a finished job's result markdown.
+ * Read-only renderer for a finished job's result markdown.
  *
- * Inputs:
- *   markdown      — the source `status.md` content
- *   jobId / watchPath — used by the image resolver to turn `attachments/foo.png`
- *                       and `results/foo.png` into job-folder API URLs
- *
- * The component owns: sentinel banner extraction, the Rendered/Raw toggle,
- * lazy syntax highlighting (stage 2 of the renderer pipeline), and the
- * code-copy buttons emitted by the renderer. Image-click-to-enlarge is
- * delegated to the shared `appMarkdownLightbox` directive on the body
- * container, which forwards to `MediaLightboxService`.
+ * The rendered/raw toggle lives in the protocol-pane context menu (F54).
+ * This component always renders in "rendered" mode; the parent switches
+ * to a raw `<pre>` when the user picks "View raw markdown".
  */
 @Component({
   selector: 'app-beautiful-results',
@@ -57,7 +48,6 @@ export class BeautifulResultsComponent {
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
 
-  readonly viewMode = signal<BeautifulResultsViewMode>('rendered');
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -81,23 +71,12 @@ export class BeautifulResultsComponent {
 
   readonly hasBody = computed(() => this.rendered().html.trim().length > 0);
 
-  /**
-   * Whenever the rendered HTML changes (new job, new markdown, raw->rendered
-   * toggle), kick off stage 2: lazy highlight.js for code blocks. The await
-   * happens off-cycle so the synchronous "first paint" is unblocked.
-   */
   private readonly highlightEffect = effect(() => {
-    // Read deps so this effect re-runs on real changes.
     this.bodyHtml();
-    if (this.viewMode() !== 'rendered') return;
     queueMicrotask(() => {
       void applyHighlighting(this.bodyRef?.nativeElement ?? null);
     });
   });
-
-  setMode(mode: BeautifulResultsViewMode): void {
-    this.viewMode.set(mode);
-  }
 
   /**
    * The renderer emits `<button data-results-copy>` headers above `<pre>`

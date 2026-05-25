@@ -1,25 +1,5 @@
 <div class="results-view"
-     [attr.data-view-mode]="viewMode()"
      data-testid="beautiful-results">
-
-  <div class="results-view__toolbar">
-    <div class="results-view__modes" role="tablist" aria-label="Result view mode">
-      <button type="button"
-              class="results-view__mode"
-              role="tab"
-              data-testid="results-view-mode-rendered"
-              [class.results-view__mode--active]="viewMode() === 'rendered'"
-              [attr.aria-selected]="viewMode() === 'rendered'"
-              (click)="setMode('rendered')">Rendered</button>
-      <button type="button"
-              class="results-view__mode"
-              role="tab"
-              data-testid="results-view-mode-raw"
-              [class.results-view__mode--active]="viewMode() === 'raw'"
-              [attr.aria-selected]="viewMode() === 'raw'"
-              (click)="setMode('raw')">Raw</button>
-    </div>
-  </div>
 
   @if (banner(); as b) {
     <div class="results-banner"
@@ -36,20 +16,15 @@
     </div>
   }
 
-  @if (viewMode() === 'rendered') {
-    @if (hasBody()) {
-      <article #body
-               class="results-view__body markdown-body"
-               appMarkdownLightbox
-               data-testid="results-rendered"
-               (click)="onBodyClick($event)"
-               [innerHTML]="bodyHtml()" tabindex="0" (keydown.enter)="onBodyClick($event)" (keydown.space)="onBodyClick($event); $event.preventDefault()"></article>
-    } @else {
-      <p class="results-view__empty" data-testid="results-empty">No result content.</p>
-    }
+  @if (hasBody()) {
+    <article #body
+             class="results-view__body markdown-body"
+             appMarkdownLightbox
+             data-testid="results-rendered"
+             (click)="onBodyClick($event)"
+             [innerHTML]="bodyHtml()" tabindex="0" (keydown.enter)="onBodyClick($event)" (keydown.space)="onBodyClick($event); $event.preventDefault()"></article>
   } @else {
-    <pre class="results-view__raw"
-         data-testid="results-raw">{{ markdown() }}</pre>
+    <p class="results-view__empty" data-testid="results-empty">No result content.</p>
   }
 </div>
 

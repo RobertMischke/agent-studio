@@ -35,10 +35,10 @@ describe('BeautifulResultsComponent', () => {
     expect(body?.textContent ?? '').not.toMatch(/TASK_DONE/);
   });
 
-  it('exposes both Rendered and Raw view-mode buttons', async () => {
+  it('does not render Rendered/Raw pill buttons (F63: moved to context menu)', async () => {
     const host = await mount('# Hi');
-    expect(host.querySelector('[data-testid="results-view-mode-rendered"]')).not.toBeNull();
-    expect(host.querySelector('[data-testid="results-view-mode-raw"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="results-view-mode-rendered"]')).toBeNull();
+    expect(host.querySelector('[data-testid="results-view-mode-raw"]')).toBeNull();
   });
 
   it('renders an empty placeholder when no body content remains after sentinel extraction', async () => {
