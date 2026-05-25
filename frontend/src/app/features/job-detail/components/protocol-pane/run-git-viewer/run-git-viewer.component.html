@@ -1,97 +1,186 @@
-    @if (visible()) {
-      <div class="rgv__backdrop" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()"></div>
-      <div class="rgv" role="dialog" aria-label="Run git viewer"
-           data-testid="run-git-viewer"
-           (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-        <header class="rgv__header">
-          <div class="rgv__title">
-            <span class="rgv__title-main">Run #{{ run()?.index }} · git changes</span>
-            <span class="rgv__sha-range">
-              @if (run()?.headShaBefore && run()?.headShaAfter) {
-                <code>{{ short(run()!.headShaBefore) }}</code>
-                <span class="rgv__arrow">→</span>
-                <code>{{ short(run()!.headShaAfter) }}</code>
-              } @else {
-                <em>no captured SHAs</em>
-              }
-            </span>
-          </div>
-          <div class="rgv__totals">
-            @if (totalFiles() > 0) {
-              <span class="rgv__total">{{ totalFiles() }} files</span>
-              <span class="rgv__add">+{{ totalAdded() }}</span>
-              <span class="rgv__del">-{{ totalRemoved() }}</span>
-            }
-          </div>
-          <button class="rgv__close" type="button" (click)="closeRequest.emit()" aria-label="Close">✕</button>
-        </header>
-
-        <div class="rgv__body" [class.rgv__body--new-file]="isNewFile()">
-          <aside class="rgv__tree" data-testid="rgv-tree">
-            @if (filesState() === 'loading') {
-              <div class="rgv__placeholder">Loading file list…</div>
-            } @else if (filesState() === 'error') {
-              <div class="rgv__placeholder rgv__placeholder--error">{{ filesError() }}</div>
-            } @else if (rootChildren().length === 0) {
-              <div class="rgv__placeholder">No files changed in this run.</div>
-            } @else {
-              <ng-container *ngTemplateOutlet="treeTpl; context: { $implicit: rootChildren(), depth: 0 }" />
-            }
-
-            <ng-template #treeTpl let-nodes let-depth="depth">
-              @for (n of nodes; track n.fullPath) {
-                <div class="rgv__node"
-                     [class.rgv__node--folder]="n.isFolder"
-                     [class.rgv__node--file]="!n.isFolder"
-                     [class.rgv__node--selected]="!n.isFolder && selectedPath() === n.fullPath"
-                     [style.padding-left.px]="8 + depth * 14"
-                     tabindex="0"
-                     (click)="onNodeClick(n)"
-                     (keydown.enter)="onNodeClick(n)"
-                     (keydown.space)="onNodeClick(n); $event.preventDefault()">
-                  <span class="rgv__node-glyph">
-                    @if (n.isFolder) {
-                      {{ expanded().has(n.fullPath) ? '▾' : '▸' }}
-                    } @else if (n.change) {
-                      <span class="rgv__status" [attr.data-status]="n.change.status">{{ n.change.status }}</span>
-                    }
-                  </span>
-                  <span class="rgv__node-name">{{ n.name }}</span>
-                  <span class="rgv__node-stats">
-                    @if (n.isFolder) {
-                      <span class="rgv__node-files">{{ n.fileCount }}</span>
-                    }
-                    @if (n.added > 0) { <span class="rgv__add">+{{ n.added }}</span> }
-                    @if (n.removed > 0) { <span class="rgv__del">-{{ n.removed }}</span> }
-                  </span>
+<!-- F55: inline state-aware git panel -->
+@if (!visible()) {
+  @switch (displayMode()) {
+    @case ('committed') {
+      <div class="rgv-inline" data-testid="rgv-inline-committed">
+        <div class="rgv-inline__header">
+          <span class="rgv-inline__badge rgv-inline__badge--committed">Committed</span>
+          <span class="rgv-inline__count">{{ commitChain().length }} {{ commitChain().length === 1 ? 'commit' : 'commits' }}</span>
+        </div>
+        <div class="rgv-inline__cards">
+          @for (c of commitChain(); track c.sha) {
+            <div class="rgv-inline__card"
+                 [class.rgv-inline__card--expanded]="expandedCommitSha() === c.sha"
+                 [attr.data-testid]="'rgv-commit-card'"
+                 [attr.data-sha]="c.sha">
+              <button type="button"
+                      class="rgv-inline__card-row"
+                      (click)="toggleCommitDiff(c.sha)">
+                <span class="rgv-inline__dot" aria-hidden="true">●</span>
+                <code class="rgv-inline__sha">{{ short(c.sha) }}</code>
+                <span class="rgv-inline__subject">{{ commitSubject(c.message) }}</span>
+                <span class="rgv-inline__meta">{{ c.filesChanged }}f · {{ relativeTime(c.at) }}</span>
+                <span class="rgv-inline__toggle" aria-hidden="true">{{ expandedCommitSha() === c.sha ? '▾' : '▸' }}</span>
+              </button>
+              @if (expandedCommitSha() === c.sha) {
+                <div class="rgv-inline__diff-area" data-testid="rgv-commit-diff-area">
+                  @if (commitDiffState() === 'loading') {
+                    <div class="rgv-inline__diff-placeholder">Loading diff for {{ short(c.sha) }}...</div>
+                  } @else if (commitDiffState() === 'error') {
+                    <div class="rgv-inline__diff-placeholder rgv-inline__diff-placeholder--error">Could not load diff.</div>
+                  } @else if (commitDiffLines().length === 0) {
+                    <div class="rgv-inline__diff-placeholder">No diff available.</div>
+                  } @else {
+                    <pre class="rgv-inline__diff-body" data-testid="rgv-commit-diff-body"><code>@for (line of commitDiffLines(); track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}<span class="rgv__line-code">{{ line.body }}</span>
+</span>}</code></pre>
+                  }
                 </div>
-                @if (n.isFolder && expanded().has(n.fullPath)) {
-                  <ng-container *ngTemplateOutlet="treeTpl; context: { $implicit: n.children, depth: depth + 1 }" />
-                }
               }
-            </ng-template>
-          </aside>
-
-          <section class="rgv__diff" data-testid="rgv-diff">
-            @if (!selectedPath()) {
-              <div class="rgv__placeholder">Select a file from the tree to view its diff.</div>
-            } @else if (diffState() === 'loading') {
-              <div class="rgv__placeholder">Loading diff for <code>{{ selectedPath() }}</code>…</div>
-            } @else if (diffState() === 'error') {
-              <div class="rgv__placeholder rgv__placeholder--error">{{ diffError() }}</div>
-            } @else if (!diffText()) {
-              <div class="rgv__placeholder">No diff available for <code>{{ selectedPath() }}</code> in this range.</div>
-            } @else {
-              <div class="rgv__diff-head">
-                <code class="rgv__diff-path">{{ selectedPath() }}</code>
-                <button class="rgv__copy" type="button" (click)="copyDiff()">{{ copyLabel() }}</button>
-              </div>
-              <pre class="rgv__diff-body" data-testid="rgv-diff-body"><code>@if (highlightedLines(); as hl) {@for (line of hl; track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}@if (line.highlightedHtml !== null) {<span class="rgv__line-code" [innerHTML]="line.highlightedHtml"></span>} @else {<span class="rgv__line-code">{{ line.body }}</span>}
-</span>}} @else {@for (line of diffLines(); track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}<span class="rgv__line-code">{{ line.body }}</span>
-</span>}}</code></pre>
-            }
-          </section>
+            </div>
+          }
         </div>
       </div>
     }
+    @case ('worktree') {
+      <div class="rgv-inline" data-testid="rgv-inline-worktree">
+        <div class="rgv-inline__header">
+          <span class="rgv-inline__badge rgv-inline__badge--worktree">Live worktree</span>
+          @if (worktreeLoading()) {
+            <span class="rgv-inline__poll-indicator" data-testid="rgv-worktree-polling" aria-label="Polling">●</span>
+          }
+        </div>
+        @if (worktreeStatus(); as ws) {
+          @if (ws.error) {
+            <div class="rgv-inline__empty">{{ ws.error }}</div>
+          } @else if (!ws.isRepo) {
+            <div class="rgv-inline__empty">Not a git repository.</div>
+          } @else if (ws.filesChanged === 0) {
+            <div class="rgv-inline__empty">Working tree clean. No uncommitted changes.</div>
+          } @else {
+            <div class="rgv-inline__worktree-summary">
+              <span class="rgv-inline__branch">{{ ws.branch || '(detached)' }}</span>
+              <span class="rgv-inline__wt-stat">{{ ws.filesChanged }} files</span>
+              <span class="rgv__add">+{{ ws.totalAdded }}</span>
+              <span class="rgv__del">-{{ ws.totalRemoved }}</span>
+            </div>
+            <div class="rgv-inline__file-list">
+              @for (f of ws.files; track f.path) {
+                <div class="rgv-inline__wt-file">
+                  <span class="rgv__status" [attr.data-status]="f.status">{{ f.status }}</span>
+                  <span class="rgv-inline__wt-path">{{ f.path }}</span>
+                  @if (f.added > 0) { <span class="rgv__add">+{{ f.added }}</span> }
+                  @if (f.removed > 0) { <span class="rgv__del">-{{ f.removed }}</span> }
+                </div>
+              }
+            </div>
+          }
+        } @else {
+          <div class="rgv-inline__empty">Loading worktree status...</div>
+        }
+      </div>
+    }
+    @case ('idle') {
+      <div class="rgv-inline rgv-inline--idle" data-testid="rgv-inline-idle">
+        <div class="rgv-inline__empty">No commits yet — this task hasn't run.</div>
+      </div>
+    }
+  }
+}
 
+<!-- Per-run diff overlay (existing F20 behavior) -->
+@if (visible()) {
+  <div class="rgv__backdrop" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()"></div>
+  <div class="rgv" role="dialog" aria-label="Run git viewer"
+       data-testid="run-git-viewer"
+       (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
+    <header class="rgv__header">
+      <div class="rgv__title">
+        <span class="rgv__title-main">Run #{{ run()?.index }} · git changes</span>
+        <span class="rgv__sha-range">
+          @if (run()?.headShaBefore && run()?.headShaAfter) {
+            <code>{{ short(run()!.headShaBefore) }}</code>
+            <span class="rgv__arrow">→</span>
+            <code>{{ short(run()!.headShaAfter) }}</code>
+          } @else {
+            <em>no captured SHAs</em>
+          }
+        </span>
+      </div>
+      <div class="rgv__totals">
+        @if (totalFiles() > 0) {
+          <span class="rgv__total">{{ totalFiles() }} files</span>
+          <span class="rgv__add">+{{ totalAdded() }}</span>
+          <span class="rgv__del">-{{ totalRemoved() }}</span>
+        }
+      </div>
+      <button class="rgv__close" type="button" (click)="closeRequest.emit()" aria-label="Close">✕</button>
+    </header>
+
+    <div class="rgv__body" [class.rgv__body--new-file]="isNewFile()">
+      <aside class="rgv__tree" data-testid="rgv-tree">
+        @if (filesState() === 'loading') {
+          <div class="rgv__placeholder">Loading file list…</div>
+        } @else if (filesState() === 'error') {
+          <div class="rgv__placeholder rgv__placeholder--error">{{ filesError() }}</div>
+        } @else if (rootChildren().length === 0) {
+          <div class="rgv__placeholder">No files changed in this run.</div>
+        } @else {
+          <ng-container *ngTemplateOutlet="treeTpl; context: { $implicit: rootChildren(), depth: 0 }" />
+        }
+
+        <ng-template #treeTpl let-nodes let-depth="depth">
+          @for (n of nodes; track n.fullPath) {
+            <div class="rgv__node"
+                 [class.rgv__node--folder]="n.isFolder"
+                 [class.rgv__node--file]="!n.isFolder"
+                 [class.rgv__node--selected]="!n.isFolder && selectedPath() === n.fullPath"
+                 [style.padding-left.px]="8 + depth * 14"
+                 tabindex="0"
+                 (click)="onNodeClick(n)"
+                 (keydown.enter)="onNodeClick(n)"
+                 (keydown.space)="onNodeClick(n); $event.preventDefault()">
+              <span class="rgv__node-glyph">
+                @if (n.isFolder) {
+                  {{ expanded().has(n.fullPath) ? '▾' : '▸' }}
+                } @else if (n.change) {
+                  <span class="rgv__status" [attr.data-status]="n.change.status">{{ n.change.status }}</span>
+                }
+              </span>
+              <span class="rgv__node-name">{{ n.name }}</span>
+              <span class="rgv__node-stats">
+                @if (n.isFolder) {
+                  <span class="rgv__node-files">{{ n.fileCount }}</span>
+                }
+                @if (n.added > 0) { <span class="rgv__add">+{{ n.added }}</span> }
+                @if (n.removed > 0) { <span class="rgv__del">-{{ n.removed }}</span> }
+              </span>
+            </div>
+            @if (n.isFolder && expanded().has(n.fullPath)) {
+              <ng-container *ngTemplateOutlet="treeTpl; context: { $implicit: n.children, depth: depth + 1 }" />
+            }
+          }
+        </ng-template>
+      </aside>
+
+      <section class="rgv__diff" data-testid="rgv-diff">
+        @if (!selectedPath()) {
+          <div class="rgv__placeholder">Select a file from the tree to view its diff.</div>
+        } @else if (diffState() === 'loading') {
+          <div class="rgv__placeholder">Loading diff for <code>{{ selectedPath() }}</code>…</div>
+        } @else if (diffState() === 'error') {
+          <div class="rgv__placeholder rgv__placeholder--error">{{ diffError() }}</div>
+        } @else if (!diffText()) {
+          <div class="rgv__placeholder">No diff available for <code>{{ selectedPath() }}</code> in this range.</div>
+        } @else {
+          <div class="rgv__diff-head">
+            <code class="rgv__diff-path">{{ selectedPath() }}</code>
+            <button class="rgv__copy" type="button" (click)="copyDiff()">{{ copyLabel() }}</button>
+          </div>
+          <pre class="rgv__diff-body" data-testid="rgv-diff-body"><code>@if (highlightedLines(); as hl) {@for (line of hl; track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}@if (line.highlightedHtml !== null) {<span class="rgv__line-code" [innerHTML]="line.highlightedHtml"></span>} @else {<span class="rgv__line-code">{{ line.body }}</span>}
+</span>}} @else {@for (line of diffLines(); track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}<span class="rgv__line-code">{{ line.body }}</span>
+</span>}}</code></pre>
+        }
+      </section>
+    </div>
+  </div>
+}
