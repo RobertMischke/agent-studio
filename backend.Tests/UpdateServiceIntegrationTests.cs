@@ -300,6 +300,37 @@ public class UpdateServiceIntegrationTests
     }
 
     [SkippableFact]
+    public async Task JobsGroupedRetry_FirstAttemptFails_SecondSucceeds_RunCompletes()
+    {
+        using var checkout = FakeStableCheckout.TryCreate();
+        Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
+
+        // F58: /api/jobs/grouped fails the first call (simulating cold-start
+        // delay), then succeeds on the retry. The verifier's new retry logic
+        // should recover and the overall run should reach phase=done.
+        await using var backend = new FakeBackendHarness { JobsGroupedFailFirstN = 1 };
+        await backend.StartAsync();
+
+        using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: false);
+        var client = factory.CreateClient();
+
+        await TriggerAsync(client);
+        var status = await WaitForPhaseAsync(client, new[] { "done", "failed" }, TriggerTimeoutMs);
+        var phase = status.GetProperty("phase").GetString();
+        Assert.Equal("done", phase);
+
+        // The retry succeeded: verification.jsonl should have 6 passing rows,
+        // and the jobs-grouped row should note the retry attempt.
+        var runFolder = LatestRunFolder(checkout!.RunsDir);
+        var rows = ReadJsonl(Path.Combine(runFolder, "verification.jsonl"));
+        Assert.Equal(6, rows.Count);
+        var jobsGroupedRow = rows.First(r => r.RootElement.GetProperty("step").GetString() == "jobs-grouped");
+        Assert.True(jobsGroupedRow.RootElement.GetProperty("ok").GetBoolean());
+        var observed = jobsGroupedRow.RootElement.GetProperty("observed").GetString();
+        Assert.Contains("attempt 2", observed!);
+    }
+
+    [SkippableFact]
     public async Task DoneLinger_LastRunFinishedAtSurvivesPastLingerWindow()
     {
         using var checkout = FakeStableCheckout.TryCreate();

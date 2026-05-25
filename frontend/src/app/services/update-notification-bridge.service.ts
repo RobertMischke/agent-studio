@@ -38,10 +38,18 @@ export class UpdateNotificationBridge {
           f => `${f.step}: ${f.observed ?? '(none)'} (expected ${f.expected ?? '?'})`
         );
 
+        const hasNoResponse = failures.some(f => f.observed?.includes('no response'));
+        const hasVerificationFailure = failures.length > 0;
+        const message = hasVerificationFailure
+          ? (hasNoResponse
+            ? 'The backend did not respond in time after the update. It may still be starting up. You can roll back to the previous version or wait and retry.'
+            : `Verification failed after restart: ${failures.map(f => f.step).join(', ')} did not pass. Roll back to restore the previous version.`)
+          : (s.message ?? 'The update did not succeed.');
+
         this.activeToastId = this.notify.notify({
           kind: 'error',
           title: 'Update failed',
-          message: s.message ?? 'The update did not succeed.',
+          message,
           details,
           durationMs: 0,
           actions: [

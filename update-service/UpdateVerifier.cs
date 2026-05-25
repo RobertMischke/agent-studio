@@ -132,7 +132,7 @@ public sealed class UpdateVerifier
         sw.Stop();
         if (status != 200)
             return new VerificationCheck(runId, "runner-status", false,
-                $"http={status}", "http=200", DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
+                DescribeHttpFailure(status), "http=200", DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
 
         Dictionary<string, string> projects;
         try
@@ -164,28 +164,58 @@ public sealed class UpdateVerifier
     private async Task<VerificationCheck> CheckJobsGroupedAsync(string runId, CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
-        var (status, body) = await _backend.GetAsync("/api/jobs/grouped", TimeSpan.FromSeconds(15), ct);
-        sw.Stop();
-        if (status != 200)
-            return new VerificationCheck(runId, "jobs-grouped", false, $"http={status}", "http=200",
-                DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
+        var attempts = 3;
+        var spacing = TimeSpan.FromSeconds(5);
 
-        try
+        for (int i = 0; i < attempts; i++)
         {
-            using var doc = JsonDocument.Parse(body);
-            // Old shape may be a flat object whose values are arrays per state.
-            // We accept either {"preparation":[...], ...} or any object that
-            // parses; the sentinel is "the endpoint answers with valid JSON".
-            if (doc.RootElement.ValueKind != JsonValueKind.Object && doc.RootElement.ValueKind != JsonValueKind.Array)
-                return new VerificationCheck(runId, "jobs-grouped", false, $"unexpected root kind {doc.RootElement.ValueKind}", "json object/array",
+            var (status, body) = await _backend.GetAsync("/api/jobs/grouped", TimeSpan.FromSeconds(15), ct);
+
+            if (status == 200)
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.ValueKind != JsonValueKind.Object && doc.RootElement.ValueKind != JsonValueKind.Array)
+                    {
+                        sw.Stop();
+                        return new VerificationCheck(runId, "jobs-grouped", false,
+                            $"unexpected root kind {doc.RootElement.ValueKind}", "json object/array",
+                            DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    sw.Stop();
+                    return new VerificationCheck(runId, "jobs-grouped", false,
+                        $"parse: {ex.Message}", "valid json",
+                        DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
+                }
+                sw.Stop();
+                return new VerificationCheck(runId, "jobs-grouped", true,
+                    i == 0 ? "ok" : $"ok (attempt {i + 1}/{attempts})", "200 + parses",
                     DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
+            }
+
+            if (i < attempts - 1)
+            {
+                _logger.LogDebug("jobs-grouped attempt {Attempt}/{Max}: http={Status}, retrying in {Spacing}s",
+                    i + 1, attempts, status, spacing.TotalSeconds);
+                try { await Task.Delay(spacing, ct); }
+                catch (OperationCanceledException) { break; }
+            }
+            else
+            {
+                sw.Stop();
+                return new VerificationCheck(runId, "jobs-grouped", false,
+                    DescribeHttpFailure(status), "http=200",
+                    DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
+            }
         }
-        catch (JsonException ex)
-        {
-            return new VerificationCheck(runId, "jobs-grouped", false, $"parse: {ex.Message}", "valid json",
-                DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
-        }
-        return new VerificationCheck(runId, "jobs-grouped", true, "ok", "200 + parses",
+
+        sw.Stop();
+        return new VerificationCheck(runId, "jobs-grouped", false,
+            "cancelled during retry", "http=200",
             DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
     }
 
@@ -195,7 +225,7 @@ public sealed class UpdateVerifier
         var (status, body) = await _backend.GetAsync("/api/clients", TimeSpan.FromSeconds(10), ct);
         sw.Stop();
         if (status != 200)
-            return new VerificationCheck(runId, "clients", false, $"http={status}", "http=200",
+            return new VerificationCheck(runId, "clients", false, DescribeHttpFailure(status), "http=200",
                 DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
         try
         {
@@ -227,7 +257,7 @@ public sealed class UpdateVerifier
         var (status, _) = await _backend.GetAsync("/api/cli/quota", TimeSpan.FromSeconds(10), ct);
         sw.Stop();
         if (status != 200)
-            return new VerificationCheck(runId, "cli-quota", false, $"http={status}", "http=200",
+            return new VerificationCheck(runId, "cli-quota", false, DescribeHttpFailure(status), "http=200",
                 DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
         return new VerificationCheck(runId, "cli-quota", true, "200", "200 (degraded payload ok)",
             DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
@@ -244,7 +274,7 @@ public sealed class UpdateVerifier
         sw.Stop();
         if (status != 200)
             return new VerificationCheck(runId, "db-touch", false,
-                $"http={status} body={Truncate(body, 80)}",
+                $"{DescribeHttpFailure(status)} body={Truncate(body, 80)}",
                 "http=200 (Environment:IsDev or DevTools:UpdateStableEnabled gates this endpoint)",
                 DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
 
@@ -257,6 +287,12 @@ public sealed class UpdateVerifier
 
         return new VerificationCheck(runId, "db-touch", true, "round-trip ok", "echo",
             DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
+    }
+
+    public static string DescribeHttpFailure(int status)
+    {
+        if (status == 0) return "no response (timed out or unreachable)";
+        return $"http={status}";
     }
 
     private static string Truncate(string? s, int n)

@@ -36,6 +36,13 @@ public sealed class FakeBackendHarness : IAsyncDisposable
     /// </summary>
     public int ProbeFailFirstN { get; set; }
     public int ProbeCallCount;
+    /// <summary>
+    /// F58: when &gt; 0, the first N calls to <c>/api/jobs/grouped</c> return
+    /// 503 and subsequent calls return 200. Lets the integration suite verify
+    /// that the verifier's retry logic recovers from a cold-start delay.
+    /// </summary>
+    public int JobsGroupedFailFirstN { get; set; }
+    public int JobsGroupedCallCount;
     public Dictionary<string, string> ProjectModes { get; } = new()
     {
         ["agent-taskboard"] = "auto-continuous",
@@ -68,12 +75,18 @@ public sealed class FakeBackendHarness : IAsyncDisposable
             return Results.Json(new { projects });
         });
 
-        app.MapGet("/api/jobs/grouped", () => Results.Json(new
+        app.MapGet("/api/jobs/grouped", () =>
         {
-            preparation = Array.Empty<object>(),
-            ready = Array.Empty<object>(),
-            progress = Array.Empty<object>(),
-        }));
+            var call = System.Threading.Interlocked.Increment(ref JobsGroupedCallCount);
+            if (JobsGroupedFailFirstN > 0 && call <= JobsGroupedFailFirstN)
+                return Results.Json(new { error = "cold start" }, statusCode: 503);
+            return Results.Json(new
+            {
+                preparation = Array.Empty<object>(),
+                ready = Array.Empty<object>(),
+                progress = Array.Empty<object>(),
+            });
+        });
 
         app.MapGet("/api/jobs", () => Results.Json(new[] { new { id = "demo" } }));
         app.MapGet("/api/clients", () => Results.Json(new[] { new { id = "fake-client" } }));

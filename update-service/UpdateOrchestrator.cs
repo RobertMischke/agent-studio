@@ -180,8 +180,12 @@ public sealed class UpdateOrchestrator
             var verification = await _verifier.RunAsync(runId, preModes, folder.AppendVerification, ct);
             if (!verification.AllPassed)
             {
+                var failedSteps = string.Join(", ", verification.Failures.Select(f => f.Step));
+                var hint = verification.Failures.Any(f => f.Observed != null && f.Observed.Contains("no response"))
+                    ? ". The backend may not have finished starting after the update"
+                    : "";
                 FinishFailed(runId, startedAt, headBefore, headAfterPull, trigger,
-                    $"verification failed: {string.Join(", ", verification.Failures.Select(f => f.Step))}",
+                    $"verification failed ({failedSteps}){hint}",
                     verification.Failures, folder, preSnapshot);
 
                 if (_options.AutoRollback)

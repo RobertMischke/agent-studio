@@ -115,6 +115,33 @@ public class UpdateVerifierTests
 }
 
 /// <summary>
+/// F58: the <see cref="UpdateVerifier.DescribeHttpFailure"/> helper translates
+/// raw HTTP status codes (especially the "no-response" status 0) into
+/// operator-readable text for the verification failure toast.
+/// </summary>
+public class DescribeHttpFailureTests
+{
+    [Fact]
+    public void Status0_TranslatesToNoResponse()
+    {
+        var result = UpdateVerifier.DescribeHttpFailure(0);
+        Assert.Contains("no response", result);
+        Assert.Contains("timed out", result);
+    }
+
+    [Theory]
+    [InlineData(500)]
+    [InlineData(502)]
+    [InlineData(503)]
+    [InlineData(404)]
+    public void NonZeroStatus_ShowsRawHttpCode(int status)
+    {
+        var result = UpdateVerifier.DescribeHttpFailure(status);
+        Assert.Equal($"http={status}", result);
+    }
+}
+
+/// <summary>
 /// Phase-label mapping is the FE-visible contract for the block-modal title
 /// in ADR-0031. The internal helper is exercised through the public
 /// orchestrator surface, but pinning the strings here would couple the test
