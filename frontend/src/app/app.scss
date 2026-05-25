@@ -266,6 +266,38 @@
       border-color: rgba(248, 113, 113, 0.55);
       color: #fecaca;
     }
+    .board-filter-empty-hint {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      margin: 0 4px;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--studio-accent-warn, #e5a64e) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--studio-accent-warn, #e5a64e) 35%, transparent);
+      font-size: 12.5px;
+      color: var(--studio-fg);
+    }
+    .board-filter-empty-hint__text {
+      flex: 1 1 auto;
+    }
+    .board-filter-empty-hint__clear {
+      flex: 0 0 auto;
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
+      color: var(--studio-fg-strong);
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .board-filter-empty-hint__clear:hover {
+      background: var(--studio-bg-elevated);
+      border-color: var(--studio-border-strong);
+    }
     .header__filters { display: flex; gap: 6px; align-items: center; }
     /* Filter chip carries each project's identity colour as a CSS variable
        supplied per chip; the active state pulls the chip into the project's

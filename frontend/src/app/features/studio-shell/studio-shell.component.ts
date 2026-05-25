@@ -691,6 +691,10 @@ export class StudioShellComponent {
     { key: 'runbook', icon: 'runbook', label: 'Runbook' },
   ];
 
+  readonly activityBarBadgeCounts = computed<Record<string, number>>(() => ({
+    filters: this.boardFilters.activeFilterCount(),
+  }));
+
   openBoard(projectName: string): void {
     this.tabState.open({ kind: 'board', projectName });
   }

@@ -567,6 +567,22 @@
       background: var(--studio-bg-selected);
       color: var(--studio-fg-strong);
     }
+
+    &--text {
+      width: auto;
+      height: auto;
+      padding: 2px 6px;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: 4px;
+      background: var(--studio-bg-hover);
+      color: var(--studio-accent-warn, #e5a64e);
+      transition: background 0.12s, color 0.12s;
+      &:hover {
+        background: var(--studio-bg-elevated);
+        color: var(--studio-fg-strong);
+      }
+    }
   }
 
   &__body {

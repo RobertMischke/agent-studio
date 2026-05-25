@@ -148,6 +148,7 @@
       [items]="activityBarItems"
       [activePanel]="activePanel()"
       [sidebarVisible]="sidebarVisible()"
+      [badgeCounts]="activityBarBadgeCounts()"
       (panelToggle)="togglePanel($event)" />
 
     <!-- Sidebar host -->
@@ -190,6 +191,14 @@
                     (click)="onCollapseAllProjects()">
               <app-studio-icon name="collapse" [size]="14"></app-studio-icon>
             </button>
+          }
+          @if (activePanel() === 'filters' && boardFilters.hasActiveFiltersOrSearch()) {
+            <button type="button"
+                    class="studio-sidebar__action studio-sidebar__action--text"
+                    data-testid="studio-sidebar-filter-clear-all"
+                    title="Clear all active filters"
+                    aria-label="Clear all filters"
+                    (click)="boardFilters.clearSearchAndFilters()">Clear all</button>
           }
         </div>
         <div class="studio-sidebar__body">

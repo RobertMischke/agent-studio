@@ -5,6 +5,7 @@
             [class.studio-ab__btn--active]="activePanel() === item.key && sidebarVisible()"
             [title]="item.label"
             [attr.data-panel]="item.key"
+            [attr.data-testid]="'studio-ab-' + item.key"
             (click)="panelToggle.emit(item.key)">
       <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
@@ -38,6 +39,12 @@
           }
         }
       </svg>
+      @if (badgeCounts()[item.key]; as count) {
+        <span class="studio-ab__badge"
+              [appTooltip]="count + (count === 1 ? ' filter active' : ' filters active')"
+              [attr.data-testid]="'studio-ab-badge-' + item.key"
+              aria-hidden="true">{{ count }}</span>
+      }
     </button>
   }
   <span class="studio-ab__spacer"></span>
