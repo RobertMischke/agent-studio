@@ -17,16 +17,20 @@ import { test, expect, Page } from '@playwright/test';
  * overflow" to "overflowing", but no track is painted while the lane
  * fits.
  *
+ * F60 refinement: in the studio super-column layout, the scroll surface
+ * moved from `.column__body` to `.lane-group__lanes` — one scrollbar
+ * per super-column, not per lane. The legacy layout keeps the per-lane
+ * `.column__body` scroll. This test probes whichever surface is active.
+ *
  * The spec runs against whatever board state the configured backend
  * exposes — no fixtures. The CSS contract is what F28 cares about; any
  * lane on the board is enough to validate it.
  *
  * Asserts:
- *   1. `.column__body` has `scrollbar-gutter: stable`.
- *   2. The 4 px right-padding hack is gone (padding-right is 0).
- *   3. Two side-by-side lanes share the same content width — the
- *      gutter reservation does not depend on the lane's overflow state,
- *      so empty/full lanes lay out identically.
+ *   1. The active scroll surface has `scrollbar-gutter: stable`.
+ *   2. The 4 px right-padding hack is gone on `.column__body`.
+ *   3. Two lanes share the same content width — the gutter reservation
+ *      does not depend on the lane's overflow state.
  */
 
 async function dismissTransientErrors(page: Page): Promise<void> {
@@ -67,43 +71,60 @@ async function gotoBoard(page: Page): Promise<void> {
 }
 
 test.describe('F28 — lane scrollbar redundancy', () => {
-  test('column__body uses scrollbar-gutter: stable and drops the old 4px padding-right hack', async ({ page }) => {
+  test('scroll surface uses scrollbar-gutter: stable and the old 4px padding-right hack is gone', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoBoard(page);
 
-    // Wait until at least one lane body has rendered. We don't care
-    // which lane — F28 is about every lane's scroll surface, so the
-    // first one we find is representative.
     const body = page.locator('.column__body').first();
     await expect(body, 'expected at least one .column__body on the board').toBeVisible({ timeout: 10_000 });
 
-    const styles = await body.evaluate((el) => {
-      const cs = window.getComputedStyle(el);
-      return {
-        scrollbarGutter: cs.scrollbarGutter,
-        paddingRight: cs.paddingRight,
-        overflowY: cs.overflowY,
-      };
-    });
+    // Detect layout: studio super-column vs legacy horizontal.
+    // In studio, the scroll surface is .lane-group__lanes; in legacy
+    // it is .column__body.
+    const isStudio = (await page.getByTestId('studio-board').count()) > 0;
 
-    // 1. The new gutter mechanism is in effect.
-    expect(
-      styles.scrollbarGutter,
-      `column__body scrollbar-gutter="${styles.scrollbarGutter}" — F28 expects "stable" so the lane ` +
-      `reserves gutter width at layout time instead of forcing a manual padding-right.`,
-    ).toMatch(/\bstable\b/);
+    if (isStudio) {
+      const lanes = page.locator('.lane-group__lanes').first();
+      await expect(lanes).toBeVisible({ timeout: 5_000 });
+      const styles = await lanes.evaluate((el) => {
+        const cs = window.getComputedStyle(el);
+        return { scrollbarGutter: cs.scrollbarGutter, overflowY: cs.overflowY };
+      });
 
-    // 2. The old 4 px right padding hack is gone — its job is now done
-    //    by scrollbar-gutter. Painting it again would put us back in
-    //    the redundant-track state F28 fixes.
+      expect(
+        styles.scrollbarGutter,
+        `lane-group__lanes scrollbar-gutter="${styles.scrollbarGutter}" — F60 moved the gutter ` +
+        `reservation to the super-column scroll surface.`,
+      ).toMatch(/\bstable\b/);
+      expect(styles.overflowY).toMatch(/^(auto|scroll)$/);
+
+      // column__body must NOT scroll in the studio layout.
+      const bodyStyles = await body.evaluate((el) => {
+        const cs = window.getComputedStyle(el);
+        return { overflowY: cs.overflowY };
+      });
+      expect(
+        bodyStyles.overflowY,
+        `column__body overflow-y="${bodyStyles.overflowY}" — F60 delegates scrolling to ` +
+        `lane-group__lanes; the per-lane body must not scroll.`,
+      ).toBe('visible');
+    } else {
+      const styles = await body.evaluate((el) => {
+        const cs = window.getComputedStyle(el);
+        return { scrollbarGutter: cs.scrollbarGutter, overflowY: cs.overflowY };
+      });
+      expect(styles.scrollbarGutter).toMatch(/\bstable\b/);
+      expect(styles.overflowY).toMatch(/^(auto|scroll)$/);
+    }
+
+    // The 4 px right padding hack must be gone in both layouts.
+    const paddingRight = await body.evaluate((el) =>
+      window.getComputedStyle(el).paddingRight,
+    );
     expect(
-      styles.paddingRight,
-      `column__body padding-right="${styles.paddingRight}" — F28 removed the manual 4 px gutter; ` +
-      `scrollbar-gutter handles the reservation now.`,
+      paddingRight,
+      `column__body padding-right="${paddingRight}" — the manual 4 px gutter must stay removed.`,
     ).toBe('0px');
-
-    // 3. overflow-y stays auto so the lane still scrolls when full.
-    expect(styles.overflowY).toMatch(/^(auto|scroll)$/);
   });
 
   test('two lanes share the same content width regardless of their overflow state', async ({ page }) => {

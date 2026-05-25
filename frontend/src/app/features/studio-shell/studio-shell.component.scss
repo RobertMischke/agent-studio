@@ -1440,6 +1440,8 @@
   }
 
   // Stack the lanes vertically within the super-column.
+  // This is the SOLE Y-scroll surface per super-column; per-lane
+  // .column__body relinquishes its scrollbar below.
   .lane-group__lanes {
     display: flex;
     flex-direction: column;
@@ -1447,16 +1449,27 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-gutter: stable;
     padding: 4px;
     gap: 4px;
+    @include m.thin-scroll;
   }
 
-  // Each lane inside the super-column shrinks to its content height and
-  // sheds its standalone column chrome (it now lives as a sub-section).
+  // Each lane inside the super-column displays at full content height
+  // (flex-shrink: 0) so its cards are never clipped by a per-lane
+  // scrollbar. The super-column's .lane-group__lanes handles overflow.
   app-job-column {
     display: block;
     width: 100%;
+    flex-shrink: 0;
     background: transparent;
+  }
+
+  // Kill per-lane scrollbar inside a super-column: only
+  // .lane-group__lanes scrolls.
+  app-job-column .column__body {
+    overflow-y: visible;
+    scrollbar-gutter: auto;
   }
 
   // Pile-down collapse: when a lane is collapsed inside a super-column,
