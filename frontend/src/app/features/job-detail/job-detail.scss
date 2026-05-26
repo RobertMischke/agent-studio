@@ -31,6 +31,9 @@
       border-radius: 10px;
       background: var(--studio-bg-hover);
       border: 1px solid var(--studio-border);
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
     }
     .chat-compose__input {
       width: 100%;

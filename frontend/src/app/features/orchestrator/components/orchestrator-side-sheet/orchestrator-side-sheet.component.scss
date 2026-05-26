@@ -173,6 +173,8 @@
   overflow: hidden;
   padding: 10px 18px 14px;
   background: var(--studio-bg-editor);
+  display: flex;
+  flex-direction: column;
 }
 .sheet__scope-row {
   display: flex;
@@ -222,7 +224,7 @@
   font-size: 12px;
 }
 .sheet__chat {
-  height: 100%;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
