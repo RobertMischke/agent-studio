@@ -16,6 +16,12 @@ For operator-side setup (attaching a new project, onboarding a new CLI agent, fi
 
 When you add a new document under `docs/`, add a one-line row to the index in the same commit so it stays a single grep target. Mockup README files and research notes nest under their existing parent rows; they do not each get their own line.
 
+## STOP — read this before any file action under `agent-taskboard-workspace/`
+
+**Never create, move, edit, delete, or rename folders or files under `agent-taskboard-workspace/projects/**` or `agent-taskboard-workspace/.metadata/**` with `Write`, `Edit`, `mv`, `rm`, `cp`, `mkdir`, PowerShell `Move-Item` / `Remove-Item` / `New-Item`, or any other direct filesystem command — not even "just this once" to file a new job, fix a slug, or move a card.** The application API is the only allowed mutation path. The full enumeration (create job, move, batch-move, restore-from-failed-pickup, delete, edit fields) and the rationale (filesystem state and in-memory index diverge silently → zombie folders, 409 conflicts, orphaned runs) live in [Job organization rule: API first](#job-organization-rule-api-first) further down. This callout exists because the rule keeps getting violated. The architecture test [`backend.Tests/Architecture/JobFolderAccessIsolationTest.cs`](backend.Tests/Architecture/JobFolderAccessIsolationTest.cs) enforces the code-side; this rule is the agent-side and applies to **every** agent (Claude Code, Codex, Copilot, Gemini, any future surface).
+
+If the API does not expose an operation you need, **queue a new task** rather than reaching past it.
+
 ## Edit only the dev checkout
 
 This repository is checked out twice in the parent `agent-taskboard-devspace/` folder: `agent-taskboard-dev/` (active development) and `agent-taskboard-stable/` (reference). **All edits go to the dev checkout.** Stable receives changes via `git pull` from `main` and is never edited directly.
