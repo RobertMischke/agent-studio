@@ -288,6 +288,18 @@ export class BoardFiltersService {
   }
 
   /**
+   * Idempotent single-project set. Used by reactive tab-sync effects where
+   * repeated invocations with the same name must not toggle the filter off.
+   */
+  setSoleProject(name: string): void {
+    const current = this.activeProjects();
+    if (current.size === 1 && current.has(name)) return;
+    this.activeProjects.set(new Set([name]));
+    localStorage.setItem('activeProjects', JSON.stringify([name]));
+    this.writeFilterHash();
+  }
+
+  /**
    * Single-select project switch. Clicking an inactive project chip with
    * no modifier replaces the active set with just that project, so the
    * board, lane counters, and chip strips switch cleanly between projects
@@ -330,6 +342,23 @@ export class BoardFiltersService {
   clearSearchAndFilters(): void {
     this.searchQuery.set('');
     this.clearAllFilters();
+  }
+
+  /**
+   * Drop project names from the active filter that no longer exist in the
+   * registry. Called once after watch-path data arrives so stale
+   * localStorage values from before a registry rename don't leave the
+   * board empty.
+   */
+  purgeStaleProjects(validNames: ReadonlySet<string>): void {
+    const current = this.activeProjects();
+    if (current.size === 0) return;
+    const cleaned = new Set([...current].filter(n => validNames.has(n)));
+    if (cleaned.size !== current.size) {
+      this.activeProjects.set(cleaned);
+      localStorage.setItem('activeProjects', JSON.stringify([...cleaned]));
+      this.writeFilterHash();
+    }
   }
 
   // ---------- URL sync ----------

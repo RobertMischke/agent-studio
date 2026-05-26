@@ -827,8 +827,10 @@ export class App implements OnInit, OnDestroy {
               /* storage may be blocked */
             }
           } else {
-            // Single-select: only this project's jobs render in the lanes.
-            this.boardFilters.selectProject(tab.projectName, false);
+            // Idempotent set: only this project's jobs render in the lanes.
+            // Uses setSoleProject (not selectProject) so repeated tab
+            // activations don't toggle the filter off.
+            this.boardFilters.setSoleProject(tab.projectName);
           }
         }
       });
@@ -975,6 +977,13 @@ export class App implements OnInit, OnDestroy {
       next: (entries) => {
         this.watchPaths.set(entries);
         if (entries.length > 0) this.createJobForm.newWatchPath = entries[0].path;
+
+        // Purge stale project names that survived a registry rename in
+        // localStorage (board filter) and persisted tabs.
+        const validNames = new Set(entries.map(e => e.name));
+        this.boardFilters.purgeStaleProjects(validNames);
+        this.studioTabState.purgeStaleProjectTabs(validNames);
+
         // The deep-link hash listener can fire before watch paths are
         // known (e.g. on a hard reload of `#/projects/<slug>`); resolving
         // the slug → project name needs the watch-path list, so re-apply

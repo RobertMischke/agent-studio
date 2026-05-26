@@ -145,6 +145,26 @@ export class StudioTabStateService {
     this.persist();
   }
 
+  /**
+   * Remove board and hub tabs whose projectName is no longer in the
+   * registry. Called once after the watch-path data arrives so tabs
+   * persisted under a pre-rename name don't produce empty boards.
+   */
+  purgeStaleProjectTabs(validNames: ReadonlySet<string>): void {
+    const before = this._tabs();
+    const after = before.filter(t => {
+      if (t.kind === 'board' && t.projectName !== '__all__') return validNames.has(t.projectName);
+      if (t.kind === 'hub') return validNames.has(t.projectName);
+      return true;
+    });
+    if (after.length === before.length) return;
+    this._tabs.set(after);
+    if (!after.some(t => studioTabKey(t) === this._activeKey())) {
+      this._activeKey.set(after.length ? studioTabKey(after[after.length - 1]) : null);
+    }
+    this.persist();
+  }
+
   // ---- persistence ----------------------------------------------------
 
   private restore(): void {
