@@ -186,6 +186,16 @@
   --notify-accent-tint:         rgba(139, 92, 246, 0.18);
 
   // ---------------------------------------------------------------------------
+  // Tooltip surface — used by the singleton <app-tooltip> injected by
+  // TooltipController. Dark theme matches the Mocha crust with a frosted
+  // backdrop; light theme flips to a white shell.
+  // ---------------------------------------------------------------------------
+  --studio-tooltip-bg:     rgba(15, 17, 28, 0.96);
+  --studio-tooltip-fg:     var(--color-slate-200);
+  --studio-tooltip-fg-strong: var(--color-slate-50);
+  --studio-tooltip-border: rgba(148, 163, 184, 0.28);
+
+  // ---------------------------------------------------------------------------
   // Elevations — shadow tokens by USE-CASE (Tier-2 alias over --shadow-*).
   //
   // When a component needs a drop shadow, pick the elevation matching the
@@ -309,6 +319,12 @@
   --syntax-meta:     var(--color-sky-800);
   --syntax-tag:      var(--color-sky-800);
   --syntax-selector: var(--color-violet-700);
+
+  // Tooltip surface — white shell with subtle shadow.
+  --studio-tooltip-bg:     rgba(255, 255, 255, 0.97);
+  --studio-tooltip-fg:     var(--color-grey-900);
+  --studio-tooltip-fg-strong: var(--color-grey-950);
+  --studio-tooltip-border: rgba(0, 0, 0, 0.14);
 
   // Elevations — softer drop shadows on white. Same use-case aliases as dark.
   --elevation-card:     var(--shadow-100-light);

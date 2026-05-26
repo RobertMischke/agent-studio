@@ -275,16 +275,16 @@ const TOOLTIP_CSS = `
   pointer-events: none;
   max-width: 360px;
   min-width: 0;
-  background: rgba(15, 17, 28, 0.96);
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: var(--studio-tooltip-bg, rgba(15, 17, 28, 0.96));
+  color: var(--studio-tooltip-fg, #e2e8f0);
+  border: 1px solid var(--studio-tooltip-border, rgba(148, 163, 184, 0.28));
   border-radius: 10px;
   padding: 10px 12px;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 12.5px;
   line-height: 1.5;
   letter-spacing: 0.01em;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--elevation-tooltip, 0 12px 32px rgba(0, 0, 0, 0.45));
   backdrop-filter: blur(6px) saturate(120%);
   -webkit-backdrop-filter: blur(6px) saturate(120%);
   opacity: 0;
@@ -294,13 +294,13 @@ const TOOLTIP_CSS = `
 .app-tooltip__title {
   font-size: 12px;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--studio-tooltip-fg-strong, #f8fafc);
   margin: 0 0 4px 0;
   letter-spacing: 0.02em;
 }
 .app-tooltip__body {
   font-size: 12.5px;
-  color: #e2e8f0;
+  color: var(--studio-tooltip-fg, #e2e8f0);
   white-space: pre-line;
   overflow: hidden;
   overflow-wrap: anywhere;

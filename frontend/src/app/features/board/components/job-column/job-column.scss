@@ -84,7 +84,7 @@
       align-items: center;
       gap: 8px;
       padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
+      border-bottom: 1px solid var(--studio-border, rgba(255,255,255,0.06));
       /*
        * Clip header content to the column. With min-width: 200 on
        * .column the header's natural fixed-size children (icon, count,
@@ -353,9 +353,9 @@
      * in a vertical strip in the middle so the user still sees task
      * count, active runs, needs-input flags, and errors at a glance.
      */
-    .column-rail {
-      background: var(--column-bg, #181825);
-      border: 1px solid rgba(255,255,255,0.04);
+    button.column-rail {
+      background-color: var(--column-bg, #181825);
+      border: 1px solid var(--studio-border, rgba(255,255,255,0.06));
       border-radius: 14px;
       width: 36px;
       min-width: 36px;
@@ -366,14 +366,14 @@
       gap: 10px;
       padding: 12px 4px 10px;
       cursor: pointer;
-      color: #cbd5e1;
-      transition: outline 0.15s, background 0.15s;
+      color: var(--studio-fg-dim, #cbd5e1);
+      transition: outline 0.15s, background-color 0.15s;
       /* Same containment rationale as .column: a rail's running-pulse
          animation must not invalidate sibling lanes. */
       contain: layout paint;
     }
-    .column-rail:hover {
-      background: #1a1a2b;
+    button.column-rail:hover {
+      background-color: var(--studio-bg-selected, rgba(255,255,255,0.06));
     }
     .column-rail--dragover {
       outline: 2px solid rgba(99, 102, 241, 0.6);
@@ -381,8 +381,8 @@
     }
     .column-rail__icon { font-size: 16px; line-height: 1; }
     .column-rail__count {
-      background: rgba(255,255,255,0.08);
-      color: #cbd5e1;
+      background: var(--studio-bg-hover, rgba(255,255,255,0.08));
+      color: var(--studio-fg-dim, #cbd5e1);
       border-radius: 10px;
       padding: 2px 6px;
       font-size: 11px;
@@ -462,7 +462,7 @@
       line-height: 1;
       margin-top: auto;
     }
-    .column-rail:hover .column-rail__expand { color: #cbd5e1; }
+    button.column-rail:hover .column-rail__expand { color: var(--studio-fg, #cbd5e1); }
     .column--archive .column__body { gap: 2px; }
     .archive-row {
       display: grid;
@@ -521,7 +521,7 @@
     @media (prefers-reduced-motion: reduce) {
       .column { transition: none; }
       .column__drop-zone::before { transition: none; }
-      .column-rail { transition: none; }
+      button.column-rail { transition: none; }
     }
 
     // Lane-side auto-pickup chip (mirrors the titlebar's auto chip).
