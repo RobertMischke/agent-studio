@@ -259,4 +259,121 @@ public class WorkspaceRegistryTests : IDisposable
         var list = reg.List();
         Assert.Equal(["Alpha", "Bravo", "Charlie"], list.Select(w => w.DisplayName));
     }
+
+    // ------------------------------------------------------------------
+    // F66 regression: create-then-list and persistence roundtrip
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Create_ImmediatelyVisibleInList()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        reg.Create("Test");
+
+        var list = reg.List();
+        Assert.Equal(2, list.Count);
+        Assert.Contains(list, w => w.Id == "ws-test" && w.DisplayName == "Test");
+        Assert.Contains(list, w => w.Id == DefaultWorkspace.Id);
+    }
+
+    [Fact]
+    public void Create_RoundTrips_ThroughFreshInstance()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        reg.Create("Test");
+        reg.Create("Other", "#ff0000");
+
+        var reloaded = Build();
+        var list = reloaded.List();
+        Assert.Equal(3, list.Count);
+        var test = list.Single(w => w.Id == "ws-test");
+        Assert.Equal("Test", test.DisplayName);
+        Assert.False(test.IsDefault);
+        Assert.Null(test.Color);
+        var other = list.Single(w => w.Id == "ws-other");
+        Assert.Equal("#ff0000", other.Color);
+    }
+
+    [Fact]
+    public void Create_EmptyWorkspace_HasEmptyProjectsList()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        reg.Create("Empty");
+
+        var list = reg.List();
+        var empty = list.Single(w => w.Id == "ws-empty");
+        Assert.Equal("Empty", empty.DisplayName);
+        Assert.False(empty.IsDefault);
+    }
+
+    [Fact]
+    public void List_DetectsExternalFileModification()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        Assert.Single(reg.List());
+
+        // Simulate an external process writing a second workspace to the file.
+        var path = RegistryPaths.WorkspacesFilePath(_root);
+        var json = File.ReadAllText(path);
+        var file = System.Text.Json.JsonSerializer.Deserialize<WorkspacesFile>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var updated = file with
+        {
+            Workspaces =
+            [
+                .. file.Workspaces,
+                new WorkspaceRecord
+                {
+                    Id = "ws-external",
+                    DisplayName = "External",
+                    SortOrder = 1,
+                    CreatedAt = DateTime.UtcNow,
+                },
+            ],
+        };
+        // Ensure the mtime advances past the file-system resolution.
+        Thread.Sleep(50);
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(updated,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+        var list = reg.List();
+        Assert.Equal(2, list.Count);
+        Assert.Contains(list, w => w.Id == "ws-external");
+    }
+
+    [Fact]
+    public void Find_DetectsExternalFileModification()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        Assert.Null(reg.Find("ws-injected"));
+
+        var path = RegistryPaths.WorkspacesFilePath(_root);
+        var json = File.ReadAllText(path);
+        var file = System.Text.Json.JsonSerializer.Deserialize<WorkspacesFile>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var updated = file with
+        {
+            Workspaces =
+            [
+                .. file.Workspaces,
+                new WorkspaceRecord
+                {
+                    Id = "ws-injected",
+                    DisplayName = "Injected",
+                    SortOrder = 1,
+                    CreatedAt = DateTime.UtcNow,
+                },
+            ],
+        };
+        Thread.Sleep(50);
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(updated,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+        var found = reg.Find("ws-injected");
+        Assert.NotNull(found);
+        Assert.Equal("Injected", found.DisplayName);
+    }
 }

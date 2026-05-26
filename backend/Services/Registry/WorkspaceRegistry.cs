@@ -29,6 +29,7 @@ public sealed class WorkspaceRegistry
     private readonly object _gate = new();
     private WorkspacesFile _state = new();
     private bool _loaded;
+    private DateTime _lastWriteUtc;
 
     public WorkspaceRegistry(IConfiguration config, ILogger<WorkspaceRegistry> logger)
     {
@@ -51,29 +52,62 @@ public sealed class WorkspaceRegistry
         {
             if (_loaded) return;
             _loaded = true;
-            if (_taskRepositoryRoot == null) return;
+            LoadFromDiskLocked();
+        }
+    }
 
-            var path = RegistryPaths.WorkspacesFilePath(_taskRepositoryRoot);
+    /// <summary>
+    /// Re-reads the backing file when another process has modified it
+    /// since the last load or persist. Called from <see cref="List"/>
+    /// and <see cref="Find"/> so reads always reflect the current disk
+    /// state even when a sibling backend instance mutated the file.
+    /// </summary>
+    private void RefreshIfStaleLocked()
+    {
+        if (_taskRepositoryRoot == null) return;
+        var path = RegistryPaths.WorkspacesFilePath(_taskRepositoryRoot);
+        try
+        {
             if (!File.Exists(path)) return;
+            var diskMtime = File.GetLastWriteTimeUtc(path);
+            if (diskMtime <= _lastWriteUtc) return;
+            LoadFromDiskLocked();
+            _logger.LogInformation(
+                "workspace-registry-reloaded-stale path={Path} count={Count}",
+                path, _state.Workspaces.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "workspace-registry-stale-check-failed path={Path} - serving cached state",
+                path);
+        }
+    }
 
-            try
+    private void LoadFromDiskLocked()
+    {
+        if (_taskRepositoryRoot == null) return;
+        var path = RegistryPaths.WorkspacesFilePath(_taskRepositoryRoot);
+        if (!File.Exists(path)) return;
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var parsed = JsonSerializer.Deserialize<WorkspacesFile>(json, JsonOpts);
+            if (parsed != null)
             {
-                var json = File.ReadAllText(path);
-                var parsed = JsonSerializer.Deserialize<WorkspacesFile>(json, JsonOpts);
-                if (parsed != null)
-                {
-                    _state = parsed;
-                    _logger.LogInformation(
-                        "workspace-registry-loaded path={Path} count={Count}",
-                        path, _state.Workspaces.Count);
-                }
+                _state = parsed;
+                _lastWriteUtc = File.GetLastWriteTimeUtc(path);
+                _logger.LogInformation(
+                    "workspace-registry-loaded path={Path} count={Count}",
+                    path, _state.Workspaces.Count);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "workspace-registry-load-failed path={Path} - starting with empty list",
-                    path);
-            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "workspace-registry-load-failed path={Path} - starting with empty list",
+                path);
         }
     }
 
@@ -86,6 +120,7 @@ public sealed class WorkspaceRegistry
         EnsureLoaded();
         lock (_gate)
         {
+            RefreshIfStaleLocked();
             return _state.Workspaces
                 .OrderBy(w => w.SortOrder)
                 .ThenBy(w => w.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -100,6 +135,7 @@ public sealed class WorkspaceRegistry
         EnsureLoaded();
         lock (_gate)
         {
+            RefreshIfStaleLocked();
             return _state.Workspaces.FirstOrDefault(w =>
                 string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase));
         }
@@ -305,8 +341,8 @@ public sealed class WorkspaceRegistry
             var path = RegistryPaths.WorkspacesFilePath(_taskRepositoryRoot);
             var tmp = path + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(_state, JsonOpts));
-            // File.Move with overwrite is the atomic-ish replace on Windows.
             File.Move(tmp, path, overwrite: true);
+            _lastWriteUtc = File.GetLastWriteTimeUtc(path);
         }
         catch (Exception ex)
         {
