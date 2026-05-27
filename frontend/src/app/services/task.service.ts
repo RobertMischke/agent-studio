@@ -47,6 +47,7 @@ import type {
 } from '../features/run-timeline';
 import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { SessionEventsResponse } from '../features/session-events';
+import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
 
 /** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
@@ -747,6 +748,13 @@ export class JobService {
     return this.http.get<RunDiffResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/diff`,
       this.withWatchPathAndPath(watchPath, path),
+    );
+  }
+
+  getRegressionRadar(jobId: string, watchPath?: string) {
+    return this.http.get<RegressionRadarResult>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/regression-radar`,
+      this.withWatchPath(watchPath),
     );
   }
 

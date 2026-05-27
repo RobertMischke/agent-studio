@@ -154,6 +154,11 @@
     }
   </section>
 
+  <!-- Regression Radar block -->
+  <section class="ov-section" data-testid="overview-regression-radar">
+    <app-regression-radar [jobId]="job().id" [watchPath]="job().watchPath" />
+  </section>
+
   <!-- Run History block -->
   @if (recentRuns().length > 0) {
     <section class="ov-section" data-testid="overview-runs">

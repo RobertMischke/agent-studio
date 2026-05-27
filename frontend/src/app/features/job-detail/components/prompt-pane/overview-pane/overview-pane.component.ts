@@ -12,6 +12,7 @@ import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { ClientService } from '../../../../../services/client.service';
 import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
+import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import {
   cliTypeIcon,
@@ -23,7 +24,7 @@ import {
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChatModelBadgeComponent, TooltipDirective],
+  imports: [ChatModelBadgeComponent, RegressionRadarComponent, TooltipDirective],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })

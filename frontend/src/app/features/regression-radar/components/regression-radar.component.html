@@ -1,0 +1,111 @@
+@if (loading()) {
+  <div class="radar radar--loading" data-testid="regression-radar-loading">
+    <span class="radar__spinner"></span>
+    <span class="radar__loading-text">Analyzing spec changes...</span>
+  </div>
+} @else if (result()?.error) {
+  <div class="radar radar--empty" data-testid="regression-radar-error">
+    <span class="radar__empty-text">{{ result()!.error }}</span>
+  </div>
+} @else if (isEmpty()) {
+  <div class="radar radar--empty" data-testid="regression-radar-empty">
+    <span class="radar__empty-icon">&#x2714;</span>
+    <span class="radar__empty-text">No spec file changes in this task</span>
+  </div>
+} @else if (hasData()) {
+  <div class="radar" data-testid="regression-radar">
+    <div class="radar__header">
+      <h4 class="radar__title">Regression Radar</h4>
+      @if (statusIcon(); as si) {
+        <span class="radar__overall-badge"
+              [class]="'radar__overall-badge--' + si.tone"
+              [appTooltip]="si.label"
+              data-testid="regression-radar-badge">
+          {{ si.label }}
+        </span>
+      }
+    </div>
+
+    <div class="radar__summary">
+      @if (result()!.intendedCount > 0) {
+        <span class="radar__count radar__count--intended"
+              data-testid="radar-intended-count">
+          <span class="radar__dot radar__dot--intended"></span>
+          {{ result()!.intendedCount }} intended
+        </span>
+      }
+      @if (result()!.atRiskCount > 0) {
+        <span class="radar__count radar__count--at-risk"
+              data-testid="radar-at-risk-count">
+          <span class="radar__dot radar__dot--at-risk"></span>
+          {{ result()!.atRiskCount }} at risk
+        </span>
+      }
+      @if (result()!.driftCount > 0) {
+        <span class="radar__count radar__count--drift"
+              data-testid="radar-drift-count">
+          <span class="radar__dot radar__dot--drift"></span>
+          {{ result()!.driftCount }} drift
+        </span>
+      }
+    </div>
+
+    <div class="radar__entries">
+      @for (entry of result()!.entries; track entry.path) {
+        <div class="radar__entry"
+             [class]="'radar__entry--' + categoryIcon(entry)"
+             data-testid="radar-entry">
+          <button type="button"
+                  class="radar__entry-header"
+                  (click)="toggleExpand(entry.path)"
+                  [attr.aria-expanded]="expanded() === entry.path">
+            <span class="radar__entry-dot"
+                  [class]="'radar__entry-dot--' + categoryIcon(entry)"></span>
+            <span class="radar__entry-file">{{ entry.fileName }}</span>
+            <span class="radar__entry-status">({{ statusLabel(entry.gitStatus) }})</span>
+            <span class="radar__entry-category"
+                  [class]="'radar__entry-category--' + categoryIcon(entry)">
+              {{ categoryLabel(entry) }}
+            </span>
+            <span class="radar__entry-lines">
+              @if (entry.linesAdded > 0) {
+                <span class="radar__lines-added">+{{ entry.linesAdded }}</span>
+              }
+              @if (entry.linesRemoved > 0) {
+                <span class="radar__lines-removed">-{{ entry.linesRemoved }}</span>
+              }
+            </span>
+            <span class="radar__entry-chevron"
+                  [class.radar__entry-chevron--open]="expanded() === entry.path">
+            </span>
+          </button>
+          @if (expanded() === entry.path) {
+            <div class="radar__entry-detail" data-testid="radar-entry-detail">
+              <div class="radar__detail-row">
+                <span class="radar__detail-label">Path</span>
+                <span class="radar__detail-value">{{ entry.path }}</span>
+              </div>
+              <div class="radar__detail-row">
+                <span class="radar__detail-label">Reason</span>
+                <span class="radar__detail-value">{{ entry.reason }}</span>
+              </div>
+              @if (entry.companionPath) {
+                <div class="radar__detail-row">
+                  <span class="radar__detail-label">Companion</span>
+                  <span class="radar__detail-value">
+                    {{ entry.companionPath }}
+                    @if (entry.companionChanged) {
+                      <span class="radar__companion-changed">(also changed)</span>
+                    } @else {
+                      <span class="radar__companion-unchanged">(unchanged)</span>
+                    }
+                  </span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}

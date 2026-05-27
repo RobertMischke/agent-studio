@@ -874,3 +874,23 @@ Polling, bounded buffers, and visibility-aware timers are already enforced by [`
 **Current state (2026-05-24).** F45a (read surface + boot-time auto-discovery) shipped first via the crash-recovery commit. F47 (this ADR) ships F45b on top: workspace + project mutation endpoints (`POST /api/workspaces`, `PUT /api/workspaces/{id}`, `DELETE /api/workspaces/{id}`, `PUT /api/projects/{PROJ-NNN}/displayName | /shortCode | /color | /workspace | /archived`), the matching registry mutation methods + tests, the interactive Settings-panel "Workspaces" section in the studio shell (create / rename / color / reorder / delete with confirmation), the Project-Hub "Manage Project" actions (rename, short-code, color, workspace move, archive), and the WatchPaths-divergence warning in `RegistryBootstrap` so an operator who hand-edits `appsettings.Local.json` after the registry exists sees the conflict in the backend log. F45c (per-project task-key floor backfill, jobKey-format migration, optional folder restructure under `projects/PROJ-NNN/jobs/<shard>/<slug>/`) and F46 (frontend explorer tree migration off `WatchPathEntry` and onto the registry types) remain queued; the rest of the consumers (jobKey resolution, `?watchPath=` query param) keeps working unchanged during the cutover.
 
 **Status.** Accepted; F45a + F45b implemented. F45c (folder restructure / jobKey migration) and F46 (frontend explorer tree on registry) tracked separately.
+
+---
+
+## ADR-0043 - Regression Radar: deterministic spec-change classification per task (2026-05-27)
+
+**Decision.** Every task's spec-file changes are classified as intended, at-risk, or drift using deterministic git-diff heuristics. The radar is an on-demand read surface in the task detail Overview tab, not a per-poll kanban overlay.
+
+**Context.** Agents routinely modify test files during task execution. Some changes are legitimate (new specs, assertions updated alongside implementation changes), while others are suspicious (assertion values changed without corresponding implementation changes, specs deleted without replacement). The operator wants a regression indicator that makes spec changes visible per task and distinguishes intentional from potentially regressive changes.
+
+**Non-goals.**
+- LLM-based classification. The heuristic is deterministic: file status (A/D/M/R), companion-file co-change detection, and replacement-file matching. Prompt-parsing for scope matching is deferred to a follow-up.
+- Per-card kanban indicator in V1. Computing the radar requires a git diff per job; running this for every card on every 5s poll cycle would be O(N) git processes per poll. The V1 surface is the task detail Overview tab, fetched on-demand when the user opens the detail view. A board-card indicator needs a cached summary (stored on the job or computed async) and is tracked separately.
+- Spec-coverage manifest and CI gate. Enforcing mandatory spec coverage via a manifest file is a separate policy decision with its own bootstrapping cost. This ADR covers the visibility and classification surface only.
+- Operator override persistence. The V1 classification is read-only. An override flow (at-risk to intended with justification) requires a new mutation endpoint and per-job storage; tracked as a follow-up.
+
+**Reasoning style.** Observability first, enforcement later. Show the operator what changed before gating on what must exist. The same progression as the drift-control family: report surface first, then scored dimensions, then gates.
+
+**Implementation pointers.** [backend/Services/RegressionRadar/RegressionRadarService.cs](../backend/Services/RegressionRadar/RegressionRadarService.cs) (classification engine); [backend/Services/RegressionRadar/RegressionRadarModels.cs](../backend/Services/RegressionRadar/RegressionRadarModels.cs) (typed result); [backend/Endpoints/Jobs/JobRegressionRadarEndpoints.cs](../backend/Endpoints/Jobs/JobRegressionRadarEndpoints.cs) (`GET /api/jobs/{id}/regression-radar`); [frontend/src/app/features/regression-radar/](../frontend/src/app/features/regression-radar/) (Angular feature module + component); [backend.Tests/RegressionRadarServiceTests.cs](../backend.Tests/RegressionRadarServiceTests.cs) (unit tests for classification heuristics).
+
+**Status.** Accepted; V1 (read-only radar in Overview tab) implemented. Board-card indicator, operator overrides, spec-coverage manifest, and CI gate tracked as follow-ups.
