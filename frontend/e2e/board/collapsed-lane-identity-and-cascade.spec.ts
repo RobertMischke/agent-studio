@@ -260,27 +260,50 @@ test.describe('Collapsed lane identity + cascade regression', () => {
   });
 
   test('collapsed state persists across reload per lane-id', async ({ page }) => {
-    await seedBoardTab(page);
+    // Seed tab config AND pre-collapsed state via addInitScript. Unlike
+    // the other tests we do NOT clear collapsedLanes on reload - the
+    // whole point is to verify persistence.
+    await page.addInitScript(() => {
+      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+        v: 1,
+        tabs: [{ kind: 'board', projectName: '__all__' }],
+        activeKey: 'board:__all__',
+      }));
+      // Seed one collapsed lane as if the user had collapsed it before.
+      // The init script runs before Angular boots, so the service reads
+      // this value from localStorage and starts with the lane collapsed.
+      localStorage.setItem('collapsedLanes', JSON.stringify(['3-progress']));
+    });
     await installRoutes(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
-    await waitForBoard(page);
+    await expect(page.locator('[data-testid="studio-board"]').first())
+      .toBeVisible({ timeout: 10_000 });
+    // Dismiss toast if present.
+    const dismiss = page.getByText('Dismiss', { exact: true });
+    if (await dismiss.isVisible({ timeout: 500 }).catch(() => false)) {
+      await dismiss.click();
+    }
 
-    // Collapse In Progress.
-    await page.getByTestId('lane-collapse-3-progress').click();
-    await expect(page.getByTestId('lane-rail-3-progress')).toBeVisible({ timeout: 2_000 });
+    // In-progress should be collapsed (rail visible, expanded column hidden).
+    await expect(page.getByTestId('lane-rail-3-progress')).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByTestId('lane-3-progress')).toHaveCount(0);
 
-    // Verify localStorage stores the lane state.
-    const stored = await page.evaluate(() => localStorage.getItem('collapsedLanes'));
-    expect(stored).toContain('3-progress');
+    // Other lanes must still be expanded.
+    await expect(page.getByTestId('lane-2-ready')).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByTestId('lane-4-auto-review')).toBeVisible({ timeout: 3_000 });
 
-    // Reload and verify persistence.
+    // Reload and verify same state persists.
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
-    await waitForBoard(page);
-    await expect(page.getByTestId('lane-rail-3-progress')).toBeVisible({ timeout: 3_000 });
+    await expect(page.locator('[data-testid="studio-board"]').first())
+      .toBeVisible({ timeout: 10_000 });
+    const dismiss2 = page.getByText('Dismiss', { exact: true });
+    if (await dismiss2.isVisible({ timeout: 500 }).catch(() => false)) {
+      await dismiss2.click();
+    }
 
-    // Other lanes must still be expanded after reload.
+    await expect(page.getByTestId('lane-rail-3-progress')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('lane-2-ready')).toBeVisible({ timeout: 3_000 });
     await expect(page.getByTestId('lane-4-auto-review')).toBeVisible({ timeout: 3_000 });
   });

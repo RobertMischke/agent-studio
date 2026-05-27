@@ -1457,7 +1457,12 @@
   // Each lane inside the super-column displays at full content height
   // (flex-shrink: 0) so its cards are never clipped by a per-lane
   // scrollbar. The super-column's .lane-group__lanes handles overflow.
-  app-job-column {
+  //
+  // Specificity note: app.scss sets `.lane-group__lanes > app-job-column
+  // { display: contents }` (0,1,1) for the legacy horizontal layout.
+  // This override must win inside the studio grid, so we nest under
+  // `.lane-group__lanes` to reach 0,2,1 and avoid source-order races.
+  .lane-group__lanes > app-job-column {
     display: block;
     width: 100%;
     flex-shrink: 0;
@@ -1474,15 +1479,24 @@
   // Pile-down collapse: when a lane is collapsed inside a super-column,
   // render the rail as a horizontal strip (icon + count + title +
   // indicators) instead of the legacy vertical rail. The vertical rail
-  // was designed for the 7-column horizontal layout — inside a super-
+  // was designed for the 7-column horizontal layout - inside a super-
   // column it would look like a tall thin button orphaned from its
   // header.
-  app-job-column .column-rail {
+  //
+  // Specificity: the base rail styles in task-column.scss use
+  // `button.column-rail` which under ViewEncapsulation.Emulated compiles
+  // to `button.column-rail[_ngcontent-xxx]` (0,2,1). These overrides
+  // nest under `.dashboard--studio` (implicit from the parent block) +
+  // `app-job-column` + `button.column-rail` to reach 0,2,2. Without
+  // this the emulated-scope styles win and the rail renders as a narrow
+  // vertical strip instead of a horizontal identity bar.
+  app-job-column button.column-rail {
     width: 100%;
     min-width: 0;
     flex: 0 0 auto;
     height: 32px;
     flex-direction: row;
+    align-items: center;
     padding: 0 12px;
     gap: 10px;
     border-radius: 4px;
@@ -1502,6 +1516,7 @@
   app-job-column .column-rail__expand {
     transform: rotate(90deg);
     margin-left: auto;
+    margin-top: 0;
   }
 }
 
