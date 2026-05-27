@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
-import { JobInfo } from '../../../../models/job.model';
+import { JobInfo } from '../../../../models/task.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import {
   formatDateTime as fmtDateTime,

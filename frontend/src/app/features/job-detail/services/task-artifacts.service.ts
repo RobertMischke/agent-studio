@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { JobService } from '../../../services/job.service';
-import type { JobArtifact, JobInfo } from '../../../models/job.model';
+import { JobService } from '../../../services/task.service';
+import type { JobArtifact, JobInfo } from '../../../models/task.model';
 
 /**
  * Per-detail Files-tab manifest. Refreshes when the open job changes

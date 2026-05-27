@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { DriftService } from '../../../../services/drift.service';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import { TooltipDirective } from '../../../../components/tooltip';
 import {

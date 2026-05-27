@@ -4,9 +4,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { JobCardComponent } from './job-card.component';
-import type { JobInfo, ClientSummary } from '../../../../models/job.model';
-import { buildEffectiveModelChip } from './job-card-view-model';
+import { JobCardComponent } from './task-card.component';
+import type { JobInfo, ClientSummary } from '../../../../models/task.model';
+import { buildEffectiveModelChip } from './task-card-view-model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.

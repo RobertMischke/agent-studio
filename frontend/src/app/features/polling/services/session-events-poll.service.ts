@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import type { SessionEventsResponse } from '../../../features/session-events';
-import { JobService } from '../../../services/job.service';
-import { JobBackgroundPoller } from './job-background-poller';
+import { JobService } from '../../../services/task.service';
+import { JobBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls the per-job session-event log every 10 s. Drives the

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { shouldShowFailureToast } from './run-outcome.util';
-import type { CliExecution } from '../../../models/job.model';
+import type { CliExecution } from '../../../models/task.model';
 
 const baseExecution: CliExecution = {
   jobId: 'job',

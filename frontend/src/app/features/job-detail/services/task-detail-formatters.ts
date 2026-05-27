@@ -1,5 +1,5 @@
 import type { ClaudeRateLimitSnapshot, ClaudeSessionInfo } from '../../claude';
-import type { CliType } from '../../../models/job.model';
+import type { CliType } from '../../../models/task.model';
 import {
   cliTypeLabel as fmtCliTypeLabel,
   formatDate as fmtDate,

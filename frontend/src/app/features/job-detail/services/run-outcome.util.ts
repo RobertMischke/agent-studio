@@ -1,4 +1,4 @@
-import type { CliExecution } from '../../../models/job.model';
+import type { CliExecution } from '../../../models/task.model';
 
 export type TerminalRunOutcome =
   | 'success'

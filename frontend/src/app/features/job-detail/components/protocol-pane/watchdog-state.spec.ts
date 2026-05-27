@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveWatchdogPill } from './watchdog-state';
-import { CliOutputLine } from '../../../../models/job.model';
+import { CliOutputLine } from '../../../../models/task.model';
 
 function line(stream: string, text: string, atSecondsFromBase: number): CliOutputLine {
   // Anchor everything around a single base timestamp so the math is obvious.

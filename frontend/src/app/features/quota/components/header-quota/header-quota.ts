@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import type { CliType } from '../../../../models/job.model';
+import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';

@@ -1,4 +1,4 @@
-import { CliType } from '../models/job.model';
+import { CliType } from '../models/task.model';
 
 /**
  * Pure formatting helpers used by both the board and detail views.

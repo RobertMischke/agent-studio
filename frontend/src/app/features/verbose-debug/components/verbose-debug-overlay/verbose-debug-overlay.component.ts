@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 
 import { ModalStackService } from '../../../../services/modal-stack.service';
-import type { CliOutputLine, JobInfo } from '../../../../models/job.model';
+import type { CliOutputLine, JobInfo } from '../../../../models/task.model';
 import type { RunRecord, RunTimeline } from '../../../../features/run-timeline';
 import type { JobScreenshot } from '../../../../features/screenshots';
 import type { JobTokenSummary } from '../../../../features/tokens';

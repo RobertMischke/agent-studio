@@ -7,16 +7,16 @@
 // state
 export { BoardFiltersService, type ActiveFilterPill } from './state/board-filters.service';
 export { LaneCollapseService } from './state/lane-collapse.service';
-export { CreateJobFormService } from './state/create-job-form.service';
+export { CreateJobFormService } from './state/create-task-form.service';
 export { BoardMutationsService } from './state/board-mutations.service';
 
 // components
 export { BoardSearchIconComponent } from './components/board-search-icon/board-search-icon.component';
-export { CreateJobDialogComponent, type PendingAttachment } from './components/create-job-dialog/create-job-dialog.component';
+export { CreateJobDialogComponent, type PendingAttachment } from './components/create-task-dialog/create-task-dialog.component';
 export { FiltersDropdownComponent, type TypeFilterOption } from './components/filters-dropdown/filters-dropdown.component';
 export { KanbanFilterSidesheetComponent } from './components/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
-export { JobCardComponent } from './components/job-card/job-card.component';
-export { JobColumnComponent } from './components/job-column/job-column';
+export { JobCardComponent } from './components/task-card/task-card.component';
+export { JobColumnComponent } from './components/task-column/task-column';
 export {
   ProjectTabsComponent,
   type ProjectAutoInfo,

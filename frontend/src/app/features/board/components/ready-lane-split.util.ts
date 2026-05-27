@@ -1,4 +1,4 @@
-import { JobInfo } from '../../../models/job.model';
+import { JobInfo } from '../../../models/task.model';
 
 /**
  * Lane phases for the 2-ready filesystem state. Mirrors backend

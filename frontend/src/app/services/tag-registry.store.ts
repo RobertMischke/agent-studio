@@ -1,5 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { TagRegistryEntry } from '../models/job.model';
+import { TagRegistryEntry } from '../models/task.model';
 
 /**
  * Process-wide cache of the workspace tag registry (`GET /api/tags`). The

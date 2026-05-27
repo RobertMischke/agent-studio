@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, output, signal, inject } from '@angular/core';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { CliConsoleComponent } from '../cli-console/cli-console';
-import type { CliOutputLine, CliType } from '../../../../models/job.model';
+import type { CliOutputLine, CliType } from '../../../../models/task.model';
 import type {
   CliSessionInfo,
   CliUsageProjectGroup,

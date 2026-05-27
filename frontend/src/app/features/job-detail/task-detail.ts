@@ -23,14 +23,14 @@ import type {
   CliType,
   ContinueMode,
   ReviewEvidenceEntry,
-} from '../../models/job.model';
-import { CLI_TYPES } from '../../models/job.model';
+} from '../../models/task.model';
+import { CLI_TYPES } from '../../models/task.model';
 import type { CliModelInfo } from '../../features/cli';
-import { JobService } from '../../services/job.service';
+import { JobService } from '../../services/task.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { NowTickService } from '../../services/now-tick.service';
 import { LayoutPanesService } from './services/layout-panes.service';
-import { JobArtifactsService } from './services/job-artifacts.service';
+import { JobArtifactsService } from './services/task-artifacts.service';
 import { LanePagerService } from './state/lane-pager.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
 import { SessionEventsPollService } from '../polling/services/session-events-poll.service';
@@ -64,7 +64,7 @@ import {
   isCliErrorMessage,
   rateLimitTooltip,
   stateLabel,
-} from './services/job-detail-formatters';
+} from './services/task-detail-formatters';
 
 import { TooltipDirective } from '../../components/tooltip';
 @Component({
@@ -106,8 +106,8 @@ import { TooltipDirective } from '../../components/tooltip';
   // to copy each block into its own .scss. Step 9 (per-component
   // styles) can flip this back to default once all blocks have moved.
   encapsulation: ViewEncapsulation.None,
-  templateUrl: './job-detail.html',
-  styleUrl: './job-detail.scss',
+  templateUrl: './task-detail.html',
+  styleUrl: './task-detail.scss',
 })
 export class JobDetailComponent implements OnDestroy {
   private jobService = inject(JobService);
@@ -821,7 +821,7 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   private applyExecutionState(
-    execution: import('../../models/job.model').CliExecution | null,
+    execution: import('../../models/task.model').CliExecution | null,
   ): void {
     if (!execution) return;
     this.cliPoll.applyExecution(execution);

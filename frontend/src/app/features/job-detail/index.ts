@@ -6,8 +6,8 @@
  * triage-panel) are private to the feature — only `JobDetailComponent` is
  * exported. Hygiene helpers + parsers used cross-feature stay exported.
  */
-export { JobDetailComponent } from './job-detail';
-export { JobSelectionService } from './state/job-selection.service';
+export { JobDetailComponent } from './task-detail';
+export { JobSelectionService } from './state/task-selection.service';
 export { TriageController } from './state/triage-controller.service';
 export { HygieneStripComponent } from './components/hygiene-strip/hygiene-strip/hygiene-strip.component';
 export { ProjectHygieneBadgeComponent } from './components/hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';

@@ -1,9 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { CliType, CLI_TYPES, WatchPathEntry } from '../../../models/job.model';
+import { CliType, CLI_TYPES, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
-import type { PendingAttachment } from '../components/create-job-dialog/create-job-dialog.component';
-import { JobService } from '../../../services/job.service';
+import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
+import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { CLIENT_ID } from '../../../services/client-id.interceptor';
 

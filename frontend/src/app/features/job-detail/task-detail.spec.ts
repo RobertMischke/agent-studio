@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { App } from './app';
+import { JobDetailComponent } from './job-detail';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -18,7 +18,7 @@ import { App } from './app';
  * note instead of a red test, which keeps this generator-driven layer
  * stable across template tweaks.
  */
-describe('App (smoke)', () => {
+describe('JobDetailComponent (smoke)', () => {
   it('compiles + instantiates without throwing', async () => {
     // The smoke pattern can crash inside Angular's TestBed compile path when
     // module-load order leaves a transitive dependency undefined (cycle or
@@ -28,7 +28,7 @@ describe('App (smoke)', () => {
     // siblings + the generator at scripts/generate-smoke-specs.mjs.
     try {
       await TestBed.configureTestingModule({
-        imports: [App],
+        imports: [JobDetailComponent],
         providers: [
           provideZonelessChangeDetection(),
           provideHttpClient(),
@@ -36,14 +36,15 @@ describe('App (smoke)', () => {
           provideRouter([]),
         ],
       }).compileComponents();
-      const fixture = TestBed.createComponent(App);
+      const fixture = TestBed.createComponent(JobDetailComponent);
+      fixture.componentRef.setInput('detail', undefined);
       try { fixture.detectChanges(); } catch (e) {
-        console.warn('[smoke] App initial render skipped:', (e as Error).message);
+        console.warn('[smoke] JobDetailComponent initial render skipped:', (e as Error).message);
       }
       expect(fixture.componentInstance).toBeTruthy();
     } catch (e) {
-      console.warn('[smoke] App TestBed setup skipped:', (e as Error).message);
-      expect(App).toBeTruthy();
+      console.warn('[smoke] JobDetailComponent TestBed setup skipped:', (e as Error).message);
+      expect(JobDetailComponent).toBeTruthy();
     }
   });
 });

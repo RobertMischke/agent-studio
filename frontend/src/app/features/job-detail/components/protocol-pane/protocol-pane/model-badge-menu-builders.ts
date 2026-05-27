@@ -12,7 +12,7 @@
  * the menu shape is unit-testable without instantiating Angular.
  */
 import type { CliModelInfo } from '../../../../cli';
-import type { CliType } from '../../../../../models/job.model';
+import type { CliType } from '../../../../../models/task.model';
 import type { MenuItem } from '../../../../../components/menu';
 import { shortModelName as _shortModelName } from '../../../../../services/format.util';
 

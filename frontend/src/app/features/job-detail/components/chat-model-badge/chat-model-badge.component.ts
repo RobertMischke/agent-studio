@@ -6,8 +6,8 @@ import {
   output,
   signal,
 } from '@angular/core';
-import type { CliType } from '../../../../models/job.model';
-import { CLI_TYPES } from '../../../../models/job.model';
+import type { CliType } from '../../../../models/task.model';
+import { CLI_TYPES } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
 import {
   cliTypeIcon as fmtCliTypeIcon,

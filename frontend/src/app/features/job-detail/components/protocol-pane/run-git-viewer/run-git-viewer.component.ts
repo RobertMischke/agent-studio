@@ -10,11 +10,11 @@ import {
   DoCheck,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import type { JobInfo } from '../../../../../models/job.model';
+import type { JobInfo } from '../../../../../models/task.model';
 import type { JobCommitInfo } from '../../../../git';
 import type { RunFileChange, RunRecord } from '../../../../../features/run-timeline';
 import type { GitStatus } from '../../../../git';
-import { JobService } from '../../../../../services/job.service';
+import { JobService } from '../../../../../services/task.service';
 import { highlightBlock } from '../../beautiful-results/highlight-lazy';
 import {
   setVisibleInterval,

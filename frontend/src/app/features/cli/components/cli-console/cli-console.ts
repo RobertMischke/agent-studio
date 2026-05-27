@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, input, signal, computed, effect, OnDestroy } from '@angular/core';
-import { CliOutputLine } from '../../../../models/job.model';
+import { CliOutputLine } from '../../../../models/task.model';
 
 @Component({
   selector: 'app-cli-console',

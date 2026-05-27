@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../../services/job.service';
-import type { CliType } from '../../../../models/job.model';
+import { JobService } from '../../../../services/task.service';
+import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport } from '../../../../features/quota';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';

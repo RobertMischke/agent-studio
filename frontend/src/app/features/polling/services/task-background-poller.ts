@@ -1,6 +1,6 @@
 import { Directive, OnDestroy } from '@angular/core';
 import { Observable } from 'rxjs';
-import type { JobInfo } from '../../../models/job.model';
+import type { JobInfo } from '../../../models/task.model';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 
 /**

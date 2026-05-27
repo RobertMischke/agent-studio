@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, effect, inject, input, signal } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { SteeringDocsService } from '../../../../services/steering-docs.service';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import {
   SteeringDocsOverview,

@@ -2,8 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { CLIENT_ID } from './client-id.interceptor';
-import type { CliType } from '../models/job.model';
-import { CLI_TYPES, ClientDefaultsResponse } from '../models/job.model';
+import type { CliType } from '../models/task.model';
+import { CLI_TYPES, ClientDefaultsResponse } from '../models/task.model';
 
 /**
  * Two-way sync of the user's preferred default CLI + model between

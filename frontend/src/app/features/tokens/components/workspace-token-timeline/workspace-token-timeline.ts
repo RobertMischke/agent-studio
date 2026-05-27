@@ -7,7 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { TokenTimeline, TokenTimelineCell } from '../../../../features/tokens';
 import { TokensApiService } from '../../../../features/tokens';

@@ -12,8 +12,8 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { JobInfo, WatchPathEntry, RegistryWorkspaceListItem } from '../../models/job.model';
-import { JobService } from '../../services/job.service';
+import type { JobInfo, WatchPathEntry, RegistryWorkspaceListItem } from '../../models/task.model';
+import { JobService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';

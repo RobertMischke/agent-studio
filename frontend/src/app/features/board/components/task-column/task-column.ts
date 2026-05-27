@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output } from '@angular/core';
-import { JobInfo, JobOrderItem } from '../../../../models/job.model';
-import { JobCardComponent } from '../job-card/job-card.component';
+import { JobInfo, JobOrderItem } from '../../../../models/task.model';
+import { JobCardComponent } from '../task-card/task-card.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -21,8 +21,8 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
   // walk the lane's children either. Inputs are signal-based so OnPush
   // marks dirty correctly without needing markForCheck.
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './job-column.html',
-  styleUrl: './job-column.scss'
+  templateUrl: './task-column.html',
+  styleUrl: './task-column.scss'
 })
 export class JobColumnComponent implements OnInit, OnDestroy {
   private readonly autoReviewStatus = inject(AutoReviewStatusStore);

@@ -10,7 +10,7 @@ import {
   modelIdFromMenuId,
   shortModelName,
 } from './model-badge-menu-builders';
-import { CLI_TYPES, type CliType } from '../../../../../models/job.model';
+import { CLI_TYPES, type CliType } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
 import type { MenuRow } from '../../../../../components/menu';
 

@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy, computed, signal, inject } from '@angular/core';
-import { CliExecution, CliOutputLine } from '../../../models/job.model';
-import { JobService } from '../../../services/job.service';
+import { CliExecution, CliOutputLine } from '../../../models/task.model';
+import { JobService } from '../../../services/task.service';
 
 interface JobRef {
   id: string;

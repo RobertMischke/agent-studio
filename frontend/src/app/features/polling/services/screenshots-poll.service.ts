@@ -1,8 +1,8 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import type { JobScreenshot, JobScreenshotsResponse } from '../../../features/screenshots';
-import { JobService } from '../../../services/job.service';
-import { JobBackgroundPoller } from './job-background-poller';
+import { JobService } from '../../../services/task.service';
+import { JobBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls the per-job screenshot listing (`/api/jobs/{id}/screenshots`)

@@ -1,7 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import { DomSanitizer } from '@angular/platform-browser';
-import { CliOutputLine } from '../../../../models/job.model';
+import { CliOutputLine } from '../../../../models/task.model';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import {
   ActivityLogGroup,

@@ -1,4 +1,4 @@
-import type { JobOutcomeIssue, JobSummaryStatus } from '../../../../models/job.model';
+import type { JobOutcomeIssue, JobSummaryStatus } from '../../../../models/task.model';
 
 /**
  * Three-state simplified verdict shown at the very top of the protocol pane.

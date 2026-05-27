@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, signal, computed, inject } from '@angular/core';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { QuotaStripComponent } from '../../../quota';
-import type { CliOutputLine, CliType } from '../../../../models/job.model';
+import type { CliOutputLine, CliType } from '../../../../models/task.model';
 import type {
   CliSessionInfo,
   CliUsageProjectGroup,

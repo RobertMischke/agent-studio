@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { ClientSummary } from '../models/job.model';
+import { ClientSummary } from '../models/task.model';
 
 /**
  * Reads the registry of client identities (`/api/clients`) and keeps a

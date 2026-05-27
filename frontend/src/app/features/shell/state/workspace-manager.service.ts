@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { JobService } from '../../../services/job.service';
+import { JobService } from '../../../services/task.service';
 
 /**
  * Owns the visibility of the "+ Add workspace" modal plus the

@@ -15,7 +15,7 @@ import type {
   JobSummaryStatus,
   ReviewEvidenceEntry,
   CliType,
-} from '../../../../../models/job.model';
+} from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
 import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
 import type { RunRecord } from '../../../../../features/run-timeline';
@@ -35,7 +35,7 @@ import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.componen
 
 import { FeatureFlagsService } from '../../../../../services/feature-flags.service';
 import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
-import { JobService } from '../../../../../services/job.service';
+import { JobService } from '../../../../../services/task.service';
 import type {
   ConversationEvent,
   RawLineRange,

@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import type { RunTimeline } from '../../../features/run-timeline';
-import { JobService } from '../../../services/job.service';
-import { JobBackgroundPoller } from './job-background-poller';
+import { JobService } from '../../../services/task.service';
+import { JobBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls the per-job run timeline (`/api/jobs/{id}/runs`) every 5 s

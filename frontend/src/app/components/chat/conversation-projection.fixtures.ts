@@ -11,7 +11,7 @@
  * the same way a host would feed it.
  */
 
-import type { CliOutputLine } from '../../models/job.model';
+import type { CliOutputLine } from '../../models/task.model';
 import type { RunRecord, RunTimeline } from '../../features/run-timeline';
 
 let TS_COUNTER = 0;

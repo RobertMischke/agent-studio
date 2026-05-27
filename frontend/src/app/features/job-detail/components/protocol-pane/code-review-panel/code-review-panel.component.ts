@@ -9,8 +9,8 @@ import {
 } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import { JobInfo } from '../../../../../models/job.model';
-import { CodeReviewListEntry, JobService } from '../../../../../services/job.service';
+import { JobInfo } from '../../../../../models/task.model';
+import { CodeReviewListEntry, JobService } from '../../../../../services/task.service';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**

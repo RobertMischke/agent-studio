@@ -5,8 +5,8 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TriageController } from './triage-controller.service';
-import { JobSelectionService } from './job-selection.service';
-import type { JobInfo, JobDetail } from '../../../models/job.model';
+import { JobSelectionService } from './task-selection.service';
+import type { JobInfo, JobDetail } from '../../../models/task.model';
 
 /**
  * Regression for orchestrator-decision-closing-task:

@@ -14,7 +14,7 @@
  * `ConversationEvent[]`.
  */
 
-import type { CliOutputLine, JobInfo } from '../../models/job.model';
+import type { CliOutputLine, JobInfo } from '../../models/task.model';
 import type { GitFileChange } from '../../features/git';
 import type { JobTokenSummary } from '../../features/tokens';
 import type { RunRecord, RunTimeline } from '../../features/run-timeline';

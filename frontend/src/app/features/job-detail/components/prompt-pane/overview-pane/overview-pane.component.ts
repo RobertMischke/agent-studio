@@ -6,7 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import type { CliType, JobInfo } from '../../../../../models/job.model';
+import type { CliType, JobInfo } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';

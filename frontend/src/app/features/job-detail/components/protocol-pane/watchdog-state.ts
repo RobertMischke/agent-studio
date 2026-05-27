@@ -1,4 +1,4 @@
-import { CliOutputLine } from '../../../../models/job.model';
+import { CliOutputLine } from '../../../../models/task.model';
 
 /**
  * State the watchdog chip renders. Mirrors backend `WatchdogState` but

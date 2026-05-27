@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import type { CliType } from '../../../../models/job.model';
+import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
 import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline, WorkspaceExpensiveJob } from '../../../../features/tokens';
 import { cliTypeIcon } from '../../../../services/format.util';

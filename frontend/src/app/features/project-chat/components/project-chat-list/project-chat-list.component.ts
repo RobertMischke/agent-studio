@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import type { ProjectChatSearchHit, ProjectChatTurn } from '../../../../features/project-chat';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';

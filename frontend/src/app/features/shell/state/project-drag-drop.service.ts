@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import type { JobInfo, WatchPathEntry } from '../../../models/job.model';
-import { JobService } from '../../../services/job.service';
+import type { JobInfo, WatchPathEntry } from '../../../models/task.model';
+import { JobService } from '../../../services/task.service';
 
 /**
  * Owns the explorer sidebar's "drag a project onto another project to

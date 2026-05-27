@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import type { JobInfo, RunnerStatus } from '../../../../models/job.model';
+import type { JobInfo, RunnerStatus } from '../../../../models/task.model';
 import { buildProjectTokenChip, projectAutoInfo, projectRunnerIndicator } from './project-chip-view-model';
 import { ProjectTabsComponent } from './project-tabs.component';
 

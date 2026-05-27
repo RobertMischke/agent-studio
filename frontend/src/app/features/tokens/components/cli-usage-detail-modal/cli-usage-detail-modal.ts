@@ -9,7 +9,7 @@ import {
   input,
   output,
 } from '@angular/core';
-import type { CliType } from '../../../../models/job.model';
+import type { CliType } from '../../../../models/task.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 import type { QuotaWindow } from '../../../../features/quota';

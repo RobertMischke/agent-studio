@@ -1,4 +1,4 @@
-import type { JobInfo, RunnerStatus } from '../../../../models/job.model';
+import type { JobInfo, RunnerStatus } from '../../../../models/task.model';
 import type {
   ProjectAutoInfo,
   ProjectRunnerIndicator,

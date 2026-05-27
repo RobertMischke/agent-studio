@@ -1,4 +1,4 @@
-import type { JobOutcomeIssue, JobSummaryStatus } from '../../../../../models/job.model';
+import type { JobOutcomeIssue, JobSummaryStatus } from '../../../../../models/task.model';
 import type { ClaudeRateLimitSnapshot, ClaudeSessionInfo } from '../../../../../features/claude';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import {

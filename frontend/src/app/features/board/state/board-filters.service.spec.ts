@@ -4,8 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { BoardFiltersService } from './board-filters.service';
-import { JobService } from '../../../services/job.service';
-import type { GroupedJobs, JobInfo } from '../../../models/job.model';
+import { JobService } from '../../../services/task.service';
+import type { GroupedJobs, JobInfo } from '../../../models/task.model';
 
 /**
  * Regression test for the cross-project counter "leak": ensure that

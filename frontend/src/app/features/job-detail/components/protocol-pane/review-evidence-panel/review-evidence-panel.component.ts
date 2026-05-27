@@ -4,7 +4,7 @@ import {
   JobInfo,
   ReviewEvidenceEntry,
   ReviewEvidenceSeverity,
-} from '../../../../../models/job.model';
+} from '../../../../../models/task.model';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**

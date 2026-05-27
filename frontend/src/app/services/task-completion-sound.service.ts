@@ -1,6 +1,6 @@
 import { Injectable, effect, inject } from '@angular/core';
-import { JobService } from './job.service';
-import { JobInfo } from '../models/job.model';
+import { JobService } from './task.service';
+import { JobInfo } from '../models/task.model';
 
 /**
  * Plays a short beep when a job leaves the `progress` lane for `review` or

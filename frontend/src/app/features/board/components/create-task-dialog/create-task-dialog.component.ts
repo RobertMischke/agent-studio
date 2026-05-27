@@ -3,11 +3,11 @@ import { ModalStackService } from '../../../../services/modal-stack.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
-import type { CliType, TagRegistryEntry, WatchPathEntry } from '../../../../models/job.model';
-import { CLI_TYPES } from '../../../../models/job.model';
+import type { CliType, TagRegistryEntry, WatchPathEntry } from '../../../../models/task.model';
+import { CLI_TYPES } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../../services/format.util';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -58,7 +58,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, TooltipDirective],
-  templateUrl: './create-job-dialog.component.html'
+  templateUrl: './create-task-dialog.component.html'
 })
 export class CreateJobDialogComponent implements AfterViewInit {
   readonly watchPaths = input<WatchPathEntry[]>([]);

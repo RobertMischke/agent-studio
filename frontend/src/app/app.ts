@@ -69,11 +69,11 @@ import {
   StudioTabStateService,
   StudioPanelStateService,
 } from './features/studio-shell';
-import { JobService } from './services/job.service';
+import { JobService } from './services/task.service';
 import { ClientService } from './services/client.service';
 import { NotificationService } from './services/notification.service';
-import type { JobInfo, WatchPathEntry, CliType } from './models/job.model';
-import { CLI_TYPES } from './models/job.model';
+import type { JobInfo, WatchPathEntry, CliType } from './models/task.model';
+import { CLI_TYPES } from './models/task.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import {
   cliTypeLabel as fmtCliTypeLabel,
@@ -89,9 +89,9 @@ import { UpdateNotificationBridge } from './services/update-notification-bridge.
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
-import { JobCompletionSoundService } from './services/job-completion-sound.service';
+import { JobCompletionSoundService } from './services/task-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
-import type { CliOutputLine } from './models/job.model';
+import type { CliOutputLine } from './models/task.model';
 import type { RunTimeline } from './features/run-timeline';
 import type { JobScreenshot } from './features/screenshots';
 import { TooltipDirective } from './components/tooltip';

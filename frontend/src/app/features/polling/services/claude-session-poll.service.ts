@@ -1,13 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
-import type { JobInfo } from '../../../models/job.model';
+import type { JobInfo } from '../../../models/task.model';
 import type {
   ClaudeRateLimitSnapshot,
   ClaudeSessionInfo,
   ClaudeSessionResponse,
 } from '../../../features/claude';
-import { JobService } from '../../../services/job.service';
-import { JobBackgroundPoller } from './job-background-poller';
+import { JobService } from '../../../services/task.service';
+import { JobBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls live Claude session telemetry every 5 s for the currently-open

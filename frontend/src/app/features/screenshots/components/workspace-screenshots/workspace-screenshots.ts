@@ -10,7 +10,7 @@ import {
   signal,
 } from '@angular/core';
 
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import type { JobScreenshot } from '../../../../features/screenshots';
 import { ScreenshotStripComponent } from '../screenshot-strip/screenshot-strip.component';
 

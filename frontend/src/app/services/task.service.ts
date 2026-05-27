@@ -17,7 +17,7 @@ import type {
   ContinueMode,
   ContinueJobResponse,
   ProjectSnapshot,
-} from '../models/job.model';
+} from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
 import type { GitFileChange, GitStatus, JobCommitDetail } from '../features/git';
@@ -443,11 +443,11 @@ export class JobService {
 
   // Tag registry + per-job tag mutation. Backlog-lane spec.
   listTags() {
-    return this.http.get<import('../models/job.model').TagRegistryEntry[]>(`${this.baseUrl}/tags`);
+    return this.http.get<import('../models/task.model').TagRegistryEntry[]>(`${this.baseUrl}/tags`);
   }
 
   createTag(req: { id?: string; label: string; color?: string; description?: string }) {
-    return this.http.post<import('../models/job.model').TagRegistryEntry>(
+    return this.http.post<import('../models/task.model').TagRegistryEntry>(
       `${this.baseUrl}/tags`,
       req,
     );

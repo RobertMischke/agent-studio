@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
-import type { AutoLoopSnapshot, JobInfo, PendingIntent } from '../../../../models/job.model';
+import type { AutoLoopSnapshot, JobInfo, PendingIntent } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { ClientService } from '../../../../services/client.service';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
@@ -14,7 +14,7 @@ import {
   buildTokenBubble,
   formatShortTime,
   formatTokens,
-} from './job-card-view-model';
+} from './task-card-view-model';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
@@ -35,8 +35,8 @@ if (typeof window !== 'undefined') {
   // `nowTick` signal, so OnPush updates remain correct without any
   // explicit `markForCheck` calls.
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './job-card.component.html',
-  styleUrl: './job-card.component.scss',
+  templateUrl: './task-card.component.html',
+  styleUrl: './task-card.component.scss',
 })
 export class JobCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<JobInfo>();

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { JobService } from '../../../../services/job.service';
-import type { JobInfo } from '../../../../models/job.model';
+import { JobService } from '../../../../services/task.service';
+import type { JobInfo } from '../../../../models/task.model';
 
 /**
  * Full-screen "Diff" tab. Resolves the owning job for a commit SHA by

@@ -8,7 +8,7 @@
  * in job.model.ts because they participate in the JobInfo graph.
  */
 
-import type { CliType, SessionUsage } from '../../../models/job.model';
+import type { CliType, SessionUsage } from '../../../models/task.model';
 
 export interface CliModelInfo {
   id: string;

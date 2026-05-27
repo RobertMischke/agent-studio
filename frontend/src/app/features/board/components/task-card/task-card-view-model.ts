@@ -1,4 +1,4 @@
-import type { JobInfo, ClientSummary, CliType } from '../../../../models/job.model';
+import type { JobInfo, ClientSummary, CliType } from '../../../../models/task.model';
 import type { StructuredTooltip } from '../../../../components/tooltip';
 import { cliTypeIcon, cliTypeLabel, shortModelName } from '../../../../services/format.util';
 

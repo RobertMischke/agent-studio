@@ -1,5 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { JobInfo } from '../../../models/job.model';
+import { JobInfo } from '../../../models/task.model';
 
 /**
  * Lane pager snapshot: the captured iteration the detail header walks

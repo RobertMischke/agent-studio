@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
 import type { TokenSummary } from '../../../../features/tokens';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { TokensApiService } from '../../../../features/tokens';
 
 import { TooltipDirective } from '../../../../components/tooltip';

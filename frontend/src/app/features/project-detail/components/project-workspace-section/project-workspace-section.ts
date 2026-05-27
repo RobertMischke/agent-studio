@@ -3,10 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import { JobService } from '../../../../services/job.service';
+import { JobService } from '../../../../services/task.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import { WorkspaceManagerService } from '../../../shell';
-import type { JobInfo, WatchPathEntry } from '../../../../models/job.model';
+import type { JobInfo, WatchPathEntry } from '../../../../models/task.model';
 import { TooltipDirective } from '../../../../components/tooltip';
 
 /**

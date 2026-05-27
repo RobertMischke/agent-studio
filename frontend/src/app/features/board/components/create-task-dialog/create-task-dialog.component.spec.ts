@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.component';
+import { CreateJobDialogComponent } from './create-task-dialog.component';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -18,10 +18,10 @@ import { OrchestratorSideSheetComponent } from './orchestrator-side-sheet.compon
  * note instead of a red test, which keeps this generator-driven layer
  * stable across template tweaks.
  */
-describe('OrchestratorSideSheetComponent (smoke)', () => {
+describe('CreateJobDialogComponent (smoke)', () => {
   it('compiles + instantiates without throwing', async () => {
     await TestBed.configureTestingModule({
-      imports: [OrchestratorSideSheetComponent],
+      imports: [CreateJobDialogComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -29,11 +29,15 @@ describe('OrchestratorSideSheetComponent (smoke)', () => {
         provideRouter([]),
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(OrchestratorSideSheetComponent);
+    const fixture = TestBed.createComponent(CreateJobDialogComponent);
+    fixture.componentRef.setInput('cliTypeDraft', undefined);
+
+    // Required inputs seeded with undefined — replace with realistic defaults if needed:
+    // cliTypeDraft
     try { fixture.detectChanges(); } catch (e) {
       // Render needs more setup than the generic generator provides.
       // The instantiation above is still a real smoke check.
-      console.warn('[smoke] OrchestratorSideSheetComponent initial render skipped:', (e as Error).message);
+      console.warn('[smoke] CreateJobDialogComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
   });

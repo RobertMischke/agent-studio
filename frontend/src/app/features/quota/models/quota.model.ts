@@ -1,4 +1,4 @@
-import type { CliType } from '../../../models/job.model';
+import type { CliType } from '../../../models/task.model';
 
 /**
  * Cycle 9 quota feature models. Lifted out of the kitchen-sink

@@ -1,9 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { JobInfo } from '../../../models/job.model';
-import { JobService } from '../../../services/job.service';
+import { JobInfo } from '../../../models/task.model';
+import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
-import { JobSelectionService } from './job-selection.service';
+import { JobSelectionService } from './task-selection.service';
 import { LanePagerService, LANE_LABELS } from './lane-pager.service';
 
 /**

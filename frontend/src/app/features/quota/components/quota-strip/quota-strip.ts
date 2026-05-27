@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal, computed } from '@angular/core';
-import { JobService } from '../../../../services/job.service';
-import type { CliType } from '../../../../models/job.model';
+import { JobService } from '../../../../services/task.service';
+import type { CliType } from '../../../../models/task.model';
 import { QuotaApiService } from '../../../../features/quota';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
 import { cliTypeIcon } from '../../../../services/format.util';

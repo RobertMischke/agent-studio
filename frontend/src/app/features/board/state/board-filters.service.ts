@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { GroupedJobs, JobInfo } from '../../../models/job.model';
-import { JobService } from '../../../services/job.service';
+import { GroupedJobs, JobInfo } from '../../../models/task.model';
+import { JobService } from '../../../services/task.service';
 import { ClientService } from '../../../services/client.service';
 import { TagRegistryStore } from '../../../services/tag-registry.store';
 import { projectIdentity } from '../../../services/project-identity.util';

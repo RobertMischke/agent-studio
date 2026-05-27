@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { JobDetail, JobInfo } from '../../../models/job.model';
-import { JobService } from '../../../services/job.service';
+import { JobDetail, JobInfo } from '../../../models/task.model';
+import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
 import { LanePagerService } from './lane-pager.service';

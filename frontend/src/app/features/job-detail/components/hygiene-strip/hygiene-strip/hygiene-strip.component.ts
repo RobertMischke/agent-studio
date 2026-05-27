@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 
-import type { JobInfo } from '../../../../../models/job.model';
+import type { JobInfo } from '../../../../../models/task.model';
 import type { GitHygieneStatus } from '../../../../../features/git';
 import { GitHygieneService } from '../../../../../services/git-hygiene.service';
 import { ErrorDialogService } from '../../../../../services/error-dialog.service';

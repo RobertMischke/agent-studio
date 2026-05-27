@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import type { JobInfo } from '../../../../../models/job.model';
+import type { JobInfo } from '../../../../../models/task.model';
 import type { RunCommitInfo, RunRecord } from '../../../../../features/run-timeline';
-import { JobService } from '../../../../../services/job.service';
+import { JobService } from '../../../../../services/task.service';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**

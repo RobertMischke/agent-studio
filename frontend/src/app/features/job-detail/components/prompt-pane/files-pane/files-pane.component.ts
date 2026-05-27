@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { JobService } from '../../../../../services/job.service';
+import { JobService } from '../../../../../services/task.service';
 import { MarkdownRichEditorComponent } from '../../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
-import type { JobArtifact, JobArtifactKind } from '../../../../../models/job.model';
+import type { JobArtifact, JobArtifactKind } from '../../../../../models/task.model';
 
 /**
  * Files tab body. Renders every `.md` file directly in the job folder

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
-import { CliSettings } from '../../../../models/job.model';
+import { CliSettings } from '../../../../models/task.model';
 
 /**
  * Inline CLI configuration card surfaced when the active CLI is
