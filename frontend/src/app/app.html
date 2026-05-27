@@ -157,35 +157,6 @@
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
-              @if (activeFilterPills().length > 0) {
-                <div class="active-filter-strip"
-                     data-testid="active-filter-strip"
-                     role="region"
-                     aria-label="Active filters">
-                  @for (pill of activeFilterPills(); track pill.kind + ':' + pill.value) {
-                    <span class="active-filter-strip__pill"
-                          [class]="'active-filter-strip__pill--' + pill.kind"
-                          [attr.data-testid]="'active-filter-pill-' + pill.kind + '-' + pill.value">
-                      <span class="active-filter-strip__pill-kind">{{ pill.kindLabel }}:</span>
-                      @if (pill.swatch) {
-                        <span class="active-filter-strip__pill-swatch"
-                              aria-hidden="true"
-                              [style.background]="pill.swatch"></span>
-                      }
-                      <span class="active-filter-strip__pill-label">{{ pill.label }}</span>
-                      <button type="button"
-                              class="active-filter-strip__pill-remove"
-                              [attr.data-testid]="'active-filter-remove-' + pill.kind + '-' + pill.value"
-                              [attr.aria-label]="'Remove ' + pill.kindLabel + ' filter ' + pill.label"
-                              (click)="removeFilterPill(pill)">×</button>
-                    </span>
-                  }
-                  <button type="button"
-                          class="active-filter-strip__clear-all"
-                          data-testid="filter-clear-all"
-                          (click)="clearAllFilters()">Clear all</button>
-                </div>
-              }
               <!-- F56: failed-pickup notification moved to toast stack -->
               @if (hasActiveFiltersOrSearch() && filteredJobCount() === 0) {
                 <div class="board-filter-empty-hint" data-testid="board-filter-empty-hint">
@@ -445,36 +416,6 @@
           </div>
         </div>
       </header>
-
-      @if (activeFilterPills().length > 0) {
-        <div class="active-filter-strip"
-             data-testid="active-filter-strip"
-             role="region"
-             aria-label="Active filters">
-          @for (pill of activeFilterPills(); track pill.kind + ':' + pill.value) {
-            <span class="active-filter-strip__pill"
-                  [class]="'active-filter-strip__pill--' + pill.kind"
-                  [attr.data-testid]="'active-filter-pill-' + pill.kind + '-' + pill.value">
-              <span class="active-filter-strip__pill-kind">{{ pill.kindLabel }}:</span>
-              @if (pill.swatch) {
-                <span class="active-filter-strip__pill-swatch"
-                      aria-hidden="true"
-                      [style.background]="pill.swatch"></span>
-              }
-              <span class="active-filter-strip__pill-label">{{ pill.label }}</span>
-              <button type="button"
-                      class="active-filter-strip__pill-remove"
-                      [attr.data-testid]="'active-filter-remove-' + pill.kind + '-' + pill.value"
-                      [attr.aria-label]="'Remove ' + pill.kindLabel + ' filter ' + pill.label"
-                      (click)="removeFilterPill(pill)">×</button>
-            </span>
-          }
-          <button type="button"
-                  class="active-filter-strip__clear-all"
-                  data-testid="filter-clear-all"
-                  (click)="clearAllFilters()">Clear all</button>
-        </div>
-      }
 
 <!-- <app-update-banner /> moved into <app-notification-stack> in F40 so
            the update strip docks alongside other banner notifications. -->

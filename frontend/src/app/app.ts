@@ -15,7 +15,6 @@ import {
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import {
-  ActiveFilterPill,
   BoardFiltersService,
   CreateJobDialogComponent,
   FiltersDropdownComponent,
@@ -427,7 +426,6 @@ export class App implements OnInit, OnDestroy {
   readonly activeTagFilter = this.boardFilters.activeTagFilter;
   readonly activeType = this.boardFilters.activeType;
   readonly hasActiveFilters = this.boardFilters.hasActiveFilters;
-  readonly activeFilterPills = this.boardFilters.activeFilterPills;
   /** Workspace tag registry, refreshed on init via `loadTagRegistry`. */
   readonly tagRegistry = this.tagRegistryStore.tags;
   readonly tagRegistryById = this.tagRegistryStore.byId;
@@ -457,13 +455,6 @@ export class App implements OnInit, OnDestroy {
   toggleTagFilter(id: string): void {
     this.boardFilters.toggleTagFilter(id);
   }
-  clearAllFilters(): void {
-    this.boardFilters.clearAllFilters();
-  }
-  removeFilterPill(pill: ActiveFilterPill): void {
-    this.boardFilters.removeFilterPill(pill);
-  }
-
   loadTagRegistry(): void {
     this.jobService.listTags().subscribe({
       next: (tags) => this.tagRegistryStore.set(tags),
