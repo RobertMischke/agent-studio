@@ -343,6 +343,22 @@
       font-weight: 600;
       color: var(--studio-fg);
     }
+    .job-card__key-chip {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.03em;
+      color: var(--studio-fg-muted);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
+      vertical-align: middle;
+      margin-right: 4px;
+      user-select: none;
+      white-space: nowrap;
+    }
     .job-card__badges {
       display: flex;
       flex-wrap: wrap;

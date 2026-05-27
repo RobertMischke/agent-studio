@@ -29,6 +29,7 @@ import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orch
 export interface JobInfo {
   id: string;
   jobKey: string;
+  key?: string | null;
   title: string;
   state: string;
   order: number;

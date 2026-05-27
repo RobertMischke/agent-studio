@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OrchestratorApi.Services.Configuration;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -40,6 +41,12 @@ public static class AdminConfigEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
+        });
+
+        app.MapGroup("/api/maintenance").MapPost("/backfill-keys", (JobMutationService mutations) =>
+        {
+            var count = mutations.BackfillTaskKeys();
+            return Results.Ok(new { stamped = count });
         });
     }
 }

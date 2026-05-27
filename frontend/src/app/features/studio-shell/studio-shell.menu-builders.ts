@@ -18,10 +18,25 @@ export interface TabCtxMenuInputs {
   totalTabs: number;
   hasTabsToRight: boolean;
   hasTabsToLeft: boolean;
+  /** When the tab is a task, provide its identifiers for copy actions. */
+  task?: { title: string; id: string; key?: string | null } | null;
 }
 
 export function buildTabCtxMenuItems(input: TabCtxMenuInputs): readonly MenuItem[] {
-  return [
+  const items: MenuItem[] = [];
+
+  if (input.task) {
+    items.push(
+      { kind: 'row', id: 'copy-name', label: 'Copy Name', icon: '📋' },
+      { kind: 'row', id: 'copy-id', label: 'Copy ID', icon: '🔗' },
+    );
+    if (input.task.key) {
+      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${input.task.key})`, icon: '🏷' });
+    }
+    items.push({ kind: 'separator' });
+  }
+
+  items.push(
     { kind: 'row', id: 'close', label: 'Close' },
     {
       kind: 'row',
@@ -43,7 +58,8 @@ export function buildTabCtxMenuItems(input: TabCtxMenuInputs): readonly MenuItem
     },
     { kind: 'separator' },
     { kind: 'row', id: 'close-all', label: 'Close All' },
-  ];
+  );
+  return items;
 }
 
 export interface ProjectPickerInputs {

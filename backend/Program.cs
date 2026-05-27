@@ -363,6 +363,16 @@ catch (Exception ex)
     crashRecorder.Record("RegistryBootstrap", ex);
 }
 
+// Backfill task keys (ATP-NNN) on jobs created before key generation was wired
+// into CreateJob. Runs after RegistryBootstrap so project short codes exist.
+// Idempotent; no-op once all jobs carry a key.
+{
+    var keyCount = app.Services.GetRequiredService<JobMutationService>().BackfillTaskKeys();
+    if (keyCount > 0)
+        app.Services.GetRequiredService<ILogger<Program>>()
+            .LogInformation("Backfilled task keys on {Count} job(s)", keyCount);
+}
+
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
 // surviving completion-marker.json finishes its 3-progress -> 4-review move
 // here, and any orphan working-tree changes get committed under a

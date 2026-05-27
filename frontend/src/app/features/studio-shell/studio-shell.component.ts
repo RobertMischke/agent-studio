@@ -26,6 +26,8 @@ import { UiPreferencesService } from '../shell';
 import { BoardFiltersService } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { NotificationService } from '../../services/notification.service';
+import { copyTextToClipboard } from '../../services/clipboard.util';
 import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
@@ -114,6 +116,7 @@ export class StudioShellComponent {
   readonly updateClient = inject(UpdateClientService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
+  private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
 
   /** Tab list + active selection re-exposed for the template. */
@@ -890,10 +893,17 @@ export class StudioShellComponent {
     if (!ctx) return [];
     const tabs = this.tabs();
     const idx = tabs.findIndex(t => studioTabKey(t) === ctx.key);
+    const tab = idx >= 0 ? tabs[idx] : null;
+    let task: { title: string; id: string; key?: string | null } | null = null;
+    if (tab && (tab.kind === 'task' || tab.kind === 'activity')) {
+      const job = this.findJob(tab.jobKey);
+      if (job) task = { title: job.title || job.id, id: job.id, key: job.key };
+    }
     return buildTabCtxMenuItems({
       totalTabs: tabs.length,
       hasTabsToRight: idx >= 0 && idx < tabs.length - 1,
       hasTabsToLeft: idx > 0,
+      task,
     });
   });
   readonly tabCtxMenuPosition = computed(() => {
@@ -908,6 +918,27 @@ export class StudioShellComponent {
     else if (ev.id === 'close-right') this.closeRight(ctx.key);
     else if (ev.id === 'close-left') this.closeLeft(ctx.key);
     else if (ev.id === 'close-all') this.closeAll();
+    else if (ev.id === 'copy-name' || ev.id === 'copy-id' || ev.id === 'copy-key') {
+      this.handleTabCopyAction(ev.id, ctx.key);
+    }
+  }
+
+  private handleTabCopyAction(action: string, tabKey: string): void {
+    const tabs = this.tabs();
+    const tab = tabs.find(t => studioTabKey(t) === tabKey);
+    if (!tab || (tab.kind !== 'task' && tab.kind !== 'activity')) return;
+    const job = this.findJob(tab.jobKey);
+    if (!job) return;
+    let text = '';
+    let label = '';
+    if (action === 'copy-name') { text = job.title || job.id; label = 'Name'; }
+    else if (action === 'copy-id') { text = job.id; label = 'ID'; }
+    else if (action === 'copy-key' && job.key) { text = job.key; label = 'Key'; }
+    if (text) {
+      copyTextToClipboard(text).then(ok => {
+        if (ok) this.notifications.success(`${label} copied`);
+      });
+    }
   }
   readonly projectPickerItems = computed<readonly MenuItem[]>(() => buildProjectPickerItems({
     rows: this.projectRows(),
@@ -1072,7 +1103,8 @@ export class StudioShellComponent {
   tabNum(tab: StudioTab): string | null {
     if (tab.kind === 'task') {
       const job = this.findJob(tab.jobKey);
-      return job ? `#${job.order ?? '?'}` : null;
+      if (!job) return null;
+      return job.key || `#${job.order ?? '?'}`;
     }
     return null;
   }

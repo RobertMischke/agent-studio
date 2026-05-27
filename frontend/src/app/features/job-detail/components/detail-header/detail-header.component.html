@@ -35,15 +35,24 @@
           <span class="detail__project-name">{{ info().projectName }}</span>
           <app-project-hygiene-badge [projectName]="info().projectName" />
         </div>
-        <h2 class="detail__title"
-            (click)="startTitleEdit.emit()"
-            [appTooltip]="'Click to rename'" tabindex="0" (keydown.enter)="startTitleEdit.emit()" (keydown.space)="startTitleEdit.emit(); $event.preventDefault()">
-          {{ info().title || info().id }}
-          <button type="button"
-                  class="detail__title-edit-btn"
-                  (click)="$event.stopPropagation(); startTitleEdit.emit()"
-                  aria-label="Rename task">✎</button>
-        </h2>
+        <div class="detail__title-row">
+          @if (info().key; as taskKey) {
+            <span class="detail__key-chip"
+                  data-testid="detail-key-chip"
+                  [appTooltip]="'Right-click to copy'"
+                  (contextmenu)="openTitleContextMenu($event)">{{ taskKey }}</span>
+          }
+          <h2 class="detail__title"
+              (click)="startTitleEdit.emit()"
+              (contextmenu)="openTitleContextMenu($event)"
+              [appTooltip]="'Click to rename · Right-click to copy'" tabindex="0" (keydown.enter)="startTitleEdit.emit()" (keydown.space)="startTitleEdit.emit(); $event.preventDefault()">
+            {{ info().title || info().id }}
+            <button type="button"
+                    class="detail__title-edit-btn"
+                    (click)="$event.stopPropagation(); startTitleEdit.emit()"
+                    aria-label="Rename task">✎</button>
+          </h2>
+        </div>
         <div class="detail__meta">
           <span class="detail__meta-item"
                 data-testid="detail-created-at"
@@ -128,4 +137,13 @@
       </div>
     }
   </div>
+  <app-menu
+    [items]="titleCtxMenuItems()"
+    [open]="titleContextMenu() !== null"
+    [position]="titleContextMenu()"
+    testIdPrefix="detail-title-ctx"
+    ariaLabel="Copy task info"
+    [minWidth]="180"
+    (itemClick)="onTitleCtxMenuItemClick($event)"
+    (closeRequest)="closeTitleContextMenu()" />
 </header>

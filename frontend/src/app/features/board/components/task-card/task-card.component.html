@@ -10,7 +10,8 @@
      data-testid="job-card"
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
-     [attr.data-compact]="compact() ? 'true' : null">
+     [attr.data-compact]="compact() ? 'true' : null"
+     (contextmenu)="openCardContextMenu($event)">
   @if (isRunning()) {
     <div class="job-card__progress" aria-hidden="true" data-testid="job-card-progress"></div>
   }
@@ -56,6 +57,9 @@
             [attr.aria-label]="job().projectName"
             aria-hidden="true">{{ identity().initial }}</span>
       <span class="job-card__compact-cli" aria-hidden="true">{{ agentIcon() }}</span>
+    }
+    @if (job().key; as taskKey) {
+      <span class="job-card__key-chip" data-testid="job-card-key">{{ taskKey }}</span>
     }
     <span class="job-card__title-text">{{ job().title || job().id }}</span>
     @if (compact()) {
@@ -237,3 +241,12 @@
     Last activity: {{ relativeActivity() }}
   </div>
 </div>
+<app-menu
+  [items]="cardCtxMenuItems()"
+  [open]="cardContextMenu() !== null"
+  [position]="cardContextMenu()"
+  testIdPrefix="card-ctx"
+  ariaLabel="Task actions"
+  [minWidth]="180"
+  (itemClick)="onCardCtxMenuItemClick($event)"
+  (closeRequest)="closeCardContextMenu()" />

@@ -11,6 +11,9 @@ import { projectIdentity } from '../../../../services/project-identity.util';
 import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
+import { NotificationService } from '../../../../services/notification.service';
+import { copyTextToClipboard } from '../../../../services/clipboard.util';
 /**
  * Top header of the job-detail view: back button, editable title,
  * state pill, and the "Complete & Next" review action. Title-edit
@@ -20,7 +23,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent, TooltipDirective],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective, MenuComponent],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })
@@ -182,4 +185,43 @@ export class DetailHeaderComponent {
   readonly identity = computed(() => projectIdentity(this.info().projectName));
 
   stateLabel(state: string): string { return fmtStateLabel(state); }
+
+  // Title right-click context menu for copy actions
+  private readonly notifs = inject(NotificationService);
+  readonly titleContextMenu = signal<{ x: number; y: number } | null>(null);
+  readonly titleCtxMenuItems = computed<readonly MenuItem[]>(() => {
+    const info = this.info();
+    const items: MenuItem[] = [
+      { kind: 'row', id: 'copy-name', label: 'Copy Name', icon: '📋' },
+      { kind: 'row', id: 'copy-id', label: 'Copy ID', icon: '🔗' },
+    ];
+    if (info.key) {
+      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${info.key})`, icon: '🏷' });
+    }
+    return items;
+  });
+
+  openTitleContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.titleContextMenu.set({ x: event.clientX, y: event.clientY });
+  }
+
+  closeTitleContextMenu(): void {
+    this.titleContextMenu.set(null);
+  }
+
+  onTitleCtxMenuItemClick(ev: MenuItemClickEvent): void {
+    const info = this.info();
+    let text = '';
+    let label = '';
+    if (ev.id === 'copy-name') { text = info.title || info.id; label = 'Name'; }
+    else if (ev.id === 'copy-id') { text = info.id; label = 'ID'; }
+    else if (ev.id === 'copy-key' && info.key) { text = info.key; label = 'Key'; }
+    if (text) {
+      copyTextToClipboard(text).then(ok => {
+        if (ok) this.notifs.success(`${label} copied`);
+      });
+    }
+  }
 }

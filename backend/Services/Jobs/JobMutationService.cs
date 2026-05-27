@@ -386,6 +386,10 @@ public class JobMutationService
                 .ToList();
         }
 
+        var taskKey = MintTaskKey(entry.Path);
+        if (taskKey != null)
+            jobJson["key"] = taskKey;
+
         File.WriteAllText(Path.Combine(jobDir, "job.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
 
@@ -708,6 +712,63 @@ public class JobMutationService
         }
         if (count > 0) _scanner.InvalidateCache();
         return count;
+    }
+
+    /// <summary>
+    /// Mint a <c>SHC-NNN</c> task key for the project that owns
+    /// <paramref name="watchPath"/>. Returns null when the project
+    /// registry has no record for this path (non-fatal; the job will
+    /// simply have <c>key: null</c>).
+    /// </summary>
+    private string? MintTaskKey(string watchPath)
+    {
+        try
+        {
+            var project = _projectRegistry.FindByStorageLocation(watchPath);
+            if (project == null) return null;
+            var seq = _projectRegistry.IssueNextTaskKey(project.Id);
+            return $"{project.ShortCode}-{seq}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "task-key-mint-failed watchPath={WatchPath}", watchPath);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Boot-time backfill: stamps a <c>key</c> on every job whose
+    /// <c>job.json</c> currently has no key. Idempotent; jobs that
+    /// already carry a key are skipped. After stamping, the project
+    /// counter is raised past the highest issued number so future
+    /// creates cannot collide. Returns the number of jobs stamped.
+    /// </summary>
+    public int BackfillTaskKeys()
+    {
+        var stamped = 0;
+        var maxByProject = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var job in _scanner.ScanAllJobs())
+        {
+            if (!string.IsNullOrWhiteSpace(job.Key)) continue;
+
+            var project = _projectRegistry.FindByStorageLocation(job.WatchPath);
+            if (project == null) continue;
+
+            var seq = _projectRegistry.IssueNextTaskKey(project.Id);
+            var key = $"{project.ShortCode}-{seq}";
+            JobJsonFile.UpdateField(job.FolderPath, "key", key, _logger);
+            stamped++;
+
+            if (!maxByProject.TryGetValue(project.Id, out var prev) || seq > prev)
+                maxByProject[project.Id] = seq;
+        }
+
+        foreach (var (projectId, max) in maxByProject)
+            _projectRegistry.EnsureTaskKeyFloor(projectId, max + 1);
+
+        if (stamped > 0) _scanner.InvalidateCache();
+        return stamped;
     }
 
     private static string ToSlug(string text)

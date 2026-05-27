@@ -17,6 +17,9 @@ import {
 } from './task-card-view-model';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
+import { NotificationService } from '../../../../services/notification.service';
+import { copyTextToClipboard } from '../../../../services/clipboard.util';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -27,7 +30,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-job-card',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, MenuComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's
@@ -507,4 +510,43 @@ export class JobCardComponent implements OnInit, OnDestroy {
     if (hrs < 24) return hrs + 'h ago';
     return Math.floor(hrs / 24) + 'd ago';
   });
+
+  // Context menu for copy actions
+  private readonly notifications = inject(NotificationService);
+  readonly cardContextMenu = signal<{ x: number; y: number } | null>(null);
+  readonly cardCtxMenuItems = computed<readonly MenuItem[]>(() => {
+    const job = this.job();
+    const items: MenuItem[] = [
+      { kind: 'row', id: 'copy-name', label: 'Copy Name', icon: '📋' },
+      { kind: 'row', id: 'copy-id', label: 'Copy ID', icon: '🔗' },
+    ];
+    if (job.key) {
+      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${job.key})`, icon: '🏷' });
+    }
+    return items;
+  });
+
+  openCardContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.cardContextMenu.set({ x: event.clientX, y: event.clientY });
+  }
+
+  closeCardContextMenu(): void {
+    this.cardContextMenu.set(null);
+  }
+
+  onCardCtxMenuItemClick(ev: MenuItemClickEvent): void {
+    const job = this.job();
+    let text = '';
+    let label = '';
+    if (ev.id === 'copy-name') { text = job.title || job.id; label = 'Name'; }
+    else if (ev.id === 'copy-id') { text = job.id; label = 'ID'; }
+    else if (ev.id === 'copy-key' && job.key) { text = job.key; label = 'Key'; }
+    if (text) {
+      copyTextToClipboard(text).then(ok => {
+        if (ok) this.notifications.success(`${label} copied`);
+      });
+    }
+  }
 }
