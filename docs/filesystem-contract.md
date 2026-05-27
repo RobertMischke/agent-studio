@@ -88,7 +88,7 @@ Each job folder uses this structure:
   "createdAt": "<ISO-8601>",
   "state": "0-backlog",
   "order": 1,
-  "agent": "agent",
+  "agent": "claude",
   "cliType": "codex",
   "taskType": "chore",
   "tags": ["architecture"]
@@ -99,6 +99,7 @@ Each job folder uses this structure:
 
 **Optional fields:**
 
+- `agent` - auto-pickup eligibility marker. Values matching a CLI backend (`claude`, `codex`, `copilot`, `gemini`) are eligible for auto-pickup; `human` means the job is skipped by the runner and must be started manually. On creation, the API materializes `agent`, `cliType`, and `model` from the owner client's defaults when not explicitly provided, so new jobs carry concrete values rather than the old misleading `agent: "human" / cliType: null / model: null` triple. See `AgentTypes` in `backend/Models/CliTypes.cs`.
 - `taskType` - structural classification, one of `bug`, `feature`, or `chore` (default for legacy and technical work). Drives the small chip rendered on the kanban card and the type filter pill in the header. Legacy `user-story` values on disk are silently normalised to `feature` on read; no bulk re-write is performed.
 - `tags` - string array of workspace tag ids. The label and colour for each id come from `<workspace>/tags.json` served by `GET /api/tags`. The registry seeds seven default tags on first read (`ui-ux`, `performance`, `quality`, `architecture`, `security`, `docs`, `observability`), each carrying a `description` field that surfaces in tooltips and the filter dropdown. On boot, missing seed ids are merged into an existing registry by id; user-customised rows are never overwritten. Unknown ids on a job (registry entries that were soft-deleted) render as a faint ghost chip on the card.
 

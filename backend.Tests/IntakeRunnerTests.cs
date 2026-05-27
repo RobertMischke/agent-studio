@@ -5,6 +5,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Clients;
+using OrchestratorApi.Services.Registry;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
@@ -275,6 +276,7 @@ public class IntakeRunnerTests : IDisposable
 
     private IntakeRunner BuildRunner()
     {
+        var scanner = BuildScanner();
         var cfg = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -282,9 +284,7 @@ public class IntakeRunnerTests : IDisposable
                 ["WatchPaths:0:Path"] = _watchPath
             })
             .Build();
-        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, cfg);
-        var scanner = new JobScannerService(cfg, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(cfg, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(cfg, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(cfg, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         return new IntakeRunner(scanner, mutations, chatLog, NullLogger<IntakeRunner>.Instance);
     }

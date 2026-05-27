@@ -6,6 +6,7 @@ using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Registry;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
@@ -98,7 +99,7 @@ public sealed class HumanAgentPickupSkipTests : IDisposable
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
         var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
         var clients = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance);
-        var mutations = new JobMutationService(scanner, clients, NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, clients, new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
         var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);

@@ -4,6 +4,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Clients;
+using OrchestratorApi.Services.Registry;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -268,7 +269,7 @@ public class SkillReadinessServiceTests : IDisposable
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
         return new SkillReadinessService(scanner, mutations, NullLogger<SkillReadinessService>.Instance);
     }
 }
