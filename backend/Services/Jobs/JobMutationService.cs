@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Clients;
+using OrchestratorApi.Services.Registry;
 
 namespace OrchestratorApi.Services.Jobs;
 
@@ -24,12 +25,14 @@ public class JobMutationService
 {
     private readonly JobScannerService _scanner;
     private readonly ClientIdentityStore _clients;
+    private readonly ProjectRegistry _projectRegistry;
     private readonly ILogger<JobMutationService> _logger;
 
-    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ILogger<JobMutationService> logger)
+    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, ILogger<JobMutationService> logger)
     {
         _scanner = scanner;
         _clients = clients;
+        _projectRegistry = projectRegistry;
         _logger = logger;
     }
 
