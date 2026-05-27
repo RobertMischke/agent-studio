@@ -193,6 +193,8 @@
   --studio-tooltip-bg:     rgba(15, 17, 28, 0.96);
   --studio-tooltip-fg:     var(--color-slate-200);
   --studio-tooltip-fg-strong: var(--color-slate-50);
+  --studio-tooltip-fg-dim: var(--color-slate-400);
+  --studio-tooltip-link:   #7dd3fc;
   --studio-tooltip-border: rgba(148, 163, 184, 0.28);
 
   // ---------------------------------------------------------------------------
@@ -324,6 +326,8 @@
   --studio-tooltip-bg:     rgba(255, 255, 255, 0.97);
   --studio-tooltip-fg:     var(--color-grey-900);
   --studio-tooltip-fg-strong: var(--color-grey-950);
+  --studio-tooltip-fg-dim: var(--color-grey-700);
+  --studio-tooltip-link:   var(--color-blue-700);
   --studio-tooltip-border: rgba(0, 0, 0, 0.14);
 
   // Elevations — softer drop shadows on white. Same use-case aliases as dark.

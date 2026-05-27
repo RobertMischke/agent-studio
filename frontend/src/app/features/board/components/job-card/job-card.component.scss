@@ -785,10 +785,12 @@
       max-width: 320px;
       padding: 10px 12px;
       border-radius: 8px;
-      background: #11131a;
-      border: 1px solid rgba(255,255,255,0.10);
-      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
-      color: var(--studio-fg);
+      background: var(--studio-tooltip-bg);
+      border: 1px solid var(--studio-tooltip-border);
+      box-shadow: var(--elevation-tooltip);
+      backdrop-filter: blur(6px) saturate(120%);
+      -webkit-backdrop-filter: blur(6px) saturate(120%);
+      color: var(--studio-tooltip-fg);
       text-align: left;
       pointer-events: none;
     }
@@ -804,7 +806,7 @@
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: var(--studio-fg-dim);
+      color: var(--studio-tooltip-fg-dim);
       margin-bottom: 6px;
     }
     .job-card__token-table {
@@ -815,18 +817,18 @@
     .job-card__token-table th {
       text-align: left;
       font-weight: 500;
-      color: var(--studio-fg-dim);
+      color: var(--studio-tooltip-fg-dim);
       padding: 2px 8px 2px 0;
     }
     .job-card__token-table td {
       text-align: right;
       font-variant-numeric: tabular-nums;
-      color: var(--studio-fg);
+      color: var(--studio-tooltip-fg-strong);
       padding: 2px 0;
     }
     .job-card__token-total-row th,
     .job-card__token-total-row td {
-      border-top: 1px solid rgba(255,255,255,0.08);
+      border-top: 1px solid var(--studio-tooltip-border);
       padding-top: 4px;
       font-weight: 700;
     }
@@ -834,7 +836,7 @@
       margin-top: 8px;
       font-size: 11px;
       font-weight: 700;
-      color: var(--studio-fg-dim);
+      color: var(--studio-tooltip-fg-dim);
     }
     .job-card__token-table--runs th,
     .job-card__token-table--runs td {
@@ -845,7 +847,7 @@
       display: inline-block;
       margin-top: 8px;
       font-size: 11px;
-      color: #7dd3fc;
+      color: var(--studio-tooltip-link);
       text-decoration: none;
     }
     .job-card__token-link:hover { text-decoration: underline; }
