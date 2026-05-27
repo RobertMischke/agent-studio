@@ -710,7 +710,7 @@ export class App implements OnInit, OnDestroy {
       items.push({
         kind: 'row',
         id: 'delete-e2e',
-        label: 'Delete E2E Jobs',
+        label: 'Delete E2E Tasks',
         hint: 'across all projects',
         icon: '🧹',
         danger: true,
@@ -938,7 +938,7 @@ export class App implements OnInit, OnDestroy {
           failedPickupToastId = this.notifications.notify({
             kind: 'warning',
             title: 'Failed pickup',
-            message: `${count} ${count === 1 ? 'job' : 'jobs'} failed to pick up.`,
+            message: `${count} ${count === 1 ? 'task' : 'tasks'} failed to pick up.`,
             durationMs: 0,
             actions: [
               {
@@ -1137,7 +1137,7 @@ export class App implements OnInit, OnDestroy {
         this.errorDialog.show(err, {
           title: 'Failed to bump task',
           fallbackMessage: 'Failed to bump task to the front of the queue',
-          source: `Job ${job.id}`,
+          source: `Task ${job.id}`,
         });
       },
     });

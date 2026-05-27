@@ -71,7 +71,7 @@
             <span class="studio-auto-toggle__dot" aria-hidden="true"></span>
             <span class="studio-auto-toggle__label">{{ autoModeLabelFor(name) }}</span>
           </span>
-          <span class="studio-pill__count" aria-label="open jobs">{{ activeProjectTotalJobs() }}</span>
+          <span class="studio-pill__count" aria-label="open tasks">{{ activeProjectTotalJobs() }}</span>
         } @else {
           <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">
             <app-studio-icon name="grid" [size]="11"></app-studio-icon>
@@ -392,7 +392,7 @@
               <section class="studio-cli">
                 <div class="studio-explorer__group-head">Agents / CLI</div>
                 @if (cliRows().length === 0) {
-                  <app-empty-state>No jobs loaded yet.</app-empty-state>
+                  <app-empty-state>No tasks loaded yet.</app-empty-state>
                 } @else {
                   @for (row of cliRows(); track row.cli) {
                     <div class="studio-cli__row">

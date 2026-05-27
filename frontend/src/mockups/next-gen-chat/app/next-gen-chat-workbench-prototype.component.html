@@ -419,11 +419,11 @@
         </article>
         <article>
           <strong>Orchestrator</strong>
-          <p>The task chat owns evidence. The side sheet owns project steering, upcoming jobs, and cross-task decisions.</p>
+          <p>The task chat owns evidence. The side sheet owns project steering, upcoming tasks, and cross-task decisions.</p>
         </article>
         <button class="sheet__summary" (click)="setPane('debug')">
           <strong>Queue signal</strong>
-          <span>6 chat jobs aligned to v7 workbench · click to inspect debug context</span>
+          <span>6 chat tasks aligned to v7 workbench · click to inspect debug context</span>
         </button>
       </div>
       <footer class="sheet__composer">
@@ -488,7 +488,7 @@
               <div><b>2</b><span>running</span></div>
               <div><b>4/6</b><span>auto loops</span></div>
               <div><b>1</b><span>blocked</span></div>
-              <div><b>6</b><span>chat jobs</span></div>
+              <div><b>6</b><span>chat tasks</span></div>
             </div>
           </article>
           <article>
@@ -525,7 +525,7 @@
         @case ('evidence') {
           <article>
             <h3>Visual evidence</h3>
-            <p>Four screenshots are attached to this job. The status bar keeps them one click away even while Git stays open beside chat.</p>
+            <p>Four screenshots are attached to this task. The status bar keeps them one click away even while Git stays open beside chat.</p>
             <div class="function-grid">
               <button (click)="setPane('preview')">Open preview</button>
               <button (click)="lightboxOpen.set(true)">Open lightbox</button>

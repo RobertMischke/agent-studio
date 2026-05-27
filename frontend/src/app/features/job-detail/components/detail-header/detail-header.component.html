@@ -60,8 +60,8 @@
               class="detail__pager-btn"
               data-testid="lane-pager-prev"
               [disabled]="!pagerCanPrev()"
-              [appTooltip]="pagerCanPrev() ? 'Previous job in iteration (k or ←)' : 'Already at the first job in the iteration'"
-              aria-label="Previous job in iteration"
+              [appTooltip]="pagerCanPrev() ? 'Previous task in iteration (k or ←)' : 'Already at the first task in the iteration'"
+              aria-label="Previous task in iteration"
               (click)="pagerPrev.emit()">‹</button>
       <span class="detail__pager-count"
             data-testid="lane-pager-count"
@@ -70,8 +70,8 @@
               class="detail__pager-btn"
               data-testid="lane-pager-next"
               [disabled]="!pagerCanNext()"
-              [appTooltip]="pagerCanNext() ? 'Next job in iteration (j or →)' : 'No more jobs in the captured iteration'"
-              aria-label="Next job in iteration"
+              [appTooltip]="pagerCanNext() ? 'Next task in iteration (j or →)' : 'No more tasks in the captured iteration'"
+              aria-label="Next task in iteration"
               (click)="pagerNext.emit()">›</button>
     </div>
   }

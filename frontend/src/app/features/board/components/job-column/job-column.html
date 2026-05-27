@@ -121,7 +121,7 @@
             </button>
           }
           @if (jobs().length === 0) {
-            <div class="column__empty">No archived jobs</div>
+            <div class="column__empty">No archived tasks</div>
           } @else if (archiveOverflow() > 0) {
             <div class="archive-overflow">
               + {{ archiveOverflow() }} more in <code>6-archive/</code> folder
@@ -148,7 +148,7 @@
                   (dragstart)="onDragStart($event, job)" />
               }
               @if (group.jobs.length === 0) {
-                <div class="column__empty column__empty--subsection">No jobs</div>
+                <div class="column__empty column__empty--subsection">No tasks</div>
               }
             </section>
           }
@@ -181,7 +181,7 @@
             </div>
           }
           @if (jobs().length === 0) {
-            <div class="column__empty">No jobs</div>
+            <div class="column__empty">No tasks</div>
           }
           @if (canAddTask()) {
             <button type="button" class="column__add" (click)="addTask.emit(state())">

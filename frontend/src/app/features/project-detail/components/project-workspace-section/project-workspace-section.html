@@ -12,7 +12,7 @@
     <button type="button"
             class="pws__save"
             data-testid="project-detail-workspace-save"
-            [appTooltip]="'Move all jobs in this project to the selected workspace via the change-project endpoint (mirrors cross-project drag and drop).'"
+            [appTooltip]="'Move all tasks in this project to the selected workspace via the change-project endpoint (mirrors cross-project drag and drop).'"
             [disabled]="!canSave()"
             (click)="onSave()">
       {{ saving() ? 'Moving...' : 'Save' }}

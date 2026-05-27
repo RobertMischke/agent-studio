@@ -7,7 +7,7 @@
     </header>
     <div class="activity__body">
       <dl class="activity__facts">
-        <dt>Job key</dt>
+        <dt>Task key</dt>
         <dd class="mono">{{ j.jobKey }}</dd>
         <dt>Project</dt>
         <dd>{{ j.projectName }}</dd>
@@ -32,7 +32,7 @@
   } @else {
     <div class="activity__empty">
       <h3>Activity log</h3>
-      <p>Job <code>{{ jobKey() }}</code> not found in the live index. The job may
+      <p>Task <code>{{ jobKey() }}</code> not found in the live index. The task may
         have been archived or moved; reload the workspace or pick the task from
         the Explorer to find it.</p>
     </div>

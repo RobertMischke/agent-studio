@@ -1,5 +1,5 @@
 <app-dialog eyebrow="Dev tool"
-            title="Delete E2E Jobs"
+            title="Delete E2E Tasks"
             subtitle="Across every watched project. Matches &quot;E2E&quot; anywhere in id or title."
             role="dialog"
             kind="danger"
@@ -15,7 +15,7 @@
     }
     @case ('list') {
       @if (jobs().length === 0) {
-        <div class="empty">No E2E-named jobs found.</div>
+        <div class="empty">No E2E-named tasks found.</div>
       } @else {
         <div class="toolbar">
           <label class="check">
@@ -49,7 +49,7 @@
       }
     }
     @case ('deleting') {
-      <div class="empty">Deleting {{ pendingCount() }} job(s)…</div>
+      <div class="empty">Deleting {{ pendingCount() }} task(s)…</div>
     }
     @case ('report') {
       <div class="report">
@@ -84,7 +84,7 @@
                     data-testid="e2e-delete-confirm"
                     [disabled]="selectedCount() === 0"
                     (click)="confirmDelete()">
-              Delete {{ selectedCount() }} job{{ selectedCount() === 1 ? '' : 's' }}
+              Delete {{ selectedCount() }} task{{ selectedCount() === 1 ? '' : 's' }}
             </button>
           </div>
         }

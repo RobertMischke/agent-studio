@@ -20,7 +20,7 @@
     <ng-container *ngTemplateOutlet="body" />
     <div footer class="sheet__footer-bits" data-testid="kanban-filter-sidesheet-footer">
       <span class="sheet__hits"
-            data-testid="kanban-filter-sidesheet-hitcount">{{ hitCount() }} / {{ totalCount() }} jobs match</span>
+            data-testid="kanban-filter-sidesheet-hitcount">{{ hitCount() }} / {{ totalCount() }} tasks match</span>
       <button type="button"
               class="sheet__clear-all"
               data-testid="kanban-filter-sidesheet-clear-all"
@@ -162,7 +162,7 @@
        above, projected into <app-sidesheet>[footer]). -->
   @if (inline()) {
     <section class="sheet__section sheet__section--inline-foot">
-      <span class="sheet__hits">{{ hitCount() }} / {{ totalCount() }} jobs match</span>
+      <span class="sheet__hits">{{ hitCount() }} / {{ totalCount() }} tasks match</span>
       <button type="button"
               class="sheet__clear-all"
               [disabled]="!hasAnyFilter()"

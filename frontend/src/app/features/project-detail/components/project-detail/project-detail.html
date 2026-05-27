@@ -23,7 +23,7 @@
           <strong>{{ effectiveMode() }}</strong>
         </div>
         <div class="proj-detail__status-cell">
-          <span class="proj-detail__status-label">Active job</span>
+          <span class="proj-detail__status-label">Active task</span>
           <strong>{{ activeRunner()?.activeJobId || 'none' }}</strong>
           @if (activeLaneLabel(); as lane) {
             <span class="proj-detail__status-note">{{ lane }}</span>
@@ -97,7 +97,7 @@
       <h3>Active execution</h3>
       @if (activeRunner()?.activeExecution; as ex) {
         <dl class="proj-detail__paths proj-detail__session">
-          <div><dt>Job</dt><dd><code>{{ ex.jobId }}</code></dd></div>
+          <div><dt>Task</dt><dd><code>{{ ex.jobId }}</code></dd></div>
           <div><dt>Status</dt><dd>{{ ex.status }}</dd></div>
           <div><dt>Process</dt><dd>{{ ex.processId }}</dd></div>
           <div><dt>Model</dt><dd>{{ ex.model || '(default)' }}</dd></div>
@@ -196,7 +196,7 @@
     <section class="proj-detail__group">
       <h3>Auto-commit</h3>
       <label class="proj-detail__toggle"
-             [appTooltip]="'When enabled, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on JobInfo.Commit. Changes apply to the next job transition immediately.'">
+             [appTooltip]="'When enabled, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on TaskInfo.Commit. Changes apply to the next task transition immediately.'">
         <input type="checkbox"
                data-testid="project-detail-auto-commit"
                [(ngModel)]="autoCommitDraft"

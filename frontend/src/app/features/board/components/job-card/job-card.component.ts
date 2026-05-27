@@ -129,7 +129,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
           ghost: false,
           concern: true,
           unparseable: false,
-          tooltip: `Auto-review aspect '${ns}' flagged concerns. Open the job and read aspect-*.md for details.`
+          tooltip: `Auto-review aspect '${ns}' flagged concerns. Open the task and read aspect-*.md for details.`
         };
       }
       const entry = byId.get(id);
@@ -456,7 +456,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const startedAt = (() => { try { return new Date(al.startedAt).toLocaleString(); } catch { return al.startedAt; } })();
     const lastQ = (al.lastQuestion ?? '').slice(0, 160);
     const lastErr = al.lastError ? `\nLast error: ${al.lastError}` : '';
-    return `Auto-loop: orchestrator answering NEEDS_INPUT for this job.\n` +
+    return `Auto-loop: orchestrator answering NEEDS_INPUT for this task.\n` +
            `Iteration ${al.iteration} of ${al.maxIterations}.\n` +
            `${tokenLine}.\nStarted ${startedAt}.${lastErr}\n\nLast question: ${lastQ}${(al.lastQuestion ?? '').length > 160 ? '...' : ''}`;
   }

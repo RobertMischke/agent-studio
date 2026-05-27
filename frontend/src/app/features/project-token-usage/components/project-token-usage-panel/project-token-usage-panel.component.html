@@ -66,14 +66,14 @@
       }
     </section>
 
-    <section class="tup__heatmap-section" aria-label="Per-job heatmap">
-      <h3 class="tup__section-title">Heatmap (top jobs × days)</h3>
+    <section class="tup__heatmap-section" aria-label="Per-task heatmap">
+      <h3 class="tup__section-title">Heatmap (top tasks × days)</h3>
       @if (heatmap()?.hasData) {
         <div class="tup__heatmap-scroll">
           <table class="tup__heatmap" data-testid="token-usage-heatmap">
             <thead>
               <tr>
-                <th class="tup__heatmap-corner" scope="col">Job</th>
+                <th class="tup__heatmap-corner" scope="col">Task</th>
                 @for (day of heatmap()!.days; track day) {
                   <th scope="col" class="tup__heatmap-day-th">{{ shortDay(day) }}</th>
                 }
@@ -118,11 +118,11 @@
       }
     </section>
 
-    <section class="tup__expensive-section" aria-label="Expensive jobs">
-      <h3 class="tup__section-title">Most expensive jobs</h3>
+    <section class="tup__expensive-section" aria-label="Expensive tasks">
+      <h3 class="tup__section-title">Most expensive tasks</h3>
       @if (expensive().length === 0) {
         <p class="tup__section-empty" data-testid="expensive-empty">
-          No jobs have recorded orchestrator token spend yet.
+          No tasks have recorded orchestrator token spend yet.
         </p>
       } @else {
         <ul class="tup__expensive-list" data-testid="token-usage-expensive">
@@ -164,7 +164,7 @@
         } @else if (!drilldown()) {
           <p class="tup__section-empty" data-testid="drill-loading">Loading drill-down…</p>
         } @else if (drilldown()!.runs.length === 0) {
-          <p class="tup__section-empty" data-testid="drill-empty">No orchestrator calls recorded for this job.</p>
+          <p class="tup__section-empty" data-testid="drill-empty">No orchestrator calls recorded for this task.</p>
         } @else {
           <div class="tup__drill-summary">
             <span class="tup__drill-summary-cat"

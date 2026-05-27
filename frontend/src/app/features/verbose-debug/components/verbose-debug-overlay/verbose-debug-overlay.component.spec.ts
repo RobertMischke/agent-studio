@@ -48,6 +48,7 @@ describe('VerboseDebugOverlayComponent (smoke)', () => {
     expect(tabIds).toEqual([
       'overview',
       'actors',
+      'phases',
       'orchestrator',
       'tools',
       'warnings',

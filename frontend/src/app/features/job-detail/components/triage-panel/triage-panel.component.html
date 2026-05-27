@@ -34,7 +34,7 @@
       <div class="triage__menu-head">
         <span class="triage__menu-title">{{ laneLabel() }} actions</span>
         @if (laneSize() > 0) {
-          <span class="triage__menu-sub" data-testid="triage-counter">Job {{ laneIndex() + 1 }} of {{ laneSize() }}</span>
+          <span class="triage__menu-sub" data-testid="triage-counter">Task {{ laneIndex() + 1 }} of {{ laneSize() }}</span>
         }
       </div>
       @if (mutationsBlocked()) {

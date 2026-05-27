@@ -88,10 +88,10 @@
             </select>
           </label>
           <label class="prt__field">
-            <span>Job</span>
+            <span>Task</span>
             <select [(ngModel)]="filter.jobId" (ngModelChange)="onFilterChanged()"
                     data-testid="product-runtime-filter-job">
-              <option value="">All jobs</option>
+              <option value="">All tasks</option>
               @for (j of jobOptions(); track j) {
                 <option [value]="j">{{ j }}</option>
               }
@@ -169,7 +169,7 @@
                     <th scope="col">Operation</th>
                     <th scope="col">Status</th>
                     <th scope="col">Latency</th>
-                    <th scope="col">Job · Run</th>
+                    <th scope="col">Task · Run</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -379,7 +379,7 @@
               @if (sel.status) { <div><dt>Status</dt><dd>{{ sel.status }}</dd></div> }
               @if (sel.duration) { <div><dt>Duration</dt><dd>{{ formatMs(sel.duration.ms) }}</dd></div> }
               @if (sel.correlationId) { <div><dt>Correlation</dt><dd><code>{{ sel.correlationId }}</code></dd></div> }
-              @if (sel.jobId) { <div><dt>Job</dt><dd><code>{{ sel.jobId }}</code></dd></div> }
+              @if (sel.jobId) { <div><dt>Task</dt><dd><code>{{ sel.jobId }}</code></dd></div> }
               @if (sel.runId) { <div><dt>Run</dt><dd><code>{{ sel.runId }}</code></dd></div> }
               @if (sel.taskId) { <div><dt>Task</dt><dd><code>{{ sel.taskId }}</code></dd></div> }
               @if (sel.tags && sel.tags.length) {

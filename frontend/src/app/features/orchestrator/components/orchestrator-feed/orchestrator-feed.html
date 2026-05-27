@@ -70,7 +70,7 @@
         <h3>{{ entry.summary }}</h3>
         <dl class="orch-feed__meta">
           <div><dt>Time</dt><dd>{{ formatTime(entry.ts) }}</dd></div>
-          @if (entry.jobId) { <div><dt>Job</dt><dd><code>{{ entry.jobId }}</code></dd></div> }
+          @if (entry.jobId) { <div><dt>Task</dt><dd><code>{{ entry.jobId }}</code></dd></div> }
           @if (entry.tokenUsage; as tu) {
             <div><dt>Model</dt><dd>{{ tu.model || '?' }}</dd></div>
             <div><dt>Tokens</dt><dd>↑{{ tu.inputTokens }} / ↓{{ tu.outputTokens }}</dd></div>

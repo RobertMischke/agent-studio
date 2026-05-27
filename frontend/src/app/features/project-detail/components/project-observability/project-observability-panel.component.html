@@ -82,9 +82,9 @@
             </select>
           </label>
           <label class="obs__field">
-            <span>Job</span>
+            <span>Task</span>
             <select [(ngModel)]="filter.jobId" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-job">
-              <option value="">All jobs</option>
+              <option value="">All tasks</option>
               @for (j of jobIds(); track j) {
                 <option [value]="j">{{ j }}</option>
               }
@@ -198,7 +198,7 @@
         <section class="obs__matrix" aria-label="Participant matrix" data-testid="observability-matrix">
           <header class="obs__section-head">
             <h3>Participant × kind matrix</h3>
-            <span class="obs__section-meta">Refs = unique jobs each participant emitted to</span>
+            <span class="obs__section-meta">Refs = unique tasks each participant emitted to</span>
           </header>
           @if (matrixRows().length === 0) {
             <p class="obs__section-empty">No participants in the selected range.</p>
@@ -299,7 +299,7 @@
                     <th scope="col">Participant</th>
                     <th scope="col">Kind</th>
                     <th scope="col">Severity</th>
-                    <th scope="col">Job · Run</th>
+                    <th scope="col">Task · Run</th>
                     <th scope="col">Summary</th>
                   </tr>
                 </thead>
@@ -349,7 +349,7 @@
               <div><dt>Participant</dt><dd>{{ sel.participantId }} ({{ sel.role }})</dd></div>
               <div><dt>Kind</dt><dd>{{ sel.kind }}</dd></div>
               @if (sel.severity) { <div><dt>Severity</dt><dd>{{ sel.severity }}</dd></div> }
-              @if (sel.jobId) { <div><dt>Job</dt><dd><code>{{ sel.jobId }}</code></dd></div> }
+              @if (sel.jobId) { <div><dt>Task</dt><dd><code>{{ sel.jobId }}</code></dd></div> }
               @if (sel.runId) { <div><dt>Run</dt><dd><code>{{ sel.runId }}</code></dd></div> }
               @if (sel.cliSessionId) { <div><dt>CLI session</dt><dd><code>{{ sel.cliSessionId }}</code></dd></div> }
               @if (sel.replyToId) { <div><dt>Reply to</dt><dd><code>{{ sel.replyToId }}</code></dd></div> }
