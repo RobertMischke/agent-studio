@@ -6,7 +6,7 @@
 
 ![Board overview](docs/images/board-overview.png)
 
-> .NET 10 backend + Angular 21 PWA. Job state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, and scripts read and mutate through one boundary. Runs tasks sequentially through Claude Code, Codex, GitHub Copilot, or Gemini.
+> .NET 10 backend + Angular 21 PWA. Task state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, and scripts read and mutate through one boundary. Runs tasks sequentially through Claude Code, Codex, GitHub Copilot, or Gemini.
 
 ---
 
@@ -56,7 +56,7 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **Make the patterns visible — and explain the why next to the lever.** A major part of this product is *exposing* the patterns and best practices the platform has accumulated, instead of hiding them in code or a wiki nobody opens. Every controllable behavior — agent permissions, sandbox modes, auto-commit/push, review thresholds, drift rules, skill catalog — should show up in Project Settings and the agent configuration surfaces *with* an inline explanation: what it does, why we picked this default, what the risk is, what the alternative would cost. The user should never have to leave the screen to understand a setting. Standalone docs in `docs/` remain the source of truth; the UI embeds the relevant section in-line at the spot the decision is made. See [docs/design-principles.md §Inline meta](docs/design-principles.md#inline-meta-explain-decisions-next-to-the-lever).
 
-**A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which jobs and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/orchestrator-chat.md](docs/orchestrator-chat.md).
+**A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which tasks and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/orchestrator-chat.md](docs/orchestrator-chat.md).
 
 **Sequential within a project, never parallel.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
 
@@ -64,7 +64,7 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **Drift is a first-class project risk.** Long-running agentic work can drift between human intent, specs, tasks, jobs, ADRs, code, tests, design references, README, AGENTS, and marketing promises. The most important version is software drift: the actual source code, runtime behavior, tests, schemas, and module boundaries must stay aligned with the documented architecture. A project should be able to define a compact high-level architecture map with at most ten elements, then track drift per element.
 
-**Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's job is to use as much of it as productively as possible.
+**Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's task is to use as much of it as productively as possible.
 
 **Use existing coding agents, not a custom agent runtime.** agent-orchestrator deliberately sits above productized coding agents instead of rebuilding their agent loop against raw model APIs. Claude Code, Codex, Copilot, and Gemini already bundle planning, editing, tool use, approvals, authentication, model routing, and subscription economics. The app's job is queueing, lifecycle control, evidence capture, review handoff, and cross-CLI fallback. If a run gets awkward, the user can still drop into the native CLI or VS Code integration with the same subscription and provider-owned session artifacts where the provider exposes them.
 
@@ -126,7 +126,7 @@ A nine-phase update pipeline (stop, pull, install, build, verify, restart, retry
 
 ### Visual evidence
 
-Per-job screenshot strip in the protocol pane plus a workspace-wide visual evidence reel (`#/workspace/screenshots`) grouped by hour bucket with lightbox prev / next navigation. Files live under each job's `results/`. Routable URLs serve the files directly so screenshots can be linked from chat or external review.
+Per-task screenshot strip in the protocol pane plus a workspace-wide visual evidence reel (`#/workspace/screenshots`) grouped by hour bucket with lightbox prev / next navigation. Files live under each task's `results/`. Routable URLs serve the files directly so screenshots can be linked from chat or external review.
 
 ### Project chat (Slice D) and next-gen multi-actor chat surface
 
@@ -142,7 +142,7 @@ Out of scope on purpose: API-key billing, worktrees, sandboxes, branch-per-task,
 
 ![Review protocol in protocol view](docs/images/detail-quality-gate.png)
 
-When a CLI run completes successfully, the application captures the run log, moves the task to `4-review`, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the job's `results/` folder.
+When a CLI run completes successfully, the application captures the run log, moves the task to `4-review`, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the task's `results/` folder.
 
 Failed or stopped runs stay in `3-progress` so the user can inspect, restart, or continue them. The agent works on the selected task. The application owns pickup, continuation, stopping, state movement, protocol generation, and the one-active-task rule. That boundary is the point: the queue keeps moving without asking the model to decide what should run next.
 
@@ -172,7 +172,7 @@ Meta-level work is allowed to run as small, parallel CLI interactions when it is
 
 Recurring or manual meta-analyses are also product memory. Examples: "are we on track?", "what changed in the last few hours?", "which jobs are stale?", "does the queue match the roadmap?", "which docs drifted?", or "what should become follow-up work?" Their result should be a Markdown report for humans plus structured JSON when the app needs to aggregate, filter, or trend the findings. These reports belong in a project-level analysis area or in the relevant task evidence, depending on scope. They should reference raw evidence rather than copying entire logs, and any implementation follow-up becomes a normal queued task.
 
-The orchestrator should use these reports to improve the steering layer over time. When multiple jobs show the same failure pattern, ambiguous prompt shape, recurring blocked reason, missing test expectation, or repeated CLI handling issue, a meta-analysis should point to the evidence and propose a README, AGENTS, task-contract, skill, or process update. That proposal must be visible and reviewable. The product should not secretly rewrite the instructions that agents rely on.
+The orchestrator should use these reports to improve the steering layer over time. When multiple tasks show the same failure pattern, ambiguous prompt shape, recurring blocked reason, missing test expectation, or repeated CLI handling issue, a meta-analysis should point to the evidence and propose a README, AGENTS, task-contract, skill, or process update. That proposal must be visible and reviewable. The product should not secretly rewrite the instructions that agents rely on.
 
 Agent-facing steering documents are product surface, not hidden implementation detail. A project page should make the relevant README, AGENTS, task contract, skills lookup, ADR index, and project-specific notes inspectable, with a shorter human summary on top that explains what the agents are being told and flags where the guidance looks stale, conflicting, or incomplete.
 
@@ -201,7 +201,7 @@ The full concept lives in [docs/skills-architecture.md](docs/skills-architecture
 
 ## How it's wired
 
-All job operations flow through the API. Direct filesystem mutation is reserved for the API host process.
+All task operations flow through the API. Direct filesystem mutation is reserved for the API host process.
 
 The system is layered:
 
@@ -237,22 +237,22 @@ One task processor, many targets. The board watches several projects in parallel
 
 ## Task Access API
 
-The Task Access API is the canonical reference for every job operation. Agents, scripts, the frontend, the supervisor, and the meta-cycle all go through it. Direct filesystem reads or mutations are reserved for the API host process and for migrations or recovery work that deliberately exercise the on-disk contract.
+The Task Access API is the canonical reference for every task operation. Agents, scripts, the frontend, the supervisor, and the meta-cycle all go through it. Direct filesystem reads or mutations are reserved for the API host process and for migrations or recovery work that deliberately exercise the on-disk contract.
 
 Mutations require an `X-Client-Id` header so the layer can attribute the change to a registered client. Reads do not.
 
 Canonical endpoints:
 
-**Job lifecycle**
+**Task lifecycle**
 
-- `POST /api/jobs` - create a job. `CreateJobRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
-- `POST /api/jobs/{id}/move?watchPath=...` - move a job to another lane.
-- `PUT /api/jobs/{id}/state` - drive a job through a typed state transition.
-- `POST /api/jobs/reorder` - reorder jobs within a lane.
-- `DELETE /api/jobs/{id}?watchPath=...` - delete a job.
+- `POST /api/jobs` - create a task. `CreateJobRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
+- `POST /api/jobs/{id}/move?watchPath=...` - move a task to another lane.
+- `PUT /api/jobs/{id}/state` - drive a task through a typed state transition.
+- `POST /api/jobs/reorder` - reorder tasks within a lane.
+- `DELETE /api/jobs/{id}?watchPath=...` - delete a task.
 - `GET /api/jobs`, `GET /api/jobs/grouped`, `GET /api/jobs/{id}` - list and read.
 
-**Job runner and content**
+**Task runner and content**
 
 - `POST /api/jobs/{id}/start`, `POST /api/jobs/{id}/stop`, `POST /api/jobs/{id}/continue` - process lifecycle.
 - `PUT /api/jobs/{id}/title`, `PUT /api/jobs/{id}/model`, `PUT /api/jobs/{id}/cli-type` - typed field updates.
@@ -292,7 +292,7 @@ If you want to install and configure manually, the technical walkthrough lives i
 The four most-asked-for individual documents (the index covers the full set):
 
 - [docs/supported-clis.md](docs/supported-clis.md) — CLI integration contract
-- [docs/filesystem-contract.md](docs/filesystem-contract.md) — job folder contract
+- [docs/filesystem-contract.md](docs/filesystem-contract.md) — task folder contract
 - [docs/agent-task-contract.md](docs/agent-task-contract.md) — application and agent ownership boundary
 - [docs/architecture-decisions.md](docs/architecture-decisions.md) — ADR archive with the load-bearing decisions
 - [docs/orchestrator-chat.md](docs/orchestrator-chat.md) — persistent orchestrator chat, memory, scope, and control surface

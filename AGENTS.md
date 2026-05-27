@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-agent-orchestrator is a local AI work monitor: a .NET 10 backend plus an Angular 21 frontend that watches external job folders and displays agent progress as a Kanban board.
+agent-orchestrator is a local AI work monitor: a .NET 10 backend plus an Angular 21 frontend that watches external task folders and displays agent progress as a Kanban board.
 
 For product context, read [README.md](README.md) and [ROADMAP.md](ROADMAP.md). The README explains what the tool is and how it is wired. The roadmap explains the product thesis, near-term themes, hard boundaries, and decision principles.
 
@@ -30,8 +30,8 @@ The dev checkout marks itself visually (orange "DEV" stripe, orange PWA icon, `(
 
 Keep the product boundary clear:
 - This repository contains the task processor app source code, prompts, and docs.
-- Job folders live in watched target projects under `.orchestrator/jobs/`.
-- The app observes external jobs; it should not store runtime job artifacts in this repository.
+- Task folders live in watched target projects under `.orchestrator/jobs/`.
+- The app observes external tasks; it should not store runtime task artifacts in this repository.
 
 ### Dev backend lifecycle: Playwright-only
 
@@ -69,7 +69,7 @@ Reusable specialist workflows are **portable skills**, not CLI-local silos. The 
 The rule of thumb:
 
 - Core orchestration rules are always active and stay in code, runtime prompts, AGENTS.md, and the target task contract.
-- Skills are optional, situational workflow guides. They explain how to do a specialist job; they must not own task lifecycle, state movement, review transitions, or queue policy.
+- Skills are optional, situational workflow guides. They explain how to do a specialist task; they must not own task lifecycle, state movement, review transitions, or queue policy.
 - agent-orchestrator is the central home for standard skills and project-specific skills.
 - Watched child projects should expose a small README or agent-instruction lookup section that tells direct CLI agents where to find the relevant skills.
 
@@ -81,11 +81,11 @@ The active skill set lives under [`.agents/skills/`](.agents/skills/README.md). 
 
 | Skill | Read when |
 |-------|-----------|
-| [**Job API**](.agents/skills/job-api/SKILL.md) | The task includes creating, moving, reissuing, archiving, or bulk-triaging jobs via HTTP. Required reading before any scripted board mutation; covers the `watchPath`-quirk, `X-Client-Id` header, lane vocabulary, and ready-to-use Node templates for create / move-state / move-to-top / triage. Examples of "this applies": "lege einen Bug-Job an", "schick die Open-Items zurück nach Ready", "räum die Failed-Pickup-Lane auf". |
+| [**Task API**](.agents/skills/job-api/SKILL.md) | The task includes creating, moving, reissuing, archiving, or bulk-triaging tasks via HTTP. Required reading before any scripted board mutation; covers the `watchPath`-quirk, `X-Client-Id` header, lane vocabulary, and ready-to-use Node templates for create / move-state / move-to-top / triage. Examples of "this applies": "lege einen Bug-Task an", "schick die Open-Items zurück nach Ready", "räum die Failed-Pickup-Lane auf". |
 | [Regenerate README](.agents/skills/regenerate-readme/SKILL.md) | A load-bearing change requires a README rewrite. |
 | [Runtime log analysis](.agents/skills/runtime-log-analysis/SKILL.md) | Inspecting backend / runner / CLI logs after an incident. |
 
-The library is for **every** CLI driving this repo - Claude Code, Codex, Copilot, Gemini. If you write a one-off shell snippet to move a job, you missed the Job API skill; copy the Node template from [`scripts/`](.agents/skills/job-api/scripts) instead.
+The library is for **every** CLI driving this repo - Claude Code, Codex, Copilot, Gemini. If you write a one-off shell snippet to move a task, you missed the Task API skill; copy the Node template from [`scripts/`](.agents/skills/job-api/scripts) instead.
 
 When changing skill behavior, keep [docs/architecture-decisions.md](docs/architecture-decisions.md) in sync if the change affects this boundary.
 
@@ -98,7 +98,7 @@ When to update stable:
 - **After a coherent batch ships and is verified in dev.** A "batch" is a feature plus its tests plus its documentation, all green. Single-commit speculative pushes to stable add risk for no gain.
 - **Before a long unattended run.** If you are about to leave the orchestrator working on a board for hours, update stable first so the running version matches the documented behaviour. The Layer 3 system review monitor watches stable; running it against an out-of-date stable wastes the run.
 - **After a load-bearing change to runner / supervisor / outcome-policy / agent contract.** These are observation surfaces; if dev and stable diverge on them, the activity log and supervisor logs disagree on what the system is actually doing.
-- **Never mid-run.** `update-stable.sh` stops stable. If a job is in `3-progress` on stable, finish or stop it explicitly first.
+- **Never mid-run.** `update-stable.sh` stops stable. If a task is in `3-progress` on stable, finish or stop it explicitly first.
 - **Dev stays offline outside Playwright.** Stable is the supervisor seat; dev is the regression-test target. Only Playwright specs running from stable may bring dev's backend up, via the `dev-backend` fixture. Don't add supervisor or auto-mode code paths that start dev as a side effect.
 - **Any external resume must verify mode after the backend restart and retry on mismatch.** `update-stable.sh` stops and restarts stable; a resume `PUT /api/runner/<project>/mode` that fires before the new backend is ready, or that is missing the `X-Client-Id` mutation header, silently leaves the project paused. Shell out to `scripts/supervisor/resume-runner.sh` (or replicate its four steps: wait for `/healthz`, auto-register a `service` identity if needed, PUT with `X-Client-Id`, read back `/api/runner/status` and retry the PUT until the project's mode is `auto-continuous`). The in-process equivalent lives in `MetaCycleHostedService.ResumeWithVerificationAsync` and emits a high-severity `cycle-resume-failed` advisory + `[supervisor]` chat-note on persistent failure rather than leaving the operator silently stuck.
 
@@ -165,7 +165,7 @@ Existing tooling for roadmap work:
 | Backend tests | `backend.Tests/` | xUnit. |
 | Frontend | `frontend/` | Angular 21 standalone components, signals state, PWA, runs on `http://localhost:4010`. |
 | E2E tests | `frontend/e2e/` | Playwright. See [frontend/e2e/README.md](frontend/e2e/README.md). |
-| Filesystem contract | `docs/filesystem-contract.md` | Job folder layout. |
+| Filesystem contract | `docs/filesystem-contract.md` | Task folder layout. |
 | Design principles | `docs/design-principles.md` | UX contract for the abstraction layer over agents + software: top-level summary, always-available drill-down, run-as-unit-of-conversation. |
 | Protocol & image style | `docs/protocol-style.md` | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | Agent task contract | `docs/agent-task-contract.md` | App-owned lifecycle boundary copied into watched targets. |
@@ -193,14 +193,14 @@ When you change a CLI driver, prompt template, or the runner's post-run path, ke
 The runner described above is itself the second loop in a four-layer model. When you change supervisor code or wire a new check, keep the model and the load-bearing rules in mind:
 
 1. **Layer 0** - the CLI agent's own loop (Claude / Codex / Copilot / Gemini). Owned by the vendor. The orchestrator can only start, observe, kill.
-2. **Layer 1** - the orchestrator's job-pickup loop per project. The deterministic post-run policy (ADR-0002) decides outcomes here.
+2. **Layer 1** - the orchestrator's task-pickup loop per project. The deterministic post-run policy (ADR-0002) decides outcomes here.
 3. **Layer 2** - the per-project supervisor (`backend/Services/Supervisor/*`). Watches Layer 1 in real time. Default behaviour is cooperative signalling: writes typed `SupervisorAdvisory` records to `logs/meta/<project>/observations.jsonl`. Four pre-emptive primitives (`cancelRun`, `pausePickup`, `forceFail`, `resume`) exist for the rare emergency and route through the existing runner methods so the runner stays the single state-machine authority. Auto-intervention is a separate opt-in policy (`Supervisor:AutoInterventionEnabled`, default false). The full design rationale is in [`docs/research/orchestrator-meta-loop-analysis-2026-05-04.md`](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md) and [ADR-0017](docs/architecture-decisions.md).
-4. **Layer 2.5** - the orchestrator meta-cycle. It runs at quiet batch boundaries, not during a CLI run: pause after N jobs reach review, inspect a bounded evidence envelope, write a structured `MetaCycleReport`, then resume, update stable, queue a fix task, or escalate. It reuses Layer 2 pause/resume primitives, never edits source code, and never moves job lanes directly. The spec is [`docs/mockups/orchestrator-meta-cycle/`](docs/mockups/orchestrator-meta-cycle/) and the decision is [ADR-0022](docs/architecture-decisions.md).
+4. **Layer 2.5** - the orchestrator meta-cycle. It runs at quiet batch boundaries, not during a CLI run: pause after N tasks reach review, inspect a bounded evidence envelope, write a structured `MetaCycleReport`, then resume, update stable, queue a fix task, or escalate. It reuses Layer 2 pause/resume primitives, never edits source code, and never moves task lanes directly. The spec is [`docs/mockups/orchestrator-meta-cycle/`](docs/mockups/orchestrator-meta-cycle/) and the decision is [ADR-0022](docs/architecture-decisions.md).
 5. **Layer 3** - the external system review monitor (`scripts/supervisor/run-system-review.sh`). Stand-alone Claude session driven from outside the app, reads stable's state on a 4-8h cadence, writes a structured Markdown review under the workspace's `logs/system-review/`. Survives any failure mode of the app itself, including the Layer 2 supervisor.
 
 Hard rules:
 - The supervisor is **advice-first, force-rare**. Routine outcomes still flow through `RunOutcomePolicy`; the supervisor adds a kill-switch and a soft-reasoning second opinion, not a parallel orchestrator.
-- **Single-writer state machine**: emergency primitives never poke job state directly; they call `TaskRunnerService.StopJob` / `SetMode` so there is exactly one cancel implementation.
+- **Single-writer state machine**: emergency primitives never poke task state directly; they call `TaskRunnerService.StopJob` / `SetMode` so there is exactly one cancel implementation.
 - **Feedback-loop guard**: every event carries a `Source`. Auto-intervention and observation parsing never act on `Source: AutoIntervention` or `Source: User` events; they would feed back into the loop they came from.
 - **Auto-intervention stays gated**: enabling it is a per-instance decision; the rate limit (`Supervisor:AutoInterventionRateLimit`, default 3/h/project) and severity threshold (`Supervisor:AutoInterventionSeverityThreshold`, default High) protect against runaway invocations.
 - **Analysis reports are evidence**: manual, scheduled, and meta-cycle analyses write Markdown plus structured JSON when parseable. They may queue follow-up tasks, but they do not silently change source or bypass review lanes.
@@ -228,8 +228,8 @@ First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagn
 ### Service & data layout (backend)
 
 - `Services/Cli/`: one driver per CLI: `ClaudeCliService`, `CodexCliService`, `CopilotCliService`, `GeminiCliService`, all extending `CliExecutionServiceBase` (except Copilot, which predates the base class). `CliRouter` picks the right one by `cliType`. The contract every driver must satisfy is documented in [docs/supported-clis.md](docs/supported-clis.md). **When you touch any of these files, also read the matching skill in [docs/cli-skills/](docs/cli-skills/) - [cli-overview](docs/cli-skills/cli-overview.md) plus the per-CLI skill ([cli-claude](docs/cli-skills/cli-claude.md), [cli-codex](docs/cli-skills/cli-codex.md), [cli-copilot](docs/cli-skills/cli-copilot.md), [cli-gemini](docs/cli-skills/cli-gemini.md)). The skills hold the operational knowledge that doesn't fit in code comments - frame catalogues, capture flows, known incidents, common-task playbooks. This is a hard rule for every CLI driving this repo (Claude Code, Codex, Copilot, Gemini): if the task touches a CLI driver, the matching skill is required reading before any code change. The pickup is enforced by two tests - a free scaffolding lock in [`backend.Tests/CliSkillFilesTests.cs`](backend.Tests/CliSkillFilesTests.cs) and a `@billable` live test in [`frontend/e2e/cli-skills-pickup.spec.ts`](frontend/e2e/cli-skills-pickup.spec.ts) that drives each CLI through the task processor and asserts it can echo back the sentinel string from the matching skill.**
-- `Services/TaskAccess/`: the single owner of on-disk job state (ADR-0024). `ITaskAccess` is the read / list / mutate / transition / subscribe surface; `ITaskAccessHost` owns boot / reload / shutdown; `TaskAccessRecords` carries the typed requests, results, optimistic-concurrency token, and change notifications. **Phase 1 ships the contract only**; the in-memory store, mutations, and consumer migration land in phases 2 through 5 of the queued task `task-access-api-layer-extraction`. Once phase 4 ships, no service, hosted service, endpoint, or test outside this folder may read or write job folders directly; every consumer goes through `ITaskAccess`.
-- `Services/Jobs/JobTransitionService.cs`: the only path that combines a folder move with its side effects (auto-commit stamping, runner-active-state reconciliation). State mutations on the active job clear `ProjectRunner._activeJobId` atomically: a successful move out of `3-progress` raises `JobTransitionService.OnJobMoved`, the `Program.cs` subscriber calls `TaskRunnerService.ClearActiveJobForProject`, and the runner releases the in-memory latch before any further tick observes it. The defensive sibling on the watcher path (`JobWatcherService.OnJobChanged` + `TaskRunnerService.ReconcileAllRunners`) and on the periodic tick (`ProjectRunner.ReconcileActiveJobAgainstDisk` at the head of `TickAsync`) covers external folder moves that never went through the API. Without this, an external move leaves the runner pinned at a slug whose folder has left the lane, every pickup tick short-circuits on `active != null`, and the project wedges until a backend restart.
+- `Services/TaskAccess/`: the single owner of on-disk task state (ADR-0024). `ITaskAccess` is the read / list / mutate / transition / subscribe surface; `ITaskAccessHost` owns boot / reload / shutdown; `TaskAccessRecords` carries the typed requests, results, optimistic-concurrency token, and change notifications. **Phase 1 ships the contract only**; the in-memory store, mutations, and consumer migration land in phases 2 through 5 of the queued task `task-access-api-layer-extraction`. Once phase 4 ships, no service, hosted service, endpoint, or test outside this folder may read or write task folders directly; every consumer goes through `ITaskAccess`.
+- `Services/Jobs/JobTransitionService.cs`: the only path that combines a folder move with its side effects (auto-commit stamping, runner-active-state reconciliation). State mutations on the active task clear `ProjectRunner._activeJobId` atomically: a successful move out of `3-progress` raises `JobTransitionService.OnJobMoved`, the `Program.cs` subscriber calls `TaskRunnerService.ClearActiveJobForProject`, and the runner releases the in-memory latch before any further tick observes it. The defensive sibling on the watcher path (`JobWatcherService.OnJobChanged` + `TaskRunnerService.ReconcileAllRunners`) and on the periodic tick (`ProjectRunner.ReconcileActiveJobAgainstDisk` at the head of `TickAsync`) covers external folder moves that never went through the API. Without this, an external move leaves the runner pinned at a slug whose folder has left the lane, every pickup tick short-circuits on `active != null`, and the project wedges until a backend restart.
 - **Strict-iteration progress-first pickup** (ADR-0028). The per-project pickup loop walks **every** `3-progress` folder oldest-first by mtime before considering `2-ready`. A folder qualifies for resume regardless of session state or whether `cli-output.log` exists - the "no log" case means the previous attempt died before the CLI streamed anything, the most-restartable case. Folders whose autopickup runs have produced no CLI output for `PickupFailureThreshold` (default 3) consecutive attempts are dead-lettered into `3a-failed-pickup/<slug>-pickup-failed-<utc-date>/` via `JobStateMachine.MoveFolderToFailedPickup`; one row per dead-letter is appended to `<workspace>/logs/pickup-failures.jsonl` (schema: [docs/schemas/pickup-failure.schema.json](docs/schemas/pickup-failure.schema.json)). Iteration is exhaustive within a tick (every over-budget folder is dead-lettered before the picker stops at the first remaining folder), and only an empty `3-progress` lane lets the runner consider `2-ready`. See `ProjectRunner.TryPickProgressJobOrDeadLetter` and `PickupFailureLog`.
 - `Services/Cli/SessionRegistry.cs`: discovers sessions on disk and builds the `/api/cli/usage` report.
 - `Services/Quota/*QuotaProbe.cs`: per-CLI quota probes. `QuotaService` aggregates and serves `/api/cli/quota` (with background refresh).
@@ -241,17 +241,17 @@ First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagn
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/jobs` | List all jobs (flat). |
-| GET | `/api/jobs/grouped` | Jobs grouped by state. |
+| GET | `/api/jobs` | List all tasks (flat). |
+| GET | `/api/jobs/grouped` | Tasks grouped by state. |
 | GET | `/api/jobs/{jobId}?watchPath=...` | One `JobDetail` (info + prompt + status + log). |
-| POST | `/api/jobs` | Create job (`CreateJobRequest`). |
-| POST | `/api/jobs/batch-move` | Move many jobs in one call (per-item atomic; `BatchMoveRequest`). |
+| POST | `/api/jobs` | Create task (`CreateJobRequest`). |
+| POST | `/api/jobs/batch-move` | Move many tasks in one call (per-item atomic; `BatchMoveRequest`). |
 | POST | `/api/jobs/{jobId}/restore-from-failed-pickup?watchPath=...` | Lift a folder out of `3a-failed-pickup` back into `2-ready`, dropping the `-pickup-failed-<utc>` suffix; optional body `{"keepDeadLetterSlug": true}` retains it. |
 | POST | `/api/jobs/{jobId}/start?watchPath=...` | Start CLI execution. |
 | POST | `/api/jobs/{jobId}/stop?watchPath=...` | Cancel running execution. |
 | POST | `/api/jobs/{jobId}/continue?watchPath=...` | Resume with new prompt (same session). |
 | GET | `/api/jobs/{jobId}/output?watchPath=...` | CLI stdout/stderr buffer. |
-| GET | `/api/jobs/{jobId}/runs?watchPath=...` | Per-job run timeline: ordered CLI invocations between user inputs + aggregates (RunCount, FirstStartedAt, LastActivityAt, HasActiveRun). Drives the protocol-pane run cards. |
+| GET | `/api/jobs/{jobId}/runs?watchPath=...` | Per-task run timeline: ordered CLI invocations between user inputs + aggregates (RunCount, FirstStartedAt, LastActivityAt, HasActiveRun). Drives the protocol-pane run cards. |
 | GET | `/api/jobs/{jobId}/runs/{index}/commits?watchPath=...` | Git commits whose author date falls in run #index's wall-clock window. Drives the per-run software-side change set. |
 | GET | `/api/cli/usage` | Sessions + versions for all CLIs. |
 | GET | `/api/cli/quota` | Per-CLI quota windows (used%, reset times). |
@@ -290,7 +290,7 @@ When the user reports a regression ("X is suddenly slow", "Y broke after Z"), th
 
 Worked example: the auto-loop snapshot folded onto every JobInfo in `WithRuntime` made `/api/jobs/grouped` a 15-second call (frontend polls every 5 s, so the UI froze permanently). The diagnostic showed `loopMs ≈ 7800ms` per call dominating; the cause was `GetStuckLoopStateForJob` resolving the project via `JobScannerService.FindJob`, which performs a full disk rescan on every invocation. The regression test [`JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond`](backend.Tests/JobsEndpointPerfTests.cs) builds a 200-job board, runs the overlay, asserts under 1 s. It failed at 19 s on the broken code and passed at well under 50 ms after the fix (look up by `ProjectName` against the in-memory `_runners` dictionary instead of re-scanning disk).
 
-Endpoints that are polled by the UI carry an extra obligation: the perf test must reflect a realistic workload (≥ 150-200 jobs for the kanban endpoints) so a future O(N²) regression cannot hide behind a small fixture. New per-job overlay logic that calls back into a scanner method is a smell; review it on the way in.
+Endpoints that are polled by the UI carry an extra obligation: the perf test must reflect a realistic workload (≥ 150-200 tasks for the kanban endpoints) so a future O(N²) regression cannot hide behind a small fixture. New per-task overlay logic that calls back into a scanner method is a smell; review it on the way in.
 
 #### When the symptom is in the UI, measure in the UI
 
@@ -300,7 +300,7 @@ Three Playwright primitives cover most cases, all CLI-friendly (no UI required),
 
 - **`apiRoundtrip(page, urlGlob, trigger)`** - times an outbound HTTP call from inside the running app via `page.waitForResponse`. Matches what the app's polling actually pays (HttpClient overhead + interceptors + browser queue), not what `curl` shows. Use for "polled endpoint stays under N ms from the browser's seat".
 - **`startLongTaskRecorder(page)`** - installs a `PerformanceObserver` for `longtask` entries (browser definition: any main-thread block > 50 ms). Returns a callback that reads the running total. Use for "panel idle for 5 s does not block the main thread for more than X ms cumulatively". This is the metric that tracks scrolling smoothness.
-- **`clickToVisible(trigger, target)`** - wall time between a click and the target locator becoming visible. Use for action latency: opening the detail panel, creating a job, expanding a card.
+- **`clickToVisible(trigger, target)`** - wall time between a click and the target locator becoming visible. Use for action latency: opening the detail panel, creating a task, expanding a card.
 
 Other techniques in the toolbox when the basic three are not enough: `page.context().newCDPSession(page)` + `Performance.getMetrics` for ScriptDuration / LayoutDuration / JSHeapUsedSize; `Emulation.setCPUThrottlingRate` for worst-case CPU reproduction (do not enable in the default suite); `context.tracing.start({ snapshots, screenshots })` for the trace-viewer timeline as evidence on a failure.
 
@@ -338,9 +338,9 @@ The full E2E setup, conventions, and authoring rules live in [frontend/e2e/READM
 - If a task genuinely requires Windows-specific tooling (`tasklist`, `taskkill`, `netstat`), call those binaries directly from sh. Do not wrap them in `powershell -c`.
 - Avoid shell-specific file-creation syntax (PowerShell here-strings, `Out-File`, `Set-Content`); use `cat <<'EOF'`, `tee`, or the `Write` tool.
 
-## Job Folder Contract
+## Task Folder Contract
 
-Each job folder contains:
+Each task folder contains:
 
 - `job.json`: metadata (id, title, state, order, agent, cliType, model, sessionName).
 - `prompt.md`: task description.
@@ -353,27 +353,27 @@ States (ADR-0025: three-stage review pipeline):
 1-preparation -> 2-ready -> 3-progress -> 4-auto-review -> 5-human-review -> 6-completed -> 7-archive
 ```
 
-`4-auto-review` is the orchestrator's lane (machine icon in the kanban): the `ReviewDecisionOrchestrator` decides reissue / accept-as-done / escalate. `5-human-review` is the lane that waits for the user (eye icon). The user always gets the final say on completion - the orchestrator never moves a job directly from `4-auto-review` to `6-completed`.
+`4-auto-review` is the orchestrator's lane (machine icon in the kanban): the `ReviewDecisionOrchestrator` decides reissue / accept-as-done / escalate. `5-human-review` is the lane that waits for the user (eye icon). The user always gets the final say on completion - the orchestrator never moves a task directly from `4-auto-review` to `6-completed`.
 
-Only jobs in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New jobs default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
+Only tasks in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New tasks default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
 
 Successful CLI runs move from `3-progress` to `4-auto-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation. The pre-ADR-0025 single `4-review` lane is migrated automatically on backend boot via `JobStateMachine.EnsureStateFoldersAndMigrate`.
 
-### Job organization rule: API first
+### Task organization rule: API first
 
-Agents must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders in `agent-taskboard-workspace/projects/<projectKey>/`. This applies to **every agent surface**: the orchestrator-managed CLI runs, direct-from-VS-Code Codex / Claude Code / Copilot / Gemini sessions, and any ad-hoc shell session a human or LLM drives.
+Agents must organize tasks through the application API, not by directly creating, moving, deleting, or reordering folders in `agent-taskboard-workspace/projects/<projectKey>/`. This applies to **every agent surface**: the orchestrator-managed CLI runs, direct-from-VS-Code Codex / Claude Code / Copilot / Gemini sessions, and any ad-hoc shell session a human or LLM drives.
 
 Use:
 
 - `GET /api/watch-paths` to find the effective `watchPath`.
-- `POST /api/jobs` with `CreateJobRequest` to create jobs.
-- `POST /api/jobs/{jobId}/move?watchPath=...` to move jobs.
-- `POST /api/jobs/batch-move` to move many jobs in one call (per-item atomic; failed items report `conflict` / `not-found` / `rejected` without rolling back items that already moved). This is the supported path for bulk restore / triage; do not fall back to shell loops over the single-item endpoint.
+- `POST /api/jobs` with `CreateJobRequest` to create tasks.
+- `POST /api/jobs/{jobId}/move?watchPath=...` to move tasks.
+- `POST /api/jobs/batch-move` to move many tasks in one call (per-item atomic; failed items report `conflict` / `not-found` / `rejected` without rolling back items that already moved). This is the supported path for bulk restore / triage; do not fall back to shell loops over the single-item endpoint.
 - `POST /api/jobs/{jobId}/restore-from-failed-pickup?watchPath=...` to lift a folder out of `3a-failed-pickup` back into `2-ready` and rename it to drop the `-pickup-failed-<utc>` suffix in one server-side step. Optional body `{"keepDeadLetterSlug": true}` retains the suffix. Idempotent (already-restored slugs return a 200 `no-op`); appends a `pickup-restored` row to `<workspace>/logs/pickup-failures.jsonl` for forensics. Use this instead of a manual `mv` + rename.
-- `POST /api/jobs/reorder` to reorder jobs.
-- `POST /api/jobs/{jobId}/move-to-top?watchPath=...` to promote a queued job.
-- `POST /api/jobs/{jobId}/change-project?watchPath=...` to relocate a job between watched workspaces.
-- `DELETE /api/jobs/{jobId}?watchPath=...` to delete jobs.
+- `POST /api/jobs/reorder` to reorder tasks.
+- `POST /api/jobs/{jobId}/move-to-top?watchPath=...` to promote a queued task.
+- `POST /api/jobs/{jobId}/change-project?watchPath=...` to relocate a task between watched workspaces.
+- `DELETE /api/jobs/{jobId}?watchPath=...` to delete tasks.
 - `PUT /api/jobs/{jobId}/state?watchPath=...` plus the other `PUT /api/jobs/{jobId}/*` field-edit endpoints for content changes.
 
 **Forbidden, even as a one-shot convenience:** `mv`, `rm`, `cp`, `mkdir`, `Move-Item`, `Remove-Item`, `Rename-Item`, or any other shell / filesystem command against a slug folder under `agent-taskboard-workspace/projects/<projectKey>/<lane>/`. Editing `state` inside a `job.json` by hand to "fix" a lane mismatch is the same bypass and is also forbidden. Filesystem state and the in-memory index diverge silently when these run, which is exactly what produced the 2026-05-09 zombie folder + 409 conflict. The architecture test [`backend.Tests/Architecture/JobFolderAccessIsolationTest.cs`](backend.Tests/Architecture/JobFolderAccessIsolationTest.cs) catches code-side bypasses; the LLM behavioural side is this rule.

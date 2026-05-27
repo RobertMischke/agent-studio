@@ -8,9 +8,9 @@ For **what the product is and what it can do today**, see [README.md](README.md)
 
 ### Task Access Layer
 
-Today every backend service that touches jobs reads or writes the filesystem directly. Performance regressions surface when the kanban poll rescans disk per request; concurrent writers race; and any future multi-instance or multi-user story is gated on having one place that owns task state.
+Today every backend service that touches tasks reads or writes the filesystem directly. Performance regressions surface when the kanban poll rescans disk per request; concurrent writers race; and any future multi-instance or multi-user story is gated on having one place that owns task state.
 
-A separate **Task Access Layer** (`backend/Services/TaskAccess/`) becomes the single point of access for every job operation. It boots once, loads every project's lane folders into a typed in-memory index, watches the filesystem for external changes, and exposes a typed API for find / list / mutate / transition / subscribe. No service, hosted service, or test is allowed to touch job folders directly; everything goes through `ITaskAccess`.
+A separate **Task Access Layer** (`backend/Services/TaskAccess/`) becomes the single point of access for every task operation. It boots once, loads every project's lane folders into a typed in-memory index, watches the filesystem for external changes, and exposes a typed API for find / list / mutate / transition / subscribe. No service, hosted service, or test is allowed to touch task folders directly; everything goes through `ITaskAccess`.
 
 What the layer enables:
 
