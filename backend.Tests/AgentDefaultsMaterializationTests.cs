@@ -1,0 +1,239 @@
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services;
+using OrchestratorApi.Services.Clients;
+using OrchestratorApi.Services.Jobs;
+using Xunit;
+
+namespace OrchestratorApi.Tests;
+
+/// <summary>
+/// Acceptance tests for the agent-defaults materialization feature:
+///   1. CreateJob materializes owner-client defaults (cliType, model, agent)
+///   2. agent:"human" is preserved (deliberate manual-task marker)
+///   3. BackfillAgentDefaults migrates legacy triple idempotently
+///   4. Auto-pickup skips agent:"human" jobs
+/// </summary>
+public class AgentDefaultsMaterializationTests : IDisposable
+{
+    private readonly string _workspace;
+    private readonly string _watchPath;
+    private const string Project = "test-project";
+
+    public AgentDefaultsMaterializationTests()
+    {
+        _workspace = Path.Combine(Path.GetTempPath(), "rdo-agent-defaults-" + Guid.NewGuid().ToString("N"));
+        _watchPath = Path.Combine(_workspace, "projects", Project);
+        Directory.CreateDirectory(_watchPath);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_workspace, recursive: true); } catch { /* best-effort */ }
+    }
+
+    [Fact]
+    public void CreateJob_MaterializesOwnerDefaults_WhenCliTypeAndModelOmitted()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "task-1",
+            Title = "Test",
+            WatchPath = _watchPath,
+            TargetState = JobStates.Ready
+        });
+
+        var info = scanner.FindJob("task-1", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("claude", info!.Agent);
+        Assert.Equal("claude", info.CliType);
+        Assert.Equal("claude-opus-4-7", info.Model);
+    }
+
+    [Fact]
+    public void CreateJob_PreservesExplicitCliTypeAndModel()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "task-2",
+            Title = "Test",
+            WatchPath = _watchPath,
+            CliType = "codex",
+            Model = "o3",
+            TargetState = JobStates.Ready
+        });
+
+        var info = scanner.FindJob("task-2", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("codex", info!.Agent);
+        Assert.Equal("codex", info.CliType);
+        Assert.Equal("o3", info.Model);
+    }
+
+    [Fact]
+    public void CreateJob_PreservesAgentHuman_AsDeliberateManualTask()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "manual-task",
+            Title = "Manual",
+            WatchPath = _watchPath,
+            Agent = "human",
+            TargetState = JobStates.Ready
+        });
+
+        var info = scanner.FindJob("manual-task", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("human", info!.Agent);
+    }
+
+    [Fact]
+    public void CreateJob_FallsBackToRequestDefaults_WhenOwnerHasNoDefaults()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: null, defaultModel: null);
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "no-defaults",
+            Title = "No defaults",
+            WatchPath = _watchPath,
+            TargetState = JobStates.Ready
+        });
+
+        var info = scanner.FindJob("no-defaults", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("claude", info!.Agent);
+        Assert.Null(info.CliType);
+        Assert.Null(info.Model);
+    }
+
+    [Fact]
+    public void BackfillAgentDefaults_MigratesLegacyTriple()
+    {
+        var (machine, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
+        machine.EnsureStateFoldersAndMigrate();
+
+        var jobDir = Path.Combine(_watchPath, JobStates.Ready, "legacy-job");
+        Directory.CreateDirectory(jobDir);
+        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+            {
+              "id": "legacy-job",
+              "title": "Legacy",
+              "state": "2-ready",
+              "order": 10,
+              "agent": "human",
+              "ownerClientId": "local-default"
+            }
+            """);
+
+        var count = mutations.BackfillAgentDefaults();
+
+        Assert.Equal(1, count);
+        var info = scanner.FindJob("legacy-job", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("claude", info!.Agent);
+        Assert.Equal("claude", info.CliType);
+        Assert.Equal("claude-opus-4-7", info.Model);
+    }
+
+    [Fact]
+    public void BackfillAgentDefaults_IsIdempotent()
+    {
+        var (machine, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
+        machine.EnsureStateFoldersAndMigrate();
+
+        var jobDir = Path.Combine(_watchPath, JobStates.Ready, "idem-job");
+        Directory.CreateDirectory(jobDir);
+        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+            {
+              "id": "idem-job",
+              "title": "Idempotent",
+              "state": "2-ready",
+              "order": 10,
+              "agent": "human",
+              "ownerClientId": "local-default"
+            }
+            """);
+
+        var first = mutations.BackfillAgentDefaults();
+        Assert.Equal(1, first);
+
+        var second = mutations.BackfillAgentDefaults();
+        Assert.Equal(0, second);
+    }
+
+    [Fact]
+    public void BackfillAgentDefaults_SkipsJobsWithExplicitCliType()
+    {
+        var (machine, _, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
+        machine.EnsureStateFoldersAndMigrate();
+
+        var jobDir = Path.Combine(_watchPath, JobStates.Ready, "explicit-job");
+        Directory.CreateDirectory(jobDir);
+        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+            {
+              "id": "explicit-job",
+              "title": "Explicit",
+              "state": "2-ready",
+              "order": 10,
+              "agent": "human",
+              "cliType": "codex",
+              "ownerClientId": "local-default"
+            }
+            """);
+
+        var count = mutations.BackfillAgentDefaults();
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public void AgentTypes_IsAutoPickupEligible_ReturnsFalseForHuman()
+    {
+        Assert.False(AgentTypes.IsAutoPickupEligible("human"));
+        Assert.False(AgentTypes.IsAutoPickupEligible("Human"));
+        Assert.False(AgentTypes.IsAutoPickupEligible("HUMAN"));
+        Assert.True(AgentTypes.IsAutoPickupEligible("claude"));
+        Assert.True(AgentTypes.IsAutoPickupEligible("codex"));
+        Assert.True(AgentTypes.IsAutoPickupEligible("copilot"));
+        Assert.True(AgentTypes.IsAutoPickupEligible("gemini"));
+        Assert.True(AgentTypes.IsAutoPickupEligible(null));
+        Assert.True(AgentTypes.IsAutoPickupEligible(""));
+    }
+
+    private (JobStateMachine machine, JobScannerService scanner, JobMutationService mutations) Build(
+        string? defaultCliType, string? defaultModel)
+    {
+        var config = BuildConfig();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var clients = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance);
+        clients.EnsureLoaded();
+
+        if (defaultCliType != null || defaultModel != null)
+            clients.SetDefaults(DefaultClientIdentity.Id, defaultCliType, defaultModel);
+
+        var mutations = new JobMutationService(scanner, clients, NullLogger<JobMutationService>.Instance);
+        machine.EnsureStateFoldersAndMigrate();
+        return (machine, scanner, mutations);
+    }
+
+    private IConfiguration BuildConfig() =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+                ["WatchPaths:0:Name"] = Project,
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _watchPath,
+            })
+            .Build();
+}
