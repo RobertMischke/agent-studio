@@ -275,8 +275,16 @@ public class IntakeRunnerTests : IDisposable
 
     private IntakeRunner BuildRunner()
     {
-        var scanner = BuildScanner();
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "test",
+                ["WatchPaths:0:Path"] = _watchPath
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, cfg);
+        var scanner = new JobScannerService(cfg, NullLogger<JobScannerService>.Instance, summary);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(cfg, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         return new IntakeRunner(scanner, mutations, chatLog, NullLogger<IntakeRunner>.Instance);
     }
