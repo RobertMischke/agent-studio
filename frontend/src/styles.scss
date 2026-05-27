@@ -385,19 +385,6 @@ html[data-studio-theme='light'] {
   .statusbar__item--btn:hover { background: rgba(0,0,0,0.08); color: #1a1a1a; }
   .statusbar__sep { background: rgba(0,0,0,0.18); }
   .statusbar__caret { color: #4a4a4a; }
-  .statusbar__menu-title { color: #1a1a1a; }
-  // Dropdown menus popping up from the status bar picker buttons.
-  .statusbar__menu {
-    background: #ffffff;
-    border-color: #e1e1e1;
-    box-shadow: 0 -8px 24px rgba(0,0,0,0.12);
-  }
-  .statusbar__menu-item { color: #1a1a1a; }
-  .statusbar__menu-item:hover { background: rgba(0,0,0,0.05); }
-  .statusbar__menu-item--active { background: rgba(99,102,241,0.14); color: #1a1a1a; }
-  .statusbar__menu-item--meta { color: #4a4a4a; border-top-color: #e1e1e1; }
-  .statusbar__menu-empty { color: #4a4a4a; }
-
   // ---- Side sheets / dialogs ----
   // The host selectors don't reach the inner .sheet/.panel surfaces.
   // The descendant selectors below flip the dark background actually

@@ -87,7 +87,7 @@ test.describe('Status bar and header size', () => {
     await expect(cliPicker).toContainText('Copilot');
 
     await cliPicker.click();
-    await page.getByRole('button', { name: /Claude Code/ }).click();
+    await page.getByTestId('status-bar-cli-menu-item-cli:claude').click();
     await expect(cliPicker).toContainText('Claude Code');
 
     const stored = await page.evaluate(() => localStorage.getItem('defaultCliType'));
@@ -144,10 +144,10 @@ test.describe('Status bar default-model picker', () => {
     await expect(modelPicker).toContainText('CLI default');
 
     await modelPicker.click();
-    const menu = page.locator('.statusbar__menu', { hasText: 'Default model' });
+    const menu = page.getByTestId('status-bar-model-menu-panel');
     await expect(menu).toBeVisible();
 
-    await menu.getByRole('button', { name: /Opus 4\.7/ }).click();
+    await page.getByTestId('status-bar-model-menu-item-model:claude-opus-4-7').click();
     await expect(modelPicker).toContainText('Opus 4.7');
 
     const stored = await page.evaluate(() =>
@@ -189,12 +189,12 @@ test.describe('Status bar default-model picker', () => {
     await expect(modelPicker).toContainText('gpt-4o-stale');
 
     await modelPicker.click();
-    const menu = page.locator('.statusbar__menu', { hasText: 'Default model' });
+    const menu = page.getByTestId('status-bar-model-menu-panel');
     await expect(menu).toBeVisible();
     await expect(menu).toContainText(/No models reported|Catalog unavailable/);
-    await expect(menu.getByTestId('status-bar-model-refresh')).toBeVisible();
+    await expect(page.getByTestId('status-bar-model-menu-item-model:__refresh__')).toBeVisible();
 
-    await menu.getByTestId('status-bar-model-default').click();
+    await page.getByTestId('status-bar-model-menu-item-model:__default__').click();
     await expect(modelPicker).toContainText('CLI default');
 
     const stored = await page.evaluate(() => localStorage.getItem('defaultModel:copilot'));
@@ -239,12 +239,14 @@ test.describe('Status bar default-model picker', () => {
 
     const modelPicker = page.getByTestId('status-bar-model-picker');
     await modelPicker.click();
-    const menu = page.locator('.statusbar__menu', { hasText: 'Default model' });
+    const menu = page.getByTestId('status-bar-model-menu-panel');
     await expect(menu).toContainText('Catalog unavailable');
 
-    await menu.getByTestId('status-bar-model-refresh').click();
-    // Catalog now resolves with one model; menu should re-render with it.
-    await expect(menu.getByRole('button', { name: /GPT-4o/ })).toBeVisible();
+    await page.getByTestId('status-bar-model-menu-item-model:__refresh__').click();
+    // Standard <app-menu> closes on click; reopen to verify the refreshed catalog.
+    await page.waitForTimeout(300);
+    await modelPicker.click();
+    await expect(page.getByTestId('status-bar-model-menu-item-model:gpt-4o')).toBeVisible();
     expect(calls).toBeGreaterThanOrEqual(2);
   });
 });

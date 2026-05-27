@@ -40,85 +40,49 @@
     <span class="statusbar__sep" aria-hidden="true"></span>
 
     <div class="statusbar__pickers">
-      <button class="statusbar__item statusbar__item--btn"
+      <button #cliPickerTrigger
+              class="statusbar__item statusbar__item--btn"
               data-testid="status-bar-cli-picker"
               [appTooltip]="'Default CLI for new tasks: ' + cliLabel(defaultCli())"
-              (click)="toggleCliMenu($event)">
+              (click)="toggleCliMenu()">
         <span class="statusbar__icon">{{ cliIcon(defaultCli()) }}</span>
         <span>{{ cliLabel(defaultCli()) }}</span>
         <span class="statusbar__caret">▾</span>
       </button>
 
-      @if (cliMenuOpen()) {
-        <div class="statusbar__menu" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-          <div class="statusbar__menu-title">Default CLI for new tasks</div>
-          @for (t of cliTypes; track t) {
-            <button class="statusbar__menu-item"
-                    [class.statusbar__menu-item--active]="t === defaultCli()"
-                    (click)="setDefaultCli(t)">
-              <span class="statusbar__icon">{{ cliIcon(t) }}</span>
-              <span>{{ cliLabel(t) }}</span>
-            </button>
-          }
-        </div>
-      }
+      <app-menu
+        [items]="cliMenuItems()"
+        [open]="cliMenuOpen()"
+        [anchorEl]="cliPickerTrigger"
+        placement="above"
+        testIdPrefix="status-bar-cli-menu"
+        ariaLabel="Default CLI picker"
+        [minWidth]="200"
+        (itemClick)="onCliMenuItemClick($event)"
+        (closeRequest)="cliMenuOpen.set(false)" />
     </div>
 
     <div class="statusbar__pickers">
-      <button class="statusbar__item statusbar__item--btn"
+      <button #modelPickerTrigger
+              class="statusbar__item statusbar__item--btn"
               data-testid="status-bar-model-picker"
               [appTooltip]="modelPickerTooltip()"
-              (click)="toggleModelMenu($event)">
+              (click)="toggleModelMenu()">
         <span class="statusbar__icon">⚙</span>
         <span>{{ defaultModelLabel() }}</span>
         <span class="statusbar__caret">▾</span>
       </button>
 
-      @if (modelMenuOpen()) {
-        <div class="statusbar__menu"
-             tabindex="-1"
-             (click)="$event.stopPropagation()"
-             (keydown)="$event.stopPropagation()">
-          <div class="statusbar__menu-title">
-            Default model · {{ cliLabel(defaultCli()) }}
-          </div>
-          <button class="statusbar__menu-item"
-                  data-testid="status-bar-model-default"
-                  [class.statusbar__menu-item--active]="!defaultModel()"
-                  (click)="setDefaultModel('')">
-            <span class="statusbar__icon">·</span>
-            <span>CLI default</span>
-          </button>
-          @if (modelsLoading()) {
-            <div class="statusbar__menu-empty">Loading catalog…</div>
-          } @else if (models().length === 0) {
-            <div class="statusbar__menu-empty">
-              @if (modelsError()) {
-                Catalog unavailable for {{ cliLabel(defaultCli()) }}.
-              } @else {
-                No models reported for {{ cliLabel(defaultCli()) }}.
-              }
-            </div>
-          } @else {
-            @for (m of models(); track m.id) {
-              <button class="statusbar__menu-item"
-                      [class.statusbar__menu-item--active]="m.id === defaultModel()"
-                      [appTooltip]="m.id"
-                      (click)="setDefaultModel(m.id)">
-                <span class="statusbar__icon">{{ m.isDefault ? '★' : '·' }}</span>
-                <span>{{ m.label || m.id }}</span>
-              </button>
-            }
-          }
-          <button class="statusbar__menu-item statusbar__menu-item--meta"
-                  data-testid="status-bar-model-refresh"
-                  [disabled]="modelsLoading()"
-                  (click)="refreshModels($event)">
-            <span class="statusbar__icon">↻</span>
-            <span>Refresh catalog</span>
-          </button>
-        </div>
-      }
+      <app-menu
+        [items]="modelMenuItems()"
+        [open]="modelMenuOpen()"
+        [anchorEl]="modelPickerTrigger"
+        placement="above"
+        testIdPrefix="status-bar-model-menu"
+        ariaLabel="Default model picker"
+        [minWidth]="220"
+        (itemClick)="onModelMenuItemClick($event)"
+        (closeRequest)="modelMenuOpen.set(false)" />
     </div>
   </div>
 </div>

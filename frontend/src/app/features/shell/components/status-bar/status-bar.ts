@@ -1,12 +1,9 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
-  HostListener,
   OnInit,
   ViewEncapsulation,
   computed,
-  effect,
   inject,
   input,
   output,
@@ -14,7 +11,6 @@ import {
 } from '@angular/core';
 import { JobService } from '../../../../services/task.service';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
-import { ModalStackService } from '../../../../services/modal-stack.service';
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
@@ -23,29 +19,25 @@ import { UsageHoverPanelComponent } from '../../../tokens';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
+import { MenuComponent } from '../../../../components/menu';
+import type { MenuItem, MenuItemClickEvent } from '../../../../components/menu';
+import {
+  buildCliMenuItems,
+  buildModelMenuItems,
+  cliTypeFromMenuId,
+  isRefreshAction,
+  modelIdFromMenuId,
+} from './status-bar-menu-builders';
+
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 
-/**
- * VS Code-style status bar pinned to the bottom of the app shell. Carries
- * compact quota indicators, the current "default CLI / model" used when
- * creating new tasks, and quick toggles for the secondary side sheets
- * (CLI Usage, Orchestrator chat, Orchestrator feed).
- *
- * The bar persists the default CLI + per-CLI default model in localStorage
- * so the same picks survive a reload, and emits changes upward so the
- * shell can pre-fill the create-task dialog with them.
- */
 @Component({
   selector: 'app-status-bar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  // Drop view encapsulation so the .statusbar__quota overrides reach the
-  // inner <app-header-quota> classes (.hquota__card, .hquota__svg, ...).
-  // Selectors stay scoped via the .statusbar__quota class so we don't
-  // leak globally to other usages of header-quota.
   encapsulation: ViewEncapsulation.None,
-  imports: [UsageHoverPanelComponent, TooltipDirective, StatusbarItemComponent],
+  imports: [UsageHoverPanelComponent, TooltipDirective, StatusbarItemComponent, MenuComponent],
   templateUrl: './status-bar.html',
   styleUrl: './status-bar.scss',
 })
@@ -102,12 +94,28 @@ export class StatusBarComponent implements OnInit {
     return `Default model for ${cli}`;
   });
 
+  readonly cliMenuItems = computed<readonly MenuItem[]>(() =>
+    buildCliMenuItems({
+      cliTypes: this.cliTypes,
+      defaultCli: this.defaultCli(),
+      cliLabel: cliTypeLabel,
+      cliIcon: cliTypeIcon,
+    }),
+  );
+
+  readonly modelMenuItems = computed<readonly MenuItem[]>(() =>
+    buildModelMenuItems({
+      defaultCli: this.defaultCli(),
+      defaultModel: this.defaultModel(),
+      models: this.models(),
+      modelsLoading: this.modelsLoading(),
+      modelsError: this.modelsError(),
+      cliLabel: cliTypeLabel,
+    }),
+  );
+
   ngOnInit(): void {
     this.loadModels(this.defaultCli());
-    // Pull the canonical defaults from the backend so a value changed in a
-    // different browser session (or by the orchestrator itself) overrides
-    // the localStorage cache. After hydrate(), re-read the cache so the
-    // signals reflect the freshly-written values.
     void this.clientDefaults.hydrate().then(() => {
       const cli = this.readDefaultCli();
       this.defaultCli.set(cli);
@@ -115,38 +123,6 @@ export class StatusBarComponent implements OnInit {
       this.loadModels(cli);
     });
   }
-
-  // Status-bar dropdowns register on the modal stack while open so they
-  // win Escape over the detail view below, and so a real modal above
-  // (Add Task, confirm-dialog) wins Escape over them.
-  private readonly modalStack = inject(ModalStackService);
-  private readonly destroyRef = inject(DestroyRef);
-  private cliMenuDispose: (() => void) | null = null;
-  private modelMenuDispose: (() => void) | null = null;
-  private readonly cliMenuEffect = effect(() => {
-    const open = this.cliMenuOpen();
-    if (open && !this.cliMenuDispose) {
-      this.cliMenuDispose = this.modalStack.push('status-bar-cli-menu', () => this.cliMenuOpen.set(false));
-    } else if (!open && this.cliMenuDispose) {
-      this.cliMenuDispose();
-      this.cliMenuDispose = null;
-    }
-  });
-  private readonly modelMenuEffect = effect(() => {
-    const open = this.modelMenuOpen();
-    if (open && !this.modelMenuDispose) {
-      this.modelMenuDispose = this.modalStack.push('status-bar-model-menu', () => this.modelMenuOpen.set(false));
-    } else if (!open && this.modelMenuDispose) {
-      this.modelMenuDispose();
-      this.modelMenuDispose = null;
-    }
-  });
-  // Destroy hook is set up via DestroyRef so we drop the entry even if the
-  // host node is torn down with the dropdown still open (e.g. router nav).
-  private readonly statusBarTeardown = this.destroyRef.onDestroy(() => {
-    this.cliMenuDispose?.();
-    this.modelMenuDispose?.();
-  });
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }
@@ -161,31 +137,34 @@ export class StatusBarComponent implements OnInit {
     return `${this.autoCount()} of ${this.projectCount()} project(s) have auto-pickup enabled.`;
   }
 
-  toggleCliMenu(ev: Event) {
-    ev.stopPropagation();
+  toggleCliMenu() {
     this.modelMenuOpen.set(false);
     this.cliMenuOpen.update(v => !v);
   }
 
-  toggleModelMenu(ev: Event) {
-    ev.stopPropagation();
+  toggleModelMenu() {
     this.cliMenuOpen.set(false);
     this.modelMenuOpen.update(v => !v);
   }
 
-  setDefaultCli(t: CliType) {
+  onCliMenuItemClick(ev: MenuItemClickEvent): void {
+    const t = cliTypeFromMenuId(ev.id);
+    if (!t) return;
     this.defaultCli.set(t);
     localStorage.setItem(STORAGE_DEFAULT_CLI, t);
-    this.cliMenuOpen.set(false);
     this.defaultModel.set(this.readDefaultModel(t));
     this.loadModels(t);
     this.defaultCliChange.emit(t);
-    // Mirror to the backend so the orchestrator's per-turn USER PREFERENCES
-    // block picks up the new value on the next chat send.
     void this.clientDefaults.pushDefaultCli(t);
   }
 
-  setDefaultModel(modelId: string) {
+  onModelMenuItemClick(ev: MenuItemClickEvent): void {
+    if (isRefreshAction(ev.id)) {
+      this.loadModels(this.defaultCli(), true);
+      return;
+    }
+    const modelId = modelIdFromMenuId(ev.id);
+    if (modelId === null) return;
     const cli = this.defaultCli();
     this.defaultModel.set(modelId);
     if (modelId) {
@@ -193,24 +172,9 @@ export class StatusBarComponent implements OnInit {
     } else {
       localStorage.removeItem(STORAGE_DEFAULT_MODEL_PREFIX + cli);
     }
-    this.modelMenuOpen.set(false);
     this.defaultModelChange.emit({ cliType: cli, model: modelId });
     void this.clientDefaults.pushDefaultModel(modelId);
   }
-
-  refreshModels(ev: Event) {
-    ev.stopPropagation();
-    this.loadModels(this.defaultCli(), true);
-  }
-
-  @HostListener('document:click')
-  onDocumentClick() {
-    this.cliMenuOpen.set(false);
-    this.modelMenuOpen.set(false);
-  }
-
-  // Escape handling is delegated to ModalStackService (effects above register
-  // an entry per open dropdown). The previous local @HostListener was removed.
 
   private loadModels(cliType: CliType, refresh = false) {
     this.modelsLoading.set(true);
