@@ -66,8 +66,9 @@ public sealed class HumanAgentPickupSkipTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        var json = agent == "human"
-            ? $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order},\"agent\":\"human\",\"ownerClientId\":\"local-default\"}}"
+        var isHuman = string.Equals(agent, "human", StringComparison.OrdinalIgnoreCase);
+        var json = isHuman
+            ? $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order},\"agent\":\"{agent}\",\"ownerClientId\":\"local-default\"}}"
             : $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order},\"agent\":\"{cliType}\",\"cliType\":\"{cliType}\",\"ownerClientId\":\"local-default\"}}";
         File.WriteAllText(Path.Combine(dir, "job.json"), json);
     }
