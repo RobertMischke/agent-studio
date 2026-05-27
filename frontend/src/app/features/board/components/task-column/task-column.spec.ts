@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { JobColumnComponent } from './job-column';
+import { JobColumnComponent } from './task-column';
 import type { JobInfo } from '../../../../models/task.model';
 
 /**

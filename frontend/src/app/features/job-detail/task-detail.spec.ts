@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { JobDetailComponent } from './job-detail';
+import { JobDetailComponent } from './task-detail';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
