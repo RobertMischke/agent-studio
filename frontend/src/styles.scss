@@ -137,12 +137,12 @@ html[data-studio-theme='light'] {
   }
   .detail__title, .detail__project, .detail__meta { color: #1a1a1a; }
   .pane {
-    background: #ffffff;
-    border-color: #e1e1e1;
+    background: transparent;
+    border: none;
     color: #1a1a1a;
   }
   .pane__header {
-    background: #f8f8f8;
+    background: transparent;
     border-bottom-color: #e1e1e1;
     color: #1a1a1a;
   }

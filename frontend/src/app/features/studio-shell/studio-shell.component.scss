@@ -1359,25 +1359,24 @@
   }
 
   .detail__panes {
-    gap: 12px;
-    padding-top: 12px;
+    gap: 0;
+    padding-top: 0;
     flex: 1;
     min-height: 0;
+    margin-left: -12px;
+    margin-right: -12px;
   }
 
   .pane {
-    border: 1px solid var(--studio-border);
-    border-radius: 6px;
-    background: var(--studio-bg-elevated);
+    background: transparent;
     overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 
   .pane__header {
     padding: 6px 12px;
     min-height: 32px;
     border-bottom: 1px solid var(--studio-border);
-    background: var(--studio-bg-titlebar);
+    background: transparent;
   }
 
   .pane__title {

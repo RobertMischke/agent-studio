@@ -561,19 +561,15 @@
       align-items: stretch;
       min-height: 0;
       gap: 0;
+      margin-left: -12px;
+      margin-right: -12px;
     }
     .pane {
       display: flex;
       flex-direction: column;
       min-width: 240px;
       min-height: 0;
-      // Pane surfaces flip per theme: dark navy on the dark shell, near-
-      // white on the light shell. The previous `rgba(12,12,23,0.55)` was
-      // a fixed dark-navy overlay that washed the entire pane into a
-      // dark island on the light shell.
-      background: var(--studio-bg-editor);
-      border: 1px solid var(--studio-border);
-      border-radius: 4px;
+      background: transparent;
       overflow: hidden;
     }
     .pane__header {
@@ -582,7 +578,7 @@
       gap: 6px;
       padding: 6px 10px;
       border-bottom: 1px solid var(--studio-border);
-      background: var(--studio-bg-sidebar);
+      background: transparent;
       min-height: 28px;
     }
     .pane__title {
@@ -644,25 +640,24 @@
       display: flex;
       flex-direction: column;
       min-height: 0;
-      padding: 10px 12px;
+      padding: 0;
       overflow: auto;
     }
     .pane__splitter {
-      flex: 0 0 10px;
+      flex: 0 0 1px;
       align-self: stretch;
       display: flex;
       justify-content: center;
       cursor: col-resize;
       touch-action: none;
+      background: var(--studio-border);
     }
     .pane__splitter span {
-      width: 2px;
+      width: 0;
       min-height: 100%;
-      border-radius: 999px;
-      background: rgba(148,163,184,0.14);
-      transition: background 0.15s ease, width 0.15s ease;
     }
-    .pane__splitter:hover span { width: 4px; background: rgba(129,140,248,0.55); }
+    .pane__splitter:hover { background: rgba(129,140,248,0.55); flex-basis: 3px; }
+    .pane__splitter:hover span { width: 0; }
     .detail__panes-empty {
       flex: 1;
       display: flex;
@@ -705,14 +700,7 @@
       min-height: 0;
     }
     .inspector {
-      // Was `rgba(12,12,23,0.55)` (dark-navy 55% overlay), which on the
-      // light shell painted the entire activity-log container as a
-      // dark-grey island inside the otherwise white pane. Flip to the
-      // studio editor token so the band reads transparent / near-white
-      // on light and dark-navy on dark.
-      background: var(--studio-bg-editor);
-      border: 1px solid var(--studio-border);
-      border-radius: 4px;
+      background: transparent;
       padding: 8px 10px;
       display: flex;
       flex-direction: column;

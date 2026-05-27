@@ -11,7 +11,7 @@
  */
 :host { display: contents; }
 
-.git-view { gap: 12px; }
+.git-view { gap: 12px; padding: 8px 10px; }
 .git-view__summary {
   display: flex;
   gap: 12px;

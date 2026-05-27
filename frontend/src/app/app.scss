@@ -1836,10 +1836,12 @@
     .app--vscode-layout .detail__panes-toolbar {
       display: none;
     }
-    /* Pane chrome density: VS Code-style 6/12 padding, 12 px title. */
+    /* Pane chrome removed — panels sit flush on the detail surface. */
     .app--vscode-layout .pane {
-      border-radius: 4px;
-      border-color: rgba(255,255,255,0.04);
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
     }
     .app--vscode-layout .pane__header {
       padding: 4px 10px;
