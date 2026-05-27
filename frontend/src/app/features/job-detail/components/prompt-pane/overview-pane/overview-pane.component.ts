@@ -1,0 +1,191 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  output,
+} from '@angular/core';
+import type { CliType, JobInfo } from '../../../../../models/job.model';
+import type { CliModelInfo } from '../../../../cli';
+import type { RunRecord } from '../../../../run-timeline';
+import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
+import { ClientService } from '../../../../../services/client.service';
+import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
+import { TooltipDirective } from '../../../../../components/tooltip';
+import {
+  cliTypeIcon,
+  cliTypeLabel,
+  formatTokens,
+} from '../../../../../services/format.util';
+
+@Component({
+  selector: 'app-overview-pane',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ChatModelBadgeComponent, TooltipDirective],
+  templateUrl: './overview-pane.component.html',
+  styleUrl: './overview-pane.component.scss',
+})
+export class OverviewPaneComponent {
+  readonly job = input.required<JobInfo>();
+  readonly availableModels = input<readonly CliModelInfo[]>([]);
+  readonly isRunning = input(false);
+
+  readonly modelChange = output<string>();
+  readonly cliTypeChange = output<CliType>();
+
+  private readonly runTimelinePoll = inject(RunTimelinePollService);
+  private readonly clients = inject(ClientService);
+
+  readonly timeline = this.runTimelinePoll.timeline;
+  readonly runs = this.runTimelinePoll.runs;
+
+  readonly owner = computed(() => {
+    const ownerId = this.job().ownerClientId;
+    return this.clients.resolve(ownerId);
+  });
+
+  readonly isFailedPickup = computed(() =>
+    this.job().state === '3a-failed-pickup',
+  );
+
+  readonly failureInfo = computed<string | null>(() => {
+    const issue = this.job().outcomeIssue;
+    if (issue) return `${issue.label}: ${issue.summary}`;
+    if (this.isFailedPickup()) return 'Pickup failed (see activity log for details)';
+    return null;
+  });
+
+  readonly tokenSummary = computed(() => this.job().tokenSummary ?? null);
+
+  readonly hasTokens = computed(() => {
+    const ts = this.tokenSummary();
+    return ts !== null && ts.totalTokens > 0;
+  });
+
+  readonly lastRunRecord = computed<RunRecord | null>(() => {
+    const r = this.runs();
+    return r.length > 0 ? r[r.length - 1] : null;
+  });
+
+  readonly recentRuns = computed(() => {
+    const r = this.runs();
+    return r.slice(-8);
+  });
+
+  readonly totalDuration = computed(() => {
+    let total = 0;
+    for (const r of this.runs()) {
+      if (r.durationSeconds != null) total += r.durationSeconds;
+    }
+    return total;
+  });
+
+  laneLabel(state: string): string {
+    switch (state) {
+      case '0-backlog':              return 'Backlog';
+      case '1-preparation':          return 'In Preparation';
+      case '1a-orchestrator-prep':   return 'Orchestrator Prep';
+      case '1b-needs-human-review':  return 'Needs Human Review';
+      case '2-ready':                return 'Human Ready';
+      case '3-progress':             return 'In Progress';
+      case '3a-failed-pickup':       return 'Failed Pickup';
+      case '4-auto-review':          return 'Auto Review';
+      case '5-human-review':         return 'Human Review';
+      case '6-completed':            return 'Completed';
+      case '7-archive':              return 'Archive';
+      default:                       return state ?? '';
+    }
+  }
+
+  formatRelativeTime(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const diffMs = Date.now() - d.getTime();
+    const minutes = Math.round(diffMs / 60_000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.round(days / 30);
+    if (months < 12) return `${months}mo ago`;
+    return `${Math.round(months / 12)}y ago`;
+  }
+
+  formatAbsoluteTime(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  }
+
+  formatTokens(n: number): string {
+    return formatTokens(n);
+  }
+
+  formatDuration(seconds: number): string {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const min = Math.floor(seconds / 60);
+    const sec = Math.round(seconds % 60);
+    if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min}m`;
+    const hrs = Math.floor(min / 60);
+    const remMin = min % 60;
+    return remMin > 0 ? `${hrs}h ${remMin}m` : `${hrs}h`;
+  }
+
+  runStatusIcon(status: string): string {
+    switch (status) {
+      case 'completed': return '✅';
+      case 'failed':    return '❌';
+      case 'cancelled': return '⚠️';
+      case 'running':   return '▶️';
+      default:          return '❓';
+    }
+  }
+
+  runTooltip(run: RunRecord): string {
+    const parts: string[] = [
+      `Run #${run.index + 1} (${run.intent})`,
+      `Status: ${run.status}`,
+    ];
+    if (run.startedAt) parts.push(`Started: ${this.formatAbsoluteTime(run.startedAt)}`);
+    if (run.durationSeconds != null) parts.push(`Duration: ${this.formatDuration(run.durationSeconds)}`);
+    if (run.cli) parts.push(`CLI: ${run.cli}`);
+    return parts.join('\n');
+  }
+
+  cliTypeLabel(t: CliType): string {
+    return cliTypeLabel(t);
+  }
+
+  cliTypeIcon(t: CliType): string {
+    return cliTypeIcon(t);
+  }
+
+  shortSessionId(sessionName: string | null): string {
+    if (!sessionName) return '';
+    if (sessionName.length <= 12) return sessionName;
+    return sessionName.slice(0, 10) + '…';
+  }
+
+  copyToClipboard(text: string): void {
+    navigator.clipboard?.writeText(text);
+  }
+
+  phaseLabel(phase: string | null | undefined): string | null {
+    if (!phase) return null;
+    switch (phase) {
+      case 'human-ready':              return 'Human Ready';
+      case 'intake-running':           return 'Intake Running';
+      case 'intake-blocked':           return 'Intake Blocked';
+      case 'intake-passed':            return 'Intake Passed';
+      case 'execution-running':        return 'Execution Running';
+      case 'post-processing-running':  return 'Post-Processing';
+      default:                         return phase;
+    }
+  }
+}

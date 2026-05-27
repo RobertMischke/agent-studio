@@ -14,6 +14,17 @@
   </app-pane-header>
   <div class="pane__body">
     @switch (activeTab()) {
+      @case ('overview') {
+        @if (job(); as info) {
+          <app-overview-pane
+            [job]="info"
+            [availableModels]="availableModels()"
+            [isRunning]="isRunning()"
+            (modelChange)="modelChange.emit($event)"
+            (cliTypeChange)="cliTypeChange.emit($event)" />
+        }
+      }
+
       @case ('description') {
         @if (job(); as info) {
           <div class="desc-meta-bar" data-testid="desc-meta-bar">

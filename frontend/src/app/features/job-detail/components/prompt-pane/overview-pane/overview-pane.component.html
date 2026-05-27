@@ -1,0 +1,173 @@
+<div class="overview" data-testid="overview-tab">
+
+  <!-- Status block -->
+  <section class="ov-section" data-testid="overview-status">
+    <h3 class="ov-section__title">Status</h3>
+    <div class="ov-grid">
+      <div class="ov-row">
+        <span class="ov-label">Lane</span>
+        <span class="ov-value">
+          <span class="ov-lane-pill"
+                [class]="'ov-lane-pill state--' + job().state"
+                [attr.data-state]="job().state">
+            <span class="ov-lane-pill__dot" aria-hidden="true">●</span>
+            {{ laneLabel(job().state) }}
+          </span>
+          @if (phaseLabel(job().phase); as pl) {
+            <span class="ov-phase-chip">{{ pl }}</span>
+          }
+        </span>
+      </div>
+
+      @if (failureInfo(); as reason) {
+        <div class="ov-row ov-row--failure" data-testid="overview-failure-reason">
+          <span class="ov-label">Failure</span>
+          <span class="ov-value ov-value--failure">{{ reason }}</span>
+        </div>
+      }
+
+      <div class="ov-row">
+        <span class="ov-label">Last Activity</span>
+        <span class="ov-value">
+          <span>{{ formatRelativeTime(job().lastActivity) }}</span>
+          <span class="ov-dim">({{ formatAbsoluteTime(job().lastActivity) }})</span>
+        </span>
+      </div>
+
+      <div class="ov-row">
+        <span class="ov-label">Created</span>
+        <span class="ov-value">
+          <span>{{ formatRelativeTime(job().createdAt) }}</span>
+          <span class="ov-dim">({{ formatAbsoluteTime(job().createdAt) }})</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Agent block -->
+  <section class="ov-section" data-testid="overview-agent">
+    <h3 class="ov-section__title">Agent</h3>
+    <div class="ov-grid">
+      <div class="ov-row">
+        <span class="ov-label">Model</span>
+        <span class="ov-value">
+          <app-chat-model-badge
+            [cliType]="job().cliType"
+            [model]="job().model"
+            [availableModels]="availableModels()"
+            [disabled]="isRunning()"
+            (modelChange)="modelChange.emit($event)"
+            (cliTypeChange)="cliTypeChange.emit($event)" />
+        </span>
+      </div>
+
+      <div class="ov-row">
+        <span class="ov-label">CLI</span>
+        <span class="ov-value">
+          @if (job().cliType; as ct) {
+            <span class="ov-cli-chip">
+              <span aria-hidden="true">{{ cliTypeIcon(ct) }}</span>
+              {{ cliTypeLabel(ct) }}
+            </span>
+          } @else {
+            <span class="ov-dim">Not set</span>
+          }
+        </span>
+      </div>
+
+      <div class="ov-row">
+        <span class="ov-label">Owner</span>
+        <span class="ov-value">
+          @if (owner(); as ow) {
+            <span class="ov-owner-chip"
+                  [style.color]="ow.colour || 'var(--studio-fg)'"
+                  [appTooltip]="ow.displayName + ' (' + ow.kind + ')'">
+              <span aria-hidden="true">{{ ow.emoji || '·' }}</span>
+              {{ ow.displayName }}
+            </span>
+          }
+        </span>
+      </div>
+
+      @if (job().sessionName) {
+        <div class="ov-row">
+          <span class="ov-label">Session</span>
+          <span class="ov-value ov-value--mono">
+            <span [appTooltip]="job().sessionName!">{{ shortSessionId(job().sessionName) }}</span>
+            <button type="button"
+                    class="ov-copy-btn"
+                    aria-label="Copy session ID"
+                    (click)="copyToClipboard(job().sessionName!)">
+              <span aria-hidden="true">&#x1F4CB;</span>
+            </button>
+          </span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Token / Performance block -->
+  <section class="ov-section" data-testid="overview-tokens">
+    <h3 class="ov-section__title">Tokens &amp; Performance</h3>
+    @if (hasTokens()) {
+      <div class="ov-grid">
+        <div class="ov-row">
+          <span class="ov-label">Input</span>
+          <span class="ov-value ov-value--mono">{{ formatTokens(tokenSummary()!.inputTokens) }}</span>
+        </div>
+        <div class="ov-row">
+          <span class="ov-label">Output</span>
+          <span class="ov-value ov-value--mono">{{ formatTokens(tokenSummary()!.outputTokens) }}</span>
+        </div>
+        @if (tokenSummary()!.cacheReadTokens > 0) {
+          <div class="ov-row">
+            <span class="ov-label">Cache Read</span>
+            <span class="ov-value ov-value--mono">{{ formatTokens(tokenSummary()!.cacheReadTokens) }}</span>
+          </div>
+        }
+        <div class="ov-row">
+          <span class="ov-label">Total</span>
+          <span class="ov-value ov-value--mono ov-value--strong">{{ formatTokens(tokenSummary()!.totalTokens) }}</span>
+        </div>
+        <div class="ov-row">
+          <span class="ov-label">LLM Calls</span>
+          <span class="ov-value ov-value--mono">{{ tokenSummary()!.calls }}</span>
+        </div>
+      </div>
+    } @else {
+      <div class="ov-empty">No token data recorded yet.</div>
+    }
+
+    @if (timeline(); as tl) {
+      <div class="ov-grid ov-grid--perf">
+        <div class="ov-row">
+          <span class="ov-label">Runs</span>
+          <span class="ov-value ov-value--mono">{{ tl.runCount }}</span>
+        </div>
+        @if (totalDuration() > 0) {
+          <div class="ov-row">
+            <span class="ov-label">Total Duration</span>
+            <span class="ov-value ov-value--mono">{{ formatDuration(totalDuration()) }}</span>
+          </div>
+        }
+      </div>
+    }
+  </section>
+
+  <!-- Run History block -->
+  @if (recentRuns().length > 0) {
+    <section class="ov-section" data-testid="overview-runs">
+      <h3 class="ov-section__title">Recent Runs</h3>
+      <div class="ov-run-strip">
+        @for (run of recentRuns(); track run.index) {
+          <span class="ov-run-icon"
+                [class.ov-run-icon--active]="run.status === 'running'"
+                [appTooltip]="runTooltip(run)"
+                data-testid="overview-run-icon">
+            {{ runStatusIcon(run.status) }}
+          </span>
+        }
+      </div>
+    </section>
+  }
+</div>

@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 import { JobArtifact, JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
+import type { CliType } from '../../../../models/job.model';
+import type { CliModelInfo } from '../../../cli';
 import type { JobScreenshot } from '../../../screenshots';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
 import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel/review-evidence-panel.component';
@@ -9,6 +11,7 @@ import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolve
 import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent, PaneTabDef } from '../../../../components/pane-tabs/pane-tabs.component';
 import { FilesPaneComponent } from './files-pane/files-pane.component';
+import { OverviewPaneComponent } from './overview-pane/overview-pane.component';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -34,7 +37,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesPaneComponent, MarkdownViewComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
+  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -51,31 +54,34 @@ export class PromptPaneComponent {
   readonly isRunning = input(false);
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
+  readonly availableModels = input<readonly CliModelInfo[]>([]);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
   readonly save = output<string>();
   readonly evidenceAcknowledge = output<{ entry: ReviewEvidenceEntry; acknowledged: boolean }>();
   readonly evidenceCreateFollowup = output<ReviewEvidenceEntry>();
+  readonly modelChange = output<string>();
+  readonly cliTypeChange = output<CliType>();
 
-  /** description | evidence | code-review. Persisted across sessions in localStorage. */
-  readonly activeTab = signal<'description' | 'evidence' | 'code-review'>(
+  /** overview | description | evidence | code-review. Persisted across sessions in localStorage. */
+  readonly activeTab = signal<'overview' | 'description' | 'evidence' | 'code-review'>(
     (() => {
-      if (typeof window === 'undefined') return 'description';
+      if (typeof window === 'undefined') return 'overview';
       const v = window.localStorage?.getItem('atp.detail.left-tab');
-      if (v === 'evidence' || v === 'code-review') return v;
-      return 'description';
+      if (v === 'overview' || v === 'description' || v === 'evidence' || v === 'code-review') return v;
+      return 'overview';
     })(),
   );
 
-  setTab(tab: 'description' | 'evidence' | 'code-review'): void {
+  setTab(tab: 'overview' | 'description' | 'evidence' | 'code-review'): void {
     this.activeTab.set(tab);
     try { window.localStorage?.setItem('atp.detail.left-tab', tab); } catch { /* ignore */ }
   }
 
   /** Type-safe bridge from the generic pane-tabs `tabChange` event. */
   onPromptTabChange(id: string): void {
-    if (id === 'description' || id === 'evidence' || id === 'code-review') {
+    if (id === 'overview' || id === 'description' || id === 'evidence' || id === 'code-review') {
       this.setTab(id);
     }
   }
@@ -93,6 +99,12 @@ export class PromptPaneComponent {
    * is now "Files" since the tab carries every `.md` in the job folder.
    */
   readonly promptTabs = computed<readonly PaneTabDef[]>(() => [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: 'layout',
+      testid: 'prompt-tab-overview',
+    },
     {
       id: 'description',
       label: 'Files',
