@@ -9,6 +9,7 @@ import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { shouldShowFailureToast } from '../../../job-detail/services/run-outcome.util';
 import {
   buildCommitTooltip,
+  buildEffectiveModelChip,
   buildTaskTypeChip,
   buildTokenBubble,
   formatShortTime,
@@ -484,6 +485,10 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const t = this.job().cliType;
     return t ? cliTypeIcon(t) : '🤖';
   });
+
+  readonly effectiveModelChip = computed(() =>
+    buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId))
+  );
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 

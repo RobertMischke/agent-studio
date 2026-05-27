@@ -2141,6 +2141,7 @@ public class ProjectRunner
         return _scanner.ScanAllJobs()
             .Where(j => j.ProjectName == ProjectName
                         && j.State == JobStates.Ready
+                        && AgentTypes.IsAutoPickupEligible(j.Agent)
                         && IsPickupAllowed(j, intakeEnabled))
             .OrderBy(j => j.Order)
             .FirstOrDefault();
@@ -2295,6 +2296,9 @@ public class ProjectRunner
                 MoveProgressOrphanToFailedPickup(candidate, slug);
                 continue;
             }
+
+            if (!AgentTypes.IsAutoPickupEligible(candidate.Info.Agent))
+                continue;
 
             var attempts = GetPickupAttempts(slug);
             if (attempts >= PickupFailureThreshold)

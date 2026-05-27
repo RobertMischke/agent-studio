@@ -14,6 +14,7 @@
 import type { CliModelInfo } from '../../../../cli';
 import type { CliType } from '../../../../../models/job.model';
 import type { MenuItem } from '../../../../../components/menu';
+import { shortModelName as _shortModelName } from '../../../../../services/format.util';
 
 export interface ModelMenuInputs {
   cliType: CliType | null;
@@ -98,26 +99,10 @@ export function buildModelMenuItems(input: ModelMenuInputs): readonly MenuItem[]
  * Compact text shown on the chat-composer badge itself. Short, dimmed,
  * 11-12 px — operator wants subtle. Falls back to "No model" when the job
  * has neither a CLI nor a model set yet (rare; usually a CLI is always
- * implied).
+ * implied). Delegates to the shared `shortModelName` in format.util.ts.
  */
 export function shortModelName(model: string | null | undefined): string {
-  if (!model) return 'No model';
-  const m = model.trim();
-  if (!m) return 'No model';
-  // Common pattern: "claude-opus-4-7" → "opus 4.7", "claude-sonnet-4-6" → "sonnet 4.6",
-  // "claude-haiku-4-5" → "haiku 4.5". Keep other ids verbatim.
-  const claudeMatch = /^claude-(opus|sonnet|haiku)-(\d+)-(\d+)$/i.exec(m);
-  if (claudeMatch) {
-    const [, family, major, minor] = claudeMatch;
-    return `${family.toLowerCase()} ${major}.${minor}`;
-  }
-  // Generic shortener: drop the leading vendor token if there is one.
-  // "openai/gpt-4o" → "gpt-4o", "gemini-1.5-pro" → "1.5-pro"
-  const slashIdx = m.indexOf('/');
-  if (slashIdx >= 0 && slashIdx < m.length - 1) {
-    return m.slice(slashIdx + 1);
-  }
-  return m;
+  return _shortModelName(model);
 }
 
 /**

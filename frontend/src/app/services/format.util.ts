@@ -107,3 +107,19 @@ export function cliTypeIcon(t: CliType): string {
     case 'gemini':  return '♊';
   }
 }
+
+export function shortModelName(model: string | null | undefined): string {
+  if (!model) return 'No model';
+  const m = model.trim();
+  if (!m) return 'No model';
+  const claudeMatch = /^claude-(opus|sonnet|haiku)-(\d+)-(\d+)$/i.exec(m);
+  if (claudeMatch) {
+    const [, family, major, minor] = claudeMatch;
+    return `${family.toLowerCase()} ${major}.${minor}`;
+  }
+  const slashIdx = m.indexOf('/');
+  if (slashIdx >= 0 && slashIdx < m.length - 1) {
+    return m.slice(slashIdx + 1);
+  }
+  return m;
+}

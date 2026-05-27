@@ -652,10 +652,32 @@
       color: var(--studio-fg-dim);
       margin-bottom: 4px;
     }
-    .job-card__model {
-      color: var(--severity-pending);
-      font-family: var(--font-mono, monospace);
+    .job-card__effective-model {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-size: 11px;
+      color: var(--studio-fg-dim);
+    }
+    .job-card__effective-model-icon {
+      font-size: 12px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+    .job-card__effective-model-cli {
+      font-weight: 600;
+      color: var(--studio-fg-dim);
+    }
+    .job-card__effective-model-name {
+      font-family: var(--font-mono, monospace);
+      color: var(--studio-fg);
+    }
+    .job-card__effective-model--default .job-card__effective-model-name {
+      font-style: italic;
+      color: var(--studio-fg-dim);
+    }
+    .job-card__effective-model--default .job-card__effective-model-cli {
+      font-style: italic;
     }
     .job-card__activity {
       font-size: 11px;

@@ -1,6 +1,24 @@
 namespace OrchestratorApi.Models;
 
 /// <summary>
+/// Values for the <c>agent</c> field in <c>job.json</c>. The field controls
+/// auto-pickup eligibility: <c>"human"</c> means the job is skipped by the
+/// runner and must be started manually. Every other value maps 1:1 to a CLI
+/// backend and is eligible for auto-pickup.
+/// </summary>
+public static class AgentTypes
+{
+    public const string Human   = "human";
+    public const string Copilot = "copilot";
+    public const string Claude  = "claude";
+    public const string Codex   = "codex";
+    public const string Gemini  = "gemini";
+
+    public static bool IsAutoPickupEligible(string? agent) =>
+        !string.Equals(agent, Human, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
 /// Identifiers for the supported CLI backends. The string values are persisted
 /// to <c>job.json</c> and used as URL segments — keep them stable.
 /// </summary>

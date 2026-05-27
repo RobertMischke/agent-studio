@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Clients;
 
 namespace OrchestratorApi.Services.Jobs;
 
@@ -22,11 +23,13 @@ namespace OrchestratorApi.Services.Jobs;
 public class JobMutationService
 {
     private readonly JobScannerService _scanner;
+    private readonly ClientIdentityStore _clients;
     private readonly ILogger<JobMutationService> _logger;
 
-    public JobMutationService(JobScannerService scanner, ILogger<JobMutationService> logger)
+    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ILogger<JobMutationService> logger)
     {
         _scanner = scanner;
+        _clients = clients;
         _logger = logger;
     }
 
@@ -324,6 +327,31 @@ public class JobMutationService
             ? req.OwnerClientId!
             : DefaultClientIdentity.Id;
 
+        // Materialize effective agent/cliType/model from the owner's
+        // client defaults when the request does not carry explicit values.
+        // This prevents the old "agent: human, cliType: null, model: null"
+        // triple that was misleading on the card and in the dataset.
+        var ownerIdentity = _clients.Find(ownerClientId);
+        var effectiveCliType = !string.IsNullOrWhiteSpace(req.CliType)
+            ? CliTypes.Normalize(req.CliType)
+            : (ownerIdentity?.DefaultCliType is { } dc && CliTypes.IsValid(dc)
+                ? CliTypes.Normalize(dc)
+                : null);
+        var effectiveModel = !string.IsNullOrWhiteSpace(req.Model)
+            ? req.Model
+            : ownerIdentity?.DefaultModel;
+        var effectiveAgent = string.Equals(req.Agent, AgentTypes.Human, StringComparison.OrdinalIgnoreCase)
+            ? AgentTypes.Human
+            : effectiveCliType ?? req.Agent;
+
+        var materializedFromDefaults = effectiveCliType != null && string.IsNullOrWhiteSpace(req.CliType);
+        if (materializedFromDefaults)
+        {
+            _logger.LogInformation(
+                "job-defaults-materialized jobId={JobId} owner={Owner} agent={Agent} cliType={CliType} model={Model}",
+                jobId, ownerClientId, effectiveAgent, effectiveCliType, effectiveModel);
+        }
+
         var jobJson = new Dictionary<string, object?>
         {
             ["id"] = jobId,
@@ -331,13 +359,13 @@ public class JobMutationService
             ["createdAt"] = DateTime.UtcNow.ToString("o"),
             ["state"] = targetState,
             ["order"] = resolvedOrder,
-            ["agent"] = req.Agent,
+            ["agent"] = effectiveAgent,
             ["ownerClientId"] = ownerClientId
         };
-        if (!string.IsNullOrWhiteSpace(req.Model))
-            jobJson["model"] = req.Model;
-        if (!string.IsNullOrWhiteSpace(req.CliType))
-            jobJson["cliType"] = CliTypes.Normalize(req.CliType);
+        if (!string.IsNullOrWhiteSpace(effectiveModel))
+            jobJson["model"] = effectiveModel;
+        if (!string.IsNullOrWhiteSpace(effectiveCliType))
+            jobJson["cliType"] = effectiveCliType;
         if (req.Fixture)
             jobJson["fixture"] = true;
 
@@ -631,6 +659,52 @@ public class JobMutationService
         {
             // Best-effort append - failure to persist the addendum should not block the CLI resume.
         }
+    }
+
+    /// <summary>
+    /// Boot-time migration: rewrites jobs that carry the misleading
+    /// <c>agent: "human" + cliType: null + model: null</c> triple when
+    /// the owner client has configured defaults. Idempotent (no-op on
+    /// already-migrated jobs). Returns the number of jobs backfilled.
+    /// </summary>
+    public int BackfillAgentDefaults()
+    {
+        var count = 0;
+        foreach (var job in _scanner.ScanAllJobs())
+        {
+            if (!string.Equals(job.Agent, AgentTypes.Human, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!string.IsNullOrWhiteSpace(job.CliType) || !string.IsNullOrWhiteSpace(job.Model))
+                continue;
+
+            var ownerId = job.OwnerClientId;
+            if (string.IsNullOrWhiteSpace(ownerId)) continue;
+
+            var owner = _clients.Find(ownerId);
+            if (owner == null) continue;
+
+            var cliType = owner.DefaultCliType is { } dc && CliTypes.IsValid(dc)
+                ? CliTypes.Normalize(dc)
+                : null;
+            var model = owner.DefaultModel;
+
+            if (cliType == null && model == null) continue;
+
+            if (cliType != null)
+            {
+                JobJsonFile.UpdateField(job.FolderPath, "cliType", cliType, _logger);
+                JobJsonFile.UpdateField(job.FolderPath, "agent", cliType, _logger);
+            }
+            if (model != null)
+                JobJsonFile.UpdateField(job.FolderPath, "model", model, _logger);
+
+            count++;
+            _logger.LogInformation(
+                "backfill-agent-defaults jobId={JobId} owner={Owner} agent={Agent} cliType={CliType} model={Model}",
+                job.Id, ownerId, cliType ?? job.Agent, cliType, model);
+        }
+        if (count > 0) _scanner.InvalidateCache();
+        return count;
     }
 
     private static string ToSlug(string text)

@@ -337,6 +337,15 @@ app.Services.GetRequiredService<ClientIdentityStore>().EnsureLoaded();
 // Ensure state folders exist and migrate legacy flat jobs
 app.Services.GetRequiredService<JobStateMachine>().EnsureStateFoldersAndMigrate();
 
+// Backfill jobs that carry agent:"human" + cliType:null + model:null with owner
+// client defaults. Idempotent; no-op once all jobs are already migrated.
+{
+    var backfillCount = app.Services.GetRequiredService<JobMutationService>().BackfillAgentDefaults();
+    if (backfillCount > 0)
+        app.Services.GetRequiredService<ILogger<Program>>()
+            .LogInformation("Backfilled agent defaults on {Count} job(s)", backfillCount);
+}
+
 // F45a: populate workspace + project registries from configured WatchPaths.
 // Additive; does not move or rename anything on disk. Writes only to
 // <TaskRepository>/.metadata/. Safe to run on every boot - idempotent.

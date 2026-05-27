@@ -5,7 +5,8 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { JobCardComponent } from './job-card.component';
-import type { JobInfo } from '../../../../models/job.model';
+import type { JobInfo, ClientSummary } from '../../../../models/job.model';
+import { buildEffectiveModelChip } from './job-card-view-model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -257,6 +258,97 @@ describe('JobCardComponent (smoke)', () => {
     expect(pill?.className).toContain('job-card__issue-pill--high');
   });
 });
+
+describe('buildEffectiveModelChip', () => {
+  it('shows owner-client default when job has no cliType/model', () => {
+    const job = makeJob({ agent: 'human', cliType: null, model: null, ownerClientId: 'local-default' });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('default');
+    expect(chip.isDefault).toBe(true);
+    expect(chip.label).toBe('opus 4.7');
+    expect(chip.icon).toBe('✴️');
+    expect(chip.cliLabel).toBe('Claude Code');
+  });
+
+  it('shows explicit model when job has cliType/model set', () => {
+    const job = makeJob({ cliType: 'codex', model: 'o3', ownerClientId: 'local-default' });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('explicit');
+    expect(chip.isDefault).toBe(false);
+    expect(chip.label).toBe('o3');
+  });
+
+  it('shows running execution model for in-progress jobs', () => {
+    const job = makeJob({
+      cliType: null,
+      model: null,
+      ownerClientId: 'local-default',
+      execution: {
+        jobId: 'task-1', jobKey: 'test::task-1', processId: 1, startedAt: '',
+        status: 'running', exitCode: null, durationSeconds: null,
+        model: 'claude-sonnet-4-6', runOutcome: null
+      },
+    });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('run');
+    expect(chip.isDefault).toBe(false);
+    expect(chip.label).toBe('sonnet 4.6');
+  });
+
+  it('shows "human" when owner client is human-kind with no defaults', () => {
+    const job = makeJob({ agent: 'human', cliType: null, model: null, ownerClientId: 'user-1' });
+    const owner = makeOwner({ id: 'user-1', kind: 'human', defaultCliType: null, defaultModel: null });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('human');
+    expect(chip.label).toBe('human');
+    expect(chip.icon).toBe('\u{1F464}');
+  });
+
+  it('shows "unknown" when no defaults and owner is not human', () => {
+    const job = makeJob({ agent: 'human', cliType: null, model: null, ownerClientId: 'svc' });
+    const owner = makeOwner({ id: 'svc', kind: 'service', defaultCliType: null, defaultModel: null });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('unknown');
+    expect(chip.label).toBe('unknown');
+  });
+
+  it('tooltip contains agent as pickup permission', () => {
+    const job = makeJob({ agent: 'human', cliType: null, model: null });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(typeof chip.tooltip).toBe('object');
+    expect(chip.tooltip.body).toContain('human');
+    expect(chip.tooltip.body).toContain('pickup permission');
+  });
+
+  it('tooltip indicates client default when source is default', () => {
+    const job = makeJob({ agent: 'human', cliType: null, model: null });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.tooltip.title).toContain('client default');
+    expect(chip.tooltip.body).toContain('client default');
+  });
+});
+
+function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {
+  return {
+    id: 'local-default',
+    displayName: 'Local Default',
+    emoji: null,
+    colour: null,
+    kind: 'agent-instance',
+    registeredAt: '',
+    lastSeenAt: null,
+    tokenBudgetMonthly: null,
+    notes: null,
+    defaultCliType: null,
+    defaultModel: null,
+    ...overrides,
+  };
+}
 
 function makeJob(overrides: Partial<JobInfo> = {}): JobInfo {
   return {

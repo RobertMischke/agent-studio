@@ -130,10 +130,17 @@
     }
   </div>
   <div class="job-card__meta">
-    <span class="job-card__agent">{{ agentIcon() }} {{ job().agent || 'unknown' }}</span>
-    @if (job().model) {
-      <span class="job-card__model">🧠 {{ job().model }}</span>
-    }
+    <span class="job-card__effective-model"
+          [class.job-card__effective-model--default]="effectiveModelChip().isDefault"
+          [appTooltip]="effectiveModelChip().tooltip"
+          data-testid="job-card-effective-model"
+          [attr.data-model-source]="effectiveModelChip().source">
+      <span class="job-card__effective-model-icon" aria-hidden="true">{{ effectiveModelChip().icon }}</span>
+      @if (effectiveModelChip().cliLabel && effectiveModelChip().fullModel) {
+        <span class="job-card__effective-model-cli">{{ effectiveModelChip().cliLabel }}</span>
+      }
+      <span class="job-card__effective-model-name">{{ effectiveModelChip().label }}</span>
+    </span>
     @if (tokenBubble(); as tb) {
       <span class="job-card__token-wrap">
         <button type="button"

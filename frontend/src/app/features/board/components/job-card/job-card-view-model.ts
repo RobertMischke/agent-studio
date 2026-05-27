@@ -1,5 +1,6 @@
-import type { JobInfo } from '../../../../models/job.model';
+import type { JobInfo, ClientSummary, CliType } from '../../../../models/job.model';
 import type { StructuredTooltip } from '../../../../components/tooltip';
+import { cliTypeIcon, cliTypeLabel, shortModelName } from '../../../../services/format.util';
 
 export interface JobTaskTypeChip {
   kind: string;
@@ -117,4 +118,110 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+export type EffectiveModelSource = 'run' | 'explicit' | 'default' | 'human' | 'unknown';
+
+export interface EffectiveModelChip {
+  icon: string;
+  label: string;
+  fullModel: string | null;
+  cliLabel: string | null;
+  source: EffectiveModelSource;
+  isDefault: boolean;
+  tooltip: StructuredTooltip;
+}
+
+const CLI_TYPES_SET = new Set(['copilot', 'claude', 'codex', 'gemini']);
+
+function isCliType(v: string | null | undefined): v is CliType {
+  return !!v && CLI_TYPES_SET.has(v);
+}
+
+export function buildEffectiveModelChip(job: JobInfo, owner: ClientSummary): EffectiveModelChip {
+  const execution = job.execution;
+  const ownerCli = isCliType(owner.defaultCliType) ? owner.defaultCliType : null;
+  const ownerModel = owner.defaultModel ?? null;
+
+  let icon: string;
+  let label: string;
+  let fullModel: string | null;
+  let cliLbl: string | null;
+  let source: EffectiveModelSource;
+  let isDefault: boolean;
+
+  if (execution?.status === 'running' && execution.model) {
+    const cli = job.cliType ?? ownerCli;
+    icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
+    label = shortModelName(execution.model);
+    fullModel = execution.model;
+    cliLbl = cli ? cliTypeLabel(cli) : null;
+    source = 'run';
+    isDefault = false;
+  } else if (job.cliType || job.model) {
+    const cli = job.cliType ?? ownerCli;
+    icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
+    label = shortModelName(job.model ?? ownerModel);
+    fullModel = job.model ?? ownerModel;
+    cliLbl = cli ? cliTypeLabel(cli) : null;
+    source = 'explicit';
+    isDefault = false;
+  } else if (ownerCli || ownerModel) {
+    icon = ownerCli ? cliTypeIcon(ownerCli) : '\u{1F916}';
+    label = shortModelName(ownerModel);
+    fullModel = ownerModel;
+    cliLbl = ownerCli ? cliTypeLabel(ownerCli) : null;
+    source = 'default';
+    isDefault = true;
+  } else if (owner.kind === 'human') {
+    icon = '\u{1F464}';
+    label = 'human';
+    fullModel = null;
+    cliLbl = null;
+    source = 'human';
+    isDefault = false;
+  } else {
+    icon = '\u{1F916}';
+    label = 'unknown';
+    fullModel = null;
+    cliLbl = null;
+    source = 'unknown';
+    isDefault = false;
+  }
+
+  const tooltip = buildModelTooltip(job, owner, source, ownerCli, ownerModel);
+
+  return { icon, label, fullModel, cliLabel: cliLbl, source, isDefault, tooltip };
+}
+
+function buildModelTooltip(
+  job: JobInfo,
+  owner: ClientSummary,
+  source: EffectiveModelSource,
+  ownerCli: CliType | null,
+  ownerModel: string | null,
+): StructuredTooltip {
+  const lines: string[] = [];
+
+  const effectiveCli = job.cliType ?? ownerCli;
+  const effectiveModel = source === 'run'
+    ? job.execution?.model ?? job.model ?? ownerModel
+    : job.model ?? ownerModel;
+
+  lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
+  lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!job.cliType && ownerCli ? ' <i>(client default)</i>' : ''}`);
+  lines.push(`<b>Agent:</b> ${escapeHtml(job.agent || 'none')} <i>(pickup permission)</i>`);
+
+  const ownerLabel = owner.displayName || owner.id;
+  const defaultParts: string[] = [];
+  if (ownerCli) defaultParts.push(cliTypeLabel(ownerCli));
+  if (ownerModel) defaultParts.push(ownerModel);
+  const defaultsStr = defaultParts.length > 0 ? defaultParts.join(' / ') : 'none';
+  lines.push(`<b>Owner:</b> ${escapeHtml(ownerLabel)} (${escapeHtml(owner.id)})`);
+  lines.push(`<b>Defaults:</b> ${escapeHtml(defaultsStr)}`);
+
+  return {
+    title: source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
+    body: lines.join('<br>'),
+  };
 }
