@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
@@ -275,7 +276,7 @@ public class IntakeRunnerTests : IDisposable
     private IntakeRunner BuildRunner()
     {
         var scanner = BuildScanner();
-        var mutations = new JobMutationService(scanner, NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         return new IntakeRunner(scanner, mutations, chatLog, NullLogger<IntakeRunner>.Instance);
     }

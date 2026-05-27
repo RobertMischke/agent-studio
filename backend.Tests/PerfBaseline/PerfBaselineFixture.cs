@@ -6,6 +6,7 @@ using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
@@ -83,7 +84,7 @@ internal sealed class PerfBaselineFixture : IDisposable
         }
         States = new JobStateMachine(Scanner, NullLogger<JobStateMachine>.Instance);
         var sessions = new JobSessionLog(Scanner, NullLogger<JobSessionLog>.Instance);
-        var mutations = new JobMutationService(Scanner, NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(Scanner, new ClientIdentityStore(Config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
 
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(

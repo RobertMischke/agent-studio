@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
@@ -231,7 +232,7 @@ public class OrchestratorIntakeTests : IDisposable
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(scanner, NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var time = new FakeTimeProvider(new DateTime(2026, 5, 6, 12, 0, 0, DateTimeKind.Utc));
         var intake = new IntakeRunner(scanner, mutations, chatLog,

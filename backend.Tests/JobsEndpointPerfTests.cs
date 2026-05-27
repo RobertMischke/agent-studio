@@ -7,6 +7,7 @@ using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
@@ -161,7 +162,7 @@ public class JobsEndpointPerfTests : IDisposable
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
         var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
         var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
-        var mutations = new JobMutationService(scanner, NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
 
         // Minimal CliRouter wired with all four drivers - the overlay only
         // calls router.Get(...).GetExecution(), which returns null when no

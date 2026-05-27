@@ -4,6 +4,7 @@ using OrchestratorApi.Endpoints.Jobs;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
@@ -890,7 +891,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
-        var mutations = new JobMutationService(scanner, NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var transitions = new JobTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<JobTransitionService>.Instance);

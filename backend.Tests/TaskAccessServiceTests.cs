@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.TaskAccess;
 using Xunit;
 
@@ -337,7 +338,7 @@ public class TaskAccessServiceTests : IDisposable
         var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
         var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), NullLogger<JobMutationService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var transitions = new JobTransitionService(scanner, machine, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
