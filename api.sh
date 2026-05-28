@@ -161,6 +161,39 @@ cmd_stop() {
 }
 
 cmd_start() {
+  # ADR-0044: dev backend boot policy gate. The dev checkout is the regression-
+  # test target, not a second pickup driver on the shared workspace. The
+  # Playwright fixture (`scripts/supervisor/dev-lifecycle.sh`) is the one
+  # legitimate caller that brings dev up; it exports
+  # ATP_DEV_BACKEND_FROM_FIXTURE=1 to bypass this gate. Direct human
+  # invocation needs ATP_ALLOW_DEV_BACKEND=1 as an explicit policy
+  # acknowledgement. Anything else refuses to boot so that an interactive
+  # session or a stray watchdog cannot silently restart dev's pickup loop
+  # on a shared workspace. The stable checkout (folder name ends in -stable)
+  # is unaffected by this gate.
+  case "$(basename "${SCRIPT_DIR}")" in
+    *-stable) ;;
+    *)
+      if [[ "${ATP_DEV_BACKEND_FROM_FIXTURE:-}" != "1" && "${ATP_ALLOW_DEV_BACKEND:-}" != "1" ]]; then
+        echo "ERROR: refusing to start the dev backend." >&2
+        echo "       AGENTS.md 'Dev backend lifecycle: Playwright-only' (ADR-0044) says the dev" >&2
+        echo "       checkout is offline by default. The only path that may bring it up is the" >&2
+        echo "       Playwright dev-backend fixture, which routes through" >&2
+        echo "       scripts/supervisor/dev-lifecycle.sh and sets ATP_DEV_BACKEND_FROM_FIXTURE=1." >&2
+        echo "" >&2
+        echo "       To boot dev manually for interactive debugging, re-run with" >&2
+        echo "       ATP_ALLOW_DEV_BACKEND=1 set in the environment as a policy acknowledgement:" >&2
+        echo "         ATP_ALLOW_DEV_BACKEND=1 ./api.sh start" >&2
+        exit 1
+      fi
+      if [[ "${ATP_DEV_BACKEND_FROM_FIXTURE:-}" == "1" ]]; then
+        echo "[api.sh] dev backend boot: Playwright fixture (ATP_DEV_BACKEND_FROM_FIXTURE=1)."
+      else
+        echo "[api.sh] dev backend boot: operator acknowledged (ATP_ALLOW_DEV_BACKEND=1)."
+      fi
+      ;;
+  esac
+
   get_status
   if [[ "${STATUS_RUNNING}" -eq 1 ]]; then
     if [[ "${STATUS_HEALTHY}" -eq 1 ]]; then

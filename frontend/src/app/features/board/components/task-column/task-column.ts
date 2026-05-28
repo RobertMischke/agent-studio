@@ -99,6 +99,9 @@ export class JobColumnComponent implements OnInit, OnDestroy {
     const mode = this.autoMode();
     const reason = status?.modeReason ?? null;
     const source = status?.modeSource ?? null;
+    const role = status?.role ?? null;
+    const pendingMode = status?.pendingMode ?? null;
+    const pendingAfter = status?.pendingModeWillApplyAfter ?? null;
 
     // PAUSED kind: explicit `paused` mode OR `manual` mode that was
     // flipped by a circuit-breaker / supervisor. The visible chip is the
@@ -131,6 +134,27 @@ export class JobColumnComponent implements OnInit, OnDestroy {
       modeKind = 'manual';
       modeLabel = 'MANUAL';
       modeTooltip = 'Auto-pickup is off. The currently running task continues; new tasks have to be started manually.';
+    }
+
+    // ADR-0044: deferred-mode overlay. A PUT /api/runner/{project}/mode call
+    // that arrived while a job was active leaves the live mode at its
+    // auto-* value and queues the requested mode in status.pendingMode.
+    // Surface that as "(after current)" on the pill so the operator sees the
+    // change took, just not yet.
+    if (pendingMode) {
+      const pendingPretty = pendingMode === 'paused' ? 'PAUSED' : pendingMode.toUpperCase();
+      modeLabel = `${modeLabel} → ${pendingPretty}`;
+      modeTooltip =
+        `${modeTooltip}\n\nDeferred change pending: mode will flip to "${pendingMode}" when the active job (${pendingAfter ?? 'in flight'}) finishes (ADR-0044).`;
+    }
+
+    // ADR-0044: test-subject backends never auto-pick. The label still
+    // shows the configured mode (operators can leave it on auto for
+    // future role flips), but we annotate the tooltip so the lane pill
+    // explains why nothing is being claimed even when AUTO is on.
+    if (role === 'test-subject') {
+      modeTooltip =
+        `${modeTooltip}\n\nThis backend is the test-subject seat (ADR-0044). The auto-pickup loop is structurally disabled regardless of mode; only explicit /api/jobs/{id}/start calls (Playwright fixtures, manual debugging) reach the CLI.`;
     }
 
     // Pick the active run. Two signals feed this:

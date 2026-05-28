@@ -30,6 +30,12 @@ frontend/e2e/_baselines*
 frontend/screenshots/
 test-results/
 
+# Locally-scoped build trees occasionally used to side-step a locked bin/ dir
+# (e.g. when the dev backend is running and holds OrchestratorApi.dll). Build
+# artifacts only; never source.
+**/obj-test/
+**/bin-test/
+
 # Loose Playwright screenshots that land in frontend/ when a spec writes
 # `screenshot({ path: 'foo.png' })` (relative path → CWD = frontend/).
 # Curated visual evidence stays under frontend/playwright-screenshots/

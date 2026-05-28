@@ -142,6 +142,41 @@ describe('JobColumnComponent (smoke)', () => {
     expect(cluster!.mode.tooltip.toLowerCase()).toContain('auto-pickup is off');
   });
 
+  // ADR-0044: a PUT /api/runner/{project}/mode call that arrived while a
+  // job was active leaves the live mode at auto-* and queues the requested
+  // mode in status.pendingMode. The pill renders an arrow + the deferred
+  // value so the operator sees the change took, just not yet.
+  it('cluster: pendingMode on auto-continuous renders "AUTO → MANUAL" with deferred-mode tooltip', async () => {
+    const fixture = await buildColumn({
+      mode: 'auto-continuous',
+      status: makeStatus({
+        mode: 'auto-continuous',
+        activeJobId: 'running-task',
+        pendingMode: 'manual',
+        pendingModeWillApplyAfter: 'running-task'
+      })
+    });
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.mode.label).toBe('AUTO → MANUAL');
+    expect(cluster!.mode.tooltip).toContain('Deferred change pending');
+    expect(cluster!.mode.tooltip).toContain('running-task');
+  });
+
+  // ADR-0044: a test-subject backend's lane pill should explain why no
+  // pickup is happening even when the mode pill says AUTO. We assert the
+  // tooltip carries the test-subject explanation; the label itself still
+  // reflects the configured mode so a future role-flip is visible.
+  it('cluster: role=test-subject appends a tooltip note explaining the structural pickup gate', async () => {
+    const fixture = await buildColumn({
+      mode: 'auto-continuous',
+      status: makeStatus({ mode: 'auto-continuous', role: 'test-subject' })
+    });
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.mode.label).toBe('AUTO');
+    expect(cluster!.mode.tooltip).toContain('test-subject');
+    expect(cluster!.mode.tooltip.toLowerCase()).toContain('structurally disabled');
+  });
+
   // ─────────────────────────────────────────────────────────────────────
   // Shared-workspace / multi-backend scenario.
   //

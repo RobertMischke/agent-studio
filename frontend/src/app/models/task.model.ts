@@ -571,6 +571,40 @@ export interface ProjectRunnerStatus {
    * the heuristic on every render.
    */
   modeSource?: 'user' | 'circuit-breaker' | 'supervisor' | 'system' | string | null;
+  /**
+   * Backend role assigned via `Runner:Role` config (ADR-0044). `orchestrator`
+   * runs the auto-pickup loop (stable seat); `test-subject` structurally
+   * disables auto-pickup so the dev backend can be observed by Playwright
+   * specs without racing stable on the shared workspace. Defaults to
+   * `orchestrator` when older backends return without the field.
+   */
+  role?: 'orchestrator' | 'test-subject' | string | null;
+  /**
+   * Mode the operator asked for while a job was still running. Non-null only
+   * when a `PUT /api/runner/{project}/mode` with `manual` / `paused` arrived
+   * while {@link activeJobId} was set. The runner applies the value the
+   * moment the active job clears; the lane pill renders as
+   * "MANUAL (after current)" while this is populated. See ADR-0044.
+   */
+  pendingMode?: string | null;
+  /** Job id the deferred mode change is waiting on. */
+  pendingModeWillApplyAfter?: string | null;
+}
+
+/**
+ * Response body for `PUT /api/runner/{project}/mode` (ADR-0044).
+ * `applied: true` means the live mode moved immediately; `applied: false`
+ * means the change is queued behind the active job, in which case
+ * {@link pendingMode} + {@link willApplyAfterJobId} carry the deferred
+ * value. The frontend renders the lane pill as
+ * "{mode} (then {pendingMode} after {willApplyAfterJobId})" while the
+ * deferred change is pending.
+ */
+export interface SetRunnerModeResponse {
+  applied: boolean;
+  mode: string;
+  pendingMode?: string | null;
+  willApplyAfterJobId?: string | null;
 }
 
 export interface RunnerStatus {
