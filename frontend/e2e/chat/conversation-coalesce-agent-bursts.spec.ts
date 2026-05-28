@@ -119,15 +119,25 @@ test.describe('Conversation view coalesces consecutive agent bursts', () => {
     await expect(agentBubbles).toHaveCount(2);
     await expect(userBubbles).toHaveCount(1);
 
-    // The first agent bubble has 9 items folded into one list; the second has 3.
+    // Progressive disclosure: the first agent bubble has 9 items folded into
+    // one list, but only the first 5 render until the user expands. The
+    // second bubble's 3 items fit under the limit so it shows all of them.
     const firstAgentItems = agentBubbles.first().locator('[data-testid="conversation-message-item"]');
     const secondAgentItems = agentBubbles.nth(1).locator('[data-testid="conversation-message-item"]');
-    await expect(firstAgentItems).toHaveCount(9);
+    await expect(firstAgentItems).toHaveCount(5);
     await expect(secondAgentItems).toHaveCount(3);
 
-    // The "N events" badge surfaces the coalesce on the multi-item bubble.
+    // The "N events" badge surfaces the coalesce on the multi-item bubble —
+    // it counts the underlying coalesce total, not the visible-items count.
     await expect(agentBubbles.first().locator('[data-testid="conversation-message-count"]'))
       .toContainText('9 events');
+
+    // "show 4 more" expands to all 9 items.
+    const showMore = agentBubbles.first().locator('[data-testid="conversation-message-show-more"]');
+    await expect(showMore).toBeVisible();
+    await expect(showMore).toContainText('4');
+    await showMore.click();
+    await expect(firstAgentItems).toHaveCount(9);
 
     await page.screenshot({
       path: path.join(RESULTS_DIR, 'coalesced-agent-bubbles.png'),

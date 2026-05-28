@@ -193,16 +193,20 @@ describe('ConversationViewComponent', () => {
     expect(el.querySelectorAll('[data-testid="conversation-message-message.user"]').length).toBe(1);
   });
 
-  it('starts a new agent bubble when the gap between same-actor messages exceeds 60s', async () => {
+  it('keeps same-actor messages in one bubble even when their gap exceeds 60s', async () => {
+    // Operator request: drop the legacy time-gap rule; same actor stays
+    // glued unless USER breaks the run. Two messages 6 minutes apart still
+    // fold into a single bubble.
     const events: ConversationEvent[] = [
       agentMsg('a1', 1, 'first'),
-      // 90s later → past the coalesce threshold
-      agentMsg('a2', 91, 'second'),
+      agentMsg('a2', 360, 'second'),
     ];
     const fixture = await makeFixture(events);
     const el: HTMLElement = fixture.nativeElement;
     const agentBubbles = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
-    expect(agentBubbles.length).toBe(2);
+    expect(agentBubbles.length).toBe(1);
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(2);
   });
 
   it('filters runMarker start events but keeps non-start markers visible', async () => {
@@ -220,7 +224,6 @@ describe('ConversationViewComponent', () => {
     ];
     const fixture = await makeFixture(events);
     const el: HTMLElement = fixture.nativeElement;
-    // start row is filtered out
     const markerRows = el.querySelectorAll('[data-testid="conversation-run-marker"]');
     expect(markerRows.length).toBe(1);
     expect(markerRows[0].getAttribute('data-marker')).toBe('complete');
@@ -237,8 +240,129 @@ describe('ConversationViewComponent', () => {
     const el: HTMLElement = fixture.nativeElement;
     const sessionChip = el.querySelector('[data-testid="conversation-message-session"]');
     expect(sessionChip).toBeTruthy();
-    // Short-form id, not the full uuid
     expect(sessionChip?.textContent?.trim()).toContain('c705779a');
     expect(sessionChip?.textContent?.trim()).not.toContain('358ea7e11a28');
+    // The bubble carries the full session id as a data attribute so the
+    // E2E spec can assert on it without parsing the truncated chip.
+    const bubble = el.querySelector('[data-testid="conversation-message-message.taskAgent"]');
+    expect(bubble?.getAttribute('data-session-id')).toBe(sessionId);
+  });
+
+  it('lifts Session init lines out of the visible flow into sidecar meta', async () => {
+    const sessionId = 'c705779a-a6bc-43ac-bada-358ea7e11a28';
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 0, `● Session init ${sessionId}`),
+      agentMsg('a2', 1, 'On branch main'),
+      agentMsg('a3', 2, 'Bash completed'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    // Exactly one bubble; the Session init line is NOT one of its items.
+    const agentBubbles = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(agentBubbles.length).toBe(1);
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(2);
+    for (const item of Array.from(items)) {
+      expect(item.textContent).not.toContain('Session init');
+    }
+    // The session id rides along on the bubble for tooltip / chip rendering.
+    expect(agentBubbles[0].getAttribute('data-session-id')).toBe(sessionId);
+  });
+
+  it('lifts Rate limit telemetry lines out of the visible flow into sidecar meta', async () => {
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 0, '● Rate limit · five-hour · allowed · reset in 4.4 h  [window=five_hour status=allowed resetsAt=1777393800 overage=allowed usingOverage=false]'),
+      agentMsg('a2', 1, 'On branch main'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const bubble = el.querySelector('[data-testid="conversation-message-message.taskAgent"]');
+    expect(bubble).toBeTruthy();
+    expect(bubble?.getAttribute('data-has-rate-limit')).toBe('true');
+    // No item body contains the raw "Rate limit" string.
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(1);
+    expect(items[0].textContent).not.toContain('Rate limit');
+    // The dezent dot is the only on-row indicator.
+    expect(el.querySelector('[data-testid="conversation-message-rate-limit"]')).toBeTruthy();
+  });
+
+  it('strips the "Session task_notification <id>" prefix so the payload is the body', async () => {
+    const sessionId = 'c705779a-a6bc-43ac-bada-358ea7e11a28';
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 0, `● Session task_notification ${sessionId} total 340`),
+      agentMsg('a2', 1, `● Session task_notification ${sessionId} session-events.jsonl`),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toContain('total 340');
+    expect(items[0].textContent).not.toContain('Session task_notification');
+    expect(items[0].textContent).not.toContain(sessionId);
+    expect(items[1].textContent).toContain('session-events.jsonl');
+  });
+
+  it('skips empty-payload task_started lines but still captures their session id', async () => {
+    const sessionId = 'c705779a-a6bc-43ac-bada-358ea7e11a28';
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 0, `● Session task_started ${sessionId}`),
+      agentMsg('a2', 1, 'real payload here'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(1);
+    expect(items[0].textContent).toContain('real payload here');
+    const bubble = el.querySelector('[data-testid="conversation-message-message.taskAgent"]');
+    expect(bubble?.getAttribute('data-session-id')).toBe(sessionId);
+  });
+
+  it('limits a long burst to the first 5 items and offers "show N more"', async () => {
+    const events: ConversationEvent[] = Array.from({ length: 12 }, (_, i) =>
+      agentMsg(`a${i}`, i, `payload ${i}`)
+    );
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(5);
+    const showMore = el.querySelector<HTMLButtonElement>(
+      '[data-testid="conversation-message-show-more"]'
+    );
+    expect(showMore).toBeTruthy();
+    expect(showMore?.textContent).toContain('7');
+    // Click expands all 12.
+    showMore?.click();
+    fixture.detectChanges();
+    const expanded = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(expanded.length).toBe(12);
+  });
+
+  it('clamps long item bodies and exposes a per-item expand toggle', async () => {
+    const longBody = 'lorem ipsum '.repeat(40); // > 180 chars
+    const events: ConversationEvent[] = [agentMsg('a1', 0, longBody)];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const item = el.querySelector('[data-testid="conversation-message-item"]');
+    expect(item?.classList.contains('msg__item--clampable')).toBe(true);
+    const toggle = el.querySelector<HTMLButtonElement>(
+      '[data-testid="conversation-message-item-expand"]'
+    );
+    expect(toggle).toBeTruthy();
+    toggle?.click();
+    fixture.detectChanges();
+    const itemAfter = el.querySelector('[data-testid="conversation-message-item"]');
+    expect(itemAfter?.classList.contains('msg__item--expanded')).toBe(true);
+  });
+
+  it('does not clamp short single-line items', async () => {
+    const events: ConversationEvent[] = [agentMsg('a1', 0, 'short')];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const item = el.querySelector('[data-testid="conversation-message-item"]');
+    expect(item?.classList.contains('msg__item--clampable')).toBe(false);
+    expect(
+      el.querySelector('[data-testid="conversation-message-item-expand"]')
+    ).toBeFalsy();
   });
 });

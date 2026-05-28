@@ -44,26 +44,35 @@
           <li class="conv__row conv__row--message"
               [attr.data-actor]="row.actor"
               [attr.data-item-count]="row.items.length"
+              [attr.data-session-id]="row.meta.sessionIdFull ?? null"
+              [attr.data-has-rate-limit]="row.meta.rateLimitText ? 'true' : 'false'"
               [attr.data-testid]="'conversation-message-' + row.actor">
             <div class="msg">
-              <header class="msg__head">
+              <header class="msg__head"
+                      [appTooltip]="metaTooltip(row)"
+                      [attr.data-testid]="'conversation-message-head'">
                 <span class="msg__avatar" aria-hidden="true">{{ actorGlyph(row.actor) }}</span>
                 <span class="msg__actor">{{ actorLabel(row.actor) }}</span>
                 @if (row.items.length > 1) {
                   <span class="msg__count"
-                        data-testid="conversation-message-count"
-                        [appTooltip]="row.items.length + ' coalesced events'">{{ row.items.length }} events</span>
+                        data-testid="conversation-message-count">{{ row.items.length }} events</span>
                 }
                 <time class="msg__time">{{ formatGroupTime(row) }}</time>
-                @if (row.sessionId) {
+                @if (row.meta.sessionIdFull) {
                   <span class="msg__session"
-                        data-testid="conversation-message-session"
-                        [appTooltip]="'Session ' + row.sessionId">session {{ formatSessionIdShort(row.sessionId) }}</span>
+                        data-testid="conversation-message-session">session {{ formatSessionIdShort(row.meta.sessionIdFull) }}</span>
+                }
+                @if (row.meta.rateLimitText) {
+                  <span class="msg__rate-dot"
+                        data-testid="conversation-message-rate-limit"
+                        aria-hidden="true">·</span>
                 }
               </header>
               <ol class="msg__items" data-testid="conversation-message-items">
-                @for (item of row.items; track item.id) {
+                @for (item of visibleItems(row); track item.id) {
                   <li class="msg__item"
+                      [class.msg__item--clampable]="item.clampable"
+                      [class.msg__item--expanded]="isItemExpanded(item.id)"
                       [attr.data-testid]="'conversation-message-item'"
                       [attr.data-item-id]="item.id">
                     @if (item.target) {
@@ -77,6 +86,31 @@
                         }
                       </ul>
                     }
+                    @if (item.clampable) {
+                      <button type="button"
+                              class="msg__item-toggle"
+                              data-testid="conversation-message-item-expand"
+                              [appTooltip]="isItemExpanded(item.id) ? 'Collapse this item' : 'Show full body'"
+                              (click)="toggleItem(item.id)">{{ isItemExpanded(item.id) ? 'collapse' : 'expand' }}</button>
+                    }
+                  </li>
+                }
+                @if (hiddenItemCount(row) > 0) {
+                  <li class="msg__more">
+                    <button type="button"
+                            class="msg__more-btn"
+                            data-testid="conversation-message-show-more"
+                            [attr.aria-expanded]="isGroupExpanded(row.id) ? 'true' : 'false'"
+                            (click)="toggleGroup(row.id)">show {{ hiddenItemCount(row) }} more
+                      {{ hiddenItemCount(row) === 1 ? 'item' : 'items' }}</button>
+                  </li>
+                } @else if (row.items.length > visibleItemLimit && isGroupExpanded(row.id)) {
+                  <li class="msg__more">
+                    <button type="button"
+                            class="msg__more-btn"
+                            data-testid="conversation-message-show-less"
+                            [attr.aria-expanded]="'true'"
+                            (click)="toggleGroup(row.id)">show fewer</button>
                   </li>
                 }
               </ol>
