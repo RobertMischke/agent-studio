@@ -1,0 +1,9 @@
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.csproj.AssemblyReference.cache
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\rpswa.dswa.cache.json
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.GeneratedMSBuildEditorConfig.editorconfig
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.AssemblyInfoInputs.cache
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.AssemblyInfo.cs
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.csproj.CoreCompileInputs.cache
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.MvcApplicationPartsAssemblyInfo.cs
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.MvcApplicationPartsAssemblyInfo.cache
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\backend\obj-test\Debug\net10.0\OrchestratorApi.sourcelink.json

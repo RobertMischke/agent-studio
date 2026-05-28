@@ -1,0 +1,7 @@
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\update-service\obj-test\Debug\net10.0\rpswa.dswa.cache.json
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\update-service\obj-test\Debug\net10.0\UpdateService.GeneratedMSBuildEditorConfig.editorconfig
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\update-service\obj-test\Debug\net10.0\UpdateService.AssemblyInfoInputs.cache
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\update-service\obj-test\Debug\net10.0\UpdateService.AssemblyInfo.cs
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\update-service\obj-test\Debug\net10.0\UpdateService.csproj.CoreCompileInputs.cache
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\update-service\obj-test\Debug\net10.0\UpdateService.MvcApplicationPartsAssemblyInfo.cache
+C:\Projects\agent-taskboard-devspace\agent-taskboard-dev\update-service\obj-test\Debug\net10.0\UpdateService.sourcelink.json
