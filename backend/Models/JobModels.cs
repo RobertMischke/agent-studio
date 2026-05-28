@@ -460,6 +460,42 @@ public record SessionEvent
     public string? HeadShaAfter { get; init; }
 }
 
+/// <summary>
+/// Per-job derived view of "what the agent actually did", folded from
+/// <c>logs/session-events.jsonl</c> (one row per CLI start / continue /
+/// recovery) and <c>logs/tool-calls.jsonl</c> (one row per tool started /
+/// completed). Drives the Overview tab's Agent Work block so the user sees
+/// concrete metrics (call count, tool mix, recovery status) instead of an
+/// inert session UUID. Every field tolerates a missing log file by
+/// returning zeros / nulls; the endpoint never throws on absent logs.
+/// </summary>
+public record AgentWorkSummary
+{
+    /// <summary>Number of session-event rows (start + continue + recovery).</summary>
+    public int Calls { get; init; }
+    /// <summary>True when at least one session event has <c>Kind == "recovery"</c>.</summary>
+    public bool Recovered { get; init; }
+    /// <summary>Total <c>kind=started</c> tool-call rows.</summary>
+    public int ToolCalls { get; init; }
+    /// <summary>Per-tool started counts, sorted by count descending.</summary>
+    public List<AgentWorkToolCount> ToolCounts { get; init; } = [];
+    /// <summary>Timestamp of the earliest session event, or null when the log is empty.</summary>
+    public DateTime? StartedAt { get; init; }
+    /// <summary>
+    /// Timestamp of the latest signal we have - max(latest session event,
+    /// latest tool-call row). Null when both logs are empty.
+    /// </summary>
+    public DateTime? LastTouchAt { get; init; }
+    /// <summary>Echoed from <c>job.json</c> for the Debug tooltip; the operator-facing UI hides this by default.</summary>
+    public string? CurrentSessionId { get; init; }
+}
+
+public record AgentWorkToolCount
+{
+    public string Tool { get; init; } = "";
+    public int Count { get; init; }
+}
+
 public record JobDetail
 {
     public JobInfo Info { get; init; } = new();

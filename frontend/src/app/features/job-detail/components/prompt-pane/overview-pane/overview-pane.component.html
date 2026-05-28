@@ -89,28 +89,22 @@
         </span>
       </div>
 
-      @if (job().sessionName) {
-        <div class="ov-row">
-          <span class="ov-label">Session</span>
-          <span class="ov-value ov-value--mono">
-            <span [appTooltip]="job().sessionName!">{{ shortSessionId(job().sessionName) }}</span>
-            <button type="button"
-                    class="ov-copy-btn"
-                    aria-label="Copy session ID"
-                    (click)="copyToClipboard(job().sessionName!)">
-              <span aria-hidden="true">&#x1F4CB;</span>
-            </button>
-          </span>
-        </div>
-      }
     </div>
   </section>
 
   <!-- Token / Performance block -->
   <section class="ov-section" data-testid="overview-tokens">
     <h3 class="ov-section__title">Tokens &amp; Performance</h3>
-    @if (hasTokens()) {
-      <div class="ov-grid">
+
+    @if (hasOrchestratorTokens()) {
+      <div class="ov-grid" data-testid="overview-tokens-orchestrator">
+        <div class="ov-row ov-row--source">
+          <span class="ov-label">Source</span>
+          <span class="ov-value ov-dim"
+                [appTooltip]="'Auto-review summaries, title-generate, and other orchestrator-side Haiku calls attributed to this task. The agent\'s own CLI footer is shown separately below.'">
+            Orchestrator
+          </span>
+        </div>
         <div class="ov-row">
           <span class="ov-label">Input</span>
           <span class="ov-value ov-value--mono">{{ formatTokens(tokenSummary()!.inputTokens) }}</span>
@@ -134,8 +128,49 @@
           <span class="ov-value ov-value--mono">{{ tokenSummary()!.calls }}</span>
         </div>
       </div>
-    } @else {
-      <div class="ov-empty">No token data recorded yet.</div>
+    }
+
+    @if (agentUsage(); as au) {
+      <div class="ov-grid" [class.ov-grid--perf]="hasOrchestratorTokens()" data-testid="overview-tokens-agent">
+        <div class="ov-row ov-row--source">
+          <span class="ov-label">Source</span>
+          <span class="ov-value ov-dim"
+                [appTooltip]="'Latest token / request count reported by the CLI agent itself in its terminal footer. Format varies per CLI; shown verbatim.'">
+            Agent (CLI footer)
+          </span>
+        </div>
+        @if (au.tokens) {
+          <div class="ov-row">
+            <span class="ov-label">Tokens</span>
+            <span class="ov-value ov-value--mono ov-value--strong">{{ au.tokens }}</span>
+          </div>
+        }
+        @if (au.requests) {
+          <div class="ov-row">
+            <span class="ov-label">Requests</span>
+            <span class="ov-value ov-value--mono">{{ au.requests }}</span>
+          </div>
+        }
+        @if (au.changes) {
+          <div class="ov-row">
+            <span class="ov-label">Changes</span>
+            <span class="ov-value ov-value--mono">{{ au.changes }}</span>
+          </div>
+        }
+        @if (au.at) {
+          <div class="ov-row">
+            <span class="ov-label">Reported</span>
+            <span class="ov-value">
+              <span>{{ formatRelativeTime(au.at) }}</span>
+              <span class="ov-dim">({{ formatAbsoluteTime(au.at) }})</span>
+            </span>
+          </div>
+        }
+      </div>
+    }
+
+    @if (!hasOrchestratorTokens() && !agentUsage()) {
+      <div class="ov-empty" data-testid="overview-tokens-empty">{{ tokensEmptyMessage() }}</div>
     }
 
     @if (timeline(); as tl) {
@@ -153,6 +188,73 @@
       </div>
     }
   </section>
+
+  <!-- Agent Work block (replaces the raw SESSION row).
+       Aggregates session-events.jsonl + tool-calls.jsonl for a meaningful
+       at-a-glance "what did the agent actually do" view. -->
+  @if (hasAgentWork()) {
+    <section class="ov-section" data-testid="overview-agent-work">
+      <h3 class="ov-section__title"
+          [appTooltip]="sessionDebugTooltip()">
+        Agent Work
+      </h3>
+      <div class="ov-grid">
+        @if (agentWork(); as aw) {
+          <div class="ov-row">
+            <span class="ov-label">Calls</span>
+            <span class="ov-value ov-value--mono" data-testid="agent-work-calls">
+              {{ aw.calls }}
+              @if (aw.recovered) {
+                <span class="ov-pill ov-pill--warn"
+                      [appTooltip]="'At least one CLI invocation could not resume the prior session and reconstructed context from disk.'">
+                  recovered
+                </span>
+              }
+            </span>
+          </div>
+
+          @if (aw.toolCalls > 0) {
+            <div class="ov-row">
+              <span class="ov-label">Tools</span>
+              <span class="ov-value"
+                    [appTooltip]="toolCountsTooltip()"
+                    data-testid="agent-work-tools">
+                <span class="ov-value--mono">{{ aw.toolCalls }}</span>
+                <span class="ov-tool-chips">
+                  @for (tc of topToolCounts(); track tc.tool) {
+                    <span class="ov-tool-chip">
+                      <span class="ov-tool-chip__name">{{ tc.tool }}</span>
+                      <span class="ov-tool-chip__count">{{ tc.count }}</span>
+                    </span>
+                  }
+                </span>
+              </span>
+            </div>
+          }
+
+          @if (aw.startedAt) {
+            <div class="ov-row">
+              <span class="ov-label">Started</span>
+              <span class="ov-value">
+                <span>{{ formatRelativeTime(aw.startedAt) }}</span>
+                <span class="ov-dim">({{ formatAbsoluteTime(aw.startedAt) }})</span>
+              </span>
+            </div>
+          }
+
+          @if (aw.lastTouchAt) {
+            <div class="ov-row">
+              <span class="ov-label">Last Touch</span>
+              <span class="ov-value">
+                <span>{{ formatRelativeTime(aw.lastTouchAt) }}</span>
+                <span class="ov-dim">({{ formatAbsoluteTime(aw.lastTouchAt) }})</span>
+              </span>
+            </div>
+          }
+        }
+      </div>
+    </section>
+  }
 
   <!-- Regression Radar block -->
   <section class="ov-section" data-testid="overview-regression-radar">

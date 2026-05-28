@@ -35,6 +35,7 @@ import { LanePagerService } from './state/lane-pager.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
 import { SessionEventsPollService } from '../polling/services/session-events-poll.service';
 import { RunTimelinePollService } from '../polling/services/run-timeline-poll.service';
+import { AgentWorkSummaryPollService } from '../polling/services/agent-work-summary-poll.service';
 import { ScreenshotsPollService } from '../polling/services/screenshots-poll.service';
 import { GitPaneService } from './services/git-pane.service';
 import { shouldShowFailureToast } from './services/run-outcome.util';
@@ -84,6 +85,7 @@ import { TooltipDirective } from '../../components/tooltip';
     ClaudeSessionPollService,
     SessionEventsPollService,
     RunTimelinePollService,
+    AgentWorkSummaryPollService,
     ScreenshotsPollService,
     GitPaneService,
     CliOutputPollService,
@@ -603,6 +605,13 @@ export class JobDetailComponent implements OnDestroy {
   // ...and for the run-timeline poller (5 s cadence).
   private readonly runTimelineEffect = effect(() => {
     this.runTimelinePoll.syncTo(this.detail()?.info ?? null);
+  });
+
+  // ...and for the agent-work-summary poller (10 s cadence). Drives
+  // the Overview tab's Agent Work block.
+  private readonly agentWorkSummaryPoll = inject(AgentWorkSummaryPollService);
+  private readonly agentWorkSummaryEffect = effect(() => {
+    this.agentWorkSummaryPoll.syncTo(this.detail()?.info ?? null);
   });
 
   // ...and for the per-job screenshots poller (10 s cadence). The

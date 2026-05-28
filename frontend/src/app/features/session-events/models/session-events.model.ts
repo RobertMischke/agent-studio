@@ -25,3 +25,25 @@ export interface SessionEventsResponse {
   sessionChain: string[];
   currentSessionId: string | null;
 }
+
+/**
+ * Per-job rollup of "what the agent actually did" - folded from
+ * `logs/session-events.jsonl` (one row per CLI start / continue /
+ * recovery) and `logs/tool-calls.jsonl` (one row per tool started /
+ * completed). Drives the Overview tab's Agent Work block; mirrors
+ * backend `AgentWorkSummary`.
+ */
+export interface AgentWorkSummary {
+  calls: number;
+  recovered: boolean;
+  toolCalls: number;
+  toolCounts: AgentWorkToolCount[];
+  startedAt: string | null;
+  lastTouchAt: string | null;
+  currentSessionId: string | null;
+}
+
+export interface AgentWorkToolCount {
+  tool: string;
+  count: number;
+}

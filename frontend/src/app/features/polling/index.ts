@@ -6,6 +6,7 @@
  * orchestrator log, etc.) and exposes signals consumers bind to.
  */
 export { JobBackgroundPoller } from './services/task-background-poller';
+export { AgentWorkSummaryPollService } from './services/agent-work-summary-poll.service';
 export { ClaudeSessionPollService } from './services/claude-session-poll.service';
 export { CliOutputPollService } from './services/cli-output-poll.service';
 export { RunTimelinePollService } from './services/run-timeline-poll.service';

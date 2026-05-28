@@ -46,7 +46,7 @@ import type {
   RunDiffResponse,
 } from '../features/run-timeline';
 import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
-import type { SessionEventsResponse } from '../features/session-events';
+import type { AgentWorkSummary, SessionEventsResponse } from '../features/session-events';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
 
@@ -715,6 +715,18 @@ export class JobService {
   getSessionEvents(jobId: string, watchPath?: string) {
     return this.http.get<SessionEventsResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/session-events`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Per-job derived view of "what the agent actually did" - folded from
+   * session-events.jsonl + tool-calls.jsonl. Drives the Overview tab's
+   * Agent Work block.
+   */
+  getAgentWorkSummary(jobId: string, watchPath?: string) {
+    return this.http.get<AgentWorkSummary>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/agent-work-summary`,
       this.withWatchPath(watchPath),
     );
   }

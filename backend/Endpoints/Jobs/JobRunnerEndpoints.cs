@@ -101,6 +101,20 @@ public static class JobRunnerEndpoints
             });
         });
 
+        // Agent work summary - a small derived view of "what the agent
+        // actually did on this job" folded from logs/session-events.jsonl
+        // (one row per CLI start / continue / recovery) and
+        // logs/tool-calls.jsonl (one row per tool started / completed).
+        // Drives the Overview tab's Agent Work block; replaces the inert
+        // raw session-id row the operator flagged as no-value noise. The
+        // current session id rides along for the debug tooltip only.
+        group.MapGet("/{jobId}/agent-work-summary", (string jobId, string? watchPath, JobScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            return Results.Ok(AgentWorkSummaryReader.Read(info));
+        });
+
         // The condensed run timeline that drives the protocol-pane redesign.
         // One record per CLI invocation between user inputs, paired with the
         // [taskboard] Started/exited markers in cli-output.log so the frontend

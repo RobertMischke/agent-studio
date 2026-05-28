@@ -10,6 +10,7 @@ import type { CliType, JobInfo } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
+import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
 import { ClientService } from '../../../../../services/client.service';
 import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
 import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
@@ -37,10 +38,43 @@ export class OverviewPaneComponent {
   readonly cliTypeChange = output<CliType>();
 
   private readonly runTimelinePoll = inject(RunTimelinePollService);
+  private readonly agentWorkPoll = inject(AgentWorkSummaryPollService);
   private readonly clients = inject(ClientService);
 
   readonly timeline = this.runTimelinePoll.timeline;
   readonly runs = this.runTimelinePoll.runs;
+
+  /**
+   * Derived from `logs/session-events.jsonl` + `logs/tool-calls.jsonl`.
+   * Drives the Agent Work block that replaced the raw SESSION row.
+   */
+  readonly agentWork = this.agentWorkPoll.summary;
+
+  readonly hasAgentWork = computed(() => {
+    const s = this.agentWork();
+    return s != null && (s.calls > 0 || s.toolCalls > 0);
+  });
+
+  /** Top N tool counts to render as compact chips. */
+  readonly topToolCounts = computed(() => {
+    const s = this.agentWork();
+    if (s == null) return [];
+    return s.toolCounts.slice(0, 6);
+  });
+
+  /** Comma-separated tool tooltip (full list) for the "Tools" row. */
+  readonly toolCountsTooltip = computed(() => {
+    const s = this.agentWork();
+    if (s == null || s.toolCounts.length === 0) return '';
+    return s.toolCounts.map(tc => `${tc.tool}: ${tc.count}`).join('\n');
+  });
+
+  /** Short rendering of the session id for the optional debug tooltip. */
+  readonly sessionDebugTooltip = computed(() => {
+    const id = this.job().sessionName;
+    if (!id) return '';
+    return `Session id (debug): ${id}`;
+  });
 
   readonly owner = computed(() => {
     const ownerId = this.job().ownerClientId;
@@ -60,9 +94,38 @@ export class OverviewPaneComponent {
 
   readonly tokenSummary = computed(() => this.job().tokenSummary ?? null);
 
-  readonly hasTokens = computed(() => {
+  readonly hasOrchestratorTokens = computed(() => {
     const ts = this.tokenSummary();
     return ts !== null && ts.totalTokens > 0;
+  });
+
+  /**
+   * Token / request / changes counts the CLI agent itself reported in its
+   * terminal footer at the end of a run. Format is unstructured strings
+   * because each CLI uses a different one (e.g. Claude `~12.5k tokens`,
+   * Copilot `tokens: 8,123`). Surfaced verbatim — combining with
+   * `tokenSummary` (orchestrator-side, structured) would lose information.
+   */
+  readonly agentUsage = computed(() => {
+    const lu = this.job().lastUsage;
+    if (!lu) return null;
+    if (!lu.tokens && !lu.requests && !lu.changes) return null;
+    return lu;
+  });
+
+  /**
+   * Wording for the empty state. Honest about *why* there is no data
+   * depending on lane state, instead of a blanket "No token data".
+   */
+  readonly tokensEmptyMessage = computed(() => {
+    const state = this.job().state;
+    if (state === '1-preparation' || state === '1a-orchestrator-prep' || state === '2-ready') {
+      return 'Run not started yet. Token activity will appear here once the agent reports usage.';
+    }
+    if (state === '3-progress') {
+      return 'Run in progress. Token activity will appear here once the agent reports a footer.';
+    }
+    return 'No token activity recorded for this task. The agent did not report a CLI footer and the orchestrator made no LLM calls attributed to this job.';
   });
 
   readonly lastRunRecord = computed<RunRecord | null>(() => {
@@ -165,16 +228,6 @@ export class OverviewPaneComponent {
 
   cliTypeIcon(t: CliType): string {
     return cliTypeIcon(t);
-  }
-
-  shortSessionId(sessionName: string | null): string {
-    if (!sessionName) return '';
-    if (sessionName.length <= 12) return sessionName;
-    return sessionName.slice(0, 10) + '…';
-  }
-
-  copyToClipboard(text: string): void {
-    navigator.clipboard?.writeText(text);
   }
 
   phaseLabel(phase: string | null | undefined): string | null {
