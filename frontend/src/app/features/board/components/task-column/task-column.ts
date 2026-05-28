@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output } from '@angular/core';
-import { JobInfo, JobOrderItem } from '../../../../models/task.model';
+import { JobInfo, JobOrderItem, ProjectRunnerStatus } from '../../../../models/task.model';
 import { JobCardComponent } from '../task-card/task-card.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
@@ -46,6 +46,20 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly autoProject = input<string | null>(null);
   /** Current runner mode for the auto project, drives the chip's on/off look. */
   readonly autoMode = input<string>('manual');
+  /**
+   * Full runner-status snapshot for the lane's auto project. Drives the
+   * In-Progress lane's three-pill status cluster (RUNNING / mode / Q:N).
+   * Null when the lane is not project-scoped (e.g. board scoped to "All
+   * projects" with mixed projects in the lane).
+   */
+  readonly runnerStatus = input<ProjectRunnerStatus | null>(null);
+  /**
+   * Live wall-clock tick used so the RUNNING pill's duration string
+   * (`3m24s`) advances without re-polling the runner status. The board
+   * passes a 1-Hz signal; the column does the read inside a computed so
+   * change detection is OnPush-friendly.
+   */
+  readonly nowMs = input<number>(0);
 
   readonly jobClick = output<JobInfo>();
   // `targetIndex` is the 0-based insertion slot in this column the user
@@ -64,17 +78,98 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   /** Emits the project name when the user clicks the lane's auto chip. */
   readonly autoToggleRequest = output<string>();
 
-  /** Helpers for the lane-side auto chip. */
-  readonly autoOn = computed(() => {
-    const m = this.autoMode();
-    return m === 'auto-continuous' || m === 'auto-single';
+  /**
+   * Three-pill status cluster for the In-Progress lane:
+   * - `running`: shown when the runner has an active execution. Includes
+   *   the JobId, an elapsed-time string, and the model.
+   * - `mode`: the pickup-mode pill (AUTO / MANUAL / PAUSED). Distinguishes
+   *   `manual` from circuit-breaker-induced halts: when the runner is in
+   *   `manual` because of a circuit-breaker reason it renders as PAUSED
+   *   with a different colour so the operator sees this was a system-
+   *   initiated halt, not a user toggle.
+   * - `queueSize`: count of items waiting in `2-ready` (`Q:5` badge).
+   *
+   * Rendered as a horizontal cluster on the lane header. Only active for
+   * `state() === '3-progress'` and only when a single project is in scope
+   * (the existing `autoProject()` gate).
+   */
+  readonly statusCluster = computed(() => {
+    if (this.state() !== '3-progress' || !this.autoProject()) return null;
+    const status = this.runnerStatus();
+    const mode = this.autoMode();
+    const reason = status?.modeReason ?? null;
+    const source = status?.modeSource ?? null;
+
+    // PAUSED kind: explicit `paused` mode OR `manual` mode that was
+    // flipped by a circuit-breaker / supervisor. The visible chip is the
+    // same in both cases, but the tooltip names the actual cause.
+    const isCircuitBreaker =
+      source === 'circuit-breaker' || (reason ?? '').includes('circuit-breaker');
+    const isSupervisorPause = source === 'supervisor';
+    let modeKind: 'auto' | 'manual' | 'paused';
+    let modeLabel: string;
+    let modeTooltip: string;
+    if (mode === 'auto-continuous') {
+      modeKind = 'auto';
+      modeLabel = 'AUTO';
+      modeTooltip = 'Auto-pickup: when the active task finishes, the runner will start the next item in 2-ready automatically.';
+    } else if (mode === 'auto-single') {
+      modeKind = 'auto';
+      modeLabel = 'AUTO · 1';
+      modeTooltip = 'Auto-pickup (single shot): the runner will start one more task and then revert to manual.';
+    } else if (mode === 'paused' || isCircuitBreaker || isSupervisorPause) {
+      modeKind = 'paused';
+      modeLabel = 'PAUSED';
+      if (isCircuitBreaker) {
+        modeTooltip = `Auto-pickup paused by circuit-breaker (${reason ?? 'consecutive failures'}). Click the auto toggle to re-enable.`;
+      } else if (isSupervisorPause) {
+        modeTooltip = `Auto-pickup paused by supervisor (${reason ?? 'supervisor intervention'}). Click the auto toggle to re-enable.`;
+      } else {
+        modeTooltip = 'Runner paused. No new tasks will be picked up until you re-enable auto.';
+      }
+    } else {
+      modeKind = 'manual';
+      modeLabel = 'MANUAL';
+      modeTooltip = 'Auto-pickup is off. The currently running task continues; new tasks have to be started manually.';
+    }
+
+    const exec = status?.activeExecution ?? null;
+    const running = exec && exec.status === 'running' ? exec : null;
+    let runningPill: { jobId: string; duration: string; model: string | null; tooltip: string } | null = null;
+    if (running) {
+      const startedAt = Date.parse(running.startedAt);
+      const now = this.nowMs() || Date.now();
+      const elapsedMs = isFinite(startedAt) ? Math.max(0, now - startedAt) : 0;
+      const duration = this.formatElapsed(elapsedMs);
+      runningPill = {
+        jobId: running.jobId,
+        duration,
+        model: running.model ?? null,
+        tooltip: `Currently running: ${running.jobId}${running.model ? ` (${running.model})` : ''}. Started ${duration} ago.`
+      };
+    }
+
+    const queueSize = status?.queuedJobIds?.length ?? 0;
+
+    return {
+      running: runningPill,
+      mode: { kind: modeKind, label: modeLabel, tooltip: modeTooltip },
+      queue: queueSize > 0
+        ? { count: queueSize, tooltip: `${queueSize} task${queueSize === 1 ? '' : 's'} waiting in 2-ready.` }
+        : null
+    };
   });
-  autoLabel(): string {
-    const m = this.autoMode();
-    if (m === 'auto-continuous') return 'Auto';
-    if (m === 'auto-single')     return 'Auto · 1';
-    if (m === 'paused')          return 'Paused';
-    return 'Manual';
+
+  /** `0` -> `0s`; `83410` -> `1m23s`; `3624000` -> `1h0m`. */
+  private formatElapsed(ms: number): string {
+    const totalSec = Math.floor(ms / 1000);
+    if (totalSec < 60) return `${totalSec}s`;
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    if (m < 60) return `${m}m${s.toString().padStart(2, '0')}s`;
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    return `${h}h${mm.toString().padStart(2, '0')}m`;
   }
 
   /**

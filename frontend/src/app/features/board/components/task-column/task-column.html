@@ -58,19 +58,45 @@
         @if (infoTopic(); as topic) {
           <app-info-button [topic]="topic" />
         }
-        <!-- Lane-side auto-pickup toggle. Mirrors the titlebar's auto chip
-             so the user can flip auto from either end. Only rendered for
-             the In Progress lane when a single project is in scope. -->
-        @if (state() === '3-progress' && autoProject(); as proj) {
-          <button type="button"
-                  class="column__auto-toggle"
-                  [class.column__auto-toggle--on]="autoOn()"
-                  [attr.data-testid]="'lane-auto-toggle-' + state()"
-                  [appTooltip]="autoOn() ? 'Auto-pickup is on for ' + proj + ' — click to pause.' : 'Auto-pickup is paused for ' + proj + ' — click to enable.'"
-                  (click)="autoToggleRequest.emit(proj); $event.stopPropagation()">
-            <span class="column__auto-toggle-dot" aria-hidden="true"></span>
-            <span class="column__auto-toggle-label">{{ autoLabel() }}</span>
-          </button>
+        <!-- Lane status cluster (In-Progress only, project-scoped). Three
+             chips so the operator can see WHAT IS RUNNING, WHAT COMES NEXT,
+             and HOW MANY ARE WAITING without contradiction. The mode chip
+             is the click target that flips auto-pickup; the run + queue
+             chips are read-only indicators. -->
+        @if (statusCluster(); as cluster) {
+          <span class="column__status-cluster"
+                [attr.data-testid]="'lane-status-cluster-' + state()">
+            @if (cluster.running; as run) {
+              <span class="column__status-pill column__status-pill--running"
+                    [attr.data-testid]="'lane-running-pill-' + state()"
+                    [attr.data-job-id]="run.jobId"
+                    [appTooltip]="run.tooltip">
+                <span class="column__status-pill-dot column__status-pill-dot--live"
+                      aria-hidden="true"></span>
+                <span class="column__status-pill-label">RUNNING</span>
+                <span class="column__status-pill-meta">{{ run.jobId }} · {{ run.duration }}@if (run.model) { · {{ run.model }} }</span>
+              </span>
+            }
+            <button type="button"
+                    class="column__status-pill column__status-pill--mode"
+                    [class.column__status-pill--auto]="cluster.mode.kind === 'auto'"
+                    [class.column__status-pill--manual]="cluster.mode.kind === 'manual'"
+                    [class.column__status-pill--paused]="cluster.mode.kind === 'paused'"
+                    [attr.data-testid]="'lane-auto-toggle-' + state()"
+                    [attr.data-mode-kind]="cluster.mode.kind"
+                    [appTooltip]="cluster.mode.tooltip"
+                    (click)="autoToggleRequest.emit(autoProject()!); $event.stopPropagation()">
+              <span class="column__status-pill-label">{{ cluster.mode.label }}</span>
+            </button>
+            @if (cluster.queue; as q) {
+              <span class="column__status-pill column__status-pill--queue"
+                    [attr.data-testid]="'lane-queue-pill-' + state()"
+                    [attr.data-queue-count]="q.count"
+                    [appTooltip]="q.tooltip">
+                Q:{{ q.count }}
+              </span>
+            }
+          </span>
         }
         @if (canArchiveAll()) {
           <button type="button"

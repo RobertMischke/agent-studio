@@ -962,6 +962,10 @@ export class App implements OnInit, OnDestroy {
     // rendering so a bookmark or copy-paste lands on the same view.
     this.boardFilters.hydrateFromUrl();
     this.loadTagRegistry();
+    // 1-Hz wall-clock tick for the lane status RUNNING pill's elapsed
+    // string. Light enough to leave running without gating - the only
+    // consumer is the lane column's statusCluster computed.
+    this.nowMsTickHandle = setInterval(() => this.nowMs.set(Date.now()), 1000);
     this.refresh();
     this.jobService.startLiveUpdates();
     this.jobService.getWatchPaths().subscribe({
@@ -1061,6 +1065,10 @@ export class App implements OnInit, OnDestroy {
     if (this.kanbanKeyListener) {
       window.removeEventListener('keydown', this.kanbanKeyListener);
       this.kanbanKeyListener = null;
+    }
+    if (this.nowMsTickHandle !== null) {
+      clearInterval(this.nowMsTickHandle);
+      this.nowMsTickHandle = null;
     }
   }
 
@@ -1525,6 +1533,26 @@ export class App implements OnInit, OnDestroy {
     if (!proj) return 'manual';
     return this.jobService.runnerStatus().projects[proj]?.mode ?? 'manual';
   }
+
+  /**
+   * Full runner-status snapshot for the lane's auto project (or null when
+   * the lane is not project-scoped). Drives the In-Progress lane's status
+   * cluster pills (RUNNING / mode / Q:N).
+   */
+  laneAutoRunner(state: string, jobs: JobInfo[]) {
+    const proj = this.laneAutoProject(state, jobs);
+    if (!proj) return null;
+    return this.jobService.runnerStatus().projects[proj] ?? null;
+  }
+
+  /**
+   * 1-Hz wall-clock tick so the RUNNING pill's elapsed-time string
+   * (`3m24s`) advances without re-polling /api/runner/status. The lane
+   * column reads this from its `nowMs` input; only the lane that renders
+   * the RUNNING pill consumes it.
+   */
+  readonly nowMs = signal(Date.now());
+  private nowMsTickHandle: ReturnType<typeof setInterval> | null = null;
 
   onFileSaved() {
     this.boardMutations.refreshAfterFileSave();

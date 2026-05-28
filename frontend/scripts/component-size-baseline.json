@@ -30,11 +30,11 @@
       "styles": 723,
       "total": 1389
     },
-    "src/app/features/board/components/job-column/job-column.ts": {
-      "typeScript": 555,
-      "template": 193,
-      "styles": 547,
-      "total": 1295
+    "src/app/features/board/components/task-column/task-column.ts": {
+      "typeScript": 654,
+      "template": 222,
+      "styles": 674,
+      "total": 1550
     },
     "src/app/features/job-detail/components/activity-log-view/activity-log-view.ts": {
       "typeScript": 397,

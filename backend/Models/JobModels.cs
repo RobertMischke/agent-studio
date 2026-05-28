@@ -1347,6 +1347,27 @@ public record ProjectRunnerStatus
     public string? ActiveJobId { get; init; }
     public CliExecution? ActiveExecution { get; init; }
     public List<string> QueuedJobIds { get; init; } = [];
+    /// <summary>
+    /// Reason recorded the last time the runner mode changed. Mirrors the
+    /// <c>reason</c> argument to <see cref="OrchestratorApi.Services.Runner.ProjectRunner.SetMode"/>;
+    /// surfaces so the board can distinguish operator-initiated
+    /// <c>manual</c> / <c>paused</c> transitions ("api-toggle", "api: POST /api/runner/{project}/stop")
+    /// from system-initiated ones ("auto-failure circuit-breaker", "capture-fail circuit-breaker",
+    /// "cross-slug infra circuit-breaker", "supervisor pause") in the lane pill chip.
+    /// </summary>
+    public string? ModeReason { get; init; }
+    /// <summary>
+    /// UTC timestamp when the mode last changed. Null on legacy in-memory
+    /// records (before the backend started recording it).
+    /// </summary>
+    public DateTime? ModeChangedAt { get; init; }
+    /// <summary>
+    /// Coarse classification of where the current mode came from. One of
+    /// <c>user</c>, <c>circuit-breaker</c>, <c>supervisor</c>, <c>system</c>.
+    /// Derived from <see cref="ModeReason"/> at SetMode time so the frontend
+    /// does not have to re-implement the heuristic on every render.
+    /// </summary>
+    public string? ModeSource { get; init; }
 }
 
 public record StartJobRequest

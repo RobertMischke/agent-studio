@@ -38,6 +38,14 @@ public class ProjectRunner
     private readonly AgentMessageBusBridge? _bus;
     private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
     private string _mode = "manual";
+    // The human-readable reason recorded the last time _mode changed, plus
+    // when the change happened. Surfaced via ProjectRunnerStatus so the
+    // board can render a different pill (PAUSED vs MANUAL) when the mode
+    // was flipped by a circuit-breaker or supervisor rather than by the
+    // operator.
+    private string? _modeReason;
+    private DateTime? _modeChangedAt;
+    private string? _modeSource;
     private string? _activeJobId;
     private string? _activeCliType;
     private bool _processing;
@@ -184,12 +192,35 @@ public class ProjectRunner
         var fromMode = _mode;
         _mode = mode;
         var effectiveReason = string.IsNullOrWhiteSpace(reason) ? "api-toggle" : reason!;
+        _modeReason = effectiveReason;
+        _modeChangedAt = DateTime.UtcNow;
+        _modeSource = ClassifyModeSource(effectiveReason);
         _logger.LogInformation(
-            "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}'",
-            ProjectName, fromMode, mode, effectiveReason);
+            "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}' (source={Source})",
+            ProjectName, fromMode, mode, effectiveReason, _modeSource);
         try { OnModePersist?.Invoke(mode); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnModePersist subscriber threw for {Project}", ProjectName); }
         NotifyStatus();
+    }
+
+    /// <summary>
+    /// Coarse classification of where a mode change came from so the board
+    /// can render circuit-breaker-induced pauses differently from operator
+    /// toggles. Kept as a static string lookup against the reason text the
+    /// caller passes to <see cref="SetMode"/>; new circuit-breaker callsites
+    /// only need to keep their reason text starting with "circuit-breaker"
+    /// or containing "circuit-breaker:" to be recognised here.
+    /// </summary>
+    private static string ClassifyModeSource(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason)) return "system";
+        if (reason.Contains("circuit-breaker", StringComparison.OrdinalIgnoreCase))
+            return "circuit-breaker";
+        if (reason.StartsWith("supervisor", StringComparison.OrdinalIgnoreCase))
+            return "supervisor";
+        if (reason.StartsWith("api", StringComparison.OrdinalIgnoreCase))
+            return "user";
+        return "system";
     }
 
     /// <summary>
@@ -266,7 +297,10 @@ public class ProjectRunner
             Mode = _mode,
             ActiveJobId = _activeJobId,
             ActiveExecution = activeExec,
-            QueuedJobIds = queued
+            QueuedJobIds = queued,
+            ModeReason = _modeReason,
+            ModeChangedAt = _modeChangedAt,
+            ModeSource = _modeSource
         };
     }
 

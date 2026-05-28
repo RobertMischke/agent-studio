@@ -197,6 +197,8 @@
                           [highlightJobId]="justCreatedJobId()"
                           [autoProject]="laneAutoProject(lane.state, lane.jobs)"
                           [autoMode]="laneAutoMode(lane.state, lane.jobs)"
+                          [runnerStatus]="laneAutoRunner(lane.state, lane.jobs)"
+                          [nowMs]="nowMs()"
                           (collapseToggle)="toggleLaneCollapse(lane.state)"
                           (jobClick)="openDetail($event)"
                           (jobDrop)="onJobDrop($event)"

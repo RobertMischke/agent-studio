@@ -554,6 +554,23 @@ export interface ProjectRunnerStatus {
   activeJobId: string | null;
   activeExecution: CliExecution | null;
   queuedJobIds: string[];
+  /**
+   * Human-readable reason recorded the last time the runner mode changed
+   * (e.g. `auto-failure circuit-breaker: 3x same job 'foo' did not reach
+   * review`, `api-toggle`, `supervisor pause: ...`). Lets the lane chip
+   * distinguish operator-initiated `manual` / `paused` transitions from
+   * system-initiated ones. Null on legacy in-memory records.
+   */
+  modeReason?: string | null;
+  /** UTC timestamp when the mode last changed. Null when not recorded. */
+  modeChangedAt?: string | null;
+  /**
+   * Coarse classification of where the current mode came from. One of
+   * `user`, `circuit-breaker`, `supervisor`, `system`. Computed on the
+   * backend from `modeReason` so the frontend does not have to re-implement
+   * the heuristic on every render.
+   */
+  modeSource?: 'user' | 'circuit-breaker' | 'supervisor' | 'system' | string | null;
 }
 
 export interface RunnerStatus {
