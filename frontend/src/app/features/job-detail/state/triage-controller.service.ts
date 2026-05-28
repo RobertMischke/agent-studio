@@ -3,6 +3,7 @@ import { JobInfo } from '../../../models/task.model';
 import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
+import { JobDetailPrefetchService } from './job-detail-prefetch.service';
 import { JobSelectionService } from './task-selection.service';
 import { LanePagerService, LANE_LABELS } from './lane-pager.service';
 
@@ -28,6 +29,7 @@ export class TriageController {
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly jobSelection = inject(JobSelectionService);
   private readonly lanePager = inject(LanePagerService);
+  private readonly prefetch = inject(JobDetailPrefetchService);
 
   /**
    * Invoked at every triage decision so the JobDetailComponent's
@@ -47,29 +49,61 @@ export class TriageController {
   // ---------- lane-action triage actions ----------
 
   /**
-   * Lane-specific move from the triage panel. Same path as drag-and-drop
-   * (optimistic paint + persist + revert-on-error), plus auto-advance
-   * to the next peer in the lane the user was triaging.
+   * Lane-specific move from the triage panel. Optimistic-everything:
+   *
+   *   1. Mark the click for the `accept-to-next-task` performance
+   *      interval (paired with `markNextTaskRendered` on the selection
+   *      service when the new panel paints).
+   *   2. Repaint the board's lane immediately
+   *      (`applyOptimisticMove`).
+   *   3. Navigate to the next peer **before** the POST has returned
+   *      (`advanceAfterMutation` consumes prefetched detail
+   *      synchronously; falls back to the live lane peers).
+   *   4. Fire the move POST in parallel. On 5xx / 4xx the optimistic
+   *      reorder + the panel navigation both revert, an error toast
+   *      surfaces, and the user lands back on the original job.
+   *
+   * The previous shape did 1 then 2 then awaited the POST before step
+   * 3, so the user paid both the move POST + the next-task GET in
+   * series. With the lane-pager prefetch already warming the next
+   * peer's detail, step 3 is now a synchronous signal flip.
    */
   move(info: JobInfo, ev: { targetState: string; actionId: string }): void {
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
+    this.jobSelection.markAcceptClick();
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, ev.targetState);
     this.jobService.beginOptimisticPersist();
+
+    // The optimistic detail for the departing job is stale the moment
+    // we move it; drop the cache entry so the next click-back doesn't
+    // serve a pre-move snapshot.
+    this.prefetch.invalidate(info.id, info.watchPath);
+
+    // Optimistic navigation: advance to the next peer right now, while
+    // the POST is still on the wire. advanceAfterMutation uses the
+    // pager snapshot (the lane iteration the user opened detail in)
+    // and the prefetch cache, so the new panel paints without a
+    // roundtrip.
+    let advanced = false;
+    if (this.jobSelection.advanceAfterMutation(info.jobKey)) {
+      advanced = true;
+    } else if (this.advanceToNextInLane(lane, info.jobKey, peers)) {
+      advanced = true;
+    }
+
     this.jobService.moveJob(info.id, ev.targetState, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
         this.clearActing();
-        // Prefer the lane-pager snapshot when one is active: it removes the
-        // moved job from the iteration and lands the next slot's job in the
-        // panel without depending on the live `triageLanePeers` view (which
-        // can be empty while the optimistic move + refresh races settle).
-        if (this.jobSelection.advanceAfterMutation(info.jobKey)) return;
-        this.advanceToNextInLane(lane, info.jobKey, peers);
       },
       error: (err) => {
         this.jobService.endOptimisticPersist();
         if (snapshot) this.jobService.revertOptimisticMove(snapshot);
+        // Optimistic navigation must roll back too: the user clicked
+        // Accept on `info`, the move failed, the only sensible landing
+        // spot is the job they tried to act on.
+        if (advanced) this.jobSelection.openDetail(info);
         this.clearActing();
         this.errorDialog.show(err, {
           title: 'Failed to move task',
@@ -212,7 +246,7 @@ export class TriageController {
     departingJobKey: string,
     peersBefore: readonly JobInfo[],
     external = false,
-  ): void {
+  ): boolean {
     this.clearActing();
     // Compute the candidate from the snapshot of peers we had before
     // the mutation: optimistic-persist may have already filtered out
@@ -236,19 +270,22 @@ export class TriageController {
       // Re-anchor lane to the new job's state (same lane unless poll drift).
       this.jobSelection.triageLaneState = candidate.state;
       const token = this.jobSelection.bumpOpenDetailToken();
+      history.replaceState(
+        null,
+        '',
+        `?job=${encodeURIComponent(candidate.id)}&watchPath=${encodeURIComponent(candidate.watchPath)}`,
+      );
+      // Optimistic-paint: serve a prefetched JobDetail when available
+      // so the panel re-renders without waiting for the GET roundtrip.
+      // The follow-up fetch reconciles any drift on the eventual reply.
+      const cached = this.prefetch.take(candidate.id, candidate.watchPath);
+      if (cached) this.jobSelection.setSelectedFromAdvance(cached, token);
       this.jobService.getDetail(candidate.id, candidate.watchPath).subscribe({
-        next: (detail) => {
-          history.replaceState(
-            null,
-            '',
-            `?job=${encodeURIComponent(candidate.id)}&watchPath=${encodeURIComponent(candidate.watchPath)}`,
-          );
-          this.jobSelection.setSelectedFromAdvance(detail, token);
-        },
+        next: (detail) => this.jobSelection.setSelectedFromAdvance(detail, token),
         error: () => { /* leave panel on the previous job; the parent effect will reconcile */ },
       });
       if (external) this.jobSelection.showTriageToast('Job was moved externally; advancing.');
-      return;
+      return true;
     }
     if (external) {
       // External move (e.g. orchestrator decision) cleared the lane:
@@ -258,12 +295,13 @@ export class TriageController {
       const sel = this.jobSelection.selected();
       if (sel) {
         this.jobSelection.triageLaneState = sel.info.state;
-        return;
+        return true;
       }
     }
     // Lane cleared — close the panel and toast.
     this.jobSelection.closeDetail();
     this.jobSelection.showTriageToast('Lane cleared.');
+    return false;
   }
 
   // ---------- external lane change (stay on current job) ----------

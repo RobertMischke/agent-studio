@@ -3,6 +3,7 @@ import { JobDetail, JobInfo } from '../../../models/task.model';
 import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
+import { JobDetailPrefetchService } from './job-detail-prefetch.service';
 import { LanePagerService } from './lane-pager.service';
 
 /**
@@ -29,6 +30,10 @@ export class JobSelectionService {
   private readonly errorDialog = inject(ErrorDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly pager = inject(LanePagerService);
+  private readonly prefetch = inject(JobDetailPrefetchService);
+
+  /** How many slots ahead of the current pager index to warm. */
+  private static readonly PREFETCH_LOOKAHEAD = 2;
 
   constructor() {
     // Ensure the lane-pager snapshot covers the currently selected job.
@@ -67,9 +72,57 @@ export class JobSelectionService {
       this.pager.capture(sel.info.state, peers, jobKey);
       this.lastEnsuredJobKey = jobKey;
     });
+
+    // Detail prefetch: warm the next 1..PREFETCH_LOOKAHEAD entries in the
+    // current pager snapshot whenever it changes. This is what makes the
+    // accept -> next-task navigation feel instant: by the time the user
+    // clicks Mark-as-Done, the next peer's JobDetail is already cached.
+    effect(() => {
+      const snap = this.pager.snapshot();
+      if (!snap) return;
+      const lookahead = JobSelectionService.PREFETCH_LOOKAHEAD;
+      for (let offset = 1; offset <= lookahead; offset++) {
+        const entry = snap.jobs[snap.index + offset];
+        if (!entry) break;
+        this.prefetch.prefetch(entry.id, entry.watchPath);
+      }
+    });
   }
 
   private lastEnsuredJobKey: string | null = null;
+
+  /**
+   * Set to `true` when the user starts a triage decision (accept etc.)
+   * and consumed by the next selection update so we mark the
+   * `accept-to-next-rendered` performance interval exactly once per
+   * click. The mark/measure is best-effort: any environment without
+   * `performance.mark` (older browsers, SSR) silently no-ops.
+   */
+  private awaitingNextTaskRender = false;
+
+  /**
+   * Stamp the start of the accept -> next-task render measurement.
+   * Called by the triage controller right before it tears down the
+   * outgoing job so the marker brackets exactly the latency the user
+   * feels. Names are stable strings the Playwright budget spec asserts
+   * on.
+   */
+  markAcceptClick(): void {
+    this.awaitingNextTaskRender = true;
+    try {
+      performance.mark('accept-click');
+    } catch { /* mark API missing or out of buffer space */ }
+  }
+
+  /** Internal: pair the `accept-click` mark with `next-task-rendered`. */
+  private markNextTaskRendered(): void {
+    if (!this.awaitingNextTaskRender) return;
+    this.awaitingNextTaskRender = false;
+    try {
+      performance.mark('next-task-rendered');
+      performance.measure('accept-to-next-task', 'accept-click', 'next-task-rendered');
+    } catch { /* the click mark may have been GC'd; not fatal */ }
+  }
 
   readonly selected = signal<JobDetail | null>(null);
 
@@ -157,13 +210,27 @@ export class JobSelectionService {
       this.pager.capture(job.state, this.peersForLane(job.state), job.jobKey);
     }
     const token = ++this.openDetailToken;
+    // Instant-paint path: serve a prefetched detail synchronously when
+    // one is on hand, then re-fetch in the background so the panel
+    // catches any post-prefetch drift (status, log tail). Without the
+    // re-fetch a stale detail could linger past its TTL.
+    const cached = this.prefetch.take(job.id, job.watchPath);
+    if (cached) {
+      this.selected.set(cached);
+      this.markNextTaskRendered();
+    }
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         this.selected.set(detail);
+        if (!cached) this.markNextTaskRendered();
       },
       error: (err) => {
         if (token !== this.openDetailToken) return;
+        // Don't surface an error after we already painted from cache -
+        // the panel is already showing the cached detail and a transient
+        // network blip should not pop a modal.
+        if (cached) return;
         history.replaceState(null, '', window.location.pathname);
         this.errorDialog.show(err, {
           title: 'Failed to load task details',
@@ -186,6 +253,12 @@ export class JobSelectionService {
     if (!entry) return false;
     history.replaceState(null, '', `?job=${encodeURIComponent(entry.id)}&watchPath=${encodeURIComponent(entry.watchPath)}`);
     const token = ++this.openDetailToken;
+    const cached = this.prefetch.take(entry.id, entry.watchPath);
+    if (cached) {
+      this.triageLaneState = this.pager.snapshot()?.lane ?? cached.info.state;
+      this.selected.set(cached);
+      this.markNextTaskRendered();
+    }
     this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
@@ -196,9 +269,11 @@ export class JobSelectionService {
         // the suppress-once flag below handles the divergence).
         this.triageLaneState = this.pager.snapshot()?.lane ?? detail.info.state;
         this.selected.set(detail);
+        if (!cached) this.markNextTaskRendered();
       },
       error: (err) => {
         if (token !== this.openDetailToken) return;
+        if (cached) return;
         this.errorDialog.show(err, {
           title: 'Failed to load task details',
           fallbackMessage: 'Failed to load task details',
@@ -269,6 +344,7 @@ export class JobSelectionService {
   setSelectedFromAdvance(detail: JobDetail, expectedToken: number): void {
     if (expectedToken !== this.openDetailToken) return;
     this.selected.set(detail);
+    this.markNextTaskRendered();
   }
 
   /**
@@ -308,13 +384,24 @@ export class JobSelectionService {
       `?job=${encodeURIComponent(entry.id)}&watchPath=${encodeURIComponent(entry.watchPath)}`,
     );
     const token = ++this.openDetailToken;
+    // Optimistic-navigation path: serve a prefetched detail synchronously
+    // when one is on hand so the panel re-renders without waiting for the
+    // move POST or a fresh GET. The follow-up fetch reconciles any drift
+    // (status/log tail) and is the source of truth on a cache miss.
+    const cached = this.prefetch.take(entry.id, entry.watchPath);
+    if (cached) {
+      this.selected.set(cached);
+      this.markNextTaskRendered();
+    }
     this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         this.selected.set(detail);
+        if (!cached) this.markNextTaskRendered();
       },
       error: (err) => {
         if (token !== this.openDetailToken) return;
+        if (cached) return;
         this.errorDialog.show(err, {
           title: 'Failed to load task details',
           fallbackMessage: 'Failed to load task details',

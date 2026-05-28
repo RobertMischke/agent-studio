@@ -4,8 +4,13 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { Subject, of, throwError } from 'rxjs';
 import { TriageController } from './triage-controller.service';
 import { JobSelectionService } from './task-selection.service';
+import { JobDetailPrefetchService } from './job-detail-prefetch.service';
+import { LanePagerService } from './lane-pager.service';
+import { JobService } from '../../../services/task.service';
+import { ErrorDialogService } from '../../../services/error-dialog.service';
 import type { JobInfo, JobDetail } from '../../../models/task.model';
 
 /**
@@ -77,5 +82,133 @@ describe('TriageController · advanceToNextInLane', () => {
 
     expect(closedDetail).toBe(false);
     expect(selection.triageLaneState).toBe('5-human-review');
+  });
+});
+
+/**
+ * The "accept-to-next-task feels instant" regression: when the user
+ * clicks Mark-as-Done on Job A, the next peer must render before the
+ * move POST returns. The previous shape awaited the POST first, so the
+ * user paid the POST roundtrip plus a getDetail roundtrip in series.
+ *
+ * The two assertions below pin the new contract:
+ *   1. The panel advances synchronously - by the time `move(...)`
+ *      returns, the prefetched detail for the next peer is in
+ *      `selected`, before any `next` callback on the POST observable
+ *      fires.
+ *   2. When the POST eventually errors, the optimistic move is
+ *      reverted and the panel navigates back to the original job, so
+ *      the user does not silently lose their click.
+ */
+describe('TriageController · optimistic navigation on Accept', () => {
+  let ctrl: TriageController;
+  let selection: JobSelectionService;
+  let prefetch: JobDetailPrefetchService;
+  let jobService: JobService;
+
+  const wp = '/wp';
+  const makeJob = (id: string, state: string): JobInfo =>
+    ({
+      id,
+      jobKey: `${wp}::${id}`,
+      title: id,
+      state,
+      order: 1,
+      watchPath: wp,
+      projectName: 'p',
+    }) as unknown as JobInfo;
+
+  const makeDetail = (id: string, state: string): JobDetail =>
+    ({
+      info: makeJob(id, state),
+      promptMarkdown: null,
+      promptHistory: [],
+      titleHistory: [],
+      statusMarkdown: null,
+      contextUsage: null,
+      log: [],
+      summaryState: null,
+      reviewEvidence: [],
+    }) as unknown as JobDetail;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    ctrl = TestBed.inject(TriageController);
+    selection = TestBed.inject(JobSelectionService);
+    prefetch = TestBed.inject(JobDetailPrefetchService);
+    jobService = TestBed.inject(JobService);
+    prefetch.clear();
+  });
+
+  const noop = (): void => undefined;
+
+  it('advances synchronously to the prefetched next peer while the move POST is still in flight', () => {
+    const taskA = makeJob('task-a', '5-human-review');
+    const taskB = makeJob('task-b', '5-human-review');
+    const taskBDetail = makeDetail('task-b', '5-human-review');
+
+    // Seed the lane-pager snapshot for [A, B], anchored on A. The
+    // service's effect prefetches B on snapshot change, so we mock the
+    // GET to land deterministically before move() runs.
+    const detailSpy = vi.spyOn(jobService, 'getDetail').mockReturnValue(of(taskBDetail));
+    TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.jobKey);
+    selection.triageLaneState = '5-human-review';
+    (selection as unknown as { selected: ReturnType<typeof signal<JobDetail | null>> }).selected
+      = signal<JobDetail | null>(makeDetail('task-a', '5-human-review'));
+
+    // POST never resolves so we can assert nav happened before completion.
+    const movePost = new Subject<object>();
+    vi.spyOn(jobService, 'moveJob').mockReturnValue(movePost.asObservable());
+    vi.spyOn(jobService, 'applyOptimisticMove').mockReturnValue({} as never);
+
+    ctrl.move(taskA, { targetState: '6-completed', actionId: 'mark-done' });
+    const observedSelectedDuringCall: JobDetail | null = selection.selected();
+
+    expect(observedSelectedDuringCall?.info.id).toBe('task-b');
+    // POST is still on the wire — no `next` callback has fired yet.
+    expect(detailSpy).toHaveBeenCalled();
+    movePost.complete();
+  });
+
+  it('reverts the optimistic move and navigates back when the POST errors', () => {
+    const taskA = makeJob('task-a', '5-human-review');
+    const taskB = makeJob('task-b', '5-human-review');
+    const taskADetail = makeDetail('task-a', '5-human-review');
+    const taskBDetail = makeDetail('task-b', '5-human-review');
+
+    vi.spyOn(jobService, 'getDetail').mockImplementation((id: string) => {
+      return of(id === 'task-a' ? taskADetail : taskBDetail);
+    });
+    TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.jobKey);
+    selection.triageLaneState = '5-human-review';
+    (selection as unknown as { selected: ReturnType<typeof signal<JobDetail | null>> }).selected
+      = signal<JobDetail | null>(taskADetail);
+
+    const revertSpy = vi.spyOn(jobService, 'revertOptimisticMove').mockImplementation(noop);
+    vi.spyOn(jobService, 'applyOptimisticMove').mockReturnValue(
+      { fromLane: 'humanReview', before: [], toLane: 'completed', toBefore: [] } as never,
+    );
+    vi.spyOn(jobService, 'moveJob').mockReturnValue(
+      throwError(() => ({ status: 500, message: 'boom' })),
+    );
+
+    // Suppress the error dialog so the test does not pop a modal.
+    const errorDialog = TestBed.inject(ErrorDialogService);
+    vi.spyOn(errorDialog, 'show').mockImplementation(noop);
+
+    const openSpy = vi.spyOn(selection, 'openDetail').mockImplementation(noop);
+
+    ctrl.move(taskA, { targetState: '6-completed', actionId: 'mark-done' });
+
+    expect(revertSpy).toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith(taskA);
   });
 });
