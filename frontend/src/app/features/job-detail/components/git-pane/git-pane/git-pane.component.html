@@ -45,13 +45,31 @@
         </ol>
       }
       @if (git.commitDetail()?.commit; as c) {
-        <div class="git-view__commit-header" data-testid="git-commit-header">
+        <div class="git-view__commit-header"
+             [class.git-view__commit-header--collapsed]="commitHeaderCollapsed()"
+             data-testid="git-commit-header">
           <div class="git-view__commit-row">
             <span class="git-view__commit-sha" data-testid="git-commit-sha">⏺ {{ c.shortSha }}</span>
-            <span class="git-view__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
+            @if (commitHeaderCollapsed()) {
+              <span class="git-view__commit-subject"
+                    data-testid="git-commit-subject">{{ c.message.split('\n')[0] }}</span>
+            } @else {
+              <span class="git-view__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
+            }
             <span class="git-view__commit-when">{{ c.at | date:'medium' }}</span>
+            <button type="button"
+                    class="git-view__commit-collapse"
+                    data-testid="git-commit-collapse-toggle"
+                    [attr.aria-expanded]="!commitHeaderCollapsed()"
+                    [attr.aria-label]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
+                    [appTooltip]="commitHeaderCollapsed() ? 'Expand commit message' : 'Collapse commit message'"
+                    (click)="toggleCommitHeaderCollapsed()">
+              {{ commitHeaderCollapsed() ? '▾' : '▴' }}
+            </button>
           </div>
-          <pre class="git-view__commit-msg-display" data-testid="git-commit-message">{{ c.message }}</pre>
+          @if (!commitHeaderCollapsed()) {
+            <pre class="git-view__commit-msg-display" data-testid="git-commit-message">{{ c.message }}</pre>
+          }
         </div>
         @if (git.commitDetail()?.files?.length) {
           <div class="git-view__split-body">

@@ -82,6 +82,20 @@ export class GitPaneComponent {
   readonly diffMaximized = signal(false);
 
   /**
+   * Collapse toggle for the commit-message banner above the tree+diff
+   * split. Persisted in localStorage so the operator's preference
+   * survives a reload. One toggle drives both the in-pane and
+   * fullscreened layouts so the mental model stays simple.
+   */
+  readonly commitHeaderCollapsed = signal<boolean>(readCommitHeaderCollapsed());
+
+  toggleCommitHeaderCollapsed(): void {
+    const next = !this.commitHeaderCollapsed();
+    this.commitHeaderCollapsed.set(next);
+    writeCommitHeaderCollapsed(next);
+  }
+
+  /**
    * Title rendered in the pane header. Surfaces the multi-commit case
    * ("3 task commits") so the user sees at a glance that the chain has
    * more than one entry.
@@ -134,4 +148,16 @@ export class GitPaneComponent {
   commitChainTooltip(entry: JobCommitInfo, index: number): string {
     return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${entry.message}`;
   }
+}
+
+const COMMIT_HEADER_COLLAPSED_KEY = 'taskboard.gitPane.commitHeaderCollapsed';
+
+function readCommitHeaderCollapsed(): boolean {
+  try { return localStorage.getItem(COMMIT_HEADER_COLLAPSED_KEY) === '1'; }
+  catch { return false; }
+}
+
+function writeCommitHeaderCollapsed(value: boolean): void {
+  try { localStorage.setItem(COMMIT_HEADER_COLLAPSED_KEY, value ? '1' : '0'); }
+  catch { /* ignore quota / privacy-mode errors */ }
 }

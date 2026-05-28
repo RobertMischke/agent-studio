@@ -259,14 +259,21 @@
   gap: 6px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--severity-pass) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--severity-pass) 22%, transparent);
+  background: color-mix(in srgb, var(--severity-pass) 8%, var(--studio-bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--severity-pass) 22%, var(--studio-border));
+  color: var(--studio-fg);
+}
+.git-view__commit-header--collapsed {
+  // Collapsed banner reads as a thin status strip; the message body
+  // is gone so the surrounding tree + diff get the vertical space.
+  padding: 4px 10px;
 }
 .git-view__commit-row {
   display: flex;
   align-items: baseline;
   gap: 12px;
   font-size: 12px;
+  color: var(--studio-fg);
 }
 .git-view__commit-sha {
   font-family: var(--font-mono, monospace);
@@ -274,7 +281,44 @@
   color: var(--severity-pass);
 }
 .git-view__commit-files { color: var(--studio-fg); }
-.git-view__commit-when { color: var(--studio-fg-dim); margin-left: auto; }
+.git-view__commit-subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--studio-fg);
+}
+.git-view__commit-when {
+  color: var(--studio-fg-dim);
+  margin-left: auto;
+}
+.git-view__commit-collapse {
+  // Text-only caret toggle (no menu-icons rule). Sized to match the
+  // pane's other inline pills so it doesn't fight the title row.
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  margin-left: 4px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.git-view__commit-collapse:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+}
+.git-view__commit-collapse:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
 
 /*
  * Split layout: when the pane is maximized the user wants the tree on

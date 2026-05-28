@@ -37,6 +37,50 @@ export class GitPaneService implements OnDestroy {
   readonly committing = signal(false);
   readonly generatingMsg = signal(false);
 
+  /**
+   * Small LRU diff cache keyed by `(mode|sha|path)`. Selecting a file in
+   * the tree fires a backend `git diff` / `git show` round-trip; without
+   * a cache, clicking back-and-forth across files repeatedly pays the
+   * network cost and the diff2html re-render. The cache invalidates
+   * whenever `setJob` is called for a different job, when the working
+   * tree refreshes (`refresh()` resets the worktree slice), and on
+   * commit (history changes). 32 entries keeps memory bounded for the
+   * largest realistic change sets.
+   */
+  private readonly DIFF_CACHE_LIMIT = 32;
+  private diffCache = new Map<string, string>();
+  private cacheKey(path: string): string {
+    if (this.viewMode() === 'commit') {
+      const sha = this.selectedCommitSha() ?? '';
+      return `commit|${sha}|${path}`;
+    }
+    return `worktree|${path}`;
+  }
+  private cacheGet(key: string): string | undefined {
+    const v = this.diffCache.get(key);
+    if (v !== undefined) {
+      // Touch LRU order.
+      this.diffCache.delete(key);
+      this.diffCache.set(key, v);
+    }
+    return v;
+  }
+  private cachePut(key: string, value: string): void {
+    if (this.diffCache.has(key)) this.diffCache.delete(key);
+    this.diffCache.set(key, value);
+    while (this.diffCache.size > this.DIFF_CACHE_LIMIT) {
+      const oldest = this.diffCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.diffCache.delete(oldest);
+    }
+  }
+  private clearDiffCache(): void { this.diffCache.clear(); }
+  private invalidateWorktreeCache(): void {
+    for (const key of [...this.diffCache.keys()]) {
+      if (key.startsWith('worktree|')) this.diffCache.delete(key);
+    }
+  }
+
   // Commit-history view: when the task has an auto-commit recorded, the
   // pane switches from "live working tree" to "what this task changed".
   // That data survives future work in the repo and is what the user wants
@@ -124,6 +168,7 @@ export class GitPaneService implements OnDestroy {
     this.loading.set(false);
     this.committing.set(false);
     this.generatingMsg.set(false);
+    this.clearDiffCache();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
     this.commitChain.set(chain);
     this.selectedCommitSha.set(chain.length > 0 ? chain[chain.length - 1].sha : null);
@@ -187,6 +232,11 @@ export class GitPaneService implements OnDestroy {
     const info = this.currentJob;
     if (!info) return;
     this.loading.set(true);
+    // Worktree diff slice can shift between refreshes (file edited again,
+    // staged, etc.); drop any cached worktree entries so the next click
+    // picks up a fresh diff. Commit-mode entries are immutable per sha,
+    // so we keep those.
+    this.invalidateWorktreeCache();
     this.jobService.getGitStatus(info.id, info.watchPath).subscribe({
       next: (status) => {
         this.status.set(status);
@@ -215,6 +265,15 @@ export class GitPaneService implements OnDestroy {
     const info = this.currentJob;
     if (!info) return;
     this.selectedDiffPath.set(path);
+    // Cache lookup: clicking back-and-forth between files in the tree is
+    // a common pattern; without the cache each toggle pays the network
+    // round-trip and the diff2html re-render. Hit -> set synchronously.
+    const cacheKey = this.cacheKey(path);
+    const cached = this.cacheGet(cacheKey);
+    if (cached !== undefined) {
+      this.diffText.set(cached);
+      return;
+    }
     this.diffText.set('');
     // In commit mode the diff comes from `git show <sha> -- <path>` so we
     // see the historical change, not whatever the working tree looks like
@@ -227,11 +286,14 @@ export class GitPaneService implements OnDestroy {
       const newest = this.commitChain()[this.commitChain().length - 1]?.sha ?? null;
       const useShaEndpoint = selectedSha != null && selectedSha !== newest;
       const setDiff = (res: unknown) => {
-        if (typeof res === 'string') this.diffText.set(res);
+        let text = '';
+        if (typeof res === 'string') text = res;
         else if (res && typeof res === 'object' && 'diff' in (res as Record<string, unknown>)) {
           const d = (res as { diff?: string }).diff;
-          this.diffText.set(typeof d === 'string' ? d : '');
-        } else this.diffText.set('');
+          text = typeof d === 'string' ? d : '';
+        }
+        this.diffText.set(text);
+        if (text) this.cachePut(cacheKey, text);
       };
       const handlers = {
         next: setDiff,
@@ -247,7 +309,11 @@ export class GitPaneService implements OnDestroy {
       return;
     }
     this.jobService.getGitDiff(info.id, path, info.watchPath).subscribe({
-      next: (text: unknown) => this.diffText.set(typeof text === 'string' ? text : ''),
+      next: (text: unknown) => {
+        const t = typeof text === 'string' ? text : '';
+        this.diffText.set(t);
+        if (t) this.cachePut(cacheKey, t);
+      },
       error: () => this.diffText.set('(failed to load diff)'),
     });
   }
