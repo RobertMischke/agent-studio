@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli.OneShot;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Pipeline;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -47,17 +49,20 @@ public sealed class AspectRunnerService
 
     private readonly AdHocUsageRecorder? _usage;
     private readonly CliOneShotRegistry? _oneShotRegistry;
+    private readonly PipelineExecutionLog? _pipelineLog;
 
     public AspectRunnerService(
         RuntimePromptService prompts,
         ILogger<AspectRunnerService> logger,
         AdHocUsageRecorder? usage = null,
-        CliOneShotRegistry? oneShotRegistry = null)
+        CliOneShotRegistry? oneShotRegistry = null,
+        PipelineExecutionLog? pipelineLog = null)
     {
         _prompts = prompts;
         _logger = logger;
         _usage = usage;
         _oneShotRegistry = oneShotRegistry;
+        _pipelineLog = pipelineLog;
 
         // Wire production CLI invocation to the OneShot service so prompts
         // travel via stdin (the failure mode this fix exists to prevent
@@ -134,6 +139,23 @@ public sealed class AspectRunnerService
     /// Run every configured aspect against the job, write the aspect MDs
     /// into the job folder, and return the per-aspect verdicts so the
     /// caller can decide reissue / accept / accept-with-concerns.
+    ///
+    /// <para>
+    /// Aspects run in parallel: each is an independent CLI call with no
+    /// shared state, so the wall-clock cost drops from sum-of-aspects to
+    /// max-of-aspects. A <see cref="SemaphoreSlim"/> caps the fan-out so
+    /// a misconfigured catalogue cannot exhaust the CLI quota in one
+    /// tick. When a <see cref="PipelineExecutionLog"/> is wired, each
+    /// step's start / outcome / tokens are recorded into
+    /// <c>pipeline-execution.json</c> in the job folder for the Overview
+    /// pipeline view to consume.
+    /// </para>
+    ///
+    /// <para>
+    /// Verdicts in the returned report are sorted to match the input
+    /// <paramref name="aspects"/> order so downstream consumers see
+    /// deterministic ordering regardless of which task finished first.
+    /// </para>
     /// </summary>
     public async Task<AspectRunReport> RunAsync(
         AspectRunInputs inputs,
@@ -143,31 +165,94 @@ public sealed class AspectRunnerService
         TimeSpan perAspectTimeout,
         CancellationToken ct)
     {
-        var verdicts = new List<AspectVerdict>();
         var now = DateTime.UtcNow;
 
-        foreach (var aspectId in aspects)
+        // Resolve definitions up-front; unknown ids are skipped silently
+        // so the input list can carry config typos without crashing the
+        // run (existing behaviour, covered by AspectRunnerTests).
+        var resolved = new List<(int Index, string AspectId, AspectDefinition Def)>();
+        for (var i = 0; i < aspects.Count; i++)
         {
-            if (ct.IsCancellationRequested) break;
+            var aspectId = aspects[i];
             if (!Catalogue.TryGetValue(aspectId, out var def))
             {
                 _logger.LogWarning("Unknown aspect '{AspectId}'; skipping", aspectId);
                 continue;
             }
+            resolved.Add((i, aspectId, def));
+        }
+        if (resolved.Count == 0) return AspectRunReport.From(Array.Empty<AspectVerdict>());
+
+        // Bounded parallel fan-out. Default cap = 4 (today's catalogue
+        // ships exactly four aspects); a future catalogue with more
+        // aspects gets a real ceiling instead of unbounded WhenAll.
+        var maxParallel = Math.Min(resolved.Count, 4);
+        using var gate = new SemaphoreSlim(maxParallel, maxParallel);
+
+        var tasks = resolved
+            .Select(entry => RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, model,
+                perAspectTimeout, gate, now, ct))
+            .ToArray();
+
+        var perIndex = await Task.WhenAll(tasks);
+
+        // Re-sort to match the requested aspect order; WhenAll's array is
+        // already index-aligned (Select preserved order), but a future
+        // refactor to per-completion writing would still get deterministic
+        // output via the explicit index sort.
+        var verdicts = perIndex
+            .OrderBy(r => r.Index)
+            .Select(r => r.Verdict)
+            .ToList();
+
+        return AspectRunReport.From(verdicts);
+    }
+
+    private async Task<(int Index, AspectVerdict Verdict)> RunOneAspectAsync(
+        int index,
+        AspectDefinition def,
+        AspectRunInputs inputs,
+        string cliBinary,
+        string model,
+        TimeSpan perAspectTimeout,
+        SemaphoreSlim gate,
+        DateTime now,
+        CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            var pipelineStepId = $"aspect-{def.Id}";
+            var startedAt = DateTime.UtcNow;
+            _pipelineLog?.RecordStep(inputs.JobFolderPath, new PipelineStepExecution
+            {
+                StepId = pipelineStepId,
+                Kind = StepKind.Aspect,
+                Model = model,
+                Status = PipelineStepStatus.Running,
+                StartedAt = startedAt,
+            });
 
             var prompt = BuildAspectPrompt(def, inputs);
             string response;
+            OrchestratorTokenUsage? callUsage = null;
+            long durationMs = 0;
+            var ok = true;
             try
             {
                 var sw = AdHocClaudeInvoker.StartTiming();
                 var rawResponse = await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct);
                 sw.Stop();
-                var (parsedText, callUsage) = AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
-                AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.ReviewDecision, model, callUsage, sw.ElapsedMilliseconds, ok: true, project: inputs.Project, jobId: inputs.JobId);
-                response = parsedText;
+                durationMs = sw.ElapsedMilliseconds;
+                var parsed = AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
+                callUsage = parsed.Usage;
+                AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.ReviewDecision, model, callUsage,
+                    durationMs, ok: true, project: inputs.Project, jobId: inputs.JobId);
+                response = parsed.Text;
             }
             catch (Exception ex)
             {
+                ok = false;
                 _logger.LogWarning(ex,
                     "Aspect runner '{AspectId}' invocation failed for {Project}/{JobId}; defaulting to concerns",
                     def.Id, inputs.Project, inputs.JobId);
@@ -177,7 +262,6 @@ public sealed class AspectRunnerService
             }
 
             var verdict = BuildVerdict(def, response);
-            verdicts.Add(verdict);
 
             try
             {
@@ -191,9 +275,31 @@ public sealed class AspectRunnerService
                     "Aspect runner '{AspectId}' failed to write aspect MD for {JobId}",
                     def.Id, inputs.JobId);
             }
-        }
 
-        return AspectRunReport.From(verdicts);
+            var completedAt = DateTime.UtcNow;
+            _pipelineLog?.RecordStep(inputs.JobFolderPath, new PipelineStepExecution
+            {
+                StepId = pipelineStepId,
+                Kind = StepKind.Aspect,
+                Model = callUsage?.Model ?? model,
+                Status = ok ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+                StartedAt = startedAt,
+                CompletedAt = completedAt,
+                DurationMs = durationMs > 0 ? durationMs : (long)(completedAt - startedAt).TotalMilliseconds,
+                InputTokens = callUsage?.InputTokens ?? 0,
+                OutputTokens = callUsage?.OutputTokens ?? 0,
+                CacheReadTokens = callUsage?.CacheReadTokens ?? 0,
+                CacheCreationTokens = callUsage?.CacheCreationTokens ?? 0,
+                Verdict = AspectVerdictParsing.StatusToken(verdict.Status),
+                Reason = ok ? null : "aspect-runner-exception",
+            });
+
+            return (index, verdict);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     /// <summary>

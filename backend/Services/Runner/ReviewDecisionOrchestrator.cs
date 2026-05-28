@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Pipeline;
 using OrchestratorApi.Services.TaskAccess;
 
 namespace OrchestratorApi.Services.Runner;
@@ -123,6 +124,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private readonly OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? _usage;
     private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
+    private readonly PipelineExecutionLog? _pipelineLog;
 
     public ReviewDecisionOrchestrator(
         JobScannerService scanner,
@@ -137,7 +139,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? usage = null,
         OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null,
         JobSessionLog? sessions = null,
-        GitService? git = null)
+        GitService? git = null,
+        PipelineExecutionLog? pipelineLog = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -152,6 +155,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _oneShotRegistry = oneShotRegistry;
         _sessions = sessions;
         _git = git;
+        _pipelineLog = pipelineLog;
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -621,7 +625,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             DiffSummary: diffSummary,
             StatusSummary: statusSummary);
 
+        // Bracket the aspect run with a pipeline-execution record so the
+        // Overview pipeline view can show "ran 4 aspects in N ms, used X
+        // tokens" without having to reconstruct it from cli-output.log.
+        // The aspect runner records each step's outcome inside RunAsync;
+        // we own the start / complete marks. Stand-alone tests that wire
+        // the orchestrator without a PipelineExecutionLog skip this
+        // entirely (the recorder is fully optional).
+        _pipelineLog?.Begin(current.FolderPath, PipelineCatalogue.Standard, entry.Name, current.Id);
+
         var report = await _aspectRunner.RunAsync(inputs, aspects, cliBinary, aspectModel, perAspectTimeout, ct);
+
+        _pipelineLog?.Complete(current.FolderPath);
 
         if (report.Overall == AspectStatus.Block)
         {

@@ -24,6 +24,7 @@ public static class EndpointMapping
         jobs.MapJobReviewEvidenceEndpoints();
         jobs.MapJobCodeReviewEndpoints();
         jobs.MapJobRegressionRadarEndpoints();
+        jobs.MapJobPipelineEndpoints();
 
         app.MapRunnerEndpoints();
         app.MapRegistryEndpoints();

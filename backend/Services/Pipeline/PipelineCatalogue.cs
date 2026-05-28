@@ -1,0 +1,130 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Runner;
+
+namespace OrchestratorApi.Services.Pipeline;
+
+/// <summary>
+/// Static catalogue of pipeline definitions. Phase 1 ships exactly one:
+/// <c>standard-task-pipeline</c>, derived from today's
+/// <c>3-progress -> 4-auto-review</c> flow. Pre-steps are reserved
+/// slots (no runtime today; future tasks plug requirement-clarification
+/// / context-retrieval / skill-readiness here). The Core step is the
+/// CLI agent run owned by <see cref="TaskRunnerService"/>. Post-steps
+/// run the four <see cref="StepKind.Aspect"/> verdicts in parallel
+/// (the load-bearing behavioural change in this phase), then a
+/// deterministic <see cref="StepKind.Tool"/> stub for the upcoming
+/// git-commit-attribution follow-up, and an
+/// <see cref="StepKind.Orchestrator"/> decision step that reads the
+/// aspect verdicts.
+///
+/// The catalogue is a code constant on purpose: YAML loading buys
+/// nothing in Phase 1 and a YAML schema would have to be co-versioned
+/// with the in-memory model. Phase 2 may externalise this when
+/// per-project pipeline customisation lands.
+/// </summary>
+public static class PipelineCatalogue
+{
+    public const string StandardPipelineId = "standard-task-pipeline";
+
+    /// <summary>
+    /// The four aspect step ids ship as parallel post-steps. Kept in
+    /// sync with <see cref="AspectRunnerService.Catalogue"/> -
+    /// <see cref="PipelineCatalogueAsserts.AspectStepsMatchAspectRunnerCatalogue"/>
+    /// fails the build if they drift.
+    /// </summary>
+    public static readonly string[] AspectStepIds =
+    {
+        "aspect-requirement-fit",
+        "aspect-code-quality",
+        "aspect-documentation-impact",
+        "aspect-tests-and-evidence",
+    };
+
+    public const string CoreAgentRunStepId = "core-agent-run";
+    public const string GitCommitAttributionStepId = "post-git-commit-attribution";
+    public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
+
+    private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
+
+    public static TaskPipeline Standard => StandardPipeline;
+
+    public static TaskPipeline? Get(string id) =>
+        string.Equals(id, StandardPipelineId, StringComparison.OrdinalIgnoreCase) ? StandardPipeline : null;
+
+    public static IReadOnlyList<TaskPipeline> All { get; } = [StandardPipeline];
+
+    private static TaskPipeline BuildStandardPipeline()
+    {
+        var aspects = new List<PipelineStep>();
+        foreach (var aspectId in AspectStepIds)
+        {
+            var bareId = aspectId.StartsWith("aspect-", StringComparison.Ordinal)
+                ? aspectId.Substring("aspect-".Length)
+                : aspectId;
+            if (!AspectRunnerService.Catalogue.TryGetValue(bareId, out var def))
+            {
+                // Catalogue mismatch would trip PipelineCatalogueTests.cs;
+                // keep going so the runtime still has a step record.
+                aspects.Add(new PipelineStep
+                {
+                    Id = aspectId,
+                    DisplayName = aspectId,
+                    Kind = StepKind.Aspect,
+                    RunMode = StepRunMode.Parallel,
+                    Idempotent = true,
+                });
+                continue;
+            }
+            aspects.Add(new PipelineStep
+            {
+                Id = aspectId,
+                DisplayName = def.Title,
+                Kind = StepKind.Aspect,
+                RunMode = StepRunMode.Parallel,
+                Idempotent = true,
+            });
+        }
+
+        return new TaskPipeline
+        {
+            Id = StandardPipelineId,
+            DisplayName = "Standard task pipeline",
+            Version = 1,
+            Pre = [],
+            Core =
+            [
+                new PipelineStep
+                {
+                    Id = CoreAgentRunStepId,
+                    DisplayName = "Agent execution",
+                    Kind = StepKind.Core,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = false,
+                },
+            ],
+            Post =
+            [
+                .. aspects,
+                new PipelineStep
+                {
+                    Id = GitCommitAttributionStepId,
+                    DisplayName = "Git commit attribution",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
+                    Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = OrchestratorDecisionStepId,
+                    DisplayName = "Auto-review decision",
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
+                },
+            ],
+        };
+    }
+}

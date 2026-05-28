@@ -224,6 +224,7 @@ builder.Services.AddHostedService<AutoInterventionHostedService>();
 builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.PipelineExecutionLog>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
