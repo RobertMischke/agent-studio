@@ -47,7 +47,16 @@ internal static class JobEndpointHelpers
         IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
     {
-        var exec = router.Get(job.CliType).GetExecution(job.JobKey);
+        // Lane is the single source of truth for "is this card live". A job
+        // outside 3-progress has finished or been moved on; surfacing a stale
+        // (or even live) Execution snapshot here lets a "running" status leak
+        // onto cards in 4-auto-review / 5-human-review / 6-completed, which
+        // the per-card pill then renders as a misleading "Running" badge.
+        // Clearing at the wire-overlay layer keeps Lane > Execution-Status
+        // > Default as the deterministic precedence for every consumer.
+        var exec = job.State == JobStates.Progress
+            ? router.Get(job.CliType).GetExecution(job.JobKey)
+            : null;
         // Look up auto-loop state by ProjectName (O(1) ConcurrentDictionary
         // hit) rather than by re-scanning all jobs from disk. Locked by
         // JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond.

@@ -230,6 +230,52 @@ describe('JobCardComponent (smoke)', () => {
     expect(barAfter).toBeNull();
   });
 
+  it('suppresses the "Running live" pill on cards outside 3-progress (lane is source of truth)', async () => {
+    // Regression: a stale `execution.status === 'running'` snapshot on a
+    // card whose lane has already moved past 3-progress (4-auto-review,
+    // 5-human-review, etc.) used to flash a misleading "Running live"
+    // pill. The lane is the single source of truth for liveness; the
+    // execution overlay must only surface on actively-running cards.
+    await TestBed.configureTestingModule({
+      imports: [JobCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobCardComponent);
+    const runningExecution = {
+      jobId: 'task-7', jobKey: 'test::task-7', processId: 4242,
+      startedAt: '2026-05-28T10:00:00Z', status: 'running',
+      exitCode: null, durationSeconds: null, model: null, runOutcome: null,
+    };
+
+    // 3-progress + running → badge + progress bar present.
+    fixture.componentRef.setInput('job', makeJob({
+      state: '3-progress',
+      execution: runningExecution,
+    }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.executionBadge()?.tone).toBe('running');
+    expect(fixture.componentInstance.isRunning()).toBe(true);
+    expect(fixture.nativeElement.querySelector('[data-testid="job-card-progress"]')).not.toBeNull();
+
+    // Same execution but lane has moved to 4-auto-review → suppress.
+    for (const state of ['4-auto-review', '5-human-review', '6-completed', '4-review']) {
+      fixture.componentRef.setInput('job', makeJob({
+        state,
+        execution: runningExecution,
+      }));
+      fixture.detectChanges();
+      expect(fixture.componentInstance.executionBadge(), `state=${state}`).toBeNull();
+      expect(fixture.componentInstance.isRunning(), `state=${state}`).toBe(false);
+      expect(fixture.nativeElement.querySelector('[data-testid="job-card-progress"]'), `state=${state}`).toBeNull();
+    }
+  });
+
   it('renders a runner outcome issue pill', async () => {
     await TestBed.configureTestingModule({
       imports: [JobCardComponent],

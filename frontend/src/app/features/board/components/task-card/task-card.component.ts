@@ -330,6 +330,14 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const execution = this.job().execution;
     if (!execution) return null;
 
+    // Lane wins over execution-status. The backend overlay already clears
+    // Execution for non-progress jobs (JobEndpointHelpers.WithRuntime), but
+    // a stale poll snapshot or an optimistic move can briefly land on the
+    // card before the next round-trip. Without this guard, a card in
+    // 4-auto-review / 5-human-review can flash "Running live" while the
+    // task is not actually executing in this lane.
+    if (this.job().state !== '3-progress') return null;
+
     if (execution.status === 'running') {
       return { label: 'Running live', tone: 'running' };
     }
@@ -495,7 +503,9 @@ export class JobCardComponent implements OnInit, OnDestroy {
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 
-  readonly isRunning = computed(() => this.job().execution?.status === 'running');
+  readonly isRunning = computed(() =>
+    this.job().state === '3-progress' && this.job().execution?.status === 'running'
+  );
 
   readonly hasCommitFiles = computed(() => (this.job().commit?.files?.length ?? 0) > 0);
 

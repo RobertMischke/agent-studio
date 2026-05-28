@@ -234,8 +234,6 @@ test.describe('GitView polish — contrast + collapsible commit-message banner',
           JSON.stringify({ prompt: false, protocol: true, git: true }),
         );
         localStorage.setItem('taskboard.activeInspectorTab', '"activity"');
-        // Start each run with the commit-message banner expanded.
-        localStorage.removeItem('taskboard.gitPane.commitHeaderCollapsed');
       } catch { /* private mode */ }
     });
   });

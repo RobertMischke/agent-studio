@@ -22,16 +22,40 @@ function uid(prefix: string) {
 }
 
 async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id: string; title: string }[]> {
-  // Create in `2-ready` (the create endpoint accepts that), then move to
-  // `5-human-review` so we land on a known lane regardless of what
-  // default the backend picks for a non-standard `targetState`.
+  // Create directly in `5-human-review` and then poll until the backend's
+  // index actually reports that state. The pre-ADR-0028 helper that
+  // created in 2-ready and moved to 5-human-review hit a JobScanner
+  // race window (see feedback_scanner_findjob_mtime_side_effect in the
+  // workspace memory) where the move 404'd before the create had been
+  // re-indexed.
   const jobs: { id: string; title: string }[] = [];
   for (let i = 0; i < count; i++) {
-    const id = uid(`triage-${i}`);
-    const title = `triage fixture ${i} ${id}`;
-    await createJob({ id, title, watchPath: wp.path, targetState: '2-ready' });
-    await moveJob(id, wp.path, '5-human-review');
-    jobs.push({ id, title });
+    const requestedId = uid(`triage-${i}`);
+    const title = `triage fixture ${i} ${requestedId}`;
+    const created = await createJob({
+      id: requestedId,
+      title,
+      watchPath: wp.path,
+      targetState: '5-human-review',
+    });
+    let attempt = 0;
+    let inLane = false;
+    while (attempt < 25 && !inLane) {
+      await new Promise(r => setTimeout(r, 200));
+      try {
+        const j = await getJob(created.id, wp.path);
+        inLane = j.state === '5-human-review';
+      } catch {
+        // 404 while the index catches up — keep polling.
+      }
+      attempt++;
+    }
+    if (!inLane) {
+      // Fallback: explicit move if the create landed somewhere else
+      // (e.g. backend defaults a non-standard targetState back to ready).
+      await moveJob(created.id, wp.path, '5-human-review');
+    }
+    jobs.push({ id: created.id, title });
   }
   return jobs;
 }
@@ -45,9 +69,23 @@ async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id:
  * so this spec targets the studio testids directly to avoid strict-mode
  * collisions across both render sites.
  */
+/**
+ * Dismiss any toast overlay (e.g. an "Update failed" banner left from a
+ * previous run) so its z-index doesn't intercept clicks on the slim
+ * tab-bar buttons that live just below the toast stack.
+ */
+async function dismissBlockingToasts(page: Page): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    const closeBtn = page.getByTestId('notification-close').first();
+    if (!(await closeBtn.isVisible({ timeout: 200 }).catch(() => false))) return;
+    await closeBtn.click({ timeout: 1_000 }).catch(() => {});
+  }
+}
+
 async function openJobInDetail(page: Page, id: string, watchPath: string) {
   await page.goto(`/?job=${encodeURIComponent(id)}&watchPath=${encodeURIComponent(watchPath)}`);
   await expect(page.getByTestId('studio-triage-panel')).toBeVisible({ timeout: 10_000 });
+  await dismissBlockingToasts(page);
 }
 
 /**
