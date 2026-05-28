@@ -577,6 +577,14 @@
       max-width: 30ch;
       overflow: hidden;
     }
+    // Foreign-backend run: same blue but with a dashed border so the
+    // operator can see at a glance that another backend on the shared
+    // workspace owns the run. The live dot stays so it still reads as
+    // "active right now".
+    .column__status-pill--running-foreign {
+      border-style: dashed;
+      max-width: 38ch;
+    }
     .column__status-pill--running .column__status-pill-meta {
       font-weight: 500;
       letter-spacing: 0;

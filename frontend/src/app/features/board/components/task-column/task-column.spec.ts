@@ -142,6 +142,103 @@ describe('JobColumnComponent (smoke)', () => {
     expect(cluster!.mode.tooltip.toLowerCase()).toContain('auto-pickup is off');
   });
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Shared-workspace / multi-backend scenario.
+  //
+  // Two backends watching the same workspace: backend A picks up a task,
+  // backend B's UI polls its own /api/runner/status (no activeExecution
+  // there) but the same disk state surfaces the job card with
+  // `execution.status === 'running'`. Without the disk-derived fallback
+  // the lane showed only MANUAL; the operator could not tell that work
+  // was actually in progress. The fallback derives the RUNNING pill from
+  // the job card and flags it `foreign` so the user knows this backend
+  // is not the one driving the run.
+  // ─────────────────────────────────────────────────────────────────────
+  it('cluster: foreign backend running on shared workspace shows RUNNING pill with foreign flag', async () => {
+    const foreignJob = makeJob({
+      id: 'shared-task-9',
+      state: '3-progress',
+      execution: {
+        jobId: 'shared-task-9',
+        jobKey: 'shared::shared-task-9',
+        processId: 5796,
+        startedAt: '2026-05-27T14:58:00Z',
+        status: 'running',
+        exitCode: null,
+        durationSeconds: null,
+        model: 'claude-opus-4-7',
+        runOutcome: null,
+      },
+    });
+    const fixture = await buildColumn({
+      mode: 'manual',
+      // Local runner is idle (`activeJobId: null`) — another backend owns the run.
+      status: makeStatus({ mode: 'manual', activeJobId: null, activeExecution: null }),
+      jobs: [foreignJob],
+    });
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster).not.toBeNull();
+    expect(cluster!.running).not.toBeNull();
+    expect(cluster!.running!.jobId).toBe('shared-task-9');
+    expect(cluster!.running!.foreign).toBe(true);
+    expect(cluster!.running!.tooltip.toLowerCase()).toContain('another backend');
+    // Mode chip stays accurate (this backend is genuinely manual) but the
+    // tooltip clarifies that the running task is being driven elsewhere.
+    expect(cluster!.mode.kind).toBe('manual');
+    expect(cluster!.mode.tooltip.toLowerCase()).toContain('shared workspace');
+  });
+
+  it('cluster: foreign run + auto mode rewrites the AUTO tooltip to mention the foreign run', async () => {
+    const foreignJob = makeJob({
+      id: 'shared-task-10',
+      state: '3-progress',
+      execution: {
+        jobId: 'shared-task-10',
+        jobKey: 'shared::shared-task-10',
+        processId: 5796,
+        startedAt: '2026-05-27T14:58:00Z',
+        status: 'running',
+        exitCode: null,
+        durationSeconds: null,
+        model: 'claude-opus-4-7',
+        runOutcome: null,
+      },
+    });
+    const fixture = await buildColumn({
+      mode: 'auto-continuous',
+      status: makeStatus({ mode: 'auto-continuous', activeJobId: null, activeExecution: null }),
+      jobs: [foreignJob],
+    });
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.mode.kind).toBe('auto');
+    expect(cluster!.mode.tooltip.toLowerCase()).toContain('shared workspace');
+    expect(cluster!.running!.foreign).toBe(true);
+  });
+
+  it('cluster: own runner takes precedence over a disk-derived foreign signal', async () => {
+    // Edge case: the local runner is actively driving the job AND the same
+    // job's `execution.status === 'running'` shows up on the card. The
+    // pill must use the runner.activeExecution path (foreign = false) so
+    // it stays semantically correct.
+    const exec = makeExec({ jobId: 'task-7', startedAt: '2026-05-27T14:56:36Z' });
+    const job = makeJob({
+      id: 'task-7',
+      state: '3-progress',
+      execution: { ...exec, runOutcome: null },
+    });
+    const fixture = await buildColumn({
+      mode: 'auto-continuous',
+      status: makeStatus({
+        mode: 'auto-continuous',
+        activeJobId: 'task-7',
+        activeExecution: exec,
+      }),
+      jobs: [job],
+    });
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.running!.foreign).toBe(false);
+  });
+
   it('cluster: hidden when state is not 3-progress', async () => {
     await TestBed.configureTestingModule({
       imports: [JobColumnComponent],

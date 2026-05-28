@@ -133,20 +133,68 @@ export class JobColumnComponent implements OnInit, OnDestroy {
       modeTooltip = 'Auto-pickup is off. The currently running task continues; new tasks have to be started manually.';
     }
 
-    const exec = status?.activeExecution ?? null;
-    const running = exec && exec.status === 'running' ? exec : null;
-    let runningPill: { jobId: string; duration: string; model: string | null; tooltip: string } | null = null;
-    if (running) {
-      const startedAt = Date.parse(running.startedAt);
+    // Pick the active run. Two signals feed this:
+    //   (a) `status.activeExecution`: what THIS backend's runner is driving.
+    //       Authoritative when present.
+    //   (b) any 3-progress card whose `execution.status === 'running'`: the
+    //       disk-derived signal that survives across backends. In a shared-
+    //       workspace setup another backend (e.g. dev next to stable, both
+    //       watching the same project) may have picked up the task; the local
+    //       runner then has `activeJobId=null` but the lane is genuinely live.
+    //       Without (b) the RUNNING pill went missing and the operator was
+    //       left looking at a bare MANUAL pill while a task was actually
+    //       running — the bug behind this fix.
+    // When only (b) matches the pill is flagged `foreign: true` so the UI can
+    // hint that this backend isn't the one driving the run.
+    let runningPill: {
+      jobId: string;
+      duration: string;
+      model: string | null;
+      foreign: boolean;
+      tooltip: string;
+    } | null = null;
+    const ownExec = status?.activeExecution ?? null;
+    const ownRunning = ownExec && ownExec.status === 'running' ? ownExec : null;
+    if (ownRunning) {
+      const startedAt = Date.parse(ownRunning.startedAt);
       const now = this.nowMs() || Date.now();
       const elapsedMs = isFinite(startedAt) ? Math.max(0, now - startedAt) : 0;
       const duration = this.formatElapsed(elapsedMs);
       runningPill = {
-        jobId: running.jobId,
+        jobId: ownRunning.jobId,
         duration,
-        model: running.model ?? null,
-        tooltip: `Currently running: ${running.jobId}${running.model ? ` (${running.model})` : ''}. Started ${duration} ago.`
+        model: ownRunning.model ?? null,
+        foreign: false,
+        tooltip: `Currently running: ${ownRunning.jobId}${ownRunning.model ? ` (${ownRunning.model})` : ''}. Started ${duration} ago.`
       };
+    } else {
+      const foreignJob = this.jobs().find(j => j.execution?.status === 'running' && !!j.execution.startedAt);
+      const foreignExec = foreignJob?.execution ?? null;
+      if (foreignExec) {
+        const startedAt = Date.parse(foreignExec.startedAt);
+        const now = this.nowMs() || Date.now();
+        const elapsedMs = isFinite(startedAt) ? Math.max(0, now - startedAt) : 0;
+        const duration = this.formatElapsed(elapsedMs);
+        runningPill = {
+          jobId: foreignExec.jobId,
+          duration,
+          model: foreignExec.model ?? null,
+          foreign: true,
+          tooltip: `Currently running: ${foreignExec.jobId}${foreignExec.model ? ` (${foreignExec.model})` : ''}. Started ${duration} ago. This run is being driven by another backend on the shared workspace; this backend's runner is not in control.`
+        };
+      }
+    }
+
+    // When a foreign backend owns the active run, soften the MANUAL/AUTO
+    // tooltip so the operator doesn't read MANUAL as "nothing is happening".
+    // The mode label itself stays accurate (it describes what THIS backend's
+    // runner will do once the current run finishes).
+    if (runningPill?.foreign) {
+      if (modeKind === 'manual') {
+        modeTooltip = 'Auto-pickup on this backend is off. A run from another backend on the shared workspace is currently in progress (see RUNNING pill). Enable auto if you want this backend to take the next task.';
+      } else if (modeKind === 'auto') {
+        modeTooltip = 'Auto-pickup is on for this backend. A run from another backend on the shared workspace is currently in progress; once it ends, this backend will pick the next 2-ready task automatically.';
+      }
     }
 
     const queueSize = status?.queuedJobIds?.length ?? 0;

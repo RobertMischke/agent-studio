@@ -68,13 +68,15 @@
                 [attr.data-testid]="'lane-status-cluster-' + state()">
             @if (cluster.running; as run) {
               <span class="column__status-pill column__status-pill--running"
+                    [class.column__status-pill--running-foreign]="run.foreign"
                     [attr.data-testid]="'lane-running-pill-' + state()"
                     [attr.data-job-id]="run.jobId"
+                    [attr.data-foreign]="run.foreign ? 'true' : null"
                     [appTooltip]="run.tooltip">
                 <span class="column__status-pill-dot column__status-pill-dot--live"
                       aria-hidden="true"></span>
                 <span class="column__status-pill-label">RUNNING</span>
-                <span class="column__status-pill-meta">{{ run.jobId }} · {{ run.duration }}@if (run.model) { · {{ run.model }} }</span>
+                <span class="column__status-pill-meta">{{ run.jobId }} · {{ run.duration }}@if (run.model) { · {{ run.model }} }@if (run.foreign) { · external }</span>
               </span>
             }
             <button type="button"

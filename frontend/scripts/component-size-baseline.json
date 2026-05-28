@@ -31,10 +31,10 @@
       "total": 1389
     },
     "src/app/features/board/components/task-column/task-column.ts": {
-      "typeScript": 654,
-      "template": 222,
-      "styles": 674,
-      "total": 1550
+      "typeScript": 702,
+      "template": 224,
+      "styles": 682,
+      "total": 1608
     },
     "src/app/features/job-detail/components/activity-log-view/activity-log-view.ts": {
       "typeScript": 397,
