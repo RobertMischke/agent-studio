@@ -30,7 +30,14 @@ import {
   projectRunnerIndicator,
   splitReadyByPhase,
 } from './features/board';
-import { JobDetailComponent, JobSelectionService, TriageController } from './features/job-detail';
+import {
+  JobDetailComponent,
+  JobSelectionService,
+  TriageController,
+  overflowActionsFor,
+  primaryActionFor,
+  type TriageButton,
+} from './features/job-detail';
 import { CliUsageSheetComponent } from './features/cli';
 import {
   OrchestratorSettingsModalComponent,
@@ -1091,6 +1098,92 @@ export class App implements OnInit, OnDestroy {
   }
 
   // Cycle 10c: triage panel + j/k navigation + auto-advance delegated
+  // --- studio slim tab-bar triage cluster ---------------------------------
+  // Mirror of the kanban detail-header's primary + overflow cluster, anchored
+  // in the studio shell's slim tab-bar header (the VS Code layout hides
+  // <app-detail-header>, so the cluster needs its own seat there). All
+  // actions route through the same TriageController paths as the kanban
+  // panel; this is purely a second render site.
+  readonly studioTriagePrimary = computed<TriageButton | null>(() => {
+    const sel = this.selectedJob();
+    return sel ? primaryActionFor(sel.info.state) : null;
+  });
+  readonly studioTriageOverflow = computed<TriageButton[]>(() => {
+    const sel = this.selectedJob();
+    return sel ? overflowActionsFor(sel.info.state) : [];
+  });
+  readonly studioTriageHasActions = computed(
+    () => this.studioTriagePrimary() !== null || this.studioTriageOverflow().length > 0,
+  );
+  readonly studioTriageOverflowOpen = signal(false);
+  readonly studioTriageOverflowAnchor = signal<HTMLElement | null>(null);
+  readonly studioTriageMenuItems = computed<MenuItem[]>(() => {
+    const blocked = this.updateClient.mutationsBlocked();
+    return this.studioTriageOverflow().map<MenuItem>(b => ({
+      kind: 'row',
+      id: b.id,
+      label: b.label,
+      danger: b.variant === 'danger',
+      disabled: blocked,
+    }));
+  });
+
+  onStudioTriagePrimary(): void {
+    const sel = this.selectedJob();
+    const p = this.studioTriagePrimary();
+    if (!sel || !p) return;
+    this.dispatchStudioTriage(sel.info, p);
+  }
+
+  toggleStudioTriageOverflow(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.updateClient.mutationsBlocked()) return;
+    this.studioTriageOverflowAnchor.set(event.currentTarget as HTMLElement);
+    this.studioTriageOverflowOpen.update(v => !v);
+  }
+
+  closeStudioTriageOverflow(): void {
+    this.studioTriageOverflowOpen.set(false);
+  }
+
+  onStudioTriageMenuItemClick(ev: MenuItemClickEvent): void {
+    const button = this.studioTriageOverflow().find(b => b.id === ev.id);
+    const sel = this.selectedJob();
+    if (!sel || !button) return;
+    this.studioTriageOverflowOpen.set(false);
+    if (button.id === 'delete') {
+      this.onDeleteFromDetail(sel.info);
+      return;
+    }
+    this.dispatchStudioTriage(sel.info, button);
+  }
+
+  private dispatchStudioTriage(info: JobInfo, button: TriageButton): void {
+    const id = button.id;
+    switch (button.intent.kind) {
+      case 'move':
+        this.onTriageMove(info, { targetState: button.intent.targetState, actionId: id });
+        return;
+      case 'moveToTop':
+        this.onTriageMoveToTop(info, { actionId: id });
+        return;
+      case 'delete':
+        this.onTriageDelete(info, { actionId: id });
+        return;
+      case 'start':
+        this.onTriageStart(info, { actionId: id });
+        return;
+      case 'stop':
+      case 'editPrompt':
+      case 'showActivity':
+        // Pane-local intents (stop a running job, jump to the prompt editor,
+        // switch the inspector to activity) only make sense inside the
+        // detail panel. The kanban detail-header still surfaces them; the
+        // studio slim header skips them to keep the row short.
+        return;
+    }
+  }
+
   // to TriageController. The shell forwards events from JobDetailComponent.
   onTriageMove(info: JobInfo, ev: { targetState: string; actionId: string }) {
     this.triage.move(info, ev);

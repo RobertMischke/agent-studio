@@ -152,6 +152,38 @@
                     data-testid="studio-task-complete-next"
                     [appTooltip]="'Complete this task and move to the next review item'"
                     (click)="onCompleteAndNextReview()">✓ Complete</button>
+            @if (studioTriageHasActions()) {
+              <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+              <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
+                @if (studioTriagePrimary(); as primary) {
+                  <button type="button"
+                          class="studio-tab-action studio-tab-action--primary"
+                          [attr.data-testid]="'studio-triage-action-' + primary.id"
+                          [attr.data-action-id]="primary.id"
+                          [disabled]="updateClient.mutationsBlocked()"
+                          [appTooltip]="primary.label + ' (Enter)'"
+                          (click)="onStudioTriagePrimary()">{{ primary.label }}</button>
+                }
+                <button type="button"
+                        class="studio-tab-action studio-tab-action--icon"
+                        data-testid="studio-triage-overflow-btn"
+                        aria-haspopup="menu"
+                        [attr.aria-expanded]="studioTriageOverflowOpen()"
+                        [disabled]="updateClient.mutationsBlocked()"
+                        [appTooltip]="'More task actions'"
+                        (click)="toggleStudioTriageOverflow($event)">⋯</button>
+                <app-menu
+                  [items]="studioTriageMenuItems()"
+                  [open]="studioTriageOverflowOpen()"
+                  [anchorEl]="studioTriageOverflowAnchor()"
+                  placement="below"
+                  testIdPrefix="studio-triage-overflow"
+                  ariaLabel="Lane actions"
+                  [minWidth]="220"
+                  (itemClick)="onStudioTriageMenuItemClick($event)"
+                  (closeRequest)="closeStudioTriageOverflow()" />
+              </div>
+            }
           }
         </div>
         <div studioContent class="studio-projected-content">

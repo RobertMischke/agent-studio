@@ -1695,6 +1695,17 @@
   padding: 0 2px;
 }
 
+// Triage cluster (primary lane action + ⋯ overflow) inside the slim
+// tab-bar header. Sits to the right of the Complete pill so the
+// "primary task action right now" reads in one row. Mirrors the cluster
+// rendered inside <app-detail-header> for the kanban detail panel.
+.studio-tab-action__triage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+}
+
 .studio-tab-action__pager {
   font-family: var(--font-mono);
   font-size: 10px;

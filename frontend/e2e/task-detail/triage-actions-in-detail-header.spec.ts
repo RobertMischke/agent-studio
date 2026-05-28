@@ -36,41 +36,38 @@ async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id:
   return jobs;
 }
 
+/**
+ * The dev frontend boots with the `vsCodeLayout` flag on by default, so
+ * the lane-action cluster lives in the studio slim tab-bar header
+ * (`studio-triage-*` testids). The kanban `<app-detail-header>` carries
+ * a parallel `triage-*` cluster for the vsCodeLayout-off variant and is
+ * mounted-but-hidden alongside the studio cluster while the flag is on,
+ * so this spec targets the studio testids directly to avoid strict-mode
+ * collisions across both render sites.
+ */
 async function openJobInDetail(page: Page, id: string, watchPath: string) {
   await page.goto(`/?job=${encodeURIComponent(id)}&watchPath=${encodeURIComponent(watchPath)}`);
-  await expect(page.getByTestId('triage-panel')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByTestId('triage-action-mark-done')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('studio-triage-panel')).toBeVisible({ timeout: 10_000 });
 }
 
 /**
- * Lane-action cluster in the detail header: a lane-specific primary button
- * and an overflow ⋯ menu of secondary actions, anchored top-right next to
- * the lane dropdown. Replaces the bottom-of-detail triage popover.
- *
- * Each spec plants its own fixture jobs in `5-human-review`, walks them via
- * the header cluster, and asserts the same next-in-lane semantics the old
- * footer-bar tests had. Fixtures are tagged (`fixture: true`) so they
- * don't show up on the main board for other specs.
+ * Lane-action cluster anchored top-right of the detail view: a
+ * lane-specific primary button and an overflow ⋯ menu of secondary
+ * actions. Replaces the bottom-of-detail triage popover. The cluster is
+ * rendered twice for the two shell variants (kanban detail-header vs
+ * studio slim tab-bar header); the spec resolves the user-visible one.
  */
 test.describe('Triage actions in detail header', () => {
-  test('primary "Mark as Done" lives next to the lane dropdown and moves the job out of the lane', async ({ page }) => {
+  test('primary "Mark as Done" lives top-right and moves the job out of the lane', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const jobs = await plantHumanReviewJobs(wp, 1);
     try {
       await openJobInDetail(page, jobs[0].id, wp.path);
 
-      // The primary button is rendered next to the lane <select>, NOT in
-      // the bottom footer the old layout used.
-      const cluster = page.getByTestId('triage-panel');
+      const cluster = page.getByTestId('studio-triage-panel');
       await expect(cluster).toBeVisible();
-      const primary = cluster.getByTestId('triage-action-mark-done');
-      await expect(primary).toBeVisible();
-      // The lane select is the cluster's left-side neighbour in the header.
-      const select = page.getByTestId('detail-state-select');
-      await expect(select).toBeVisible();
-
-      const counter = page.getByTestId('triage-counter');
-      await expect(counter).toContainText('in Human Review');
+      const primary = page.getByTestId('studio-triage-action-mark-done');
+      await expect(primary).toBeVisible({ timeout: 10_000 });
 
       const beforeUrl = page.url();
       await primary.click();
@@ -85,7 +82,7 @@ test.describe('Triage actions in detail header', () => {
       await expect.poll(async () => {
         const url = page.url();
         if (url !== beforeUrl) return 'advanced';
-        const visible = await cluster.isVisible();
+        const visible = await cluster.isVisible().catch(() => false);
         return visible ? 'still-open' : 'closed';
       }, { timeout: 5_000 }).not.toBe('still-open');
     } finally {
@@ -99,20 +96,20 @@ test.describe('Triage actions in detail header', () => {
     try {
       await openJobInDetail(page, jobs[0].id, wp.path);
 
-      const overflowBtn = page.getByTestId('triage-overflow-btn');
-      await expect(overflowBtn).toBeVisible();
-      await overflowBtn.click();
+      const trigger = page.getByTestId('studio-triage-overflow-btn');
+      await expect(trigger).toBeVisible();
+      await trigger.click();
 
-      const menu = page.getByTestId('triage-overflow-panel');
+      const menu = page.getByTestId('studio-triage-overflow-panel');
       await expect(menu).toBeVisible({ timeout: 3_000 });
 
       // 5-human-review secondaries: send-back-to-ready, send-to-backlog,
       // need-clarification + the always-on edit-prompt + delete fallbacks.
-      await expect(page.getByTestId('triage-overflow-item-send-back-to-ready')).toBeVisible();
-      await expect(page.getByTestId('triage-overflow-item-send-to-backlog')).toBeVisible();
-      await expect(page.getByTestId('triage-overflow-item-need-clarification')).toBeVisible();
-      await expect(page.getByTestId('triage-overflow-item-edit-prompt')).toBeVisible();
-      await expect(page.getByTestId('triage-overflow-item-delete')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-send-back-to-ready')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-send-to-backlog')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-need-clarification')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-edit-prompt')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-delete')).toBeVisible();
 
       // Close via Escape — the shared <app-menu> registers on ModalStack.
       await page.keyboard.press('Escape');
@@ -129,8 +126,8 @@ test.describe('Triage actions in detail header', () => {
       // Open the second fixture so j has somewhere to advance to.
       await openJobInDetail(page, jobs[1].id, wp.path);
 
-      // Click on the body so focus leaves the lane <select>; otherwise
-      // 'j' typed into the select would be intercepted by typeahead.
+      // Click on the body so focus leaves any focused control; otherwise
+      // typed keystrokes get intercepted by editable elements first.
       await page.locator('body').click({ position: { x: 5, y: 5 } });
 
       const initialUrl = page.url();
@@ -138,14 +135,13 @@ test.describe('Triage actions in detail header', () => {
       await expect.poll(() => page.url(), { timeout: 5_000 }).not.toBe(initialUrl);
 
       // The triage cluster is still mounted on the new job.
-      await expect(page.getByTestId('triage-panel')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-panel')).toBeVisible();
 
       // Re-anchor focus on body in case the navigate placed focus inside
-      // an interactive control (the lane <select>'s typeahead would
-      // otherwise eat the next keystroke).
+      // an interactive control.
       await page.locator('body').click({ position: { x: 5, y: 5 } });
       await page.keyboard.press('Escape');
-      await expect(page.getByTestId('triage-panel')).toBeHidden({ timeout: 5_000 });
+      await expect(page.getByTestId('studio-triage-panel')).toBeHidden({ timeout: 5_000 });
     } finally {
       for (const j of jobs) await deleteJob(j.id, wp.path).catch(() => {});
     }
@@ -163,7 +159,7 @@ test.describe('Triage actions in detail header', () => {
       // navigate → decide loop instead of relying on auto-advance order.
       for (const j of jobs) {
         await openJobInDetail(page, j.id, wp.path);
-        await page.getByTestId('triage-action-mark-done').click();
+        await page.getByTestId('studio-triage-action-mark-done').click();
         await expect.poll(
           async () => (await getJob(j.id, wp.path)).state,
           { timeout: 10_000 }

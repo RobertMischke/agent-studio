@@ -11,6 +11,13 @@
 export { JobDetailComponent } from './task-detail';
 export { JobSelectionService } from './state/task-selection.service';
 export { TriageController } from './state/triage-controller.service';
+export {
+  overflowActionsFor,
+  primaryActionFor,
+  laneLabelFor,
+  type TriageActionPayload,
+  type TriageButton,
+} from './state/triage-actions.model';
 export { HygieneStripComponent } from './components/hygiene-strip/hygiene-strip/hygiene-strip.component';
 export { ProjectHygieneBadgeComponent } from './components/hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
 export { ActivityLogViewComponent } from './components/activity-log-view/activity-log-view';
