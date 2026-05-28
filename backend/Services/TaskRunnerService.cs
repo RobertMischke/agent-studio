@@ -43,7 +43,24 @@ public class TaskRunnerService : BackgroundService
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
     private readonly AgentMessageBusBridge? _bus;
     private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
+    private readonly PickupLockFile? _pickupLock;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
+
+    /// <summary>
+    /// Process-wide pickup role (ADR-0044). Resolved once at construction
+    /// from <c>Runner:Role</c> with a fallback to <c>Environment:IsDev</c>.
+    /// Surfaced so endpoints can echo it back in the runner status.
+    /// </summary>
+    public RunnerRole Role { get; }
+
+    /// <summary>
+    /// Logical name of this backend instance for cross-process lock attribution.
+    /// Resolved from <c>Runner:BackendName</c> with a fallback derived from
+    /// <c>Environment:IsDev</c> ("dev" vs "stable") so the two checkouts under
+    /// <c>agent-taskboard-devspace/</c> produce distinct lock owners even when
+    /// the operator forgets to set the explicit key.
+    /// </summary>
+    public string BackendName { get; }
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
 
@@ -72,7 +89,8 @@ public class TaskRunnerService : BackgroundService
         PickupFailureLog pickupFailures,
         CrossSlugInfraCircuitBreaker infraBreaker,
         OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
-        AgentMessageBusBridge? bus = null)
+        AgentMessageBusBridge? bus = null,
+        PickupLockFile? pickupLock = null)
     {
         _config = config;
         _logger = logger;
@@ -99,6 +117,65 @@ public class TaskRunnerService : BackgroundService
         _infraBreaker = infraBreaker;
         _taskAccess = taskAccess;
         _bus = bus;
+        _pickupLock = pickupLock;
+
+        Role = RunnerRoles.ResolveFromConfig(_config);
+        BackendName = ResolveBackendName(_config);
+        _logger.LogInformation(
+            "TaskRunnerService booting with role={Role} backend={Backend} (Runner:Role={Configured}, Environment:IsDev={IsDev})",
+            RunnerRoles.Format(Role),
+            BackendName,
+            _config["Runner:Role"] ?? "<unset>",
+            _config.GetValue<bool>("Environment:IsDev"));
+        if (Role == RunnerRole.TestSubject)
+        {
+            _logger.LogWarning(
+                "[runner-role] Auto-pickup is structurally DISABLED for this backend (role=test-subject). " +
+                "Explicit /api/jobs/{{id}}/start calls still execute (Playwright fixtures, manual debugging). " +
+                "See ADR-0044 and AGENTS.md 'Dev backend lifecycle'.");
+        }
+    }
+
+    /// <summary>
+    /// Picks the backend identity stamped onto pickup-lock files. Explicit
+    /// <c>Runner:BackendName</c> wins; when unset, dev/stable is inferred from
+    /// <c>Environment:IsDev</c> so the two checkouts produce distinct owners.
+    /// </summary>
+    private static string ResolveBackendName(IConfiguration cfg)
+    {
+        var explicitName = cfg["Runner:BackendName"];
+        if (!string.IsNullOrWhiteSpace(explicitName)) return explicitName.Trim();
+        var isDev = cfg.GetValue<bool>("Environment:IsDev");
+        return isDev ? "dev" : "stable";
+    }
+
+    /// <summary>
+    /// Stamps a fresh <see cref="PickupLockOwner"/> for the given project,
+    /// carrying pid, hostname, role, and backend name so a foreign lock writer
+    /// can be identified later. The owner is per-project but the rest of the
+    /// fields are process-wide.
+    /// </summary>
+    private PickupLockOwner BuildPickupLockOwner(string projectName) => new()
+    {
+        Pid = System.Environment.ProcessId,
+        Hostname = System.Environment.MachineName,
+        Role = RunnerRoles.Format(Role),
+        BackendName = BackendName,
+        BackendPort = ResolveBackendPort(_config),
+        ProjectName = projectName
+    };
+
+    private static int ResolveBackendPort(IConfiguration cfg)
+    {
+        var raw = cfg["Urls"] ?? cfg["ASPNETCORE_URLS"] ?? System.Environment.GetEnvironmentVariable("PORT");
+        if (string.IsNullOrWhiteSpace(raw)) return 0;
+        foreach (var token in raw.Split([';', ' '], System.StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (int.TryParse(token, out var p)) return p;
+            var colon = token.LastIndexOf(':');
+            if (colon >= 0 && int.TryParse(token[(colon + 1)..].TrimEnd('/'), out var p2)) return p2;
+        }
+        return 0;
     }
 
     private readonly GitService _git;
@@ -133,7 +210,14 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git, _pickupFailures, _infraBreaker, _taskAccess, _bus);
+            var runner = new ProjectRunner(
+                entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService,
+                _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner,
+                _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git,
+                _pickupFailures, _infraBreaker, _taskAccess, _bus,
+                role: Role,
+                pickupLock: _pickupLock,
+                pickupLockOwner: BuildPickupLockOwner(entry.Name));
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
@@ -251,9 +335,35 @@ public class TaskRunnerService : BackgroundService
 
     public bool SetMode(string projectName, string mode, string? reason = null)
     {
-        if (!_runners.TryGetValue(projectName, out var runner)) return false;
+        var result = RequestModeChange(projectName, mode, reason);
+        return result != null && result.Outcome != ModeChangeOutcome.Invalid;
+    }
+
+    /// <summary>
+    /// Typed mode-change entry point (ADR-0044). Returns the structured
+    /// outcome so <c>PUT /api/runner/{project}/mode</c> can answer with
+    /// <c>{applied|deferred, mode, pendingMode, willApplyAfter}</c> instead
+    /// of an opaque 200/400. Null means "unknown project" (the endpoint
+    /// returns 404 in that case). <see cref="ModeChangeOutcome.Invalid"/>
+    /// means the mode string was not one of the four allowed values; the
+    /// endpoint converts that to 400.
+    /// </summary>
+    /// <remarks>
+    /// The deferred branch (manual / paused requested while a job is
+    /// running) is the load-bearing change from the original
+    /// <c>SetMode</c>: previously the call returned 200 unconditionally and
+    /// the operator had no way to tell that an active job was still going
+    /// to run to completion before the mode flip "took". The deferred slot
+    /// surfaces via <see cref="ProjectRunnerStatus.PendingMode"/> and the
+    /// API response so the lane pill can render "MANUAL (after current)"
+    /// while the runner finishes the job in flight.
+    /// </remarks>
+    public ModeChangeResult? RequestModeChange(string projectName, string mode, string? reason = null)
+    {
+        if (!_runners.TryGetValue(projectName, out var runner)) return null;
         var validModes = new[] { "manual", "auto-single", "auto-continuous", "paused" };
-        if (!validModes.Contains(mode)) return false;
+        if (!validModes.Contains(mode))
+            return new ModeChangeResult(ModeChangeOutcome.Invalid, runner.GetStatus().Mode, null, null);
         // Cross-slug infra breaker reset: when the operator flips back to
         // an auto mode, treat that as "infra is fixed, run again" and clear
         // the distinct-slug counter across all CLIs for this project. The
@@ -265,8 +375,8 @@ public class TaskRunnerService : BackgroundService
             try { _infraBreaker.OnOperatorResumeAuto(projectName); }
             catch (Exception ex) { _logger.LogWarning(ex, "CrossSlugInfraCircuitBreaker reset failed for {Project}", projectName); }
         }
-        runner.SetMode(mode, string.IsNullOrWhiteSpace(reason) ? "api: PUT /api/runner/{project}/mode" : reason);
-        return true;
+        var effectiveReason = string.IsNullOrWhiteSpace(reason) ? "api: PUT /api/runner/{project}/mode" : reason;
+        return runner.RequestModeChange(mode, effectiveReason);
     }
 
     /// <summary>
@@ -685,14 +795,18 @@ public class TaskRunnerService : BackgroundService
     public bool StartRunner(string projectName)
     {
         if (!_runners.TryGetValue(projectName, out var runner)) return false;
+        // Starting is always immediate: auto-* never defers.
         runner.SetMode("auto-single", "api: POST /api/runner/{project}/start");
         return true;
     }
 
     public bool StopRunner(string projectName)
     {
-        if (!_runners.TryGetValue(projectName, out var runner)) return false;
-        runner.SetMode("paused", "api: POST /api/runner/{project}/stop");
-        return true;
+        // Stop routes through the deferred-aware request so a Stop fired
+        // while a job is running queues the pause behind the active job
+        // (the runner does not kill the in-flight CLI). Matches the
+        // semantics applied by PUT /mode (ADR-0044).
+        var result = RequestModeChange(projectName, "paused", "api: POST /api/runner/{project}/stop");
+        return result != null && result.Outcome != ModeChangeOutcome.Invalid;
     }
 }

@@ -67,7 +67,11 @@ cmd_start() {
     exit 0
   fi
   log "starting dev backend in ${DEV_CHECKOUT} on :${DEV_PORT}"
-  ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" ./api.sh start )
+  # ADR-0044: this script is the single legitimate path that brings dev's
+  # backend up outside of an interactive operator session. Signal that to
+  # start-dev.sh so its env-flag gate does not refuse the boot when this
+  # script is in turn invoked from the Playwright dev-backend fixture.
+  ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" ATP_DEV_BACKEND_FROM_FIXTURE=1 ./api.sh start )
 }
 
 cmd_stop() {

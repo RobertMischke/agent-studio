@@ -38,8 +38,24 @@ public static class RunnerEndpoints
 
         runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner) =>
         {
-            var success = runner.SetMode(projectName, req.Mode);
-            return success ? Results.Ok() : Results.BadRequest("Invalid project or mode");
+            var result = runner.RequestModeChange(projectName, req.Mode);
+            if (result == null)
+                return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            if (result.Outcome == ModeChangeOutcome.Invalid)
+                return Results.BadRequest(new
+                {
+                    error = $"Invalid mode '{req.Mode}'. Allowed: manual, auto-single, auto-continuous, paused.",
+                    mode = result.CurrentMode
+                });
+            // Applied = mode is live now; Deferred = the requested mode is queued
+            // behind the active job. Both surface the requested vs. current mode
+            // so the frontend can render "MANUAL (after current)" pills without
+            // probing the status endpoint a second time.
+            return Results.Ok(new SetRunnerModeResponse(
+                Applied: result.Outcome == ModeChangeOutcome.Applied,
+                Mode: result.CurrentMode,
+                PendingMode: result.PendingMode,
+                WillApplyAfterJobId: result.WillApplyAfterJobId));
         });
 
         // Live, in-progress decision surface (ADR-0027): unresolved
@@ -307,3 +323,21 @@ public sealed record RunnerPendingDecisionDto(
 public sealed record RunnerPendingDecisionsResponse(
     string Project,
     IReadOnlyList<RunnerPendingDecisionDto> Items);
+
+/// <summary>
+/// Response body for <c>PUT /api/runner/{project}/mode</c> (ADR-0044).
+/// <para>
+/// <see cref="Applied"/> is <c>true</c> when the requested mode is live now;
+/// <c>false</c> when the change is deferred behind an active job (in that
+/// case the live mode stays at its previous <c>auto-*</c> value and
+/// <see cref="PendingMode"/> + <see cref="WillApplyAfterJobId"/> describe
+/// the deferred change). The frontend renders the pill as "<see cref="Mode"/>
+/// (then <see cref="PendingMode"/> after <see cref="WillApplyAfterJobId"/>)"
+/// while the queued change is pending.
+/// </para>
+/// </summary>
+public sealed record SetRunnerModeResponse(
+    bool Applied,
+    string Mode,
+    string? PendingMode,
+    string? WillApplyAfterJobId);

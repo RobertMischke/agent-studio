@@ -1404,6 +1404,30 @@ public record ProjectRunnerStatus
     /// does not have to re-implement the heuristic on every render.
     /// </summary>
     public string? ModeSource { get; init; }
+    /// <summary>
+    /// Backend role assigned via <c>Runner:Role</c> config; one of
+    /// <c>orchestrator</c> (the default — picks tasks automatically when mode is
+    /// <c>auto-*</c>) or <c>test-subject</c> (pickup loop is structurally
+    /// disabled — only explicit start endpoints can drive a job). The dev
+    /// backend ships as <c>test-subject</c> so a shared workspace does not
+    /// produce a parallel pickup race against stable.
+    /// </summary>
+    public string Role { get; init; } = "orchestrator";
+    /// <summary>
+    /// Mode the operator asked for while a job was still running. Non-null only
+    /// when a <c>PUT /api/runner/{project}/mode</c> with <c>manual</c> /
+    /// <c>paused</c> arrived while <see cref="ActiveJobId"/> was set. The
+    /// runner applies the value the moment the active job clears; the frontend
+    /// renders the lane pill as "MANUAL (after current)" while this field is
+    /// populated.
+    /// </summary>
+    public string? PendingMode { get; init; }
+    /// <summary>
+    /// Job id the deferred mode change is waiting on. Mirrors
+    /// <see cref="ActiveJobId"/> at the moment the deferred change was recorded
+    /// so the UI can render "after &lt;slug&gt;" in the tooltip.
+    /// </summary>
+    public string? PendingModeWillApplyAfter { get; init; }
 }
 
 public record StartJobRequest

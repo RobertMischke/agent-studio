@@ -49,6 +49,27 @@ in `agent-taskboard-devspace/` remain available for direct human invocation
 when debugging dev itself; agents should not call them as part of routine
 runs.
 
+**ADR-0044 enforcement.** The rule used to live in this document only; on
+2026-05-28 it was made structural. The dev backend now boots with
+`Runner:Role=test-subject` (set in `backend/appsettings.Local.json`); the
+per-project pickup tick checks the role and returns early before considering
+the queue, so a `test-subject` backend cannot auto-pick even when its mode
+is left at `auto-continuous`. A disk-backed `.pickup-lock.json` on the job
+folder (pid + hostname + role + backend name) is the cross-process
+belt-and-braces: a foreign live owner causes the second backend's
+`RunCliAsync` to refuse the spawn with `ProjectBusy`. The parent
+`start-dev.sh` also gates on `ATP_ALLOW_DEV_BACKEND=1` so a human boot is
+an explicit acknowledgement of the policy; `dev-lifecycle.sh` exports
+`ATP_DEV_BACKEND_FROM_FIXTURE=1` to bypass the gate because the Playwright
+fixture is the one legitimate caller. Operator-initiated `manual` /
+`paused` mode changes that arrive while a job is active are now *deferred*
+(the live mode stays at its `auto-*` value, the requested mode lands in
+`PendingMode`, and the runner applies it on the next active-job clear);
+the `PUT /api/runner/{project}/mode` response carries
+`{applied, mode, pendingMode, willApplyAfterJobId}` so the lane pill can
+render "MANUAL (after current)" without polling status a second time.
+Full rationale + non-goals in [docs/architecture-decisions.md](docs/architecture-decisions.md) under ADR-0044.
+
 ## Architecture Decisions Archive
 
 [docs/architecture-decisions.md](docs/architecture-decisions.md) holds the durable archive of **load-bearing** decisions: product boundaries, architectural philosophies, hard non-goals, and reasoning styles. The bar is high. Bug fixes, defensive guards, individual feature choices, and policy tweaks belong in commits and code comments, not in this file. If an entry would read like a changelog line, it does not belong there.

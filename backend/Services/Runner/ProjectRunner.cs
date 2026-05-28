@@ -46,6 +46,28 @@ public class ProjectRunner
     private string? _modeReason;
     private DateTime? _modeChangedAt;
     private string? _modeSource;
+    // Backend role (orchestrator vs test-subject). Set in the ctor from
+    // Runner:Role config; defaults to Orchestrator so an unconfigured backend
+    // behaves like stable rather than silently going dark. TestSubject skips
+    // the auto-pickup branch in TickAsync entirely - explicit start endpoints
+    // still work so Playwright fixtures can drive a specific job on demand.
+    private readonly RunnerRole _role;
+    // Disk-backed lock primitive: stamps .pickup-lock.json on the job folder
+    // at spawn time so a second backend sharing the same workspace skips
+    // rather than races. Null in tests that don't need the cross-process
+    // belt-and-braces (single-process unit tests).
+    private readonly PickupLockFile? _pickupLock;
+    private readonly PickupLockOwner? _pickupLockOwner;
+    private string? _activePickupLockFolder;
+    // Deferred mode: when SetMode(manual|paused) arrives while a job is
+    // active, store the requested mode here, leave _mode at its auto-* value,
+    // and apply on the next active-job clear. Lets the operator say "stop
+    // after this finishes" without killing the run, while keeping the
+    // semantics of the response visible in the status payload. Null when no
+    // change is pending.
+    private string? _pendingMode;
+    private string? _pendingModeReason;
+    private string? _pendingModeWillApplyAfter;
     private string? _activeJobId;
     private string? _activeCliType;
     private bool _processing;
@@ -144,7 +166,10 @@ public class ProjectRunner
         PickupFailureLog pickupFailures,
         CrossSlugInfraCircuitBreaker infraBreaker,
         OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
-        AgentMessageBusBridge? bus = null)
+        AgentMessageBusBridge? bus = null,
+        RunnerRole role = RunnerRole.Orchestrator,
+        PickupLockFile? pickupLock = null,
+        PickupLockOwner? pickupLockOwner = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -169,6 +194,9 @@ public class ProjectRunner
         _infraBreaker = infraBreaker;
         _taskAccess = taskAccess;
         _bus = bus;
+        _role = role;
+        _pickupLock = pickupLock;
+        _pickupLockOwner = pickupLockOwner;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -178,6 +206,21 @@ public class ProjectRunner
         // PhaseAwareWatchdog.DecideState below.
         _router.OnRunEvent += (_, jobKey, evt) => OnRunEventReceived(jobKey, evt);
     }
+
+    /// <summary>
+    /// Backend role assigned at construction time. Read-only after the runner
+    /// is built; the role is a process-wide policy decided from
+    /// <c>Runner:Role</c> config, not a per-call mutation.
+    /// </summary>
+    public RunnerRole Role => _role;
+
+    /// <summary>
+    /// True while the operator's last mode-change request is waiting on the
+    /// active job to finish before it lands. The deferred value is exposed via
+    /// <see cref="ProjectRunnerStatus.PendingMode"/> and applied automatically
+    /// by <see cref="ApplyPendingModeIfAny"/> when <c>_activeJobId</c> clears.
+    /// </summary>
+    public bool HasPendingMode => _pendingMode != null;
 
     /// <summary>
     /// Mutate the runner's auto-pickup mode and persist it. <paramref name="reason"/>
@@ -195,12 +238,86 @@ public class ProjectRunner
         _modeReason = effectiveReason;
         _modeChangedAt = DateTime.UtcNow;
         _modeSource = ClassifyModeSource(effectiveReason);
+        // A direct, fully-applied SetMode supersedes any deferred change still
+        // waiting on the active job. Clear the pending slot so the status DTO
+        // does not advertise a "MANUAL (after current)" pill that will never
+        // fire because the live mode just moved past it.
+        _pendingMode = null;
+        _pendingModeReason = null;
+        _pendingModeWillApplyAfter = null;
         _logger.LogInformation(
             "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}' (source={Source})",
             ProjectName, fromMode, mode, effectiveReason, _modeSource);
         try { OnModePersist?.Invoke(mode); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnModePersist subscriber threw for {Project}", ProjectName); }
         NotifyStatus();
+    }
+
+    /// <summary>
+    /// Operator-initiated mode change with the deferred-on-active semantics
+    /// (the rule the API endpoint applies):
+    /// <list type="bullet">
+    ///   <item>When no job is active <i>or</i> the new mode is one of the
+    ///   <c>auto-*</c> values, the change applies immediately via
+    ///   <see cref="SetMode"/> and the result is <see cref="ModeChangeOutcome.Applied"/>.</item>
+    ///   <item>When a job is active and the requested mode is <c>manual</c> or
+    ///   <c>paused</c>, the live mode is left alone and the requested mode is
+    ///   queued; <see cref="ModeChangeOutcome.Deferred"/> is returned with the
+    ///   job slug the change is waiting on. The frontend renders this as
+    ///   "&lt;currentMode&gt; (then &lt;pendingMode&gt; after &lt;slug&gt;)"
+    ///   and applies the queued value on the next active-job clear.</item>
+    /// </list>
+    /// Invalid mode strings produce <see cref="ModeChangeOutcome.Invalid"/>; the
+    /// caller (typically <see cref="OrchestratorApi.Services.TaskRunnerService.SetMode"/>)
+    /// turns that into a 400.
+    /// </summary>
+    public ModeChangeResult RequestModeChange(string mode, string? reason = null)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+            return new ModeChangeResult(ModeChangeOutcome.Invalid, _mode, null, null);
+        var isManualSide = mode is "manual" or "paused";
+        var effectiveReason = string.IsNullOrWhiteSpace(reason) ? "api-toggle" : reason!;
+        if (_activeJobId != null && isManualSide && _mode is "auto-single" or "auto-continuous")
+        {
+            _pendingMode = mode;
+            _pendingModeReason = effectiveReason + " (deferred until active job clears)";
+            _pendingModeWillApplyAfter = _activeJobId;
+            _logger.LogInformation(
+                "Runner '{Project}' deferred mode change '{From}' -> '{To}' until active job {JobId} clears (reason '{Reason}')",
+                ProjectName, _mode, mode, _activeJobId, effectiveReason);
+            NotifyStatus();
+            return new ModeChangeResult(ModeChangeOutcome.Deferred, _mode, mode, _activeJobId);
+        }
+        SetMode(mode, effectiveReason);
+        return new ModeChangeResult(ModeChangeOutcome.Applied, _mode, null, null);
+    }
+
+    /// <summary>
+    /// Drains the deferred mode slot when an active job has just cleared. The
+    /// caller (the same <c>finally</c> block that releases <c>_activeJobId</c>
+    /// in <see cref="OnCliFinishedAsync"/> / <see cref="ClearActiveJobIfMatches"/>)
+    /// pays one comparison when no defer is pending. When a defer is pending
+    /// the recorded reason is preserved so the structured log still shows the
+    /// original intent ("api-toggle (deferred until active job clears)") plus
+    /// the slug that triggered the apply.
+    /// </summary>
+    private void ApplyPendingModeIfAny(string? clearedJobId)
+    {
+        if (_pendingMode == null) return;
+        // Drain even if the slug differs from the one we recorded: in the rare
+        // case the operator deferred against one job and a different job
+        // cleared first (a manual restart, an external move), the intent was
+        // "stop auto-pickup at the next boundary", which is now.
+        var pendingMode = _pendingMode!;
+        var reason = _pendingModeReason ?? "deferred mode change applied on active-job clear";
+        var waitedOn = _pendingModeWillApplyAfter ?? clearedJobId;
+        _pendingMode = null;
+        _pendingModeReason = null;
+        _pendingModeWillApplyAfter = null;
+        _logger.LogInformation(
+            "Runner '{Project}' applying deferred mode '{Mode}' (was waiting on '{Job}')",
+            ProjectName, pendingMode, waitedOn);
+        SetMode(pendingMode, reason);
     }
 
     /// <summary>
@@ -298,6 +415,9 @@ public class ProjectRunner
             ActiveJobId = _activeJobId,
             ActiveExecution = activeExec,
             QueuedJobIds = queued,
+            Role = RunnerRoles.Format(_role),
+            PendingMode = _pendingMode,
+            PendingModeWillApplyAfter = _pendingModeWillApplyAfter,
             ModeReason = _modeReason,
             ModeChangedAt = _modeChangedAt,
             ModeSource = _modeSource
@@ -323,6 +443,14 @@ public class ProjectRunner
         // wedged. Covers external-script moves and the boot-time stuck-folder
         // sweep where no API event fired to clear us synchronously.
         ReconcileActiveJobAgainstDisk();
+
+        // Role gate (ADR-0044 / AGENTS.md "Dev backend lifecycle: Playwright-
+        // only"). A test-subject backend never auto-picks: watchdog,
+        // pending-decision scan, and reconciliation above all still ran so
+        // the surface Playwright is observing stays live, but we structurally
+        // refuse to claim work here. Explicit POST /api/jobs/{id}/start still
+        // routes through RunCliAsync directly and is allowed.
+        if (_role == RunnerRole.TestSubject) return;
 
         if (_mode is "manual" or "paused") return;
         if (_processing || _activeJobId != null) return;
@@ -472,6 +600,36 @@ public class ProjectRunner
 
             var prompt = RenderPrompt(plan, info);
 
+            // Disk-backed pickup lock (ADR-0044). When the lock is configured
+            // and an attempt to acquire it shows a foreign live owner, refuse
+            // to spawn: another backend on the same workspace is already on
+            // this job. AlreadyOwn (re-issue path), Stale (stale clean), and
+            // Acquired (first claim) all mean "we hold the lock - proceed".
+            // Re-entrancy (AlreadyOwn) is the case where the re-issue path
+            // released the in-memory active-job latch but kept us alive in
+            // the same process.
+            if (_pickupLock != null && _pickupLockOwner != null)
+            {
+                var owner = _pickupLockOwner with { ProjectName = ProjectName, JobId = jobId };
+                var outcome = _pickupLock.TryAcquire(jobFolder, owner, out var foreign);
+                if (outcome == LockAcquireOutcome.ForeignHeld)
+                {
+                    _logger.LogWarning(
+                        "[taskboard] refusing to spawn job {JobId}: pickup lock held by backend '{Backend}' (pid={Pid} host={Host} role={Role})",
+                        jobId,
+                        foreign?.BackendName ?? "<unknown>",
+                        foreign?.Pid ?? -1,
+                        foreign?.Hostname ?? "<unknown>",
+                        foreign?.Role ?? "<unknown>");
+                    return RunOutcome.Reject(new RunRejection(
+                        Reason: RunRejectReason.ProjectBusy,
+                        Message: $"Job '{jobId}' is being processed by backend '{foreign?.BackendName ?? "<unknown>"}' (pid={foreign?.Pid ?? -1}); refusing duplicate pickup.",
+                        BusyJobId: jobId,
+                        BusyJobTitle: info.Title));
+                }
+                _activePickupLockFolder = jobFolder;
+            }
+
             _activeJobId = jobId;
             _activeIntent = intent;
             _activeFollowup = followupPrompt;
@@ -543,6 +701,11 @@ public class ProjectRunner
             {
                 _activeJobId = null;
                 _activeCliType = null;
+                // The OnCliFinished release path never runs (we never got an
+                // execution) so the on-disk pickup lock we just stamped would
+                // otherwise wedge the next auto-pickup tick. Drop it here so
+                // the spawn-failure retry on the next tick sees a clean slot.
+                ReleasePickupLockIfHeld();
                 NotifyStatus();
                 // Roll back the consumed pending-intent on spawn failure so
                 // the next auto-pickup retries instead of losing the user's
@@ -560,6 +723,12 @@ public class ProjectRunner
                         durationSeconds: 0.0,
                         executionStatus: "spawn-failed");
                 }
+                // Spawn failure is the terminal end of this run's lifecycle:
+                // no OnCliFinishedAsync will fire, so release the pickup lock
+                // and drain any deferred mode change here so the project does
+                // not stay wedged on a stale lock or a never-applied pause.
+                ReleasePickupLockIfHeld();
+                ApplyPendingModeIfAny(jobId);
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.CliUnavailable,
                     Message: cliError ?? $"Failed to start {cli.CliType} CLI process"));
@@ -1913,9 +2082,27 @@ public class ProjectRunner
                 _activeFollowup = null;
                 _activePlan = null;
                 _activeReissueAttempt = 0;
+                ReleasePickupLockIfHeld();
+                ApplyPendingModeIfAny(jobId);
                 NotifyStatus();
             }
         }
+    }
+
+    /// <summary>
+    /// Drops the on-disk pickup lock we acquired in <see cref="RunCliAsync"/>
+    /// before stamping <c>_activeJobId</c>. Only deletes when this process
+    /// still owns the lock - foreign or stale locks are left in place so a
+    /// late retry from the real holder cannot be silently clobbered.
+    /// </summary>
+    private void ReleasePickupLockIfHeld()
+    {
+        if (_pickupLock == null || _pickupLockOwner == null) return;
+        var folder = _activePickupLockFolder;
+        _activePickupLockFolder = null;
+        if (string.IsNullOrEmpty(folder)) return;
+        try { _pickupLock.Release(folder, _pickupLockOwner); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Pickup lock release failed for '{Folder}'", folder); }
     }
 
     private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)
@@ -2048,6 +2235,8 @@ public class ProjectRunner
         _activeFollowup = null;
         _activePlan = null;
         _activeReissueAttempt = 0;
+        ReleasePickupLockIfHeld();
+        ApplyPendingModeIfAny(jobId);
 
         // Best-effort: drop a chat-log line on the moved folder so the
         // protocol pane shows why the latch was released. The job's folder
@@ -2939,3 +3128,34 @@ public sealed record PendingDecisionEntry(
     string JobId,
     string Title,
     PendingDecision Decision);
+
+/// <summary>
+/// Outcome of <see cref="ProjectRunner.RequestModeChange"/>. <c>Applied</c>
+/// means the live mode moved now; <c>Deferred</c> means the new mode is
+/// queued and will land when the named <see cref="ModeChangeResult.WillApplyAfterJobId"/>
+/// clears; <c>Invalid</c> means the requested mode value was rejected before
+/// it could be applied (the endpoint turns this into a 400).
+/// </summary>
+public enum ModeChangeOutcome
+{
+    Applied,
+    Deferred,
+    Invalid
+}
+
+/// <summary>
+/// Typed return for <see cref="ProjectRunner.RequestModeChange"/>. The same
+/// shape is also returned by <see cref="OrchestratorApi.Services.TaskRunnerService.RequestModeChange"/>
+/// so the endpoint can produce its response body from a single record.
+/// <para>
+/// <see cref="CurrentMode"/> is whatever <c>_mode</c> reads as <i>after</i>
+/// the call: for <see cref="ModeChangeOutcome.Applied"/> this is the new mode;
+/// for <see cref="ModeChangeOutcome.Deferred"/> this is the still-live previous
+/// mode (the deferred value is in <see cref="PendingMode"/>).
+/// </para>
+/// </summary>
+public sealed record ModeChangeResult(
+    ModeChangeOutcome Outcome,
+    string CurrentMode,
+    string? PendingMode,
+    string? WillApplyAfterJobId);

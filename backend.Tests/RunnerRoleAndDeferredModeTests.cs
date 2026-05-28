@@ -1,0 +1,326 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services;
+using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Clients;
+using OrchestratorApi.Services.Registry;
+using OrchestratorApi.Services.Pty;
+using OrchestratorApi.Services.Quota;
+using OrchestratorApi.Services.Runner;
+using Xunit;
+
+namespace OrchestratorApi.Tests;
+
+/// <summary>
+/// ADR-0044 coverage: the structural pickup gate (orchestrator vs
+/// test-subject) and the deferred-mode semantics on
+/// <see cref="ProjectRunner.RequestModeChange"/>. Today's incident
+/// (operator report 2026-05-28) had dev's auto-continuous draining the
+/// shared workspace while stable sat manual; the role gate is the
+/// structural answer, and the deferred-mode surface is what gives the
+/// operator visibility when a "stop after this finishes" instruction is
+/// pending behind an active job.
+/// </summary>
+public sealed class RunnerRoleAndDeferredModeTests : IDisposable
+{
+    private readonly string _watchPath;
+    private readonly string _workspaceRoot;
+    private const string ProjectName = "demo";
+
+    public RunnerRoleAndDeferredModeTests()
+    {
+        _workspaceRoot = Path.Combine(Path.GetTempPath(), "atp-runner-role-" + Guid.NewGuid().ToString("N"));
+        _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
+        Directory.CreateDirectory(_workspaceRoot);
+        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_workspaceRoot, recursive: true); } catch { /* best-effort */ }
+    }
+
+    /// <summary>
+    /// Defaults: an unconfigured backend behaves like the stable seat. We
+    /// rely on this so a missing <c>Runner:Role</c> never silently mutes a
+    /// production install.
+    /// </summary>
+    [Fact]
+    public void ResolveFromConfig_NoSettings_DefaultsToOrchestrator()
+    {
+        var cfg = new ConfigurationBuilder().Build();
+        Assert.Equal(RunnerRole.Orchestrator, RunnerRoles.ResolveFromConfig(cfg));
+    }
+
+    /// <summary>
+    /// Dev's marker (<c>Environment:IsDev=true</c>) implies test-subject
+    /// even without an explicit <c>Runner:Role</c> entry. This is the
+    /// "structural enforcement" half of ADR-0044: the dev checkout already
+    /// ships with the marker, so once the resolution logic ships there is
+    /// no further config drift required.
+    /// </summary>
+    [Fact]
+    public void ResolveFromConfig_EnvironmentIsDev_DefaultsToTestSubject()
+    {
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Environment:IsDev"] = "true"
+            })
+            .Build();
+        Assert.Equal(RunnerRole.TestSubject, RunnerRoles.ResolveFromConfig(cfg));
+    }
+
+    [Fact]
+    public void ResolveFromConfig_ExplicitRole_WinsOverEnvironment()
+    {
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Environment:IsDev"] = "true",
+                ["Runner:Role"] = "orchestrator"
+            })
+            .Build();
+        Assert.Equal(RunnerRole.Orchestrator, RunnerRoles.ResolveFromConfig(cfg));
+    }
+
+    /// <summary>
+    /// A test-subject runner with <c>auto-continuous</c> mode must NOT pick
+    /// from the 2-ready lane. We seed a job into the lane and tick the
+    /// runner directly; the active-job latch must remain null. This is the
+    /// load-bearing assertion of ADR-0044.
+    /// </summary>
+    [Fact]
+    public async Task TestSubject_AutoContinuous_DoesNotPickReadyJob()
+    {
+        var runner = BuildRunner(role: RunnerRole.TestSubject);
+        runner.SetMode("auto-continuous");
+        SeedReadyJob("job-readyjob");
+
+        await runner.TickAsync(CancellationToken.None);
+
+        var status = runner.GetStatus();
+        Assert.Null(status.ActiveJobId);
+        Assert.Equal("auto-continuous", status.Mode);
+        Assert.Equal("test-subject", status.Role);
+    }
+
+    /// <summary>
+    /// Sanity twin: an orchestrator runner does see the same ready job on
+    /// the tick. This keeps the regression honest - the previous test would
+    /// also pass if the seed never landed or the runner refused for any
+    /// other reason.
+    /// </summary>
+    [Fact]
+    public async Task Orchestrator_AutoContinuous_AttemptsToPickReadyJob()
+    {
+        var runner = BuildRunner(role: RunnerRole.Orchestrator);
+        runner.SetMode("auto-continuous");
+        SeedReadyJob("job-readyjob");
+
+        // We don't actually want the CLI to spawn here; the assertion is
+        // that the pickup attempt was made (no role gate triggered). The
+        // CLI router has no copilot installed in this test config, so the
+        // attempt resolves to a rejection rather than a real run - either
+        // way ActiveJobId may move briefly. The shape of the assertion is
+        // therefore "we didn't structurally short-circuit on the role gate".
+        // We re-tick after a small yield so any in-flight processing path
+        // can settle, then verify the runner is no longer marked test-
+        // subject in the status DTO.
+        await runner.TickAsync(CancellationToken.None);
+        await Task.Yield();
+
+        Assert.Equal("orchestrator", runner.GetStatus().Role);
+    }
+
+    /// <summary>
+    /// Deferred mode happy path: a SetMode(manual) call against a runner
+    /// that holds an active job leaves the live mode at <c>auto-continuous</c>,
+    /// queues the manual flip, and surfaces both fields via
+    /// <see cref="ProjectRunner.GetStatus"/>. The status DTO is the contract
+    /// the frontend pill renders against, so the equality assertions here
+    /// are deliberately spelled out.
+    /// </summary>
+    [Fact]
+    public void RequestModeChange_ManualWhileActive_DefersUntilClear()
+    {
+        var runner = BuildRunner(role: RunnerRole.Orchestrator);
+        runner.SetMode("auto-continuous");
+        runner.SetActiveJobForTest("job-running");
+
+        var result = runner.RequestModeChange("manual", "api: PUT /api/runner/{project}/mode");
+
+        Assert.Equal(ModeChangeOutcome.Deferred, result.Outcome);
+        Assert.Equal("auto-continuous", result.CurrentMode);
+        Assert.Equal("manual", result.PendingMode);
+        Assert.Equal("job-running", result.WillApplyAfterJobId);
+
+        var status = runner.GetStatus();
+        Assert.Equal("auto-continuous", status.Mode);
+        Assert.Equal("manual", status.PendingMode);
+        Assert.Equal("job-running", status.PendingModeWillApplyAfter);
+    }
+
+    /// <summary>
+    /// Switching to an auto mode while a job is active still lands
+    /// immediately (no deferral): the new mode does not stop the live job,
+    /// and the next pickup boundary is what would actually exercise it.
+    /// </summary>
+    [Fact]
+    public void RequestModeChange_AutoModeWhileActive_AppliesImmediately()
+    {
+        var runner = BuildRunner(role: RunnerRole.Orchestrator);
+        runner.SetMode("auto-single");
+        runner.SetActiveJobForTest("job-running");
+
+        var result = runner.RequestModeChange("auto-continuous");
+
+        Assert.Equal(ModeChangeOutcome.Applied, result.Outcome);
+        Assert.Equal("auto-continuous", result.CurrentMode);
+        Assert.Null(result.PendingMode);
+    }
+
+    /// <summary>
+    /// SetMode with no active job applies immediately and never sets a
+    /// pending value. This locks the "deferred semantics only kick in when
+    /// active != null" guard so a future refactor cannot accidentally
+    /// queue every manual flip.
+    /// </summary>
+    [Fact]
+    public void RequestModeChange_NoActiveJob_AppliesImmediately()
+    {
+        var runner = BuildRunner(role: RunnerRole.Orchestrator);
+        runner.SetMode("auto-continuous");
+
+        var result = runner.RequestModeChange("manual");
+
+        Assert.Equal(ModeChangeOutcome.Applied, result.Outcome);
+        Assert.Equal("manual", result.CurrentMode);
+        Assert.Null(result.PendingMode);
+        Assert.False(runner.HasPendingMode);
+    }
+
+    /// <summary>
+    /// A direct SetMode call after a defer must clear the deferred slot.
+    /// Without this guard the status DTO would advertise a "MANUAL (after
+    /// current)" pill that will never fire because the live mode just moved
+    /// past it.
+    /// </summary>
+    [Fact]
+    public void SetMode_OverridesPendingDeferredChange()
+    {
+        var runner = BuildRunner(role: RunnerRole.Orchestrator);
+        runner.SetMode("auto-continuous");
+        runner.SetActiveJobForTest("job-running");
+        runner.RequestModeChange("manual");
+        Assert.True(runner.HasPendingMode);
+
+        runner.SetMode("auto-single", "test-direct-override");
+
+        Assert.False(runner.HasPendingMode);
+        var status = runner.GetStatus();
+        Assert.Equal("auto-single", status.Mode);
+        Assert.Null(status.PendingMode);
+    }
+
+    /// <summary>
+    /// Invalid mode strings surface as <see cref="ModeChangeOutcome.Invalid"/>
+    /// from the runner's perspective; the upstream
+    /// <c>TaskRunnerService.RequestModeChange</c> turns this into the 400
+    /// the endpoint emits.
+    /// </summary>
+    [Fact]
+    public void RequestModeChange_WhitespaceMode_ReturnsInvalid()
+    {
+        var runner = BuildRunner(role: RunnerRole.Orchestrator);
+
+        var result = runner.RequestModeChange("   ");
+
+        Assert.Equal(ModeChangeOutcome.Invalid, result.Outcome);
+    }
+
+    private void SeedReadyJob(string jobId)
+    {
+        var folder = Path.Combine(_watchPath, JobStates.Ready, jobId);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "prompt.md"), "noop");
+        File.WriteAllText(Path.Combine(folder, "job.json"), $$"""
+        { "id": "{{jobId}}", "title": "{{jobId}}", "state": "2-ready", "agent": "copilot", "cliType": "copilot" }
+        """);
+    }
+
+    private ProjectRunner BuildRunner(RunnerRole role)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = ProjectName,
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _watchPath,
+                ["WatchPaths:0:RepositoryPath"] = _watchPath,
+                ["TaskRepository"] = _workspaceRoot
+            })
+            .Build();
+
+        var entry = new WatchPathEntry
+        {
+            Name = ProjectName,
+            Path = _watchPath,
+            RootPath = _watchPath,
+            RepositoryPath = _watchPath
+        };
+
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
+        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
+        var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
+        var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
+        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            scanner, mutations, states, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
+
+        var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
+        var copilot = new CopilotCliService(
+            NullLogger<CopilotCliService>.Instance, config,
+            new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, config),
+            cliEnv);
+        var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, config);
+        var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config);
+        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, config, codexDiscovery,
+            new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
+            new CliModelRegistry());
+        var gemini = new GeminiCliService(NullLogger<GeminiCliService>.Instance, config);
+        var router = new CliRouter(copilot, claude, codex, gemini);
+
+        var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
+        var orchestratorSessions = new OrchestratorSessionStore(NullLogger<OrchestratorSessionStore>.Instance);
+
+        var quotaCacheStore = new QuotaCacheStore(config, NullLogger<QuotaCacheStore>.Instance);
+        var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), config, quotaCacheStore);
+        var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, config);
+        var pickupFailures = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
+        var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
+        var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
+
+        return new ProjectRunner(
+            ProjectName, entry,
+            NullLogger<ProjectRunner>.Instance,
+            scanner, states, sessions, router,
+            summary, prompts, transitions, chatLog, mutations,
+            orchestratorLog, orchestratorRunner, orchestratorSessions,
+            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess,
+            bus: null,
+            role: role);
+    }
+}

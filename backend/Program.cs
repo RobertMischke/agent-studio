@@ -178,6 +178,7 @@ builder.Services.AddSingleton<TitleGenerationService>();
 builder.Services.AddSingleton<PromptEnhancementService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.AdHoc.AdHocUsageRecorder>();
 builder.Services.AddSingleton<OrchestratorApi.Services.AdHoc.AdHocUsageService>();
+builder.Services.AddSingleton<PickupLockFile>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();

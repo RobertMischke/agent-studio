@@ -6,6 +6,12 @@
     "IsDev": true
   },
 
+  "//Runner": "ADR-0044: per-backend pickup role. When unset, the role is inferred from Environment.IsDev (dev = test-subject, anything else = orchestrator). Set Role explicitly to override: 'orchestrator' runs the auto-pickup loop and is the stable seat; 'test-subject' suppresses the auto-pickup tick entirely so the dev backend can be observed by Playwright specs without racing stable on the shared workspace. BackendName labels the on-disk pickup lock so dev/stable show up as distinct owners.",
+  "Runner": {
+    "Role": "test-subject",
+    "BackendName": "dev"
+  },
+
   "DevTools": {
     "//comment": "Devtools knobs are dev-only conveniences. Leave them off on stable.",
     "UpdateStableEnabled": true,
