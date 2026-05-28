@@ -114,10 +114,22 @@ test.describe('Accept-to-next-task is instant', () => {
     try {
       await openJobInDetail(page, jobs[0].id, wp.path);
 
-      // Let the lane-pager snapshot effect capture from grouped peers
-      // (the URL-restore path does not capture by itself; capture is
-      // driven by an effect that re-runs after grouped() lands).
-      await page.waitForTimeout(1500);
+      // Wait for the studio slim pager to anchor on the open job. The
+      // ensure-snapshot effect captures peers off `/api/jobs/grouped`
+      // which polls every ~2-5 s; on a fresh fixture plant the first
+      // poll may still be carrying the pre-plant snapshot and the
+      // open job's index will read `0 / N`. Once the position is
+      // non-zero the snapshot covers the open job and the prefetch
+      // effect has fired for the next slot.
+      const slimPagerPos = page.getByTestId('studio-task-pager-position');
+      await expect(slimPagerPos).toBeVisible({ timeout: 30_000 });
+      await expect.poll(
+        async () => (await slimPagerPos.textContent())?.trim() ?? '',
+        { timeout: 30_000, intervals: [200, 500, 1000, 2000, 2000] },
+      ).toMatch(/^([1-9]\d*)\s*\/\s*\d+$/);
+      // One settle tick so the lookahead prefetch finishes.
+      await page.waitForTimeout(750);
+      await dismissBlockingToasts(page);
 
       // Watch the move POST so the test proves it actually goes out.
       const movePromise = page.waitForResponse(
@@ -133,7 +145,12 @@ test.describe('Accept-to-next-task is instant', () => {
       const beforeUrl = page.url();
       const departingId = jobs[0].id;
       const t0 = Date.now();
-      await page.getByTestId('studio-triage-action-mark-done').click();
+      // `{ force: true }`: a late-arriving notification toast may stack
+      // on top of the slim tab-bar between the dismiss above and the
+      // click. Playwright's actionability retry would tax the latency
+      // measurement with hundreds of ms of "scroll + re-wait" that
+      // belongs to the toast, not the navigation under test.
+      await page.getByTestId('studio-triage-action-mark-done').click({ force: true });
       // The URL should swap off the departing slug to any other slug -
       // the live lane order can include other fixtures from prior runs,
       // so we don't bind to a specific next id, only to "not the one we
@@ -174,7 +191,17 @@ test.describe('Accept-to-next-task is instant', () => {
     try {
       // Open the first fixture so we have a real lane-pager iteration.
       await openJobInDetail(page, jobs[0].id, wp.path);
-      await page.waitForTimeout(1500);
+      // Same wait-for-pager-anchor as the instant-feel test: the
+      // ensure-snapshot effect needs grouped() to reflect the fresh
+      // fixture before the prefetch can warm anything.
+      const slimPagerPos = page.getByTestId('studio-task-pager-position');
+      await expect(slimPagerPos).toBeVisible({ timeout: 30_000 });
+      await expect.poll(
+        async () => (await slimPagerPos.textContent())?.trim() ?? '',
+        { timeout: 30_000, intervals: [200, 500, 1000, 2000, 2000] },
+      ).toMatch(/^([1-9]\d*)\s*\/\s*\d+$/);
+      await page.waitForTimeout(750);
+      await dismissBlockingToasts(page);
 
       // Reset the perf buffer so prior boots / navigations don't leak in.
       await page.evaluate(() => {
@@ -183,9 +210,11 @@ test.describe('Accept-to-next-task is instant', () => {
 
       // Walk forward through the first five Mark-as-Done clicks. Each
       // click is bracketed by `accept-click` / `next-task-rendered`
-      // marks set by JobSelectionService.
+      // marks set by JobSelectionService. `{ force: true }` mirrors the
+      // instant-feel test - a late toast must not bias the latency
+      // measurement.
       for (let i = 0; i < 5; i++) {
-        await page.getByTestId('studio-triage-action-mark-done').click();
+        await page.getByTestId('studio-triage-action-mark-done').click({ force: true });
         // Wait for the URL to step so the next iteration's click lands
         // on the new selection.
         await expect.poll(() => page.url(), { timeout: 10_000 })
@@ -237,10 +266,20 @@ test.describe('Accept-to-next-task is instant', () => {
 
       await openJobInDetail(page, jobs[0].id, wp.path);
 
-      // The lane-pager snapshot is captured by an effect that re-runs
-      // after grouped() lands; give it a couple of microtasks plus one
-      // poll-cycle so the snapshot exists and the prefetch effect has
-      // had a chance to fire its background GETs for next-1 / next-2.
+      // Wait for the pager position to anchor on the open job. Until
+      // the live grouped lane includes the fresh fixture, the
+      // ensure-snapshot effect has nothing to capture and the
+      // prefetch effect cannot fire. On a freshly planted set the
+      // first /api/jobs/grouped response after page boot may still be
+      // pre-plant.
+      const slimPagerPos = page.getByTestId('studio-task-pager-position');
+      await expect(slimPagerPos).toBeVisible({ timeout: 30_000 });
+      await expect.poll(
+        async () => (await slimPagerPos.textContent())?.trim() ?? '',
+        { timeout: 30_000, intervals: [200, 500, 1000, 2000, 2000] },
+      ).toMatch(/^([1-9]\d*)\s*\/\s*\d+$/);
+      // One settle tick for the prefetch effect's microtask to land
+      // and the background GETs to issue + return.
       await page.waitForTimeout(1500);
 
       // The open job is always fetched. The prefetch should additionally
