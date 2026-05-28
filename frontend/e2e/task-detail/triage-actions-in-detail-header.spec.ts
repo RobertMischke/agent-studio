@@ -22,12 +22,13 @@ function uid(prefix: string) {
 }
 
 async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id: string; title: string }[]> {
-  // Create directly in `5-human-review` and then poll until the backend's
-  // index actually reports that state. The pre-ADR-0028 helper that
-  // created in 2-ready and moved to 5-human-review hit a JobScanner
-  // race window (see feedback_scanner_findjob_mtime_side_effect in the
-  // workspace memory) where the move 404'd before the create had been
-  // re-indexed.
+  // Create in `2-ready` (the create endpoint validates against a fixed
+  // list of allowed start lanes), then move to `5-human-review`. The
+  // create→move sequence used to 404 on the move when the JobScanner
+  // index hadn't picked up the new folder yet
+  // (feedback_scanner_findjob_mtime_side_effect in the workspace
+  // memory); we poll the read endpoint first as a barrier so the move
+  // only fires once the backend can resolve the slug.
   const jobs: { id: string; title: string }[] = [];
   for (let i = 0; i < count; i++) {
     const requestedId = uid(`triage-${i}`);
@@ -36,25 +37,18 @@ async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id:
       id: requestedId,
       title,
       watchPath: wp.path,
-      targetState: '5-human-review',
+      targetState: '2-ready',
     });
-    let attempt = 0;
-    let inLane = false;
-    while (attempt < 25 && !inLane) {
-      await new Promise(r => setTimeout(r, 200));
+    // Wait for the new slug to be readable; 200 ms × 25 caps at 5 s.
+    for (let attempt = 0; attempt < 25; attempt++) {
       try {
-        const j = await getJob(created.id, wp.path);
-        inLane = j.state === '5-human-review';
+        await getJob(created.id, wp.path);
+        break;
       } catch {
-        // 404 while the index catches up — keep polling.
+        await new Promise(r => setTimeout(r, 200));
       }
-      attempt++;
     }
-    if (!inLane) {
-      // Fallback: explicit move if the create landed somewhere else
-      // (e.g. backend defaults a non-standard targetState back to ready).
-      await moveJob(created.id, wp.path, '5-human-review');
-    }
+    await moveJob(created.id, wp.path, '5-human-review');
     jobs.push({ id: created.id, title });
   }
   return jobs;
