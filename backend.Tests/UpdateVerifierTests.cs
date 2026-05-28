@@ -139,6 +139,48 @@ public class DescribeHttpFailureTests
         var result = UpdateVerifier.DescribeHttpFailure(status);
         Assert.Equal($"http={status}", result);
     }
+
+    [Fact]
+    public void Status0_WithBackendAliveTrue_SaysStillStartingUp()
+    {
+        // Cold-start drain case: healthz answered 200 during the retry loop
+        // but /api/jobs/grouped did not drain inside the 120 s window. The
+        // operator-facing toast keys off the "still starting up" substring,
+        // so this wording is load-bearing - keep it in sync with
+        // update-notification-bridge.service.ts.
+        var result = UpdateVerifier.DescribeHttpFailure(0, backendAlive: true);
+        Assert.Contains("still starting up", result);
+        Assert.Contains("healthz=200", result);
+    }
+
+    [Fact]
+    public void Status0_WithBackendAliveFalse_FallsBackToNoResponse()
+    {
+        // /healthz never answered either => the backend really is down.
+        var result = UpdateVerifier.DescribeHttpFailure(0, backendAlive: false);
+        Assert.Contains("no response", result);
+        Assert.DoesNotContain("still starting up", result);
+    }
+
+    [Fact]
+    public void Status0_WithBackendAliveUnknown_MatchesLegacyOverload()
+    {
+        // The legacy single-arg overload should be byte-equivalent to the
+        // new one called with backendAlive=null, so existing call sites that
+        // do not observe liveness keep their original wording.
+        var legacy = UpdateVerifier.DescribeHttpFailure(0);
+        var nullable = UpdateVerifier.DescribeHttpFailure(0, backendAlive: null);
+        Assert.Equal(legacy, nullable);
+    }
+
+    [Fact]
+    public void NonZeroStatus_WithBackendAlive_StillReportsRawCode()
+    {
+        // backendAlive only changes wording for the "no response" case;
+        // a real HTTP status code is already its own diagnostic.
+        var result = UpdateVerifier.DescribeHttpFailure(503, backendAlive: true);
+        Assert.Equal("http=503", result);
+    }
 }
 
 /// <summary>

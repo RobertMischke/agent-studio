@@ -163,13 +163,25 @@ public sealed class UpdateVerifier
 
     private async Task<VerificationCheck> CheckJobsGroupedAsync(string runId, CancellationToken ct)
     {
+        // Cold-start drain window: the post-restart backend has to walk every
+        // job folder, run the auto-push sweep, the boot ReviewDecision sweep,
+        // and the TaskKey backfill before /api/jobs/grouped can answer. On a
+        // workspace with several hundred jobs this routinely runs 60-120 s.
+        // F58's 15 s window flagged that as "Update failed" while healthz was
+        // already green, eroding operator trust. We now wait up to ~120 s and
+        // separately report whether /healthz was alive across the wait so the
+        // toast can say "still starting up" instead of "no response at all".
         var sw = Stopwatch.StartNew();
-        var attempts = 3;
-        var spacing = TimeSpan.FromSeconds(5);
+        var attempts = 12;
+        var spacing = TimeSpan.FromSeconds(10);
+        var perAttemptTimeout = TimeSpan.FromSeconds(10);
+        bool sawHealthzOk = false;
+        int lastJobsGroupedStatus = 0;
 
         for (int i = 0; i < attempts; i++)
         {
-            var (status, body) = await _backend.GetAsync("/api/jobs/grouped", TimeSpan.FromSeconds(15), ct);
+            var (status, body) = await _backend.GetAsync("/api/jobs/grouped", perAttemptTimeout, ct);
+            lastJobsGroupedStatus = status;
 
             if (status == 200)
             {
@@ -193,29 +205,31 @@ public sealed class UpdateVerifier
                 }
                 sw.Stop();
                 return new VerificationCheck(runId, "jobs-grouped", true,
-                    i == 0 ? "ok" : $"ok (attempt {i + 1}/{attempts})", "200 + parses",
+                    i == 0 ? "ok" : $"ok (attempt {i + 1}/{attempts}, drained after {sw.Elapsed.TotalSeconds:F0}s)",
+                    "200 + parses",
                     DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
             }
 
+            // Between retries, probe healthz so we can distinguish a still-
+            // draining backend (healthz=200, jobs-grouped not yet) from a
+            // backend that never came back at all.
+            var hz = await _backend.ProbeHealthzAsync(ct);
+            if (hz.Ok) sawHealthzOk = true;
+
             if (i < attempts - 1)
             {
-                _logger.LogDebug("jobs-grouped attempt {Attempt}/{Max}: http={Status}, retrying in {Spacing}s",
-                    i + 1, attempts, status, spacing.TotalSeconds);
+                _logger.LogDebug(
+                    "jobs-grouped attempt {Attempt}/{Max}: jobs-grouped http={Status}, healthz ok={HealthzOk}, retrying in {Spacing}s",
+                    i + 1, attempts, status, hz.Ok, spacing.TotalSeconds);
                 try { await Task.Delay(spacing, ct); }
                 catch (OperationCanceledException) { break; }
-            }
-            else
-            {
-                sw.Stop();
-                return new VerificationCheck(runId, "jobs-grouped", false,
-                    DescribeHttpFailure(status), "http=200",
-                    DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
             }
         }
 
         sw.Stop();
         return new VerificationCheck(runId, "jobs-grouped", false,
-            "cancelled during retry", "http=200",
+            DescribeHttpFailure(lastJobsGroupedStatus, sawHealthzOk),
+            "http=200",
             DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
     }
 
@@ -290,8 +304,25 @@ public sealed class UpdateVerifier
     }
 
     public static string DescribeHttpFailure(int status)
+        => DescribeHttpFailure(status, backendAlive: null);
+
+    /// <summary>
+    /// Operator-facing wording for a failed HTTP probe. When the caller can
+    /// observe the backend's liveness independently (typically /healthz from a
+    /// retry loop), pass it via <paramref name="backendAlive"/> so the message
+    /// distinguishes "backend is up but still draining" from "backend never
+    /// came back". The toast wording in
+    /// <c>update-notification-bridge.service.ts</c> keys off the
+    /// "still starting up" substring.
+    /// </summary>
+    public static string DescribeHttpFailure(int status, bool? backendAlive)
     {
-        if (status == 0) return "no response (timed out or unreachable)";
+        if (status == 0)
+        {
+            if (backendAlive == true)
+                return "no response (backend still starting up; healthz=200 but endpoint did not drain in time)";
+            return "no response (timed out or unreachable)";
+        }
         return $"http={status}";
     }
 
