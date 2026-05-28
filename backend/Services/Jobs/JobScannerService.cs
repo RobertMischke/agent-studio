@@ -238,6 +238,7 @@ public class JobScannerService
                     : null,
                 Commit = legacyCommit,
                 Commits = commitChain,
+                ExcludedCommits = ReadExcludedCommits(raw),
                 CommitCount = ComputeCommitCountHint(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
@@ -679,6 +680,28 @@ public class JobScannerService
             legacy = chain[^1];
         }
         return (chain, legacy);
+    }
+
+    /// <summary>
+    /// Reads <c>excludedCommits</c> from <c>job.json</c>. Returns an empty
+    /// list when the field is missing (legacy folders that pre-date the
+    /// commit-attribution step) or malformed. The reason is normalized
+    /// through <see cref="CommitExclusionReasons.Normalize"/> so an
+    /// unknown writer never produces an unrenderable badge.
+    /// </summary>
+    private static List<JobExcludedCommitInfo> ReadExcludedCommits(JsonElement raw)
+    {
+        var list = new List<JobExcludedCommitInfo>();
+        if (!raw.TryGetProperty("excludedCommits", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in arr.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+            if (parsed == null || string.IsNullOrWhiteSpace(parsed.Sha)) continue;
+            list.Add(parsed with { Reason = CommitExclusionReasons.Normalize(parsed.Reason) });
+        }
+        return list;
     }
 
     private static List<string> ReadSessionChain(JsonElement raw)

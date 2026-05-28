@@ -64,6 +64,16 @@ public record JobInfo
     /// </summary>
     public List<JobCommitInfo> Commits { get; init; } = [];
     /// <summary>
+    /// Commits the deterministic attribution rule subtracted from this
+    /// task's commit set (e.g. crash-recovery commits naming another
+    /// task, submodule bumps, merge commits, operator-excluded entries).
+    /// Persisted as <c>excludedCommits</c> in <c>job.json</c>. Empty on
+    /// legacy job folders that pre-date the attribution step. Surfaced
+    /// in the protocol-pane "Git view" under a "(N excluded)" expander
+    /// so the operator can audit what was withheld and why.
+    /// </summary>
+    public List<JobExcludedCommitInfo> ExcludedCommits { get; init; } = [];
+    /// <summary>
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to
     /// <see cref="DefaultClientIdentity.Id"/> for legacy jobs whose
@@ -1329,6 +1339,15 @@ public record OrchestratorOverrideRequest
 /// Snapshot of the commit a job produced when transitioning from progress to
 /// review. Cached in <c>job.json</c> so the board card and detail view can
 /// render file count + SHA without re-running git per render.
+///
+/// <para>
+/// Commit-attribution metadata (<see cref="Attribution"/> + <see cref="Confidence"/>)
+/// is populated by the deterministic post-execution attribution step (ADR
+/// "Commit-Attribution-Regel"). Legacy entries without an explicit
+/// <see cref="Attribution"/> are treated as <see cref="CommitAttributionKinds.Legacy"/>
+/// at render time so the UI distinguishes "we know this came from the rule
+/// engine" from "this was stamped before attribution existed".
+/// </para>
 /// </summary>
 public record JobCommitInfo
 {
@@ -1338,6 +1357,113 @@ public record JobCommitInfo
     public int FilesChanged { get; init; }
     public List<string> Files { get; init; } = [];
     public DateTime At { get; init; }
+    /// <summary>
+    /// How the commit got attributed to this task. One of
+    /// <see cref="CommitAttributionKinds"/>. Null on legacy job.json entries
+    /// that pre-date the attribution step; the reader treats null as
+    /// <see cref="CommitAttributionKinds.Legacy"/>.
+    /// </summary>
+    public string? Attribution { get; init; }
+    /// <summary>
+    /// Confidence of an automatic attribution (0..1). Null for
+    /// <see cref="CommitAttributionKinds.ManualAdd"/> /
+    /// <see cref="CommitAttributionKinds.ManualIncludeAfterExclude"/> and
+    /// for legacy entries. The frontend renders a small badge when this is
+    /// present so the operator can see where the system was uncertain.
+    /// </summary>
+    public double? Confidence { get; init; }
+}
+
+/// <summary>
+/// One commit that the deterministic attribution rule subtracted from a
+/// task's commit set (see ADR "Commit-Attribution-Regel"). Persisted under
+/// <c>excludedCommits</c> in <c>job.json</c>. Surfaced under a
+/// "(N excluded)" expander in the protocol-pane git view with the reason
+/// tooltip; lets the operator see *why* a commit was withheld.
+/// </summary>
+public record JobExcludedCommitInfo
+{
+    public string Sha { get; init; } = "";
+    public string ShortSha { get; init; } = "";
+    /// <summary>One of <see cref="CommitExclusionReasons"/>. Free-form on read.</summary>
+    public string Reason { get; init; } = CommitExclusionReasons.Other;
+    /// <summary>Commit subject (first line). Optional; carried so the UI can render the row without re-querying git.</summary>
+    public string? Subject { get; init; }
+    public DateTime At { get; init; }
+    /// <summary>
+    /// True when the operator excluded a commit that the rule engine had
+    /// originally attributed to this task. Used by the UI to render a
+    /// "manual" marker so the operator can see where they intervened.
+    /// </summary>
+    public bool Manual { get; init; }
+}
+
+/// <summary>
+/// String constants for <see cref="JobCommitInfo.Attribution"/>. Kept as
+/// constants (not an enum) so the wire format stays a literal string and
+/// hand-written job.json files remain readable.
+/// </summary>
+public static class CommitAttributionKinds
+{
+    /// <summary>The deterministic rule engine attributed this commit.</summary>
+    public const string Automatic = "automatic";
+    /// <summary>Operator added a commit the rule engine missed.</summary>
+    public const string ManualAdd = "manual-add";
+    /// <summary>
+    /// Operator restored a commit that had been excluded (e.g. because the
+    /// rule engine flagged it as a crash-recovery for another task and the
+    /// operator confirmed it belongs here).
+    /// </summary>
+    public const string ManualIncludeAfterExclude = "manual-include-after-exclude";
+    /// <summary>
+    /// Legacy entry without explicit attribution (job.json pre-dates the
+    /// attribution step). Treated as "trust the existing stamp" by readers.
+    /// </summary>
+    public const string Legacy = "legacy";
+
+    public static readonly string[] All = [Automatic, ManualAdd, ManualIncludeAfterExclude, Legacy];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Legacy;
+        var v = value.Trim();
+        foreach (var k in All)
+            if (string.Equals(k, v, StringComparison.OrdinalIgnoreCase)) return k;
+        return Legacy;
+    }
+}
+
+/// <summary>
+/// String constants for <see cref="JobExcludedCommitInfo.Reason"/>. The
+/// rule engine writes one of these; the UI maps each to a human-friendly
+/// hover label.
+/// </summary>
+public static class CommitExclusionReasons
+{
+    /// <summary>Crash-recovery commit that names another task in its message.</summary>
+    public const string CrashRecoveryOfOtherTask = "crash-recovery-of-other-task";
+    /// <summary>Submodule / stable update commits that don't belong to any one task.</summary>
+    public const string UpdateStableBump = "update-stable-bump";
+    /// <summary>git pull merge commits produced by the update-stable workflow.</summary>
+    public const string MergeCommit = "merge-commit";
+    /// <summary>Commit landed before the task's first start; outside the window.</summary>
+    public const string OutsideTaskWindow = "outside-task-window";
+    /// <summary>Operator manually excluded the commit via the UI.</summary>
+    public const string ManualExclude = "manual-exclude";
+    /// <summary>Unrecognized exclusion reason.</summary>
+    public const string Other = "other";
+
+    public static readonly string[] All =
+        [CrashRecoveryOfOtherTask, UpdateStableBump, MergeCommit, OutsideTaskWindow, ManualExclude, Other];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Other;
+        var v = value.Trim();
+        foreach (var r in All)
+            if (string.Equals(r, v, StringComparison.OrdinalIgnoreCase)) return r;
+        return Other;
+    }
 }
 
 public record WatchPathEntry
