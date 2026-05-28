@@ -7,6 +7,7 @@ import type {
   AgentNeedsInputEvent,
   ArtifactImageEvent,
   ConversationEvent,
+  ConversationEventSeverity,
   MessageEvent,
   MetricTokenEvent,
   OrchestratorDecisionEvent,
@@ -21,42 +22,69 @@ import type {
   TraceLinkEvent,
 } from '../conversation-event';
 
+interface MessageGroupItem {
+  id: string;
+  timestamp: string;
+  body: string;
+  target?: string;
+  attachments?: readonly string[];
+  severity?: ConversationEventSeverity;
+}
+
+interface MessageGroupRow {
+  kind: 'messageGroup';
+  id: string;
+  actor: MessageEvent['kind'];
+  firstTs: string;
+  lastTs: string;
+  items: MessageGroupItem[];
+  sessionId?: string;
+}
+
 type RenderRow =
-  | { kind: 'message'; event: MessageEvent }
-  | { kind: 'toolBurst'; event: ToolBurstEvent }
-  | { kind: 'runMarker'; event: RunMarkerEvent }
-  | { kind: 'taskMarker'; event: TaskMarkerEvent }
-  | { kind: 'decision'; event: OrchestratorDecisionEvent }
-  | { kind: 'supervisorWait'; event: SupervisorWaitEvent }
-  | { kind: 'needsInput'; event: AgentNeedsInputEvent }
-  | { kind: 'captureFail'; event: SystemCaptureFailEvent }
-  | { kind: 'parserWarning'; event: SystemParserWarningEvent }
-  | { kind: 'schemaDrift'; event: SystemSchemaDriftEvent }
-  | { kind: 'image'; event: ArtifactImageEvent }
-  | { kind: 'tokenMetric'; event: MetricTokenEvent }
-  | { kind: 'traceLink'; event: TraceLinkEvent };
+  | MessageGroupRow
+  | { kind: 'toolBurst'; id: string; event: ToolBurstEvent }
+  | { kind: 'runMarker'; id: string; event: RunMarkerEvent }
+  | { kind: 'taskMarker'; id: string; event: TaskMarkerEvent }
+  | { kind: 'decision'; id: string; event: OrchestratorDecisionEvent }
+  | { kind: 'supervisorWait'; id: string; event: SupervisorWaitEvent }
+  | { kind: 'needsInput'; id: string; event: AgentNeedsInputEvent }
+  | { kind: 'captureFail'; id: string; event: SystemCaptureFailEvent }
+  | { kind: 'parserWarning'; id: string; event: SystemParserWarningEvent }
+  | { kind: 'schemaDrift'; id: string; event: SystemSchemaDriftEvent }
+  | { kind: 'image'; id: string; event: ArtifactImageEvent }
+  | { kind: 'tokenMetric'; id: string; event: MetricTokenEvent }
+  | { kind: 'traceLink'; id: string; event: TraceLinkEvent };
+
+const MESSAGE_KINDS = new Set<MessageEvent['kind']>([
+  'message.user',
+  'message.taskAgent',
+  'message.orchestrator',
+  'message.supervisor',
+  'message.supportingAgent',
+]);
+
+// Past 60s of silence the renderer assumes the user stepped away and starts
+// a new bubble so the head time stays meaningful.
+const COALESCE_GAP_MS = 60_000;
+
+function isMessageKind(kind: ConversationEvent['kind']): kind is MessageEvent['kind'] {
+  return MESSAGE_KINDS.has(kind as MessageEvent['kind']);
+}
 
 /**
  * Next-gen chat conversation renderer (`Frontend:NextGenChat`).
  *
- * Pure presentational component. Consumes a `ConversationEvent[]` produced by
- * `projectConversation()` and renders the v6 / v7 grammar: user/agent message
- * bubbles, `app-tool-burst-chip` for tool bursts, compact inline rows for
- * orchestrator / supervisor / agent decision events, image artefact rows,
- * compact token metric chips, slim run/task markers, and trace links.
+ * Pure presentational component over `ConversationEvent[]` (produced by
+ * `projectConversation()`). Consecutive same-actor message events fold into
+ * one bubble with a compact `<li>` list — five short agent notifications
+ * become one bubble with five items instead of five framed boxes — and
+ * `runMarker.start` rows are filtered (the bubble head already communicates
+ * "agent active at this time"). Session id from the preceding runMarker
+ * rides along as a dezent chip in the bubble head.
  *
- * The component is collapsed-by-default for noisy event kinds (handled by
- * `app-tool-burst-chip` itself) and exposes two outputs so the host can:
- *
- * - `openTrace(range?)` — swap the body to the legacy `app-activity-log-view`
- *   for full raw trace inspection (raw log is never deleted).
- * - `openVerboseDebug()` — open the existing `app-verbose-debug-overlay` for
- *   dense diagnostics.
- *
- * Workbench events (`workbench.summary`, `workbench.gitPreview`,
- * `workbench.visualPreview`, `workbench.debug`) are intentionally skipped in
- * slice 1: the existing run timeline, screenshots strip, and Verbose Debug
- * overlay already own those surfaces. Workbench split presets land in slice 6.
+ * Workbench events are skipped in slice 1; existing host surfaces (run
+ * timeline, screenshots strip, Verbose Debug overlay) carry that role.
  *
  * See `docs/research/embedded-chat-integration-2026-05.md` and
  * `docs/mockups/chat-window-next-gen/integration-plan.md`.
@@ -79,50 +107,101 @@ export class ConversationViewComponent {
 
   readonly rows = computed<RenderRow[]>(() => {
     const out: RenderRow[] = [];
+    let open: MessageGroupRow | null = null;
+    let lastSeenSessionId: string | undefined;
+
+    const closeGroup = () => {
+      if (open) {
+        out.push(open);
+        open = null;
+      }
+    };
+
     for (const e of this.events()) {
+      // runMarker.start is filtered: redundant with the bubble head, which
+      // already says "agent active at this time". Its session id still seeds
+      // the next group's dezent chip.
+      if (e.kind === 'runMarker') {
+        const m = e as RunMarkerEvent;
+        if (m.sessionId) lastSeenSessionId = m.sessionId;
+        if (m.marker === 'start') continue;
+        closeGroup();
+        out.push({ kind: 'runMarker', id: m.id, event: m });
+        continue;
+      }
+
+      if (isMessageKind(e.kind)) {
+        const m = e as MessageEvent;
+        const ts = m.timestamp;
+        const tsMs = Date.parse(ts);
+        const lastMs = open ? Date.parse(open.lastTs) : 0;
+        const sameActor = !!open && open.actor === m.kind;
+        const withinGap =
+          !!open &&
+          Number.isFinite(tsMs) &&
+          Number.isFinite(lastMs) &&
+          tsMs - lastMs < COALESCE_GAP_MS;
+
+        if (!sameActor || !withinGap) {
+          closeGroup();
+          open = {
+            kind: 'messageGroup',
+            id: `group:${m.id}`,
+            actor: m.kind,
+            firstTs: ts,
+            lastTs: ts,
+            items: [],
+            sessionId: lastSeenSessionId,
+          };
+        }
+        open!.items.push({
+          id: m.id,
+          timestamp: ts,
+          body: m.body,
+          target: m.target,
+          attachments: m.attachments,
+          severity: m.severity,
+        });
+        open!.lastTs = ts;
+        continue;
+      }
+
+      // Non-message events break the current group and dispatch to their
+      // existing inline row renderer.
+      closeGroup();
       switch (e.kind) {
-        case 'message.user':
-        case 'message.taskAgent':
-        case 'message.orchestrator':
-        case 'message.supervisor':
-        case 'message.supportingAgent':
-          out.push({ kind: 'message', event: e });
-          break;
         case 'toolBurst':
-          out.push({ kind: 'toolBurst', event: e });
-          break;
-        case 'runMarker':
-          out.push({ kind: 'runMarker', event: e });
+          out.push({ kind: 'toolBurst', id: e.id, event: e });
           break;
         case 'taskMarker':
-          out.push({ kind: 'taskMarker', event: e });
+          out.push({ kind: 'taskMarker', id: e.id, event: e });
           break;
         case 'decision.orchestrator':
-          out.push({ kind: 'decision', event: e });
+          out.push({ kind: 'decision', id: e.id, event: e });
           break;
         case 'supervisor.wait':
-          out.push({ kind: 'supervisorWait', event: e });
+          out.push({ kind: 'supervisorWait', id: e.id, event: e });
           break;
         case 'agent.needsInput':
-          out.push({ kind: 'needsInput', event: e });
+          out.push({ kind: 'needsInput', id: e.id, event: e });
           break;
         case 'system.captureFail':
-          out.push({ kind: 'captureFail', event: e });
+          out.push({ kind: 'captureFail', id: e.id, event: e });
           break;
         case 'system.parserWarning':
-          out.push({ kind: 'parserWarning', event: e });
+          out.push({ kind: 'parserWarning', id: e.id, event: e });
           break;
         case 'system.schemaDrift':
-          out.push({ kind: 'schemaDrift', event: e });
+          out.push({ kind: 'schemaDrift', id: e.id, event: e });
           break;
         case 'artifact.image':
-          out.push({ kind: 'image', event: e });
+          out.push({ kind: 'image', id: e.id, event: e });
           break;
         case 'metric.token':
-          out.push({ kind: 'tokenMetric', event: e });
+          out.push({ kind: 'tokenMetric', id: e.id, event: e });
           break;
         case 'traceLink':
-          out.push({ kind: 'traceLink', event: e });
+          out.push({ kind: 'traceLink', id: e.id, event: e });
           break;
         // Workbench events fall through: existing host surfaces (run
         // timeline, screenshots strip, Verbose Debug) carry that role
@@ -135,12 +214,14 @@ export class ConversationViewComponent {
           break;
       }
     }
+
+    closeGroup();
     return out;
   });
 
   readonly hasContent = computed(() => this.rows().length > 0);
 
-  trackByEvent = (_: number, row: RenderRow): string => row.event.id;
+  trackByEvent = (_: number, row: RenderRow): string => row.id;
 
   actorLabel(kind: MessageEvent['kind']): string {
     switch (kind) {
@@ -189,6 +270,20 @@ export class ConversationViewComponent {
     } catch {
       return '';
     }
+  }
+
+  formatGroupTime(group: MessageGroupRow): string {
+    const first = this.formatTime(group.firstTs);
+    if (group.items.length <= 1) return first;
+    const last = this.formatTime(group.lastTs);
+    if (!last || last === first) return first;
+    return `${first}–${last}`;
+  }
+
+  formatSessionIdShort(sessionId: string | undefined): string {
+    if (!sessionId) return '';
+    if (sessionId.length <= 8) return sessionId;
+    return `${sessionId.slice(0, 8)}…`;
   }
 
   formatTokens(n: number): string {

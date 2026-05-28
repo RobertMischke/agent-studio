@@ -110,11 +110,65 @@
 }
 .msg__avatar { font-size: 13px; }
 .msg__actor { font-weight: 600; color: inherit; }
-.msg__target { font-size: 11px; }
+.msg__target {
+  font-size: 11px;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+}
 .msg__time { margin-left: auto; font-variant-numeric: tabular-nums; }
 
+/* Coalesced bubble badges. Both sit in the head row alongside the time;
+ * the count is informational ("5 events") and the session chip is dezent
+ * (smaller, dimmer) so it does not steal focus from the body items. */
+.msg__count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-size: 11px;
+  color: color-mix(in srgb, currentColor 65%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.msg__session {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  color: color-mix(in srgb, currentColor 50%, transparent);
+  letter-spacing: 0.01em;
+}
+
+/* Coalesced items list. One <li> per notification; the bullet is a thin
+ * dot on the left, padding is tight, and items wrap their body markdown
+ * directly so the inline render path stays canonical. No per-item border,
+ * just a hairline separator between items so the list reads as one row
+ * cluster rather than stacked cards. */
+.msg__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.msg__item {
+  position: relative;
+  padding: 3px 0 3px 14px;
+  font-size: 12.5px;
+  word-break: break-word;
+}
+.msg__item::before {
+  content: '•';
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  color: color-mix(in srgb, currentColor 45%, transparent);
+  font-size: 12px;
+  line-height: inherit;
+}
+.msg__item + .msg__item {
+  border-top: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+}
+
 .msg__body {
-  font-size: 13px;
+  font-size: 12.5px;
   word-break: break-word;
 }
 .msg__body :first-child { margin-top: 0; }

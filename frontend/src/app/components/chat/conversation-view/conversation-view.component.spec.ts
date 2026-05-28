@@ -9,6 +9,7 @@ import type {
   ConversationEvent,
   MessageEvent,
   RawLineRange,
+  RunMarkerEvent,
   ToolBurstEvent,
 } from '../conversation-event';
 
@@ -50,6 +51,28 @@ function toolBurst(): ToolBurstEvent {
     durationMs: 4_200,
     files: ['feature-flags.service.ts'],
     collapsedByDefault: true,
+  };
+}
+
+function agentMsg(id: string, secondsOffset: number, body: string): MessageEvent {
+  return {
+    id,
+    kind: 'message.taskAgent',
+    timestamp: new Date(Date.UTC(2026, 4, 5, 12, 0, secondsOffset)).toISOString(),
+    actor: 'Agent',
+    body,
+    rawRange: range(secondsOffset + 1, secondsOffset + 1),
+  };
+}
+
+function runMarkerStart(id: string, sessionId: string, secondsOffset: number): RunMarkerEvent {
+  return {
+    id,
+    kind: 'runMarker',
+    timestamp: new Date(Date.UTC(2026, 4, 5, 12, 0, secondsOffset)).toISOString(),
+    marker: 'start',
+    sessionId,
+    rawRange: range(secondsOffset + 1, secondsOffset + 1),
   };
 }
 
@@ -137,5 +160,85 @@ describe('ConversationViewComponent', () => {
     const fixture = await makeFixture(events);
     const el: HTMLElement = fixture.nativeElement;
     expect(el.querySelector('[data-testid="conversation-feed"]')?.children.length).toBe(1);
+  });
+
+  it('coalesces consecutive same-actor agent messages into one bubble with N items', async () => {
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 1, 'On branch main'),
+      agentMsg('a2', 2, 'Bash completed with no output'),
+      agentMsg('a3', 4, '4b02f9c fix(board): replace single MANUAL pill'),
+      agentMsg('a4', 6, '[main 579ba96] docs(orchestrator-steering): document STEER reply contract'),
+      agentMsg('a5', 8, '579ba96 docs(orchestrator-steering): document STEER reply contract'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const agentBubbles = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(agentBubbles.length).toBe(1);
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(5);
+    expect(el.querySelector('[data-testid="conversation-message-count"]')?.textContent).toContain('5 events');
+  });
+
+  it('starts a new agent bubble after a user message breaks the run', async () => {
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 1, 'first line'),
+      agentMsg('a2', 2, 'second line'),
+      userMessage(),
+      agentMsg('a3', 30, 'after user'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const agentBubbles = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(agentBubbles.length).toBe(2);
+    expect(el.querySelectorAll('[data-testid="conversation-message-message.user"]').length).toBe(1);
+  });
+
+  it('starts a new agent bubble when the gap between same-actor messages exceeds 60s', async () => {
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 1, 'first'),
+      // 90s later → past the coalesce threshold
+      agentMsg('a2', 91, 'second'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const agentBubbles = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(agentBubbles.length).toBe(2);
+  });
+
+  it('filters runMarker start events but keeps non-start markers visible', async () => {
+    const events: ConversationEvent[] = [
+      runMarkerStart('r1', 'c705779a-a6bc-43ac-bada-358ea7e11a28', 0),
+      agentMsg('a1', 1, 'On branch main'),
+      agentMsg('a2', 2, 'Bash completed'),
+      {
+        id: 'r2',
+        kind: 'runMarker',
+        timestamp: new Date(Date.UTC(2026, 4, 5, 12, 0, 10)).toISOString(),
+        marker: 'complete',
+        rawRange: range(11, 11),
+      },
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    // start row is filtered out
+    const markerRows = el.querySelectorAll('[data-testid="conversation-run-marker"]');
+    expect(markerRows.length).toBe(1);
+    expect(markerRows[0].getAttribute('data-marker')).toBe('complete');
+  });
+
+  it('attaches the session id from a preceding runMarker to the next agent group as a dezent chip', async () => {
+    const sessionId = 'c705779a-a6bc-43ac-bada-358ea7e11a28';
+    const events: ConversationEvent[] = [
+      runMarkerStart('r1', sessionId, 0),
+      agentMsg('a1', 1, 'On branch main'),
+      agentMsg('a2', 2, 'Bash completed'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const sessionChip = el.querySelector('[data-testid="conversation-message-session"]');
+    expect(sessionChip).toBeTruthy();
+    // Short-form id, not the full uuid
+    expect(sessionChip?.textContent?.trim()).toContain('c705779a');
+    expect(sessionChip?.textContent?.trim()).not.toContain('358ea7e11a28');
   });
 });

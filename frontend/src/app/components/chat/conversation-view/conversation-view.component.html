@@ -40,28 +40,46 @@
       @for (row of rows(); track trackByEvent($index, row)) {
         @switch (row.kind) {
 
-        @case ('message') {
+        @case ('messageGroup') {
           <li class="conv__row conv__row--message"
-              [attr.data-actor]="row.event.kind"
-              [attr.data-testid]="'conversation-message-' + row.event.kind">
+              [attr.data-actor]="row.actor"
+              [attr.data-item-count]="row.items.length"
+              [attr.data-testid]="'conversation-message-' + row.actor">
             <div class="msg">
               <header class="msg__head">
-                <span class="msg__avatar" aria-hidden="true">{{ actorGlyph(row.event.kind) }}</span>
-                <span class="msg__actor">{{ actorLabel(row.event.kind) }}</span>
-                @if (row.event.target) {
-                  <span class="msg__target">→ {{ row.event.target }}</span>
+                <span class="msg__avatar" aria-hidden="true">{{ actorGlyph(row.actor) }}</span>
+                <span class="msg__actor">{{ actorLabel(row.actor) }}</span>
+                @if (row.items.length > 1) {
+                  <span class="msg__count"
+                        data-testid="conversation-message-count"
+                        [appTooltip]="row.items.length + ' coalesced events'">{{ row.items.length }} events</span>
                 }
-                <time class="msg__time">{{ formatTime(row.event.timestamp) }}</time>
+                <time class="msg__time">{{ formatGroupTime(row) }}</time>
+                @if (row.sessionId) {
+                  <span class="msg__session"
+                        data-testid="conversation-message-session"
+                        [appTooltip]="'Session ' + row.sessionId">session {{ formatSessionIdShort(row.sessionId) }}</span>
+                }
               </header>
-              <app-markdown class="msg__body" [source]="row.event.body" />
-
-              @if (row.event.attachments?.length) {
-                <ul class="msg__attachments" aria-label="Attachments">
-                  @for (a of row.event.attachments ?? []; track a) {
-                    <li><code>{{ a }}</code></li>
-                  }
-                </ul>
-              }
+              <ol class="msg__items" data-testid="conversation-message-items">
+                @for (item of row.items; track item.id) {
+                  <li class="msg__item"
+                      [attr.data-testid]="'conversation-message-item'"
+                      [attr.data-item-id]="item.id">
+                    @if (item.target) {
+                      <span class="msg__target">→ {{ item.target }}</span>
+                    }
+                    <app-markdown class="msg__body" [source]="item.body" />
+                    @if (item.attachments?.length) {
+                      <ul class="msg__attachments" aria-label="Attachments">
+                        @for (a of item.attachments ?? []; track a) {
+                          <li><code>{{ a }}</code></li>
+                        }
+                      </ul>
+                    }
+                  </li>
+                }
+              </ol>
             </div>
           </li>
         }
