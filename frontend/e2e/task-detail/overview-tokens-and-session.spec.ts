@@ -31,13 +31,16 @@ async function pickWatchPath(): Promise<string> {
 test.describe('Overview tab — tokens fallback + session row removed', () => {
   test('SESSION row removed; lastUsage surfaces as Agent (CLI footer) block', async ({ page }) => {
     const watchPath = await pickWatchPath();
+    // 1-preparation keeps the auto-mode runner off the folder so the
+    // writeFile against job.json below is not racing the runner moving
+    // the folder into 3-progress under us.
     const job = await createJob({
       title: `overview-tokens-${Date.now()}`,
       watchPath,
       cliType: 'claude',
       agent: 'claude',
       promptMarkdown: '# Overview tokens fallback test',
-      targetState: '2-ready',
+      targetState: '1-preparation',
     });
 
     try {
@@ -101,13 +104,15 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
 
   test('Agent Work block replaces the raw SESSION row with call + tool counts', async ({ page }) => {
     const watchPath = await pickWatchPath();
+    // 1-preparation keeps the runner off this folder so the logs we plant
+    // are still here when the agent-work-summary endpoint reads them.
     const job = await createJob({
       title: `overview-agent-work-${Date.now()}`,
       watchPath,
       cliType: 'claude',
       agent: 'claude',
       promptMarkdown: '# Overview agent-work block test',
-      targetState: '2-ready',
+      targetState: '1-preparation',
     });
 
     try {
