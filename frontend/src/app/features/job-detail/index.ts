@@ -2,9 +2,11 @@
  * Job-detail feature public API. Cycle 9h / ADR-0034.
  *
  * Sub-components (cli-config-card, command-deck, detail-header, git-pane,
- * hygiene-strip, log-overlay, pane-toggle-bar, prompt-pane, protocol-pane,
- * triage-panel) are private to the feature — only `JobDetailComponent` is
- * exported. Hygiene helpers + parsers used cross-feature stay exported.
+ * hygiene-strip, log-overlay, pane-toggle-bar, prompt-pane, protocol-pane)
+ * are private to the feature — only `JobDetailComponent` is exported.
+ * The lane-action primary button + overflow menu now render inside
+ * `detail-header`; the catalogue is headless in `state/triage-actions.model.ts`.
+ * Hygiene helpers + parsers used cross-feature stay exported.
  */
 export { JobDetailComponent } from './task-detail';
 export { JobSelectionService } from './state/task-selection.service';

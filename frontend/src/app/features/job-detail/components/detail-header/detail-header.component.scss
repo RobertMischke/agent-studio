@@ -67,8 +67,46 @@
   text-align: center;
   user-select: none;
 }
-:host .detail__menu-wrap { position: relative; display: inline-block; }
-:host .detail__menu-btn {
+/* Detail-header overflow menu (delete + extra lane actions) is now
+   rendered via the shared <app-menu> popover anchored to the triage
+   cluster's ⋯ trigger; the bespoke .detail__menu-* styles that the
+   previous inline dropdown used have been removed. */
+:host .detail__triage {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 6px;
+}
+:host .detail__triage-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--studio-accent) 45%, transparent);
+  color: var(--studio-accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, filter 0.15s;
+  flex-shrink: 0;
+}
+:host .detail__triage-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--studio-accent) 26%, transparent);
+  border-color: color-mix(in srgb, var(--studio-accent) 60%, transparent);
+  filter: brightness(1.05);
+}
+:host .detail__triage-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+:host .detail__triage-primary--acting {
+  opacity: 0.85;
+}
+:host .detail__triage-overflow {
   background: var(--studio-bg-hover);
   border: 1px solid var(--studio-border);
   color: var(--studio-fg);
@@ -80,47 +118,29 @@
   line-height: 1;
   display: grid;
   place-items: center;
+  padding: 0;
+  flex-shrink: 0;
 }
-:host .detail__menu-btn:hover {
+:host .detail__triage-overflow:hover:not(:disabled) {
   background: var(--studio-bg-elevated);
   color: var(--studio-fg-strong);
 }
-:host .detail__menu {
+:host .detail__triage-overflow:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+:host .visually-hidden {
   position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 50;
-  min-width: 180px;
-  background: var(--studio-bg-elevated);
-  border: 1px solid var(--studio-border-strong);
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.30);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-}
-:host .detail__menu-item {
-  background: transparent;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
   border: 0;
-  color: var(--studio-fg);
-  text-align: left;
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
-:host .detail__menu-item:hover {
-  background: var(--studio-bg-hover);
-  color: var(--studio-fg-strong);
-}
-:host .detail__menu-item--danger { color: var(--severity-high); }
-:host .detail__menu-item--danger:hover {
-  background: color-mix(in srgb, var(--severity-high) 15%, transparent);
-  color: var(--severity-high);
-}
+
 :host .detail__title-row {
   display: flex;
   align-items: center;

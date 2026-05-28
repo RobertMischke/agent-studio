@@ -135,7 +135,6 @@
         "src/app/features/job-detail/components/protocol-pane/protocol-pane/protocol-pane.component.scss",
         "src/app/features/job-detail/components/protocol-pane/review-evidence-panel/review-evidence-panel.component.scss",
         "src/app/features/job-detail/components/protocol-pane/run-timeline/run-timeline.component.scss",
-        "src/app/features/job-detail/components/triage-panel/triage-panel.component.scss",
         "src/app/features/job-detail/job-detail.scss",
         "src/app/features/orchestrator/components/global-orchestrator-card/global-orchestrator-card.scss",
         "src/app/features/orchestrator/components/orchestrator-feed/orchestrator-feed.scss",

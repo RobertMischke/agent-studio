@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
 import { JobInfo } from '../../../../models/task.model';
-import { ModalStackService } from '../../../../services/modal-stack.service';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
@@ -14,10 +13,21 @@ import { TooltipDirective } from '../../../../components/tooltip';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
+import {
+  TriageActionPayload,
+  TriageButton,
+  laneLabelFor,
+  overflowActionsFor,
+  primaryActionFor,
+} from '../../state/triage-actions.model';
 /**
  * Top header of the job-detail view: back button, editable title,
- * state pill, and the "Complete & Next" review action. Title-edit
- * state is owned by the parent and passed via inputs/outputs.
+ * state pill, and — top-right — the lane's primary triage action plus
+ * an overflow menu of the remaining lane actions. The bottom-of-detail
+ * triage bar that used to host these is gone (the operator reported the
+ * "Human Review v" trigger row still rendering after the first attempt
+ * at folding it up). Title-edit state is owned by the parent and passed
+ * via inputs/outputs.
  */
 @Component({
   selector: 'app-detail-header',
@@ -44,6 +54,14 @@ export class DetailHeaderComponent {
   readonly pagerCanNext = input(false);
   /** Human-readable label of the snapshot's original lane (e.g. "Ready"). */
   readonly pagerLaneLabel = input<string>('');
+  /** Index of the open job inside the live lane peers (0-based; -1 == unknown). */
+  readonly laneIndex = input(0);
+  /** Total peers in the current lane (0 == no peers). */
+  readonly laneSize = input(0);
+  /** True while the update-service is mid-update; disables triage actions. */
+  readonly mutationsBlocked = input(false);
+  /** Stable id of the triage action currently in flight (null when idle). */
+  readonly triageActingId = input<string | null>(null);
 
   readonly back = output<void>();
   readonly startTitleEdit = output<void>();
@@ -51,11 +69,18 @@ export class DetailHeaderComponent {
   readonly saveTitle = output<void>();
   readonly titleDraftChange = output<string>();
   readonly completeAndNext = output<void>();
+  /**
+   * Delete request. The overflow menu's Delete row routes here instead of
+   * through `triageAction` so the existing `boardMutations.deleteFromDetail`
+   * confirm dialog + pager-aware advance stay in charge of destructive ops.
+   */
   readonly deleteRequested = output<void>();
   readonly stateChange = output<string>();
   readonly moveToTop = output<void>();
   readonly pagerPrev = output<void>();
   readonly pagerNext = output<void>();
+  /** Lane-action chosen via the primary button or the overflow menu. */
+  readonly triageAction = output<TriageActionPayload>();
 
   /**
    * Plain-text tooltip explaining the snapshot iteration. Stays inside
@@ -108,43 +133,108 @@ export class DetailHeaderComponent {
     this.stateChange.emit(next);
   }
 
-  readonly menuOpen = signal(false);
+  // --- triage cluster (primary + overflow) --------------------------------
 
-  toggleMenu(event: Event) {
-    event.stopPropagation();
-    this.menuOpen.update(v => !v);
-  }
+  /** Lane label for tooltips / aria-text on the overflow trigger. */
+  readonly triageLaneLabel = computed(() => laneLabelFor(this.info().state));
 
-  closeMenu() {
-    this.menuOpen.set(false);
-  }
+  /** Index 0 of the lane's action list when it carries a primary variant. */
+  readonly triagePrimary = computed<TriageButton | null>(() =>
+    primaryActionFor(this.info().state),
+  );
 
-  onDeleteClick(event: Event) {
-    event.stopPropagation();
-    this.menuOpen.set(false);
-    this.deleteRequested.emit();
-  }
+  /** Remaining lane actions + always-on Edit/Delete fallbacks. */
+  readonly triageOverflow = computed<TriageButton[]>(() =>
+    overflowActionsFor(this.info().state),
+  );
 
-  @HostListener('document:click')
-  onDocumentClick() {
-    if (this.menuOpen()) this.menuOpen.set(false);
-  }
+  /** True when a primary or any overflow action is available. */
+  readonly hasTriageActions = computed(
+    () => this.triagePrimary() !== null || this.triageOverflow().length > 0,
+  );
 
-  // Escape routes through ModalStack so the dropdown closes only when
-  // nothing modal sits above it.
-  private readonly modalStack = inject(ModalStackService);
-  private readonly menuDestroyRef = inject(DestroyRef);
-  private menuStackDispose: (() => void) | null = null;
-  private readonly menuStackEffect = effect(() => {
-    const open = this.menuOpen();
-    if (open && !this.menuStackDispose) {
-      this.menuStackDispose = this.modalStack.push('detail-header-menu', () => this.menuOpen.set(false));
-    } else if (!open && this.menuStackDispose) {
-      this.menuStackDispose();
-      this.menuStackDispose = null;
-    }
+  /**
+   * Counter shown on the overflow button (and read by E2E specs to verify
+   * the panel is anchored to the right lane). Mirrors the wording of the
+   * old footer-bar counter so legacy spec assertions still pass.
+   */
+  readonly triageCounterText = computed(() => {
+    const total = this.laneSize();
+    const lane = this.triageLaneLabel();
+    if (total <= 0) return `in ${lane}`;
+    const pos = Math.max(this.laneIndex() + 1, 1);
+    return `Task ${pos} of ${total} in ${lane}`;
   });
-  private readonly menuStackTeardown = this.menuDestroyRef.onDestroy(() => this.menuStackDispose?.());
+
+  readonly triageOverflowOpen = signal(false);
+  readonly triageOverflowAnchor = signal<HTMLElement | null>(null);
+
+  readonly triageMenuItems = computed<MenuItem[]>(() => {
+    const disabled = this.mutationsBlocked() || this.triageActingId() !== null;
+    return this.triageOverflow().map<MenuItem>(b => ({
+      kind: 'row',
+      id: b.id,
+      label: b.label,
+      danger: b.variant === 'danger',
+      disabled,
+    }));
+  });
+
+  primaryTooltip(): string {
+    const p = this.triagePrimary();
+    if (!p) return '';
+    if (this.mutationsBlocked()) return 'Update in progress — actions paused.';
+    if (this.triageActingId() === p.id) return `${p.label}…`;
+    return `${p.label} (Enter)`;
+  }
+
+  overflowTooltip(): string {
+    if (this.mutationsBlocked()) return 'Update in progress — actions paused.';
+    const count = this.triageOverflow().length;
+    return `${this.triageLaneLabel()} actions (${count})`;
+  }
+
+  onPrimaryClick(): void {
+    const p = this.triagePrimary();
+    if (!p) return;
+    this.emitTriage(p);
+  }
+
+  toggleTriageOverflow(event: MouseEvent): void {
+    event.stopPropagation();
+    if (this.mutationsBlocked()) return;
+    this.triageOverflowAnchor.set(event.currentTarget as HTMLElement);
+    this.triageOverflowOpen.update(v => !v);
+  }
+
+  closeTriageOverflow(): void {
+    this.triageOverflowOpen.set(false);
+  }
+
+  onTriageMenuItemClick(ev: MenuItemClickEvent): void {
+    const button = this.triageOverflow().find(b => b.id === ev.id);
+    if (!button) return;
+    // Delete keeps its dedicated output (boardMutations.deleteFromDetail
+    // owns the confirm dialog + pager-aware advance). The rest of the lane
+    // actions flow through the triage controller via `triageAction`.
+    if (button.id === 'delete') {
+      this.triageOverflowOpen.set(false);
+      this.deleteRequested.emit();
+      return;
+    }
+    this.emitTriage(button);
+  }
+
+  /** Called by the parent on Enter when no input is focused. */
+  triggerPrimary(): void {
+    this.onPrimaryClick();
+  }
+
+  private emitTriage(button: TriageButton): void {
+    if (this.mutationsBlocked() || this.triageActingId() !== null) return;
+    this.triageOverflowOpen.set(false);
+    this.triageAction.emit({ id: button.id, label: button.label, intent: button.intent });
+  }
 
   @ViewChild('stateSelect') private stateSelectEl?: ElementRef<HTMLSelectElement>;
 

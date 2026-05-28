@@ -120,23 +120,49 @@
       {{ completingAndNext() ? '⏳' : '✓ Complete & Next' }}
     </button>
   }
-  <div class="detail__menu-wrap" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-    <button type="button"
-            class="detail__menu-btn"
-            data-testid="detail-menu-btn"
-            aria-label="Task actions"
-            [attr.aria-expanded]="menuOpen()"
-            (click)="toggleMenu($event)">⋯</button>
-    @if (menuOpen()) {
-      <div class="detail__menu" role="menu" data-testid="detail-menu">
+  @if (hasTriageActions()) {
+    <div class="detail__triage" data-testid="triage-panel" data-triage-root>
+      <span class="detail__triage-counter visually-hidden"
+            data-testid="triage-counter"
+            aria-live="polite">{{ triageCounterText() }}</span>
+      @if (triagePrimary(); as primary) {
         <button type="button"
-                class="detail__menu-item detail__menu-item--danger"
-                data-testid="detail-menu-delete"
-                role="menuitem"
-                (click)="onDeleteClick($event)">🗑 Delete task…</button>
-      </div>
-    }
-  </div>
+                class="detail__triage-primary"
+                [attr.data-testid]="'triage-action-' + primary.id"
+                [attr.data-action-id]="primary.id"
+                [class.detail__triage-primary--acting]="triageActingId() === primary.id"
+                [disabled]="mutationsBlocked() || triageActingId() !== null"
+                [appTooltip]="primaryTooltip()"
+                (click)="onPrimaryClick()">
+          @if (triageActingId() === primary.id) {
+            <span aria-hidden="true">⏳</span>
+            <span>{{ primary.label }}…</span>
+          } @else {
+            {{ primary.label }}
+          }
+        </button>
+      }
+      <button type="button"
+              class="detail__triage-overflow"
+              data-testid="triage-overflow-btn"
+              [attr.aria-expanded]="triageOverflowOpen()"
+              aria-haspopup="menu"
+              aria-label="More task actions"
+              [appTooltip]="overflowTooltip()"
+              [disabled]="mutationsBlocked()"
+              (click)="toggleTriageOverflow($event)">⋯</button>
+      <app-menu
+        [items]="triageMenuItems()"
+        [open]="triageOverflowOpen()"
+        [anchorEl]="triageOverflowAnchor()"
+        placement="below"
+        testIdPrefix="triage-overflow"
+        ariaLabel="Lane actions"
+        [minWidth]="220"
+        (itemClick)="onTriageMenuItemClick($event)"
+        (closeRequest)="closeTriageOverflow()" />
+    </div>
+  }
   <app-menu
     [items]="titleCtxMenuItems()"
     [open]="titleContextMenu() !== null"

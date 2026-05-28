@@ -1,5 +1,6 @@
 <div class="detail">
   <app-detail-header
+    #detailHeader
     [info]="detail().info"
     [editingTitle]="editingTitle()"
     [titleDraft]="titleDraft()"
@@ -13,6 +14,10 @@
     [pagerCanPrev]="pagerCanPrev()"
     [pagerCanNext]="pagerCanNext()"
     [pagerLaneLabel]="pagerLaneLabel()"
+    [laneIndex]="laneIndex()"
+    [laneSize]="laneSize()"
+    [mutationsBlocked]="mutationsBlocked()"
+    [triageActingId]="triageActingId()"
     (back)="back.emit()"
     (titleDraftChange)="titleDraft.set($event)"
     (startTitleEdit)="startTitleEdit()"
@@ -23,7 +28,8 @@
     (moveToTop)="moveToTopOfReady()"
     (deleteRequested)="deleteRequested.emit()"
     (pagerPrev)="prevInLaneRequested.emit()"
-    (pagerNext)="nextInLaneRequested.emit()" />
+    (pagerNext)="nextInLaneRequested.emit()"
+    (triageAction)="onTriageAction($event)" />
 
   <app-command-deck
     [currentWatchPath]="detail().info.watchPath"
@@ -147,15 +153,6 @@
       <div class="detail__panes-empty">All panels hidden — re-enable one above.</div>
     }
   </div>
-
-  <app-triage-panel
-    #triagePanel
-    [laneState]="detail().info.state"
-    [laneIndex]="laneIndex()"
-    [laneSize]="laneSize()"
-    [mutationsBlocked]="mutationsBlocked()"
-    [actingId]="triageActingId()"
-    (action)="onTriageAction($event)" />
 
   @if (showLogOverlay()) {
     <app-log-overlay

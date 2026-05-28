@@ -27,7 +27,7 @@ Imports via `from './features/job-detail'`. See [`index.ts`](./index.ts).
 
 ## Sub-folders
 
-- `components/` — 10 sub-panes (cli-config-card, command-deck, detail-header, git-pane, hygiene-strip, log-overlay, pane-toggle-bar, prompt-pane, protocol-pane, triage-panel) + the activity-log machinery.
+- `components/` — 9 sub-panes (cli-config-card, command-deck, detail-header, git-pane, hygiene-strip, log-overlay, pane-toggle-bar, prompt-pane, protocol-pane) + the activity-log machinery. The lane-action primary button + overflow menu live in `detail-header`; the action catalogue is headless in `state/triage-actions.model.ts`.
 - `services/` — `git-pane.service`, `layout-panes.service` (job-detail-private, not exported via barrel).
 - `state/` — the two cross-shell state services exported above.
 

@@ -351,7 +351,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `task-detail-multi-commit.spec.ts` | Task-detail multi-commit chain |
 | `task-detail-no-repo-level-hygiene.spec.ts` | Task detail page does not surface repo-level hygiene signals |
 | `task-detail-worktree-isolation.spec.ts` | Task-detail worktree isolation |
-| `triage-panel.spec.ts` | Triage panel |
+| `triage-actions-in-detail-header.spec.ts` | Triage actions in detail header (primary + overflow) |
 | `verbose-debug-overlay.spec.ts` | Verbose Debug overlay - task workbench |
 
 ### `visual-evidence/` — 7 specs

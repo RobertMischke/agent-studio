@@ -83,7 +83,7 @@ const RULES = [
   [/^prompt-(edit-lock|save)/, 'task-detail'],
   [/^inspector-tab-default/, 'task-detail'],
   [/^log-overlay-centering/, 'task-detail'],
-  [/^triage-panel/, 'task-detail'],
+  [/^triage-/, 'task-detail'],
   [/^delete-task/, 'task-detail'],
   [/^open-failed-task/, 'task-detail'],
   [/^repository-hygiene-strip/, 'task-detail'],

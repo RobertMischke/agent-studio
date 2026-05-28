@@ -47,10 +47,7 @@ import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { CliConfigCardComponent } from './components/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
-import {
-  TriagePanelComponent,
-  TriageActionPayload,
-} from './components/triage-panel/triage-panel.component';
+import { TriageActionPayload } from './state/triage-actions.model';
 import {
   claudeSessionTooltip,
   cliTypeLabel,
@@ -80,7 +77,6 @@ import { TooltipDirective } from '../../components/tooltip';
     DetailHeaderComponent,
     CliConfigCardComponent,
     PaneToggleBarComponent,
-    TriagePanelComponent,
     TooltipDirective,
   ],
   providers: [
@@ -287,7 +283,7 @@ export class JobDetailComponent implements OnDestroy {
   });
   readonly laneSize = computed(() => this.lanePeers().length);
 
-  @ViewChild('triagePanel') private triagePanelRef?: TriagePanelComponent;
+  @ViewChild('detailHeader') private detailHeaderRef?: DetailHeaderComponent;
 
   // Wall-clock tick used by relative-time formatters (e.g. formatResetIn).
   // Sourced from NowTickService — keeps the formatter stable within one
@@ -962,7 +958,7 @@ export class JobDetailComponent implements OnDestroy {
         return;
       case 'Enter':
         if (this.mutationsBlocked() || this.triageActingId() !== null) return;
-        this.triagePanelRef?.triggerPrimary();
+        this.detailHeaderRef?.triggerPrimary();
         event.preventDefault();
         return;
     }

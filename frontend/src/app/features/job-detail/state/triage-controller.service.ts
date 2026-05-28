@@ -44,7 +44,7 @@ export class TriageController {
     this.clearActingCallback?.();
   }
 
-  // ---------- triage-panel actions ----------
+  // ---------- lane-action triage actions ----------
 
   /**
    * Lane-specific move from the triage panel. Same path as drag-and-drop

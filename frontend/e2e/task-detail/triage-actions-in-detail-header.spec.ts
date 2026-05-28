@@ -22,8 +22,8 @@ function uid(prefix: string) {
 }
 
 async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id: string; title: string }[]> {
-  // Create in `2-ready` (a lane the create endpoint accepts), then move to
-  // `5-human-review` so we land on a known triage lane regardless of what
+  // Create in `2-ready` (the create endpoint accepts that), then move to
+  // `5-human-review` so we land on a known lane regardless of what
   // default the backend picks for a non-standard `targetState`.
   const jobs: { id: string; title: string }[] = [];
   for (let i = 0; i < count; i++) {
@@ -36,69 +36,98 @@ async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id:
   return jobs;
 }
 
-async function openJobInPanel(page: Page, id: string, watchPath: string) {
+async function openJobInDetail(page: Page, id: string, watchPath: string) {
   await page.goto(`/?job=${encodeURIComponent(id)}&watchPath=${encodeURIComponent(watchPath)}`);
   await expect(page.getByTestId('triage-panel')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('triage-action-mark-done')).toBeVisible({ timeout: 10_000 });
 }
 
 /**
- * Triage workflow: per-job decision panel + auto-advance to next-in-lane.
+ * Lane-action cluster in the detail header: a lane-specific primary button
+ * and an overflow ⋯ menu of secondary actions, anchored top-right next to
+ * the lane dropdown. Replaces the bottom-of-detail triage popover.
  *
  * Each spec plants its own fixture jobs in `5-human-review`, walks them via
- * the panel, and asserts the next-in-lane semantics. Fixtures are tagged
- * (`fixture: true`) so they don't show up on the main board for other
- * specs.
- *
- * The lane on a real workspace contains other tasks too, so the auto-advance
- * order is not deterministic across this fixture and unrelated jobs. We
- * therefore re-open each fixture explicitly between decisions instead of
- * trusting the next-in-lane pointer to hop fixture-to-fixture.
+ * the header cluster, and asserts the same next-in-lane semantics the old
+ * footer-bar tests had. Fixtures are tagged (`fixture: true`) so they
+ * don't show up on the main board for other specs.
  */
-test.describe('Triage panel', () => {
-  test('Mark-as-Done moves the job out of the lane and auto-loads a different job', async ({ page }) => {
+test.describe('Triage actions in detail header', () => {
+  test('primary "Mark as Done" lives next to the lane dropdown and moves the job out of the lane', async ({ page }) => {
     const wp = await getFirstWatchPath();
-    const jobs = await plantHumanReviewJobs(wp, 3);
+    const jobs = await plantHumanReviewJobs(wp, 1);
     try {
-      // Walk all 3 fixtures: open, click Mark Done, verify the job moves to
-      // 6-completed and the panel auto-advances to a *different* job in the
-      // same lane (counter still says "in Human Review").
-      for (const j of jobs) {
-        await openJobInPanel(page, j.id, wp.path);
-        const counter = page.getByTestId('triage-counter');
-        await expect(counter).toContainText('in Human Review');
+      await openJobInDetail(page, jobs[0].id, wp.path);
 
-        const beforeUrl = page.url();
-        await page.getByTestId('triage-action-mark-done').click();
+      // The primary button is rendered next to the lane <select>, NOT in
+      // the bottom footer the old layout used.
+      const cluster = page.getByTestId('triage-panel');
+      await expect(cluster).toBeVisible();
+      const primary = cluster.getByTestId('triage-action-mark-done');
+      await expect(primary).toBeVisible();
+      // The lane select is the cluster's left-side neighbour in the header.
+      const select = page.getByTestId('detail-state-select');
+      await expect(select).toBeVisible();
 
-        // Backend reflects the move.
-        await expect.poll(
-          async () => (await getJob(j.id, wp.path)).state,
-          { timeout: 10_000 }
-        ).toBe('6-completed');
+      const counter = page.getByTestId('triage-counter');
+      await expect(counter).toContainText('in Human Review');
 
-        // Panel either auto-advanced (URL changed) or closed because the
-        // lane was cleared. Either is a valid outcome of the spec.
-        await expect.poll(async () => {
-          const url = page.url();
-          if (url !== beforeUrl) return 'advanced';
-          const visible = await page.getByTestId('triage-panel').isVisible();
-          return visible ? 'still-open' : 'closed';
-        }, { timeout: 5_000 }).not.toBe('still-open');
-      }
+      const beforeUrl = page.url();
+      await primary.click();
+
+      await expect.poll(
+        async () => (await getJob(jobs[0].id, wp.path)).state,
+        { timeout: 10_000 }
+      ).toBe('6-completed');
+
+      // Panel either auto-advanced (URL changed) or closed because the
+      // lane was cleared. Either is a valid outcome.
+      await expect.poll(async () => {
+        const url = page.url();
+        if (url !== beforeUrl) return 'advanced';
+        const visible = await cluster.isVisible();
+        return visible ? 'still-open' : 'closed';
+      }, { timeout: 5_000 }).not.toBe('still-open');
     } finally {
       for (const j of jobs) await deleteJob(j.id, wp.path).catch(() => {});
     }
   });
 
-  test('j navigates to a different peer; Esc closes the panel', async ({ page }) => {
+  test('overflow ⋯ menu carries the secondary actions', async ({ page }) => {
+    const wp = await getFirstWatchPath();
+    const jobs = await plantHumanReviewJobs(wp, 1);
+    try {
+      await openJobInDetail(page, jobs[0].id, wp.path);
+
+      const overflowBtn = page.getByTestId('triage-overflow-btn');
+      await expect(overflowBtn).toBeVisible();
+      await overflowBtn.click();
+
+      const menu = page.getByTestId('triage-overflow-panel');
+      await expect(menu).toBeVisible({ timeout: 3_000 });
+
+      // 5-human-review secondaries: send-back-to-ready, send-to-backlog,
+      // need-clarification + the always-on edit-prompt + delete fallbacks.
+      await expect(page.getByTestId('triage-overflow-item-send-back-to-ready')).toBeVisible();
+      await expect(page.getByTestId('triage-overflow-item-send-to-backlog')).toBeVisible();
+      await expect(page.getByTestId('triage-overflow-item-need-clarification')).toBeVisible();
+      await expect(page.getByTestId('triage-overflow-item-edit-prompt')).toBeVisible();
+      await expect(page.getByTestId('triage-overflow-item-delete')).toBeVisible();
+
+      // Close via Escape — the shared <app-menu> registers on ModalStack.
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeHidden({ timeout: 3_000 });
+    } finally {
+      for (const j of jobs) await deleteJob(j.id, wp.path).catch(() => {});
+    }
+  });
+
+  test('Enter triggers the primary action; j navigates to a different peer', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const jobs = await plantHumanReviewJobs(wp, 3);
     try {
-      // Open the second fixture so j has somewhere to advance to (we want
-      // to avoid landing on the very tail of the lane, where j is a no-op
-      // by design).
-      await openJobInPanel(page, jobs[1].id, wp.path);
+      // Open the second fixture so j has somewhere to advance to.
+      await openJobInDetail(page, jobs[1].id, wp.path);
 
       // Click on the body so focus leaves the lane <select>; otherwise
       // 'j' typed into the select would be intercepted by typeahead.
@@ -108,7 +137,7 @@ test.describe('Triage panel', () => {
       await page.keyboard.press('j');
       await expect.poll(() => page.url(), { timeout: 5_000 }).not.toBe(initialUrl);
 
-      // The triage panel is still mounted on the new job.
+      // The triage cluster is still mounted on the new job.
       await expect(page.getByTestId('triage-panel')).toBeVisible();
 
       // Re-anchor focus on body in case the navigate placed focus inside
@@ -126,14 +155,14 @@ test.describe('Triage panel', () => {
     const wp = await getFirstWatchPath();
     const jobs = await plantHumanReviewJobs(wp, 5);
     try {
-      await openJobInPanel(page, jobs[0].id, wp.path);
+      await openJobInDetail(page, jobs[0].id, wp.path);
       const recorder = await startLongTaskRecorder(page);
 
       // Burst: open + Mark Done for all 5 fixtures, simulating a triage
       // sweep. We re-open between decisions so the burst exercises a real
       // navigate → decide loop instead of relying on auto-advance order.
       for (const j of jobs) {
-        await openJobInPanel(page, j.id, wp.path);
+        await openJobInDetail(page, j.id, wp.path);
         await page.getByTestId('triage-action-mark-done').click();
         await expect.poll(
           async () => (await getJob(j.id, wp.path)).state,
@@ -148,9 +177,7 @@ test.describe('Triage panel', () => {
       // measured in the dev build, where Angular's full change-detection
       // + zone overhead pushes the typical floor much higher than the
       // production target. The relaxed ceiling here flags a clear
-      // regression (e.g. an O(N) lane recomputation on every keystroke)
-      // without flaking on dev-mode noise. Tighten when the production
-      // bundle gates this spec.
+      // regression without flaking on dev-mode noise.
       console.log(`[triage-burst] longtask total=${totalMs}ms count=${count}`);
       expect(totalMs).toBeLessThan(3000);
     } finally {
