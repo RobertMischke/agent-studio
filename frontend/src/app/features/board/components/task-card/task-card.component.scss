@@ -239,15 +239,6 @@
       white-space: nowrap;
       min-width: 0;
     }
-    .job-card__order {
-      font-size: 11px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: rgba(255,255,255,0.08);
-      color: var(--studio-fg-dim);
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-    }
     /* Delete affordance: positioned absolutely on the card so it survives
        compact mode (the header is display:none in compact). Hidden until
        card hover so the cards stay calm in the default board view. The
