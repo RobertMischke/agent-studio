@@ -84,7 +84,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(tooltip.body).toContain('analysis-reports.md');
     expect(tooltip.body).toContain('<ul>');
 
-    const commit = fixture.nativeElement.querySelector('[data-testid="job-card-commit"]') as HTMLElement | null;
+    const commit = fixture.nativeElement.querySelector('[data-testid="task-card-commit"]') as HTMLElement | null;
     expect(commit?.getAttribute('data-has-files')).toBe('true');
   });
 
@@ -153,7 +153,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(tooltip.body).not.toContain('<ul>');
     expect(tooltip.body).not.toContain('+');
 
-    const commit = fixture.nativeElement.querySelector('[data-testid="job-card-commit"]') as HTMLElement | null;
+    const commit = fixture.nativeElement.querySelector('[data-testid="task-card-commit"]') as HTMLElement | null;
     expect(commit?.getAttribute('data-has-files')).toBeNull();
   });
 
@@ -217,16 +217,16 @@ describe('TaskCardComponent (smoke)', () => {
     }));
     fixture.detectChanges();
 
-    const host = fixture.nativeElement.querySelector('[data-testid="job-card"]') as HTMLElement | null;
-    expect(host?.classList.contains('job-card--running')).toBe(true);
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--running')).toBe(true);
     expect(host?.getAttribute('data-running')).toBe('true');
-    const bar = fixture.nativeElement.querySelector('[data-testid="job-card-progress"]') as HTMLElement | null;
+    const bar = fixture.nativeElement.querySelector('[data-testid="task-card-progress"]') as HTMLElement | null;
     expect(bar).not.toBeNull();
     expect(bar?.getAttribute('aria-hidden')).toBe('true');
 
     fixture.componentRef.setInput('job', makeJob({ execution: null }));
     fixture.detectChanges();
-    const barAfter = fixture.nativeElement.querySelector('[data-testid="job-card-progress"]') as HTMLElement | null;
+    const barAfter = fixture.nativeElement.querySelector('[data-testid="task-card-progress"]') as HTMLElement | null;
     expect(barAfter).toBeNull();
   });
 
@@ -261,7 +261,7 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.executionBadge()?.tone).toBe('running');
     expect(fixture.componentInstance.isRunning()).toBe(true);
-    expect(fixture.nativeElement.querySelector('[data-testid="job-card-progress"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-progress"]')).not.toBeNull();
 
     // Same execution but lane has moved to 4-auto-review → suppress.
     for (const state of ['4-auto-review', '5-human-review', '6-completed', '4-review']) {
@@ -272,7 +272,7 @@ describe('TaskCardComponent (smoke)', () => {
       fixture.detectChanges();
       expect(fixture.componentInstance.executionBadge(), `state=${state}`).toBeNull();
       expect(fixture.componentInstance.isRunning(), `state=${state}`).toBe(false);
-      expect(fixture.nativeElement.querySelector('[data-testid="job-card-progress"]'), `state=${state}`).toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-testid="task-card-progress"]'), `state=${state}`).toBeNull();
     }
   });
 
@@ -299,9 +299,9 @@ describe('TaskCardComponent (smoke)', () => {
     }));
     fixture.detectChanges();
 
-    const pill = fixture.nativeElement.querySelector('[data-testid="job-card-outcome-issue"]') as HTMLElement | null;
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-outcome-issue"]') as HTMLElement | null;
     expect(pill?.textContent).toContain('Permission blocked');
-    expect(pill?.className).toContain('job-card__issue-pill--high');
+    expect(pill?.className).toContain('task-card__issue-pill--high');
   });
 });
 

@@ -1,181 +1,181 @@
 <div class="job-card"
      [class]="'job-card--' + job().state"
-     [class.job-card--running]="isRunning()"
-     [class.job-card--compact]="compact()"
-     [class.job-card--just-created]="isJustCreated()"
+     [class.task-card--running]="isRunning()"
+     [class.task-card--compact]="compact()"
+     [class.task-card--just-created]="isJustCreated()"
      [style.--project-color]="identity().color"
      [style.--project-border]="identity().border"
      [style.--project-soft]="identity().soft"
      [style.--project-on]="identity().onColor"
-     data-testid="job-card"
+     data-testid="task-card"
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
      [attr.data-compact]="compact() ? 'true' : null"
      (contextmenu)="openCardContextMenu($event)">
   @if (isRunning()) {
-    <div class="job-card__progress" aria-hidden="true" data-testid="job-card-progress"></div>
+    <div class="task-card__progress" aria-hidden="true" data-testid="task-card-progress"></div>
   }
-  <div class="job-card__header">
-    <span class="job-card__project" data-testid="job-card-project">
-      <span class="job-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>
-      <span class="job-card__project-name">{{ job().projectName }}</span>
+  <div class="task-card__header">
+    <span class="task-card__project" data-testid="task-card-project">
+      <span class="task-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>
+      <span class="task-card__project-name">{{ job().projectName }}</span>
     </span>
     @if (ownerChip(); as oc) {
-      <span class="job-card__owner-chip"
-            data-testid="job-card-owner"
+      <span class="task-card__owner-chip"
+            data-testid="task-card-owner"
             [attr.data-owner-id]="oc.id"
             [style.background]="oc.background"
             [style.borderColor]="oc.border"
             [style.color]="oc.foreground"
             [appTooltip]="oc.tooltip">
-        <span class="job-card__owner-emoji" aria-hidden="true">{{ oc.emoji }}</span>
-        <span class="job-card__owner-name">{{ oc.label }}</span>
+        <span class="task-card__owner-emoji" aria-hidden="true">{{ oc.emoji }}</span>
+        <span class="task-card__owner-name">{{ oc.label }}</span>
       </span>
     }
     @if (canPickNext()) {
       <button type="button"
-              class="job-card__pick-next"
-              data-testid="job-card-pick-next"
+              class="task-card__pick-next"
+              data-testid="task-card-pick-next"
               [appTooltip]="'Pick next — bump to the front of the runner queue'"
               aria-label="Pick next"
               (click)="onPickNextClick($event)">
-        <span class="job-card__pick-next-glyph" aria-hidden="true">⤴</span>
-        <span class="job-card__pick-next-label">Next</span>
+        <span class="task-card__pick-next-glyph" aria-hidden="true">⤴</span>
+        <span class="task-card__pick-next-label">Next</span>
       </button>
     }
   </div>
   <button type="button"
-          class="job-card__delete"
-          data-testid="job-card-delete"
+          class="task-card__delete"
+          data-testid="task-card-delete"
           [appTooltip]="'Delete task'"
           aria-label="Delete task"
           (click)="onDeleteClick($event)">🗑</button>
-  <h3 class="job-card__title"
+  <h3 class="task-card__title"
       [appTaskStatusPopover]="job()"
-      data-testid="job-card-title">
+      data-testid="task-card-title">
     @if (compact()) {
-      <span class="job-card__compact-disk"
+      <span class="task-card__compact-disk"
             [attr.aria-label]="job().projectName"
             aria-hidden="true">{{ identity().initial }}</span>
-      <span class="job-card__compact-cli" aria-hidden="true">{{ agentIcon() }}</span>
+      <span class="task-card__compact-cli" aria-hidden="true">{{ agentIcon() }}</span>
     }
     @if (job().key; as taskKey) {
-      <span class="job-card__key-chip" data-testid="job-card-key">{{ taskKey }}</span>
+      <span class="task-card__key-chip" data-testid="task-card-key">{{ taskKey }}</span>
     }
-    <span class="job-card__title-text" data-truncatable>{{ job().title || job().id }}</span>
+    <span class="task-card__title-text" data-truncatable>{{ job().title || job().id }}</span>
     @if (compact()) {
-      <span class="job-card__compact-time" [appTooltip]="'Last activity: ' + relativeActivity()">
+      <span class="task-card__compact-time" [appTooltip]="'Last activity: ' + relativeActivity()">
         {{ relativeActivity() }}
       </span>
     }
   </h3>
-  <div class="job-card__badges">
+  <div class="task-card__badges">
     @if (taskTypeChip(); as tt) {
-      <span class="job-card__type-pill"
-            [class]="'job-card__type-pill--' + tt.kind"
+      <span class="task-card__type-pill"
+            [class]="'task-card__type-pill--' + tt.kind"
             data-testid="job-task-type"
             [attr.data-task-type]="tt.kind"
             [appTooltip]="tt.tooltip">{{ tt.icon }} {{ tt.label }}</span>
     }
-    <span class="job-card__state-pill">{{ stateLabel() }}</span>
+    <span class="task-card__state-pill">{{ stateLabel() }}</span>
     @if (phaseBadge(); as pb) {
-      <span class="job-card__phase-pill"
-            [class]="'job-card__phase-pill--' + pb.tone"
+      <span class="task-card__phase-pill"
+            [class]="'task-card__phase-pill--' + pb.tone"
             [appTooltip]="pb.tooltip"
-            data-testid="job-card-phase">
+            data-testid="task-card-phase">
         {{ pb.label }}
       </span>
     }
     @if (executionBadge(); as badge) {
-      <span class="job-card__execution-pill" [class]="'job-card__execution-pill--' + badge.tone">
-        <span class="job-card__execution-dot"></span>
+      <span class="task-card__execution-pill" [class]="'task-card__execution-pill--' + badge.tone">
+        <span class="task-card__execution-dot"></span>
         {{ badge.label }}
       </span>
     }
     @if (job().pendingIntent; as pi) {
-      <span class="job-card__pending-pill"
+      <span class="task-card__pending-pill"
             [appTooltip]="pendingTooltip(pi)"
-            data-testid="job-card-pending">
+            data-testid="task-card-pending">
         ⏳ {{ pi.mode }}
       </span>
     }
     @if (job().autoLoop; as al) {
-      <span class="job-card__loop-pill"
-            [class.job-card__loop-pill--hot]="loopHot()"
+      <span class="task-card__loop-pill"
+            [class.task-card__loop-pill--hot]="loopHot()"
             [appTooltip]="loopTooltip(al)"
-            data-testid="job-card-autoloop">
+            data-testid="task-card-autoloop">
         ↻ auto-loop {{ al.iteration }}/{{ al.maxIterations }}
       </span>
     }
     @if (reviewBadge(); as rb) {
-      <span class="job-card__review-pill"
-            [class]="'job-card__review-pill--' + rb.tone"
+      <span class="task-card__review-pill"
+            [class]="'task-card__review-pill--' + rb.tone"
             [appTooltip]="rb.tooltip"
-            data-testid="job-card-review">
-        <span class="job-card__review-dot"></span>
+            data-testid="task-card-review">
+        <span class="task-card__review-dot"></span>
         {{ rb.label }}
       </span>
     }
     @if (autoReviewProcessBadge(); as arb) {
-      <span class="job-card__auto-review-pill"
-            [class]="'job-card__auto-review-pill--' + arb.tone"
+      <span class="task-card__auto-review-pill"
+            [class]="'task-card__auto-review-pill--' + arb.tone"
             [appTooltip]="arb.tooltip"
-            data-testid="job-card-auto-review-status">
-        <span class="job-card__auto-review-dot"></span>
+            data-testid="task-card-auto-review-status">
+        <span class="task-card__auto-review-dot"></span>
         {{ arb.label }}
       </span>
     }
     @if (outcomeIssueBadge(); as oib) {
-      <span class="job-card__issue-pill"
-            [class]="'job-card__issue-pill--' + oib.tone"
+      <span class="task-card__issue-pill"
+            [class]="'task-card__issue-pill--' + oib.tone"
             [appTooltip]="oib.tooltip"
-            data-testid="job-card-outcome-issue">
+            data-testid="task-card-outcome-issue">
         {{ oib.label }}
       </span>
     }
   </div>
-  <div class="job-card__meta">
-    <span class="job-card__effective-model"
-          [class.job-card__effective-model--default]="effectiveModelChip().isDefault"
+  <div class="task-card__meta">
+    <span class="task-card__effective-model"
+          [class.task-card__effective-model--default]="effectiveModelChip().isDefault"
           [appTooltip]="effectiveModelChip().tooltip"
-          data-testid="job-card-effective-model"
+          data-testid="task-card-effective-model"
           [attr.data-model-source]="effectiveModelChip().source">
-      <span class="job-card__effective-model-icon" aria-hidden="true">{{ effectiveModelChip().icon }}</span>
+      <span class="task-card__effective-model-icon" aria-hidden="true">{{ effectiveModelChip().icon }}</span>
       @if (effectiveModelChip().cliLabel && effectiveModelChip().fullModel) {
-        <span class="job-card__effective-model-cli">{{ effectiveModelChip().cliLabel }}</span>
+        <span class="task-card__effective-model-cli">{{ effectiveModelChip().cliLabel }}</span>
       }
-      <span class="job-card__effective-model-name">{{ effectiveModelChip().label }}</span>
+      <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
     </span>
     @if (tokenBubble(); as tb) {
-      <span class="job-card__token-wrap">
+      <span class="task-card__token-wrap">
         <button type="button"
-                class="job-card__token-bubble"
-                [class]="'job-card__token-bubble--' + tb.tier"
-                data-testid="job-card-token-bubble"
+                class="task-card__token-bubble"
+                [class]="'task-card__token-bubble--' + tb.tier"
+                data-testid="task-card-token-bubble"
                 [attr.data-token-tier]="tb.tier"
                 [attr.data-token-total]="tb.total"
                 [attr.aria-label]="'Token usage: ' + tb.label + ' total tokens'"
                 (click)="$event.stopPropagation()">
           {{ tb.label }}
         </button>
-        <span class="job-card__token-popover"
+        <span class="task-card__token-popover"
               role="tooltip"
-              data-testid="job-card-token-popover">
-          <span class="job-card__token-popover-title">Token usage</span>
-          <table class="job-card__token-table">
+              data-testid="task-card-token-popover">
+          <span class="task-card__token-popover-title">Token usage</span>
+          <table class="task-card__token-table">
             <tbody>
               <tr><th>Input</th><td data-testid="token-row-input">{{ formatTokens(tb.input) }}</td></tr>
               <tr><th>Output</th><td data-testid="token-row-output">{{ formatTokens(tb.output) }}</td></tr>
               <tr><th>Cache read</th><td data-testid="token-row-cache-read">{{ formatTokens(tb.cacheRead) }}</td></tr>
               <tr><th>Cache write</th><td data-testid="token-row-cache-write">{{ formatTokens(tb.cacheWrite) }}</td></tr>
-              <tr class="job-card__token-total-row"><th>Total</th><td data-testid="token-row-total">{{ formatTokens(tb.total) }}</td></tr>
+              <tr class="task-card__token-total-row"><th>Total</th><td data-testid="token-row-total">{{ formatTokens(tb.total) }}</td></tr>
               <tr><th>Model</th><td data-testid="token-row-model">{{ tb.model || '-' }}</td></tr>
               <tr><th>Last update</th><td data-testid="token-row-last-update">{{ tb.lastUpdate || '-' }}</td></tr>
             </tbody>
           </table>
           @if (tb.entries.length > 1) {
-            <div class="job-card__token-runs-title">Per-run</div>
-            <table class="job-card__token-table job-card__token-table--runs">
+            <div class="task-card__token-runs-title">Per-run</div>
+            <table class="task-card__token-table task-card__token-table--runs">
               <thead>
                 <tr><th>When</th><th>Model</th><th>Tokens</th></tr>
               </thead>
@@ -190,7 +190,7 @@
               </tbody>
             </table>
           }
-          <a class="job-card__token-link"
+          <a class="task-card__token-link"
              href="/workspace/tokens"
              data-testid="token-popover-timeline-link"
              (click)="$event.stopPropagation()">
@@ -201,44 +201,44 @@
     }
   </div>
   @if (tagChips().length > 0) {
-    <div class="job-card__tags" data-testid="job-card-tags">
+    <div class="task-card__tags" data-testid="task-card-tags">
       @for (tg of tagChips(); track tg.id) {
-        <span class="job-card__tag-chip"
-              [class.job-card__tag-chip--ghost]="tg.ghost && !tg.concern && !tg.unparseable"
-              [class.job-card__tag-chip--concern]="tg.concern"
-              [class.job-card__tag-chip--unparseable]="tg.unparseable"
+        <span class="task-card__tag-chip"
+              [class.task-card__tag-chip--ghost]="tg.ghost && !tg.concern && !tg.unparseable"
+              [class.task-card__tag-chip--concern]="tg.concern"
+              [class.task-card__tag-chip--unparseable]="tg.unparseable"
               [attr.data-tag-id]="tg.id"
               [attr.data-testid]="tg.concern ? 'job-card-concern-chip' : (tg.unparseable ? 'job-card-unparseable-chip' : null)"
               [style.--tag-color]="tg.color"
-              [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="job-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="job-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
+              [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
       }
     </div>
   }
   @if (gitPill(); as g) {
-    <div class="job-card__git" [appTooltip]="gitTooltip()" data-testid="job-card-git">
-      <span class="job-card__git-branch">⎇ {{ g.branch || '?' }}</span>
-      <span class="job-card__git-count" [class.job-card__git-count--clean]="g.filesChanged === 0">
+    <div class="task-card__git" [appTooltip]="gitTooltip()" data-testid="task-card-git">
+      <span class="task-card__git-branch">⎇ {{ g.branch || '?' }}</span>
+      <span class="task-card__git-count" [class.task-card__git-count--clean]="g.filesChanged === 0">
         {{ g.filesChanged }} {{ g.filesChanged === 1 ? 'file' : 'files' }}
       </span>
       @if (g.totalAdded || g.totalRemoved) {
-        <span class="job-card__git-stat">+{{ g.totalAdded }}/−{{ g.totalRemoved }}</span>
+        <span class="task-card__git-stat">+{{ g.totalAdded }}/−{{ g.totalRemoved }}</span>
       }
     </div>
   }
   @if (commitPillView(); as cp) {
-    <div class="job-card__commit"
-         [class.job-card__commit--review-only]="cp.variant === 'review'"
+    <div class="task-card__commit"
+         [class.task-card__commit--review-only]="cp.variant === 'review'"
          [appTooltip]="commitTooltip()"
-         data-testid="job-card-commit"
+         data-testid="task-card-commit"
          [attr.data-variant]="cp.variant"
          [attr.data-has-files]="cp.hasFiles ? 'true' : null">
       @if (cp.variant === 'full') {
-        <span class="job-card__commit-sha">⏺ {{ cp.shortSha }}</span>
+        <span class="task-card__commit-sha">⏺ {{ cp.shortSha }}</span>
       }
-      <span class="job-card__commit-files">{{ cp.filesChanged }} {{ cp.filesChanged === 1 ? 'file' : 'files' }}</span>
+      <span class="task-card__commit-files">{{ cp.filesChanged }} {{ cp.filesChanged === 1 ? 'file' : 'files' }}</span>
     </div>
   }
-  <div class="job-card__activity">
+  <div class="task-card__activity">
     Last activity: {{ relativeActivity() }}
   </div>
 </div>

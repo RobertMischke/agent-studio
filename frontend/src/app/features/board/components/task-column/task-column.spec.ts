@@ -313,7 +313,7 @@ describe('TaskColumnComponent (smoke)', () => {
     fixture.componentRef.setInput('jobs', [job]);
     fixture.detectChanges();
 
-    const button = fixture.nativeElement.querySelector('[data-testid="job-card-delete"]') as HTMLButtonElement | null;
+    const button = fixture.nativeElement.querySelector('[data-testid="task-card-delete"]') as HTMLButtonElement | null;
     expect(button).toBeTruthy();
     button!.click();
 

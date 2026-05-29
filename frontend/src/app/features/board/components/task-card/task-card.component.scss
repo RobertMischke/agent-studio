@@ -1,4 +1,4 @@
-    .job-card {
+    .task-card {
       background: var(--card-bg, #1e1e2e);
       border: 1px solid var(--border, #333);
       border-radius: 10px;
@@ -39,19 +39,19 @@
     /* Drag-source: while a card is being dragged, dim it to ~55% so the
        drag-image (browser-rendered ghost) reads as the active object.
        The transition above handles the smooth restore on release. */
-    :host(.drag-source) .job-card {
+    :host(.drag-source) .task-card {
       opacity: 0.55;
       will-change: transform, opacity;
     }
     @media (prefers-reduced-motion: reduce) {
-      .job-card { transition: none; }
-      .job-card--just-created { animation: none; }
-      :host(.drag-source) .job-card { will-change: auto; }
+      .task-card { transition: none; }
+      .task-card--just-created { animation: none; }
+      :host(.drag-source) .task-card { will-change: auto; }
     }
     // F2: brief pulse + ring on a freshly-created card so the operator's
     // eye lands on it even on a busy board. Cleared by the host signal
     // after one animation cycle.
-    .job-card--just-created {
+    .task-card--just-created {
       animation: job-card-just-created-pulse 2.4s ease-out 1;
       position: relative;
       z-index: 1;
@@ -64,7 +64,7 @@
       100% { box-shadow: 0 0 0 0   color-mix(in srgb, var(--studio-accent, #d97757) 0%, transparent),
                          0 0 0 0   color-mix(in srgb, var(--studio-accent, #d97757) 0%, transparent); }
     }
-    .job-card:hover {
+    .task-card:hover {
       transform: translateY(-2px);
       // Hover elevation. Two-stop shadow gives a soft cast close to
       // the card and a longer diffused ambient cast — the "premium"
@@ -76,17 +76,17 @@
         0 2px 4px rgba(0, 0, 0, 0.10),
         0 6px 16px rgba(0, 0, 0, 0.14);
     }
-    .job-card--1-preparation { --state-color: #8b5cf6; }
-    .job-card--2-ready { --state-color: #06b6d4; }
-    .job-card--3-progress { --state-color: var(--severity-info); }
+    .task-card--1-preparation { --state-color: #8b5cf6; }
+    .task-card--2-ready { --state-color: #06b6d4; }
+    .task-card--3-progress { --state-color: var(--severity-info); }
     /* ADR-0025: distinct accents for the two review lanes - amber for the
        orchestrator's machine pass, sky for human-attention. The legacy
        4-review class is kept for any data still rendering the old name. */
-    .job-card--4-review { --state-color: #f59e0b; }
-    .job-card--4-auto-review { --state-color: #f59e0b; }
-    .job-card--5-human-review { --state-color: #38bdf8; }
-    .job-card--5-completed { --state-color: #10b981; }
-    .job-card--6-completed { --state-color: #10b981; }
+    .task-card--4-review { --state-color: #f59e0b; }
+    .task-card--4-auto-review { --state-color: #f59e0b; }
+    .task-card--5-human-review { --state-color: #38bdf8; }
+    .task-card--5-completed { --state-color: #10b981; }
+    .task-card--6-completed { --state-color: #10b981; }
 
     /* F39: running tasks must jump out of the column on BOTH themes. The
        prior dark-only halo (hardcoded blue rgba + #1e1e2e base) dissolved
@@ -97,23 +97,23 @@
          - --studio-accent-3    (left ribbon + progress-bar pigment)
        The motion role moves from a breathing box-shadow (poor perf, easy
        to overlook on white) to a constant indeterminate progress bar at
-       the top edge - see .job-card__progress below.
+       the top edge - see .task-card__progress below.
 
-       Compound selector .job-card.job-card--running is deliberate: the
+       Compound selector .task-card.task-card--running is deliberate: the
        light-theme bridge in styles.scss carries
-       `html[data-studio-theme='light'] .job-card { background: ...; }`
-       at specificity (0,2,1). A bare `.job-card--running[_ngcontent-X]`
+       `html[data-studio-theme='light'] .task-card { background: ...; }`
+       at specificity (0,2,1). A bare `.task-card--running[_ngcontent-X]`
        resolves to (0,2,0) and the bridge wins, blanking the running tint
        on the light shell. The compound selector lifts the component-side
        declaration to (0,3,0) so it wins on both themes without !important. */
-    .job-card.job-card--running {
+    .task-card.task-card--running {
       background: var(--studio-bg-running);
       border-color: color-mix(in srgb, var(--studio-accent-3) 45%, transparent);
       border-left-width: 6px;
       border-left-color: var(--studio-accent-3);
       box-shadow: var(--shadow-running);
     }
-    .job-card.job-card--running:hover {
+    .task-card.task-card--running:hover {
       transform: translateY(-2px);
       box-shadow:
         var(--shadow-running),
@@ -130,7 +130,7 @@
        bar sits 1 px inside the top border). Hidden in compact mode (rows
        are too tight) and pinned-static under prefers-reduced-motion
        (handled in the media block above). */
-    .job-card__progress {
+    .task-card__progress {
       position: absolute;
       top: 0;
       left: 0;
@@ -142,7 +142,7 @@
       pointer-events: none;
       background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
     }
-    .job-card__progress::after {
+    .task-card__progress::after {
       content: '';
       position: absolute;
       top: 0;
@@ -162,11 +162,11 @@
     /* F39: under prefers-reduced-motion: reduce we stop the slide but keep
        the bar statically visible (left:0; width:100%) so the running cue
        is preserved for operators with motion sensitivity. This block must
-       come AFTER the .job-card__progress::after declaration above so the
+       come AFTER the .task-card__progress::after declaration above so the
        cascade picks the static state under the media query (equal-
        specificity rule — last one wins). */
     @media (prefers-reduced-motion: reduce) {
-      .job-card__progress::after {
+      .task-card__progress::after {
         animation: none;
         left: 0;
         width: 100%;
@@ -174,13 +174,13 @@
       }
     }
 
-    .job-card__header {
+    .task-card__header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
     }
-    .job-card__project {
+    .task-card__project {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -196,7 +196,7 @@
       max-width: 100%;
       overflow: hidden;
     }
-    .job-card__project-disk {
+    .task-card__project-disk {
       display: inline-grid;
       place-items: center;
       width: 16px;
@@ -209,13 +209,13 @@
       letter-spacing: 0;
       flex: 0 0 auto;
     }
-    .job-card__project-name {
+    .task-card__project-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       min-width: 0;
     }
-    .job-card__owner-chip {
+    .task-card__owner-chip {
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -229,11 +229,11 @@
       max-width: 140px;
       overflow: hidden;
     }
-    .job-card__owner-emoji {
+    .task-card__owner-emoji {
       font-size: 12px;
       line-height: 1;
     }
-    .job-card__owner-name {
+    .task-card__owner-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -244,7 +244,7 @@
        card hover so the cards stay calm in the default board view. The
        button stops propagation so clicking it never opens the detail panel.
        The confirmation prompt itself lives in the parent component. */
-    .job-card__delete {
+    .task-card__delete {
       position: absolute;
       top: 8px;
       right: 8px;
@@ -264,15 +264,15 @@
       opacity: 0;
       transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .job-card--compact .job-card__delete {
+    .task-card--compact .task-card__delete {
       top: 4px;
       right: 4px;
     }
-    .job-card:hover .job-card__delete,
-    .job-card__delete:focus-visible {
+    .task-card:hover .task-card__delete,
+    .task-card__delete:focus-visible {
       opacity: 1;
     }
-    .job-card__delete:hover {
+    .task-card__delete:hover {
       background: rgba(244, 63, 94, 0.15);
       border-color: rgba(244, 63, 94, 0.40);
       color: #fda4af;
@@ -283,7 +283,7 @@
     // place so the operator doesn't have to guess what "⤴" does.
     // Width transitions smoothly via display:flex + max-width; the
     // label is hidden via opacity + width: 0 in the idle state.
-    .job-card__pick-next {
+    .task-card__pick-next {
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -300,41 +300,41 @@
       opacity: 0;
       transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .job-card__pick-next-glyph { font-size: 13px; line-height: 1; }
-    .job-card__pick-next-label {
+    .task-card__pick-next-glyph { font-size: 13px; line-height: 1; }
+    .task-card__pick-next-label {
       overflow: hidden;
       max-width: 0;
       opacity: 0;
       white-space: nowrap;
       transition: max-width 0.18s ease, opacity 0.12s ease;
     }
-    .job-card:hover .job-card__pick-next,
-    .job-card__pick-next:focus-visible {
+    .task-card:hover .task-card__pick-next,
+    .task-card__pick-next:focus-visible {
       opacity: 1;
     }
-    .job-card__pick-next:hover,
-    .job-card__pick-next:focus-visible {
+    .task-card__pick-next:hover,
+    .task-card__pick-next:focus-visible {
       background: color-mix(in srgb, var(--studio-accent, #d97757) 18%, transparent);
       border-color: color-mix(in srgb, var(--studio-accent, #d97757) 45%, transparent);
       color: var(--studio-accent, #d97757);
     }
-    .job-card__pick-next:hover .job-card__pick-next-label,
-    .job-card__pick-next:focus-visible .job-card__pick-next-label {
+    .task-card__pick-next:hover .task-card__pick-next-label,
+    .task-card__pick-next:focus-visible .task-card__pick-next-label {
       max-width: 60px;
       opacity: 1;
     }
     @media (prefers-reduced-motion: reduce) {
-      .job-card__pick-next,
-      .job-card__pick-next-label { transition: none; }
+      .task-card__pick-next,
+      .task-card__pick-next-label { transition: none; }
     }
 
-    .job-card__title {
+    .task-card__title {
       margin: 0 0 8px;
       font-size: 15px;
       font-weight: 600;
       color: var(--studio-fg);
     }
-    .job-card__key-chip {
+    .task-card__key-chip {
       display: inline-block;
       padding: 1px 5px;
       border-radius: 3px;
@@ -350,16 +350,16 @@
       user-select: none;
       white-space: nowrap;
     }
-    .job-card__badges {
+    .task-card__badges {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       margin-bottom: 10px;
     }
-    .job-card__state-pill,
-    .job-card__execution-pill,
-    .job-card__pending-pill,
-    .job-card__type-pill {
+    .task-card__state-pill,
+    .task-card__execution-pill,
+    .task-card__pending-pill,
+    .task-card__type-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -369,7 +369,7 @@
       font-weight: 600;
       letter-spacing: 0.02em;
     }
-    .job-card__pending-pill {
+    .task-card__pending-pill {
       color: var(--severity-warn);
       background: rgba(249, 226, 175, 0.12);
       border: 1px solid rgba(249, 226, 175, 0.28);
@@ -379,7 +379,7 @@
        answering NEEDS_INPUT for this job. Cyan when within budget;
        turns amber as the iteration counter approaches the cap so the
        user can see the loop heading toward the circuit breaker. */
-    .job-card__loop-pill {
+    .task-card__loop-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -393,7 +393,7 @@
       border: 1px solid color-mix(in srgb, var(--studio-accent-3) 35%, transparent);
       cursor: help;
     }
-    .job-card__loop-pill--hot {
+    .task-card__loop-pill--hot {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
@@ -404,7 +404,7 @@
        after it finishes/fails so the user sees the result. Mirrors the
        visual vocabulary of the execution pill so "something is happening
        on this card" reads consistently across lanes. */
-    .job-card__review-pill {
+    .task-card__review-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -416,32 +416,32 @@
       border: 1px solid transparent;
       cursor: help;
     }
-    .job-card__review-dot {
+    .task-card__review-dot {
       width: 7px;
       height: 7px;
       border-radius: 999px;
       background: currentColor;
       flex: 0 0 auto;
     }
-    .job-card__review-pill--generating {
+    .task-card__review-pill--generating {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
     }
-    .job-card__review-pill--generating .job-card__review-dot {
+    .task-card__review-pill--generating .task-card__review-dot {
       animation: pulse-running 1.3s infinite;
     }
-    .job-card__review-pill--ready {
+    .task-card__review-pill--ready {
       color: var(--studio-accent-success-strong);
       background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
-    .job-card__review-pill--failed {
+    .task-card__review-pill--failed {
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
-    .job-card__auto-review-pill {
+    .task-card__auto-review-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -453,37 +453,37 @@
       border: 1px solid transparent;
       cursor: help;
     }
-    .job-card__auto-review-dot {
+    .task-card__auto-review-dot {
       width: 7px;
       height: 7px;
       border-radius: 999px;
       background: currentColor;
       flex: 0 0 auto;
     }
-    .job-card__auto-review-pill--active {
+    .task-card__auto-review-pill--active {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
     }
-    .job-card__auto-review-pill--active .job-card__auto-review-dot {
+    .task-card__auto-review-pill--active .task-card__auto-review-dot {
       animation: pulse-running 1.3s infinite;
     }
-    .job-card__auto-review-pill--queued {
+    .task-card__auto-review-pill--queued {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-warn) 35%, transparent);
     }
-    .job-card__auto-review-pill--done {
+    .task-card__auto-review-pill--done {
       color: var(--studio-accent-success-strong);
       background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
-    .job-card__auto-review-pill--stale {
+    .task-card__auto-review-pill--stale {
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
-    .job-card__issue-pill {
+    .task-card__issue-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -495,29 +495,29 @@
       border: 1px solid transparent;
       cursor: help;
     }
-    .job-card__issue-pill--info {
+    .task-card__issue-pill--info {
       color: var(--studio-accent-3-strong);
       background: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-3) 35%, transparent);
     }
-    .job-card__issue-pill--warn {
+    .task-card__issue-pill--warn {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
     }
-    .job-card__issue-pill--high {
+    .task-card__issue-pill--high {
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 40%, transparent);
     }
-    .job-card__state-pill {
+    .task-card__state-pill {
       background: rgba(255,255,255,0.06);
       color: var(--studio-fg-dim);
     }
-    .job-card__execution-pill {
+    .task-card__execution-pill {
       border: 1px solid transparent;
     }
-    .job-card__execution-dot {
+    .task-card__execution-dot {
       width: 7px;
       height: 7px;
       border-radius: 999px;
@@ -528,16 +528,16 @@
        semantic accent tokens so they flip per theme. F57 completed the
        migration for all remaining pill variants (loop, auto-review
        queued/done/stale, review ready/failed, issue, phase, concern). */
-    .job-card__execution-pill--running {
+    .task-card__execution-pill--running {
       color: var(--studio-accent-3-strong);
       background: color-mix(in srgb, var(--studio-accent-3) 18%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
     }
-    .job-card__execution-pill--running .job-card__execution-dot {
+    .task-card__execution-pill--running .task-card__execution-dot {
       animation: pulse-running 1.3s infinite;
     }
-    .job-card__execution-pill--failed,
-    .job-card__execution-pill--cancelled {
+    .task-card__execution-pill--failed,
+    .task-card__execution-pill--cancelled {
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
@@ -550,26 +550,26 @@
        palette per outcome so the Ready group reads at a glance: blue for
        human-owned phases, amber when intake is mid-flight, red on a
        block, green on pass. */
-    .job-card__phase-pill {
+    .task-card__phase-pill {
       border: 1px solid transparent;
       font-weight: 600;
     }
-    .job-card__phase-pill--human-ready {
+    .task-card__phase-pill--human-ready {
       color: #7dd3fc;
       background: rgba(56, 189, 248, 0.10);
       border-color: rgba(56, 189, 248, 0.28);
     }
-    .job-card__phase-pill--intake-running {
+    .task-card__phase-pill--intake-running {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
     }
-    .job-card__phase-pill--intake-blocked {
+    .task-card__phase-pill--intake-blocked {
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
     }
-    .job-card__phase-pill--intake-passed {
+    .task-card__phase-pill--intake-passed {
       color: var(--studio-accent-success-strong);
       background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
@@ -577,32 +577,32 @@
     /* Backlog-lane spec: structural type chip (Bug / Feature / Chore) and the
        lightweight tag chips. The chore variant is deliberately quieter so
        it does not steal attention from real classifications. */
-    .job-card__type-pill {
+    .task-card__type-pill {
       border: 1px solid transparent;
       font-weight: 600;
     }
-    .job-card__type-pill--bug {
+    .task-card__type-pill--bug {
       color: #fca5a5;
       background: rgba(248, 113, 113, 0.12);
       border-color: rgba(248, 113, 113, 0.28);
     }
-    .job-card__type-pill--feature {
+    .task-card__type-pill--feature {
       color: #93c5fd;
       background: rgba(96, 165, 250, 0.12);
       border-color: rgba(96, 165, 250, 0.30);
     }
-    .job-card__type-pill--chore {
+    .task-card__type-pill--chore {
       color: var(--studio-fg-dim);
       background: rgba(255, 255, 255, 0.04);
       border-color: rgba(255, 255, 255, 0.10);
     }
-    .job-card__tags {
+    .task-card__tags {
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
       margin: 2px 0 6px;
     }
-    .job-card__tag-chip {
+    .task-card__tag-chip {
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.02em;
@@ -612,7 +612,7 @@
       background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 22%, rgba(0,0,0,0));
       border: 1px solid var(--tag-color, var(--studio-fg-dim));
     }
-    .job-card__tag-chip--ghost {
+    .task-card__tag-chip--ghost {
       color: var(--studio-fg-dim);
       background: rgba(255, 255, 255, 0.02);
       border: 1px dashed rgba(148, 163, 184, 0.40);
@@ -621,7 +621,7 @@
        tone signals "the orchestrator looked at this and flagged
        something" without overwhelming a card that already carries
        ordinary tags. Tooltip names the source aspect. */
-    .job-card__tag-chip--concern {
+    .task-card__tag-chip--concern {
       color: var(--studio-accent-warn-strong);
       background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
       border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 55%, transparent);
@@ -629,7 +629,7 @@
       align-items: center;
       gap: 3px;
     }
-    .job-card__tag-chip-warn {
+    .task-card__tag-chip-warn {
       font-size: 10px;
       line-height: 1;
     }
@@ -637,7 +637,7 @@
     // Indigo/violet tint communicates "format issue" instead of the
     // amber "quality concern" tone — the operator can tell at a glance
     // which kind of auto-review verdict landed.
-    .job-card__tag-chip--unparseable {
+    .task-card__tag-chip--unparseable {
       color: #c7d2fe;
       background: rgba(129, 140, 248, 0.12);
       border: 1px dashed rgba(129, 140, 248, 0.55);
@@ -645,12 +645,12 @@
       align-items: center;
       gap: 3px;
     }
-    .job-card__tag-chip-unparseable-glyph {
+    .task-card__tag-chip-unparseable-glyph {
       font-size: 10px;
       line-height: 1;
       opacity: 0.8;
     }
-    .job-card__meta {
+    .task-card__meta {
       display: flex;
       justify-content: space-between;
       gap: 6px;
@@ -659,38 +659,38 @@
       color: var(--studio-fg-dim);
       margin-bottom: 4px;
     }
-    .job-card__effective-model {
+    .task-card__effective-model {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       font-size: 11px;
       color: var(--studio-fg-dim);
     }
-    .job-card__effective-model-icon {
+    .task-card__effective-model-icon {
       font-size: 12px;
       line-height: 1;
       flex: 0 0 auto;
     }
-    .job-card__effective-model-cli {
+    .task-card__effective-model-cli {
       font-weight: 600;
       color: var(--studio-fg-dim);
     }
-    .job-card__effective-model-name {
+    .task-card__effective-model-name {
       font-family: var(--font-mono, monospace);
       color: var(--studio-fg);
     }
-    .job-card__effective-model--default .job-card__effective-model-name {
+    .task-card__effective-model--default .task-card__effective-model-name {
       font-style: italic;
       color: var(--studio-fg-dim);
     }
-    .job-card__effective-model--default .job-card__effective-model-cli {
+    .task-card__effective-model--default .task-card__effective-model-cli {
       font-style: italic;
     }
-    .job-card__activity {
+    .task-card__activity {
       font-size: 11px;
       color: var(--studio-fg-muted);
     }
-    .job-card__git {
+    .task-card__git {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -702,11 +702,11 @@
       font-size: 11px;
       color: var(--studio-fg-dim);
     }
-    .job-card__git-branch { color: #a5b4fc; font-family: var(--font-mono, monospace); }
-    .job-card__git-count { color: #fbbf24; font-weight: 600; }
-    .job-card__git-count--clean { color: #86efac; }
-    .job-card__git-stat { color: var(--studio-fg-dim); font-family: var(--font-mono, monospace); font-size: 10px; }
-    .job-card__commit {
+    .task-card__git-branch { color: #a5b4fc; font-family: var(--font-mono, monospace); }
+    .task-card__git-count { color: #fbbf24; font-weight: 600; }
+    .task-card__git-count--clean { color: #86efac; }
+    .task-card__git-stat { color: var(--studio-fg-dim); font-family: var(--font-mono, monospace); font-size: 10px; }
+    .task-card__commit {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -718,12 +718,12 @@
       font-size: 11px;
       color: #86efac;
     }
-    .job-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; }
-    .job-card__commit-files { color: var(--studio-fg-dim); }
+    .task-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; }
+    .task-card__commit-files { color: var(--studio-fg-dim); }
     // Review-lane variant: SHA is hidden, so the files count carries the
     // pill on its own. Tighten the colour so it does not look like a
     // muted secondary chip - this is the only indicator on the card.
-    .job-card__commit--review-only .job-card__commit-files {
+    .task-card__commit--review-only .task-card__commit-files {
       color: #86efac;
       font-weight: 600;
     }
@@ -732,12 +732,12 @@
        on this task. The popover opens on hover and on keyboard focus, so
        the bubble is keyboard-reachable as well. We render it as a button
        (not a div) so screen readers and Tab navigation pick it up. */
-    .job-card__token-wrap {
+    .task-card__token-wrap {
       position: relative;
       display: inline-flex;
       align-items: center;
     }
-    .job-card__token-bubble {
+    .task-card__token-bubble {
       min-width: 28px;
       height: 18px;
       padding: 0 6px;
@@ -753,7 +753,7 @@
       background: rgba(148,163,184,0.18);
       font-variant-numeric: tabular-nums;
     }
-    .job-card__token-bubble:focus-visible {
+    .task-card__token-bubble:focus-visible {
       outline: 2px solid #7dd3fc;
       outline-offset: 2px;
     }
@@ -761,28 +761,28 @@
        500k-5M = mauve, > 5M = peach. Tier thresholds are computed in the
        component (see tokenBubble()). Catppuccin palette to stay in line
        with the rest of the board. */
-    .job-card__token-bubble--neutral {
+    .task-card__token-bubble--neutral {
       color: var(--studio-fg-dim);
       background: rgba(148,163,184,0.18);
       border-color: rgba(148,163,184,0.32);
     }
-    .job-card__token-bubble--blue {
+    .task-card__token-bubble--blue {
       color: #bae6fd;
       background: rgba(56,189,248,0.18);
       border-color: rgba(56,189,248,0.40);
     }
-    .job-card__token-bubble--mauve {
+    .task-card__token-bubble--mauve {
       color: #e9d5ff;
       background: rgba(192,132,252,0.20);
       border-color: rgba(192,132,252,0.42);
     }
-    .job-card__token-bubble--peach {
+    .task-card__token-bubble--peach {
       color: #fed7aa;
       background: rgba(251,146,60,0.22);
       border-color: rgba(251,146,60,0.45);
     }
 
-    .job-card__token-popover {
+    .task-card__token-popover {
       display: none;
       position: absolute;
       bottom: calc(100% + 8px);
@@ -801,13 +801,13 @@
       text-align: left;
       pointer-events: none;
     }
-    .job-card__token-wrap:hover .job-card__token-popover,
-    .job-card__token-bubble:focus-visible + .job-card__token-popover,
-    .job-card__token-wrap:focus-within .job-card__token-popover {
+    .task-card__token-wrap:hover .task-card__token-popover,
+    .task-card__token-bubble:focus-visible + .task-card__token-popover,
+    .task-card__token-wrap:focus-within .task-card__token-popover {
       display: block;
       pointer-events: auto;
     }
-    .job-card__token-popover-title {
+    .task-card__token-popover-title {
       display: block;
       font-size: 11px;
       font-weight: 700;
@@ -816,48 +816,48 @@
       color: var(--studio-tooltip-fg-dim);
       margin-bottom: 6px;
     }
-    .job-card__token-table {
+    .task-card__token-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 11px;
     }
-    .job-card__token-table th {
+    .task-card__token-table th {
       text-align: left;
       font-weight: 500;
       color: var(--studio-tooltip-fg-dim);
       padding: 2px 8px 2px 0;
     }
-    .job-card__token-table td {
+    .task-card__token-table td {
       text-align: right;
       font-variant-numeric: tabular-nums;
       color: var(--studio-tooltip-fg-strong);
       padding: 2px 0;
     }
-    .job-card__token-total-row th,
-    .job-card__token-total-row td {
+    .task-card__token-total-row th,
+    .task-card__token-total-row td {
       border-top: 1px solid var(--studio-tooltip-border);
       padding-top: 4px;
       font-weight: 700;
     }
-    .job-card__token-runs-title {
+    .task-card__token-runs-title {
       margin-top: 8px;
       font-size: 11px;
       font-weight: 700;
       color: var(--studio-tooltip-fg-dim);
     }
-    .job-card__token-table--runs th,
-    .job-card__token-table--runs td {
+    .task-card__token-table--runs th,
+    .task-card__token-table--runs td {
       font-size: 10px;
       padding: 2px 6px 2px 0;
     }
-    .job-card__token-link {
+    .task-card__token-link {
       display: inline-block;
       margin-top: 8px;
       font-size: 11px;
       color: var(--studio-tooltip-link);
       text-decoration: none;
     }
-    .job-card__token-link:hover { text-decoration: underline; }
+    .task-card__token-link:hover { text-decoration: underline; }
 
     /* Compact-card mode: collapse the card to a single dense row showing
        only what is needed to find a task by name. CLI icon + project
@@ -866,7 +866,7 @@
        activity line) is hidden so the user can fit many more cards on
        screen. The drag-handle, click-to-open behaviour, and per-state
        border accent are preserved. */
-    .job-card--compact {
+    .task-card--compact {
       padding: 6px 10px;
       border-radius: 8px;
       // Compact cards have a known small rendered height — tighten the
@@ -874,15 +874,15 @@
       // user sees once cards near the viewport are painted.
       contain-intrinsic-size: 56px;
     }
-    .job-card--compact .job-card__header,
-    .job-card--compact .job-card__badges,
-    .job-card--compact .job-card__meta,
-    .job-card--compact .job-card__git,
-    .job-card--compact .job-card__commit,
-    .job-card--compact .job-card__activity {
+    .task-card--compact .task-card__header,
+    .task-card--compact .task-card__badges,
+    .task-card--compact .task-card__meta,
+    .task-card--compact .task-card__git,
+    .task-card--compact .task-card__commit,
+    .task-card--compact .task-card__activity {
       display: none;
     }
-    .job-card--compact .job-card__title {
+    .task-card--compact .task-card__title {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -892,14 +892,14 @@
       line-height: 1.25;
       min-width: 0;
     }
-    .job-card--compact .job-card__title-text {
+    .task-card--compact .task-card__title-text {
       flex: 1 1 auto;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .job-card--compact .job-card__compact-disk {
+    .task-card--compact .task-card__compact-disk {
       display: inline-grid;
       place-items: center;
       width: 16px;
@@ -911,12 +911,12 @@
       font-weight: 800;
       flex: 0 0 auto;
     }
-    .job-card--compact .job-card__compact-cli {
+    .task-card--compact .task-card__compact-cli {
       font-size: 12px;
       line-height: 1;
       flex: 0 0 auto;
     }
-    .job-card--compact .job-card__compact-time {
+    .task-card--compact .task-card__compact-time {
       font-size: 10px;
       color: var(--studio-fg-muted);
       font-variant-numeric: tabular-nums;
@@ -928,7 +928,7 @@
        because a stack of sliding bars in a dense lane is more noise than
        signal. The steady accent (tinted bg + left ribbon + outline ring
        from --shadow-running) still marks the row as the active one. */
-    .job-card.job-card--compact.job-card--running {
+    .task-card.task-card--compact.task-card--running {
       background: var(--studio-bg-running);
     }
-    .job-card--compact .job-card__progress { display: none; }
+    .task-card--compact .task-card__progress { display: none; }

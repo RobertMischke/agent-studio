@@ -87,7 +87,7 @@
 
   // F39: "Running" state on a job-card / pill is a recurring visual that
   // needs to flip with the theme. The tint is built once here so consumers
-  // (.job-card--running, future board surfaces) read a single token instead
+  // (.task-card--running, future board surfaces) read a single token instead
   // of repeating the color-mix recipe. Built on top of --studio-bg-elevated
   // so card-on-lane stays correct on both themes.
   --studio-bg-running: color-mix(in srgb, var(--studio-accent-3) 14%, var(--studio-bg-elevated));

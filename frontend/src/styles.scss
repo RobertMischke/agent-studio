@@ -33,7 +33,7 @@ body {
  * stroke on top of the existing dark stylesheets: we flip the shared
  * CSS variables (so any component that reads them switches), and add
  * targeted overrides for the loudest hardcoded hex backgrounds
- * (`.job-card`, `.column`, `.dashboard`, `.pane`, `.header`, status-
+ * (`.task-card`, `.column`, `.dashboard`, `.pane`, `.header`, status-
  * bar, detail panes, etc.) so the projected dashboard + task detail
  * read as light surfaces instead of a dark-on-light mismatch.
  *
@@ -76,19 +76,19 @@ html[data-studio-theme='light'] {
   }
   .column__title,
   .column__header { color: #1a1a1a; }
-  .job-card {
+  .task-card {
     background: #ffffff;
     color: #1a1a1a;
     border-color: #e1e1e1;
     box-shadow: 0 1px 2px rgba(0,0,0,0.06);
   }
-  .job-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); }
-  .job-card__title, .job-card__meta, .job-card__id, .job-card__heading,
-  .job-card__footer, .job-card__metric, .job-card__chip {
+  .task-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); }
+  .task-card__title, .task-card__meta, .task-card__id, .task-card__heading,
+  .task-card__footer, .task-card__metric, .task-card__chip {
     color: #1a1a1a;
   }
-  .job-card__subtle, .job-card__age, .job-card__client,
-  .job-card__cli-name, .job-card__owner-name {
+  .task-card__subtle, .task-card__age, .task-card__client,
+  .task-card__cli-name, .task-card__owner-name {
     color: #6e6e6e;
   }
   // Pills and small chips on the card. The component-side SCSS was
@@ -97,13 +97,13 @@ html[data-studio-theme='light'] {
   // component values are now CSS variables that resolve to the light
   // theme correctly. Kept the colours that diverge from token defaults
   // (chip backgrounds are component-local, not in the studio palette).
-  .job-card__owner-chip {
+  .task-card__owner-chip {
     background: rgba(0, 0, 0, 0.05);
     border-color: rgba(0, 0, 0, 0.10);
     color: #3a3a3a;
   }
-  .job-card__delete { color: var(--studio-fg-muted); }
-  .job-card__delete:hover {
+  .task-card__delete { color: var(--studio-fg-muted); }
+  .task-card__delete:hover {
     background: rgba(220, 38, 38, 0.08);
     border-color: rgba(220, 38, 38, 0.30);
     color: #b91c1c;
