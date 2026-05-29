@@ -204,6 +204,25 @@
   --studio-tooltip-border: rgba(148, 163, 184, 0.28);
 
   // ---------------------------------------------------------------------------
+  // Multiplier badge — model-cost indicator pill on the model picker.
+  // "Paid" tier uses Mocha pink to signal a non-free run; "free" tier
+  // re-uses the global pass severity color. Component reads only these
+  // two foreground tokens; the matching background tint is built in
+  // place via color-mix so the multiplier stays visually consistent
+  // with the rest of the pill family.
+  // ---------------------------------------------------------------------------
+  --studio-multiplier-fg:      var(--color-mocha-pink);
+  --studio-multiplier-fg-free: var(--severity-pass);
+
+  // ---------------------------------------------------------------------------
+  // Overlay panel — backdrop surface for the maximised activity-log
+  // dialog (job-detail). Sits underneath the modal scrim; the panel
+  // body picks the deepest Mocha tone so the overlay reads as the
+  // bottom-most surface above the editor.
+  // ---------------------------------------------------------------------------
+  --studio-bg-overlay: var(--color-mocha-crust);
+
+  // ---------------------------------------------------------------------------
   // Elevations — shadow tokens by USE-CASE (Tier-2 alias over --shadow-*).
   //
   // When a component needs a drop shadow, pick the elevation matching the
@@ -469,6 +488,14 @@
   --studio-tooltip-fg-dim: var(--color-grey-700);
   --studio-tooltip-link:   var(--color-blue-700);
   --studio-tooltip-border: rgba(0, 0, 0, 0.14);
+
+  // Multiplier badge — light theme keeps mocha-pink and severity-pass
+  // strong enough to read on the paper surface; no override needed yet.
+
+  // Overlay panel — light shell uses the elevated paper tone so the
+  // overlay still reads as the deepest surface without going black on
+  // a white theme.
+  --studio-bg-overlay: var(--studio-bg-elevated);
 
   // Elevations — softer drop shadows on white. Same use-case aliases as dark.
   --elevation-card:     var(--shadow-100-light);
