@@ -69,6 +69,8 @@
 
   <app-pane-toggle-bar
     [panesVisible]="panesVisible()"
+    [commitCount]="gitCommitCount()"
+    [gitTooltip]="gitToggleTooltip()"
     (toggleRequest)="togglePane($event)"
     (openInVsCode)="openInVsCode()" />
 

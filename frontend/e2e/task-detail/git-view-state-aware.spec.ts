@@ -5,12 +5,16 @@ import * as path from 'path';
  * F55: State-aware Git View display modes.
  *
  * The run-git-viewer component renders an inline panel below the run
- * timeline that switches between three modes based on the job's state:
+ * timeline that switches between two modes based on the job's state:
  *
- * 1. **Committed** (4-auto-review, 5-human-review, 6-completed): compact
- *    hash cards with commit message, author time, and on-demand diff.
- * 2. **Worktree** (3-progress): live working-tree status with auto-poll.
- * 3. **Idle** (0-backlog, 1-*, 2-ready): empty state placeholder.
+ * 1. **Worktree** (3-progress): live working-tree status with auto-poll.
+ * 2. **Idle** (0-backlog, 1-*, 2-ready): empty state placeholder.
+ *
+ * Committed-mode used to render an inline "COMMITTED N commits" strip
+ * with hash cards here too, but that duplicated the Git pane. It was
+ * replaced by a small numeric badge on the Git pane-toggle (see the
+ * "Git pane-toggle commit badge" describe block below) so review-lane
+ * tasks no longer carry a redundant `COMMITTED 0 commits` strip.
  *
  * Each scenario is tested with fully-mocked API routes so there is no
  * dependency on a running backend or real git repository.
@@ -303,108 +307,57 @@ test.describe('F55: Git View state-aware display', () => {
     });
   });
 
-  test('committed mode (single commit) shows one hash card', async ({ page }) => {
-    const singleCommit = [COMMITS[2]];
-    const detail = makeDetail('4-auto-review', true);
-    detail.info.commits = singleCommit;
-    detail.info.commit = singleCommit[0];
-
-    await installRoutes(page, '4-auto-review', true);
-    // Override the detail route with single-commit variant
-    const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    await page.route(new RegExp(`/api/jobs/${idEsc}(\\?|$)`), (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(detail),
-      }),
-    );
-
-    await page.goto(
-      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
-    );
-
-    const inline = page.getByTestId('rgv-inline-committed');
-    await expect(inline).toBeVisible({ timeout: 10_000 });
-
-    const cards = page.getByTestId('rgv-commit-card');
-    await expect(cards).toHaveCount(1);
-    await expect(cards.first()).toContainText(COMMITS[2].shortSha.slice(0, 7));
-
-    if (RESULTS_DIR) {
-      await dismissErrorDialog(page);
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'f55-git-view-committed-single-light.png'),
-      });
-    }
-  });
-
-  test('committed mode (multi commit) shows all cards, newest first', async ({ page }) => {
+  test('review-lane task no longer shows the inline COMMITTED strip', async ({ page }) => {
+    // Multi-commit case (3 commits): we want to verify the inline panel is gone.
     await installRoutes(page, '6-completed', true);
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
     );
 
-    const inline = page.getByTestId('rgv-inline-committed');
-    await expect(inline).toBeVisible({ timeout: 10_000 });
-    await expect(inline).toContainText('Committed');
-    await expect(inline).toContainText('3 commits');
+    // Detail-view chrome (always present once the detail mounts) is the
+    // proxy for "task detail rendered"; the Git pane-toggle in the header
+    // toolbar appears whether or not the Git pane is currently visible.
+    await dismissErrorDialog(page);
+    await expect(page.getByTestId('pane-toggle-git')).toBeVisible({ timeout: 10_000 });
 
-    const cards = page.getByTestId('rgv-commit-card');
-    await expect(cards).toHaveCount(3);
-
-    // Newest first (reversed from the API order)
-    await expect(cards.nth(0)).toHaveAttribute('data-sha', COMMITS[2].sha);
-    await expect(cards.nth(1)).toHaveAttribute('data-sha', COMMITS[1].sha);
-    await expect(cards.nth(2)).toHaveAttribute('data-sha', COMMITS[0].sha);
-
-    await expect(cards.nth(0)).toContainText('WCAG contrast');
-    await expect(cards.nth(2)).toContainText('F47 cleanup');
-
-    if (RESULTS_DIR) {
-      await dismissErrorDialog(page);
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'f55-git-view-committed-multi-light.png'),
-      });
-    }
+    // The old inline view is gone — both the container and the commit cards.
+    await expect(page.getByTestId('rgv-inline-committed')).toHaveCount(0);
+    await expect(page.getByTestId('rgv-commit-card')).toHaveCount(0);
   });
 
-  test('committed mode: clicking card toggles inline diff', async ({ page }) => {
-    await installRoutes(page, '5-human-review', true);
+  test('Git pane-toggle carries a numeric commit badge', async ({ page }) => {
+    await installRoutes(page, '6-completed', true);
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
     );
 
-    const inline = page.getByTestId('rgv-inline-committed');
-    await expect(inline).toBeVisible({ timeout: 10_000 });
+    await dismissErrorDialog(page);
+    await expect(page.getByTestId('pane-toggle-git')).toBeVisible({ timeout: 10_000 });
 
-    // Click via evaluate to bypass any error-dialog overlay from
-    // HeaderQuotaComponent that fires on mocked quota endpoints.
-    await page.evaluate((sha) => {
-      const cards = Array.from(
-        document.querySelectorAll<HTMLElement>('[data-testid="rgv-commit-card"]'),
-      );
-      const target = cards.find((c) => c.getAttribute('data-sha') === sha);
-      target?.querySelector('button')?.click();
-    }, COMMITS[2].sha);
+    const badge = page.getByTestId('pane-toggle-git-badge');
+    await expect(badge).toBeVisible({ timeout: 10_000 });
+    await expect(badge).toHaveText('3');
 
-    const diffArea = page.getByTestId('rgv-commit-diff-area');
-    await expect(diffArea).toBeVisible({ timeout: 5_000 });
+    if (RESULTS_DIR) {
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pane-toggle-git-badge-3.png'),
+      });
+    }
+  });
 
-    const diffBody = page.getByTestId('rgv-commit-diff-body');
-    await expect(diffBody).toBeVisible();
-    await expect(diffBody).toContainText(COMMITS[2].shortSha);
+  test('Git pane-toggle hides the badge when no commits exist', async ({ page }) => {
+    // Review-lane state with no commits — the prior inline view rendered a
+    // misleading "COMMITTED 0 commits" strip; the new design must render
+    // nothing on the toggle either.
+    await installRoutes(page, '4-auto-review', false);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
 
-    // Click again to collapse
-    await page.evaluate((sha) => {
-      const cards = Array.from(
-        document.querySelectorAll<HTMLElement>('[data-testid="rgv-commit-card"]'),
-      );
-      const target = cards.find((c) => c.getAttribute('data-sha') === sha);
-      target?.querySelector('button')?.click();
-    }, COMMITS[2].sha);
-
-    await expect(diffArea).not.toBeVisible();
+    await dismissErrorDialog(page);
+    await expect(page.getByTestId('pane-toggle-git')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('rgv-inline-committed')).toHaveCount(0);
+    await expect(page.getByTestId('pane-toggle-git-badge')).toHaveCount(0);
   });
 
   test('worktree mode shows live status with file list', async ({ page }) => {

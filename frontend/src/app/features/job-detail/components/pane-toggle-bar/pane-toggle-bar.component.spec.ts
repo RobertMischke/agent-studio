@@ -42,3 +42,67 @@ describe('PaneToggleBarComponent (smoke)', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 });
+
+/**
+ * Hand-tuned render-path coverage for the Git commit-count badge.
+ *
+ * The badge replaces the now-removed `COMMITTED N commits` strip that
+ * used to render above the activity log. It must:
+ *   - render when commitCount > 0,
+ *   - reflect the bound number verbatim,
+ *   - stay hidden for commitCount === 0 (no `0` badge).
+ *
+ * Selectors use `data-testid="pane-toggle-git-badge"` so this is decoupled
+ * from styling. The Playwright spec asserts the same testid.
+ */
+describe('PaneToggleBarComponent Git badge', () => {
+  async function mount(commitCount: number) {
+    await TestBed.configureTestingModule({
+      imports: [PaneToggleBarComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PaneToggleBarComponent);
+    fixture.componentRef.setInput('panesVisible', { prompt: true, protocol: true, git: true });
+    fixture.componentRef.setInput('commitCount', commitCount);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders the badge with the commit count when commitCount > 0', async () => {
+    const fixture = await mount(3);
+    const badge = fixture.nativeElement.querySelector(
+      '[data-testid="pane-toggle-git-badge"]',
+    ) as HTMLElement | null;
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent?.trim()).toBe('3');
+  });
+
+  it('omits the badge when commitCount is 0', async () => {
+    const fixture = await mount(0);
+    const badge = fixture.nativeElement.querySelector(
+      '[data-testid="pane-toggle-git-badge"]',
+    ) as HTMLElement | null;
+    expect(badge).toBeNull();
+  });
+
+  it('updates the badge text when the bound count changes', async () => {
+    const fixture = await mount(1);
+    let badge = fixture.nativeElement.querySelector(
+      '[data-testid="pane-toggle-git-badge"]',
+    ) as HTMLElement | null;
+    expect(badge?.textContent?.trim()).toBe('1');
+
+    fixture.componentRef.setInput('commitCount', 7);
+    fixture.detectChanges();
+
+    badge = fixture.nativeElement.querySelector(
+      '[data-testid="pane-toggle-git-badge"]',
+    ) as HTMLElement | null;
+    expect(badge?.textContent?.trim()).toBe('7');
+  });
+});

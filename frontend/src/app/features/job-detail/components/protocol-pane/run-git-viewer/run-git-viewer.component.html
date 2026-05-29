@@ -1,46 +1,14 @@
-<!-- F55: inline state-aware git panel -->
+<!--
+  F55: inline state-aware git panel. The 'committed' case was retired
+  - the Git pane already surfaces the same commit list (with file counts
+  and diffs), and the protocol pane now carries the commit count as a
+  small badge on the Git pane-toggle in the header. Keeping it here
+  duplicated the same information in two places and produced a noisy
+  "Committed 0 commits" strip on review-lane tasks that had not yet
+  auto-committed. Inline view now only renders worktree / idle modes.
+-->
 @if (!visible()) {
   @switch (displayMode()) {
-    @case ('committed') {
-      <div class="rgv-inline" data-testid="rgv-inline-committed">
-        <div class="rgv-inline__header">
-          <span class="rgv-inline__badge rgv-inline__badge--committed">Committed</span>
-          <span class="rgv-inline__count">{{ commitChain().length }} {{ commitChain().length === 1 ? 'commit' : 'commits' }}</span>
-        </div>
-        <div class="rgv-inline__cards">
-          @for (c of commitChain(); track c.sha) {
-            <div class="rgv-inline__card"
-                 [class.rgv-inline__card--expanded]="expandedCommitSha() === c.sha"
-                 [attr.data-testid]="'rgv-commit-card'"
-                 [attr.data-sha]="c.sha">
-              <button type="button"
-                      class="rgv-inline__card-row"
-                      (click)="toggleCommitDiff(c.sha)">
-                <span class="rgv-inline__dot" aria-hidden="true">●</span>
-                <code class="rgv-inline__sha">{{ short(c.sha) }}</code>
-                <span class="rgv-inline__subject">{{ commitSubject(c.message) }}</span>
-                <span class="rgv-inline__meta">{{ c.filesChanged }}f · {{ relativeTime(c.at) }}</span>
-                <span class="rgv-inline__toggle" aria-hidden="true">{{ expandedCommitSha() === c.sha ? '▾' : '▸' }}</span>
-              </button>
-              @if (expandedCommitSha() === c.sha) {
-                <div class="rgv-inline__diff-area" data-testid="rgv-commit-diff-area">
-                  @if (commitDiffState() === 'loading') {
-                    <div class="rgv-inline__diff-placeholder">Loading diff for {{ short(c.sha) }}...</div>
-                  } @else if (commitDiffState() === 'error') {
-                    <div class="rgv-inline__diff-placeholder rgv-inline__diff-placeholder--error">Could not load diff.</div>
-                  } @else if (commitDiffLines().length === 0) {
-                    <div class="rgv-inline__diff-placeholder">No diff available.</div>
-                  } @else {
-                    <pre class="rgv-inline__diff-body" data-testid="rgv-commit-diff-body"><code>@for (line of commitDiffLines(); track $index) {<span [class]="'rgv__line rgv__line--' + line.kind">@if (line.prefix) {<span class="rgv__line-prefix">{{ line.prefix }}</span>}<span class="rgv__line-code">{{ line.body }}</span>
-</span>}</code></pre>
-                  }
-                </div>
-              }
-            </div>
-          }
-        </div>
-      </div>
-    }
     @case ('worktree') {
       <div class="rgv-inline" data-testid="rgv-inline-worktree">
         <div class="rgv-inline__header">

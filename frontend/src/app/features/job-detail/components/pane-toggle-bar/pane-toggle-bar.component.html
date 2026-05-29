@@ -11,12 +11,19 @@
           data-testid="pane-toggle-protocol"
           aria-label="Toggle Protocol pane"
           [appTooltip]="'Protocol &amp; chat'">🤖</button>
-  <button class="pane-toggle"
+  <button class="pane-toggle pane-toggle--has-badge"
           [class.pane-toggle--active]="panesVisible().git"
           (click)="toggleRequest.emit('git')"
           data-testid="pane-toggle-git"
           aria-label="Toggle Git pane"
-          [appTooltip]="'Git diff &amp; file tree'">🌿</button>
+          [appTooltip]="gitTooltipText()">
+    <span class="pane-toggle__icon" aria-hidden="true">🌿</span>
+    @if (commitCount() > 0) {
+      <span class="pane-toggle__badge"
+            data-testid="pane-toggle-git-badge"
+            [attr.aria-label]="commitCount() + ' commits'">{{ commitCount() }}</span>
+    }
+  </button>
   <span class="detail__panes-toolbar-spacer"></span>
   <button class="pane-toggle"
           (click)="openInVsCode.emit()"

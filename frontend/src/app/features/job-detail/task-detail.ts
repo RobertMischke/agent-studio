@@ -51,18 +51,9 @@ import { CliConfigCardComponent } from './components/cli-config-card/cli-config-
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
 import { TriageActionPayload } from './state/triage-actions.model';
 import {
-  claudeSessionTooltip,
-  cliTypeLabel,
-  formatDate,
-  formatDateTime,
-  formatMultiplier,
-  formatRateWindow,
-  formatResetIn,
-  formatTime,
-  formatTokens,
-  isCliErrorMessage,
-  rateLimitTooltip,
-  stateLabel,
+  claudeSessionTooltip, cliTypeLabel, formatDate, formatDateTime, formatMultiplier,
+  formatRateWindow, formatResetIn, formatTime, formatTokens, gitCommitCount,
+  gitToggleTooltip, isCliErrorMessage, rateLimitTooltip, stateLabel,
 } from './services/task-detail-formatters';
 
 import { TooltipDirective } from '../../components/tooltip';
@@ -194,7 +185,8 @@ export class JobDetailComponent implements OnDestroy {
   readonly paneWeights = this.layout.paneWeights;
   readonly maximizedPane = this.layout.maximizedPane;
   readonly paneSplitterDragging = this.layout.paneSplitterDragging;
-
+  readonly gitCommitCount = computed(() => gitCommitCount(this.detail().info));
+  readonly gitToggleTooltip = computed(() => gitToggleTooltip(this.detail().info));
   // Live Claude session telemetry — owned by ClaudeSessionPollService
   // (5 s poll, started/stopped in response to detail() changes).
   private readonly claudePoll = inject(ClaudeSessionPollService);

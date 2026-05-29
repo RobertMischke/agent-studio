@@ -11,7 +11,6 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import type { JobInfo } from '../../../../../models/task.model';
-import type { JobCommitInfo } from '../../../../git';
 import type { RunFileChange, RunRecord } from '../../../../../features/run-timeline';
 import type { GitStatus } from '../../../../git';
 import { JobService } from '../../../../../services/task.service';
@@ -67,27 +66,17 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
   readonly isNewFile = computed<boolean>(() => detectNewFile(this.diffText()));
 
   // --- F55: state-aware inline display ---
-  readonly displayMode = computed<'worktree' | 'committed' | 'idle'>(() => {
+  // The 'committed' branch was retired (commit count now rides as a
+  // badge on the Git pane-toggle); only 'worktree' and 'idle' surface
+  // in the inline view today. The legacy review-lane states still map
+  // to a no-op so the worktree poll doesn't fire on them.
+  readonly displayMode = computed<'worktree' | 'idle'>(() => {
     const j = this.job();
     if (!j) return 'idle';
     if (j.state === '3-progress') return 'worktree';
-    if (j.commit || (j.commits && j.commits.length > 0)) return 'committed';
-    if (['4-auto-review', '5-human-review', '6-completed'].includes(j.state)) return 'committed';
     return 'idle';
   });
 
-  readonly commitChain = computed<JobCommitInfo[]>(() => {
-    const j = this.job();
-    if (!j) return [];
-    if (j.commits && j.commits.length > 0) return [...j.commits].reverse();
-    if (j.commit) return [j.commit];
-    return [];
-  });
-
-  readonly expandedCommitSha = signal<string | null>(null);
-  readonly commitDiffText = signal<string>('');
-  readonly commitDiffState = signal<'idle' | 'loading' | 'loaded' | 'error'>('idle');
-  readonly commitDiffLines = computed<DiffLine[]>(() => splitDiff(this.commitDiffText()));
   readonly worktreeStatus = signal<GitStatus | null>(null);
   readonly worktreeLoading = signal(false);
 
@@ -146,30 +135,6 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
     });
   }
 
-  toggleCommitDiff(sha: string): void {
-    if (this.expandedCommitSha() === sha) {
-      this.expandedCommitSha.set(null);
-      this.commitDiffText.set('');
-      this.commitDiffState.set('idle');
-      return;
-    }
-    this.expandedCommitSha.set(sha);
-    this.commitDiffState.set('loading');
-    this.commitDiffText.set('');
-    const j = this.job();
-    if (!j) return;
-    this.jobService.getJobCommitDiffBySha(j.id, sha, '', j.watchPath).subscribe({
-      next: (res: unknown) => {
-        const d = typeof res === 'string' ? res
-          : (res && typeof res === 'object' && 'diff' in (res as Record<string, unknown>))
-            ? ((res as { diff?: string }).diff ?? '') : '';
-        this.commitDiffText.set(d);
-        this.commitDiffState.set('loaded');
-      },
-      error: () => { this.commitDiffText.set(''); this.commitDiffState.set('error'); },
-    });
-  }
-
   copyLabel(): string {
     const s = this.copyState();
     return s === 'copied' ? '✓ Copied' : s === 'failed' ? '⚠ Copy failed' : '📋 Copy diff';
@@ -187,19 +152,6 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
   short(sha: string | null): string {
     return !sha ? '' : sha.length > 12 ? sha.slice(0, 8) : sha;
   }
-
-  relativeTime(iso: string): string {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    const mins = Math.floor((Date.now() - d.getTime()) / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-  }
-
-  commitSubject(msg: string): string { return msg.split('\n')[0]; }
 
   onNodeClick(node: TreeNode): void {
     if (node.isFolder) {
