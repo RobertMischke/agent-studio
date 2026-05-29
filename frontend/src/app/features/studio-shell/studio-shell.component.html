@@ -314,10 +314,13 @@
                   @if (!explorerSections.isCollapsed('open-tabs')) {
                   @for (t of tabs(); track tabKey(t)) {
                     <button type="button"
-                            class="studio-tree-row studio-tree-row--child"
+                            class="studio-tree-row studio-tree-row--open-tab"
                             [class.studio-tree-row--active]="activeKey() === tabKey(t)"
+                            [appTaskStatusPopover]="tabJob(t)"
+                            [appTaskStatusPopoverOnlyTruncated]="false"
+                            [attr.data-testid]="'studio-explorer-open-tab-' + tabKey(t)"
                             (click)="selectTab(tabKey(t))">
-                      <span class="studio-tree-row__name">{{ tabLabel(t) }}</span>
+                      <span class="studio-tree-row__name" data-truncatable>{{ tabLabel(t) }}</span>
                       <span class="studio-tree-row__close"
                             (click)="closeTab(tabKey(t), $event)"
                             aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>

@@ -6,34 +6,7 @@
       <span class="activity__state">· {{ j.state }}</span>
     </header>
     <div class="activity__body">
-      <div class="activity__facts" data-testid="activity-facts">
-        <app-row variant="compact">
-          <span appRowLabel>Task key</span>
-          <span appRowValue class="mono">{{ j.jobKey }}</span>
-        </app-row>
-        <app-row variant="compact">
-          <span appRowLabel>Project</span>
-          <span appRowValue>{{ j.projectName }}</span>
-        </app-row>
-        <app-row variant="compact">
-          <span appRowLabel>Agent</span>
-          <span appRowValue>{{ j.agent || '—' }}</span>
-        </app-row>
-        <app-row variant="compact">
-          <span appRowLabel>CLI</span>
-          <span appRowValue>{{ j.cliType || '—' }}</span>
-        </app-row>
-        @if (j.execution) {
-          <app-row variant="compact">
-            <span appRowLabel>Execution</span>
-            <span appRowValue>
-              {{ j.execution.status }} ·
-              @if (j.execution.runOutcome) { {{ j.execution.runOutcome }} · }
-              @if (j.execution.durationSeconds !== null) { {{ j.execution.durationSeconds }}s }
-            </span>
-          </app-row>
-        }
-      </div>
+      <app-task-status-card [job]="j" variant="inline" data-testid="activity-facts" />
       <p class="activity__note">
         The live activity stream (protocol pane + tool-call timeline) lives
         inside the task workbench. Open the task to see the streaming output.

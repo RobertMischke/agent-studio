@@ -17,6 +17,7 @@ import {
 } from './task-card-view-model';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+import { TaskStatusPopoverDirective } from '../../../../components/task-status-card';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -30,7 +31,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-job-card',
   standalone: true,
-  imports: [TooltipDirective, MenuComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's

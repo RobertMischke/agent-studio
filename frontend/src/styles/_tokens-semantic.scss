@@ -225,6 +225,23 @@
   --studio-titlebar-h:    36px;
   --studio-tabbar-h:      36px;
 
+  // Explorer-tree column geometry. Project rows render
+  //   [chev: 14px] [gap: 8px] [glyph: 16px] [gap: 8px] [name]
+  // at `padding-left: 8px`, so the glyph column starts at
+  //   --studio-explorer-row-glyph-x = 8 + 14 + 8 = 30px.
+  // Open-Tabs rows reuse this so their text starts buendig under the
+  // workspace project glyph (Option A in the explorer-open-tabs-alignment
+  // task). Reads as a single shared token instead of a magic number that
+  // can drift from the project-row geometry.
+  --studio-explorer-row-pad:     8px;   // Project row padding-left.
+  --studio-explorer-row-chev:    14px;  // Chevron column width.
+  --studio-explorer-row-gap:     8px;   // Gap between chev / glyph / name.
+  --studio-explorer-row-glyph:   16px;  // Glyph column width.
+  --studio-explorer-row-glyph-x:
+    calc(var(--studio-explorer-row-pad) + var(--studio-explorer-row-chev) + var(--studio-explorer-row-gap)); // 30px
+  --studio-explorer-row-name-x:
+    calc(var(--studio-explorer-row-glyph-x) + var(--studio-explorer-row-glyph) + var(--studio-explorer-row-gap)); // 54px
+
   // ---------------------------------------------------------------------------
   // Density tokens — row padding, row gap, section gap, min row height.
   //

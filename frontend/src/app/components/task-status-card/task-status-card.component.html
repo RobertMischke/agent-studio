@@ -1,0 +1,60 @@
+<div class="task-status-card" data-testid="task-status-card-root">
+  <header class="task-status-card__head">
+    @if (job().key; as taskKey) {
+      <span class="task-status-card__key" data-testid="task-status-card-key">{{ taskKey }}</span>
+    }
+    <span class="task-status-card__title" data-testid="task-status-card-title">
+      {{ job().title || job().id }}
+    </span>
+  </header>
+
+  <div class="task-status-card__chips" data-testid="task-status-card-chips">
+    <span class="task-status-card__chip task-status-card__lane"
+          [attr.data-state]="job().state"
+          data-testid="task-status-card-lane">
+      <span class="task-status-card__lane-dot" aria-hidden="true">●</span>
+      {{ laneLabel() }}
+    </span>
+    <span class="task-status-card__chip task-status-card__project"
+          [style.--project-color]="identity().color"
+          [style.--project-border]="identity().border"
+          [style.--project-soft]="identity().soft"
+          data-testid="task-status-card-project">
+      <span class="task-status-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>
+      <span class="task-status-card__project-name">{{ job().projectName }}</span>
+    </span>
+  </div>
+
+  <dl class="task-status-card__facts" data-testid="task-status-card-facts">
+    <div class="task-status-card__fact">
+      <dt>Agent</dt>
+      <dd data-testid="task-status-card-agent">{{ agentLabel() }}</dd>
+    </div>
+    @if (cliLabel(); as cli) {
+      <div class="task-status-card__fact">
+        <dt>CLI</dt>
+        <dd data-testid="task-status-card-cli">{{ cli }}</dd>
+      </div>
+    }
+    <div class="task-status-card__fact">
+      <dt>Model</dt>
+      <dd data-testid="task-status-card-model">{{ modelLabel() }}</dd>
+    </div>
+    <div class="task-status-card__fact">
+      <dt>Last activity</dt>
+      <dd data-testid="task-status-card-last-activity">
+        <span>{{ relativeLastActivity() }}</span>
+        <span class="task-status-card__dim">({{ absoluteLastActivity() }})</span>
+      </dd>
+    </div>
+    @if (runStatus(); as rs) {
+      <div class="task-status-card__fact">
+        <dt>Run</dt>
+        <dd data-testid="task-status-card-run">{{ rs }}</dd>
+      </div>
+    }
+  </dl>
+
+  <!-- Optional footer slot for the inline variant (e.g. action buttons in a modal). -->
+  <ng-content select="[taskStatusCardFooter]"></ng-content>
+</div>

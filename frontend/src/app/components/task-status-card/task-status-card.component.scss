@@ -1,0 +1,208 @@
+/*
+ * Task status card — schlank, kompakt, theme-aware. Used by the hover
+ * popover over open-tabs / task-card hover (variant=popover) and inline
+ * inside the activity tab and similar panels (variant=inline).
+ *
+ * The card is purely informational; it never embeds menus or action
+ * surfaces — actions live where the card is hosted.
+ */
+
+// The selector element is a custom element which defaults to `display: inline`
+// in Angular. Without an explicit `display: block`, the popover wrapper around
+// it shrinks to 0×0 (the inline parent does not stretch to the flex child's
+// outer box), and Playwright's toBeVisible reports it hidden even though the
+// content paints. Make it a block so the wrapper sees real dimensions.
+app-task-status-card {
+  display: block;
+}
+
+.task-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
+  border: 1px solid var(--studio-border);
+  font-size: 12.5px;
+  line-height: 1.45;
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  &__key {
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--studio-bg-elevated);
+    border: 1px solid var(--studio-border);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--studio-fg-strong);
+  }
+
+  &__title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--studio-fg-strong);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  &__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  &__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--studio-border);
+    background: transparent;
+  }
+
+  &__lane {
+    color: var(--studio-fg);
+  }
+
+  // Lane-tone variants: pull the same semantic tokens the rest of the
+  // shell uses (accent / accent-warn / accent-success / accent-6) so the
+  // card adapts to the dark/light theme override block without carrying
+  // its own palette.
+  &__lane[data-state^='3-progress'],
+  &__lane[data-state='3-progress'] {
+    color: var(--studio-accent-success);
+    border-color: var(--studio-accent-success);
+  }
+
+  &__lane[data-state='5-human-review'] {
+    color: var(--studio-accent-warn);
+    border-color: var(--studio-accent-warn);
+  }
+
+  &__lane[data-state='4-auto-review'] {
+    color: var(--studio-accent);
+    border-color: var(--studio-accent);
+  }
+
+  &__lane[data-state='3a-failed-pickup'] {
+    color: var(--studio-accent-6);
+    border-color: var(--studio-accent-6);
+  }
+
+  &__lane-dot {
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  &__project {
+    color: var(--studio-fg-strong);
+    background: var(--project-soft, transparent);
+    border-color: var(--project-border, var(--studio-border));
+  }
+
+  &__project-disk {
+    width: 14px;
+    height: 14px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 3px;
+    background: var(--project-color, var(--studio-fg-muted));
+    color: var(--studio-on-accent);
+    font-size: 9px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  &__project-name {
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+  }
+
+  &__facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 10px;
+    row-gap: 3px;
+    margin: 0;
+  }
+
+  &__fact {
+    display: contents;
+  }
+
+  &__fact dt {
+    color: var(--studio-fg-muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  &__fact dd {
+    margin: 0;
+    color: var(--studio-fg);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: baseline;
+  }
+
+  &__dim {
+    color: var(--studio-fg-muted);
+    font-size: 10.5px;
+  }
+}
+
+/*
+ * Variant: popover. Used by the singleton popover host that mounts at the
+ * document level. The card needs a stronger shadow + slightly tighter
+ * defaults so it reads as floating UI rather than panel content.
+ */
+.task-status-card[data-variant='popover'] {
+  background: var(--studio-bg-elevated);
+  border-color: var(--studio-border-strong);
+  box-shadow: var(--elevation-popover);
+}
+
+/*
+ * Floating host. The popover service builds a fixed-position wrapper and
+ * mounts the component inside it. The wrapper handles position + fade;
+ * the card handles look and feel. Pointer-events stay enabled so the
+ * hover can carry over from the trigger into the card without instantly
+ * closing it.
+ */
+.task-status-card-host {
+  position: fixed;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 100ms ease;
+  pointer-events: none;
+}
+
+.task-status-card-host--visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}

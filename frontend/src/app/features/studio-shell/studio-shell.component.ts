@@ -32,6 +32,7 @@ import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
+import { TaskStatusPopoverDirective } from '../../components/task-status-card';
 import { buildProjectPickerItems, buildTabCtxMenuItems } from './studio-shell.menu-builders';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
@@ -80,7 +81,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -1101,5 +1102,15 @@ export class StudioShellComponent {
       }
     }
     return null;
+  }
+
+  /**
+   * Map a tab to its underlying JobInfo so the Open-Tabs hover popover
+   * can render a TaskStatusCard. Returns `null` for board / hub / diff /
+   * welcome tabs that do not correspond to a single task.
+   */
+  tabJob(tab: StudioTab): JobInfo | null {
+    if (tab.kind !== 'task' && tab.kind !== 'activity') return null;
+    return this.findJob(tab.jobKey);
   }
 }

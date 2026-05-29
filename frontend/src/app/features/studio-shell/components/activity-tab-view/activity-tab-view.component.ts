@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { JobService } from '../../../../services/task.service';
-import { RowComponent } from '../../../../components/row/row.component';
+import { TaskStatusCardComponent } from '../../../../components/task-status-card';
 import type { JobInfo } from '../../../../models/task.model';
 
 /**
@@ -8,12 +8,17 @@ import type { JobInfo } from '../../../../models/task.model';
  * renders the live execution + run-outcome summary, plus a CTA back to
  * the in-task chat workbench (which still owns the streaming protocol
  * pane). The inline activity log streaming is a follow-up.
+ *
+ * The fact list at the top is rendered by the shared
+ * `<app-task-status-card>` so the same surface is reused across the
+ * open-tabs hover popover, the activity tab, and any future task
+ * info-modal.
  */
 @Component({
   selector: 'app-studio-activity-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RowComponent],
+  imports: [TaskStatusCardComponent],
   templateUrl: './activity-tab-view.component.html',
   styleUrl: './activity-tab-view.component.scss',
 })

@@ -24,11 +24,11 @@
       "styles": 180,
       "total": 746
     },
-    "src/app/features/board/components/job-card/job-card.component.ts": {
-      "typeScript": 449,
-      "template": 217,
-      "styles": 723,
-      "total": 1389
+    "src/app/features/board/components/task-card/task-card.component.ts": {
+      "typeScript": 564,
+      "template": 254,
+      "styles": 935,
+      "total": 1753
     },
     "src/app/features/board/components/task-column/task-column.ts": {
       "typeScript": 702,
@@ -54,11 +54,11 @@
       "styles": 882,
       "total": 2183
     },
-    "src/app/features/job-detail/job-detail.ts": {
-      "typeScript": 1298,
-      "template": 165,
-      "styles": 1282,
-      "total": 2745
+    "src/app/features/job-detail/task-detail.ts": {
+      "typeScript": 1316,
+      "template": 166,
+      "styles": 1273,
+      "total": 2755
     },
     "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
       "typeScript": 1104,
@@ -103,10 +103,10 @@
       "total": 695
     },
     "src/app/features/studio-shell/studio-shell.component.ts": {
-      "typeScript": 872,
-      "template": 761,
-      "styles": 2035,
-      "total": 3645
+      "typeScript": 1117,
+      "template": 832,
+      "styles": 2066,
+      "total": 4015
     },
     "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
       "typeScript": 548,

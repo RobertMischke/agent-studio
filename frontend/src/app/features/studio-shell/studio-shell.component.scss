@@ -792,12 +792,22 @@
   // (0,2,0) so they outrank the universal button reset.
 }
 .studio .studio-tree-row--project {
-  padding-left: 8px;
+  padding-left: var(--studio-explorer-row-pad);
 }
 .studio .studio-tree-row--child {
   // Reference paddingLeft is 44 — aligns the lane sub-icon under
   // the project glyph so children visibly nest below their parent.
   padding-left: 44px;
+  font-size: 12px;
+}
+
+// Option A from bug-explorer-open-tabs-alignment: Open-Tabs rows start
+// at the same x as the Workspace project glyph column, not the chevron.
+// We compose `--studio-explorer-row-glyph-x` (30px) so the indent stays
+// in lockstep with the workspace project geometry — moving the chev or
+// glyph widths in the semantic-tokens file shifts open-tabs in unison.
+.studio .studio-tree-row--open-tab {
+  padding-left: var(--studio-explorer-row-glyph-x);
   font-size: 12px;
 }
 

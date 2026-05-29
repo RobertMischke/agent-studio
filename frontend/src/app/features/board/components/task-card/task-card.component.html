@@ -50,7 +50,9 @@
           [appTooltip]="'Delete task'"
           aria-label="Delete task"
           (click)="onDeleteClick($event)">🗑</button>
-  <h3 class="job-card__title">
+  <h3 class="job-card__title"
+      [appTaskStatusPopover]="job()"
+      data-testid="job-card-title">
     @if (compact()) {
       <span class="job-card__compact-disk"
             [attr.aria-label]="job().projectName"
@@ -60,7 +62,7 @@
     @if (job().key; as taskKey) {
       <span class="job-card__key-chip" data-testid="job-card-key">{{ taskKey }}</span>
     }
-    <span class="job-card__title-text">{{ job().title || job().id }}</span>
+    <span class="job-card__title-text" data-truncatable>{{ job().title || job().id }}</span>
     @if (compact()) {
       <span class="job-card__compact-time" [appTooltip]="'Last activity: ' + relativeActivity()">
         {{ relativeActivity() }}
