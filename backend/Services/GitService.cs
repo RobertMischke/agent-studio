@@ -137,6 +137,54 @@ public class GitService
     private DateTime _summaryAt = DateTime.MinValue;
     private List<GitProjectSummary> _summaryCache = [];
 
+    // SHA-range answers (commits / file list / diff) are deterministic once
+    // a run has captured HeadShaBefore..HeadShaAfter: git history is
+    // content-addressed and the diff between two fixed SHAs never changes.
+    // The protocol pane re-asks for these the moment the user clicks back
+    // into a previously visible run, so a bounded LRU here keeps the
+    // run-git viewer instant on re-open. Keys include the resolved
+    // toplevel so two projects with overlapping SHAs (rare but possible
+    // with shared subtrees) cannot collide.
+    private const int ShaRangeCacheLimit = 512;
+    private readonly object _shaRangeLock = new();
+    private readonly LinkedList<string> _shaRangeOrder = new();
+    private readonly Dictionary<string, (LinkedListNode<string> Node, object Value)> _shaRangeCache = new(StringComparer.Ordinal);
+
+    private bool TryGetShaRangeCached<T>(string key, out T value) where T : class
+    {
+        lock (_shaRangeLock)
+        {
+            if (_shaRangeCache.TryGetValue(key, out var entry) && entry.Value is T typed)
+            {
+                _shaRangeOrder.Remove(entry.Node);
+                _shaRangeOrder.AddLast(entry.Node);
+                value = typed;
+                return true;
+            }
+        }
+        value = null!;
+        return false;
+    }
+
+    private void StoreShaRangeCached(string key, object value)
+    {
+        lock (_shaRangeLock)
+        {
+            if (_shaRangeCache.TryGetValue(key, out var existing))
+            {
+                _shaRangeOrder.Remove(existing.Node);
+                _shaRangeCache.Remove(key);
+            }
+            var node = _shaRangeOrder.AddLast(key);
+            _shaRangeCache[key] = (node, value);
+            while (_shaRangeCache.Count > ShaRangeCacheLimit && _shaRangeOrder.First is { } first)
+            {
+                _shaRangeOrder.RemoveFirst();
+                _shaRangeCache.Remove(first.Value);
+            }
+        }
+    }
+
     /// <summary>
     /// Per-project summary, cached for ~3 seconds so the board's tile-pills
     /// can ask freely without spawning N git processes per render.
@@ -903,6 +951,9 @@ public class GitService
         // crafted SHA argument.
         if (!IsLikelyShaOrRef(beforeSha!) || !IsLikelyShaOrRef(afterSha!)) return [];
 
+        var cacheKey = $"commits|{root}|{beforeSha}|{afterSha}";
+        if (TryGetShaRangeCached<List<GitCommitInfo>>(cacheKey, out var cached)) return cached;
+
         const char US = '';
         var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
         var args = $"log --no-merges --shortstat --pretty=format:\"{fmt}\" {beforeSha}..{afterSha}";
@@ -940,6 +991,7 @@ public class GitService
                 Added: added,
                 Removed: removed));
         }
+        StoreShaRangeCached(cacheKey, list);
         return list;
     }
 
@@ -959,6 +1011,9 @@ public class GitService
         if (configured == null) return [];
         var root = ResolveGitToplevel(configured);
         if (root == null) return [];
+
+        var cacheKey = $"files|{root}|{beforeSha}|{afterSha}";
+        if (TryGetShaRangeCached<List<GitFileChange>>(cacheKey, out var cached)) return cached;
 
         // git diff --name-status + --numstat over the range: one git
         // call each, merged by path. --diff-filter avoids type-change
@@ -991,7 +1046,7 @@ public class GitService
             }
         }
 
-        return statusByPath
+        var result = statusByPath
             .Select(kv =>
             {
                 var (added, removed) = numstat.TryGetValue(kv.Key, out var n) ? n : (0, 0);
@@ -999,6 +1054,8 @@ public class GitService
             })
             .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        StoreShaRangeCached(cacheKey, result);
+        return result;
     }
 
     /// <summary>
@@ -1016,11 +1073,21 @@ public class GitService
         var root = ResolveGitToplevel(configured);
         if (root == null) return "";
 
+        var cacheKey = $"diff|{root}|{beforeSha}|{afterSha}|{path ?? ""}";
+        if (TryGetShaRangeCached<string>(cacheKey, out var cachedDiff)) return cachedDiff;
+
         var pathArg = string.IsNullOrWhiteSpace(path)
             ? ""
             : $" -- \"{path!.Replace("\"", "\\\"")}\"";
         var (output, err, code) = RunGit(root, $"diff {beforeSha}..{afterSha}{pathArg}");
-        return code == 0 ? output : err;
+        var diff = code == 0 ? output : err;
+        // Cache successful diffs only; an err payload is usually a transient
+        // git error (lock contention, repo busy) we don't want to pin.
+        if (code == 0 && !string.IsNullOrEmpty(output))
+        {
+            StoreShaRangeCached(cacheKey, diff);
+        }
+        return diff;
     }
 
     private static bool IsLikelyShaOrRef(string s)

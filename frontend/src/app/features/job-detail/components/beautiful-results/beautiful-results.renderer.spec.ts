@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { extractSentinel, renderResultsHtml } from './beautiful-results.renderer';
+import { describe, expect, it, beforeEach } from 'vitest';
+import { extractSentinel, renderResultsHtml, clearResultsRenderCache } from './beautiful-results.renderer';
 
 const CTX = { jobId: 'abc', watchPath: 'C:/Projects/repo' };
 
@@ -127,5 +127,39 @@ describe('renderResultsHtml', () => {
     const { html, banner } = renderResultsHtml('', CTX);
     expect(html).toBe('');
     expect(banner).toBeNull();
+  });
+});
+
+describe('renderResultsHtml memo', () => {
+  // Re-renders of an unchanged status.md / results.md happen every time
+  // the operator clicks back into a previously visible task. The memo
+  // turns that into a single Map lookup so the operator-visible "switch
+  // back to this run" path stays sub-10 ms.
+  beforeEach(() => clearResultsRenderCache());
+
+  it('returns the same object reference on a repeat render with identical inputs', () => {
+    const md = '# Title\n\nBody text with `code` and a [link](https://example.com).';
+    const first = renderResultsHtml(md, CTX);
+    const second = renderResultsHtml(md, CTX);
+    expect(second).toBe(first);
+  });
+
+  it('does not collide between two jobs with the same markdown body', () => {
+    const md = 'Shared body.';
+    const a = renderResultsHtml(md, { jobId: 'job-a', watchPath: '/wp' });
+    const b = renderResultsHtml(md, { jobId: 'job-b', watchPath: '/wp' });
+    // Distinct cache entries (image resolver may reach for jobId), distinct
+    // object identity. The HTML body is allowed to be equal in this fixture
+    // since the inputs are image-free.
+    expect(a).not.toBe(b);
+  });
+
+  it('clearResultsRenderCache forces a fresh render', () => {
+    const md = 'Stable body.';
+    const first = renderResultsHtml(md, CTX);
+    clearResultsRenderCache();
+    const second = renderResultsHtml(md, CTX);
+    expect(second).not.toBe(first);
+    expect(second.html).toBe(first.html);
   });
 });

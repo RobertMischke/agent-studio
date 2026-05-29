@@ -85,9 +85,37 @@ function sentinelKind(tag: string): SentinelBanner['kind'] {
   }
 }
 
+// Bounded LRU memo for the marked->sanitize pipeline. Status.md and
+// run results.md bodies are stable between mounts (the operator clicks
+// away and back, the lane re-sorts, the detail pane re-instantiates),
+// so memoising by (markdown, jobId, watchPath) turns a previously-seen
+// render into a single map lookup. Keeps memory bounded with a small
+// LRU; entries are evicted in insertion order once the cap is hit.
+const RENDER_CACHE_LIMIT = 64;
+const renderCache = new Map<string, RenderedResults>();
+
+function renderCacheKey(markdown: string, context: BeautifulRendererContext): string {
+  // jobId + watchPath disambiguate two jobs with the same status.md body
+  // (rare in practice, but image resolution depends on both).
+  return `${context.jobId ?? ''}${context.watchPath ?? ''}${markdown.length}${markdown}`;
+}
+
 export function renderResultsHtml(markdown: string, context: BeautifulRendererContext): RenderedResults {
+  const cacheKey = renderCacheKey(markdown ?? '', context);
+  const hit = renderCache.get(cacheKey);
+  if (hit) {
+    // Touch: move to the tail so it survives the next eviction round.
+    renderCache.delete(cacheKey);
+    renderCache.set(cacheKey, hit);
+    return hit;
+  }
+
   const { cleaned, banner } = extractSentinel(markdown ?? '');
-  if (!cleaned.trim()) return { html: '', banner };
+  if (!cleaned.trim()) {
+    const empty: RenderedResults = { html: '', banner };
+    storeRender(cacheKey, empty);
+    return empty;
+  }
 
   const extension = buildMarkedExtension(context);
   const local = new Marked(extension);
@@ -100,7 +128,23 @@ export function renderResultsHtml(markdown: string, context: BeautifulRendererCo
     raw = `<pre>${escapeHtml(cleaned)}</pre>`;
   }
   const html = sanitize(raw);
-  return { html, banner };
+  const result: RenderedResults = { html, banner };
+  storeRender(cacheKey, result);
+  return result;
+}
+
+function storeRender(key: string, value: RenderedResults): void {
+  renderCache.set(key, value);
+  while (renderCache.size > RENDER_CACHE_LIMIT) {
+    const oldest = renderCache.keys().next();
+    if (oldest.done) break;
+    renderCache.delete(oldest.value);
+  }
+}
+
+/** Drop every cached render. Used by tests; safe to call in production. */
+export function clearResultsRenderCache(): void {
+  renderCache.clear();
 }
 
 function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtension {

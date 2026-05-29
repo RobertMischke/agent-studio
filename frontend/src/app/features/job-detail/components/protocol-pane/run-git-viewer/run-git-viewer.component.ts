@@ -14,6 +14,7 @@ import type { JobInfo } from '../../../../../models/task.model';
 import type { RunFileChange, RunRecord } from '../../../../../features/run-timeline';
 import type { GitStatus } from '../../../../git';
 import { JobService } from '../../../../../services/task.service';
+import { RunGitCacheService } from '../../../services/run-git-cache.service';
 import { highlightBlock } from '../../beautiful-results/highlight-lazy';
 import {
   setVisibleInterval,
@@ -81,6 +82,7 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
   readonly worktreeLoading = signal(false);
 
   private readonly jobService = inject(JobService);
+  private readonly runGitCache = inject(RunGitCacheService);
   private currentLoadKey = '';
   private worktreeTimer: VisibleIntervalHandle | null = null;
   private lastWorktreeJobId: string | null = null;
@@ -174,7 +176,7 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
     this.diffText.set('');
     this.diffState.set('idle');
     this.highlightedLines.set(null);
-    this.jobService.getRunFiles(job.id, run.index, job.watchPath).subscribe({
+    this.runGitCache.getFiles(job.id, run.index, job.watchPath).subscribe({
       next: (res) => {
         this.files.set(res.files ?? []);
         const e = new Set<string>(['']);
@@ -202,7 +204,7 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
     this.diffError.set(null);
     this.diffText.set('');
     this.highlightedLines.set(null);
-    this.jobService.getRunDiff(job.id, run.index, path, job.watchPath).subscribe({
+    this.runGitCache.getDiff(job.id, run.index, path, job.watchPath).subscribe({
       next: (res) => {
         this.diffText.set(res.diff ?? '');
         this.diffState.set('loaded');
