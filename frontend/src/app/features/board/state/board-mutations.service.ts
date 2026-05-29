@@ -5,7 +5,7 @@ import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UndoController } from '../../../services/undo.service';
-import { JobSelectionService, laneLabelFor } from '../../job-detail';
+import { JobSelectionService, laneLabelFor } from '../../task-detail';
 
 /**
  * Cycle 10b board-feature service: orchestrates the board's mutation

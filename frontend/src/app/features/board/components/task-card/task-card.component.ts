@@ -6,7 +6,7 @@ import { AutoReviewStatusStore } from '../../../../services/auto-review-status.s
 import { cliTypeIcon } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
-import { shouldShowFailureToast } from '../../../job-detail/services/run-outcome.util';
+import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
 import {
   buildCommitTooltip,
   buildEffectiveModelChip,

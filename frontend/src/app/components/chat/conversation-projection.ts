@@ -22,7 +22,7 @@ import {
   parseActivityLog,
   type ActivityLogGroup,
   type ActivityLogKind,
-} from '../../features/job-detail';
+} from '../../features/task-detail';
 import type {
   ConversationEvent,
   RawLineRange,

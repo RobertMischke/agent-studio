@@ -23,7 +23,7 @@ import { TreeRowComponent } from '../../components/tree-row/tree-row.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
-import { JobSelectionService } from '../job-detail';
+import { JobSelectionService } from '../task-detail';
 import { UiPreferencesService } from '../shell';
 import { BoardFiltersService } from '../board';
 import { UpdateClientService } from '../../services/update.service';

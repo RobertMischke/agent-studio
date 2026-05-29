@@ -37,7 +37,7 @@ import {
   overflowActionsFor,
   primaryActionFor,
   type TriageButton,
-} from './features/job-detail';
+} from './features/task-detail';
 import { CliUsageSheetComponent } from './features/cli';
 import {
   OrchestratorSettingsModalComponent,
