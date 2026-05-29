@@ -85,7 +85,7 @@ internal sealed class PerfBaselineFixture : IDisposable
         }
         States = new JobStateMachine(Scanner, NullLogger<JobStateMachine>.Instance);
         var sessions = new JobSessionLog(Scanner, NullLogger<JobSessionLog>.Instance);
-        var mutations = new JobMutationService(Scanner, new ClientIdentityStore(Config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(Config, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(Scanner, new ClientIdentityStore(Config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(Config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
 
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(

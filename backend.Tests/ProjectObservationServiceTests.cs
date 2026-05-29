@@ -57,7 +57,7 @@ public class ProjectObservationServiceTests : IDisposable
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
         var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
         var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(NullLogger<CopilotCliService>.Instance, config,
             new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, config), cliEnv);

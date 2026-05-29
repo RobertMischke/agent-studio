@@ -20,6 +20,9 @@ public class ProjectRunner
     private readonly JobScannerService _scanner;
     private readonly JobStateMachine _states;
     private readonly JobSessionLog _sessions;
+    // ADR-0049: per-job timeline.jsonl ledger. Optional so existing test
+    // fixtures keep working; production DI always supplies an instance.
+    private readonly OrchestratorApi.Services.Jobs.TimelineLog? _timeline;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -169,7 +172,8 @@ public class ProjectRunner
         AgentMessageBusBridge? bus = null,
         RunnerRole role = RunnerRole.Orchestrator,
         PickupLockFile? pickupLock = null,
-        PickupLockOwner? pickupLockOwner = null)
+        PickupLockOwner? pickupLockOwner = null,
+        OrchestratorApi.Services.Jobs.TimelineLog? timeline = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -197,6 +201,7 @@ public class ProjectRunner
         _role = role;
         _pickupLock = pickupLock;
         _pickupLockOwner = pickupLockOwner;
+        _timeline = timeline;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -691,6 +696,22 @@ public class ProjectRunner
                 Reason = plan.EventReason,
                 HeadShaBefore = headShaBefore
             }, Entry.Path);
+
+            // ADR-0049: mirror the run-start onto the unified timeline so the
+            // FE Timeline tab and the Overview strip can render the event
+            // without re-deriving it from session-events.jsonl + cli-output.log.
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.AgentRunStarted,
+                TimelineActors.System,
+                summary: $"{cli.CliType} CLI {plan.EventKind}{(string.IsNullOrWhiteSpace(plan.EventReason) ? "" : $" ({plan.EventReason})")}",
+                runId: plan.EventInputSessionId,
+                details: new()
+                {
+                    ["cli"] = cli.CliType ?? string.Empty,
+                    ["intent"] = plan.EventKind ?? string.Empty,
+                    ["resumed"] = plan.ResumeFlag ? "true" : "false",
+                });
 
             _activeCliType = cli.CliType;
             var (execution, cliError) = await cli.StartAsync(
@@ -1670,9 +1691,10 @@ public class ProjectRunner
             // these even before the post-run policy and lane move so a crash
             // mid-finalisation does not lose the lifecycle event. RunFinished
             // is the matching pair to the RunStarted emitted on spawn.
+            JobInfo? finishedInfo = null;
             try
             {
-                var finishedInfo = _scanner.FindJob(jobId, Entry.Path);
+                finishedInfo = _scanner.FindJob(jobId, Entry.Path);
                 if (finishedInfo != null)
                 {
                     _ = _bus?.EmitRunFinishedAsync(
@@ -1682,6 +1704,25 @@ public class ProjectRunner
                 }
             }
             catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of run-finish failed for {JobId}", jobId); }
+
+            // ADR-0049: mirror the run-finish onto the unified timeline. The
+            // runId pairs with the agent_run_started row's runId so the FE
+            // can fold a run-pair into one collapsible line.
+            if (finishedInfo != null)
+            {
+                _timeline?.Append(
+                    finishedInfo.FolderPath,
+                    TimelineEventKinds.AgentRunFinished,
+                    TimelineActors.Agent,
+                    summary: $"{cliType} run {execution.Status ?? "unknown"}" +
+                             (execution.DurationSeconds is double d ? $" after {d:F1}s" : ""),
+                    runId: planSnapshot?.EventInputSessionId,
+                    details: new()
+                    {
+                        ["cli"] = cliType ?? string.Empty,
+                        ["status"] = execution.Status ?? "unknown",
+                    });
+            }
 
             // Persist the captured session UUID so follow-ups can resume.
             // Claude / Codex / Gemini all auto-create a UUID on first run and

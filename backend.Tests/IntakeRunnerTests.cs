@@ -284,7 +284,7 @@ public class IntakeRunnerTests : IDisposable
                 ["WatchPaths:0:Path"] = _watchPath
             })
             .Build();
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(cfg, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(cfg, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(cfg, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(cfg, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         return new IntakeRunner(scanner, mutations, chatLog, NullLogger<IntakeRunner>.Instance);
     }

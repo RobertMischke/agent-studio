@@ -320,7 +320,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
         var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);

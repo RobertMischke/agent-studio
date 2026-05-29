@@ -28,14 +28,19 @@ public class JobMutationService
     private readonly ProjectRegistry _projectRegistry;
     private readonly JobChangeNotifier _notifier;
     private readonly ILogger<JobMutationService> _logger;
+    // ADR-0049: optional unified-timeline writer. Production DI supplies it;
+    // tests that construct JobMutationService directly may pass null and
+    // simply skip the timeline event.
+    private readonly TimelineLog? _timeline;
 
-    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, JobChangeNotifier notifier, ILogger<JobMutationService> logger)
+    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, JobChangeNotifier notifier, ILogger<JobMutationService> logger, TimelineLog? timeline = null)
     {
         _scanner = scanner;
         _clients = clients;
         _projectRegistry = projectRegistry;
         _notifier = notifier;
         _logger = logger;
+        _timeline = timeline;
     }
 
     /// <summary>
@@ -416,6 +421,20 @@ public class JobMutationService
 
         if (!string.IsNullOrWhiteSpace(req.PromptMarkdown))
             File.WriteAllText(Path.Combine(jobDir, "prompt.md"), req.PromptMarkdown);
+
+        // ADR-0049: open the per-job timeline with prompt_created so the
+        // Overview strip has something to render before the first agent run.
+        _timeline?.Append(
+            jobDir,
+            TimelineEventKinds.PromptCreated,
+            string.IsNullOrWhiteSpace(req.Agent) ? TimelineActors.System : TimelineActors.Human(ownerClientId),
+            summary: string.IsNullOrWhiteSpace(req.Title) ? $"Task {jobId} created" : $"Task created: {req.Title}",
+            payloadRef: "prompt.md",
+            details: new()
+            {
+                ["targetState"] = targetState ?? string.Empty,
+                ["agent"] = effectiveAgent ?? string.Empty,
+            });
 
         _scanner.InvalidateCache();
         return jobId;

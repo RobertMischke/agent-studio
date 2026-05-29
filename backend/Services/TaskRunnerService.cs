@@ -44,6 +44,7 @@ public class TaskRunnerService : BackgroundService
     private readonly AgentMessageBusBridge? _bus;
     private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
     private readonly PickupLockFile? _pickupLock;
+    private readonly TimelineLog? _timeline;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -90,7 +91,8 @@ public class TaskRunnerService : BackgroundService
         CrossSlugInfraCircuitBreaker infraBreaker,
         OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
         AgentMessageBusBridge? bus = null,
-        PickupLockFile? pickupLock = null)
+        PickupLockFile? pickupLock = null,
+        TimelineLog? timeline = null)
     {
         _config = config;
         _logger = logger;
@@ -118,6 +120,7 @@ public class TaskRunnerService : BackgroundService
         _taskAccess = taskAccess;
         _bus = bus;
         _pickupLock = pickupLock;
+        _timeline = timeline;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -217,7 +220,8 @@ public class TaskRunnerService : BackgroundService
                 _pickupFailures, _infraBreaker, _taskAccess, _bus,
                 role: Role,
                 pickupLock: _pickupLock,
-                pickupLockOwner: BuildPickupLockOwner(entry.Name));
+                pickupLockOwner: BuildPickupLockOwner(entry.Name),
+                timeline: _timeline);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);

@@ -130,8 +130,21 @@ builder.Services.AddSingleton<LaneMutexRegistry>();
 builder.Services.AddSingleton<JobChangeNotifier>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
+// Consolidation/merge API + completed-lane audit (Part 1+2 of the
+// api-consolidationmerge-api task). All mutations route through
+// MergeService / CompletedLaneAuditService; the audit log lives at
+// <TaskRepository>/.audit/merges.jsonl. AuditRunStore is in-memory so
+// in-flight audit runs are lost on restart (the persistent trail is the
+// per-card quality_loop_reopened events in each timeline.jsonl).
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Merge.MergeAuditLog>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Merge.MergeCandidateFinder>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Merge.MergeService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.AcceptanceEvidenceDetector>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.AuditRunStore>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.CompletedLaneAuditService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<JobSessionLog>();
+builder.Services.AddSingleton<TimelineLog>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();

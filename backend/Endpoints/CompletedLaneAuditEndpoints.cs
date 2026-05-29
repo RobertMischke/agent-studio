@@ -1,0 +1,56 @@
+using OrchestratorApi.Services.Jobs.Audit;
+
+namespace OrchestratorApi.Endpoints;
+
+/// <summary>
+/// Project-scoped routes for the completed-lane audit (Part 2 of the
+/// consolidation/audit task):
+///
+/// <list type="bullet">
+/// <item><c>POST /api/projects/{id}/completed-lane/audit</c> - kick off an async run.</item>
+/// <item><c>GET  /api/projects/{id}/completed-lane/report</c> - markdown for the latest run.</item>
+/// <item><c>GET  /api/audits/{runId}</c> - per-run progress + entries.</item>
+/// </list>
+///
+/// Project lookup accepts the canonical <c>PROJ-NNN</c> id, the display
+/// name, or a raw watch-path - the service normalises through
+/// <see cref="OrchestratorApi.Services.Registry.ProjectRegistry"/> first
+/// and falls back to <c>JobScannerService.GetWatchPaths</c> for legacy
+/// callers.
+/// </summary>
+public static class CompletedLaneAuditEndpoints
+{
+    public static void MapCompletedLaneAuditEndpoints(this WebApplication app)
+    {
+        app.MapPost("/api/projects/{projectId}/completed-lane/audit",
+            (string projectId, HttpContext ctx, CompletedLaneAuditService audit) =>
+        {
+            var who = ctx.Request.Headers["X-Client-Id"].FirstOrDefault() ?? "system";
+            var outcome = audit.StartAudit(projectId, who);
+            return outcome.Status switch
+            {
+                AuditRunStartStatus.Success => Results.Accepted(
+                    $"/api/audits/{outcome.RunId}",
+                    new { runId = outcome.RunId }),
+                AuditRunStartStatus.ProjectNotFound => Results.NotFound(new { error = outcome.Message }),
+                _ => Results.Problem(outcome.Message ?? "audit failed to start"),
+            };
+        });
+
+        app.MapGet("/api/projects/{projectId}/completed-lane/report",
+            (string projectId, CompletedLaneAuditService audit) =>
+        {
+            var report = audit.BuildReport(projectId);
+            if (report == null)
+                return Results.NotFound(new { error = "No audit has been run for this project yet." });
+            return Results.Ok(report);
+        });
+
+        app.MapGet("/api/audits/{runId}",
+            (string runId, AuditRunStore store) =>
+        {
+            var status = store.Get(runId);
+            return status == null ? Results.NotFound() : Results.Ok(status);
+        });
+    }
+}

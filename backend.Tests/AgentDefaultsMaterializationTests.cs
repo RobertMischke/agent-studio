@@ -222,7 +222,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         if (defaultCliType != null || defaultModel != null)
             clients.SetDefaults(DefaultClientIdentity.Id, defaultCliType, defaultModel);
 
-        var mutations = new JobMutationService(scanner, clients, new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new JobMutationService(scanner, clients, new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
         machine.EnsureStateFoldersAndMigrate();
         return (machine, scanner, mutations);
     }
