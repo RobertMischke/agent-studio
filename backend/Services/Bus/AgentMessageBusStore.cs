@@ -53,6 +53,20 @@ public sealed class AgentMessageBusStore
     }
 
     /// <summary>
+    /// Eagerly load the per-(workspace, project) projection so the first
+    /// caller does not pay the cold-start jsonl deserialisation cost. Used
+    /// by boot-time warmup in Program.cs to keep /api/jobs/grouped fast on
+    /// the very first request after a restart; without this, the verifier
+    /// run by update-service can time out while the Runbook bus (100K+ lines)
+    /// is being deserialised inline on the request thread.
+    /// </summary>
+    public int WarmProject(string workspaceRoot, string? project, CancellationToken ct = default)
+    {
+        var projection = GetOrLoad(workspaceRoot, project, ct);
+        return projection.Snapshot().Count;
+    }
+
+    /// <summary>
     /// Append one message to its day-file and update the in-memory projection.
     /// Atomic at the line level: a single JSON serialise-and-write to the file
     /// in append mode under a per-file semaphore. If serialisation throws,

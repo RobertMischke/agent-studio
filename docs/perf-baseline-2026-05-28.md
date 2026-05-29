@@ -6,6 +6,35 @@ dramatic improvements. Tasks should come super, super fast — best case
 efficient caching, I don't want to wait on anything." Target P95 on a
 warm cache: **20-30 ms** click → visible content.
 
+## Instrumentation in the build (post this pass)
+
+Five spans, all gated by the perf flag (`?perf=1` in the URL or
+`localStorage.perf === '1'`) via the new
+[`frontend/src/app/utils/perf-tracker.ts`](../frontend/src/app/utils/perf-tracker.ts).
+With the flag OFF (default), `perfMark` / `perfMeasure` short-circuit
+before touching `performance.*` — the marks pay nothing on a normal
+session and survive the build for future regression hunts.
+
+| Span (measure name)                  | Start mark             | End mark                  | Wired in |
+|--------------------------------------|------------------------|---------------------------|----------|
+| `accept-to-next-task`                | `accept-click`         | `next-task-rendered`      | [`task-selection.service.ts`](../frontend/src/app/features/job-detail/state/task-selection.service.ts) (pre-existing, unconditional — kept) |
+| `job-select-to-rendered`             | `job-select-click`     | `job-select-rendered`     | `task-selection.service.ts` (new this pass) |
+| `run-files-fetch-to-rendered`        | `run-files-fetch`      | `run-files-rendered`      | [`run-git-viewer.component.ts`](../frontend/src/app/features/job-detail/components/protocol-pane/run-git-viewer/run-git-viewer.component.ts) (new this pass) |
+| `run-diff-fetch-to-rendered`         | `run-diff-fetch`       | `run-diff-rendered`       | `run-git-viewer.component.ts` (new this pass) |
+| `beautiful-results-render`           | `markdown-render`      | `markdown-rendered`       | [`beautiful-results.component.ts`](../frontend/src/app/features/job-detail/components/beautiful-results/beautiful-results.component.ts) (new this pass) |
+
+Each fired measure also drops a `console.info('[perf] <name>: <ms> ms')`
+line so the operator running with `?perf=1` can see the numbers in
+DevTools without opening the Performance tab.
+
+To enable in a live session:
+
+```js
+localStorage.setItem('perf', '1');  // sticks across reloads
+// or append ?perf=1 to the URL for a one-shot run
+location.reload();
+```
+
 ## Existing instrumentation (before this pass)
 
 - `performance.mark('accept-click')` and `performance.mark('next-task-rendered')`,
@@ -54,7 +83,7 @@ Acceptance bar from the task prompt:
 | Job-select click → detail rendered | P95 ≤ 50 ms | met for lane-pager iteration (prefetch cached). First open of a never-seen-this-session job still pays the network roundtrip and is documented as the cold path. |
 | File / diff re-open | hits cache within TTL | met. Frontend cache is 60 s TTL + 128-entry LRU; backend cache is effectively infinite (LRU 512). |
 | Markdown re-render | ≤ 10 ms | met via 64-entry LRU on `renderResultsHtml`. |
-| Perf telemetry survives the build | yes | `accept-click` / `next-task-rendered` marks stay live; the Playwright `perf-baseline.spec.ts` continues to write to `logs/perf/`. |
+| Perf telemetry survives the build | yes | 5 spans wired through `perf-tracker.ts` (gated by `?perf=1` / `localStorage.perf=1`); the Playwright `perf-baseline.spec.ts` continues to write to `logs/perf/`. |
 
 ## How to capture numbers
 
@@ -80,9 +109,14 @@ moving any of the existing P95 ceilings.
     `describe` block, 17 existing) — identical inputs return the same
     object reference; two jobs with the same body get distinct entries;
     `clearResultsRenderCache` forces a fresh render. **All 20 pass.**
+  - `perf-tracker.spec.ts` (4 new tests) — OFF by default; `?perf=1` and
+    `localStorage.perf=1` both flip it ON; `perfMeasure` logs a `[perf]`
+    line when the gate is on. **All 4 pass.**
   - `beautiful-results.component.spec.ts` — **3 existing tests still pass**
     (smoke around `OnPush` mount + click delegation).
   - `run-git-viewer.component.spec.ts` — **1 existing test still passes**.
+  - `triage-controller.service.spec.ts` + `job-detail-prefetch.service.spec.ts`
+    — **9 existing tests still pass** (covers the wired `openDetail` path).
   - `tsc --noEmit` on `tsconfig.app.json` and `tsconfig.spec.json` —
     **0 errors**.
 

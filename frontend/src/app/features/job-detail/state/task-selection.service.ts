@@ -5,6 +5,7 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
 import { JobDetailPrefetchService } from './job-detail-prefetch.service';
 import { LanePagerService } from './lane-pager.service';
+import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
 
 /**
  * Cycle 9j job-detail-feature service: owns the "currently selected
@@ -199,6 +200,10 @@ export class JobSelectionService {
    * the in-progress iteration is preserved rather than re-captured.
    */
   openDetail(job: JobInfo, opts: { keepPagerSnapshot?: boolean } = {}): void {
+    // Step 1 of the perf-baseline contract: job-select click span. The
+    // accept-to-next-task pipeline owns its own marks via markAcceptClick;
+    // this one covers ad-hoc board clicks where no accept-click preceded.
+    perfMark('job-select-click');
     history.replaceState(null, '', `?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
     this.triageLaneState = job.state;
     if (!opts.keepPagerSnapshot) {
@@ -218,12 +223,18 @@ export class JobSelectionService {
     if (cached) {
       this.selected.set(cached);
       this.markNextTaskRendered();
+      perfMark('job-select-rendered');
+      perfMeasure('job-select-to-rendered', 'job-select-click', 'job-select-rendered');
     }
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => {
         if (token !== this.openDetailToken) return;
         this.selected.set(detail);
-        if (!cached) this.markNextTaskRendered();
+        if (!cached) {
+          this.markNextTaskRendered();
+          perfMark('job-select-rendered');
+          perfMeasure('job-select-to-rendered', 'job-select-click', 'job-select-rendered');
+        }
       },
       error: (err) => {
         if (token !== this.openDetailToken) return;

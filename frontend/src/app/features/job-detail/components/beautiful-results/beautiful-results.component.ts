@@ -14,6 +14,7 @@ import { renderResultsHtml, type SentinelBanner } from './beautiful-results.rend
 import { applyHighlighting } from './beautiful-results.highlight';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
+import { perfMark, perfMeasure } from '../../../../utils/perf-tracker';
 
 interface SentinelMeta {
   kind: SentinelBanner['kind'];
@@ -54,10 +55,16 @@ export class BeautifulResultsComponent {
   private readonly sanitizer = inject(DomSanitizer);
   @ViewChild('body') private bodyRef?: ElementRef<HTMLElement>;
 
-  private readonly rendered = computed(() => renderResultsHtml(this.markdown(), {
-    jobId: this.jobId(),
-    watchPath: this.watchPath()
-  }));
+  private readonly rendered = computed(() => {
+    perfMark('markdown-render');
+    const out = renderResultsHtml(this.markdown(), {
+      jobId: this.jobId(),
+      watchPath: this.watchPath()
+    });
+    perfMark('markdown-rendered');
+    perfMeasure('beautiful-results-render', 'markdown-render', 'markdown-rendered');
+    return out;
+  });
 
   readonly banner = computed<SentinelMeta & { reason: string | null } | null>(() => {
     const b = this.rendered().banner;

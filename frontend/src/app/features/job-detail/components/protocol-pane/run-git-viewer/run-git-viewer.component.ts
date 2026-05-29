@@ -16,6 +16,7 @@ import type { GitStatus } from '../../../../git';
 import { JobService } from '../../../../../services/task.service';
 import { RunGitCacheService } from '../../../services/run-git-cache.service';
 import { highlightBlock } from '../../beautiful-results/highlight-lazy';
+import { perfMark, perfMeasure } from '../../../../../utils/perf-tracker';
 import {
   setVisibleInterval,
   clearVisibleInterval,
@@ -170,6 +171,7 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
   private loadFiles(): void {
     const job = this.job(), run = this.run();
     if (!job || !run) return;
+    perfMark('run-files-fetch');
     this.filesState.set('loading');
     this.filesError.set(null);
     this.selectedPath.set(null);
@@ -187,6 +189,8 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
         }
         this.expanded.set(e);
         this.filesState.set('loaded');
+        perfMark('run-files-rendered');
+        perfMeasure('run-files-fetch-to-rendered', 'run-files-fetch', 'run-files-rendered');
         const leaf = findFirstLeaf(this.rootChildren());
         if (leaf) { this.selectedPath.set(leaf.fullPath); this.loadDiff(leaf.fullPath); }
       },
@@ -200,6 +204,7 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
   private loadDiff(path: string): void {
     const job = this.job(), run = this.run();
     if (!job || !run) return;
+    perfMark('run-diff-fetch');
     this.diffState.set('loading');
     this.diffError.set(null);
     this.diffText.set('');
@@ -208,6 +213,8 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
       next: (res) => {
         this.diffText.set(res.diff ?? '');
         this.diffState.set('loaded');
+        perfMark('run-diff-rendered');
+        perfMeasure('run-diff-fetch-to-rendered', 'run-diff-fetch', 'run-diff-rendered');
         this.highlightCurrentDiff(path);
       },
       error: (err) => {
