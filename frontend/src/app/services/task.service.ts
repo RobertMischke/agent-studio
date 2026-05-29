@@ -20,7 +20,7 @@ import type {
 } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
-import type { GitFileChange, GitStatus, JobCommitDetail } from '../features/git';
+import type { GitFileChange, GitStatus, JobCommitDetail, RecentCommit } from '../features/git';
 import type {
   OrchestratorLogResponse,
   OrchestratorSessionResponse,
@@ -713,6 +713,50 @@ export class JobService {
     if (path) params['path'] = path;
     return this.http.get<{ diff: string }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
+      { ...opts, params },
+    );
+  }
+
+  /**
+   * Operator override: exclude a commit the rule engine attributed to this
+   * task. Moves it into the task's excludedCommits with a manual marker
+   * (ADR "Commit-Attribution-Regel"). Server-side mutation goes through
+   * JobMutationService so the API-only job-folder rule holds.
+   */
+  excludeCommit(jobId: string, sha: string, watchPath?: string) {
+    return this.http.post<{ sha: string; excluded: boolean }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/exclude`,
+      {},
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Operator override: include a commit in this task's set - restoring one
+   * the rule engine excluded (manual-include-after-exclude) or adding one it
+   * never saw (manual-add). The optional message/at ride along for the
+   * add-from-recent case.
+   */
+  includeCommit(
+    jobId: string,
+    sha: string,
+    body: { message?: string; at?: string },
+    watchPath?: string,
+  ) {
+    return this.http.post<{ sha: string; included: boolean }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/include`,
+      body,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /** Recent branch commits for the git pane's "+ Add commit" dropdown. */
+  getRecentCommits(jobId: string, watchPath?: string, limit = 20) {
+    const opts = this.withWatchPath(watchPath);
+    const params = (opts.params as Record<string, string> | undefined) ?? {};
+    params['limit'] = String(limit);
+    return this.http.get<{ commits: RecentCommit[] }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/recent-commits`,
       { ...opts, params },
     );
   }

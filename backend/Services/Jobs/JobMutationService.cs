@@ -184,6 +184,164 @@ public class JobMutationService
     }
 
     /// <summary>
+    /// Persist the result of the deterministic commit-attribution post-step
+    /// (ADR "Commit-Attribution-Regel"): a replace-all write of the
+    /// <c>commits</c> chain (now carrying attribution + confidence) and the
+    /// <c>excludedCommits</c> array. The singular legacy <c>commit</c> field
+    /// is kept pointing at the newest attributed entry so old readers still
+    /// see the latest commit. Idempotent: re-running with the same git state
+    /// rewrites identical content.
+    /// </summary>
+    public bool SetCommitAttributionOnFolder(
+        string folderPath,
+        IReadOnlyList<JobCommitInfo> attributed,
+        IReadOnlyList<JobExcludedCommitInfo> excluded)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        var ordered = attributed
+            .Where(c => !string.IsNullOrWhiteSpace(c.Sha))
+            .OrderBy(c => c.At)
+            .ToList();
+        var excl = excluded.Where(e => !string.IsNullOrWhiteSpace(e.Sha)).ToList();
+        return WriteCommitState(folderPath, ordered, excl);
+    }
+
+    /// <summary>
+    /// Operator override: exclude a commit the rule engine had attributed to
+    /// this task. Moves it from <c>commits</c> to <c>excludedCommits</c> with
+    /// <see cref="JobExcludedCommitInfo.Manual"/> set and reason
+    /// <see cref="CommitExclusionReasons.ManualExclude"/>. No-op (returns
+    /// true) when the SHA is already excluded or unknown, so the UI can fire
+    /// the action without first reconciling state.
+    /// </summary>
+    public bool ExcludeCommit(string jobId, string sha, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(sha)) return false;
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var (chain, excluded) = ReadCommitState(info.FolderPath);
+
+        if (excluded.Any(e => string.Equals(e.Sha, sha, StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        var idx = chain.FindIndex(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase));
+        var moved = idx >= 0 ? chain[idx] : null;
+        if (idx >= 0) chain.RemoveAt(idx);
+
+        excluded.Add(new JobExcludedCommitInfo
+        {
+            Sha = sha,
+            ShortSha = moved?.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
+            Reason = CommitExclusionReasons.ManualExclude,
+            Subject = (moved?.Message ?? "").Split('\n')[0],
+            At = moved?.At ?? DateTime.UtcNow,
+            Manual = true,
+        });
+        return WriteCommitState(info.FolderPath, chain, excluded);
+    }
+
+    /// <summary>
+    /// Operator override: include a commit in this task's set. When the SHA
+    /// was previously excluded it is restored as
+    /// <see cref="CommitAttributionKinds.ManualIncludeAfterExclude"/>;
+    /// otherwise (an operator "+ Add commit" pick of a commit the rule engine
+    /// never saw) it is added as <see cref="CommitAttributionKinds.ManualAdd"/>.
+    /// <paramref name="candidate"/> carries the commit metadata for the
+    /// add-from-recent case; for a restore the stored exclusion subject is
+    /// used when no candidate is supplied.
+    /// </summary>
+    public bool IncludeCommit(string jobId, string sha, JobCommitInfo? candidate, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(sha)) return false;
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var (chain, excluded) = ReadCommitState(info.FolderPath);
+
+        var exIdx = excluded.FindIndex(e => string.Equals(e.Sha, sha, StringComparison.OrdinalIgnoreCase));
+        var wasExcluded = exIdx >= 0;
+        var prior = wasExcluded ? excluded[exIdx] : null;
+        if (wasExcluded) excluded.RemoveAt(exIdx);
+
+        if (chain.Any(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase)))
+            return WriteCommitState(info.FolderPath, chain, excluded);
+
+        var kind = wasExcluded
+            ? CommitAttributionKinds.ManualIncludeAfterExclude
+            : CommitAttributionKinds.ManualAdd;
+
+        chain.Add(new JobCommitInfo
+        {
+            Sha = sha,
+            ShortSha = candidate?.ShortSha ?? prior?.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
+            Message = candidate?.Message ?? prior?.Subject ?? "",
+            FilesChanged = candidate?.FilesChanged ?? 0,
+            Files = candidate?.Files ?? [],
+            At = candidate?.At ?? prior?.At ?? DateTime.UtcNow,
+            Attribution = kind,
+            Confidence = null,
+        });
+        return WriteCommitState(info.FolderPath, chain, excluded);
+    }
+
+    private (List<JobCommitInfo> chain, List<JobExcludedCommitInfo> excluded) ReadCommitState(string folderPath)
+    {
+        var chain = new List<JobCommitInfo>();
+        var excluded = new List<JobExcludedCommitInfo>();
+        var jobJsonPath = Path.Combine(folderPath, "job.json");
+        if (!File.Exists(jobJsonPath)) return (chain, excluded);
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JobJsonFile.ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+            if (doc.TryGetValue("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in commitsEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
+                }
+            }
+            else if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
+            {
+                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), JobJsonFile.ReadOpts);
+                if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
+            }
+            if (doc.TryGetValue("excludedCommits", out var exEl) && exEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in exEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) excluded.Add(parsed);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read commit state from {Folder}", folderPath);
+        }
+        return (chain, excluded);
+    }
+
+    private bool WriteCommitState(string folderPath, List<JobCommitInfo> chain, List<JobExcludedCommitInfo> excluded)
+    {
+        try
+        {
+            JobJsonFile.UpdateField(folderPath, "commits", chain, _logger);
+            JobJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
+            JobJsonFile.UpdateField(folderPath, "excludedCommits", excluded, _logger);
+            return Updated();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write commit state to {Folder}", folderPath);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Stamp a UTC progress heartbeat onto the job's <c>job.json</c>. Written
     /// on every CLI-output flush so <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
     /// can attribute orphan working-tree changes to the most-recently-active

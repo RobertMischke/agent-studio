@@ -39,6 +39,14 @@ public record GitCommitInfo(
 
 public record GenerateMessageResult(string? Message, string? Error);
 
+/// <summary>
+/// Per-commit enrichment for the deterministic commit-attribution step: the
+/// full commit body (<c>%B</c>, scanned for <c>Co-Authored-By:</c> trailers
+/// so an agent co-author is detected even when the operator is the author)
+/// and whether the commit is a merge (&gt;1 parent).
+/// </summary>
+public record CommitMeta(string Body, bool IsMerge);
+
 public record GitProjectSummary(
     string ProjectName,
     string RootPath,
@@ -993,6 +1001,107 @@ public class GitService
         }
         StoreShaRangeCached(cacheKey, list);
         return list;
+    }
+
+    /// <summary>
+    /// Recent commits on the current branch, newest first. Backs the
+    /// "+ Add commit" operator override in the git pane (ADR
+    /// "Commit-Attribution-Regel"): the dropdown lets an operator attach a
+    /// commit the deterministic rule never saw. Read-only; no caching since
+    /// the list shifts whenever the repo advances.
+    /// </summary>
+    public List<GitCommitInfo> GetRecentCommits(string jobId, string? watchPath, int limit = 20)
+    {
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return [];
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return [];
+
+        var n = Math.Clamp(limit, 1, 100);
+        const char US = '';
+        var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var args = $"log --no-merges -n {n} --shortstat --pretty=format:\"{fmt}\"";
+        var (output, _, code) = RunGit(root, args);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<GitCommitInfo>();
+        var raw = output.Replace("\r\n", "\n");
+        foreach (var block in raw.Split("\n\n", StringSplitOptions.None))
+        {
+            if (string.IsNullOrWhiteSpace(block)) continue;
+            string? recordLine = null;
+            string? shortstatLine = null;
+            foreach (var l in block.Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(l)) continue;
+                if (recordLine == null) recordLine = l;
+                else { shortstatLine = l.Trim(); break; }
+            }
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 5) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var ts))
+                continue;
+            var (files, added, removed) = ParseShortstat(shortstatLine);
+            list.Add(new GitCommitInfo(
+                Sha: parts[0],
+                ShortSha: parts[1],
+                AuthorDateUtc: DateTime.SpecifyKind(ts, DateTimeKind.Utc),
+                Author: parts[3],
+                Subject: parts[4],
+                FilesChanged: files,
+                Added: added,
+                Removed: removed));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Per-SHA enrichment for the commit-attribution step. Returns the full
+    /// commit message body and merge flag for each requested SHA in a single
+    /// <c>git show -s</c> call. Unknown SHAs are simply absent from the
+    /// result; an unavailable repo yields an empty dictionary. SHAs are
+    /// validated through <see cref="IsLikelyShaOrRef"/> first so a crafted
+    /// argument cannot smuggle a flag into the git invocation.
+    /// </summary>
+    public Dictionary<string, CommitMeta> GetCommitMeta(string jobId, string? watchPath, IEnumerable<string> shas)
+    {
+        var result = new Dictionary<string, CommitMeta>(StringComparer.OrdinalIgnoreCase);
+        var list = (shas ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s) && IsLikelyShaOrRef(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (list.Count == 0) return result;
+
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return result;
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return result;
+
+        const char US = '';
+        const char RS = '';
+        var args = "show -s --no-patch --pretty=format:\"%H%x1f%P%x1f%B%x1e\" " + string.Join(' ', list);
+        var (output, _, code) = RunGit(root, args);
+        if (code != 0 || string.IsNullOrEmpty(output)) return result;
+
+        foreach (var rec in output.Split(RS))
+        {
+            var block = rec.Trim('\n', '\r', ' ');
+            if (string.IsNullOrWhiteSpace(block)) continue;
+            var firstUs = block.IndexOf(US);
+            if (firstUs < 0) continue;
+            var sha = block[..firstUs];
+            var rest = block[(firstUs + 1)..];
+            var secondUs = rest.IndexOf(US);
+            if (secondUs < 0) continue;
+            var parents = rest[..secondUs];
+            var body = rest[(secondUs + 1)..];
+            var parentCount = parents.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+            result[sha] = new CommitMeta(body, parentCount > 1);
+        }
+        return result;
     }
 
     /// <summary>

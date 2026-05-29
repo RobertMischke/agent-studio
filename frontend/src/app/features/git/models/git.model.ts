@@ -87,9 +87,48 @@ export interface JobCommitInfo {
   filesChanged: number;
   files: string[];
   at: string;
+  /**
+   * How this commit was attributed to the task (ADR "Commit-Attribution-Regel").
+   * One of `automatic`, `manual-add`, `manual-include-after-exclude`, or
+   * `legacy` when the rule engine has not yet stamped it.
+   */
+  attribution?: string;
+  /** Confidence of an automatic attribution (0..1); absent otherwise. */
+  confidence?: number;
+}
+
+/**
+ * A commit the attribution rule withheld from this task. Surfaced under the
+ * "(N excluded)" expander in the git pane; `reason` explains why it was held
+ * back and `manual` marks an operator exclusion. Mirrors backend
+ * `JobExcludedCommitInfo`.
+ */
+export interface JobExcludedCommitInfo {
+  sha: string;
+  shortSha: string;
+  reason: string;
+  subject?: string;
+  at?: string;
+  manual?: boolean;
 }
 
 export interface JobCommitDetail {
   commit: JobCommitInfo | null;
   files: GitFileChange[];
+}
+
+/**
+ * One row in the git pane's "+ Add commit" dropdown: a recent branch
+ * commit the operator can manually attach to a task. Mirrors backend
+ * `GitCommitInfo` (the recent-commits endpoint shape).
+ */
+export interface RecentCommit {
+  sha: string;
+  shortSha: string;
+  authorDateUtc: string;
+  author: string;
+  subject: string;
+  filesChanged: number;
+  added: number;
+  removed: number;
 }

@@ -153,6 +153,66 @@ public class JobCommitsAggregatorTests
     }
 
     [Fact]
+    public void Aggregate_SubtractsExcludedShas_FromRunRanges()
+    {
+        // A crash-recovery for another task landed inside this task's run
+        // window. Once attribution records it in ExcludedCommits, the
+        // aggregate must drop it even though git still reaches it.
+        var info = new JobInfo
+        {
+            ExcludedCommits =
+            [
+                new JobExcludedCommitInfo { Sha = "noise", ShortSha = "noise", Reason = CommitExclusionReasons.CrashRecoveryOfOtherTask }
+            ]
+        };
+        var run = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "h1" };
+        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        {
+            new("real", "real", DateTime.UtcNow, "Claude", "feat: real", 1, 3, 0),
+            new("noise", "noise", DateTime.UtcNow, "boot", "chore(crash-recovery): rescue orphan changes for other", 1, 9, 0)
+        });
+
+        Assert.Equal(1, result.Count);
+        Assert.Equal("real", result.Commits[0].Sha);
+        var excluded = Assert.Single(result.Excluded);
+        Assert.Equal("noise", excluded.ShortSha);
+    }
+
+    [Fact]
+    public void Aggregate_OverlaysAttributionFromPersistedChain()
+    {
+        var info = new JobInfo
+        {
+            Commits =
+            [
+                new JobCommitInfo { Sha = "bbb", ShortSha = "bbb", Message = "feat", At = DateTime.UtcNow, Attribution = CommitAttributionKinds.Automatic, Confidence = 0.9 }
+            ]
+        };
+        var run = new RunRecord { Index = 1, HeadShaBefore = "aaa", HeadShaAfter = "bbb" };
+        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        {
+            new("bbb", "bbb", DateTime.UtcNow, "Claude", "feat: thing", 2, 10, 1)
+        });
+
+        var c = Assert.Single(result.Commits);
+        Assert.Equal(CommitAttributionKinds.Automatic, c.Attribution);
+        Assert.Equal(0.9, c.Confidence);
+    }
+
+    [Fact]
+    public void Aggregate_RangeCommitWithoutPersistedEntry_DefaultsToLegacyAttribution()
+    {
+        var info = new JobInfo();
+        var run = new RunRecord { Index = 1, HeadShaBefore = "aaa", HeadShaAfter = "bbb" };
+        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        {
+            new("bbb", "bbb", DateTime.UtcNow, "A", "feat: thing", 1, 1, 0)
+        });
+
+        Assert.Equal(CommitAttributionKinds.Legacy, Assert.Single(result.Commits).Attribution);
+    }
+
+    [Fact]
     public void CountCommitRangesPlusAutoCommit_CountsNonTrivialRanges()
     {
         var info = new JobInfo();

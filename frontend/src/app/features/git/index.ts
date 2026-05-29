@@ -6,5 +6,7 @@ export type {
   GitHygieneStatus,
   JobHygieneContext,
   JobCommitInfo,
+  JobExcludedCommitInfo,
   JobCommitDetail,
+  RecentCommit,
 } from './models/git.model';

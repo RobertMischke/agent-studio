@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
-import type { JobCommitInfo } from '../../../../git';
+import type { JobCommitInfo, JobExcludedCommitInfo } from '../../../../git';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
@@ -147,6 +147,80 @@ export class GitPaneComponent {
 
   commitChainTooltip(entry: JobCommitInfo, index: number): string {
     return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${entry.message}`;
+  }
+
+  /** Expander state for the "(N excluded)" list. Collapsed by default. */
+  readonly excludedExpanded = signal(false);
+
+  toggleExcluded(): void {
+    this.excludedExpanded.update((v) => !v);
+  }
+
+  /**
+   * True for commits the operator added or restored by hand. The chain gets
+   * a small marker so a reviewer can tell rule-driven from hand-curated
+   * attributions at a glance.
+   */
+  isManualAttribution(entry: JobCommitInfo): boolean {
+    return (
+      entry.attribution === 'manual-add' ||
+      entry.attribution === 'manual-include-after-exclude'
+    );
+  }
+
+  /** Short marker label for a manual attribution; empty for automatic/legacy. */
+  attributionMarker(entry: JobCommitInfo): string {
+    switch (entry.attribution) {
+      case 'manual-add':
+        return '+ added';
+      case 'manual-include-after-exclude':
+        return '↩ restored';
+      default:
+        return '';
+    }
+  }
+
+  /** Confidence as a whole-percent string (e.g. "90%"); empty when absent. */
+  confidencePercent(entry: JobCommitInfo): string {
+    if (entry.confidence == null) return '';
+    return `${Math.round(entry.confidence * 100)}%`;
+  }
+
+  /** Hover text spelling out attribution kind + confidence for a chain entry. */
+  attributionTooltip(entry: JobCommitInfo): string {
+    const kind =
+      entry.attribution === 'manual-add'
+        ? 'Manually added by operator'
+        : entry.attribution === 'manual-include-after-exclude'
+          ? 'Manually restored after exclusion'
+          : entry.attribution === 'automatic'
+            ? 'Attributed automatically by the rule engine'
+            : 'Legacy attribution (pre-rule-engine)';
+    const pct = this.confidencePercent(entry);
+    return pct ? `${kind} · confidence ${pct}` : kind;
+  }
+
+  /** Human-readable label for an exclusion reason code. */
+  exclusionReasonLabel(reason: string): string {
+    switch (reason) {
+      case 'crash-recovery-of-other-task':
+        return 'Crash-recovery for another task';
+      case 'update-stable-bump':
+        return 'Update-stable / submodule bump';
+      case 'merge-commit':
+        return 'Merge commit';
+      case 'outside-task-window':
+        return 'Outside the task session window';
+      case 'manual-exclude':
+        return 'Excluded by operator';
+      default:
+        return 'Other';
+    }
+  }
+
+  excludedTooltip(entry: JobExcludedCommitInfo): string {
+    const subject = entry.subject ? ` · ${entry.subject}` : '';
+    return `${entry.shortSha} · ${this.exclusionReasonLabel(entry.reason)}${subject}`;
   }
 }
 

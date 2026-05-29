@@ -997,6 +997,17 @@ public record GitCommitRequest
     public string Message { get; init; } = "";
 }
 
+/// <summary>
+/// Body for the operator "include commit" override
+/// (<c>POST /api/jobs/{id}/commits/{sha}/include</c>). Optional metadata for
+/// the add-from-recent case; the endpoint fills the rest from live git.
+/// </summary>
+public record IncludeCommitRequest
+{
+    public string? Message { get; init; }
+    public DateTime? At { get; init; }
+}
+
 public record ProjectSettings
 {
     /// <summary>When true, transition <c>3-progress → 4-auto-review</c> auto-commits and stamps the SHA on the job.</summary>

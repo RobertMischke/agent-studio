@@ -276,6 +276,9 @@ First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagn
 | GET | `/api/jobs/{jobId}/output?watchPath=...` | CLI stdout/stderr buffer. |
 | GET | `/api/jobs/{jobId}/runs?watchPath=...` | Per-task run timeline: ordered CLI invocations between user inputs + aggregates (RunCount, FirstStartedAt, LastActivityAt, HasActiveRun). Drives the protocol-pane run cards. |
 | GET | `/api/jobs/{jobId}/runs/{index}/commits?watchPath=...` | Git commits whose author date falls in run #index's wall-clock window. Drives the per-run software-side change set. |
+| GET | `/api/jobs/{jobId}/git/recent-commits?watchPath=...&limit=N` | Recent branch commits for the git pane's "+ Add commit" override picker (ADR-0050). |
+| POST | `/api/jobs/{jobId}/commits/{sha}/exclude?watchPath=...` | Operator override: withhold a commit from this task's attributed set (ADR-0050). |
+| POST | `/api/jobs/{jobId}/commits/{sha}/include?watchPath=...` | Operator override: restore an excluded commit or attach a recent one (ADR-0050). |
 | GET | `/api/cli/usage` | Sessions + versions for all CLIs. |
 | GET | `/api/cli/quota` | Per-CLI quota windows (used%, reset times). |
 | GET | `/api/cli/{cliType}/models` | Model catalog for one CLI. |
@@ -422,6 +425,12 @@ Frontend mutations on durable user-owned fields (job title, model, CLI type, tag
 Durable reference lists (per-CLI model catalogs, tag registry, client identities, workspace registry) live in process-wide `*Store` services that pre-hydrate at app boot and are read synchronously from a signal. The first cache on the contract is [`CliCatalogStore`](frontend/src/app/services/cli-catalog.store.ts) (`hasFresh` / `modelsFor` / `ensure` / `refresh` / `invalidate`, 1 h TTL, in-flight dedupe); it is hydrated in `App.ngOnInit` via `cliCatalogStore.hydrateAll()`. Opening a model picker after boot is a synchronous render, not a round-trip.
 
 Exceptions (stay synchronous with spinner): destructive operations (delete, bulk back-fill), and runner side effects (`start` / `continue`). For these, the truthful UI is the spinner; an optimistic mid-state would mislead the operator.
+
+### Commit-Attribution-Regel: deterministic commit-to-task binding (ADR-0050)
+
+Each task's git pane shows only the commits that actually belong to that task. Binding is **deterministic** - same inputs always yield the same attribution, no LLM in the default path. The engine is the pure [`CommitAttributionService`](backend/Services/Jobs/CommitAttributionService.cs); the post-step `RunCommitAttribution` in [`JobTransitionService`](backend/Services/Jobs/JobTransitionService.cs) runs it after agent execution (before `4-auto-review`) and persists results through `JobMutationService` (API-only, never a direct `job.json` write). Re-running is idempotent.
+
+Rule order per candidate commit: (0) platform-stamped SHA from the session window -> attributed `automatic` confidence 1.0; (1) authored before the task window start -> excluded `outside-task-window`; (2) merge commit -> excluded `merge-commit`; (3) `chore(submodules): bump dev` style update-stable bump -> excluded `update-stable-bump`; (4) `chore(crash-recovery): rescue orphan changes for <other-task-id>` -> excluded `crash-recovery-of-other-task`; (5) working-dir prefix mismatch (not the dev checkout) -> excluded `other`; otherwise `automatic` with a computed confidence. Operators override via the git pane: exclude an attributed commit, restore an excluded one, or attach a recent branch commit from the "+ Add commit" picker. Manual results carry `manual-add` / `manual-include-after-exclude`; automatic results carry a confidence badge (design tokens, not magic colors). Data lands in `job.json` as `commits[]` (with `attribution` + `confidence`) and `excludedCommits[]` (with `sha` + `reason`). An optional LLM fallback is reserved for confidence < 0.6 only and is toggleable; it is never on the default path.
 
 ### Menu surfaces are text-only
 

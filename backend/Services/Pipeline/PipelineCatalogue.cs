@@ -11,9 +11,12 @@ namespace OrchestratorApi.Services.Pipeline;
 /// / context-retrieval / skill-readiness here). The Core step is the
 /// CLI agent run owned by <see cref="TaskRunnerService"/>. Post-steps
 /// run the four <see cref="StepKind.Aspect"/> verdicts in parallel
-/// (the load-bearing behavioural change in this phase), then a
-/// deterministic <see cref="StepKind.Tool"/> stub for the upcoming
-/// git-commit-attribution follow-up, and an
+/// (the load-bearing behavioural change in this phase), the
+/// git-commit-attribution slot (ADR "Commit-Attribution-Regel";
+/// behaviour implemented in
+/// <see cref="OrchestratorApi.Services.Jobs.CommitAttributionService"/>
+/// and run from the transition service, so the executor records it as
+/// planned), a <see cref="StepKind.Tool"/> lint-scss step, and an
 /// <see cref="StepKind.Orchestrator"/> decision step that reads the
 /// aspect verdicts.
 ///
@@ -121,6 +124,11 @@ public static class PipelineCatalogue
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
+                    // The deterministic attribution behaviour IS implemented
+                    // (CommitAttributionService, run from JobTransitionService on
+                    // the 3-progress -> 4-auto-review transition). It runs ahead
+                    // of this executor bracket, so within the executor the slot
+                    // stays a reserved record that surfaces as "planned".
                     Stub = true,
                 },
                 new PipelineStep

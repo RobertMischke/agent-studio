@@ -8,7 +8,7 @@ export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let JobInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { JobCommitInfo } from '../features/git';
+import type { JobCommitInfo, JobExcludedCommitInfo } from '../features/git';
 import type { JobTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -61,6 +61,13 @@ export interface JobInfo {
    * is on disk, the backend surfaces it here as `[commit]`.
    */
   commits?: JobCommitInfo[];
+  /**
+   * Commits the attribution rule withheld from this task (ADR
+   * "Commit-Attribution-Regel"): crash-recovery for another task,
+   * update-stable/submodule bumps, merges, out-of-window, or an operator
+   * exclusion. Surfaced under the git pane's "(N excluded)" expander.
+   */
+  excludedCommits?: JobExcludedCommitInfo[];
   /** Saved user intent waiting for the auto-pickup loop. Surfaces in the UI as a ⏳ badge. */
   pendingIntent?: PendingIntent | null;
   /**

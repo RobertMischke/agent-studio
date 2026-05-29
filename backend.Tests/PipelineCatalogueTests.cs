@@ -9,8 +9,9 @@ namespace OrchestratorApi.Tests;
 /// Pin the Phase-1 <c>standard-task-pipeline</c> definition: the
 /// catalogue stays in sync with <see cref="AspectRunnerService.Catalogue"/>,
 /// the four aspect post-steps are marked parallel, the
-/// git-commit-attribution slot is a stub the follow-up task will fill,
-/// and the orchestrator-decision step depends on the aspect steps so a
+/// git-commit-attribution step is implemented (ADR
+/// "Commit-Attribution-Regel") and ordered before the decision, and the
+/// orchestrator-decision step depends on the aspect steps so a
 /// DAG-resolver cannot run it ahead of its inputs.
 /// </summary>
 public class PipelineCatalogueTests
@@ -27,7 +28,7 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post: 4 aspects + commit-attribution stub + lint-scss + orchestrator decision.
+        // Post: 4 aspects + commit-attribution + lint-scss + orchestrator decision.
         Assert.Equal(7, p.Post.Count);
     }
 
@@ -53,6 +54,11 @@ public class PipelineCatalogueTests
     [Fact]
     public void StandardPipeline_GitCommitAttributionIsStub_WithAspectDependencies()
     {
+        // ADR "Commit-Attribution-Regel": the deterministic attribution
+        // behaviour is implemented in CommitAttributionService and runs from
+        // the transition service on the 3-progress -> 4-auto-review move -
+        // ahead of this executor's bracket. So within the executor the slot
+        // stays a reserved record (Stub) that surfaces as "planned".
         var p = PipelineCatalogue.Standard;
         var commitStep = p.Post.First(s => s.Id == PipelineCatalogue.GitCommitAttributionStepId);
         Assert.Equal(StepKind.Tool, commitStep.Kind);

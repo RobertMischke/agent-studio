@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Jobs;
 
@@ -94,6 +95,20 @@ public sealed class JobTransitionService
             {
                 _mutations.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
             }
+        }
+
+        // Deterministic commit-attribution post-step (ADR "Commit-Attribution-Regel").
+        // Runs on every 3-progress -> 4-auto-review transition, after the
+        // auto-commit stamp, so the task's commit set is pinned to its own
+        // work and noise that landed in its run windows (crash-recovery for
+        // another task, update-stable bumps, merges) is excluded before the
+        // review lane renders it. No LLM, no tokens; same git + windows in,
+        // same result out, so re-running is a no-op.
+        if (outcome.Status == MoveJobStatus.Success
+            && info.State == JobStates.Progress && targetState == JobStates.AutoReview)
+        {
+            var attributed = _scanner.FindJob(jobId, watchPath);
+            if (attributed != null) RunCommitAttribution(attributed, watchPath);
         }
 
         // Drag-and-drop carries a desired slot in the target lane. Without
@@ -203,6 +218,78 @@ public sealed class JobTransitionService
             });
         }
         return results;
+    }
+
+    /// <summary>
+    /// Deterministic commit-attribution post-step. Gathers the commits in the
+    /// task's run SHA-windows (plus the platform auto-commit), runs the pure
+    /// <see cref="CommitAttributionService"/> rule engine, and persists the
+    /// attributed chain + exclusions via <see cref="JobMutationService"/>
+    /// (never a direct file write). Best-effort: any failure is logged and
+    /// swallowed so attribution never blocks the lane transition.
+    /// </summary>
+    private void RunCommitAttribution(JobInfo moved, string? watchPath)
+    {
+        try
+        {
+            if (_sessions == null) return;
+
+            var events = _sessions.ReadSessionEvents(moved.Id, watchPath);
+            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(moved.FolderPath));
+            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+
+            // Pre-attribution candidate set: at this point moved.ExcludedCommits
+            // is empty, so the aggregate is the raw union of run-range commits
+            // and the just-stamped auto-commit - exactly the noisy input the
+            // rule engine is meant to clean up.
+            var aggregate = JobCommitsAggregator.Aggregate(moved, timeline.Runs,
+                (before, after) => _git.GetCommitsInShaRange(moved.Id, watchPath, before, after));
+
+            if (aggregate.Commits.Count == 0) return;
+
+            // Enrich with the full commit body (for Co-Authored-By detection)
+            // and the merge flag (parent count) in one git call, so the rule
+            // engine works off the real message body rather than the subject.
+            var meta = _git.GetCommitMeta(moved.Id, watchPath, aggregate.Commits.Select(c => c.Sha));
+
+            var candidates = aggregate.Commits.Select(c =>
+            {
+                meta.TryGetValue(c.Sha, out var m);
+                return new AttributionCandidate
+                {
+                    Sha = c.Sha,
+                    ShortSha = c.ShortSha,
+                    Author = c.Author,
+                    Subject = c.Subject,
+                    Message = string.IsNullOrEmpty(m?.Body) ? c.Subject : m!.Body,
+                    AuthorDateUtc = c.AuthorDateUtc,
+                    FilesChanged = c.FilesChanged,
+                    IsMerge = m?.IsMerge ?? false,
+                };
+            }).ToList();
+
+            var input = new AttributionInput
+            {
+                TaskId = moved.Id,
+                Candidates = candidates,
+                // The platform-stamped auto-commit(s) are the task's accepted
+                // work by construction - pin them to full confidence.
+                PlatformStampShas = moved.Commits
+                    .Where(c => !string.IsNullOrWhiteSpace(c.Sha))
+                    .Select(c => c.Sha)
+                    .ToList(),
+            };
+
+            var result = CommitAttributionService.Attribute(input);
+            _mutations.SetCommitAttributionOnFolder(moved.FolderPath, result.Attributed, result.Excluded);
+            _logger.LogInformation(
+                "commit-attribution jobId={JobId} attributed={Attributed} excluded={Excluded}",
+                moved.Id, result.Attributed.Count, result.Excluded.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "commit-attribution post-step failed for {JobId}", moved.Id);
+        }
     }
 
     private async Task<JobCommitInfo?> TryAutoCommitAsync(string jobId, string? watchPath, CancellationToken ct)
