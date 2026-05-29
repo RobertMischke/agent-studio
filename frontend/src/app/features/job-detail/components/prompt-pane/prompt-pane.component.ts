@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
 import { JobArtifact, JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
@@ -64,19 +64,32 @@ export class PromptPaneComponent {
   readonly modelChange = output<string>();
   readonly cliTypeChange = output<CliType>();
 
-  /** overview | description | evidence | code-review. Persisted across sessions in localStorage. */
-  readonly activeTab = signal<'overview' | 'description' | 'evidence' | 'code-review'>(
-    (() => {
-      if (typeof window === 'undefined') return 'overview';
-      const v = window.localStorage?.getItem('atp.detail.left-tab');
-      if (v === 'overview' || v === 'description' || v === 'evidence' || v === 'code-review') return v;
-      return 'overview';
-    })(),
-  );
+  /**
+   * overview | description | evidence | code-review.
+   *
+   * The active tab is per-task and lives only in-memory: opening a task or
+   * switching to a different one snaps back to Overview so the operator
+   * always lands on the same first impression. Switching tabs within the
+   * same task persists (the signal stays) until the user navigates away to
+   * another task. Persistence across page reloads is intentionally out of
+   * scope.
+   */
+  readonly activeTab = signal<'overview' | 'description' | 'evidence' | 'code-review'>('overview');
+
+  /** Resets the active tab to Overview whenever the underlying task changes,
+   *  so navigating between tasks always lands on Overview. Within the same
+   *  task (refreshes, status updates) the previously-selected tab persists. */
+  private lastJobKey: string | null = null;
+  private resetTabOnJobSwitch = effect(() => {
+    const key = this.job()?.jobKey ?? null;
+    if (this.lastJobKey !== null && key !== null && key !== this.lastJobKey) {
+      this.activeTab.set('overview');
+    }
+    this.lastJobKey = key;
+  });
 
   setTab(tab: 'overview' | 'description' | 'evidence' | 'code-review'): void {
     this.activeTab.set(tab);
-    try { window.localStorage?.setItem('atp.detail.left-tab', tab); } catch { /* ignore */ }
   }
 
   /** Type-safe bridge from the generic pane-tabs `tabChange` event. */

@@ -64,6 +64,13 @@ test.describe('F30 — Task-detail header + tabs redesign', () => {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await setTheme(page, theme);
 
+      // Overview is the default tab on task switch — click into Files so
+      // the F30 redesign surface (desc-meta + file-card-prompt-edit) is
+      // mounted.
+      const descTab = page.getByTestId('prompt-tab-description');
+      await expect(descTab).toBeVisible({ timeout: 15_000 });
+      await descTab.click();
+
       // F48: prompt is shown as a card; editor opens on demand.
       await page.getByTestId('file-card-prompt-edit').click();
 
@@ -106,7 +113,6 @@ test.describe('F30 — Task-detail header + tabs redesign', () => {
       await expect(page.getByTestId('prompt-editor-source')).toBeVisible();
 
       // Active tab in the pane-header carries the new active styling.
-      const descTab = page.getByTestId('prompt-tab-description');
       await expect(descTab).toHaveClass(/pane-tab--active/);
       const bg = await descTab.evaluate((el) => getComputedStyle(el).backgroundColor);
       // The new active background reads `--studio-bg-tab-active`, which

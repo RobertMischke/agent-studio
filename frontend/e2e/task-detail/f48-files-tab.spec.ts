@@ -97,6 +97,10 @@ test.describe('F48 Files tab — rename + only-prompt + hint', () => {
       // No badge when only prompt is present.
       await expect(page.getByTestId('prompt-tab-description-badge')).toHaveCount(0);
 
+      // Overview is the default tab on task switch; click into Files so
+      // the prompt-card / hint card mount.
+      await tab.click();
+
       // Files-pane shell rendered with the prompt card auto-expanded.
       const promptCard = page.getByTestId('file-card-prompt.md');
       await expect(promptCard).toBeVisible();
@@ -160,6 +164,10 @@ test.describe('F48 Files tab — multi-file display', () => {
       const badge = page.getByTestId('prompt-tab-description-badge');
       await expect(badge).toBeVisible({ timeout: 10_000 });
       await expect(badge).toHaveText('5');
+
+      // Overview is the default tab on task switch; click into Files so the
+      // multi-file body mounts.
+      await page.getByTestId('prompt-tab-description').click();
 
       // Hint card must disappear when more than one file is present.
       await expect(page.getByTestId('files-pane-hint')).toHaveCount(0);
@@ -229,6 +237,10 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
         await dismissUpdateBannerIfPresent(page);
         await setTheme(page, theme);
 
+        // Overview is the default tab on task switch; click into Files so
+        // the prompt card mounts.
+        await page.getByTestId('prompt-tab-description').click();
+
         await expect(page.getByTestId('file-card-prompt.md')).toBeVisible({ timeout: 10_000 });
         await expect(page.getByTestId('files-pane-hint')).toBeVisible();
 
@@ -256,6 +268,10 @@ test.describe('F48 Files tab — only-prompt theme screenshots + Edit flow', () 
 
       // Initially the editor must not be rendered — read-only markdown only.
       await expect(page.getByTestId('prompt-editor')).toHaveCount(0);
+
+      // Overview is the default tab on task switch; click into Files so the
+      // prompt card / edit button mount.
+      await page.getByTestId('prompt-tab-description').click();
 
       const edit = page.getByTestId('file-card-prompt-edit');
       await expect(edit).toBeVisible({ timeout: 10_000 });

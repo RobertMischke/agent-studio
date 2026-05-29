@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { api } from '../helpers/api';
-import { createJob } from '../helpers/jobs';
+import { createJob, waitForJob } from '../helpers/jobs';
 
 interface WatchPath { path: string; name?: string }
 
@@ -121,12 +121,18 @@ test.describe('F38: unified pane-header tab strip across prompt + protocol', () 
 
     try {
       await page.setViewportSize({ width: 1600, height: 980 });
+      // Race-proof the deep-link: wait for the scanner to surface the
+      // fixture before navigating, otherwise the URL restore loses the
+      // race against the JobIndexCache and the welcome screen wins.
+      await waitForJob(job.id, watchPath, () => true, { timeoutMs: 15_000 });
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
 
+      // The prompt pane defaults to Overview on every task switch; click
+      // into Description to assert the canonical active-class transfers
+      // when the user picks a tab.
       const description = page.getByTestId('prompt-tab-description');
       await expect(description).toBeVisible({ timeout: 15_000 });
-      // Default open tab is Description; it must carry the canonical
-      // active-class emitted by `<app-pane-tabs>`.
+      await description.click();
       await expect(description).toHaveClass(/pane-tab--active/);
 
       // Click into Activity on the right; the same class applies to the

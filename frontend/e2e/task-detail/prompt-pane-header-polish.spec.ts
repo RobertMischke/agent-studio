@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { api } from '../helpers/api';
-import { createJob } from '../helpers/jobs';
+import { createJob, waitForJob } from '../helpers/jobs';
 
 interface WatchPath { path: string; name?: string }
 
@@ -53,8 +53,16 @@ test.describe('F52: prompt-pane sub-header padding, title wrap, meta-row polish'
 
     try {
       await page.setViewportSize({ width: 1600, height: 980 });
+      // Race-proof the deep-link: wait for the scanner before navigating.
+      await waitForJob(job.id, watchPath, () => true, { timeoutMs: 15_000 });
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await dismissUpdateBannerIfPresent(page);
+
+      // Overview is the default tab on task switch — click into Files so
+      // the desc-meta strip + file cards this spec measures get mounted.
+      const descTabInit = page.getByTestId('prompt-tab-description');
+      await expect(descTabInit).toBeVisible({ timeout: 15_000 });
+      await descTabInit.click();
 
       // --- Wait for the detail view to render ---
       const metaBar = page.getByTestId('desc-meta-bar');
