@@ -64,7 +64,16 @@
   }
 }
 
-/* Header variant — full-height cell, bottom-border accent. */
+/* Header variant — full-height cell, bottom-border accent.
+ *
+ * Active state is intentionally loud (operator polish 2026-05-28):
+ *   - elevated background distinct from the host surface (white on light,
+ *     mocha base-2 on dark) — visual contrast > 3:1 against inactive,
+ *   - 2 px brand-accent underline anchoring the active tab to the body,
+ *   - bumped font weight so the label reads strong even from a glance.
+ * Inactive tabs stay transparent with a dimmed label so a single tab
+ * jumps out of the strip. Hover lands a subtle wash between the two.
+ */
 .pane-tabs--header .pane-tab {
   padding: 0 12px;
   height: 100%;
@@ -72,13 +81,17 @@
 
   &:hover:not(:disabled) {
     background: var(--studio-bg-hover);
+    color: var(--studio-fg);
   }
 
   &.pane-tab--active {
     color: var(--studio-fg-strong);
-    background: var(--studio-bg-tab-active);
+    background: var(--studio-bg-elevated);
     border-bottom-color: var(--studio-accent);
     font-weight: 600;
+  }
+  &.pane-tab--active:hover:not(:disabled) {
+    background: var(--studio-bg-elevated);
   }
 }
 

@@ -121,6 +121,7 @@ export class LayoutPanesService {
     this.paneResizeLeft = left;
     this.paneResizeRight = right;
     this.paneResizeStartTotal = this.paneWeights()[left] + this.paneWeights()[right];
+    this.paneSplitterDragging.set(true);
     window.addEventListener('pointermove', this.paneResizeMove);
     window.addEventListener('pointerup', this.paneResizeEnd, { once: true });
   }
@@ -142,6 +143,7 @@ export class LayoutPanesService {
     this.paneResizeBounds = null;
     this.paneResizeLeft = null;
     this.paneResizeRight = null;
+    this.paneSplitterDragging.set(false);
     safeWrite(LS_WEIGHTS, JSON.stringify(this.paneWeights()));
   }
 }

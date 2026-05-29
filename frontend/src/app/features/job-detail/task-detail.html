@@ -101,7 +101,10 @@
     }
 
     @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
-      <div class="pane__splitter" role="separator" aria-orientation="vertical"
+      <div class="pane__splitter"
+           [class.pane__splitter--dragging]="paneSplitterDragging()"
+           role="separator" aria-orientation="vertical"
+           data-testid="pane-splitter"
            [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
     }
 
@@ -136,7 +139,10 @@
     }
 
     @if (!maximizedPane() && panesVisible().protocol && panesVisible().git) {
-      <div class="pane__splitter" role="separator" aria-orientation="vertical"
+      <div class="pane__splitter"
+           [class.pane__splitter--dragging]="paneSplitterDragging()"
+           role="separator" aria-orientation="vertical"
+           data-testid="pane-splitter"
            [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
     }
 

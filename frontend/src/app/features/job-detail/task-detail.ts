@@ -187,13 +187,13 @@ export class JobDetailComponent implements OnDestroy {
 
   readonly editingPrompt = signal(false);
 
-  // Three-pane layout — state, persistence and resize handlers live in
-  // LayoutPanesService (provided locally on this component). The fields
-  // below are facades so existing template bindings keep working.
+  // Three-pane layout state + resize handlers — owned by LayoutPanesService
+  // (provided locally on this component); fields below re-expose as facades.
   private readonly layout = inject(LayoutPanesService);
   readonly panesVisible = this.layout.panesVisible;
   readonly paneWeights = this.layout.paneWeights;
   readonly maximizedPane = this.layout.maximizedPane;
+  readonly paneSplitterDragging = this.layout.paneSplitterDragging;
 
   // Live Claude session telemetry — owned by ClaudeSessionPollService
   // (5 s poll, started/stopped in response to detail() changes).
