@@ -38,6 +38,11 @@ export class LayoutPanesService {
   readonly paneWeights = signal<PaneWeights>(loadWeights());
   readonly maximizedPane = signal<PaneName | null>(null);
   readonly detailPanePercent = signal<number>(loadDetailPercent());
+  // True while the user is dragging the prompt|protocol or
+  // protocol|git pane splitter. Template binds the
+  // `pane__splitter--dragging` modifier off this so the visible line
+  // stays highlighted for the duration of the drag, not just on hover.
+  readonly paneSplitterDragging = signal(false);
 
   private layoutResizeBounds: DOMRect | null = null;
   private readonly layoutResizeMove = (e: PointerEvent) => this.resizeLayout(e);

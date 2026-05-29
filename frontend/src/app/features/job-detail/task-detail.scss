@@ -253,20 +253,20 @@
        4 px so the page reads as IDE chrome, not a marketing card. The
        dark Catppuccin background palette is preserved unchanged. */
     .detail {
-      // Detail surface flips per theme — was pinned to Catppuccin
-      // `#181825` (dark navy). On the light shell the bridge layer in
-      // styles.scss patched this to `#f3f3f3`, but reading the studio
-      // token directly removes the bridge dependency and keeps the
-      // dark-shell appearance.
-      background: var(--studio-bg-editor);
-      border: 1px solid var(--studio-border);
-      border-radius: 4px;
-      padding: 10px 12px;
+      // Detail surface — paper-white on light, cleanest body tone on
+      // dark. Operator polish 2026-05-28: removed the 1px studio-border
+      // ring and the 4px corner radius that read as a "white rand"
+      // around the panes; whitespace now lives as padding inside the
+      // host so the splitter and tabs sit flush against the edge.
+      background: var(--studio-bg-surface);
+      border: 0;
+      border-radius: 0;
+      padding: var(--studio-spacing-3) var(--studio-spacing-3);
       height: 100%;
       min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--studio-spacing-2);
       position: relative;
       box-sizing: border-box;
     }
@@ -556,13 +556,17 @@
     }
     .detail__panes-toolbar-spacer { flex: 1; }
     .detail__panes {
+      // Panes claim the full host width so the splitter runs edge-to-
+      // edge. Use negative inline margins keyed to the host's inline
+      // padding so the panes still bleed through the parent padding
+      // without re-introducing per-pane outer margins.
       display: flex;
       flex: 1;
       align-items: stretch;
       min-height: 0;
       gap: 0;
-      margin-left: -12px;
-      margin-right: -12px;
+      margin-left: calc(var(--studio-spacing-3) * -1);
+      margin-right: calc(var(--studio-spacing-3) * -1);
     }
     .pane {
       display: flex;
@@ -643,21 +647,52 @@
       padding: 0;
       overflow: auto;
     }
+    /*
+     * Pane splitter — visual line stays thin (1 px), but a wider
+     * pointer hit-box overlays it via ::before so the operator does
+     * not have to land the cursor on a single-pixel target. Hover and
+     * drag both turn the visible line accent-orange so the click
+     * target is unambiguous.
+     */
     .pane__splitter {
       flex: 0 0 1px;
       align-self: stretch;
+      position: relative;
       display: flex;
       justify-content: center;
       cursor: col-resize;
       touch-action: none;
       background: var(--studio-border);
+      transition: background 120ms ease;
+      z-index: 1;
+    }
+    .pane__splitter::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      // Hit-box widened to 9 px total (1 px line + 4 px on each side)
+      // so a 3-4 px miss still drags. Touch widens to 17 px.
+      left: calc(var(--studio-spacing-1) * -1);
+      right: calc(var(--studio-spacing-1) * -1);
+      cursor: col-resize;
     }
     .pane__splitter span {
       width: 0;
       min-height: 100%;
     }
-    .pane__splitter:hover { background: rgba(129,140,248,0.55); flex-basis: 3px; }
-    .pane__splitter:hover span { width: 0; }
+    .pane__splitter:hover,
+    .pane__splitter--dragging {
+      background: var(--studio-accent);
+    }
+    .pane__splitter:hover span,
+    .pane__splitter--dragging span { width: 0; }
+    @media (pointer: coarse) {
+      .pane__splitter::before {
+        left: calc(var(--studio-spacing-2) * -1);
+        right: calc(var(--studio-spacing-2) * -1);
+      }
+    }
     .detail__panes-empty {
       flex: 1;
       display: flex;

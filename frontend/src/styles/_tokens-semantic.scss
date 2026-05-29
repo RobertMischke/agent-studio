@@ -37,6 +37,12 @@
   --studio-bg-tab-inactive: var(--color-mocha-mantle);    // surface-1
   --studio-bg-hover:        var(--alpha-white-04);
   --studio-bg-selected:     var(--color-mocha-base-3);    // surface-3
+  // Clean "surface" for chrome-less detail / pane backgrounds: pure
+  // white on light, the same cleanest body tone as the editor on dark.
+  // Components that previously read --studio-bg-editor for their host
+  // surface should switch to this so light-theme shells render as
+  // paper-white instead of grey-50.
+  --studio-bg-surface:      var(--color-mocha-base-0);    // surface-0 (dark)
 
   // ---------------------------------------------------------------------------
   // Borders
@@ -351,6 +357,10 @@
   --studio-bg-tab-inactive: var(--color-grey-200);
   --studio-bg-hover:        var(--alpha-black-05);
   --studio-bg-selected:     rgba(217, 119, 87, 0.15);
+  // Pure-white paper surface for the task-detail host on light theme.
+  // Sub-panes stay transparent so the white reads through; active tabs
+  // and elevated chrome use --studio-bg-elevated for contrast.
+  --studio-bg-surface:      #ffffff;
 
   // Borders
   --studio-border:        var(--color-grey-400);
