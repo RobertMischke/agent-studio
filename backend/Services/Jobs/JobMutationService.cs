@@ -26,13 +26,15 @@ public class JobMutationService
     private readonly JobScannerService _scanner;
     private readonly ClientIdentityStore _clients;
     private readonly ProjectRegistry _projectRegistry;
+    private readonly JobChangeNotifier _notifier;
     private readonly ILogger<JobMutationService> _logger;
 
-    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, ILogger<JobMutationService> logger)
+    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, JobChangeNotifier notifier, ILogger<JobMutationService> logger)
     {
         _scanner = scanner;
         _clients = clients;
         _projectRegistry = projectRegistry;
+        _notifier = notifier;
         _logger = logger;
     }
 
@@ -42,6 +44,25 @@ public class JobMutationService
     /// invalidated synchronously. Without this, a POST-then-GET sequence
     /// (e.g. SetJobTitle then refresh) could see the pre-write snapshot
     /// for up to 250 ms (the FileSystemWatcher debounce window).
+    /// Also publishes a typed <c>jobUpdated</c> event to
+    /// <see cref="JobChangeNotifier"/> so the SignalR hub can push the
+    /// change to connected clients without waiting for the next poll.
+    /// </summary>
+    private bool Updated(JobInfo info)
+    {
+        _scanner.InvalidateCache();
+        _notifier.PublishUpdated(info.ProjectName, info.Id, info.WatchPath);
+        return true;
+    }
+
+    /// <summary>
+    /// Folder-only invalidation for the internal helpers
+    /// (<see cref="SetJobCommitOnFolder"/>, <see cref="AppendJobCommitOnFolder"/>,
+    /// <see cref="SetJobLastProgressAt"/>, <see cref="SetJobPhase"/>) whose
+    /// callers do not always have a <see cref="JobInfo"/> in hand. Skips the
+    /// SignalR push: those code paths are either user-invisible heartbeats
+    /// (<c>lastProgressAt</c>), or land on a job that the user-facing
+    /// surface (Move, CreateJob) is about to push for separately.
     /// </summary>
     private bool Updated() { _scanner.InvalidateCache(); return true; }
 

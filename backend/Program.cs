@@ -123,6 +123,11 @@ builder.Services.AddSingleton<ScreenshotIndexService>();
 // every lane-mutating service can take it as a dependency. See
 // docs/architecture-3-progress-lane-writers.md.
 builder.Services.AddSingleton<LaneMutexRegistry>();
+// SignalR fanout for fine-grained job mutation events (jobCreated /
+// jobUpdated / jobMoved / jobDeleted / jobsReordered). Registered before
+// the mutation services so each takes it as a constructor dependency.
+// See backend/Services/Jobs/JobChangeNotifier.cs.
+builder.Services.AddSingleton<JobChangeNotifier>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
