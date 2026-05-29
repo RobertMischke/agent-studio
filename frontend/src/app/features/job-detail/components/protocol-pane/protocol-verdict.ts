@@ -28,14 +28,23 @@ export interface ProtocolVerdictInputs {
  * Map the existing protocol-pane signals to a single 3-state verdict.
  *
  * Priority (top wins):
- *   1. isRunning            -> Unclear ("Läuft … Stand offen")
- *   2. summaryStatus failed -> Problem
- *   3. outcomeIssue High    -> Problem
- *   4. trailing sentinel    -> Done/NoOp = OK, Blocked = Problem, NeedsInput = Unclear
- *   5. Result: line         -> Success/NoOp = OK, Failed/Blocked = Problem, Partial/NeedsInput = Unclear
- *   6. outcomeIssue Warn    -> Unclear
- *   7. hasActivity          -> Unclear (ran but nothing classifiable yet)
- *   8. default              -> Unclear ("No run yet")
+ *   1. isRunning                        -> Unclear ("Läuft … Stand offen")
+ *   2. summaryStatus failed             -> Problem
+ *   3. outcomeIssue High                -> Problem
+ *   4. trailing sentinel                -> Done/NoOp = OK, Blocked = Problem, NeedsInput = Unclear
+ *   5. Result: Success + Notes/Open Items/What Was Done contains a blocker phrase
+ *                                       -> Problem (downgraded; matched sentence becomes detail)
+ *   6. Result: line                     -> Success/NoOp = OK, Failed/Blocked = Problem, Partial/NeedsInput = Unclear
+ *   7. outcomeIssue Warn                -> Unclear
+ *   8. hasActivity                      -> Unclear (ran but nothing classifiable yet)
+ *   9. default                          -> Unclear ("No run yet")
+ *
+ * Step 5 exists because the `Result:` line is deterministically rewritten by the
+ * runner from the terminal exit, not by Haiku, so it can read `Success` while the
+ * body Notes describe a blocker the agent hit (sandbox denied, access denied,
+ * external verification required, etc.). The downgrade is intentionally narrow
+ * to `Result: Success`; sentinels and explicit non-success Result lines still
+ * win at their original priority.
  *
  * Pure function so the protocol-pane component can wrap it in a `computed()`
  * and unit tests can hammer every branch without a fixture.
@@ -69,6 +78,15 @@ export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVer
 
   const result = parseResultLine(input.statusMarkdown);
   if (result) {
+    if (result === 'success') {
+      const blocker = scanForBlockers(input.statusMarkdown);
+      if (blocker) {
+        const detail = blocker.sentence
+          ? `${blocker.section}: ${blocker.sentence}`
+          : `${blocker.section} flagged a blocker (matched "${blocker.phrase}").`;
+        return verdict('problem', 'Blocked', detail);
+      }
+    }
     switch (result) {
       case 'success': return verdict('ok', 'Success', 'Last run completed successfully.');
       case 'noop': return verdict('ok', 'No action needed', 'Last run produced no changes.');
@@ -138,4 +156,91 @@ function parseResultLine(markdown: string | null | undefined): ResultKind | null
     case 'needsinput': return 'needsinput';
     default:           return null;
   }
+}
+
+// Phrases that flip a Haiku "Success" verdict into a Blocked verdict when they
+// appear in the Notes / Open Items / What Was Done body of status.md. Keep one
+// phrase per line so the list reads as a lint surface. EN + DE because the agent
+// log can be either.
+const BLOCKER_PHRASES = [
+  'blocked',
+  'blocker',
+  'could not',
+  'was prevented',
+  'prevented from',
+  'sandbox denied',
+  'access denied',
+  'forbidden',
+  'requires manual',
+  'requires external',
+  'geblockt',
+  'konnte nicht',
+  'verhindert'
+] as const;
+
+const BLOCKER_SECTION_HEADINGS = new Set(['notes', 'open items', 'what was done']);
+
+interface BlockerHit {
+  phrase: string;
+  /** The full sentence (or list-bullet line) containing the phrase, trimmed. */
+  sentence: string;
+  /** Human-readable section heading (e.g. "Notes"). */
+  section: string;
+}
+
+export function scanForBlockers(markdown: string | null | undefined): BlockerHit | null {
+  if (!markdown) return null;
+  for (const section of splitSections(markdown)) {
+    if (!BLOCKER_SECTION_HEADINGS.has(section.heading.trim().toLowerCase())) continue;
+    const hit = findBlockerPhrase(section.body);
+    if (hit) return { ...hit, section: section.heading.trim() };
+  }
+  return null;
+}
+
+function splitSections(markdown: string): { heading: string; body: string }[] {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const out: { heading: string; body: string }[] = [];
+  let current: { heading: string; body: string[] } | null = null;
+  for (const line of lines) {
+    const m = /^##\s+(.*)$/.exec(line);
+    if (m) {
+      if (current) out.push({ heading: current.heading, body: current.body.join('\n') });
+      current = { heading: m[1], body: [] };
+    } else if (current) {
+      current.body.push(line);
+    }
+  }
+  if (current) out.push({ heading: current.heading, body: current.body.join('\n') });
+  return out;
+}
+
+function findBlockerPhrase(body: string): { phrase: string; sentence: string } | null {
+  const lower = body.toLowerCase();
+  let best: { phrase: string; index: number } | null = null;
+  for (const phrase of BLOCKER_PHRASES) {
+    const idx = lower.indexOf(phrase);
+    if (idx >= 0 && (best === null || idx < best.index)) {
+      best = { phrase, index: idx };
+    }
+  }
+  if (!best) return null;
+  return { phrase: best.phrase, sentence: extractSentence(body, best.index) };
+}
+
+function extractSentence(text: string, atIndex: number): string {
+  let start = atIndex;
+  while (start > 0) {
+    const ch = text[start - 1];
+    if (ch === '\n' || ch === '.' || ch === '!' || ch === '?') break;
+    start--;
+  }
+  let end = atIndex;
+  while (end < text.length) {
+    const ch = text[end];
+    if (ch === '\n') break;
+    if (ch === '.' || ch === '!' || ch === '?') { end++; break; }
+    end++;
+  }
+  return text.slice(start, end).trim().replace(/^[-*\s]+/, '').trim();
 }
