@@ -5,7 +5,9 @@
          [attr.aria-label]="card.ariaLabel"
          [class.hquota__card--error]="!!card.error"
          [class.hquota__card--stale]="card.stale"
-         [attr.data-tone]="card.tone">
+         [attr.data-tone]="card.tone"
+         [attr.data-state]="card.state"
+         [appTooltip]="card.tooltip">
       <div class="hquota__head">
         <span class="hquota__icon" aria-hidden="true">{{ card.icon }}</span>
         <span class="hquota__label">{{ card.label }}</span>

@@ -6,6 +6,7 @@ import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+import type { StructuredTooltip } from '../../../../components/tooltip';
 
 interface QuotaWindowDisplay {
   value: string;
@@ -14,6 +15,16 @@ interface QuotaWindowDisplay {
   tooltip: string;
   windowKind: 'five_hour' | 'weekly';
 }
+
+/**
+ * Semantic state of a CLI quota card. Drives the highlight reading
+ * for the operator: idle = quiet, warn = approaching threshold, hot =
+ * over threshold, stale = snapshot older than TTL, unavailable = no
+ * data, error = probe failed. F50 follow-up: the card tooltip names
+ * the state explicitly so "warum ist Codex gehighlighted?" is
+ * answerable without reading code.
+ */
+type QuotaCardState = 'idle' | 'warn' | 'hot' | 'stale' | 'unavailable' | 'error';
 
 interface QuotaCardModel {
   cliType: CliType;
@@ -24,6 +35,8 @@ interface QuotaCardModel {
   shortWindow?: QuotaWindowDisplay;
   weekWindow?: QuotaWindowDisplay;
   tone: 'ok' | 'warn' | 'hot' | 'unknown';
+  state: QuotaCardState;
+  tooltip: StructuredTooltip;
   fetchedAt: string | null;
   stale: boolean;
   freshness: string;
@@ -105,6 +118,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const shortWindow = this.buildWindowDisplay(s.windows, 'five_hour');
     const weekWindow = this.buildWindowDisplay(s.windows, 'weekly');
     const tone = this.cardTone(shortWindow, weekWindow, !!s.error);
+    const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow);
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
@@ -114,6 +128,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       shortWindow,
       weekWindow,
       tone,
+      state,
+      tooltip: this.cardTooltip(label, state, s.plan, freshness, shortWindow, weekWindow, s.error),
       fetchedAt: s.fetchedAt,
       stale,
       freshness,
@@ -132,6 +148,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       ariaLabel: `${label} quota: no data yet`,
       plan: null,
       tone: 'unknown',
+      state: 'unavailable',
+      tooltip: this.cardTooltip(label, 'unavailable', null, 'never refreshed', undefined, undefined, null),
       fetchedAt: null,
       stale: true,
       freshness: 'never refreshed',
@@ -190,6 +208,51 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     if (pct < 70) return 'ok';
     if (pct < 90) return 'warn';
     return 'hot';
+  }
+
+  private cardState(
+    tone: QuotaCardModel['tone'],
+    stale: boolean,
+    hasError: boolean,
+    sw?: QuotaWindowDisplay,
+    ww?: QuotaWindowDisplay,
+  ): QuotaCardState {
+    if (hasError) return 'error';
+    if (!sw && !ww) return 'unavailable';
+    if (tone === 'hot') return 'hot';
+    if (tone === 'warn') return 'warn';
+    if (stale) return 'stale';
+    return 'idle';
+  }
+
+  private cardTooltip(
+    label: string,
+    state: QuotaCardState,
+    plan: string | null,
+    freshness: string,
+    sw?: QuotaWindowDisplay,
+    ww?: QuotaWindowDisplay,
+    error?: string | null,
+  ): StructuredTooltip {
+    const stateLine = (() => {
+      switch (state) {
+        case 'idle':        return `<b>${label}</b> — idle (under 70% on every window)`;
+        case 'warn':        return `<b>${label}</b> — quota warning (≥ 70% on at least one window)`;
+        case 'hot':         return `<b>${label}</b> — quota blocked (≥ 90% on at least one window)`;
+        case 'stale':       return `<b>${label}</b> — snapshot is older than the cache TTL`;
+        case 'unavailable': return `<b>${label}</b> — no data yet`;
+        case 'error':       return `<b>${label}</b> — probe failed`;
+      }
+    })();
+
+    const lines: string[] = [stateLine];
+    if (sw) lines.push(`5H rolling: ${sw.value}`);
+    if (ww) lines.push(`Weekly: ${ww.value}`);
+    if (plan) lines.push(`Plan: ${plan}`);
+    lines.push(freshness);
+    if (error) lines.push(`Error: ${error}`);
+    lines.push('<i>Click for usage detail.</i>');
+    return { body: lines.join('<br>') };
   }
 
   private cliLabel(cli: string): string {

@@ -1,16 +1,32 @@
+// F50 follow-up (2026-05-29) — CLI quota cards now share the status-
+// bar's sizing tokens so Claude / Codex / Copilot pills sit on the
+// same baseline as the surrounding chips. Previous min-height: 28 px
+// overflowed the 22 px bar and was the visual source of "Codex looks
+// inconsistent" + "left icons rutsch nach unten".
+
 :host { display: inline-flex; }
-.hquota { display: inline-flex; gap: 6px; align-items: center; }
+
+.hquota {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
 .hquota__card {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 28px;
-  padding: 4px 9px;
-  border-radius: 6px;
+  gap: 6px;
+  // Match the status-bar item height (defined on .statusbar). Falling
+  // back to 18 px keeps the card sane when rendered outside the bar.
+  height: var(--statusbar-item-height, 18px);
+  min-height: 0;
+  padding: 0 var(--statusbar-item-pad-x, 7px);
+  border-radius: var(--statusbar-item-radius, 4px);
   border: 1px solid var(--studio-border);
   background: var(--studio-bg-hover);
   color: var(--studio-fg);
-  font: inherit;
+  font-size: var(--statusbar-font-size, 11px);
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -22,34 +38,56 @@
 }
 .hquota__card--stale { border-color: color-mix(in srgb, var(--severity-warn) 50%, transparent); }
 .hquota__card--error { border-color: color-mix(in srgb, var(--severity-high) 50%, transparent); }
+// Loud-state hint: tone="warn" / "hot" shifts the border so the card
+// reads as semantically highlighted (not just decorative). Tooltip on
+// the card root documents the why.
+.hquota__card[data-tone="warn"] { border-color: color-mix(in srgb, var(--severity-warn) 45%, transparent); }
+.hquota__card[data-tone="hot"]  { border-color: color-mix(in srgb, var(--severity-high) 55%, transparent); }
+
 .hquota__head {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: var(--statusbar-font-size, 11px);
+  line-height: 1;
   color: var(--studio-fg);
   letter-spacing: 0;
 }
-.hquota__icon { font-size: 12px; }
-.hquota__label { font-weight: 650; }
-.hquota__stale-dot { color: var(--severity-warn); }
+.hquota__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--statusbar-icon-size, 11px);
+  line-height: 1;
+}
+.hquota__label {
+  font-weight: 600;
+  line-height: 1;
+}
+.hquota__stale-dot {
+  color: var(--severity-warn);
+  font-size: 9px;
+  line-height: 1;
+}
 
 .hquota__windows {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .hquota__window-cell {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  line-height: 1;
 }
 .hquota__window-value {
   color: var(--studio-fg-strong);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--statusbar-font-size, 11px);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  min-width: 28px;
+  line-height: 1;
+  min-width: 26px;
   text-align: right;
 }
 .hquota__window-cell[data-tone="warn"] .hquota__window-value { color: var(--severity-warn); }
@@ -57,11 +95,12 @@
 .hquota__window-label {
   color: var(--studio-fg-dim);
   font-size: 9px;
+  line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 .hquota__window-bar {
-  width: 24px;
+  width: 20px;
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
