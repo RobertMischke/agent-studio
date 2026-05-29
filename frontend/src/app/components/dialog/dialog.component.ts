@@ -59,6 +59,13 @@ export class DialogComponent {
   readonly closable = input(true);
   /** Visual variant — drives accent stripe colour. */
   readonly kind = input<'default' | 'danger' | 'primary'>('default');
+  /**
+   * Body padding variant. `md` (default) uses --studio-modal-padding-body
+   * (24px); `sm` drops to --studio-modal-padding-body-sm (16px) for confirm-
+   * style dialogs that are intentionally tight. Header/footer always use
+   * --studio-modal-padding-header / -footer regardless of size.
+   */
+  readonly size = input<'sm' | 'md'>('md');
   readonly testid = input<string | null>(null);
 
   readonly closeRequest = output<void>();

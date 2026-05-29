@@ -219,6 +219,43 @@
   --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 
   // ---------------------------------------------------------------------------
+  // Spacing scale — 4px base, Material-aligned.
+  //
+  // Every component reads padding / margin / gap through this scale instead of
+  // hardcoding px. The scale exists primarily so surfaces stay rhythmically
+  // consistent across the shell (a 14px card padding next to a 16px sheet
+  // padding reads as visual noise); it is also the hook surfaces like the
+  // modal dialog use when the operator asks for "more breathing room".
+  //
+  //   1 = 4px   row gap, tag chip inset, icon-icon gap
+  //   2 = 8px   small inline gap, kbd padding
+  //   3 = 12px  default card / row padding
+  //   4 = 16px  modal header/footer padding, small-dialog body inset
+  //   5 = 24px  modal body padding, section inset, dialog viewport gutter
+  //   6 = 32px  hero / empty-state padding
+  //   7 = 48px  rare — first-run welcome cards
+  // ---------------------------------------------------------------------------
+  --studio-spacing-1: 4px;
+  --studio-spacing-2: 8px;
+  --studio-spacing-3: 12px;
+  --studio-spacing-4: 16px;
+  --studio-spacing-5: 24px;
+  --studio-spacing-6: 32px;
+  --studio-spacing-7: 48px;
+
+  // ---------------------------------------------------------------------------
+  // Modal padding — single knob the operator can dial to widen breathing room
+  // across every <app-dialog>. Body uses the larger inset; header / footer
+  // share a slightly tighter inset so the title bar and action row do not
+  // dominate the panel. The `--sm` variant is for confirm-style dialogs that
+  // intentionally stay compact (a one-line message + two buttons).
+  // ---------------------------------------------------------------------------
+  --studio-modal-padding-body:    var(--studio-spacing-5); // 24px
+  --studio-modal-padding-header:  var(--studio-spacing-4); // 16px
+  --studio-modal-padding-footer:  var(--studio-spacing-4); // 16px
+  --studio-modal-padding-body-sm: var(--studio-spacing-4); // 16px
+
+  // ---------------------------------------------------------------------------
   // Layout sizes
   // ---------------------------------------------------------------------------
   --studio-activitybar-w: 48px;

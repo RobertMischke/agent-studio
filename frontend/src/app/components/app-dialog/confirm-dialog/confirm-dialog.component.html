@@ -3,6 +3,7 @@
               [title]="confirm.title"
               role="alertdialog"
               [kind]="confirm.kind === 'danger' ? 'danger' : 'primary'"
+              size="sm"
               testid="confirm-dialog"
               (closeRequest)="onCancel()"
               (backdropClick)="onBackdropClick()"

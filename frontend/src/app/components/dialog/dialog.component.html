@@ -4,6 +4,7 @@
   <div class="dialog"
        [class.dialog--danger]="kind() === 'danger'"
        [class.dialog--primary]="kind() === 'primary'"
+       [class.dialog--sm]="size() === 'sm'"
        [style.width.px]="width()"
        [attr.role]="role()"
        aria-modal="true"
