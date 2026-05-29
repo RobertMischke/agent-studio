@@ -268,6 +268,25 @@
   --studio-titlebar-h:    36px;
   --studio-tabbar-h:      36px;
 
+  // ---------------------------------------------------------------------------
+  // Rail items — collapsed lane-rail + activity-bar share the same vertical
+  // rhythm contract: each rail child sits in a slot with the same min-height
+  // and padding-block so the spacing reads as a single grid, not as a stack
+  // of per-element gaps. Without these tokens the rail's intrinsic gap +
+  // each child's own intrinsic size produced an uneven rhythm (operator
+  // 2026-05-28 bug). Consumers MUST read these instead of hardcoding px.
+  //
+  // Adding a new rail surface (e.g. a future side-rail or status strip)?
+  // Reuse these tokens; do not introduce a parallel scale.
+  // ---------------------------------------------------------------------------
+  --studio-rail-width:               36px;
+  --studio-rail-item-min-height:     28px;
+  --studio-rail-item-padding-block:  var(--studio-spacing-1);  // 4px
+  --studio-rail-item-padding-inline: var(--studio-spacing-1);  // 4px
+  --studio-rail-gap:                 var(--studio-spacing-2);  // 8px between rail slots
+  --studio-rail-padding-block:       var(--studio-spacing-2);  // 8px top/bottom of the rail container
+  --studio-rail-padding-inline:      var(--studio-spacing-1);  // 4px left/right of the rail container
+
   // Explorer-tree column geometry. Project rows render
   //   [chev: 14px] [gap: 8px] [glyph: 16px] [gap: 8px] [name]
   // at `padding-left: 8px`, so the glyph column starts at

@@ -1511,6 +1511,15 @@
     border-radius: 4px;
     border-color: var(--studio-border);
   }
+  /* Reset the vertical-rhythm slot contract from task-column.scss when
+     the rail flips to a horizontal strip inside a super-column. In the
+     row layout the rail is 32 px tall and items sit side by side; the
+     28 px slot min-height + 4 px padding-block from the base rhythm
+     would overflow the strip vertically. */
+  app-job-column button.column-rail > * {
+    min-height: 0;
+    padding-block: 0;
+  }
   app-job-column .column-rail__icon { font-size: 14px; }
   app-job-column .column-rail__title {
     writing-mode: horizontal-tb;

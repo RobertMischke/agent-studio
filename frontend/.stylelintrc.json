@@ -121,6 +121,8 @@
         "src/app/features/board/components/filters-dropdown/filters-dropdown.component.scss",
         "src/app/features/board/components/job-card/job-card.component.scss",
         "src/app/features/board/components/job-column/job-column.scss",
+        "src/app/features/board/components/task-card/task-card.component.scss",
+        "src/app/features/board/components/task-column/task-column.scss",
         "src/app/features/cli/components/cli-admin-panel/cli-admin-panel.scss",
         "src/app/features/cli/components/cli-console/cli-console.scss",
         "src/app/features/cli/components/cli-sessions-panel/cli-sessions-panel.scss",
@@ -192,6 +194,40 @@
             "ignoreFunctions": false,
             "disableFix": true,
             "severity": "warning"
+          }
+        ]
+      }
+    },
+    {
+      "comment": "Lane-rail spacing-token enforcement. The collapsed lane-rail block in task-column.scss must source padding/margin/gap exclusively from --studio-spacing-* / --studio-rail-* tokens (see _tokens-semantic.scss). This is a scoped enforcement: the rest of the codebase is not yet migrated (1846 raw-px hits across 95 SCSS files as of 2026-05-29). Cleanup tasks lift more files into this enforcement over time; new files written with tokens are not affected. If you legitimately need a raw px value in this file (e.g. component-internal sizing that isn't part of the rhythm contract), inline a stylelint-disable-next-line with a short rationale. NOTE: must come AFTER the legacy override above because later overrides win per-rule in stylelint; the legacy override redeclares strict-value for color properties at warning severity, and this entry replaces that for the rail file with the full spacing+color enforcement at error severity. Color hits inside this file stay at warning by repeating color-no-hex below.",
+      "files": [
+        "src/app/features/board/components/task-column/task-column.scss"
+      ],
+      "rules": {
+        "color-no-hex": [true, { "severity": "warning" }],
+        "color-named": ["never", { "ignore": ["inside-function"], "severity": "warning" }],
+        "scale-unlimited/declaration-strict-value": [
+          [
+            "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+            "padding-block", "padding-block-start", "padding-block-end",
+            "padding-inline", "padding-inline-start", "padding-inline-end",
+            "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+            "margin-block", "margin-block-start", "margin-block-end",
+            "margin-inline", "margin-inline-start", "margin-inline-end",
+            "gap", "row-gap", "column-gap"
+          ],
+          {
+            "ignoreValues": [
+              "transparent", "currentColor", "inherit", "initial", "unset", "none", "revert", "revert-layer", "0", "auto",
+              "/^color-mix\\(/",
+              "/^linear-gradient\\(/",
+              "/^radial-gradient\\(/",
+              "/^conic-gradient\\(/",
+              "/^url\\(/"
+            ],
+            "ignoreFunctions": false,
+            "disableFix": true,
+            "severity": "error"
           }
         ]
       }

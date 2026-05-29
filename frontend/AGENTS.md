@@ -42,6 +42,16 @@ Never select by CSS class names; they belong to styling and change often.
 - The detail view is a simple protocol view — don't add tabs or metrics grids unless the product direction changes.
 - **Menus are text-only.** `<app-menu>` rows never carry decorative icons. The `MenuRow` type has no `icon` field and the template renders no icon span. The single allowed leading affordance is `leadingGlyph` (the coloured-initial chip used by the project picker). Icons elsewhere (toolbars, chips, lane glyphs, the chat model badge pill) are fine. Full rationale in the root AGENTS.md under "Menu surfaces are text-only".
 
+## Spacing: tokens, never raw px
+
+New SCSS reads `padding`, `margin`, and `gap` from the design-token scale in [`src/styles/_tokens-semantic.scss`](src/styles/_tokens-semantic.scss); raw px in those properties is forbidden. The base scale lives at the top of that file as `--studio-spacing-1` … `--studio-spacing-7` (4 / 8 / 12 / 16 / 24 / 32 / 48 px). Semantic aliases sit alongside it: `--studio-rail-*` (collapsed lane-rail), `--studio-modal-padding-*`, `--studio-row-*` (density rows). Reach for an existing alias before introducing a new one.
+
+Why: the lane-rail bug (operator 2026-05-28) was a symptom of per-element intrinsic sizing. Without a token vocabulary the rhythm drifts every time someone tweaks a single child; with tokens every consumer shares the same scale and `_tokens-semantic.scss` is the only place the px number is written.
+
+Stylelint enforces this scoped per file via `scale-unlimited/declaration-strict-value` on `padding*` / `margin*` / `gap` / `row-gap` / `column-gap` in [`.stylelintrc.json`](.stylelintrc.json). Today the rule is ERROR for `src/app/features/board/components/task-column/task-column.scss` (the lane-rail block); the rest of the codebase is grandfathered while the cleanup task lifts more files into the enforced list. When you write a new SCSS file, opt it in by adding it to that override; when you touch a legacy file, prefer the migration over adding more raw px.
+
+If a value legitimately doesn't fit the scale (true one-off like a 1 px hairline, an animation frame, a sub-pixel border), inline a `/* stylelint-disable-next-line scale-unlimited/declaration-strict-value */` with a short rationale on the same line.
+
 ## Side-sheet layout contract (`<app-orchestrator-side-sheet>`, `<app-cli-usage-sheet>`, `<app-kanban-filter-sidesheet>`)
 
 All three right-edge side sheets are **panels that push the workspace, not overlays that float over it**. The push behaviour rides on three coordinated pieces; break any one and the panel either floats, overlays, leaves a transparent gap, or stacks on the wrong side. Locked by the `open pushes studio-shell + inner panel fills host` test in `e2e/orchestrator-side-sheet-position.spec.ts`.

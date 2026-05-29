@@ -1,5 +1,12 @@
 @use '../../../../../styles/mixins' as m;
 
+/* Spacing-token enforcement is scoped to the `.column-rail*` block below
+   (search for "Collapsed-lane rail"). The rest of this file is legacy and
+   still uses raw px for padding/margin/gap; that migration lives in a
+   follow-up cleanup task. New padding/margin/gap values inside the rail
+   block MUST come from --studio-spacing-* / --studio-rail-* tokens. */
+/* stylelint-disable scale-unlimited/declaration-strict-value */
+
     .column {
       background: var(--column-bg, #181825);
       // Slightly tighter than the previous 16 px so lane radius is
@@ -352,62 +359,88 @@
      * drop target and the click target for re-expansion. Indicators live
      * in a vertical strip in the middle so the user still sees task
      * count, active runs, needs-input flags, and errors at a glance.
+     *
+     * Rhythm contract: every direct child of `.column-rail` is a "slot"
+     * with the same `min-height` and `padding-block`, sourced from
+     * `--studio-rail-item-*` tokens. That keeps the visual cadence between
+     * lanes identical regardless of how many indicators or which CLI is
+     * showing (operator bug 2026-05-28: counts and glyphs sat at uneven
+     * intervals because each child had a different intrinsic height +
+     * the rail's flex gap stacked on top of that). The token surface
+     * lives in `src/styles/_tokens-semantic.scss`; this file MUST NOT
+     * introduce raw px in padding/margin/gap (stylelint enforces below).
      */
+    /* stylelint-enable scale-unlimited/declaration-strict-value */
     button.column-rail {
-      background-color: var(--column-bg, #181825);
-      border: 1px solid var(--studio-border, rgba(255,255,255,0.06));
+      background-color: var(--column-bg, var(--studio-bg-sidebar));
+      border: 1px solid var(--studio-border);
       border-radius: 14px;
-      width: 36px;
-      min-width: 36px;
-      flex: 0 0 36px;
+      width: var(--studio-rail-width);
+      min-width: var(--studio-rail-width);
+      flex: 0 0 var(--studio-rail-width);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 4px 10px;
+      align-items: stretch;
+      gap: var(--studio-rail-gap);
+      padding-block: var(--studio-rail-padding-block);
+      padding-inline: var(--studio-rail-padding-inline);
       cursor: pointer;
-      color: var(--studio-fg-dim, #cbd5e1);
+      color: var(--studio-fg-dim);
       transition: outline 0.15s, background-color 0.15s;
       /* Same containment rationale as .column: a rail's running-pulse
          animation must not invalidate sibling lanes. */
       contain: layout paint;
     }
     button.column-rail:hover {
-      background-color: var(--studio-bg-selected, rgba(255,255,255,0.06));
+      background-color: var(--studio-bg-selected);
     }
     .column-rail--dragover {
       outline: 2px solid rgba(99, 102, 241, 0.6);
       outline-offset: -2px;
     }
+    /* Shared slot rhythm — every direct rail child sits in a slot of
+       identical vertical extent (min-height + padding-block from
+       --studio-rail-item-* tokens) so the rail reads as a single grid.
+       Horizontal padding stays per-child so a count-pill renders as a
+       pill, not as a full-width strip. */
+    .column-rail > * {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: var(--studio-rail-item-min-height);
+      padding-block: var(--studio-rail-item-padding-block);
+      flex: 0 0 auto;
+    }
     .column-rail__icon { font-size: 16px; line-height: 1; }
     .column-rail__count {
-      background: var(--studio-bg-hover, rgba(255,255,255,0.08));
-      color: var(--studio-fg-dim, #cbd5e1);
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg-dim);
       border-radius: 10px;
-      padding: 2px 6px;
+      padding-inline: var(--studio-spacing-2);
       font-size: 11px;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
       min-width: 22px;
       text-align: center;
     }
+    /* The vertical-rotated title is the only slot that can stretch — it
+       absorbs leftover vertical space so the icon/count cluster sits at the
+       top and the expand caret pins to the bottom without the per-child
+       gaps drifting. */
     .column-rail__title {
       writing-mode: vertical-rl;
       transform: rotate(180deg);
       font-size: 11px;
       font-weight: 600;
-      color: var(--studio-fg-dim, #94a3b8);
+      color: var(--studio-fg-dim);
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      margin: 4px 0 6px;
       flex: 1 1 auto;
       white-space: nowrap;
     }
     .column-rail__indicators {
-      display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 4px;
+      gap: var(--studio-spacing-1);
     }
     .column-rail__dot {
       width: 14px;
@@ -456,13 +489,16 @@
       line-height: 1;
       filter: saturate(1.1);
     }
+    /* The expand caret stays pinned to the bottom via the title slot's
+       `flex: 1 1 auto` — no margin-top:auto needed, and the slot's
+       min-height matches every other rail item. */
     .column-rail__expand {
-      color: var(--studio-fg-muted, #64748b);
+      color: var(--studio-fg-muted);
       font-size: 14px;
       line-height: 1;
-      margin-top: auto;
     }
-    button.column-rail:hover .column-rail__expand { color: var(--studio-fg, #cbd5e1); }
+    button.column-rail:hover .column-rail__expand { color: var(--studio-fg); }
+    /* stylelint-disable scale-unlimited/declaration-strict-value */
     .column--archive .column__body { gap: 2px; }
     .archive-row {
       display: grid;
