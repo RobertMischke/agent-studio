@@ -89,11 +89,13 @@
       <div class="ov-row">
         <span class="ov-label">Model</span>
         <span class="ov-value">
-          <app-chat-model-badge
+          <app-cli-model-selector
             [cliType]="effectiveCliType()"
             [model]="effectiveModel()"
             [availableModels]="availableModels()"
             [disabled]="isRunning()"
+            triggerTestid="chat-compose-model"
+            pickerTestidPrefix="chat-model-picker"
             (commit)="agentConfigCommit.emit($event)" />
         </span>
       </div>

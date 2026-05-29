@@ -1,12 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Evidence screenshots for the status-bar picker migration to <app-menu>.
- * Captures both CLI and model pickers opened, showing they now render through
- * the shared menu surface with proper tokens, keyboard nav, and ARIA.
+ * Evidence screenshot for the status-bar default-CLI + default-model
+ * homogenisation. The two separate pickers collapsed into the single
+ * shared `<app-cli-model-selector>` chip; this spec opens it and shows
+ * the CLI pills + model pills inside one popover. See
+ * `docs/cli-model-selector-audit.md`.
  */
-test.describe('Status bar menu migration evidence', () => {
-  test('CLI picker opens via shared app-menu with keyboard nav', async ({ page }) => {
+test.describe('Status bar default picker (unified chip)', () => {
+  test('opens the unified CLI+model defaults picker', async ({ page }) => {
     await page.route('**/api/cli/*/models*', async (route) => {
       await route.fulfill({
         status: 200,
@@ -28,46 +30,25 @@ test.describe('Status bar menu migration evidence', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(800);
 
-    // Open CLI picker
-    const cliPicker = page.getByTestId('status-bar-cli-picker');
-    await cliPicker.click();
+    const trigger = page.getByTestId('status-bar-defaults');
+    await expect(trigger).toBeVisible();
+    await trigger.click();
 
-    const cliMenu = page.getByTestId('status-bar-cli-menu-panel');
-    await expect(cliMenu).toBeVisible();
-    await expect(cliMenu).toHaveAttribute('role', 'menu');
+    const picker = page.getByTestId('status-bar-defaults-picker');
+    await expect(picker).toBeVisible();
+    await expect(picker).toHaveAttribute('role', 'dialog');
 
-    // Verify ARIA on rows
-    const firstRow = cliMenu.locator('[role="menuitem"]').first();
-    await expect(firstRow).toBeVisible();
-
-    // Keyboard: arrow down moves focus
-    await cliMenu.press('ArrowDown');
-    await cliMenu.press('ArrowDown');
+    // Both sections present in one popover.
+    await expect(picker.getByTestId('status-bar-defaults-picker-cli-pills')).toBeVisible();
+    await expect(picker.getByTestId('status-bar-defaults-picker-model-pills')).toBeVisible();
 
     await page.screenshot({
-      path: 'test-results/status-bar-cli-menu-open.png',
+      path: 'test-results/status-bar-defaults-picker-open.png',
       fullPage: false,
     });
 
-    // Escape closes
-    await cliMenu.press('Escape');
-    await expect(cliMenu).not.toBeVisible();
-
-    // Now open model picker
-    const modelPicker = page.getByTestId('status-bar-model-picker');
-    await modelPicker.click();
-
-    const modelMenu = page.getByTestId('status-bar-model-menu-panel');
-    await expect(modelMenu).toBeVisible();
-    await expect(modelMenu).toHaveAttribute('role', 'menu');
-
-    await page.screenshot({
-      path: 'test-results/status-bar-model-menu-open.png',
-      fullPage: false,
-    });
-
-    // Outside click closes (click the backdrop)
-    await page.getByTestId('app-menu-backdrop').click({ force: true, position: { x: 10, y: 10 } });
-    await expect(modelMenu).not.toBeVisible();
+    // Esc closes the picker.
+    await page.keyboard.press('Escape');
+    await expect(picker).not.toBeVisible();
   });
 });

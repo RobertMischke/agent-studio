@@ -7,10 +7,13 @@
       <span class="commandbar__status-text">Running · {{ elapsedTime() }}</span>
     </span>
     <span class="commandbar__compact-meta">
-      <span class="commandbar__chip">{{ cliTypeLabel(cliTypeDraft()) }}</span>
-      @if (modelDraft(); as m) {
-        <span class="commandbar__chip commandbar__chip--muted">{{ m }}</span>
-      }
+      <app-cli-model-selector
+        [cliType]="cliTypeDraft()"
+        [model]="modelDraft()"
+        [availableModels]="availableModels()"
+        [disabled]="true"
+        triggerTestid="commandbar-agent"
+        pickerTestidPrefix="commandbar-agent-picker" />
     </span>
     <span class="commandbar__spacer"></span>
     <button type="button"
@@ -39,38 +42,16 @@
       </select>
     </label>
 
-    <div class="commandbar__cli" role="tablist" [attr.aria-label]="'CLI'">
-      @for (t of cliTypes; track t) {
-        <button type="button"
-                class="commandbar__cli-btn"
-                [class.commandbar__cli-btn--active]="cliTypeDraft() === t"
-                [disabled]="isRunning()"
-                [appTooltip]="cliTypeLabel(t)"
-                [attr.aria-label]="cliTypeLabel(t)"
-                (click)="cliTypeChange.emit(t)">
-          <span class="commandbar__cli-icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
-          <span class="commandbar__cli-text">{{ cliTypeLabel(t) }}</span>
-        </button>
-      }
-    </div>
-
-    <!-- Compressed Model chip (same shape as Project). -->
-    <label class="commandbar__field commandbar__field--chip commandbar__field--grow">
-      <span class="commandbar__label commandbar__label--sr" aria-hidden="false">Model</span>
-      <select id="job-model"
-              class="commandbar__select commandbar__select--chip"
-              aria-label="Model"
-              [appTooltip]="'Model'"
-              data-testid="commandbar-model"
-              [ngModel]="modelDraft()"
-              [disabled]="isRunning()"
-              (ngModelChange)="modelChange.emit($event)">
-        <option value="">(default)</option>
-        @for (m of availableModels(); track m.id) {
-          <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
-        }
-      </select>
-    </label>
+    <app-cli-model-selector
+      class="commandbar__agent"
+      [cliType]="cliTypeDraft()"
+      [model]="modelDraft()"
+      [availableModels]="availableModels()"
+      [disabled]="isRunning()"
+      triggerTestid="commandbar-agent"
+      pickerTestidPrefix="commandbar-agent-picker"
+      (cliTypeChange)="cliTypeChange.emit($event)"
+      (modelChange)="modelChange.emit($event)" />
 
     @if (isRunning()) {
       <span class="commandbar__status" data-testid="commandbar-running">

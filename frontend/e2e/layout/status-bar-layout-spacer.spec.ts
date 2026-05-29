@@ -36,8 +36,10 @@ test.describe('Status bar layout: left quota + center spacer', () => {
     const right = statusBar.locator('.statusbar__group--right');
     await expect(right).toBeVisible();
     await expect(right.getByTestId('orch-side-sheet-toggle')).toBeVisible();
-    await expect(right.getByTestId('status-bar-cli-picker')).toBeVisible();
-    await expect(right.getByTestId('status-bar-model-picker')).toBeVisible();
+    // Per the homogenisation work (docs/cli-model-selector-audit.md), the
+    // two separate CLI / model pickers collapsed into the single shared
+    // `<app-cli-model-selector>` chip.
+    await expect(right.getByTestId('status-bar-defaults')).toBeVisible();
   });
 
   test('LEFT ends before RIGHT, with breathing room between them', async ({ page }) => {

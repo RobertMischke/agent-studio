@@ -91,29 +91,18 @@
       </div>
       <div class="field">
         <span class="field__label">Agent</span>
-        <div class="create-cli-picker">
-          @for (t of cliTypes; track t) {
-            <button type="button"
-                    class="create-cli-picker__btn"
-                    [class.create-cli-picker__btn--active]="cliTypeDraft() === t"
-                    (click)="cliTypeChange.emit(t)">
-              <span class="create-cli-picker__icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
-              {{ cliTypeLabel(t) }}
-            </button>
-          }
-        </div>
+        <app-cli-model-selector
+          class="create-cli-picker"
+          [cliType]="cliTypeDraft()"
+          [model]="newModel()"
+          [availableModels]="availableModels()"
+          eyebrow="Agent for new task"
+          triggerTestid="create-agent"
+          pickerTestidPrefix="create-agent-picker"
+          (cliTypeChange)="cliTypeChange.emit($event)"
+          (modelChange)="newModel.set($event)" />
       </div>
     </div>
-
-    <label class="field">
-      <span class="field__label">Model</span>
-      <select class="field__input" [(ngModel)]="newModel">
-        <option value="">(default — CLI chooses)</option>
-        @for (m of availableModels(); track m.id) {
-          <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
-        }
-      </select>
-    </label>
 
     @if (availableTags().length > 0) {
       <div class="field">

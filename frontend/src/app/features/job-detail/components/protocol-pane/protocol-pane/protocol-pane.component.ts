@@ -17,7 +17,7 @@ import type {
   CliType,
 } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
-import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
+import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
@@ -96,7 +96,7 @@ interface InterimSummaryState {
     TooltipDirective,
     PaneHeaderComponent,
     PaneTabsComponent,
-    ChatModelBadgeComponent,
+    CliModelSelectorComponent,
   ],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss'],
@@ -115,7 +115,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly chatSendLabel = input<string>('Send');
 
   readonly regenerating = input(false);
-  // F44: forwarded straight to <app-chat-model-badge>.
+  // F44: forwarded straight to <app-cli-model-selector>.
   readonly cliType = input<CliType | null>(null);
   readonly model = input<string | null>(null);
   readonly availableModels = input<readonly CliModelInfo[]>([]);
@@ -135,9 +135,9 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly sendChat = output<void>();
   readonly stopJob = output<void>();
   readonly regenerateSummary = output<void>();
-  /** Atomic CLI + model commit from the chat-model-badge picker. The parent
-   *  applies both changes in one PUT sequence; the badge guarantees only
-   *  truly-changed configurations are emitted. */
+  /** Atomic CLI + model commit from the unified <app-cli-model-selector>
+   *  picker. The parent applies both changes in one PUT sequence; the
+   *  selector guarantees only truly-changed configurations are emitted. */
   readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
 
   // Live data — injected from the parent's local providers.

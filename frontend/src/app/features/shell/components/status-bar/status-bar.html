@@ -39,51 +39,14 @@
 
     <span class="statusbar__sep" aria-hidden="true"></span>
 
-    <div class="statusbar__pickers">
-      <button #cliPickerTrigger
-              class="statusbar__item statusbar__item--btn"
-              data-testid="status-bar-cli-picker"
-              [appTooltip]="'Default CLI for new tasks: ' + cliLabel(defaultCli())"
-              (click)="toggleCliMenu()">
-        <span class="statusbar__icon">{{ cliIcon(defaultCli()) }}</span>
-        <span>{{ cliLabel(defaultCli()) }}</span>
-        <span class="statusbar__caret">▾</span>
-      </button>
-
-      <app-menu
-        [items]="cliMenuItems()"
-        [open]="cliMenuOpen()"
-        [anchorEl]="cliPickerTrigger"
-        placement="above"
-        testIdPrefix="status-bar-cli-menu"
-        ariaLabel="Default CLI picker"
-        [minWidth]="200"
-        (itemClick)="onCliMenuItemClick($event)"
-        (closeRequest)="cliMenuOpen.set(false)" />
-    </div>
-
-    <div class="statusbar__pickers">
-      <button #modelPickerTrigger
-              class="statusbar__item statusbar__item--btn"
-              data-testid="status-bar-model-picker"
-              [appTooltip]="modelPickerTooltip()"
-              (click)="toggleModelMenu()">
-        <span class="statusbar__icon">⚙</span>
-        <span>{{ defaultModelLabel() }}</span>
-        <span class="statusbar__caret">▾</span>
-      </button>
-
-      <app-menu
-        [items]="modelMenuItems()"
-        [open]="modelMenuOpen()"
-        [anchorEl]="modelPickerTrigger"
-        placement="above"
-        testIdPrefix="status-bar-model-menu"
-        ariaLabel="Default model picker"
-        [minWidth]="220"
-        (itemClick)="onModelMenuItemClick($event)"
-        (closeRequest)="modelMenuOpen.set(false)" />
-    </div>
+    <app-cli-model-selector
+      class="statusbar__defaults"
+      [cliType]="defaultCli()"
+      [model]="defaultModel()"
+      eyebrow="Defaults for new tasks"
+      triggerTestid="status-bar-defaults"
+      pickerTestidPrefix="status-bar-defaults-picker"
+      (commit)="onDefaultCommit($event)" />
   </div>
 </div>
 

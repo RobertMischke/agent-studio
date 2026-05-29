@@ -123,10 +123,10 @@ describe('CodeReviewPanelComponent', () => {
     fixture.detectChanges();
 
     const root = fixture.nativeElement as HTMLElement;
-    const select = root.querySelector('[data-testid="code-review-model"]') as HTMLSelectElement;
-    select.value = 'claude-haiku-4-5-20251001';
-    select.dispatchEvent(new Event('change'));
-    fixture.componentInstance.selectedModel.set('claude-haiku-4-5-20251001');
+    // The unified selector is a chip + popover, not a <select>. Drive the
+    // signal directly to exercise the "operator picked a different model"
+    // path without re-opening the picker in a unit test.
+    fixture.componentInstance.onAgentCommit({ cliType: 'claude', model: 'claude-haiku-4-5-20251001' });
 
     const button = root.querySelector('[data-testid="code-review-run"]') as HTMLButtonElement;
     button.click();
@@ -137,7 +137,7 @@ describe('CodeReviewPanelComponent', () => {
     const post = httpCtrl.expectOne(
       (r) => r.method === 'POST' && r.url.includes('/api/jobs/demo-job/code-review')
     );
-    expect(post.request.body).toEqual({ model: 'claude-haiku-4-5-20251001' });
+    expect(post.request.body).toEqual({ cliType: 'claude', model: 'claude-haiku-4-5-20251001' });
     post.flush({
       fileName: 'code-review-2026-05-14T13-00-00Z.md',
       verdict: 'pass',

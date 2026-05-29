@@ -9,10 +9,10 @@ import {
 } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import { JobInfo } from '../../../../../models/task.model';
+import type { CliType, JobInfo } from '../../../../../models/task.model';
 import { CodeReviewListEntry, JobService } from '../../../../../services/task.service';
 
-import { TooltipDirective } from '../../../../../components/tooltip';
+import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 /**
  * User-triggered code-review panel that lives in the protocol pane.
  *
@@ -21,24 +21,28 @@ import { TooltipDirective } from '../../../../../components/tooltip';
  *   <li>Render the existing <code>code-review-*.md</code> artifacts as a
  *       newest-first list with verdict chip + one-line summary; rows
  *       expand to show the MD body inline.</li>
- *   <li>Drive the "Run Code Review" action: model picker (defaults from
- *       AppSettings via the configurable backend default), Run button
- *       that POSTs and shows a spinner until the response arrives.</li>
+ *   <li>Drive the "Run Code Review" action: a unified
+ *       <code>&lt;app-cli-model-selector&gt;</code> (CLI + model) defaults
+ *       to <code>claude</code> + <code>claude-opus-4-7</code>, the Run
+ *       button POSTs the chosen pair and shows a spinner until the
+ *       response arrives.</li>
  *   <li>Cover the user's "Progress an die Karte, dass da gerade eine
  *       Code-Review läuft" by surfacing the running indicator inside the
  *       detail pane (the spinner stays visible for the whole CLI call).
  *       A card-level badge is a future follow-up.</li>
  * </ul>
  *
- * <p>Architecturally the panel mirrors {@link ReviewEvidencePanelComponent}:
- * presentational where possible, with a small amount of local-only fetch
- * state so the parent does not have to manage every lifecycle event.</p>
+ * <p>The CLI list is intentionally not filtered (see
+ * <code>docs/cli-model-selector-audit.md</code>): the backend
+ * <code>POST /api/jobs/{id}/code-review</code> endpoint accepts an
+ * arbitrary <code>cliType</code> field, so the operator may run a review
+ * with any installed CLI even though Claude remains the default.</p>
  */
 @Component({
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TooltipDirective],
+  imports: [FormsModule, CliModelSelectorComponent],
   templateUrl: './code-review-panel.component.html',
   styleUrl: './code-review-panel.component.scss',
 })
@@ -46,6 +50,8 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly job = input.required<JobInfo>();
   /** Optional override for the model dropdown's initial value. */
   readonly defaultModel = input<string>('claude-opus-4-7');
+  /** Optional override for the CLI dropdown's initial value. */
+  readonly defaultCli = input<CliType>('claude');
 
   readonly entries = signal<CodeReviewListEntry[]>([]);
   readonly loading = signal(true);
@@ -54,18 +60,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly expandedFile = signal<string | null>(null);
   readonly expandedBody = signal<string | null>(null);
   readonly selectedModel = signal<string>('claude-opus-4-7');
-
-  /**
-   * Reasonable Claude model menu. Kept narrow on purpose: the user asked
-   * for a configurable default, not a full model catalogue. A future slice
-   * can wire {@link CliService}'s model catalogue endpoint here when it
-   * becomes useful.
-   */
-  readonly availableModels: readonly { id: string; label: string }[] = [
-    { id: 'claude-opus-4-7', label: 'Opus 4.7 (default)' },
-    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-    { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
-  ];
+  readonly selectedCli = signal<CliType>('claude');
 
   private readonly jobs = inject(JobService);
 
@@ -74,6 +69,7 @@ export class CodeReviewPanelComponent implements OnInit {
 
   ngOnInit(): void {
     this.selectedModel.set(this.defaultModel());
+    this.selectedCli.set(this.defaultCli());
     this.refresh();
   }
 
@@ -107,7 +103,12 @@ export class CodeReviewPanelComponent implements OnInit {
     if (this.running()) return;
     this.running.set(true);
     this.error.set(null);
-    this.jobs.runCodeReview(job.id, { model: this.selectedModel() }, job.watchPath).subscribe({
+    const body: { model?: string; cliType?: string } = {
+      cliType: this.selectedCli(),
+    };
+    const model = this.selectedModel().trim();
+    if (model) body.model = model;
+    this.jobs.runCodeReview(job.id, body, job.watchPath).subscribe({
       next: () => {
         this.running.set(false);
         this.refresh();
@@ -117,6 +118,12 @@ export class CodeReviewPanelComponent implements OnInit {
         this.running.set(false);
       },
     });
+  }
+
+  /** Atomic commit from the shared selector picker. */
+  onAgentCommit(change: { cliType: CliType; model: string }): void {
+    this.selectedCli.set(change.cliType);
+    this.selectedModel.set(change.model);
   }
 
   /** Toggle the inline body view for one row. */

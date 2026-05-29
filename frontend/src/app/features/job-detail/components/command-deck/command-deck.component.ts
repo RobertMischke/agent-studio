@@ -1,24 +1,28 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { CliType, WatchPathEntry } from '../../../../models/task.model';
-import { CLI_TYPES } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
-import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../../services/format.util';
+import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 /**
- * Top toolbar of the job-detail view: project picker, CLI tab strip,
- * model dropdown, and the live elapsed-time / start / stop controls.
+ * Top toolbar of the job-detail view: project picker, unified CLI+model
+ * selector chip, and the live elapsed-time / start / stop controls.
  *
  * Stateless / presentational: the parent owns the model + CLI selection
  * (via two-way `model` bindings), watchPaths (list), and the run-state
  * signals; this component only emits intent (start/stop, change project).
+ *
+ * Migrated 2026-05-29 to use the shared `<app-cli-model-selector>` chip
+ * (see `docs/cli-model-selector-audit.md`) so the toolbar matches the
+ * chat composer, overview Agent row, create-task dialog, status-bar
+ * default pickers, and code-review panel.
  */
 @Component({
   selector: 'app-command-deck',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TooltipDirective],
+  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent],
   templateUrl: './command-deck.component.html',
   styleUrls: ['./command-deck.component.scss']
 })
@@ -45,9 +49,4 @@ export class CommandDeckComponent {
   readonly startRequest = output<void>();
   readonly stopRequest = output<void>();
   readonly toggleCollapsed = output<void>();
-
-  readonly cliTypes = CLI_TYPES;
-  cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
-  cliTypeIcon(t: CliType): string { return fmtCliTypeIcon(t); }
-  formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
 }

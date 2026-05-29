@@ -1,10 +1,12 @@
-// Subtle CLI + model badge for the chat-compose action row + the inline
-// "Configure agent" popover the badge opens. Strictly token-based (no raw
-// hex) so dark + light themes stay aligned.
+// Unified CLI + model selector chip + popover. Tokens-only; the previous
+// `chat-model-badge` SCSS is the donor and the class names mirror its
+// shape (just renamed from `chat-model-*` to `cli-model-*`) so every
+// existing call-site (chat composer, overview Agent row) keeps the same
+// visual weight.
 
 :host { display: inline-flex; align-items: center; position: relative; }
 
-.chat-model-badge {
+.cli-model-selector {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -20,27 +22,27 @@
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.chat-model-badge:hover:not(:disabled),
-.chat-model-badge--open {
+.cli-model-selector:hover:not(:disabled),
+.cli-model-selector--open {
   color: var(--studio-fg);
   background: var(--studio-bg-hover);
   border-color: var(--studio-border);
 }
 
-.chat-model-badge:focus-visible {
+.cli-model-selector:focus-visible {
   outline: 2px solid var(--studio-accent);
   outline-offset: 1px;
 }
 
-.chat-model-badge--disabled,
-.chat-model-badge:disabled {
+.cli-model-selector--disabled,
+.cli-model-selector:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.chat-model-badge__icon { font-size: 0.9rem; line-height: 1; }
+.cli-model-selector__icon { font-size: 0.9rem; line-height: 1; }
 
-.chat-model-badge__name {
+.cli-model-selector__name {
   white-space: nowrap;
   max-width: 22ch;
   overflow: hidden;
@@ -48,20 +50,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-.chat-model-badge__caret { font-size: 0.7rem; opacity: 0.7; }
+.cli-model-selector__caret { font-size: 0.7rem; opacity: 0.7; }
 
 // =============================================================================
 // Configure-agent picker popover.
 // =============================================================================
 
-.chat-model-picker__backdrop {
+.cli-model-picker__backdrop {
   position: fixed;
   inset: 0;
   z-index: 90;
   background: transparent;
 }
 
-.chat-model-picker {
+.cli-model-picker {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
@@ -81,13 +83,13 @@
   line-height: 1.4;
 }
 
-.chat-model-picker__header {
+.cli-model-picker__header {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.chat-model-picker__eyebrow {
+.cli-model-picker__eyebrow {
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -95,19 +97,19 @@
   color: var(--studio-fg-muted);
 }
 
-.chat-model-picker__current {
+.cli-model-picker__current {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--studio-fg-strong);
 }
 
-.chat-model-picker__section {
+.cli-model-picker__section {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
 
-.chat-model-picker__section-label {
+.cli-model-picker__section-label {
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -115,19 +117,19 @@
   color: var(--studio-fg-muted);
 }
 
-.chat-model-picker__pills {
+.cli-model-picker__pills {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
 }
 
-.chat-model-picker__pills--column {
+.cli-model-picker__pills--column {
   flex-direction: column;
   flex-wrap: nowrap;
   gap: 3px;
 }
 
-.chat-model-picker__pill {
+.cli-model-picker__pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -142,55 +144,57 @@
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.chat-model-picker__pill:hover {
+.cli-model-picker__pill:hover {
   background: var(--studio-bg-hover);
   color: var(--studio-fg-strong);
 }
 
-.chat-model-picker__pill:focus-visible {
+.cli-model-picker__pill:focus-visible {
   outline: 2px solid var(--studio-accent);
   outline-offset: 1px;
 }
 
-.chat-model-picker__pill--active {
+.cli-model-picker__pill--active {
   background: var(--studio-bg-selected);
   border-color: var(--studio-accent);
   color: var(--studio-fg-strong);
   font-weight: 600;
 }
 
-.chat-model-picker__pill--row {
+.cli-model-picker__pill--row {
   width: 100%;
   justify-content: flex-start;
 }
 
-.chat-model-picker__pill-icon { font-size: 0.85rem; line-height: 1; }
-.chat-model-picker__pill-label { font-weight: 500; }
-.chat-model-picker__pill-hint {
+.cli-model-picker__pill-icon { font-size: 0.85rem; line-height: 1; }
+.cli-model-picker__pill-label { font-weight: 500; }
+.cli-model-picker__pill-hint {
   margin-left: auto;
   font-size: 0.66rem;
   color: var(--studio-fg-muted);
   font-weight: 400;
 }
 
-.chat-model-picker__hint {
+.cli-model-picker__hint {
   padding: 6px 4px;
   font-size: 0.72rem;
   color: var(--studio-fg-muted);
 }
-.chat-model-picker__hint--error {
+.cli-model-picker__hint--error {
   color: var(--severity-high);
 }
 
-.chat-model-picker__footer {
+.cli-model-picker__footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 6px;
   padding-top: 4px;
   border-top: 1px solid var(--studio-border);
 }
 
-.chat-model-picker__btn {
+.cli-model-picker__footer-spacer { flex: 1 1 auto; }
+
+.cli-model-picker__btn {
   padding: 5px 12px;
   border-radius: 6px;
   border: 1px solid var(--studio-border);
@@ -202,23 +206,23 @@
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.chat-model-picker__btn--ghost:hover {
+.cli-model-picker__btn--ghost:hover {
   background: var(--studio-bg-hover);
   color: var(--studio-fg-strong);
 }
 
-.chat-model-picker__btn--primary {
+.cli-model-picker__btn--primary {
   background: var(--studio-accent);
   color: var(--studio-on-accent);
   border-color: var(--studio-accent);
   font-weight: 600;
 }
 
-.chat-model-picker__btn--primary:hover:not(:disabled) {
+.cli-model-picker__btn--primary:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 
-.chat-model-picker__btn:disabled {
+.cli-model-picker__btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

@@ -2,18 +2,14 @@
   <header class="cr-header">
     <h3 class="cr-title">Code Reviews</h3>
     <div class="cr-actions">
-      <select
-        class="cr-model"
-        data-testid="code-review-model"
-        [ngModel]="selectedModel()"
-        (ngModelChange)="selectedModel.set($event)"
+      <app-cli-model-selector
+        [cliType]="selectedCli()"
+        [model]="selectedModel()"
         [disabled]="running()"
-        [appTooltip]="'Model used for the next review'"
-      >
-        @for (m of availableModels; track m) {
-          <option [value]="m.id">{{ m.label }}</option>
-        }
-      </select>
+        eyebrow="Code review agent"
+        triggerTestid="code-review-model"
+        pickerTestidPrefix="code-review-model-picker"
+        (commit)="onAgentCommit($event)" />
       <button
         class="cr-run"
         data-testid="code-review-run"

@@ -22,9 +22,9 @@ test.describe('CLI icons — screenshots @screenshots', () => {
     // 2) Job board with preview cards
     await page.screenshot({ path: 'test-results/screenshots/board.png', fullPage: false });
 
-    // 3) Add Task dialog (CLI picker)
+    // 3) Add Task dialog (CLI picker is now the unified chip)
     await page.getByRole('button', { name: /add task/i }).first().click();
-    await page.locator('.create-cli-picker').waitFor();
+    await page.getByTestId('create-agent').waitFor();
     await page.locator('.create-dialog').screenshot({ path: 'test-results/screenshots/add-task-dialog.png' });
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);

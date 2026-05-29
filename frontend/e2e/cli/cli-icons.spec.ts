@@ -52,21 +52,25 @@ test.describe('CLI icons — distinct glyph per CLI', () => {
     const bar = page.locator('[data-testid="commandbar"]');
     await expect(bar).toBeVisible();
 
-    const buttons = bar.locator('.commandbar__cli-btn');
-    await expect(buttons).toHaveCount(4);
+    // Command deck now uses the shared <app-cli-model-selector> chip;
+    // open the popover to see the CLI pills.
+    await bar.getByTestId('commandbar-agent').click();
+    const picker = page.getByTestId('commandbar-agent-picker');
+    await expect(picker).toBeVisible();
+
+    const pills = picker.getByTestId('commandbar-agent-picker-cli-pills').getByRole('radio');
+    await expect(pills).toHaveCount(4);
 
     const labels = ['Copilot', 'Claude Code', 'Codex', 'Gemini'] as const;
     const expectedIcons = [ICONS.copilot, ICONS.claude, ICONS.codex, ICONS.gemini];
 
     const found = new Set<string>();
     for (let i = 0; i < 4; i++) {
-      const btn = buttons.nth(i);
-      const text = (await btn.textContent())?.trim() ?? '';
-      // Each button's text must contain its label and exactly one icon.
+      const text = (await pills.nth(i).textContent())?.trim() ?? '';
       const matchedLabel = labels.find(l => text.includes(l));
-      expect(matchedLabel, `button ${i} text "${text}" should contain a known label`).toBeTruthy();
+      expect(matchedLabel, `pill ${i} text "${text}" should contain a known label`).toBeTruthy();
       const matchedIcon = expectedIcons.find(g => text.includes(g));
-      expect(matchedIcon, `button ${i} text "${text}" should contain a known icon`).toBeTruthy();
+      expect(matchedIcon, `pill ${i} text "${text}" should contain a known icon`).toBeTruthy();
       found.add(matchedIcon!);
     }
     expect(found.size, 'all four icons should be distinct').toBe(4);
@@ -76,15 +80,21 @@ test.describe('CLI icons — distinct glyph per CLI', () => {
     await page.goto('/');
     await page.getByRole('button', { name: /add task/i }).first().click();
 
-    const buttons = page.locator('.create-cli-picker__btn');
-    await expect(buttons).toHaveCount(4);
+    // Create dialog now uses the shared <app-cli-model-selector> chip;
+    // open the popover to expose the CLI pills.
+    await page.getByTestId('create-agent').click();
+    const picker = page.getByTestId('create-agent-picker');
+    await expect(picker).toBeVisible();
+
+    const pills = picker.getByTestId('create-agent-picker-cli-pills').getByRole('radio');
+    await expect(pills).toHaveCount(4);
 
     const expectedIcons = [ICONS.copilot, ICONS.claude, ICONS.codex, ICONS.gemini];
     const found = new Set<string>();
     for (let i = 0; i < 4; i++) {
-      const text = (await buttons.nth(i).textContent())?.trim() ?? '';
+      const text = (await pills.nth(i).textContent())?.trim() ?? '';
       const matchedIcon = expectedIcons.find(g => text.includes(g));
-      expect(matchedIcon, `button ${i} text "${text}" should contain a known icon`).toBeTruthy();
+      expect(matchedIcon, `pill ${i} text "${text}" should contain a known icon`).toBeTruthy();
       found.add(matchedIcon!);
     }
     expect(found.size).toBe(4);

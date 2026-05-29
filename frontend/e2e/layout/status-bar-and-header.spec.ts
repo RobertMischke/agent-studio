@@ -6,13 +6,13 @@ import { test, expect } from '@playwright/test';
  * - The header should be short (well below the previous ~70px) so vertical
  *   space is reclaimed.
  * - The status bar must be present at the bottom and host the quick toggles
- *   (Usage / Orchestrator / Feed) and the default-CLI / default-model
- *   pickers.
- * - The picker popups should open above the bar (VS Code style) and persist
- *   the user's choice in localStorage.
+ *   (Usage / Orchestrator / Feed) and the unified default-CLI + default-model
+ *   chip (see docs/cli-model-selector-audit.md).
+ * - The defaults popover should open above the bar (VS Code style) and
+ *   persist the user's choice in localStorage.
  */
 test.describe('Status bar and header size', () => {
-  test('header is compact and status bar carries quota + pickers', async ({ page }) => {
+  test('header is compact and status bar carries quota + defaults chip', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('http://localhost:4010');
     await page.waitForLoadState('domcontentloaded');
@@ -35,6 +35,9 @@ test.describe('Status bar and header size', () => {
     await expect(statusBar.getByTitle('Orchestrator chat')).toBeVisible();
     await expect(statusBar.getByTitle('Orchestrator feed')).toBeVisible();
 
+    // Unified defaults chip.
+    await expect(statusBar.getByTestId('status-bar-defaults')).toBeVisible();
+
     // Add Task remains the primary CTA in the header.
     await expect(header.getByRole('button', { name: /Add Task/ })).toBeVisible();
 
@@ -43,12 +46,10 @@ test.describe('Status bar and header size', () => {
       fullPage: false,
     });
 
-    // Closeup of just the status bar so the picker labels read clearly.
     await statusBar.screenshot({
       path: 'test-results/status-bar-closeup.png',
     });
 
-    // Closeup of just the header so the slim brand + tabs read clearly.
     await header.screenshot({
       path: 'test-results/header-closeup.png',
     });
@@ -60,7 +61,6 @@ test.describe('Status bar and header size', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(800);
 
-    // Open the first card in any column to enter focus view.
     const firstCard = page.locator('app-job-card').first();
     if (await firstCard.count()) {
       await firstCard.click();
@@ -72,24 +72,29 @@ test.describe('Status bar and header size', () => {
     }
   });
 
-  test('default CLI picker persists selection', async ({ page }) => {
+  test('changing the default CLI through the unified chip persists in localStorage', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('http://localhost:4010');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(500);
 
-    // Reset any previous run's state.
     await page.evaluate(() => localStorage.removeItem('defaultCliType'));
     await page.reload();
     await page.waitForTimeout(500);
 
-    const cliPicker = page.getByTestId('status-bar-cli-picker');
-    await expect(cliPicker).toContainText('Copilot');
+    const chip = page.getByTestId('status-bar-defaults');
+    await expect(chip).toContainText(/Copilot/i);
 
-    await cliPicker.click();
-    await page.getByTestId('status-bar-cli-menu-item-cli:claude').click();
-    await expect(cliPicker).toContainText('Claude Code');
+    await chip.click();
+    const picker = page.getByTestId('status-bar-defaults-picker');
+    await expect(picker).toBeVisible();
 
+    await picker.getByTestId('status-bar-defaults-picker-cli-claude').click();
+    // CLI change keeps the picker open; commit with Done.
+    await picker.getByTestId('status-bar-defaults-picker-done').click();
+    await expect(picker).not.toBeVisible();
+
+    await expect(chip).toContainText(/Claude Code|Claude/i);
     const stored = await page.evaluate(() => localStorage.getItem('defaultCliType'));
     expect(stored).toBe('claude');
 
@@ -101,14 +106,13 @@ test.describe('Status bar and header size', () => {
 });
 
 /**
- * Default model picker — must remain interactive regardless of catalog state.
- *
- * Before this fix the picker button was disabled whenever the model catalog
- * came back empty (no Copilot session, PTY probe 503, etc.), which left the
- * user with no way to change or clear the persisted default. The tests below
- * mock the catalog endpoint and assert the menu is always reachable.
+ * Default model picker (now inside the unified defaults chip) must remain
+ * interactive regardless of catalog state: the chip is always clickable,
+ * the popover opens with an empty hint when the catalog returns no models,
+ * and the (CLI default) row stays selectable so the user can clear a stale
+ * persisted default.
  */
-test.describe('Status bar default-model picker', () => {
+test.describe('Status bar defaults picker - model section', () => {
   test('opens and persists a selection when catalog has models', async ({ page }) => {
     let catalogCalls = 0;
     await page.route('**/api/cli/*/models*', async (route) => {
@@ -138,17 +142,19 @@ test.describe('Status bar default-model picker', () => {
     await page.reload();
     await page.waitForTimeout(500);
 
-    const modelPicker = page.getByTestId('status-bar-model-picker');
-    await expect(modelPicker).toBeVisible();
-    await expect(modelPicker).toBeEnabled();
-    await expect(modelPicker).toContainText('CLI default');
+    const chip = page.getByTestId('status-bar-defaults');
+    await expect(chip).toBeVisible();
+    await expect(chip).toBeEnabled();
+    await expect(chip).toContainText(/No model|CLI default/i);
 
-    await modelPicker.click();
-    const menu = page.getByTestId('status-bar-model-menu-panel');
-    await expect(menu).toBeVisible();
+    await chip.click();
+    const picker = page.getByTestId('status-bar-defaults-picker');
+    await expect(picker).toBeVisible();
 
-    await page.getByTestId('status-bar-model-menu-item-model:claude-opus-4-7').click();
-    await expect(modelPicker).toContainText('Opus 4.7');
+    // Model click without a CLI change auto-commits + closes the picker.
+    await picker.getByTestId('status-bar-defaults-picker-model-claude-opus-4-7').click();
+    await expect(picker).not.toBeVisible();
+    await expect(chip).toContainText(/opus 4\.7/i);
 
     const stored = await page.evaluate(() =>
       localStorage.getItem('defaultModel:' + (localStorage.getItem('defaultCliType') ?? 'copilot'))
@@ -162,7 +168,7 @@ test.describe('Status bar default-model picker', () => {
     });
   });
 
-  test('menu is reachable when catalog returns empty so the default can be reset', async ({ page }) => {
+  test('popover stays reachable when catalog returns empty so the default can be reset', async ({ page }) => {
     await page.route('**/api/cli/*/models*', async (route) => {
       await route.fulfill({
         status: 200,
@@ -174,7 +180,6 @@ test.describe('Status bar default-model picker', () => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('http://localhost:4010');
     await page.waitForLoadState('domcontentloaded');
-    // Seed a stale persisted model so the reset path has something to clear.
     await page.evaluate(() => {
       localStorage.setItem('defaultCliType', 'copilot');
       localStorage.setItem('defaultModel:copilot', 'gpt-4o-stale');
@@ -182,20 +187,20 @@ test.describe('Status bar default-model picker', () => {
     await page.reload();
     await page.waitForTimeout(500);
 
-    const modelPicker = page.getByTestId('status-bar-model-picker');
-    await expect(modelPicker).toBeVisible();
-    // The regression: button was disabled here. It must stay enabled.
-    await expect(modelPicker).toBeEnabled();
-    await expect(modelPicker).toContainText('gpt-4o-stale');
+    const chip = page.getByTestId('status-bar-defaults');
+    await expect(chip).toBeVisible();
+    await expect(chip).toBeEnabled();
+    await expect(chip).toContainText(/gpt-4o-stale/);
 
-    await modelPicker.click();
-    const menu = page.getByTestId('status-bar-model-menu-panel');
-    await expect(menu).toBeVisible();
-    await expect(menu).toContainText(/No models reported|Catalog unavailable/);
-    await expect(page.getByTestId('status-bar-model-menu-item-model:__refresh__')).toBeVisible();
+    await chip.click();
+    const picker = page.getByTestId('status-bar-defaults-picker');
+    await expect(picker).toBeVisible();
+    await expect(picker.getByTestId('status-bar-defaults-picker-empty')).toBeVisible();
 
-    await page.getByTestId('status-bar-model-menu-item-model:__default__').click();
-    await expect(modelPicker).toContainText('CLI default');
+    // Selecting (CLI default) clears the persisted override.
+    await picker.getByTestId('status-bar-defaults-picker-model-default').click();
+    await expect(picker).not.toBeVisible();
+    await expect(chip).toContainText(/CLI default|No model/i);
 
     const stored = await page.evaluate(() => localStorage.getItem('defaultModel:copilot'));
     expect(stored).toBeNull();
@@ -206,10 +211,7 @@ test.describe('Status bar default-model picker', () => {
     });
   });
 
-  test('refresh action re-fetches the catalog when it had failed', async ({ page }) => {
-    // Fresh `page` fixture means a fresh storage context — register the route
-    // before the first navigation so the initial ngOnInit fetch hits the 503
-    // branch, then the refresh click hits the 200 branch.
+  test('Refresh button re-fetches the catalog when it had failed', async ({ page }) => {
     let calls = 0;
     await page.route('**/api/cli/*/models*', async (route) => {
       calls += 1;
@@ -237,16 +239,15 @@ test.describe('Status bar default-model picker', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(500);
 
-    const modelPicker = page.getByTestId('status-bar-model-picker');
-    await modelPicker.click();
-    const menu = page.getByTestId('status-bar-model-menu-panel');
-    await expect(menu).toContainText('Catalog unavailable');
-
-    await page.getByTestId('status-bar-model-menu-item-model:__refresh__').click();
-    // Standard <app-menu> closes on click; reopen to verify the refreshed catalog.
-    await page.waitForTimeout(300);
-    await modelPicker.click();
-    await expect(page.getByTestId('status-bar-model-menu-item-model:gpt-4o')).toBeVisible();
+    const chip = page.getByTestId('status-bar-defaults');
+    await chip.click();
+    const picker = page.getByTestId('status-bar-defaults-picker');
+    await expect(picker).toBeVisible();
+    // Initial render: the first ngOnInit fetch failed silently, so the
+    // popover shows the empty-state hint. The "Refresh" button bypasses
+    // the TTL and triggers a fresh fetch.
+    await picker.getByTestId('status-bar-defaults-picker-refresh').click();
+    await expect(picker.getByTestId('status-bar-defaults-picker-model-gpt-4o')).toBeVisible();
     expect(calls).toBeGreaterThanOrEqual(2);
   });
 });

@@ -92,10 +92,11 @@ test.describe('Status bar layout consolidated', () => {
       statusBar.getByTestId('hquota-card-claude'),
       statusBar.getByTestId('hquota-card-codex'),
       statusBar.getByTestId('hquota-card-copilot'),
-      // Right side: action buttons and pickers.
+      // Right side: action buttons and unified defaults chip
+      // (formerly two separate cli/model pickers, see
+      // docs/cli-model-selector-audit.md).
       statusBar.getByTestId('orch-side-sheet-toggle'),
-      statusBar.getByTestId('status-bar-cli-picker'),
-      statusBar.getByTestId('status-bar-model-picker'),
+      statusBar.getByTestId('status-bar-defaults'),
     ];
 
     const centers: number[] = [];

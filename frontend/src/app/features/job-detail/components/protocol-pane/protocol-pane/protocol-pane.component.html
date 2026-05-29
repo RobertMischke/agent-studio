@@ -432,11 +432,13 @@
                           (keydown.control.enter)="sendChat.emit()"
                           (keydown.meta.enter)="sendChat.emit()"></textarea>
                 <div class="chat-compose__actions">
-                  <app-chat-model-badge
+                  <app-cli-model-selector
                     [cliType]="cliType()"
                     [model]="model()"
                     [availableModels]="availableModels()"
                     [disabled]="isRunning()"
+                    triggerTestid="chat-compose-model"
+                    pickerTestidPrefix="chat-model-picker"
                     (commit)="agentConfigCommit.emit($event)" />
                   <span class="chat-compose__spacer"></span>
                   @if (isRunning()) {

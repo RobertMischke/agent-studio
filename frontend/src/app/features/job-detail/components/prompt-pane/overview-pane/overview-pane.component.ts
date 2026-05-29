@@ -17,7 +17,7 @@ import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
 import { ClientService } from '../../../../../services/client.service';
-import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
+import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { RowComponent } from '../../../../../components/row/row.component';
@@ -36,7 +36,7 @@ import { copyTextToClipboard } from '../../../../../services/clipboard.util';
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChatModelBadgeComponent, RegressionRadarComponent, TooltipDirective, RowComponent],
+  imports: [CliModelSelectorComponent, RegressionRadarComponent, TooltipDirective, RowComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -53,8 +53,8 @@ export class OverviewPaneComponent {
   readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
   readonly modelOverride = input<string | null | undefined>(undefined);
 
-  /** Atomic CLI + model commit from the chat-model-badge picker. The
-   *  parent task-detail handler issues both PUTs in sequence. */
+  /** Atomic CLI + model commit from the unified <app-cli-model-selector>
+   *  picker. The parent task-detail handler issues both PUTs in sequence. */
   readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
   /** Fired after a successful title PUT so the parent can re-fetch the
    *  detail and let the optimistic override drop back to the canonical
