@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
   ViewEncapsulation,
   computed,
@@ -10,6 +11,7 @@ import {
   output,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { JobInfo, WatchPathEntry, RegistryWorkspaceListItem } from '../../models/task.model';
@@ -29,6 +31,7 @@ import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
 import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
+import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
@@ -119,6 +122,7 @@ export class StudioShellComponent {
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
+  readonly wsSettings = inject(WorkspaceSettingsService);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
@@ -359,19 +363,26 @@ export class StudioShellComponent {
     });
   }
 
-  /** F45b — prompt-driven rename. */
+  /**
+   * F66 / ADR-0048 — click-to-edit rename. The settings service owns the
+   * inline-edit state, validation, and PUT call; this shell method exists
+   * only as the click handler on the workspace-name button so the template
+   * binding does not have to know about the service.
+   */
   renameRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
-    const name = window.prompt(`Rename workspace "${ws.displayName}"`, ws.displayName)?.trim();
-    if (!name || name === ws.displayName) return;
-    this.registryWorkspaceBusyId.set(ws.id);
-    this.jobService.updateRegistryWorkspace(ws.id, { displayName: name }).subscribe({
-      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
-      error: (err: unknown) => {
-        this.registryWorkspaceBusyId.set(null);
-        this.registryWorkspacesError.set(this.errMsg(err));
-      },
-    });
+    this.wsSettings.startRename(ws.id, ws.displayName);
   }
+
+  /** ViewChild on the inline rename input — focus it the moment a row
+   *  enters edit mode. Avoids needing an autofocus directive. */
+  private readonly renameInputRef = viewChild<ElementRef<HTMLInputElement>>('renameInput');
+
+  private readonly focusRenameInputFx = effect(() => {
+    if (this.wsSettings.renamingId() === null) return;
+    const el = this.renameInputRef()?.nativeElement;
+    if (!el) return;
+    queueMicrotask(() => { el.focus(); el.select(); });
+  });
 
   /** F45b — prompt for an accent color hex string. Empty input clears the color. */
   editRegistryWorkspaceColor(ws: RegistryWorkspaceListItem): void {
@@ -403,15 +414,31 @@ export class StudioShellComponent {
     });
   }
 
-  /** F45b — delete a workspace after a confirm dialog. Backend refuses 409 if projects are still attached. */
+  /**
+   * F66 — delete a workspace after a confirm dialog. Per ADR-0048 the registry
+   * auto-rehomes any assigned projects to <c>ws-default</c>; the project
+   * `StorageLocation` on disk is never touched. The confirm prompt warns
+   * about how many projects will be rehomed so the operator can back out.
+   */
   deleteRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
     if (ws.isDefault) return;
-    const ok = window.confirm(
-      `Delete workspace "${ws.displayName}"?\n\nThe registry refuses if any active projects are still assigned; reassign them first via the Project Hub.`);
+    const assigned = ws.projects.length;
+    const message = assigned === 0
+      ? `Delete workspace "${ws.displayName}"?`
+      : `Delete workspace "${ws.displayName}"?\n\n${assigned} project(s) will be moved to the Default workspace. The project folders on disk are not affected.`;
+    const ok = window.confirm(message);
     if (!ok) return;
     this.registryWorkspaceBusyId.set(ws.id);
     this.jobService.deleteRegistryWorkspace(ws.id).subscribe({
-      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
+      next: () => {
+        this.registryWorkspaceBusyId.set(null);
+        this.reloadRegistryWorkspaces();
+        if (assigned > 0) {
+          this.notifications.info(
+            `Workspace "${ws.displayName}" deleted; ${assigned} project(s) moved to the Default workspace.`,
+          );
+        }
+      },
       error: (err: unknown) => {
         this.registryWorkspaceBusyId.set(null);
         this.registryWorkspacesError.set(this.errMsg(err));

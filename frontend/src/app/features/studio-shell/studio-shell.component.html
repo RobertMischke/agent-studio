@@ -533,15 +533,39 @@
                         <li class="studio-settings-workspace-row"
                             data-testid="settings-workspace-row"
                             [attr.data-workspace-id]="ws.id"
-                            [class.studio-settings-workspace-row--busy]="registryWorkspaceBusyId() === ws.id">
+                            [class.studio-settings-workspace-row--busy]="registryWorkspaceBusyId() === ws.id"
+                            [class.studio-settings-workspace-row--drop-target]="wsSettings.isDragOver(ws.id)"
+                            (dragover)="wsSettings.onWorkspaceDragOver($event, ws.id)"
+                            (dragleave)="wsSettings.onWorkspaceDragLeave(ws.id)"
+                            (drop)="wsSettings.onWorkspaceDrop($event, ws.id, ws.displayName)">
                           <span class="studio-settings-workspace-color"
                                 [style.background]="ws.color || 'var(--studio-fg-muted)'"
                                 aria-hidden="true"></span>
-                          <button type="button"
-                                  class="studio-settings-workspace-name studio-settings-workspace-name--btn"
-                                  data-testid="settings-workspace-rename"
-                                  [appTooltip]="'Click to rename'"
-                                  (click)="renameRegistryWorkspace(ws)">{{ ws.displayName }}</button>
+                          @if (wsSettings.isRenaming(ws.id)) {
+                            <input #renameInput
+                                   type="text"
+                                   class="studio-settings-workspace-name studio-settings-workspace-name--input"
+                                   data-testid="settings-workspace-rename-input"
+                                   [attr.maxlength]="64"
+                                   [attr.aria-invalid]="wsSettings.renameError() ? 'true' : null"
+                                   [attr.aria-label]="'Rename workspace ' + ws.displayName"
+                                   [ngModel]="wsSettings.renameDraft()"
+                                   (ngModelChange)="wsSettings.updateRenameDraft($event)"
+                                   (keydown.enter)="wsSettings.commitRename(ws.displayName); $event.preventDefault()"
+                                   (keydown.escape)="wsSettings.cancelRename(); $event.preventDefault()"
+                                   (blur)="wsSettings.commitRename(ws.displayName)" />
+                            @if (wsSettings.renameError(); as err) {
+                              <span class="studio-settings-workspace-name-error"
+                                    data-testid="settings-workspace-rename-error"
+                                    role="alert">{{ err }}</span>
+                            }
+                          } @else {
+                            <button type="button"
+                                    class="studio-settings-workspace-name studio-settings-workspace-name--btn"
+                                    data-testid="settings-workspace-rename"
+                                    [appTooltip]="'Click to rename'"
+                                    (click)="renameRegistryWorkspace(ws)">{{ ws.displayName }}</button>
+                          }
                           <span class="studio-settings-workspace-id mono">{{ ws.id }}</span>
                           <span class="studio-settings-workspace-count">
                             {{ ws.projects.length }} {{ ws.projects.length === 1 ? 'project' : 'projects' }}
@@ -582,8 +606,12 @@
                                 <li class="studio-settings-project-row"
                                     data-testid="settings-project-row"
                                     [attr.data-project-id]="p.id"
+                                    [attr.draggable]="true"
                                     [class.studio-settings-project-row--busy]="registryProjectBusyId() === p.id"
-                                    [class.studio-settings-project-row--archived]="p.archived">
+                                    [class.studio-settings-project-row--archived]="p.archived"
+                                    [class.studio-settings-project-row--dragging]="wsSettings.draggingProjectId() === p.id"
+                                    (dragstart)="wsSettings.onProjectDragStart($event, p.id, ws.id)"
+                                    (dragend)="wsSettings.onProjectDragEnd()">
                                   <span class="studio-settings-project-color"
                                         [style.background]="p.color || 'var(--studio-fg-muted)'"
                                         aria-hidden="true"></span>

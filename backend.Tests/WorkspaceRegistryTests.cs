@@ -222,18 +222,44 @@ public class WorkspaceRegistryTests : IDisposable
     }
 
     [Fact]
-    public void Delete_RefusesWhenProjectsAssigned()
+    public void Delete_RehomesAssignedProjectsToDefault()
     {
         var reg = Build();
         reg.EnsureDefaultWorkspace();
         var ws = reg.Create("Frontend");
         var projects = BuildProjectRegistry();
-        projects.EnsureProjectForStorage(
+        var projA = projects.EnsureProjectForStorage(
             storageLocation: Path.Combine(_root, "proj-a"),
             initialDisplayName: "Proj A",
             workspaceId: ws.Id);
+        var projB = projects.EnsureProjectForStorage(
+            storageLocation: Path.Combine(_root, "proj-b"),
+            initialDisplayName: "Proj B",
+            workspaceId: ws.Id);
 
-        Assert.Throws<InvalidOperationException>(() => reg.Delete(ws.Id, projects));
+        var result = reg.Delete(ws.Id, projects);
+
+        Assert.Equal(ws.Id, result.DeletedId);
+        Assert.Equal(2, result.RehomedProjectIds.Count);
+        Assert.Contains(projA.Id, result.RehomedProjectIds);
+        Assert.Contains(projB.Id, result.RehomedProjectIds);
+        Assert.Null(reg.Find(ws.Id));
+        Assert.Equal(DefaultWorkspace.Id, projects.FindById(projA.Id)!.WorkspaceId);
+        Assert.Equal(DefaultWorkspace.Id, projects.FindById(projB.Id)!.WorkspaceId);
+    }
+
+    [Fact]
+    public void Delete_EmptyWorkspace_ReturnsEmptyRehomedList()
+    {
+        var reg = Build();
+        reg.EnsureDefaultWorkspace();
+        var ws = reg.Create("Frontend");
+        var projects = BuildProjectRegistry();
+
+        var result = reg.Delete(ws.Id, projects);
+
+        Assert.Equal(ws.Id, result.DeletedId);
+        Assert.Empty(result.RehomedProjectIds);
     }
 
     private ProjectRegistry BuildProjectRegistry() =>

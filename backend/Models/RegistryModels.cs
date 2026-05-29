@@ -93,3 +93,14 @@ public static class DefaultWorkspace
     public const string DisplayName = "Workspace";
     public const string Color = "#a78bfa";
 }
+
+/// <summary>
+/// F66 — return shape for <c>DELETE /api/workspaces/{id}</c>. Lists the
+/// projects that were auto-rehomed to <c>ws-default</c> as part of the
+/// delete so the UI can surface a "moved N project(s) to Default" toast.
+/// </summary>
+public sealed record WorkspaceDeleteResult
+{
+    public string DeletedId { get; init; } = "";
+    public List<string> RehomedProjectIds { get; init; } = [];
+}

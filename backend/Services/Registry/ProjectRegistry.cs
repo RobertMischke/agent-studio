@@ -293,6 +293,20 @@ public sealed class ProjectRegistry
         return MutateLocked(id, p => p with { WorkspaceId = newWorkspaceId }, "workspace-set");
     }
 
+    /// <summary>
+    /// F66 — internal rehome path used by <see cref="WorkspaceRegistry.Delete"/>.
+    /// Skips the WorkspaceRegistry existence check because the caller is the
+    /// workspace registry itself moving projects onto <c>ws-default</c>, which
+    /// is guaranteed to exist by the boot-time seed. Per ADR-0048 this is
+    /// metadata-only: no folder is moved.
+    /// </summary>
+    internal ProjectRecord SetWorkspaceUnchecked(string id, string newWorkspaceId)
+    {
+        if (string.IsNullOrWhiteSpace(newWorkspaceId))
+            throw new ArgumentException("newWorkspaceId is required", nameof(newWorkspaceId));
+        return MutateLocked(id, p => p with { WorkspaceId = newWorkspaceId }, "workspace-rehomed");
+    }
+
     /// <summary>F45b — archive or un-archive a project.</summary>
     public ProjectRecord SetArchived(string id, bool archived)
         => MutateLocked(id, p => p with { Archived = archived }, archived ? "archived" : "unarchived");

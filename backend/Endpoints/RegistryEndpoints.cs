@@ -18,29 +18,42 @@ namespace OrchestratorApi.Endpoints;
 /// </summary>
 public static class RegistryEndpoints
 {
+    /// <summary>
+    /// F66 — pure projection used by <c>GET /api/workspaces</c>. Extracted so
+    /// the LEFT-JOIN invariant ("every workspace appears, even ones with no
+    /// projects") can be locked in by a unit test without hosting Kestrel.
+    /// Iteration anchors on <c>workspaces.List()</c> and the per-workspace
+    /// projects list defaults to an empty list when no projects are mapped.
+    /// </summary>
+    public static List<WorkspaceListItem> BuildWorkspaceListing(
+        WorkspaceRegistry workspaces,
+        ProjectRegistry projects,
+        bool includeArchived)
+    {
+        var projectsByWs = projects.List()
+            .Where(p => includeArchived || !p.Archived)
+            .GroupBy(p => p.WorkspaceId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        return workspaces.List().Select(w => new WorkspaceListItem
+        {
+            Id = w.Id,
+            DisplayName = w.DisplayName,
+            SortOrder = w.SortOrder,
+            IsDefault = w.IsDefault,
+            Color = w.Color,
+            CreatedAt = w.CreatedAt,
+            Projects = projectsByWs.TryGetValue(w.Id, out var list)
+                ? list.Select(ProjectSummary.From).ToList()
+                : [],
+        }).ToList();
+    }
+
     public static void MapRegistryEndpoints(this WebApplication app)
     {
         app.MapGet("/api/workspaces", (WorkspaceRegistry workspaces, ProjectRegistry projects, bool? includeArchived) =>
         {
-            var projectsByWs = projects.List()
-                .Where(p => includeArchived == true || !p.Archived)
-                .GroupBy(p => p.WorkspaceId, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-
-            var payload = workspaces.List().Select(w => new WorkspaceListItem
-            {
-                Id = w.Id,
-                DisplayName = w.DisplayName,
-                SortOrder = w.SortOrder,
-                IsDefault = w.IsDefault,
-                Color = w.Color,
-                CreatedAt = w.CreatedAt,
-                Projects = projectsByWs.TryGetValue(w.Id, out var list)
-                    ? list.Select(ProjectSummary.From).ToList()
-                    : [],
-            }).ToList();
-
-            return Results.Ok(payload);
+            return Results.Ok(BuildWorkspaceListing(workspaces, projects, includeArchived == true));
         });
 
         app.MapGet("/api/projects", (ProjectRegistry projects, bool? includeArchived) =>
@@ -109,8 +122,8 @@ public static class RegistryEndpoints
         {
             try
             {
-                workspaces.Delete(id, projects);
-                return Results.NoContent();
+                var result = workspaces.Delete(id, projects);
+                return Results.Ok(result);
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
             catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }

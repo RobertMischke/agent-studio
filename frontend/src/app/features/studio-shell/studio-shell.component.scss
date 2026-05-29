@@ -1152,8 +1152,50 @@
   &:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
 }
 
+/* F66 — inline rename input replaces the click-to-prompt button while the
+   row is in edit mode. Sized so the workspace name doesn't visually jump
+   between the static-button and the editing layouts. */
+.studio-settings-workspace-name--input {
+  appearance: none;
+  background: var(--studio-bg);
+  color: var(--studio-fg-strong);
+  border: 1px solid var(--studio-accent, var(--studio-border));
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+  min-width: 0;
+  width: 100%;
+
+  &[aria-invalid='true'] {
+    border-color: var(--studio-danger, #e74c3c);
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--studio-accent-faint, rgba(167, 139, 250, 0.35));
+  }
+}
+
+.studio-settings-workspace-name-error {
+  grid-row: 2;
+  grid-column: 2 / -1;
+  color: var(--studio-danger, #e74c3c);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
 .studio-settings-workspace-row--busy {
   opacity: 0.6;
+}
+
+/* F66 — workspace row highlight while a foreign project is being dragged
+   over it. Solid border so the affordance is visible in both Light and
+   Dark themes (WCAG-AA contrast against the panel background). */
+.studio-settings-workspace-row--drop-target {
+  outline: 2px solid var(--studio-accent, #a78bfa);
+  outline-offset: -2px;
+  background: var(--studio-bg-hover);
 }
 
 .studio-settings-workspaces__create {
@@ -1189,9 +1231,14 @@
   padding: 2px 4px;
   border-radius: 3px;
   font-size: 11px;
+  cursor: grab;
 
   &--archived { opacity: 0.55; }
-  &--busy { opacity: 0.6; }
+  &--busy { opacity: 0.6; cursor: progress; }
+  &--dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+  }
 }
 
 .studio-settings-project-color {

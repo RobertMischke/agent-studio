@@ -397,9 +397,15 @@ export class JobService {
     return this.http.post(`${this.baseUrl}/workspaces/${encodeURIComponent(id)}/reorder`, { direction });
   }
 
-  /** F45b — delete a workspace. Backend refuses 409 if projects are still attached. */
+  /**
+   * F66 — delete a workspace. Backend refuses the default workspace (409)
+   * but auto-rehomes any still-assigned projects onto `ws-default` and
+   * returns the list of rehomed project ids so the UI can surface a
+   * "moved N project(s) to Default" toast.
+   */
   deleteRegistryWorkspace(id: string) {
-    return this.http.delete(`${this.baseUrl}/workspaces/${encodeURIComponent(id)}`);
+    return this.http.delete<{ deletedId: string; rehomedProjectIds: string[] }>(
+      `${this.baseUrl}/workspaces/${encodeURIComponent(id)}`);
   }
 
   /** F45b — patch a project record (rename / short-code / color / workspace / archived). */
