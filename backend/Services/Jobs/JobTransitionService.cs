@@ -15,6 +15,7 @@ public sealed class JobTransitionService
     private readonly GitService _git;
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<JobTransitionService> _logger;
+    private readonly JobSessionLog? _sessions;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -34,7 +35,8 @@ public sealed class JobTransitionService
         JobMutationService mutations,
         GitService git,
         ProjectSettingsService settings,
-        ILogger<JobTransitionService> logger)
+        ILogger<JobTransitionService> logger,
+        JobSessionLog? sessions = null)
     {
         _scanner = scanner;
         _states = states;
@@ -42,6 +44,7 @@ public sealed class JobTransitionService
         _git = git;
         _settings = settings;
         _logger = logger;
+        _sessions = sessions;
     }
 
     /// <summary>
@@ -206,6 +209,21 @@ public sealed class JobTransitionService
     {
         try
         {
+            // Pre-flight attribution guard: if every currently dirty path was last
+            // modified before this task's first CLI run started, the working-tree
+            // changes did not originate from this task's agent. Bundling them into
+            // an auto-commit would stamp an unrelated SHA onto the job (see the
+            // 2026-05-26 markdown task that ended up owning an AGENTS.md commit).
+            // The guard is gated on JobSessionLog so unit-test fixtures that
+            // construct the service without it keep the legacy behavior.
+            if (!IsWorkingTreeAttributableToTask(jobId, watchPath))
+            {
+                _logger.LogInformation(
+                    "Auto-commit skipped for {JobId}: working-tree dirty paths predate the task's first run",
+                    jobId);
+                return null;
+            }
+
             var (result, message) = await _git.AutoCommitAsync(jobId, watchPath, ct);
             if (!result.Success || string.IsNullOrWhiteSpace(result.Sha))
             {
@@ -247,6 +265,69 @@ public sealed class JobTransitionService
                 pushed++;
         }
         return pushed;
+    }
+
+    /// <summary>
+    /// Returns false when every currently dirty path in the project's working
+    /// tree was last modified before this task's first recorded CLI run
+    /// started - the signal that the changes were left over from another
+    /// context (operator edit, an earlier task that never committed) rather
+    /// than authored by this task's agent. Returns true (allow the auto-commit
+    /// to proceed) in any of these cases:
+    /// <list type="bullet">
+    /// <item>No <see cref="JobSessionLog"/> is wired (legacy fixtures).</item>
+    /// <item>The task has no recorded session events yet (first-ever pickup,
+    ///   no run history to compare against).</item>
+    /// <item>The working tree is clean - <see cref="GitService.AutoCommitAsync"/>
+    ///   will short-circuit on its own.</item>
+    /// <item>At least one dirty path was modified at or after the task's first
+    ///   run timestamp, or its mtime cannot be read (deleted, permission
+    ///   error). When in doubt we defer to the auto-commit so a legitimately
+    ///   edited file is never lost.</item>
+    /// </list>
+    /// </summary>
+    private bool IsWorkingTreeAttributableToTask(string jobId, string? watchPath)
+    {
+        if (_sessions == null) return true;
+
+        List<SessionEvent> events;
+        try { events = _sessions.ReadSessionEvents(jobId, watchPath); }
+        catch { return true; }
+        if (events.Count == 0) return true;
+
+        var firstActivityUtc = events.Min(e => e.Ts);
+        if (firstActivityUtc == default) return true;
+
+        var status = _git.GetStatus(jobId, watchPath);
+        if (!status.IsRepo || status.Files.Count == 0) return true;
+
+        var repoRoot = _git.ResolveRepoRootForWatchPath(watchPath);
+        if (string.IsNullOrWhiteSpace(repoRoot)) return true;
+
+        foreach (var file in status.Files)
+        {
+            if (string.IsNullOrWhiteSpace(file.Path)) continue;
+            var fullPath = Path.Combine(repoRoot, file.Path.Replace('/', Path.DirectorySeparatorChar));
+            DateTime mtime;
+            try
+            {
+                if (!File.Exists(fullPath))
+                {
+                    // Deletion or rename - we cannot timestamp it. Treat as
+                    // potentially attributable so a real agent-driven delete
+                    // is still committed.
+                    return true;
+                }
+                mtime = File.GetLastWriteTimeUtc(fullPath);
+            }
+            catch
+            {
+                return true;
+            }
+            if (mtime >= firstActivityUtc) return true;
+        }
+
+        return false;
     }
 
     private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string jobId, string reason, CancellationToken ct)
