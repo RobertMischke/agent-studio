@@ -1,10 +1,22 @@
 :host { display: block; }
 
 .overview {
+  // Density overrides scoped to the meta panel. The five sections (Status,
+  // Agent, Tokens & Performance, Agent Work, Runs) are read together as a
+  // scannable label/value list; the compact defaults were still leaving
+  // ~26px per row, which scrolled out useful sections before the bottom of
+  // the panel. Tightening at the local-token level lets `.ov-row` and the
+  // `<app-row variant="compact">` instances inherit the smaller values
+  // without reaching into the global tokens.
+  --studio-section-gap: 6px;
+  --studio-row-gap: 2px;
+  --studio-row-pad-block: 1px;
+  --studio-row-min-h: 16px;
+
   padding: 8px 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--studio-section-gap, 10px);
+  gap: var(--studio-section-gap);
   max-width: 640px;
   margin: 0 auto;
 }
@@ -12,7 +24,7 @@
 .ov-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 
   &__title {
     font-size: 11px;
@@ -21,16 +33,16 @@
     letter-spacing: 0.06em;
     color: var(--studio-fg-strong);
     margin: 0;
-    padding-bottom: 2px;
+    padding-bottom: 1px;
     border-bottom: 1px solid var(--studio-border);
   }
 }
 
 // Hero title block. Sits above the first column-group.
 .ov-title-block {
-  gap: 4px;
+  gap: 2px;
   padding-top: 2px;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--studio-border);
 }
 
@@ -162,11 +174,11 @@
 .ov-grid {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-row-gap, 3px);
+  gap: var(--studio-row-gap);
 
   &--perf {
-    margin-top: 4px;
-    padding-top: 4px;
+    margin-top: 2px;
+    padding-top: 2px;
     border-top: 1px dashed var(--studio-border);
   }
 }
@@ -175,8 +187,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: var(--studio-row-min-h, 20px);
-  padding-block: var(--studio-row-pad-block, 3px);
+  min-height: var(--studio-row-min-h);
+  padding-block: var(--studio-row-pad-block);
 
   &--failure {
     background: color-mix(in srgb, var(--severity-high, #ef4444) 10%, transparent);
@@ -347,7 +359,7 @@
 .ov-empty {
   font-size: 12px;
   color: var(--studio-fg-dim);
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .ov-run-strip {

@@ -111,10 +111,12 @@ test.describe('Row spacing compact density', () => {
       await waitForJob(id, wp.path, () => true, { timeoutMs: 15_000 });
       await openTaskDirectly(page, id, wp.path);
 
-      // Every <app-row> in Status renders with variant=compact so its
-      // resolved min-height comes from --studio-row-min-h-compact (20 px).
-      // The host attribute lives on the <app-row> custom element, not on
-      // the inner BEM root, so we resolve via the parent chain.
+      // Every <app-row> in Status renders with variant=compact. The
+      // overview pane scopes a further row-min-h override (16 px) on top
+      // of the global compact default (20 px) so its five sections stay
+      // scannable as more content lands; <app-row> inherits the local
+      // override via CSS variable cascade. This test asserts the host
+      // variant is wired correctly AND the override flows through.
       const status = page.getByTestId('overview-status');
       const hosts = status.locator('app-row');
       const count = await hosts.count();
@@ -133,10 +135,10 @@ test.describe('Row spacing compact density', () => {
       });
 
       expect(inspected.hostVariant).toBe('compact');
-      // Token must resolve to the compact value (20px).
-      expect(inspected.tokenRowMinH).toMatch(/20px/);
+      // Token resolves to the overview-pane local override (16px).
+      expect(inspected.tokenRowMinH).toMatch(/16px/);
       // Inner row picks up the token via min-height: var(--studio-row-min-h)
-      expect(inspected.innerMinHeight).toBe('20px');
+      expect(inspected.innerMinHeight).toBe('16px');
     } finally {
       await deleteJob(id, wp.path);
     }
