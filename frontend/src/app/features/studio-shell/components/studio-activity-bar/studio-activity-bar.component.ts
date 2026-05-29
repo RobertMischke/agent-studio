@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { TooltipDirective } from '../../../../components/tooltip/tooltip.directive';
 
-export type StudioActivityPanelKey = 'explorer' | 'tasks' | 'filters' | 'cli' | 'activity' | 'runbook';
+export type StudioActivityPanelKey = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook';
 
 export interface StudioActivityBarItem {
   key: StudioActivityPanelKey;
-  icon: 'folder' | 'list' | 'filter' | 'cli' | 'activity' | 'runbook';
+  icon: 'folder' | 'filter' | 'cli' | 'activity' | 'runbook';
   label: string;
 }
 

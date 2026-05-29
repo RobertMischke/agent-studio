@@ -327,56 +327,6 @@
                 }
               </section>
             }
-            @case ('tasks') {
-              <section class="studio-tasks">
-                <div class="studio-explorer__group-head">Lanes</div>
-                <div class="studio-lane-summary">
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
-                    <span class="studio-lane-summary__label">Backlog</span>
-                    <span class="studio-lane-summary__count">{{ laneSummary().backlog }}</span>
-                  </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
-                    <span class="studio-lane-summary__label">Ready</span>
-                    <span class="studio-lane-summary__count">{{ laneSummary().ready }}</span>
-                  </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
-                    <span class="studio-lane-summary__label">In progress</span>
-                    <span class="studio-lane-summary__count studio-lane-summary__count--alive">{{ laneSummary().progress }}</span>
-                  </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
-                    <span class="studio-lane-summary__label">Auto review</span>
-                    <span class="studio-lane-summary__count">{{ laneSummary().autoReview }}</span>
-                  </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
-                    <span class="studio-lane-summary__label">Human review</span>
-                    <span class="studio-lane-summary__count studio-lane-summary__count--review">{{ laneSummary().humanReview }}</span>
-                  </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
-                    <span class="studio-lane-summary__label">Completed</span>
-                    <span class="studio-lane-summary__count">{{ laneSummary().completed }}</span>
-                  </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
-                    <span class="studio-lane-summary__label">Archive</span>
-                    <span class="studio-lane-summary__count studio-lane-summary__count--dim">{{ laneSummary().archive }}</span>
-                  </button>
-                </div>
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Open tasks</div>
-                @if (tabs().length === 0) {
-                  <app-empty-state>Open a task from the board.</app-empty-state>
-                } @else {
-                  @for (t of tabs(); track tabKey(t)) {
-                    @if (t.kind === 'task') {
-                      <button type="button"
-                              class="studio-tree-row"
-                              [class.studio-tree-row--active]="activeKey() === tabKey(t)"
-                              (click)="selectTab(tabKey(t))">
-                        <span class="studio-tree-row__name">{{ tabLabel(t) }}</span>
-                      </button>
-                    }
-                  }
-                }
-              </section>
-            }
             @case ('filters') {
               <section class="studio-filters">
                 <!-- Inline filter UI is projected here from app.html

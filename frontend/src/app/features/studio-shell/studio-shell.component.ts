@@ -695,7 +695,6 @@ export class StudioShellComponent {
 
   readonly activityBarItems: readonly StudioActivityBarItem[] = [
     { key: 'explorer', icon: 'folder', label: 'Explorer' },
-    { key: 'tasks', icon: 'list', label: 'Tasks' },
     { key: 'filters', icon: 'filter', label: 'Filters' },
     { key: 'cli', icon: 'cli', label: 'Agents / CLI' },
     { key: 'activity', icon: 'activity', label: 'Activity' },
@@ -1037,21 +1036,6 @@ export class StudioShellComponent {
     return Array.from(counts.entries())
       .map(([cli, count]) => ({ cli, count, color: cliColorFor(cli) }))
       .sort((a, b) => b.count - a.count);
-  });
-
-  /** Lane-state counts across the active filter set (for the Tasks panel summary). */
-  readonly laneSummary = computed(() => {
-    const grouped = this.grouped();
-    const len = (k: keyof typeof grouped) => (grouped[k] ?? []).length;
-    return {
-      backlog: len('backlog') + len('preparation') + len('orchestratorPrep') + len('needsHumanReview'),
-      ready: len('ready'),
-      progress: len('progress'),
-      autoReview: len('autoReview'),
-      humanReview: len('humanReview'),
-      completed: len('completed'),
-      archive: len('archive'),
-    };
   });
 
   startSidebarResize(event: MouseEvent): void {
