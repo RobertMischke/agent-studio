@@ -224,6 +224,63 @@
   --studio-activitybar-w: 48px;
   --studio-titlebar-h:    36px;
   --studio-tabbar-h:      36px;
+
+  // ---------------------------------------------------------------------------
+  // Density tokens — row padding, row gap, section gap, min row height.
+  //
+  // Three variants:
+  //   compact  → operator-grade information density (Overview, Explorer,
+  //              Conversation-View, Activity-Bar sub-panels)
+  //   default  → mid-density for surfaces where breathing room still helps
+  //   cozy     → only for empty states / Welcome / first-run cards
+  //
+  // Surface-level vars (`--studio-row-pad-block`, `--studio-row-gap`,
+  // `--studio-section-gap`, `--studio-row-min-h`) resolve to the *-compact
+  // variant by default, so every consumer reading `var(--studio-row-pad-block)`
+  // automatically picks up the compact value. A surface that wants `default`
+  // or `cozy` overrides its local `--studio-row-pad-block` to the matching
+  // variant token.
+  //
+  // Interactive rows (buttons, list items with click handlers) must satisfy
+  // the WCAG-AA touch-target minimum: 32px (compact) / 36px (default) /
+  // 40px (cozy). The `--studio-row-min-h-interactive-*` family ships those
+  // floors; the `--studio-row-min-h-*` family ships the smaller floors for
+  // static label/value rows.
+  // ---------------------------------------------------------------------------
+  --studio-row-pad-block-compact:  3px;
+  --studio-row-pad-block-default:  6px;
+  --studio-row-pad-block-cozy:     10px;
+
+  --studio-row-pad-inline-compact: 6px;
+  --studio-row-pad-inline-default: 10px;
+  --studio-row-pad-inline-cozy:    14px;
+
+  --studio-row-gap-compact:        3px;
+  --studio-row-gap-default:        6px;
+  --studio-row-gap-cozy:           10px;
+
+  --studio-section-gap-compact:    10px;
+  --studio-section-gap-default:    16px;
+  --studio-section-gap-cozy:       24px;
+
+  // Static row floors (no click target requirement)
+  --studio-row-min-h-compact:      20px;
+  --studio-row-min-h-default:      24px;
+  --studio-row-min-h-cozy:         32px;
+
+  // Interactive row floors (a11y touch-target)
+  --studio-row-min-h-interactive-compact: 32px;
+  --studio-row-min-h-interactive-default: 36px;
+  --studio-row-min-h-interactive-cozy:    40px;
+
+  // Surface-level aliases — compact is the system default. A surface that
+  // wants a different variant overrides these four vars in its own scope.
+  --studio-row-pad-block:  var(--studio-row-pad-block-compact);
+  --studio-row-pad-inline: var(--studio-row-pad-inline-compact);
+  --studio-row-gap:        var(--studio-row-gap-compact);
+  --studio-section-gap:    var(--studio-section-gap-compact);
+  --studio-row-min-h:      var(--studio-row-min-h-compact);
+  --studio-row-min-h-interactive: var(--studio-row-min-h-interactive-compact);
 }
 
 // =============================================================================

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { JobService } from '../../../../services/task.service';
+import { RowComponent } from '../../../../components/row/row.component';
 import type { JobInfo } from '../../../../models/task.model';
 
 /**
@@ -19,6 +20,7 @@ import type { JobInfo } from '../../../../models/task.model';
   selector: 'app-studio-diff-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RowComponent],
   templateUrl: './diff-tab-view.component.html',
   styleUrl: './diff-tab-view.component.scss',
 })

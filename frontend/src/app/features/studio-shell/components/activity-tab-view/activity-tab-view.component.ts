@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { JobService } from '../../../../services/task.service';
+import { RowComponent } from '../../../../components/row/row.component';
 import type { JobInfo } from '../../../../models/task.model';
 
 /**
@@ -12,6 +13,7 @@ import type { JobInfo } from '../../../../models/task.model';
   selector: 'app-studio-activity-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RowComponent],
   templateUrl: './activity-tab-view.component.html',
   styleUrl: './activity-tab-view.component.scss',
 })

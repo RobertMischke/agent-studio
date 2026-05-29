@@ -20,6 +20,7 @@ import { ClientService } from '../../../../../services/client.service';
 import { ChatModelBadgeComponent } from '../../chat-model-badge/chat-model-badge.component';
 import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
+import { RowComponent } from '../../../../../components/row/row.component';
 import {
   cliTypeIcon,
   cliTypeLabel,
@@ -35,7 +36,7 @@ import { copyTextToClipboard } from '../../../../../services/clipboard.util';
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChatModelBadgeComponent, RegressionRadarComponent, TooltipDirective],
+  imports: [ChatModelBadgeComponent, RegressionRadarComponent, TooltipDirective, RowComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })

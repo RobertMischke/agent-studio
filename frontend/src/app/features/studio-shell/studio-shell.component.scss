@@ -588,7 +588,7 @@
   &__body {
     flex: 1;
     overflow: auto;
-    padding: 6px 0;
+    padding: 4px 0;
     // F28: dezent scrollbar — transparent thumb that only fades in on
     // hover so the sidebar tree doesn't show a permanent scroll track
     // when the project list fits.
@@ -822,14 +822,14 @@
 .studio-lane-summary {
   display: flex;
   flex-direction: column;
-  padding: 4px 12px;
-  gap: 2px;
+  padding: 2px 12px;
+  gap: 0;
 
   &__row {
     display: flex;
     align-items: center;
     width: 100%;
-    padding: 4px 8px;
+    padding: 2px 8px;
     border-radius: 3px;
     background: transparent;
     font-size: 12px;
@@ -950,7 +950,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 12px;
+  padding: 2px 12px;
   font-size: 12px;
   color: var(--studio-fg);
 
@@ -986,7 +986,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 12px;
+  padding: 4px 12px;
   font-size: 12px;
   color: var(--studio-fg);
 
@@ -1057,8 +1057,8 @@
 .studio-update {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px 12px 8px;
+  gap: 2px;
+  padding: 4px 12px 6px;
 
   &__row {
     display: flex;
@@ -1066,6 +1066,7 @@
     justify-content: space-between;
     gap: 8px;
     font-size: 11px;
+    min-height: 20px;
   }
 
   &__label {
@@ -1533,7 +1534,11 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 24px;
+  // F-row-density: rows are interactive (click to open tab) so they keep
+  // a 22px floor that still clears desktop touch-target ergonomics in
+  // a sidebar context. Down from 24px to reclaim vertical pixels for the
+  // operator's tree.
+  height: 22px;
   padding-top: 0;
   // 16px right padding so count badges stay clear of the sidebar's
   // right edge — applies to OPEN TABS / OPEN TASKS rows that still

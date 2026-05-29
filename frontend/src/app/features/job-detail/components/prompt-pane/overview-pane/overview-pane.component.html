@@ -43,9 +43,9 @@
   <section class="ov-section" data-testid="overview-status">
     <h3 class="ov-section__title">Status</h3>
     <div class="ov-grid">
-      <div class="ov-row">
-        <span class="ov-label">Lane</span>
-        <span class="ov-value">
+      <app-row variant="compact">
+        <span appRowLabel>Lane</span>
+        <span appRowValue>
           <span class="ov-lane-pill"
                 [class]="'ov-lane-pill state--' + job().state"
                 [attr.data-state]="job().state">
@@ -56,7 +56,7 @@
             <span class="ov-phase-chip">{{ pl }}</span>
           }
         </span>
-      </div>
+      </app-row>
 
       @if (failureInfo(); as reason) {
         <div class="ov-row ov-row--failure" data-testid="overview-failure-reason">
@@ -65,21 +65,20 @@
         </div>
       }
 
-      <div class="ov-row">
-        <span class="ov-label">Last Activity</span>
-        <span class="ov-value">
+      <app-row variant="compact">
+        <span appRowLabel>Last Activity</span>
+        <span appRowValue>
           <span>{{ formatRelativeTime(job().lastActivity) }}</span>
           <span class="ov-dim">({{ formatAbsoluteTime(job().lastActivity) }})</span>
         </span>
-      </div>
-
-      <div class="ov-row">
-        <span class="ov-label">Created</span>
-        <span class="ov-value">
+      </app-row>
+      <app-row variant="compact">
+        <span appRowLabel>Created</span>
+        <span appRowValue>
           <span>{{ formatRelativeTime(job().createdAt) }}</span>
           <span class="ov-dim">({{ formatAbsoluteTime(job().createdAt) }})</span>
         </span>
-      </div>
+      </app-row>
     </div>
   </section>
 

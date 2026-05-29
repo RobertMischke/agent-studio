@@ -1,8 +1,8 @@
 .activity {
-  padding: 24px 32px;
+  padding: 14px 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--studio-section-gap, 10px);
   color: var(--studio-fg);
   height: 100%;
   min-height: 0;
@@ -12,7 +12,7 @@
     align-items: baseline;
     gap: 10px;
     border-bottom: 1px solid var(--studio-border);
-    padding-bottom: 12px;
+    padding-bottom: 6px;
   }
 
   &__eyebrow {
@@ -38,38 +38,27 @@
     background: var(--studio-bg-elevated);
     border: 1px solid var(--studio-border);
     border-radius: 6px;
-    padding: 16px 20px;
+    padding: 10px 14px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
   }
 
   &__facts {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 4px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-row-gap, 3px);
     margin: 0;
     font-size: 12px;
 
-    dt {
-      color: var(--studio-fg-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    dd {
-      margin: 0;
-      color: var(--studio-fg);
-
-      &.mono {
-        font-family: var(--font-mono);
-      }
+    .mono {
+      font-family: var(--font-mono);
     }
   }
 
   &__note {
     margin: 0;
-    padding-top: 8px;
+    padding-top: 6px;
     border-top: 1px solid var(--studio-border);
     font-size: 12px;
     color: var(--studio-fg-muted);

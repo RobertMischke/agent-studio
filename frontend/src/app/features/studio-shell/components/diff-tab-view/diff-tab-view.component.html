@@ -22,16 +22,22 @@
           }
         </button>
       }
-      <dl class="diff__facts">
-        <dt>Task</dt>
-        <dd>{{ o.job.title || o.job.id }}</dd>
-        <dt>Project</dt>
-        <dd>{{ o.job.projectName }}</dd>
+      <div class="diff__facts" data-testid="diff-facts">
+        <app-row variant="compact">
+          <span appRowLabel>Task</span>
+          <span appRowValue>{{ o.job.title || o.job.id }}</span>
+        </app-row>
+        <app-row variant="compact">
+          <span appRowLabel>Project</span>
+          <span appRowValue>{{ o.job.projectName }}</span>
+        </app-row>
         @if (o.commit.filesChanged !== null) {
-          <dt>Files</dt>
-          <dd>{{ o.commit.filesChanged }}</dd>
+          <app-row variant="compact">
+            <span appRowLabel>Files</span>
+            <span appRowValue>{{ o.commit.filesChanged }}</span>
+          </app-row>
         }
-      </dl>
+      </div>
       <p class="diff__note">
         The inline diff renderer is being migrated from the existing task
         diff pane. Open the owning task to see the file list, +/- counts,
