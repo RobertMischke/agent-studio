@@ -27,8 +27,8 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post: 4 aspects + commit-attribution stub + orchestrator decision.
-        Assert.Equal(6, p.Post.Count);
+        // Post: 4 aspects + commit-attribution stub + lint-scss + orchestrator decision.
+        Assert.Equal(7, p.Post.Count);
     }
 
     [Fact]
@@ -63,6 +63,33 @@ public class PipelineCatalogueTests
         {
             Assert.Contains(aspectId, commitStep.DependsOn);
         }
+    }
+
+    [Fact]
+    public void StandardPipeline_LintScss_IsToolStep_WithAspectDependencies_AndNotAStub()
+    {
+        // ASS-563: lint-scss must run after the aspect verdicts (so the
+        // pre-existing aspect work is not wasted by an early lint reissue)
+        // but before the orchestrator decision (so a fail verdict can
+        // route through the reissue path instead of accept-as-done).
+        // Unlike commit-attribution, this step is implemented today.
+        var p = PipelineCatalogue.Standard;
+        var lintStep = p.Post.First(s => s.Id == PipelineCatalogue.LintScssStepId);
+        Assert.Equal(StepKind.Tool, lintStep.Kind);
+        Assert.False(lintStep.Stub);
+        Assert.True(lintStep.Idempotent);
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            Assert.Contains(aspectId, lintStep.DependsOn);
+        }
+
+        // The orchestrator-decision step must come AFTER lint-scss in the
+        // Post list, so a deterministic executor runs lint first and the
+        // decision step sees its verdict.
+        var lintIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.LintScssStepId);
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.True(lintIndex < decisionIndex,
+            $"lint-scss (idx {lintIndex}) must precede orchestrator-decision (idx {decisionIndex}) in Post list");
     }
 
     [Fact]

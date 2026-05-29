@@ -125,6 +125,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? _usage;
     private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
+    private readonly ILintScssRunner? _lintScssRunner;
+
+    /// <summary>
+    /// Stable prefix on the <c>Reason</c> field of every
+    /// <see cref="ReviewDecisionRecord"/> that the lint-scss post-step
+    /// emitted. Used for the infinite-spin guard (a prior reissue with
+    /// this prefix means the agent already had one chance to clear the
+    /// gate; the next failure escalates to human review).
+    /// </summary>
+    internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
 
     public ReviewDecisionOrchestrator(
         JobScannerService scanner,
@@ -140,7 +150,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null,
         JobSessionLog? sessions = null,
         GitService? git = null,
-        PipelineExecutionLog? pipelineLog = null)
+        PipelineExecutionLog? pipelineLog = null,
+        ILintScssRunner? lintScssRunner = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -156,6 +167,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _sessions = sessions;
         _git = git;
         _pipelineLog = pipelineLog;
+        _lintScssRunner = lintScssRunner;
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -636,11 +648,28 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var report = await _aspectRunner.RunAsync(inputs, aspects, cliBinary, aspectModel, perAspectTimeout, ct);
 
+        // ASS-563: run the lint-scss post-step BEFORE the pipeline Complete
+        // mark so its step record lands in pipeline-execution.json while
+        // the file is still in its in-flight state. Skipped/Ok/Warn just
+        // record; Fail short-circuits the move-to-review path with a
+        // reissue (or, if we've already reissued once, an escalation).
+        var lintResult = await RunLintScssPostStepAsync(workspace, entry, current, ct);
+
         _pipelineLog?.Complete(current.FolderPath);
 
         if (report.Overall == AspectStatus.Block)
         {
             await ReissueOnBlockAsync(workspace, entry, pending, current, report, ct);
+            return;
+        }
+
+        if (lintResult?.Verdict == LintScssVerdict.Fail)
+        {
+            // The aspect verdict was pass/concerns but lint-scss broke; in
+            // fail mode the post-step routes to its own reissue / escalate
+            // path and we stop here. In warn mode the verdict was Warn,
+            // not Fail, and we fall through to the normal move-to-review.
+            await HandleLintScssFailureAsync(workspace, entry, pending, current, lintResult, ct);
             return;
         }
 
@@ -758,6 +787,210 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Response: AspectSummaryLine(report),
             FollowUp: followUp));
     }
+
+    /// <summary>
+    /// Drive the lint-scss post-step: resolve mode through
+    /// <see cref="PostStepConfigResolver"/>, invoke the runner, record
+    /// the verdict on <c>pipeline-execution.json</c>, and write the
+    /// per-run log file under <c>post-steps/</c>. Returns null when the
+    /// runner is not wired (test path) or when mode = off so the caller
+    /// can short-circuit. Never throws: a broken local stylelint
+    /// toolchain falls through to a <see cref="LintScssVerdict.Skipped"/>
+    /// verdict rather than crash the orchestrator tick.
+    /// </summary>
+    private async Task<LintScssResult?> RunLintScssPostStepAsync(
+        string workspace,
+        WatchPathEntry entry,
+        JobInfo current,
+        CancellationToken ct)
+    {
+        if (_lintScssRunner == null) return null;
+
+        var mode = PostStepConfigResolver.Resolve(
+            _configuration, current.FolderPath, PipelineCatalogue.LintScssStepId);
+
+        if (mode == PostStepMode.Off)
+        {
+            RecordLintScssStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off",
+                reason: "post-step disabled by config");
+            return new LintScssResult(LintScssVerdict.Skipped, null, 0, "", "mode=off");
+        }
+
+        var repoPath = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+        var timeoutSeconds = _configuration.GetValue($"PostSteps:{PipelineCatalogue.LintScssStepId}:TimeoutSeconds", 120);
+
+        LintScssResult result;
+        try
+        {
+            result = await _lintScssRunner.RunAsync(repoPath, mode, TimeSpan.FromSeconds(timeoutSeconds), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: lint-scss post-step threw for {Project}/{JobId}; treating as skipped",
+                entry.Name, current.Id);
+            RecordLintScssStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "error", reason: ex.Message);
+            return null;
+        }
+
+        var status = result.Verdict switch
+        {
+            LintScssVerdict.Ok      => PipelineStepStatus.Passed,
+            LintScssVerdict.Warn    => PipelineStepStatus.Passed, // ran, no reissue
+            LintScssVerdict.Fail    => PipelineStepStatus.Failed,
+            LintScssVerdict.Skipped => PipelineStepStatus.Skipped,
+            _ => PipelineStepStatus.Skipped,
+        };
+        var verdictToken = result.Verdict switch
+        {
+            LintScssVerdict.Ok      => "ok",
+            LintScssVerdict.Warn    => "warn",
+            LintScssVerdict.Fail    => "fail",
+            LintScssVerdict.Skipped => "skipped",
+            _ => "skipped",
+        };
+        RecordLintScssStep(current.FolderPath, status, result.DurationMs, verdictToken, result.Reason);
+        WriteLintScssLog(current.FolderPath, result);
+        return result;
+    }
+
+    private void RecordLintScssStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.LintScssStepId,
+            Kind = StepKind.Tool,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Verdict = verdictToken,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
+    /// Persist the truncated stylelint output for the FE timeline to
+    /// render on click-to-expand. One file per run-index so the user can
+    /// see previous-run output side-by-side with the current attempt;
+    /// the index is derived from how many <c>lint-scss-*.log</c> files
+    /// already exist in <c>post-steps/</c>.
+    /// </summary>
+    private void WriteLintScssLog(string jobFolderPath, LintScssResult result)
+    {
+        try
+        {
+            var dir = Path.Combine(jobFolderPath, "post-steps");
+            Directory.CreateDirectory(dir);
+            var index = Directory.EnumerateFiles(dir, "lint-scss-*.log").Count() + 1;
+            var path = Path.Combine(dir, $"lint-scss-{index}.log");
+            var body = $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} durationMs={result.DurationMs}\n" +
+                       $"reason={result.Reason}\n" +
+                       "---\n" +
+                       result.Output;
+            File.WriteAllText(path, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: failed to persist lint-scss log under {JobFolder}",
+                jobFolderPath);
+        }
+    }
+
+    /// <summary>
+    /// Resolve a Fail verdict from the lint-scss post-step. If the job has
+    /// no prior lint-scss reissue, send it back to <c>2-ready</c> with a
+    /// follow-up that includes the truncated stylelint output. If a prior
+    /// reissue already exists in the decision journal, the budget is
+    /// spent and the job escalates to <c>5-human-review</c> instead — the
+    /// spec's infinite-spin guard.
+    /// </summary>
+    private async Task HandleLintScssFailureAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        JobInfo current,
+        LintScssResult result,
+        CancellationToken ct)
+    {
+        var priorLintReissues = ReviewDecisionLog.ReadAll(workspace, entry.Name)
+            .Count(r => r.JobId == current.Id
+                        && r.Kind == ReviewDecisionKind.Reissue
+                        && r.Reason != null
+                        && r.Reason.StartsWith(LintScssReissueReasonPrefix, StringComparison.Ordinal));
+
+        if (priorLintReissues >= 1)
+        {
+            var reason = $"lint-scss failed twice in a row (exit {result.ExitCode}); escalating per ASS-46 infinite-spin guard.";
+            var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
+            var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+            if (move.Status == MoveJobStatus.Success)
+            {
+                var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+                var moved = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
+                _chatLog.AppendSupervisor(moved, "escalate",
+                    $"Lint-scss post-step failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
+                await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "ReviewDecisionOrchestrator: failed to escalate {JobId} after lint-scss double-fail: {Status} {Message}",
+                    current.Id, move.Status, move.Message);
+            }
+            _statusSnapshot.RecordEscalate();
+            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow,
+                JobId: current.Id,
+                Project: entry.Name,
+                Kind: ReviewDecisionKind.Escalate,
+                Reason: reason,
+                Prompt: "(deterministic lint-scss post-step)",
+                Response: result.Output,
+                FollowUp: string.Empty));
+            return;
+        }
+
+        var moved2 = MoveReissueToReadyTop(current, entry, "lint-scss fail");
+        if (moved2 == null) return;
+
+        var followUp = BuildLintScssFollowUp(result);
+        await WriteFollowUpFileAsync(moved2, followUp, ct);
+
+        var title = string.IsNullOrWhiteSpace(moved2.Title) ? moved2.Id : moved2.Title;
+        _chatLog.Append(moved2, OrchestratorMessageKind.Reissue,
+            $"Auto-review sent \"{title}\" back to 2-ready: lint-scss failed (exit {result.ExitCode}).");
+
+        _statusSnapshot.RecordReissue();
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: LintScssReissueReasonPrefix + $"stylelint exit {result.ExitCode}",
+            Prompt: "(deterministic lint-scss post-step)",
+            Response: result.Output,
+            FollowUp: followUp));
+    }
+
+    private static string BuildLintScssFollowUp(LintScssResult result) =>
+        "Auto-review re-opened this task because the lint-scss post-step found stylelint errors. " +
+        "Run `npm run lint:scss` from the frontend tree, address every error (warnings can stay), " +
+        "and end with [[TASK_DONE]] once the gate is green again.\n\n" +
+        "Truncated stylelint output (first 50 lines):\n" +
+        "```\n" +
+        result.Output + "\n" +
+        "```";
 
     private static string AspectSummaryLine(AspectRunReport report)
     {

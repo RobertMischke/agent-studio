@@ -42,6 +42,14 @@ public static class PipelineCatalogue
 
     public const string CoreAgentRunStepId = "core-agent-run";
     public const string GitCommitAttributionStepId = "post-git-commit-attribution";
+    /// <summary>
+    /// Post-step that runs <c>npx stylelint</c> over the frontend SCSS tree
+    /// after the agent run finishes. Verdict drives the
+    /// <see cref="OrchestratorApi.Services.Pipeline.LintScssRunner"/> mode
+    /// (off/warn/fail) and may trigger a reissue back to <c>2-ready</c>
+    /// when configured to fail. See ASS-563.
+    /// </summary>
+    public const string LintScssStepId = "post-lint-scss";
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -114,6 +122,15 @@ public static class PipelineCatalogue
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
                     Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = LintScssStepId,
+                    DisplayName = "Frontend stylelint",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
                 },
                 new PipelineStep
                 {
