@@ -1,5 +1,44 @@
 <div class="overview" data-testid="overview-tab">
 
+  <section class="ov-section ov-title-block" data-testid="overview-title-block">
+    @if (editingTitle()) {
+      <input #titleInput class="ov-title-input" data-testid="overview-title-input" type="text"
+             [value]="titleDraft()" maxlength="200" placeholder="Task title"
+             (input)="onTitleDraftInput($any($event.target).value)"
+             (keydown.enter)="saveTitle(); $event.stopPropagation()"
+             (keydown.escape)="cancelTitleEdit(); $event.stopPropagation()"
+             (blur)="saveTitle()" />
+    } @else {
+      <h1 class="ov-title" data-testid="overview-title" tabindex="0"
+          [appTooltip]="'Click to rename'"
+          (click)="startTitleEdit()" (keydown.enter)="startTitleEdit()">
+        <span class="ov-title__text">{{ displayedTitle() }}</span>
+        <button type="button" class="ov-title__edit-affordance"
+                data-testid="overview-title-edit-affordance"
+                aria-label="Rename task"
+                (click)="$event.stopPropagation(); startTitleEdit()">edit</button>
+      </h1>
+    }
+    <div class="ov-subline" data-testid="overview-title-subline">
+      @if (job().key; as taskKey) {
+        <span class="ov-subline__key" data-testid="overview-title-key">{{ taskKey }}</span>
+        <span class="ov-subline__sep" aria-hidden="true">·</span>
+      }
+      <span class="ov-lane-pill ov-subline__lane" data-testid="overview-title-lane"
+            [class]="'ov-lane-pill state--' + job().state" [attr.data-state]="job().state">
+        <span class="ov-lane-pill__dot" aria-hidden="true">●</span>
+        {{ laneLabel(job().state) }}
+      </span>
+      <span class="ov-subline__sep" aria-hidden="true">·</span>
+      <span class="ov-subline__project" data-testid="overview-title-project"
+            [style.--project-color]="identity().color"
+            [style.--project-border]="identity().border">
+        <span class="ov-subline__project-disk" aria-hidden="true">{{ identity().initial }}</span>
+        <span class="ov-subline__project-name">{{ job().projectName }}</span>
+      </span>
+    </div>
+  </section>
+
   <!-- Status block -->
   <section class="ov-section" data-testid="overview-status">
     <h3 class="ov-section__title">Status</h3>

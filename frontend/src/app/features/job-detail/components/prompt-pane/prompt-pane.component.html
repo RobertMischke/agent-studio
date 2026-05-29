@@ -21,7 +21,8 @@
             [availableModels]="availableModels()"
             [isRunning]="isRunning()"
             (modelChange)="modelChange.emit($event)"
-            (cliTypeChange)="cliTypeChange.emit($event)" />
+            (cliTypeChange)="cliTypeChange.emit($event)"
+            (titleSaved)="titleSaved.emit()" />
         }
       }
 

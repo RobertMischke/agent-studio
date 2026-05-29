@@ -95,7 +95,8 @@
         (evidenceAcknowledge)="onEvidenceAcknowledge($event)"
         (evidenceCreateFollowup)="onEvidenceCreateFollowup($event)"
         (modelChange)="onModelDraftChange($event)"
-        (cliTypeChange)="onCliTypeChange($event)" />
+        (cliTypeChange)="onCliTypeChange($event)"
+        (titleSaved)="fileSaved.emit()" />
     }
 
     @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {

@@ -42,6 +42,12 @@
       "styles": 686,
       "total": 1355
     },
+    "src/app/features/job-detail/components/prompt-pane/overview-pane/overview-pane.component.ts": {
+      "typeScript": 377,
+      "template": 319,
+      "styles": 377,
+      "total": 1073
+    },
     "src/app/features/job-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
       "typeScript": 820,
       "template": 481,

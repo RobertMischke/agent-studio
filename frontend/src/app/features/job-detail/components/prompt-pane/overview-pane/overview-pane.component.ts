@@ -1,10 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
+  ElementRef,
+  ViewChild,
   computed,
+  effect,
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import type { CliType, JobInfo } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
@@ -20,6 +25,11 @@ import {
   cliTypeLabel,
   formatTokens,
 } from '../../../../../services/format.util';
+import { projectIdentity } from '../../../../../services/project-identity.util';
+import { JobService } from '../../../../../services/task.service';
+import { NotificationService } from '../../../../../services/notification.service';
+import { ModalStackService } from '../../../../../services/modal-stack.service';
+import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 
 @Component({
   selector: 'app-overview-pane',
@@ -36,13 +46,134 @@ export class OverviewPaneComponent {
 
   readonly modelChange = output<string>();
   readonly cliTypeChange = output<CliType>();
+  /** Fired after a successful title PUT so the parent can re-fetch the
+   *  detail and let the optimistic override drop back to the canonical
+   *  `job().title`. */
+  readonly titleSaved = output<void>();
 
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly agentWorkPoll = inject(AgentWorkSummaryPollService);
   private readonly clients = inject(ClientService);
+  private readonly jobService = inject(JobService);
+  private readonly notifs = inject(NotificationService);
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly timeline = this.runTimelinePoll.timeline;
   readonly runs = this.runTimelinePoll.runs;
+
+  /** Title inline-edit state — local to this pane (the detail-header's edit
+   *  is parent-owned and separate). Optimistic: `optimisticTitle` overrides
+   *  the displayed value the moment the user hits Enter / blurs, so there
+   *  is no spinner between PUT and the parent's re-fetch landing. */
+  readonly editingTitle = signal(false);
+  readonly titleDraft = signal('');
+  readonly savingTitle = signal(false);
+  private readonly optimisticTitle = signal<string | null>(null);
+  private modalStackDisposer: (() => void) | null = null;
+
+  /** Title the H1 renders. Falls back to the job id when no title is set. */
+  readonly displayedTitle = computed<string>(() => {
+    const opt = this.optimisticTitle();
+    if (opt != null) return opt;
+    return this.job().title || this.job().id;
+  });
+
+  /** Visual identity (initial + colour) of the project, for the sub-line. */
+  readonly identity = computed(() => projectIdentity(this.job().projectName));
+
+  /** Clear the optimistic override once the real `job().title` catches up
+   *  to the saved value (parent re-fetched the detail after PUT). */
+  private clearOptimisticOnSync = effect(() => {
+    const opt = this.optimisticTitle();
+    if (opt == null) return;
+    const current = this.job().title || this.job().id;
+    if (current === opt) {
+      this.optimisticTitle.set(null);
+    }
+  });
+
+  @ViewChild('titleInput') private titleInputEl?: ElementRef<HTMLInputElement>;
+
+  private focusOnEdit = effect(() => {
+    if (this.editingTitle()) {
+      queueMicrotask(() => this.titleInputEl?.nativeElement.select());
+    }
+  });
+
+  startTitleEdit(): void {
+    if (this.editingTitle()) return;
+    this.titleDraft.set(this.displayedTitle());
+    this.editingTitle.set(true);
+    // Push a modal-stack entry so Escape closes the edit, not the detail
+    // panel. The parent's modal-stack entry only checks its own
+    // editingTitle / editingPrompt signals (set by the detail-header), so
+    // without this Escape would bubble past our local cancel and close
+    // the whole detail view.
+    this.modalStackDisposer = this.modalStack.push('overview-title-edit', () => {
+      this.cancelTitleEdit();
+      return true;
+    });
+    this.destroyRef.onDestroy(() => this.disposeModalStack());
+  }
+
+  cancelTitleEdit(): void {
+    this.editingTitle.set(false);
+    this.savingTitle.set(false);
+    this.disposeModalStack();
+  }
+
+  saveTitle(): void {
+    if (!this.editingTitle()) return;
+    const trimmed = this.titleDraft().trim();
+    if (!trimmed) {
+      this.cancelTitleEdit();
+      return;
+    }
+    const current = this.displayedTitle();
+    if (trimmed === current) {
+      this.cancelTitleEdit();
+      return;
+    }
+    // Optimistic: paint the new title immediately, drop edit mode, fire
+    // the PUT without a spinner. Revert on error.
+    const job = this.job();
+    this.optimisticTitle.set(trimmed);
+    this.editingTitle.set(false);
+    this.savingTitle.set(false);
+    this.disposeModalStack();
+    this.jobService.setJobTitle(job.id, trimmed, job.watchPath).subscribe({
+      next: () => {
+        this.titleSaved.emit();
+      },
+      error: () => {
+        this.optimisticTitle.set(null);
+        this.notifs.warning(
+          'The new title could not be saved. The previous title was restored.',
+          'Title save failed',
+        );
+      },
+    });
+  }
+
+  copyTitle(): void {
+    const text = this.displayedTitle();
+    if (!text) return;
+    copyTextToClipboard(text).then(ok => {
+      if (ok) this.notifs.success('Task title copied to clipboard', 'Title copied');
+    });
+  }
+
+  onTitleDraftInput(value: string): void {
+    this.titleDraft.set(value);
+  }
+
+  private disposeModalStack(): void {
+    if (this.modalStackDisposer) {
+      this.modalStackDisposer();
+      this.modalStackDisposer = null;
+    }
+  }
 
   /**
    * Derived from `logs/session-events.jsonl` + `logs/tool-calls.jsonl`.

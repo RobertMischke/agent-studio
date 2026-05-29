@@ -121,6 +121,34 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.componentInstance.hasAgentWork()).toBe(false);
   });
 
+  it('hero title block: displayedTitle falls back to job.id when title is missing', async () => {
+    const fixture = await build(baseJob({ title: '', id: 'fallback-task-id' }));
+    expect(fixture.componentInstance.displayedTitle()).toBe('fallback-task-id');
+  });
+
+  it('hero title block: startTitleEdit seeds the draft and flips editingTitle', async () => {
+    const fixture = await build(baseJob({ title: 'Original title' }));
+    const c = fixture.componentInstance;
+    expect(c.editingTitle()).toBe(false);
+    c.startTitleEdit();
+    expect(c.editingTitle()).toBe(true);
+    expect(c.titleDraft()).toBe('Original title');
+    c.cancelTitleEdit();
+    expect(c.editingTitle()).toBe(false);
+  });
+
+  it('hero title block: saving an unchanged title just exits edit mode (no PUT, no override)', async () => {
+    const fixture = await build(baseJob({ title: 'Same title' }));
+    const c = fixture.componentInstance;
+    c.startTitleEdit();
+    c.onTitleDraftInput('   Same title   ');
+    c.saveTitle();
+    expect(c.editingTitle()).toBe(false);
+    // displayedTitle still reflects the underlying job because no optimistic
+    // override was set.
+    expect(c.displayedTitle()).toBe('Same title');
+  });
+
   it('session row was removed (component no longer exposes session-id helpers)', async () => {
     const fixture = await build(baseJob({ sessionName: 'c705779a-aaaa-bbbb-cccc-ddddeeeeffff' }));
     // The overview no longer surfaces session id in any row. The session

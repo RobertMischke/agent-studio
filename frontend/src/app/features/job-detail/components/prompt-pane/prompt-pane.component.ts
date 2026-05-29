@@ -63,6 +63,10 @@ export class PromptPaneComponent {
   readonly evidenceCreateFollowup = output<ReviewEvidenceEntry>();
   readonly modelChange = output<string>();
   readonly cliTypeChange = output<CliType>();
+  /** Forwarded from the Overview tab's inline title-edit so the parent
+   *  task-detail can re-fetch the job and let the optimistic override
+   *  drop. */
+  readonly titleSaved = output<void>();
 
   /**
    * overview | description | evidence | code-review.
