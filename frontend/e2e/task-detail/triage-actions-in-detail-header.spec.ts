@@ -54,6 +54,26 @@ async function plantHumanReviewJobs(wp: WatchPath, count: number): Promise<{ id:
   return jobs;
 }
 
+async function plantReadyJob(wp: WatchPath): Promise<{ id: string; title: string }> {
+  const requestedId = uid('ready');
+  const title = `ready fixture ${requestedId}`;
+  const created = await createJob({
+    id: requestedId,
+    title,
+    watchPath: wp.path,
+    targetState: '2-ready',
+  });
+  for (let attempt = 0; attempt < 25; attempt++) {
+    try {
+      await getJob(created.id, wp.path);
+      break;
+    } catch {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+  return { id: created.id, title };
+}
+
 /**
  * The dev frontend boots with the `vsCodeLayout` flag on by default, so
  * the lane-action cluster lives in the studio slim tab-bar header
@@ -176,6 +196,64 @@ test.describe('Triage actions in detail header', () => {
       await expect(page.getByTestId('studio-triage-panel')).toBeHidden({ timeout: 5_000 });
     } finally {
       for (const j of jobs) await deleteJob(j.id, wp.path).catch(() => {});
+    }
+  });
+
+  test('primary "Run now" surfaces top-right for a 2-ready job; overflow carries the lane secondaries', async ({ page }) => {
+    // Different lane, different primary action: the cluster reads the
+    // current job's state and swaps Mark-as-Done for Run-now without any
+    // imperative wiring. The test plants a 2-ready fixture, opens
+    // detail, and asserts the primary label + overflow items match the
+    // `2-ready` row of LANE_ACTIONS.
+    const wp = await getFirstWatchPath();
+    const job = await plantReadyJob(wp);
+    try {
+      await openJobInDetail(page, job.id, wp.path);
+
+      const cluster = page.getByTestId('studio-triage-panel');
+      await expect(cluster).toBeVisible();
+      const primary = page.getByTestId('studio-triage-action-run-now');
+      await expect(primary).toBeVisible({ timeout: 10_000 });
+      await expect(primary).toHaveText(/Run now/);
+
+      // Don't click — the action starts the CLI and burns quota. Just
+      // verify the overflow exposes the 2-ready secondary catalogue.
+      await page.getByTestId('studio-triage-overflow-btn').click();
+      const menu = page.getByTestId('studio-triage-overflow-panel');
+      await expect(menu).toBeVisible({ timeout: 3_000 });
+      await expect(page.getByTestId('studio-triage-overflow-item-move-to-top')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-send-to-backlog')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-edit-prompt')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-delete')).toBeVisible();
+      await page.keyboard.press('Escape');
+    } finally {
+      await deleteJob(job.id, wp.path).catch(() => {});
+    }
+  });
+
+  test('header cluster screenshot — 5-human-review vs 2-ready primaries', async ({ page }) => {
+    // Visual evidence that the cluster swaps primary per lane. Saved as
+    // Playwright attachments (`test-results/`) and surfaced in the HTML
+    // report so the operator can pick them up into the job folder's
+    // results/ next to the activity log. Two captures, same camera
+    // angle: top of the studio shell where the slim tab-bar renders the
+    // triage cluster.
+    const wp = await getFirstWatchPath();
+    const reviewJobs = await plantHumanReviewJobs(wp, 1);
+    const readyJob = await plantReadyJob(wp);
+    try {
+      await openJobInDetail(page, reviewJobs[0].id, wp.path);
+      await expect(page.getByTestId('studio-triage-action-mark-done')).toBeVisible({ timeout: 10_000 });
+      const reviewShot = await page.screenshot({ fullPage: false });
+      await test.info().attach('detail-header-5-human-review', { body: reviewShot, contentType: 'image/png' });
+
+      await openJobInDetail(page, readyJob.id, wp.path);
+      await expect(page.getByTestId('studio-triage-action-run-now')).toBeVisible({ timeout: 10_000 });
+      const readyShot = await page.screenshot({ fullPage: false });
+      await test.info().attach('detail-header-2-ready', { body: readyShot, contentType: 'image/png' });
+    } finally {
+      for (const j of reviewJobs) await deleteJob(j.id, wp.path).catch(() => {});
+      await deleteJob(readyJob.id, wp.path).catch(() => {});
     }
   });
 
