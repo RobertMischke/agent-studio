@@ -314,7 +314,10 @@ public sealed class AgentMessageBusStore
             }
             if (msg is null) continue;
             if (!AgentMessageValidator.TryValidate(msg, out _)) continue;
-            projection.Append(msg);
+            // Cold load: O(1) in-place add. LoadFromDisk calls SortById() after
+            // all files are replayed. Using Append() here was O(N^2) — see
+            // AppendInitial remarks.
+            projection.AppendInitial(msg);
         }
     }
 
@@ -368,6 +371,28 @@ public sealed class AgentMessageBusStore
                 _messages = next;
                 _byId = byId;
             }
+        }
+
+        /// <summary>
+        /// Bulk cold-load append used only by <see cref="LoadFile"/> while a
+        /// projection is still thread-local and unpublished (before
+        /// <c>GetOrLoad</c> installs it). Mutates the backing list/dict in
+        /// place — NO copy-on-write — so replaying an N-line bus file is O(N)
+        /// instead of the O(N^2) that per-message <see cref="Append"/> costs
+        /// (each Append clones the whole list + dict). On a 100K-line history
+        /// that quadratic was minutes of CPU + multi-GB transient garbage and
+        /// was the root cause of the /api/jobs(/grouped) hang + 90% CPU.
+        /// Caller MUST follow the load loop with <see cref="SortById"/> to
+        /// restore id order, since this skips the incremental ordered insert.
+        /// </summary>
+        public void AppendInitial(AgentMessage message)
+        {
+            // No lock: the projection instance is not yet visible to readers
+            // during cold load (one LoadFromDisk thread owns it). Dedup keeps
+            // parity with Append for ids that recur across daily files.
+            if (_byId.ContainsKey(message.Id)) return;
+            _messages.Add(message);
+            _byId[message.Id] = message;
         }
 
         public void SortById()

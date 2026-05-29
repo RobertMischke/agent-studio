@@ -257,6 +257,85 @@ public class AgentMessageBusStoreTests : IDisposable
         Assert.True(loadMs < 10_000, $"cold load took {loadMs} ms; well above the in-memory budget");
     }
 
+    /// <summary>
+    /// Regression guard for the O(N^2) cold-load bug: <c>Projection.Append</c>
+    /// cloned the whole message list + id-dict on every appended line, so
+    /// replaying an N-line bus file was O(N^2). On the real Runbook bus
+    /// (~100K lines) that was minutes of CPU + multi-GB transient garbage and
+    /// wedged <c>/api/jobs</c> + <c>/api/jobs/grouped</c> (profiler showed every
+    /// worker thread parked in Projection.Append -> Dictionary..ctor).
+    ///
+    /// The old <see cref="HighVolume_TenThousandMessages_LoadsAndQueriesQuickly"/>
+    /// test missed it twice over: 10K is too small for the quadratic to bite,
+    /// and a 10s threshold is loose enough that even the quadratic squeaked
+    /// under it. This test pins the *shape*: doubling the message count must
+    /// roughly double load time (linear), not quadruple it (quadratic), and a
+    /// 50K-line cold load must finish in well under the time a quadratic load
+    /// could ever achieve. Machine-independent: the ratio assertion holds
+    /// regardless of CPU speed; the absolute bound is generous for O(N) yet
+    /// unreachable for O(N^2) at this volume.
+    /// </summary>
+    [Fact]
+    public void ColdLoad_ScalesLinearly_NotQuadratically()
+    {
+        // 25K vs 50K: large enough that O(N^2) is unmistakably slow (a 50K
+        // quadratic replay is tens of seconds) while O(N) stays in the low
+        // hundreds of ms, and the 2x doubling makes the scaling exponent
+        // directly observable.
+        var tSmall = MeasureColdLoadMs("scale-small", 25_000);
+        var tLarge = MeasureColdLoadMs("scale-large", 50_000);
+        _out.WriteLine($"cold-load 25K={tSmall} ms, 50K={tLarge} ms, ratio={(double)tLarge / Math.Max(1, tSmall):F2}");
+
+        // Absolute bound: O(N) loads 50K small messages in the low hundreds of
+        // ms; the pre-fix O(N^2) took tens of seconds. 3s cleanly separates the
+        // two without being flaky on a slow CI box.
+        Assert.True(tLarge < 3_000,
+            $"50K-message cold load took {tLarge} ms — quadratic regression in Projection bulk load (expected well under 3s for O(N)).");
+
+        // Shape bound: linear doubling is ~2x, quadratic is ~4x. Allow head-
+        // room for fixed costs + timer noise but stay clearly below quadratic.
+        // Floor the denominator so a sub-millisecond small run can't blow up
+        // the ratio on a very fast machine.
+        var ratio = (double)tLarge / Math.Max(20, tSmall);
+        Assert.True(ratio < 3.0,
+            $"cold-load time grew {ratio:F2}x when message count doubled (25K->50K); "
+            + "expected ~2x (linear). A ratio near 4x means the O(N^2) per-append clone is back.");
+    }
+
+    /// <summary>
+    /// Writes <paramref name="count"/> bus messages straight to a day-file and
+    /// returns the milliseconds a fresh <see cref="AgentMessageBusStore"/>
+    /// takes to cold-load the projection (first query forces the disk replay).
+    /// Each call uses its own project so projections never share cache state.
+    /// </summary>
+    private long MeasureColdLoadMs(string project, int count)
+    {
+        var day = new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc);
+        var path = AgentMessageBusPaths.DayFile(_workspace, project, day);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16))
+        using (var writer = new StreamWriter(stream, Encoding.UTF8))
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var id = "01HXYZ00000000000000" + project[^1] + i.ToString("D9");
+                var m = NewMessage(id, project,
+                    kind: i % 7 == 0 ? "decision" : "lifecycle",
+                    jobId: "job-" + (i % 50),
+                    runId: "run-" + (i % 200),
+                    createdAt: day.AddSeconds(i));
+                writer.WriteLine(JsonSerializer.Serialize(m, AgentMessageBusStore.SerializerOptions));
+            }
+        }
+
+        var store = new AgentMessageBusStore();
+        var sw = Stopwatch.StartNew();
+        var recent = store.Recent(_workspace, project, limit: 1); // forces cold load
+        sw.Stop();
+        Assert.Single(recent);
+        return sw.ElapsedMilliseconds;
+    }
+
     [Fact]
     public async Task AppendAsync_SerialisesConcurrentAppendsToSameDayFile()
     {
