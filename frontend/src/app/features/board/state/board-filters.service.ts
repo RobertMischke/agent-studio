@@ -141,7 +141,7 @@ export class BoardFiltersService {
     } as GroupedJobs;
   });
 
-  readonly filteredJobCount = computed(() => {
+  readonly filteredTaskCount = computed(() => {
     const g = this.filteredGrouped();
     return (
       (g.preparation?.length ?? 0)
@@ -158,7 +158,7 @@ export class BoardFiltersService {
     );
   });
 
-  readonly totalJobCount = computed(() => {
+  readonly totalTaskCount = computed(() => {
     const g = this.jobService.grouped();
     return (
       (g.preparation?.length ?? 0)

@@ -71,8 +71,8 @@
           [owners]="clientService.clients()"
           [activeOwnerId]="activeClientFilter()"
           [compactCards]="effectiveCompactCards()"
-          [hitCount]="filteredJobCount()"
-          [totalCount]="totalJobCount()"
+          [hitCount]="filteredTaskCount()"
+          [totalCount]="totalTaskCount()"
           [hasAnyFilter]="hasActiveFiltersOrSearch()"
           (queryChange)="setSearchQuery($event)"
           (setType)="onSetType($event)"
@@ -190,7 +190,7 @@
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
               <!-- F56: failed-pickup notification moved to toast stack -->
-              @if (hasActiveFiltersOrSearch() && filteredJobCount() === 0) {
+              @if (hasActiveFiltersOrSearch() && filteredTaskCount() === 0) {
                 <div class="board-filter-empty-hint" data-testid="board-filter-empty-hint">
                   <span class="board-filter-empty-hint__text">
                     No tasks match the current filter

@@ -361,8 +361,8 @@ export class App implements OnInit, OnDestroy {
   readonly activeFilterCount = this.boardFilters.activeFilterCount;
   readonly hasActiveFiltersOrSearch = this.boardFilters.hasActiveFiltersOrSearch;
   readonly filteredGrouped = this.boardFilters.filteredGrouped;
-  readonly filteredJobCount = this.boardFilters.filteredJobCount;
-  readonly totalJobCount = this.boardFilters.totalJobCount;
+  readonly filteredTaskCount = this.boardFilters.filteredTaskCount;
+  readonly totalTaskCount = this.boardFilters.totalTaskCount;
 
   onSidesheetClearAll(): void {
     this.boardFilters.clearSearchAndFilters();
