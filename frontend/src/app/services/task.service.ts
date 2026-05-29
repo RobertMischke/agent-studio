@@ -214,6 +214,21 @@ export class JobService {
   }
 
   /**
+   * Find the 0-based position of a job within the lane that currently
+   * owns it in the local `grouped` snapshot. Returns -1 when the job is
+   * not in any known lane (e.g. an external reshuffle dropped it between
+   * the caller's read and this lookup). Used by the undo flow to capture
+   * "where did this card sit before I moved it" so the revert can put it
+   * back at the same slot via `moveJob(..., targetIndex)`.
+   */
+  findLaneIndex(jobId: string, watchPath: string, state: string): number {
+    const lane = STATE_TO_LANE[state];
+    if (!lane) return -1;
+    const list = this.grouped()[lane] ?? [];
+    return list.findIndex((j) => j.id === jobId && j.watchPath === watchPath);
+  }
+
+  /**
    * Apply a within-lane reorder to the local `grouped` signal immediately,
    * before the backend confirms. Idempotent: missing keys are dropped and
    * the existing lane order is preserved for any job not present in the

@@ -4,7 +4,8 @@ import { JobInfo } from '../../../models/task.model';
 import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
-import { JobSelectionService } from '../../job-detail';
+import { UndoController } from '../../../services/undo.service';
+import { JobSelectionService, laneLabelFor } from '../../job-detail';
 
 /**
  * Cycle 10b board-feature service: orchestrates the board's mutation
@@ -28,6 +29,7 @@ export class BoardMutationsService {
   private readonly errorDialog = inject(ErrorDialogService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly jobSelection = inject(JobSelectionService);
+  private readonly undo = inject(UndoController);
 
   // ---------- drag-and-drop move ----------
 
@@ -149,11 +151,26 @@ export class BoardMutationsService {
    */
   changeStateFromDetail(info: JobInfo, targetState: string): void {
     if (!targetState || targetState === info.state) return;
+    // Capture the prev lane + slot BEFORE the optimistic move so the
+    // undo toast can put the card back at the exact position it sat in.
+    const prevState = info.state;
+    const prevIndex = this.jobService.findLaneIndex(info.id, info.watchPath, prevState);
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, targetState);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJob(info.id, targetState, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
+        if (prevIndex >= 0) {
+          this.undo.offerLaneRevert({
+            jobId: info.id,
+            watchPath: info.watchPath,
+            jobLabel: info.title || info.id,
+            actionLabel: 'Moved',
+            targetLaneLabel: laneLabelFor(targetState),
+            prevState,
+            prevIndex,
+          });
+        }
         // The user just moved THIS job out of the iteration lane (5-human-review
         // -> 7-archive, 2-ready, ...). Drop it from the pager snapshot and
         // advance the detail panel to the next item still in the original

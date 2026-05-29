@@ -3,9 +3,11 @@ import { JobInfo } from '../../../models/task.model';
 import { JobService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
+import { UndoController } from '../../../services/undo.service';
 import { JobDetailPrefetchService } from './job-detail-prefetch.service';
 import { JobSelectionService } from './task-selection.service';
 import { LanePagerService, LANE_LABELS } from './lane-pager.service';
+import { laneLabelFor } from './triage-actions.model';
 
 /**
  * Cycle 10c job-detail-feature controller: orchestrates the triage
@@ -30,6 +32,7 @@ export class TriageController {
   private readonly jobSelection = inject(JobSelectionService);
   private readonly lanePager = inject(LanePagerService);
   private readonly prefetch = inject(JobDetailPrefetchService);
+  private readonly undo = inject(UndoController);
 
   /**
    * Invoked at every triage decision so the JobDetailComponent's
@@ -71,6 +74,10 @@ export class TriageController {
   move(info: JobInfo, ev: { targetState: string; actionId: string }): void {
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
+    // Capture prev lane + slot BEFORE the optimistic move so undo can
+    // restore the card to its exact origin position.
+    const prevState = info.state;
+    const prevIndex = this.jobService.findLaneIndex(info.id, info.watchPath, prevState);
     this.jobSelection.markAcceptClick();
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, ev.targetState);
     this.jobService.beginOptimisticPersist();
@@ -95,6 +102,17 @@ export class TriageController {
     this.jobService.moveJob(info.id, ev.targetState, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
+        if (prevIndex >= 0) {
+          this.undo.offerLaneRevert({
+            jobId: info.id,
+            watchPath: info.watchPath,
+            jobLabel: info.title || info.id,
+            actionLabel: 'Moved',
+            targetLaneLabel: laneLabelFor(ev.targetState),
+            prevState,
+            prevIndex,
+          });
+        }
         this.clearActing();
       },
       error: (err) => {
@@ -117,10 +135,26 @@ export class TriageController {
   /** Triage "Move to top" (only on 2-ready). Stays in lane; clears acting. */
   moveToTop(info: JobInfo, ev: { actionId: string }): void {
     void ev;
+    // Capture the lane's exact ordered list BEFORE the promote so undo
+    // can replay it via /api/jobs/reorder. Same-lane reorders cannot be
+    // expressed via the cross-lane move endpoint (it skips
+    // SetOrderInLane when fromState == targetState), so we replay the
+    // full order.
+    const prevOrder = this.captureLaneOrder(info.state);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJobToTop(info.id, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
+        if (prevOrder.length > 0) {
+          this.undo.offerReorderRevert({
+            jobId: info.id,
+            jobLabel: info.title || info.id,
+            actionLabel: 'Moved',
+            targetLaneLabel: `top of ${laneLabelFor(info.state)}`,
+            laneState: info.state,
+            prevOrder,
+          });
+        }
         this.clearActing();
       },
       error: (err) => {
@@ -196,6 +230,25 @@ export class TriageController {
         });
       },
     });
+  }
+
+  /**
+   * Snapshot the current ordered list of `{jobId, watchPath}` in the
+   * given state. Returns an empty array when the lane is unknown or
+   * empty. Used by the undo flow to replay a pre-action order via
+   * `POST /api/jobs/reorder`.
+   */
+  private captureLaneOrder(state: string): { jobId: string; watchPath: string }[] {
+    const grouped = this.jobService.grouped();
+    // The triage panel sees one of seven lanes; pick the matching list
+    // by scanning the grouped buckets for jobs whose `state` matches.
+    const found: { jobId: string; watchPath: string }[] = [];
+    for (const list of Object.values(grouped)) {
+      for (const j of list as JobInfo[]) {
+        if (j.state === state) found.push({ jobId: j.id, watchPath: j.watchPath });
+      }
+    }
+    return found;
   }
 
   // ---------- peer navigation (j / k / arrows / pager buttons) ----------

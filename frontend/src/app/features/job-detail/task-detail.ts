@@ -49,7 +49,8 @@ import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { CliConfigCardComponent } from './components/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
-import { TriageActionPayload } from './state/triage-actions.model';
+import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
+import { UndoController } from '../../services/undo.service';
 import {
   claudeSessionTooltip, cliTypeLabel, formatDate, formatDateTime, formatMultiplier,
   formatRateWindow, formatResetIn, formatTime, formatTokens, gitCommitCount,
@@ -103,6 +104,7 @@ export class JobDetailComponent implements OnDestroy {
   private jobService = inject(JobService);
   private catalogStore = inject(CliCatalogStore);
   private errorDialog = inject(ErrorDialogService);
+  private undo = inject(UndoController);
 
   readonly detail = input.required<JobDetail>();
   readonly watchPaths = input<WatchPathEntry[]>([]);
@@ -1058,10 +1060,26 @@ export class JobDetailComponent implements OnDestroy {
   completeAndNext() {
     if (this.completingAndNext()) return;
     this.completingAndNext.set(true);
-    const { id, watchPath } = this.detail().info;
+    const info = this.detail().info;
+    const { id, watchPath } = info;
+    // Capture the prev lane + slot BEFORE the move so the undo toast
+    // can return the card to its origin position.
+    const prevState = info.state;
+    const prevIndex = this.jobService.findLaneIndex(id, watchPath, prevState);
     this.jobService.moveJob(id, '6-completed', watchPath).subscribe({
       next: () => {
         this.completingAndNext.set(false);
+        if (prevIndex >= 0) {
+          this.undo.offerLaneRevert({
+            jobId: id,
+            watchPath,
+            jobLabel: info.title || id,
+            actionLabel: 'Completed',
+            targetLaneLabel: laneLabelFor('6-completed'),
+            prevState,
+            prevIndex,
+          });
+        }
         this.completeAndNextReview.emit();
       },
       error: (err) => {
@@ -1101,12 +1119,27 @@ export class JobDetailComponent implements OnDestroy {
     const info = this.detail().info;
     if (info.state !== '2-ready') return;
 
+    // Capture the lane order BEFORE the promote so undo can replay it
+    // via /api/jobs/reorder. Same-lane reorders cannot be expressed via
+    // the cross-lane move endpoint (it skips SetOrderInLane when
+    // fromState == targetState).
+    const prevOrder = this.captureLaneOrder('2-ready');
     this.movingToTop.set(true);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJobToTop(info.id, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
         this.movingToTop.set(false);
+        if (prevOrder.length > 0) {
+          this.undo.offerReorderRevert({
+            jobId: info.id,
+            jobLabel: info.title || info.id,
+            actionLabel: 'Moved',
+            targetLaneLabel: `top of ${laneLabelFor('2-ready')}`,
+            laneState: '2-ready',
+            prevOrder,
+          });
+        }
       },
       error: (err) => {
         this.jobService.endOptimisticPersist();
@@ -1126,6 +1159,22 @@ export class JobDetailComponent implements OnDestroy {
       this.promptDraftValue = this.detail().promptMarkdown ?? '';
       this.editingPrompt.set(true);
     }
+  }
+
+  /**
+   * Snapshot the current ordered list of `{jobId, watchPath}` in the
+   * given state. Used by the undo flow to replay a pre-action order via
+   * `POST /api/jobs/reorder`.
+   */
+  private captureLaneOrder(state: string): { jobId: string; watchPath: string }[] {
+    const grouped = this.jobService.grouped();
+    const out: { jobId: string; watchPath: string }[] = [];
+    for (const list of Object.values(grouped)) {
+      for (const j of list as JobInfo[]) {
+        if (j.state === state) out.push({ jobId: j.id, watchPath: j.watchPath });
+      }
+    }
+    return out;
   }
 
   /**
