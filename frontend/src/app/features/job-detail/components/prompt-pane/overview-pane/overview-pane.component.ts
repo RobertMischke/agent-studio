@@ -45,8 +45,9 @@ export class OverviewPaneComponent {
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   readonly isRunning = input(false);
 
-  readonly modelChange = output<string>();
-  readonly cliTypeChange = output<CliType>();
+  /** Atomic CLI + model commit from the chat-model-badge picker. The
+   *  parent task-detail handler issues both PUTs in sequence. */
+  readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
   /** Fired after a successful title PUT so the parent can re-fetch the
    *  detail and let the optimistic override drop back to the canonical
    *  `job().title`. */

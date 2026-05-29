@@ -1,15 +1,16 @@
 /**
- * F44 — pure helpers for the chat-composer model badge.
+ * Pure helpers for the chat-composer model badge.
  *
  * The badge renders a subtle "{cliIcon} {short-model} ▾" affordance next to
  * the chat composer in the protocol pane. Click / right-click opens an
- * <app-menu> built from these helpers; the menu lists every available model
- * for the active CLI (current row marked active) and the four CLI types
- * (current row marked active). Selecting a model emits `modelChange`;
- * selecting a CLI emits `cliTypeChange`.
+ * inline "Configure agent" picker (see ChatModelBadgeComponent).
  *
- * The helpers are pure so the protocol-pane component can stay small and
- * the menu shape is unit-testable without instantiating Angular.
+ * `shortModelName`, `currentBadgeText`, and `modelBadgeTooltip` remain in
+ * use by the badge to format the trigger label, picker header, and tooltip.
+ * The historical `buildModelMenuItems` / menu-id-routing helpers are kept
+ * exported as a stable surface for downstream tests and any future menu
+ * surface that wants to re-use the same shape; the current badge no longer
+ * routes through them because the picker has its own draft-state model.
  */
 import type { CliModelInfo } from '../../../../cli';
 import type { CliType } from '../../../../../models/task.model';

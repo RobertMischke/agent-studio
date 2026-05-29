@@ -135,8 +135,10 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly sendChat = output<void>();
   readonly stopJob = output<void>();
   readonly regenerateSummary = output<void>();
-  readonly modelChange = output<string>(); // F44: '' = clear to CLI default
-  readonly cliTypeChange = output<CliType>();
+  /** Atomic CLI + model commit from the chat-model-badge picker. The parent
+   *  applies both changes in one PUT sequence; the badge guarantees only
+   *  truly-changed configurations are emitted. */
+  readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
 
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);

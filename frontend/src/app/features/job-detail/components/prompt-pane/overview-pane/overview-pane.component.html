@@ -94,8 +94,7 @@
             [model]="job().model"
             [availableModels]="availableModels()"
             [disabled]="isRunning()"
-            (modelChange)="modelChange.emit($event)"
-            (cliTypeChange)="cliTypeChange.emit($event)" />
+            (commit)="agentConfigCommit.emit($event)" />
         </span>
       </div>
 

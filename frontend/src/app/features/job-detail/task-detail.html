@@ -94,8 +94,7 @@
         (save)="saveFileContent('prompt.md', $event)"
         (evidenceAcknowledge)="onEvidenceAcknowledge($event)"
         (evidenceCreateFollowup)="onEvidenceCreateFollowup($event)"
-        (modelChange)="onModelDraftChange($event)"
-        (cliTypeChange)="onCliTypeChange($event)"
+        (agentConfigCommit)="onAgentConfigCommit($event)"
         (titleSaved)="fileSaved.emit()" />
     }
 
@@ -129,8 +128,7 @@
         (sendChat)="sendChatMessage()"
         (stopJob)="stopJob()"
         (regenerateSummary)="regenerateProtocol()"
-        (modelChange)="onModelDraftChange($event)"
-        (cliTypeChange)="onCliTypeChange($event)"
+        (agentConfigCommit)="onAgentConfigCommit($event)"
         (evidenceMutated)="fileSaved.emit()"
         (followupCreatedFromEvidence)="fileSaved.emit()" />
     }

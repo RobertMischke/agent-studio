@@ -804,6 +804,62 @@ export class JobDetailComponent implements OnDestroy {
       });
   }
 
+  /**
+   * Atomic CLI + model commit from the chat-model-badge picker. The picker
+   * collects both fields locally; this handler sequences the two PUT calls
+   * (cli-type, then model) and updates the local draft signals optimistically.
+   * `model` of '' clears back to the CLI default. The two backend endpoints
+   * are independent, but ordering matters: cli-type first ensures the
+   * subsequent model PUT validates against the new CLI's catalog.
+   */
+  onAgentConfigCommit(change: { cliType: CliType; model: string }): void {
+    const info = this.detail().info;
+    const currentCli = this.cliTypeDraft();
+    const currentModel = (info.model ?? '').trim();
+    const cliChanged = change.cliType !== currentCli;
+    const modelChanged = change.model !== currentModel;
+    if (!cliChanged && !modelChanged) return;
+
+    // Optimistic local update so the badge re-renders instantly without
+    // waiting for the parent's detail re-fetch.
+    if (cliChanged) {
+      this.cliTypeDraft.set(change.cliType);
+      // Refresh the visible catalog to match the new CLI so the legacy
+      // commandbar dropdown does not show stale options between PUT and
+      // detail-refetch.
+      this.loadModelCatalog(change.cliType);
+    }
+    this.modelDraft.set(change.model);
+
+    const modelPut = () => {
+      this.jobService
+        .setJobModel(
+          info.id,
+          change.model === '' ? null : change.model,
+          info.watchPath,
+        )
+        .subscribe({
+          next: () => this.fileSaved.emit(),
+          error: (err) => this.showError(err),
+        });
+    };
+
+    if (cliChanged) {
+      this.jobService
+        .setJobCliType(info.id, change.cliType, info.watchPath)
+        .subscribe({
+          next: () => {
+            if (modelChanged) modelPut();
+            else this.fileSaved.emit();
+          },
+          error: (err) => this.showError(err),
+        });
+      return;
+    }
+
+    if (modelChanged) modelPut();
+  }
+
   private showError(err: unknown): void {
     const detail = err as { status?: number; statusText?: string; message?: string; error?: unknown };
     const bodyError =

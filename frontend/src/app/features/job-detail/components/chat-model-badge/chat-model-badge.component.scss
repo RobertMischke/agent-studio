@@ -1,10 +1,8 @@
-// F44 — Subtle model + CLI badge for the chat-compose action row.
-//
-// Visual contract: dimmed by default, brightens on hover, opacity-only when
-// disabled mid-run. Token-disciplined (no raw hex) so dark + light themes
-// stay in sync.
+// Subtle CLI + model badge for the chat-compose action row + the inline
+// "Configure agent" popover the badge opens. Strictly token-based (no raw
+// hex) so dark + light themes stay aligned.
 
-:host { display: inline-flex; align-items: center; }
+:host { display: inline-flex; align-items: center; position: relative; }
 
 .chat-model-badge {
   display: inline-flex;
@@ -22,7 +20,8 @@
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.chat-model-badge:hover:not(:disabled) {
+.chat-model-badge:hover:not(:disabled),
+.chat-model-badge--open {
   color: var(--studio-fg);
   background: var(--studio-bg-hover);
   border-color: var(--studio-border);
@@ -50,3 +49,176 @@
 }
 
 .chat-model-badge__caret { font-size: 0.7rem; opacity: 0.7; }
+
+// =============================================================================
+// Configure-agent picker popover.
+// =============================================================================
+
+.chat-model-picker__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: transparent;
+}
+
+.chat-model-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  min-width: 280px;
+  max-width: 340px;
+  padding: 10px;
+  background: var(--studio-bg-elevated);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  box-shadow: var(--elevation-popover);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--studio-fg);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.chat-model-picker__header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-model-picker__eyebrow {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--studio-fg-muted);
+}
+
+.chat-model-picker__current {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--studio-fg-strong);
+}
+
+.chat-model-picker__section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.chat-model-picker__section-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--studio-fg-muted);
+}
+
+.chat-model-picker__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chat-model-picker__pills--column {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 3px;
+}
+
+.chat-model-picker__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--studio-border);
+  background: transparent;
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.chat-model-picker__pill:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+}
+
+.chat-model-picker__pill:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}
+
+.chat-model-picker__pill--active {
+  background: var(--studio-bg-selected);
+  border-color: var(--studio-accent);
+  color: var(--studio-fg-strong);
+  font-weight: 600;
+}
+
+.chat-model-picker__pill--row {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.chat-model-picker__pill-icon { font-size: 0.85rem; line-height: 1; }
+.chat-model-picker__pill-label { font-weight: 500; }
+.chat-model-picker__pill-hint {
+  margin-left: auto;
+  font-size: 0.66rem;
+  color: var(--studio-fg-muted);
+  font-weight: 400;
+}
+
+.chat-model-picker__hint {
+  padding: 6px 4px;
+  font-size: 0.72rem;
+  color: var(--studio-fg-muted);
+}
+.chat-model-picker__hint--error {
+  color: var(--severity-high);
+}
+
+.chat-model-picker__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--studio-border);
+}
+
+.chat-model-picker__btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--studio-border);
+  background: transparent;
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.chat-model-picker__btn--ghost:hover {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+}
+
+.chat-model-picker__btn--primary {
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+  border-color: var(--studio-accent);
+  font-weight: 600;
+}
+
+.chat-model-picker__btn--primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.chat-model-picker__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
