@@ -216,7 +216,12 @@ test.describe('CLI + model picker flow', () => {
     }
   });
 
-  test('Cancel button also reverts without firing PUTs', async ({ page }) => {
+  test('Cancel button after a CLI switch reverts without firing PUTs', async ({ page }) => {
+    // Picking a model with the CLI unchanged now auto-commits + closes, so
+    // the Cancel-button revert path is exercised against the CLI-switch
+    // flow instead: open, switch CLI (model list refreshes, default
+    // selected), click Cancel, assert no PUTs and the badge still shows
+    // the original Claude model.
     const watchPath = await pickWatchPath();
     const job = await createJob({
       title: `picker-flow-cancel-btn-${Date.now()}`,
@@ -249,13 +254,14 @@ test.describe('CLI + model picker flow', () => {
       const picker = page.getByTestId('overview-agent').getByTestId('chat-model-picker');
       await expect(picker).toBeVisible({ timeout: 5_000 });
 
-      // Pick a different model in the same CLI (not switching CLI).
-      const sonnetPill = page
+      // Switch CLI to Codex inside the picker - this is the "stay open"
+      // case where Cancel must intercept before Done commits.
+      await page.getByTestId('overview-agent').getByTestId('chat-model-picker-cli-codex').click();
+      const checkedModelPill = page
         .getByTestId('overview-agent')
-        .getByTestId('chat-model-picker-model-claude-sonnet-4-6');
-      await expect(sonnetPill).toBeVisible();
-      await sonnetPill.click();
-      await expect(sonnetPill).toHaveAttribute('aria-checked', 'true');
+        .getByTestId('chat-model-picker-model-pills')
+        .locator('[role="radio"][aria-checked="true"]');
+      await expect(checkedModelPill.first()).toBeVisible({ timeout: 10_000 });
 
       // Cancel button.
       await page.getByTestId('overview-agent').getByTestId('chat-model-picker-cancel').click();

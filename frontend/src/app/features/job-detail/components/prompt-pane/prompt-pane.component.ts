@@ -55,6 +55,11 @@ export class PromptPaneComponent {
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
   readonly availableModels = input<readonly CliModelInfo[]>([]);
+  /** Optimistic CLI + model values forwarded to the Overview tab's badge
+   *  so it reflects a freshly-committed change without waiting on the
+   *  parent's detail re-fetch. See [[OverviewPaneComponent]] and ADR-0046. */
+  readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
+  readonly modelOverride = input<string | null | undefined>(undefined);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();

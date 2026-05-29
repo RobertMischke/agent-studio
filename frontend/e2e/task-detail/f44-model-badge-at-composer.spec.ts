@@ -62,7 +62,10 @@ test.describe('F44 — chat-composer model badge', () => {
         await setTheme(page, theme);
         await activateActivityTab(page);
 
-        const badge = page.getByTestId('chat-compose-model');
+        // Overview tab + chat-composer both carry the badge; scope this
+        // spec to the composer so it is the one exercised here.
+        const composer = page.getByTestId('activity-chat-compose');
+        const badge = composer.getByTestId('chat-compose-model');
         await expect(badge).toBeVisible({ timeout: 10_000 });
         await expect(badge).toContainText(/opus\s+4\.7/i);
         await expect(badge).toBeEnabled();
@@ -79,11 +82,11 @@ test.describe('F44 — chat-composer model badge', () => {
         }
 
         await badge.click();
-        const picker = page.getByTestId('chat-model-picker');
+        const picker = composer.getByTestId('chat-model-picker');
         await expect(picker).toBeVisible({ timeout: 5_000 });
         await expect(picker).toContainText(/Claude\s*Code/i);
 
-        const opusPill = page.getByTestId('chat-model-picker-model-claude-opus-4-7');
+        const opusPill = composer.getByTestId('chat-model-picker-model-claude-opus-4-7');
         await expect(opusPill).toBeVisible();
         await expect(opusPill).toHaveAttribute('aria-checked', 'true');
 
@@ -111,7 +114,7 @@ test.describe('F44 — chat-composer model badge', () => {
     });
   }
 
-  test('selecting a different model and confirming with Done persists', async ({ page }) => {
+  test('selecting a different model persists without requiring Done', async ({ page }) => {
     const watchPath = await pickWatchPath();
     const job = await createJob({
       title: `f44-model-change-${Date.now()}`,
@@ -131,24 +134,27 @@ test.describe('F44 — chat-composer model badge', () => {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await activateActivityTab(page);
 
-      const badge = page.getByTestId('chat-compose-model');
+      // Scope to the chat-composer surface so this test exercises the
+      // composer badge specifically; the Overview tab carries a sibling
+      // badge with the same data-testid and is covered by
+      // overview-tab-model-change.spec.ts.
+      const composer = page.getByTestId('activity-chat-compose');
+      const badge = composer.getByTestId('chat-compose-model');
       await expect(badge).toBeVisible({ timeout: 10_000 });
       await expect(badge).toContainText(/opus\s+4\.7/i);
       await badge.click();
 
-      const picker = page.getByTestId('chat-model-picker');
+      const picker = composer.getByTestId('chat-model-picker');
       await expect(picker).toBeVisible({ timeout: 5_000 });
 
-      const sonnetPill = page.getByTestId('chat-model-picker-model-claude-sonnet-4-6');
+      const sonnetPill = composer.getByTestId('chat-model-picker-model-claude-sonnet-4-6');
       await expect(sonnetPill).toBeVisible();
       await sonnetPill.click();
 
-      // Picker stays open until Done is clicked - this is the new contract.
-      await expect(picker).toBeVisible();
-      await expect(sonnetPill).toHaveAttribute('aria-checked', 'true');
-
-      await page.getByTestId('chat-model-picker-done').click();
-      await expect(picker).toBeHidden();
+      // Click-on-model auto-commits when no CLI change is pending. The
+      // picker closes and the PUT fires - no Done click needed. The
+      // atomic-Done flow is exclusive to the CLI-switch path.
+      await expect(picker).toBeHidden({ timeout: 5_000 });
 
       const req = await modelPutPromise;
       expect(req.url()).toContain(`/api/jobs/${encodeURIComponent(job.id)}/model`);
@@ -175,7 +181,8 @@ test.describe('F44 — chat-composer model badge', () => {
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await activateActivityTab(page);
 
-      const badge = page.getByTestId('chat-compose-model');
+      const composer = page.getByTestId('activity-chat-compose');
+      const badge = composer.getByTestId('chat-compose-model');
       await expect(badge).toBeVisible({ timeout: 10_000 });
       await expect(badge).toHaveAttribute('aria-haspopup', 'dialog');
       await expect(badge).toHaveAttribute('aria-expanded', 'false');

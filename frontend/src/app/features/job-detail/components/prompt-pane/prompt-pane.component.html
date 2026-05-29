@@ -20,6 +20,8 @@
             [job]="info"
             [availableModels]="availableModels()"
             [isRunning]="isRunning()"
+            [cliTypeOverride]="cliTypeOverride()"
+            [modelOverride]="modelOverride()"
             (agentConfigCommit)="agentConfigCommit.emit($event)"
             (titleSaved)="titleSaved.emit()" />
         }

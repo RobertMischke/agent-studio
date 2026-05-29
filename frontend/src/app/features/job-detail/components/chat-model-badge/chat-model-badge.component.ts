@@ -203,14 +203,27 @@ export class ChatModelBadgeComponent {
     });
   }
 
-  /** User clicked a model pill in the (drafted) catalog. */
+  /** User clicked a model pill in the (drafted) catalog. Auto-commits when
+   *  the draft CLI still matches the input CLI: in that case the picker is
+   *  acting like a one-shot model selector and the operator expectation is
+   *  "click model = persist". When the CLI was changed inside the picker
+   *  we keep the picker open so the user can commit both fields with one
+   *  Done click - that preserves the atomic-after-CLI-switch flow from
+   *  ASS-532 (commit f421f2d). */
   onModelPillClick(modelId: string): void {
     this.draftModel.set(modelId);
+    if (this.draftCliType() === this.cliType()) {
+      this.onDoneClick();
+    }
   }
 
-  /** Default ("CLI default") pill click: clears the explicit model selection. */
+  /** Default ("CLI default") pill click: clears the explicit model selection.
+   *  Same auto-commit semantics as {@link onModelPillClick}. */
   onDefaultModelClick(): void {
     this.draftModel.set('');
+    if (this.draftCliType() === this.cliType()) {
+      this.onDoneClick();
+    }
   }
 
   /** Done button: emit the atomic commit and close. Skips the emit when

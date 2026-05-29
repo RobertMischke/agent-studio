@@ -44,6 +44,14 @@ export class OverviewPaneComponent {
   readonly job = input.required<JobInfo>();
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   readonly isRunning = input(false);
+  /** Optimistic CLI + model values from the parent task-detail. The badge
+   *  uses these (when set) so it re-renders synchronously after the picker
+   *  fires `agentConfigCommit`, ahead of the parent's detail re-fetch.
+   *  Falls back to `job().cliType` / `job().model` when the parent has not
+   *  populated the override yet. Matches the chat-composer wiring at the
+   *  protocol-pane, see ADR-0046. */
+  readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
+  readonly modelOverride = input<string | null | undefined>(undefined);
 
   /** Atomic CLI + model commit from the chat-model-badge picker. The
    *  parent task-detail handler issues both PUTs in sequence. */
@@ -83,6 +91,19 @@ export class OverviewPaneComponent {
 
   /** Visual identity (initial + colour) of the project, for the sub-line. */
   readonly identity = computed(() => projectIdentity(this.job().projectName));
+
+  /** Effective CLI + model the Agent block renders. The override wins when
+   *  the parent provides one (optimistic state from the picker commit) so
+   *  the badge updates without a network round-trip; otherwise we fall
+   *  back to the canonical `job()` value. */
+  readonly effectiveCliType = computed<CliType | null>(() => {
+    const override = this.cliTypeOverride();
+    return override !== undefined ? (override as CliType | null) : this.job().cliType;
+  });
+  readonly effectiveModel = computed<string | null>(() => {
+    const override = this.modelOverride();
+    return override !== undefined ? override : this.job().model;
+  });
 
   /** Clear the optimistic override once the real `job().title` catches up
    *  to the saved value (parent re-fetched the detail after PUT). */

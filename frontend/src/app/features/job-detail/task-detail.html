@@ -89,6 +89,8 @@
         [jobId]="detail().info.id"
         [watchPath]="detail().info.watchPath"
         [availableModels]="availableModels()"
+        [cliTypeOverride]="cliTypeDraft()"
+        [modelOverride]="modelDraft()"
         (maximizeToggle)="toggleMaximize('prompt')"
         (hide)="togglePane('prompt')"
         (save)="saveFileContent('prompt.md', $event)"

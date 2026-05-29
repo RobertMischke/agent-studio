@@ -90,8 +90,8 @@
         <span class="ov-label">Model</span>
         <span class="ov-value">
           <app-chat-model-badge
-            [cliType]="job().cliType"
-            [model]="job().model"
+            [cliType]="effectiveCliType()"
+            [model]="effectiveModel()"
             [availableModels]="availableModels()"
             [disabled]="isRunning()"
             (commit)="agentConfigCommit.emit($event)" />
