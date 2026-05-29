@@ -121,6 +121,15 @@
         <span class="protocol-verdict__emoji" aria-hidden="true">{{ v.emoji }}</span>
         <span class="protocol-verdict__label">{{ v.label }}</span>
         <span class="protocol-verdict__detail">{{ v.detail }}</span>
+        @if (v.duration) {
+          <span class="protocol-verdict__duration"
+                [appTooltip]="'Run duration: ' + v.duration"
+                data-testid="protocol-verdict-duration"
+                aria-label="Run duration">
+            <span class="protocol-verdict__duration-icon" aria-hidden="true">⏱</span>
+            <span class="protocol-verdict__duration-value">{{ v.duration }}</span>
+          </span>
+        }
       </div>
     }
     @if (interimSummary(); as s) {
@@ -285,11 +294,11 @@
                 (closeRequest)="closeProtocolMenu()" />
               @if (protocolViewMode() === 'raw') {
                 <pre class="notes-panel__body notes-panel__body--raw"
-                     data-testid="protocol-raw-markdown">{{ detail().statusMarkdown }}</pre>
+                     data-testid="protocol-raw-markdown">{{ statusMarkdownBody() }}</pre>
               } @else {
                 <app-beautiful-results class="notes-panel__body"
                                        data-testid="protocol-beautiful-results"
-                                       [markdown]="detail().statusMarkdown || ''"
+                                       [markdown]="statusMarkdownBody()"
                                        [jobId]="detail().info.id"
                                        [watchPath]="detail().info.watchPath" />
               }

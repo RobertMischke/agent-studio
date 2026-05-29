@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { deriveProtocolVerdict, scanForBlockers, type ProtocolVerdictInputs } from './protocol-verdict';
+import {
+  deriveProtocolVerdict,
+  parseDuration,
+  scanForBlockers,
+  stripStatusHeader,
+  type ProtocolVerdictInputs,
+} from './protocol-verdict';
 
 function baseInputs(overrides: Partial<ProtocolVerdictInputs> = {}): ProtocolVerdictInputs {
   return {
@@ -235,6 +241,91 @@ describe('deriveProtocolVerdict', () => {
       ].join('\n');
       const v = deriveProtocolVerdict(baseInputs({ statusMarkdown: md }));
       expect(v.kind).toBe('ok');
+    });
+  });
+
+  describe('duration carried on the verdict pill', () => {
+    it('parses "- Duration: 4 min" from a typical # Status header', () => {
+      const md = ['# Status', '', '- Result: Success', '- Duration: 4 min', '', '## Notes', '- ok'].join('\n');
+      expect(parseDuration(md)).toBe('4 min');
+    });
+
+    it('parses Duration even when nested under ## Status (legacy authoring)', () => {
+      const md = ['## Status', '- Result: Failed', '- Duration: 12s'].join('\n');
+      expect(parseDuration(md)).toBe('12s');
+    });
+
+    it('returns null when no Duration line is present', () => {
+      expect(parseDuration('# Status\n- Result: Success')).toBeNull();
+      expect(parseDuration(null)).toBeNull();
+      expect(parseDuration('')).toBeNull();
+    });
+
+    it('attaches duration to the resolved verdict', () => {
+      const v = deriveProtocolVerdict(baseInputs({
+        statusMarkdown: '# Status\n\n- Result: Success\n- Duration: 4 min\n'
+      }));
+      expect(v.duration).toBe('4 min');
+      expect(v.kind).toBe('ok');
+    });
+
+    it('verdict.duration is null when status.md omits Duration', () => {
+      const v = deriveProtocolVerdict(baseInputs({
+        statusMarkdown: '# Status\n\n- Result: Success\n'
+      }));
+      expect(v.duration).toBeNull();
+    });
+
+    it('verdict.duration is null when no markdown exists yet', () => {
+      const v = deriveProtocolVerdict(baseInputs({ summaryStatus: 'none', statusMarkdown: null, hasActivity: false }));
+      expect(v.duration).toBeNull();
+    });
+  });
+
+  describe('stripStatusHeader', () => {
+    it('removes the # Status section + Result/Duration list before the next heading', () => {
+      const md = [
+        '# Status',
+        '',
+        '- Result: Success',
+        '- Duration: 4 min',
+        '',
+        '## What Was Done',
+        '- did stuff',
+        '',
+        '## Notes',
+        '- a note'
+      ].join('\n');
+      const out = stripStatusHeader(md);
+      expect(out).not.toContain('# Status');
+      expect(out).not.toContain('Duration:');
+      expect(out).not.toMatch(/Result:\s*Success/);
+      expect(out).toMatch(/^## What Was Done/);
+      expect(out).toContain('did stuff');
+      expect(out).toContain('## Notes');
+    });
+
+    it('also strips ## Status (lower heading level)', () => {
+      const md = ['## Status', '- Result: Failed', '- Duration: 2 min', '', '## Notes', '- broke'].join('\n');
+      const out = stripStatusHeader(md);
+      expect(out).not.toContain('Status');
+      expect(out).toMatch(/^## Notes/);
+    });
+
+    it('leaves status.md untouched when there is no Status heading', () => {
+      const md = '## Other\n- nope';
+      expect(stripStatusHeader(md)).toBe(md);
+    });
+
+    it('returns empty string for null/empty input', () => {
+      expect(stripStatusHeader(null)).toBe('');
+      expect(stripStatusHeader('')).toBe('');
+    });
+
+    it('does not strip a heading that merely contains the word Status', () => {
+      const md = ['## Status summary (the agent\'s own report)', '- detail'].join('\n');
+      const out = stripStatusHeader(md);
+      expect(out).toBe(md);
     });
   });
 

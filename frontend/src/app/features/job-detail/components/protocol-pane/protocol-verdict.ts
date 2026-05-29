@@ -12,6 +12,13 @@ export interface ProtocolVerdict {
   emoji: string;
   label: string;
   detail: string;
+  /**
+   * Run duration as written by the runner into the `# Status` header of
+   * status.md (e.g. `4 min`). Surfaced as an icon-prefixed chip on the
+   * verdict pill instead of leaving the Status section in the rendered
+   * body. Null when status.md has no Duration line yet.
+   */
+  duration: string | null;
 }
 
 export interface ProtocolVerdictInputs {
@@ -50,6 +57,11 @@ export interface ProtocolVerdictInputs {
  * and unit tests can hammer every branch without a fixture.
  */
 export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVerdict {
+  const base = computeVerdictBase(input);
+  return { ...base, duration: parseDuration(input.statusMarkdown) };
+}
+
+function computeVerdictBase(input: ProtocolVerdictInputs): Omit<ProtocolVerdict, 'duration'> {
   if (input.isRunning) {
     return verdict('unclear', 'Running', 'Agent is still working - click Interim status to peek.');
   }
@@ -112,8 +124,56 @@ export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVer
   return verdict('unclear', 'No run yet', 'Start the task to see how it goes.');
 }
 
-function verdict(kind: ProtocolVerdictKind, label: string, detail: string): ProtocolVerdict {
+function verdict(kind: ProtocolVerdictKind, label: string, detail: string): Omit<ProtocolVerdict, 'duration'> {
   return { kind, emoji: emojiFor(kind), label, detail };
+}
+
+const DURATION_RE = /^\s*-\s*Duration:\s*(.+?)\s*$/im;
+
+/**
+ * Pull the `- Duration: <text>` line out of a status.md so it can render
+ * as a chip on the verdict pill instead of staying buried in the Status
+ * section. Returns the raw text (e.g. "4 min", "12s"), trimmed; null when
+ * absent.
+ */
+export function parseDuration(markdown: string | null | undefined): string | null {
+  if (!markdown) return null;
+  const m = DURATION_RE.exec(markdown);
+  return m ? m[1].trim() : null;
+}
+
+const STATUS_HEADING_RE = /^#{1,2}\s+Status\s*$/i;
+const ANY_HEADING_RE = /^#{1,6}\s+/;
+
+/**
+ * Drop the `# Status` / `## Status` header and the immediately-following
+ * Result / Duration list from status.md before handing it to the
+ * markdown renderer. The verdict pill carries those two facts; leaving
+ * them in the body would duplicate the read.
+ *
+ * Everything from the Status heading up to (but not including) the next
+ * heading is removed; the rest of the document is returned verbatim with
+ * leading blank lines trimmed.
+ */
+export function stripStatusHeader(markdown: string | null | undefined): string {
+  if (!markdown) return '';
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (STATUS_HEADING_RE.test(lines[i])) {
+      i++;
+      while (i < lines.length && !ANY_HEADING_RE.test(lines[i])) {
+        i++;
+      }
+      continue;
+    }
+    out.push(lines[i]);
+    i++;
+  }
+  let start = 0;
+  while (start < out.length && out[start].trim() === '') start++;
+  return out.slice(start).join('\n');
 }
 
 function emojiFor(kind: ProtocolVerdictKind): string {

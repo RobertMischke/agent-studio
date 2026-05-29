@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';
 import { createJob, listJobs } from '../helpers/jobs';
 
@@ -7,6 +7,60 @@ interface WatchPathEntry { path: string; name: string }
 interface JobDetail {
   info: { id: string; watchPath: string };
   statusMarkdown: string | null;
+}
+
+function buildCompletedJobDetail(jobId: string, watchPath: string, statusMarkdown: string) {
+  return {
+    info: {
+      id: jobId,
+      jobKey: `${watchPath}::${jobId}`,
+      title: 'Verdict duration spec fixture',
+      state: '5-human-review',
+      agent: 'claude',
+      cliType: 'claude',
+      model: 'claude-opus-4-7',
+      watchPath,
+      projectName: 'fixture',
+      folderPath: `${watchPath}/.orchestrator/jobs/5-human-review/${jobId}`,
+      sessionName: '00000000-0000-0000-0000-000000000000',
+      lastUsage: null,
+      execution: null,
+      order: 1,
+    },
+    promptMarkdown: 'Pretend prompt.',
+    statusMarkdown,
+    log: [],
+    promptHistory: [],
+    summaryState: { status: 'ready', startedAt: null, finishedAt: null, errorMessage: null },
+  };
+}
+
+async function installCompletedJobMocks(
+  page: Page,
+  target: { id: string; watchPath: string },
+  statusMarkdown: string,
+): Promise<void> {
+  const detailBody = JSON.stringify(buildCompletedJobDetail(target.id, target.watchPath, statusMarkdown));
+
+  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}?**`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: detailBody });
+  });
+  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/output?**`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/runs?**`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) });
+  });
+  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/session-events?**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ events: [], sessionChain: [] }),
+    });
+  });
+  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/claude-session?**`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(null) });
+  });
 }
 
 /**
@@ -47,6 +101,57 @@ test.describe('Protocol pane - verdict chip + interim status', () => {
     await page.screenshot({
       path: 'test-results/protocol-verdict-chip.png',
       fullPage: false
+    });
+  });
+
+  test('duration lifts out of the # Status section into a chip on the pill', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 1100 });
+
+    const jobs = await listJobs();
+    test.skip(jobs.length === 0, 'No jobs available in workspace');
+    const target = { id: jobs[0].id, watchPath: jobs[0].watchPath };
+
+    const statusMarkdown = [
+      '# Status',
+      '',
+      '- Result: Success',
+      '- Duration: 4 min',
+      '',
+      '## What Was Done',
+      '- Refactored the verdict pill so duration rides on the chip.',
+      '',
+      '## Notes',
+      '- Status header is now lifted out of the rendered body.',
+    ].join('\n');
+
+    await installCompletedJobMocks(page, target, statusMarkdown);
+
+    await page.goto(
+      `/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`,
+    );
+
+    const chip = page.getByTestId('protocol-verdict-ok');
+    await expect(chip).toBeVisible({ timeout: 15_000 });
+
+    const duration = page.getByTestId('protocol-verdict-duration');
+    await expect(duration).toBeVisible();
+    await expect(duration).toContainText('4 min');
+    // Icon affordance: a clock glyph sits before the value.
+    await expect(duration).toContainText('⏱');
+
+    // The Status section (heading + Result/Duration list) must not appear in
+    // the rendered markdown body — that is the whole point of the collapse.
+    const body = page.getByTestId('protocol-beautiful-results');
+    await expect(body).toBeVisible();
+    await expect(body).not.toContainText('Duration:');
+    await expect(body).not.toContainText('Result: Success');
+    // Sibling sections still render so we know the body itself is alive.
+    await expect(body).toContainText('What Was Done');
+    await expect(body).toContainText('Refactored the verdict pill');
+
+    await page.screenshot({
+      path: 'test-results/protocol-verdict-duration-chip.png',
+      fullPage: false,
     });
   });
 

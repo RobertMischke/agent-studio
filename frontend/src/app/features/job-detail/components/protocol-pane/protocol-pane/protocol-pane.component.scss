@@ -141,6 +141,35 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  // Duration lifted from the (now-collapsed) "## Status" markdown section
+  // into the pill itself. Stays on the right as a compact icon + value
+  // chip — same line as label/detail so the verdict pill still reads as
+  // a single row.
+  &__duration {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding-left: 8px;
+    margin-left: auto;
+    border-left: 1px solid var(--studio-border, rgba(255, 255, 255, 0.12));
+    color: var(--studio-fg-dim, var(--lane-backlog));
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: help;
+  }
+
+  &__duration-icon {
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.85;
+  }
+
+  &__duration-value {
+    line-height: 1;
+  }
 }
 
 // Protocol-verdict reads --studio-* / --severity-* tokens that flip

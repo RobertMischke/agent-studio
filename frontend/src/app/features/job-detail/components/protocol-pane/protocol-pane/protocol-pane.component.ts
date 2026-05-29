@@ -45,7 +45,7 @@ import { projectConversation } from '../../../../../components/chat/conversation
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { MenuComponent } from '../../../../../components/menu';
 import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
-import { deriveProtocolVerdict, type ProtocolVerdict } from '../protocol-verdict';
+import { deriveProtocolVerdict, stripStatusHeader, type ProtocolVerdict } from '../protocol-verdict';
 import {
   buildInspectorTabs,
   claudeSessionTooltip,
@@ -288,6 +288,16 @@ export class ProtocolPaneComponent implements OnDestroy {
       outcomeIssue: this.detail().info.outcomeIssue,
       hasActivity: this.hasActivity(),
     }),
+  );
+
+  /**
+   * Status.md body with the `# Status` header (Result + Duration) lifted out
+   * so it does not duplicate what the verdict pill already shows. Used for
+   * both rendered and raw views; the copy-markdown button still copies the
+   * untouched source.
+   */
+  readonly statusMarkdownBody = computed<string>(() =>
+    stripStatusHeader(this.detail().statusMarkdown),
   );
 
   /**
