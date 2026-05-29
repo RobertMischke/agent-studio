@@ -312,7 +312,7 @@ export class TaskDetailComponent implements OnDestroy {
     // affordances (template `(keydown.escape)` on the input) and would feel
     // broken if a single Escape jumped past them and closed the panel.
     inject(ModalStackService).pushUntilDestroyed(
-      'job-detail',
+      'task-detail',
       () => {
         // Decline (return false) while an inline title/prompt edit or a
         // local sub-overlay is active. The original template binding

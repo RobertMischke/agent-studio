@@ -1,5 +1,5 @@
-<div class="job-card"
-     [class]="'job-card--' + job().state"
+<div class="task-card"
+     [class]="'task-card--' + job().state"
      [class.task-card--running]="isRunning()"
      [class.task-card--compact]="compact()"
      [class.task-card--just-created]="isJustCreated()"
@@ -208,7 +208,7 @@
               [class.task-card__tag-chip--concern]="tg.concern"
               [class.task-card__tag-chip--unparseable]="tg.unparseable"
               [attr.data-tag-id]="tg.id"
-              [attr.data-testid]="tg.concern ? 'job-card-concern-chip' : (tg.unparseable ? 'job-card-unparseable-chip' : null)"
+              [attr.data-testid]="tg.concern ? 'task-card-concern-chip' : (tg.unparseable ? 'task-card-unparseable-chip' : null)"
               [style.--tag-color]="tg.color"
               [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
       }
