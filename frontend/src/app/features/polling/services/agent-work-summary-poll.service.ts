@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import type { AgentWorkSummary } from '../../../features/session-events';
-import { JobService } from '../../../services/task.service';
-import { JobBackgroundPoller } from './task-background-poller';
+import { TaskService } from '../../../services/task.service';
+import { TaskBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls the per-job agent-work-summary endpoint at a slow cadence (10 s).
@@ -12,8 +12,8 @@ import { JobBackgroundPoller } from './task-background-poller';
  * the Overview tab's Agent Work block.
  */
 @Injectable()
-export class AgentWorkSummaryPollService extends JobBackgroundPoller<AgentWorkSummary | null> {
-  private readonly jobService = inject(JobService);
+export class AgentWorkSummaryPollService extends TaskBackgroundPoller<AgentWorkSummary | null> {
+  private readonly jobService = inject(TaskService);
 
   protected readonly intervalMs = 10_000;
 

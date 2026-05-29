@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
 import type { TokenSummary } from '../../../../features/tokens';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { TokensApiService } from '../../../../features/tokens';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -34,7 +34,7 @@ export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
   private readonly tokensApi = inject(TokensApiService);
   readonly projectName = input.required<string>();
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   readonly summary = signal<TokenSummary | null>(null);
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 

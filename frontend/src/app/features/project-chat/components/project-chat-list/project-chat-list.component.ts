@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import type { ProjectChatSearchHit, ProjectChatTurn } from '../../../../features/project-chat';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
@@ -200,7 +200,7 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
     return formatLoadedSummary(all.length, this.totalCount(), oldest);
   });
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 

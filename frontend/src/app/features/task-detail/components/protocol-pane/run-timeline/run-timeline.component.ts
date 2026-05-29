@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import type { JobInfo } from '../../../../../models/task.model';
+import type { TaskInfo } from '../../../../../models/task.model';
 import type { RunCommitInfo, RunRecord } from '../../../../../features/run-timeline';
-import { JobService } from '../../../../../services/task.service';
+import { TaskService } from '../../../../../services/task.service';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**
@@ -22,7 +22,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
  * selected run via `runSelected` so the parent can apply it.
  *
  * The component owns no run data of its own - it reads the timeline
- * from RunTimelinePollService and the commits from JobService on
+ * from RunTimelinePollService and the commits from TaskService on
  * demand. That keeps the polling cadence in one place and avoids
  * stale per-card state when the timeline updates.
  */
@@ -35,7 +35,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
   styleUrl: './run-timeline.component.scss'
 })
 export class RunTimelineComponent {
-  readonly job = input<JobInfo | null>(null);
+  readonly job = input<TaskInfo | null>(null);
   readonly runs = input<RunRecord[]>([]);
 
   /** Emits when the user clicks "Filter activity log to this run". */
@@ -94,7 +94,7 @@ export class RunTimelineComponent {
   readonly totalRemoved = computed(() => this.commits().reduce((s, c) => s + c.removed, 0));
   readonly totalFiles = computed(() => this.commits().reduce((s, c) => s + c.filesChanged, 0));
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   toggle(index: number): void {
     if (this.expandedIndex() === index) {

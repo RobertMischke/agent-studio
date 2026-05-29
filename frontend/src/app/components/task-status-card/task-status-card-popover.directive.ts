@@ -7,7 +7,7 @@ import {
   input,
 } from '@angular/core';
 import { TaskStatusCardPopover } from './task-status-card-popover.service';
-import type { JobInfo } from '../../models/task.model';
+import type { TaskInfo } from '../../models/task.model';
 
 /**
  * Hover trigger that opens an `<app-task-status-card>` in popover mode.
@@ -23,7 +23,7 @@ import type { JobInfo } from '../../models/task.model';
 })
 export class TaskStatusPopoverDirective implements OnDestroy {
   /** The job to render in the popover. `null` disables the trigger. */
-  readonly job = input<JobInfo | null>(null, { alias: 'appTaskStatusPopover' });
+  readonly job = input<TaskInfo | null>(null, { alias: 'appTaskStatusPopover' });
 
   /** Trigger delay in ms; default 500 ms per task spec. */
   readonly delayMs = input<number>(500, { alias: 'appTaskStatusPopoverDelay' });

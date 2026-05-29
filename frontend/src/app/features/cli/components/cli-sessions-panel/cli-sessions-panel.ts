@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, output, signal, inject } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { CliConsoleComponent } from '../cli-console/cli-console';
 import type { CliOutputLine, CliType } from '../../../../models/task.model';
 import type {
@@ -26,12 +26,12 @@ interface SelectedSession {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CliSessionsPanelComponent implements OnInit {
-  private jobService = inject(JobService);
+  private jobService = inject(TaskService);
 
   /**
    * Emitted when the user clicks a session row's task-link chip. The shell
    * (via `orchestrator-side-sheet`) routes this through the existing
-   * `JobSelectionService.openDetail` flow so the kanban detail panel
+   * `TaskSelectionService.openDetail` flow so the kanban detail panel
    * opens for the owning task. Mirrors the screenshot-strip `openTask`
    * pattern.
    */

@@ -1,15 +1,15 @@
-import type { JobInfo, ClientSummary, CliType } from '../../../../models/task.model';
+import type { TaskInfo, ClientSummary, CliType } from '../../../../models/task.model';
 import type { StructuredTooltip } from '../../../../components/tooltip';
 import { cliTypeIcon, cliTypeLabel, shortModelName } from '../../../../services/format.util';
 
-export interface JobTaskTypeChip {
+export interface TaskTypeChip {
   kind: string;
   label: string;
   icon: string;
   tooltip: string;
 }
 
-export interface JobTokenBubble {
+export interface TaskTokenBubble {
   label: string;
   total: number;
   input: number;
@@ -24,7 +24,7 @@ export interface JobTokenBubble {
 
 const FILE_LIST_MAX = 12;
 
-export function buildTaskTypeChip(taskType: JobInfo['taskType']): JobTaskTypeChip {
+export function buildTaskTypeChip(taskType: TaskInfo['taskType']): TaskTypeChip {
   const type = (taskType || 'chore').toLowerCase();
   if (type === 'bug') return { kind: 'bug', label: 'Bug', icon: '🐞', tooltip: 'Task type: Bug' };
   if (type === 'feature' || type === 'user-story') {
@@ -33,7 +33,7 @@ export function buildTaskTypeChip(taskType: JobInfo['taskType']): JobTaskTypeChi
   return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
 }
 
-export function buildCommitTooltip(commit: JobInfo['commit']): StructuredTooltip | string {
+export function buildCommitTooltip(commit: TaskInfo['commit']): StructuredTooltip | string {
   if (!commit) return '';
   const subject = (commit.message || '').split('\n')[0];
   const files = commit.files ?? [];
@@ -59,7 +59,7 @@ export function buildCommitTooltip(commit: JobInfo['commit']): StructuredTooltip
   return { title, body: parts.join('') };
 }
 
-export function buildTokenBubble(tokenSummary: JobInfo['tokenSummary']): JobTokenBubble | null {
+export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTokenBubble | null {
   if (!tokenSummary) return null;
   const input = tokenSummary.inputTokens ?? 0;
   const output = tokenSummary.outputTokens ?? 0;
@@ -138,7 +138,7 @@ function isCliType(v: string | null | undefined): v is CliType {
   return !!v && CLI_TYPES_SET.has(v);
 }
 
-export function buildEffectiveModelChip(job: JobInfo, owner: ClientSummary): EffectiveModelChip {
+export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): EffectiveModelChip {
   const execution = job.execution;
   const ownerCli = isCliType(owner.defaultCliType) ? owner.defaultCliType : null;
   const ownerModel = owner.defaultModel ?? null;
@@ -195,7 +195,7 @@ export function buildEffectiveModelChip(job: JobInfo, owner: ClientSummary): Eff
 }
 
 function buildModelTooltip(
-  job: JobInfo,
+  job: TaskInfo,
   owner: ClientSummary,
   source: EffectiveModelSource,
   ownerCli: CliType | null,

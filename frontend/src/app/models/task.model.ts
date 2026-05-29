@@ -1,15 +1,15 @@
 export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
 export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 
-// Cycle 9i: this file is the canonical "shared kernel" — JobInfo,
-// JobDetail, GroupedJobs, CliExecution, etc. Feature-specific types
+// Cycle 9i: this file is the canonical "shared kernel" — TaskInfo,
+// TaskDetail, GroupedJobs, CliExecution, etc. Feature-specific types
 // (git, tokens, orchestrator, screenshots, claude, run-timeline,
 // session-events, project-chat, roadmap, quota, cli, project-token-usage)
 // live under their own `features/X/models/` and are accessed via the
-// feature barrel. The two `import type` lines below let JobInfo's
+// feature barrel. The two `import type` lines below let TaskInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { JobCommitInfo, JobExcludedCommitInfo } from '../features/git';
-import type { JobTokenSummary } from '../features/tokens';
+import type { TaskCommitInfo, TaskExcludedCommitInfo } from '../features/git';
+import type { TaskTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
 /** One row in `logs/session-events.jsonl` for a job. */
@@ -24,9 +24,9 @@ import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orch
  */
 // (Run timeline / commits / files / diff now in features/run-timeline/models; re-exported below)
 
-// (GitProjectSummary, GitHygieneStatus, JobHygieneContext now in features/git/models/git.model.ts; re-exported above)
+// (GitProjectSummary, GitHygieneStatus, TaskHygieneContext now in features/git/models/git.model.ts; re-exported above)
 
-export interface JobInfo {
+export interface TaskInfo {
   id: string;
   jobKey: string;
   key?: string | null;
@@ -46,13 +46,13 @@ export interface JobInfo {
    * the total is greater than zero, with a hover popover showing the
    * detailed breakdown.
    */
-  tokenSummary?: JobTokenSummary | null;
+  tokenSummary?: TaskTokenSummary | null;
   model: string | null;
   cliType: CliType | null;
   useOwnSession: boolean | null;
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
-  commit: JobCommitInfo | null;
+  commit: TaskCommitInfo | null;
   /**
    * Ordered chain of commits attributed to this task (oldest -> newest).
    * Tasks regularly produce more than one commit across iterations
@@ -60,14 +60,14 @@ export interface JobInfo {
    * steers). Backwards compat: when only the legacy singular `commit`
    * is on disk, the backend surfaces it here as `[commit]`.
    */
-  commits?: JobCommitInfo[];
+  commits?: TaskCommitInfo[];
   /**
    * Commits the attribution rule withheld from this task (ADR
    * "Commit-Attribution-Regel"): crash-recovery for another task,
    * update-stable/submodule bumps, merges, out-of-window, or an operator
    * exclusion. Surfaced under the git pane's "(N excluded)" expander.
    */
-  excludedCommits?: JobExcludedCommitInfo[];
+  excludedCommits?: TaskExcludedCommitInfo[];
   /** Saved user intent waiting for the auto-pickup loop. Surfaces in the UI as a ⏳ badge. */
   pendingIntent?: PendingIntent | null;
   /**
@@ -84,14 +84,14 @@ export interface JobInfo {
    * "auto-reviewing" pill so the user knows the orchestrator is still
    * working on a card that just landed in 4-review.
    */
-  summaryState?: JobSummaryState | null;
+  summaryState?: TaskSummaryState | null;
   /**
    * Latest categorized runner-outcome issue, derived from logs/cli-output.log.
    * This is read-only observability: it surfaces permission blocks, watchdog
    * timeouts, missing sentinels, and classifier ambiguity without creating a
    * second persistence path beside the existing task log.
    */
-  outcomeIssue?: JobOutcomeIssue | null;
+  outcomeIssue?: TaskOutcomeIssue | null;
   /**
    * Latest orchestrator-review verdict for this job, sourced from the
    * per-project decision journal. Drives the 4-review kanban swim-lane
@@ -108,7 +108,7 @@ export interface JobInfo {
    */
   ownerClientId?: string | null;
   /**
-   * Optional lifecycle substate. Mirrors backend `JobInfo.Phase`. Drives
+   * Optional lifecycle substate. Mirrors backend `TaskInfo.Phase`. Drives
    * the kanban Ready group split (Human Ready vs Intake) and the per-card
    * phase chip. Null means "no explicit phase on disk"; the Ready lane
    * defaults to Human Ready in that case (compatibility contract from
@@ -136,7 +136,7 @@ export interface JobInfo {
   tags?: string[];
 }
 
-export interface JobOutcomeIssue {
+export interface TaskOutcomeIssue {
   kind:
     | 'permission-blocked'
     | 'watchdog-timeout'
@@ -180,11 +180,11 @@ export interface ClientDefaultsResponse {
 }
 
 /**
- * Per-job orchestrator token rollup. Mirrors backend `JobTokenSummary`.
+ * Per-job orchestrator token rollup. Mirrors backend `TaskTokenSummary`.
  * Surfaced on the kanban card as a colour-tiered "token bubble" with a
  * hover popover that lists per-call rows.
  */
-// (JobTokenSummary, JobTokenCall now in features/tokens/models/tokens.model.ts; re-exported below)
+// (TaskTokenSummary, TaskTokenCall now in features/tokens/models/tokens.model.ts; re-exported below)
 
 export interface AutoLoopSnapshot {
   iteration: number;
@@ -198,7 +198,7 @@ export interface AutoLoopSnapshot {
   lastError?: string | null;
 }
 
-// (JobCommitInfo, JobCommitDetail now in features/git/models/git.model.ts; re-exported above)
+// (TaskCommitInfo, TaskCommitDetail now in features/git/models/git.model.ts; re-exported above)
 
 export interface SessionUsage {
   at: string;
@@ -211,7 +211,7 @@ export interface SessionUsage {
 // CliSessionInfo, CliUsageProjectGroup, CliUsageSection, CliUsageReport
 // now in features/cli/models/cli.model.ts; re-exported below.)
 
-export type JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed';
+export type TaskSummaryStatus = 'none' | 'generating' | 'ready' | 'failed';
 
 /**
  * How a follow-up sent through the chat box should be interpreted by the
@@ -249,13 +249,13 @@ export interface PendingIntent {
  * `queued` as success-with-info (no modal); the chat carries the
  * orchestrator's `[queued]` line.
  */
-export interface ContinueJobResponse {
+export interface ContinueTaskResponse {
   status: 'started' | 'queued';
   execution?: CliExecution | null;
-  queued?: ContinueJobQueuedInfo | null;
+  queued?: ContinueTaskQueuedInfo | null;
 }
 
-export interface ContinueJobQueuedInfo {
+export interface ContinueTaskQueuedInfo {
   reason: 'project-busy';
   activeJobId?: string | null;
   activeJobTitle?: string | null;
@@ -285,12 +285,12 @@ export interface ContinueJobQueuedInfo {
 // now in features/project-token-usage/models; re-exported below.)
 
 /**
- * Mirrors backend `JobScreenshot`. One screenshot file produced during
+ * Mirrors backend `TaskScreenshot`. One screenshot file produced during
  * a job's runs and harvested into `<job>/results/`. The strip in the
  * protocol pane and the workspace visual evidence reel both render
  * arrays of these.
  */
-// (JobScreenshot + JobScreenshotsResponse + WorkspaceScreenshotsResponse now in features/screenshots/models; re-exported below)
+// (TaskScreenshot + TaskScreenshotsResponse + WorkspaceScreenshotsResponse now in features/screenshots/models; re-exported below)
 
 /**
  * Long-lived orchestrator session record. The orchestrator boots one of
@@ -312,8 +312,8 @@ export interface ContinueJobQueuedInfo {
 
 // (TokenSummaryByModel now in features/tokens/models/tokens.model.ts; re-exported below)
 
-export interface JobSummaryState {
-  status: JobSummaryStatus;
+export interface TaskSummaryState {
+  status: TaskSummaryStatus;
   startedAt: string | null;
   finishedAt: string | null;
   errorMessage: string | null;
@@ -326,7 +326,7 @@ export interface JobSummaryState {
  * Task Description pane renders these as a blog-style sequence below the
  * original task body.
  */
-export interface JobPromptHistoryEntry {
+export interface TaskPromptHistoryEntry {
   index: number;
   fileName: string;
   markdown: string;
@@ -338,22 +338,22 @@ export interface JobPromptHistoryEntry {
  * `title-history.json` in the job folder. Appended by the rename
  * endpoint whenever the title actually changes. Oldest first.
  */
-export interface JobTitleHistoryEntry {
+export interface TaskTitleHistoryEntry {
   at: string;
   oldTitle: string;
   newTitle: string;
   source: string;
 }
 
-export interface JobDetail {
-  info: JobInfo;
+export interface TaskDetail {
+  info: TaskInfo;
   promptMarkdown: string | null;
-  promptHistory: JobPromptHistoryEntry[];
-  titleHistory: JobTitleHistoryEntry[];
+  promptHistory: TaskPromptHistoryEntry[];
+  titleHistory: TaskTitleHistoryEntry[];
   statusMarkdown: string | null;
   contextUsage: ContextUsageSnapshot | null;
-  log: JobLogEntry[];
-  summaryState: JobSummaryState | null;
+  log: TaskLogEntry[];
+  summaryState: TaskSummaryState | null;
   /**
    * Task-level review evidence. Populated from
    * `<job>/results/review-evidence.jsonl`. Findings produced by security
@@ -403,7 +403,7 @@ export interface ContextUsageSection {
   items: string[];
 }
 
-export interface JobLogEntry {
+export interface TaskLogEntry {
   timestamp: string;
   event: string;
   detail: string | null;
@@ -411,10 +411,10 @@ export interface JobLogEntry {
 
 /**
  * Kind classification used by the Files tab (F48). Mirrors
- * `JobArtifactKind` on the backend; values arrive as camel-case strings
+ * `TaskArtifactKind` on the backend; values arrive as camel-case strings
  * because of `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`.
  */
-export type JobArtifactKind = 'prompt' | 'aspect' | 'note' | 'other';
+export type TaskArtifactKind = 'prompt' | 'aspect' | 'note' | 'other';
 
 /**
  * One `.md` file in the job root surfaced by the Files tab. The content
@@ -422,30 +422,30 @@ export type JobArtifactKind = 'prompt' | 'aspect' | 'note' | 'other';
  * `GET /api/jobs/{id}/files/{fileName}` only when the user expands the
  * card (or when it's the sole prompt and auto-expanded).
  */
-export interface JobArtifact {
+export interface TaskArtifact {
   name: string;
   sizeBytes: number;
   mtime: string;
-  kind: JobArtifactKind;
+  kind: TaskArtifactKind;
   /** Set when `kind === 'aspect'`; e.g. `code-quality` for `aspect-code-quality.md`. */
   aspectName?: string | null;
 }
 
-export interface JobArtifactsResponse {
+export interface TaskArtifactsResponse {
   jobId: string;
-  files: JobArtifact[];
+  files: TaskArtifact[];
 }
 
 export interface GroupedJobs {
   /** Triage staging area; default landing for new jobs, never auto-picked. */
-  backlog: JobInfo[];
-  preparation: JobInfo[];
+  backlog: TaskInfo[];
+  preparation: TaskInfo[];
   /** ADR-0026 lane: orchestrator-prep (1a-orchestrator-prep). */
-  orchestratorPrep: JobInfo[];
+  orchestratorPrep: TaskInfo[];
   /** ADR-0026 lane: needs-human-review (1b-needs-human-review). Hide-when-empty. */
-  needsHumanReview: JobInfo[];
-  ready: JobInfo[];
-  progress: JobInfo[];
+  needsHumanReview: TaskInfo[];
+  ready: TaskInfo[];
+  progress: TaskInfo[];
   /**
    * ADR-0028 lane: pickup failures (3a-failed-pickup). Hide-when-empty.
    * Populated by StaleProgressArchiver and the per-project dead-letter path.
@@ -454,15 +454,15 @@ export interface GroupedJobs {
    * 7-archive; they now stay visible here with a per-card placard
    * (`failed-pickup-reason.md`).
    */
-  failedPickup: JobInfo[];
+  failedPickup: TaskInfo[];
   /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */
-  autoReview: JobInfo[];
+  autoReview: TaskInfo[];
   /** ADR-0025 lane: waiting for the user (5-human-review). */
-  humanReview: JobInfo[];
+  humanReview: TaskInfo[];
   /** Legacy alias for pre-ADR-0025 clients; equal to `autoReview`. */
-  review: JobInfo[];
-  completed: JobInfo[];
-  archive: JobInfo[];
+  review: TaskInfo[];
+  completed: TaskInfo[];
+  archive: TaskInfo[];
 }
 
 export interface CreateJobRequest {
@@ -492,7 +492,7 @@ export interface TagRegistryEntry {
   description: string;
 }
 
-export interface JobOrderItem {
+export interface TaskOrderItem {
   jobId: string;
   watchPath: string;
 }

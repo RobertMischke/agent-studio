@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { OrchestratorLogEntry } from '../../../../features/orchestrator';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { TokenSummaryBlockComponent } from '../../../tokens';
 import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
 
@@ -30,7 +30,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   readonly entries = signal<OrchestratorLogEntry[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);

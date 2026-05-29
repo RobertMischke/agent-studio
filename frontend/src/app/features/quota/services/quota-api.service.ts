@@ -4,7 +4,7 @@ import type { QuotaReport, QuotaSnapshot } from '../models/quota.model';
 
 /**
  * Cycle 10d API client for the per-CLI quota / rate-limit endpoints.
- * Lifted out of the JobService god-service per ADR-0034 so the per-feature
+ * Lifted out of the TaskService god-service per ADR-0034 so the per-feature
  * HTTP surface is owned by the feature folder.
  *
  * Wraps `/api/cli/quota` (cached + force-refresh) and the per-CLI

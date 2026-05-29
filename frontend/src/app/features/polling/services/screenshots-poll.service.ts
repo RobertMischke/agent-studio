@@ -1,8 +1,8 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
-import type { JobScreenshot, JobScreenshotsResponse } from '../../../features/screenshots';
-import { JobService } from '../../../services/task.service';
-import { JobBackgroundPoller } from './task-background-poller';
+import type { TaskScreenshot, TaskScreenshotsResponse } from '../../../features/screenshots';
+import { TaskService } from '../../../services/task.service';
+import { TaskBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls the per-job screenshot listing (`/api/jobs/{id}/screenshots`)
@@ -12,18 +12,18 @@ import { JobBackgroundPoller } from './task-background-poller';
  * cheap on the backend, so 10 s is a comfortable trade.
  */
 @Injectable()
-export class ScreenshotsPollService extends JobBackgroundPoller<JobScreenshotsResponse | null> {
-  private readonly jobService = inject(JobService);
+export class ScreenshotsPollService extends TaskBackgroundPoller<TaskScreenshotsResponse | null> {
+  private readonly jobService = inject(TaskService);
 
   protected readonly intervalMs = 10_000;
 
-  readonly screenshots = signal<JobScreenshot[]>([]);
+  readonly screenshots = signal<TaskScreenshot[]>([]);
 
-  protected fetch(jobId: string, watchPath: string): Observable<JobScreenshotsResponse | null> {
+  protected fetch(jobId: string, watchPath: string): Observable<TaskScreenshotsResponse | null> {
     return this.jobService.getJobScreenshots(jobId, watchPath);
   }
 
-  protected applyResponse(res: JobScreenshotsResponse | null): void {
+  protected applyResponse(res: TaskScreenshotsResponse | null): void {
     this.screenshots.set(res?.screenshots ?? []);
   }
 

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, AfterViewIni
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
 import { WorkspaceManagerService } from '../../state/workspace-manager.service';
 
@@ -11,7 +11,7 @@ import { WorkspaceManagerService } from '../../state/workspace-manager.service';
  * <code>WorkspaceManagerService.createOpen</code> signal so any trigger
  * (titlebar "Workspace" button, Explorer "+", future deep link) opens
  * the same surface. Hands off to
- * <code>JobService.createRegistryWorkspace</code> on submit, then
+ * <code>TaskService.createRegistryWorkspace</code> on submit, then
  * refreshes the workspace registry so the new workspace lights up in
  * the sidebar tree before the dialog closes.
  *
@@ -29,7 +29,7 @@ import { WorkspaceManagerService } from '../../state/workspace-manager.service';
   styleUrl: './workspace-create-dialog.component.scss',
 })
 export class WorkspaceCreateDialogComponent implements AfterViewInit {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly notifications = inject(NotificationService);
   private readonly manager = inject(WorkspaceManagerService);
 

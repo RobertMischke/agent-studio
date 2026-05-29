@@ -16,8 +16,8 @@ import {
 import { ModalStackService } from '../../services/modal-stack.service';
 import { FormsModule } from '@angular/forms';
 import type {
-  JobDetail,
-  JobInfo,
+  TaskDetail,
+  TaskInfo,
   WatchPathEntry,
   CliSettings,
   CliType,
@@ -26,12 +26,12 @@ import type {
 } from '../../models/task.model';
 import { CLI_TYPES } from '../../models/task.model';
 import type { CliModelInfo } from '../../features/cli';
-import { JobService } from '../../services/task.service';
+import { TaskService } from '../../services/task.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { NowTickService } from '../../services/now-tick.service';
 import { LayoutPanesService } from './services/layout-panes.service';
-import { JobArtifactsService } from './services/task-artifacts.service';
+import { TaskArtifactsService } from './services/task-artifacts.service';
 import { LanePagerService } from './state/lane-pager.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
 import { SessionEventsPollService } from '../polling/services/session-events-poll.service';
@@ -59,7 +59,7 @@ import {
 
 import { TooltipDirective } from '../../components/tooltip';
 @Component({
-  selector: 'app-job-detail',
+  selector: 'app-task-detail, app-job-detail',
   standalone: true,
   imports: [
     FormsModule,
@@ -82,7 +82,7 @@ import { TooltipDirective } from '../../components/tooltip';
     ScreenshotsPollService,
     GitPaneService,
     CliOutputPollService,
-    JobArtifactsService,
+    TaskArtifactsService,
   ],
   // Cycle 7b: OnPush. The detail panel mounts seven polling services
   // (claude session, session events, run timeline, screenshots,
@@ -100,16 +100,16 @@ import { TooltipDirective } from '../../components/tooltip';
   templateUrl: './task-detail.html',
   styleUrl: './task-detail.scss',
 })
-export class JobDetailComponent implements OnDestroy {
-  private jobService = inject(JobService);
+export class TaskDetailComponent implements OnDestroy {
+  private jobService = inject(TaskService);
   private catalogStore = inject(CliCatalogStore);
   private errorDialog = inject(ErrorDialogService);
   private undo = inject(UndoController);
 
-  readonly detail = input.required<JobDetail>();
+  readonly detail = input.required<TaskDetail>();
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /** Peers in the same on-disk lane as the current job, in kanban order. */
-  readonly lanePeers = input<JobInfo[]>([]);
+  readonly lanePeers = input<TaskInfo[]>([]);
   /** True while the update-service is mid-update; disables triage actions. */
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
@@ -630,8 +630,8 @@ export class JobDetailComponent implements OnDestroy {
     this.screenshotsPoll.syncTo(this.detail()?.info ?? null);
   });
 
-  // F48: Files-tab manifest is owned by JobArtifactsService.
-  private readonly artifactsService = inject(JobArtifactsService);
+  // F48: Files-tab manifest is owned by TaskArtifactsService.
+  private readonly artifactsService = inject(TaskArtifactsService);
   readonly artifacts = this.artifactsService.artifacts;
   private readonly artifactsEffect = effect(() => {
     this.artifactsService.syncTo(this.detail()?.info ?? null);
@@ -1170,7 +1170,7 @@ export class JobDetailComponent implements OnDestroy {
     const grouped = this.jobService.grouped();
     const out: { jobId: string; watchPath: string }[] = [];
     for (const list of Object.values(grouped)) {
-      for (const j of list as JobInfo[]) {
+      for (const j of list as TaskInfo[]) {
         if (j.state === state) out.push({ jobId: j.id, watchPath: j.watchPath });
       }
     }

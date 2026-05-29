@@ -5,8 +5,8 @@ export { UsageHoverPanelComponent } from './components/usage-hover-panel/usage-h
 export { CliUsageDetailModalComponent } from './components/cli-usage-detail-modal/cli-usage-detail-modal';
 export { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline/workspace-token-timeline';
 export type {
-  JobTokenCall,
-  JobTokenSummary,
+  TaskTokenCall,
+  TaskTokenSummary,
   TokenSummaryByModel,
   TokenSummaryByProject,
   TokenSummary,

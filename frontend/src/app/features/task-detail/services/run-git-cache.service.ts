@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, ReplaySubject, of } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 import type { RunFilesResponse, RunDiffResponse } from '../../run-timeline';
 
 /**
@@ -14,7 +14,7 @@ import type { RunFilesResponse, RunDiffResponse } from '../../run-timeline';
  * range too (`GitService` LRU), but the frontend round-trip still costs
  * an HTTP queue slot + JSON parse. Caching the response on the browser
  * side makes a re-open of the same run a single map lookup (target:
- * sub-30ms on a warm cache, same as the JobDetail prefetch path).
+ * sub-30ms on a warm cache, same as the TaskDetail prefetch path).
  *
  * Invalidation:
  *   - `invalidate(jobId, watchPath)` drops every entry for a job after
@@ -25,11 +25,11 @@ import type { RunFilesResponse, RunDiffResponse } from '../../run-timeline';
  * SHA ranges themselves are content-addressed, so for a finished run the
  * answer truly never changes — we could keep entries forever — but a
  * small bounded LRU is friendlier to long sessions, and matches the
- * shape of the existing `JobDetailPrefetchService`.
+ * shape of the existing `TaskDetailPrefetchService`.
  */
 @Injectable({ providedIn: 'root' })
 export class RunGitCacheService {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   private static readonly TTL_MS = 60_000;
   private static readonly LIMIT = 128;

@@ -9,7 +9,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
@@ -31,7 +31,7 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
   styleUrl: './status-bar.scss',
 })
 export class StatusBarComponent implements OnInit {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
 
   readonly projectNames = input<string[]>([]);

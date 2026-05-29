@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { Observable, map } from 'rxjs';
 import { DriftService } from '../../../../services/drift.service';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import { TooltipDirective } from '../../../../components/tooltip';
 import {
@@ -48,7 +48,7 @@ export class ProjectDriftSectionComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
 
   private readonly drift = inject(DriftService);
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
 
   readonly model = signal<DriftArchitectureModel | null>(null);
   readonly sourceReportId = signal<string | null>(null);

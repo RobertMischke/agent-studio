@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { groupReviewJobs } from './review-grouping.util';
-import { JobInfo } from '../../../models/task.model';
+import { TaskInfo } from '../../../models/task.model';
 
-function job(id: string, verdict: JobInfo['orchestratorVerdict'] = null): JobInfo {
+function job(id: string, verdict: TaskInfo['orchestratorVerdict'] = null): TaskInfo {
   return {
     id,
     jobKey: `ws::${id}`,
@@ -16,7 +16,7 @@ function job(id: string, verdict: JobInfo['orchestratorVerdict'] = null): JobInf
     folderPath: '/tmp',
     lastActivity: '2026-05-05T12:00:00Z',
     orchestratorVerdict: verdict
-  } as JobInfo;
+  } as TaskInfo;
 }
 
 describe('groupReviewJobs', () => {

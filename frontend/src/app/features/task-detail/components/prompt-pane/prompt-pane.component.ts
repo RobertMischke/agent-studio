@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
-import { JobArtifact, JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/task.model';
+import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
-import type { JobScreenshot } from '../../../screenshots';
+import type { TaskScreenshot } from '../../../screenshots';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
 import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel/review-evidence-panel.component';
 import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel/code-review-panel.component';
@@ -43,12 +43,12 @@ interface EvidenceSection {
 })
 export class PromptPaneComponent {
   readonly markdown = input<string>('');
-  readonly history = input<JobPromptHistoryEntry[]>([]);
-  readonly titleHistory = input<JobTitleHistoryEntry[]>([]);
+  readonly history = input<TaskPromptHistoryEntry[]>([]);
+  readonly titleHistory = input<TaskTitleHistoryEntry[]>([]);
   readonly reviewEvidence = input<ReviewEvidenceEntry[]>([]);
-  readonly screenshots = input<JobScreenshot[]>([]);
-  readonly artifacts = input<JobArtifact[]>([]);
-  readonly job = input<JobInfo | null>(null);
+  readonly screenshots = input<TaskScreenshot[]>([]);
+  readonly artifacts = input<TaskArtifact[]>([]);
+  readonly job = input<TaskInfo | null>(null);
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);

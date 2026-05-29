@@ -1,6 +1,6 @@
 import { Injectable, effect, inject } from '@angular/core';
-import { JobService } from './task.service';
-import { JobInfo } from '../models/task.model';
+import { TaskService } from './task.service';
+import { TaskInfo } from '../models/task.model';
 
 /**
  * Plays a short beep when a job leaves the `progress` lane for `review` or
@@ -20,8 +20,8 @@ import { JobInfo } from '../models/task.model';
  * Mute via `localStorage.setItem('atp.muteCompletionSound', '1')`.
  */
 @Injectable({ providedIn: 'root' })
-export class JobCompletionSoundService {
-  private readonly jobService = inject(JobService);
+export class TaskCompletionSoundService {
+  private readonly jobService = inject(TaskService);
 
   private previousProgressIds = new Set<string>();
   private firstSnapshotConsumed = false;
@@ -30,17 +30,17 @@ export class JobCompletionSoundService {
   constructor() {
     effect(() => {
       const grouped = this.jobService.grouped();
-      const inProgress = new Set((grouped.progress ?? []).map((j: JobInfo) => j.id));
+      const inProgress = new Set((grouped.progress ?? []).map((j: TaskInfo) => j.id));
       if (!this.firstSnapshotConsumed) {
         this.previousProgressIds = inProgress;
         this.firstSnapshotConsumed = true;
         return;
       }
 
-      const autoReview = new Set((grouped.autoReview ?? grouped.review ?? []).map((j: JobInfo) => j.id));
-      const humanReview = new Set((grouped.humanReview ?? []).map((j: JobInfo) => j.id));
-      const completed = new Set((grouped.completed ?? []).map((j: JobInfo) => j.id));
-      const completedJobs: JobInfo[] = [];
+      const autoReview = new Set((grouped.autoReview ?? grouped.review ?? []).map((j: TaskInfo) => j.id));
+      const humanReview = new Set((grouped.humanReview ?? []).map((j: TaskInfo) => j.id));
+      const completed = new Set((grouped.completed ?? []).map((j: TaskInfo) => j.id));
+      const completedJobs: TaskInfo[] = [];
       for (const id of this.previousProgressIds) {
         if (inProgress.has(id)) continue;
         if (autoReview.has(id) || humanReview.has(id) || completed.has(id)) {
@@ -57,7 +57,7 @@ export class JobCompletionSoundService {
     });
   }
 
-  private shouldSkip(job: JobInfo): boolean {
+  private shouldSkip(job: TaskInfo): boolean {
     if (typeof window !== 'undefined' && window.localStorage?.getItem('atp.muteCompletionSound') === '1') return true;
     const title = (job.title || '').trim().toLowerCase();
     if (title.startsWith('e2e')) return true;
@@ -66,9 +66,9 @@ export class JobCompletionSoundService {
   }
 
   private findJob(
-    grouped: { autoReview?: JobInfo[]; humanReview?: JobInfo[]; review?: JobInfo[]; completed?: JobInfo[] },
+    grouped: { autoReview?: TaskInfo[]; humanReview?: TaskInfo[]; review?: TaskInfo[]; completed?: TaskInfo[] },
     id: string,
-  ): JobInfo | undefined {
+  ): TaskInfo | undefined {
     return (grouped.autoReview ?? grouped.review ?? []).find(j => j.id === id)
       ?? (grouped.humanReview ?? []).find(j => j.id === id)
       ?? (grouped.completed ?? []).find(j => j.id === id);

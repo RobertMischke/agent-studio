@@ -5,7 +5,7 @@ import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
 import type { CliType, TagRegistryEntry, WatchPathEntry } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -59,7 +59,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   imports: [FormsModule, TooltipDirective, CliModelSelectorComponent],
   templateUrl: './create-task-dialog.component.html'
 })
-export class CreateJobDialogComponent implements AfterViewInit {
+export class CreateTaskDialogComponent implements AfterViewInit {
   readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly availableModels = input<CliModelInfo[]>([]);
   readonly cliTypeDraft = input.required<CliType>();
@@ -108,7 +108,7 @@ export class CreateJobDialogComponent implements AfterViewInit {
   readonly isDragging = model<boolean>(false);
   readonly attachmentError = model<string | null>(null);
 
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
   readonly titleGenerating = signal(false);
   readonly titleGenerateError = signal<string | null>(null);
 

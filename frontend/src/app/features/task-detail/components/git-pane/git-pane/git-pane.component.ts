@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
-import type { JobCommitInfo, JobExcludedCommitInfo } from '../../../../git';
+import type { TaskCommitInfo, TaskExcludedCommitInfo } from '../../../../git';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
@@ -36,7 +36,7 @@ async function loadDiff2Html(): Promise<typeof diff2htmlModuleCache> {
 /**
  * Renders the Git pane of the job-detail view: working-tree status,
  * per-file diff, and commit form. State + API calls live in
- * GitPaneService (provided locally on JobDetailComponent); this
+ * GitPaneService (provided locally on TaskDetailComponent); this
  * component is purely presentational.
  *
  * The selected file's unified-diff text is rendered through
@@ -145,7 +145,7 @@ export class GitPaneComponent {
     this.diffMaximized.update(v => !v);
   }
 
-  commitChainTooltip(entry: JobCommitInfo, index: number): string {
+  commitChainTooltip(entry: TaskCommitInfo, index: number): string {
     return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${entry.message}`;
   }
 
@@ -161,7 +161,7 @@ export class GitPaneComponent {
    * a small marker so a reviewer can tell rule-driven from hand-curated
    * attributions at a glance.
    */
-  isManualAttribution(entry: JobCommitInfo): boolean {
+  isManualAttribution(entry: TaskCommitInfo): boolean {
     return (
       entry.attribution === 'manual-add' ||
       entry.attribution === 'manual-include-after-exclude'
@@ -169,7 +169,7 @@ export class GitPaneComponent {
   }
 
   /** Short marker label for a manual attribution; empty for automatic/legacy. */
-  attributionMarker(entry: JobCommitInfo): string {
+  attributionMarker(entry: TaskCommitInfo): string {
     switch (entry.attribution) {
       case 'manual-add':
         return '+ added';
@@ -181,13 +181,13 @@ export class GitPaneComponent {
   }
 
   /** Confidence as a whole-percent string (e.g. "90%"); empty when absent. */
-  confidencePercent(entry: JobCommitInfo): string {
+  confidencePercent(entry: TaskCommitInfo): string {
     if (entry.confidence == null) return '';
     return `${Math.round(entry.confidence * 100)}%`;
   }
 
   /** Hover text spelling out attribution kind + confidence for a chain entry. */
-  attributionTooltip(entry: JobCommitInfo): string {
+  attributionTooltip(entry: TaskCommitInfo): string {
     const kind =
       entry.attribution === 'manual-add'
         ? 'Manually added by operator'
@@ -218,7 +218,7 @@ export class GitPaneComponent {
     }
   }
 
-  excludedTooltip(entry: JobExcludedCommitInfo): string {
+  excludedTooltip(entry: TaskExcludedCommitInfo): string {
     const subject = entry.subject ? ` · ${entry.subject}` : '';
     return `${entry.shortSha} · ${this.exclusionReasonLabel(entry.reason)}${subject}`;
   }

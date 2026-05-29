@@ -6,12 +6,12 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { Subject, of, throwError } from 'rxjs';
 import { TriageController } from './triage-controller.service';
-import { JobSelectionService } from './task-selection.service';
-import { JobDetailPrefetchService } from './job-detail-prefetch.service';
+import { TaskSelectionService } from './task-selection.service';
+import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { LanePagerService } from './lane-pager.service';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
-import type { JobInfo, JobDetail } from '../../../models/task.model';
+import type { TaskInfo, TaskDetail } from '../../../models/task.model';
 
 /**
  * Regression for orchestrator-decision-closing-task:
@@ -27,10 +27,10 @@ import type { JobInfo, JobDetail } from '../../../models/task.model';
  */
 describe('TriageController · advanceToNextInLane', () => {
   let ctrl: TriageController;
-  let selection: JobSelectionService;
+  let selection: TaskSelectionService;
   let closedDetail: boolean;
 
-  const makeJob = (id: string, state: string): JobInfo =>
+  const makeJob = (id: string, state: string): TaskInfo =>
     ({
       id,
       jobKey: `wp::${id}`,
@@ -39,7 +39,7 @@ describe('TriageController · advanceToNextInLane', () => {
       order: 1,
       watchPath: '/wp',
       projectName: 'p',
-    }) as unknown as JobInfo;
+    }) as unknown as TaskInfo;
 
   beforeEach(async () => {
     closedDetail = false;
@@ -54,7 +54,7 @@ describe('TriageController · advanceToNextInLane', () => {
     }).compileComponents();
 
     ctrl = TestBed.inject(TriageController);
-    selection = TestBed.inject(JobSelectionService);
+    selection = TestBed.inject(TaskSelectionService);
 
     vi.spyOn(selection, 'closeDetail').mockImplementation(() => {
       closedDetail = true;
@@ -74,9 +74,9 @@ describe('TriageController · advanceToNextInLane', () => {
   it('does NOT close the panel on an external move when the lane is empty', () => {
     const job = makeJob('task-a', '5-human-review');
     selection.triageLaneState = '4-auto-review';
-    (selection as any).selected = signal<JobDetail | null>({
+    (selection as any).selected = signal<TaskDetail | null>({
       info: job,
-    } as unknown as JobDetail);
+    } as unknown as TaskDetail);
 
     ctrl.advanceToNextInLane('4-auto-review', job.jobKey, [job], true);
 
@@ -102,12 +102,12 @@ describe('TriageController · advanceToNextInLane', () => {
  */
 describe('TriageController · optimistic navigation on Accept', () => {
   let ctrl: TriageController;
-  let selection: JobSelectionService;
-  let prefetch: JobDetailPrefetchService;
-  let jobService: JobService;
+  let selection: TaskSelectionService;
+  let prefetch: TaskDetailPrefetchService;
+  let jobService: TaskService;
 
   const wp = '/wp';
-  const makeJob = (id: string, state: string): JobInfo =>
+  const makeJob = (id: string, state: string): TaskInfo =>
     ({
       id,
       jobKey: `${wp}::${id}`,
@@ -116,9 +116,9 @@ describe('TriageController · optimistic navigation on Accept', () => {
       order: 1,
       watchPath: wp,
       projectName: 'p',
-    }) as unknown as JobInfo;
+    }) as unknown as TaskInfo;
 
-  const makeDetail = (id: string, state: string): JobDetail =>
+  const makeDetail = (id: string, state: string): TaskDetail =>
     ({
       info: makeJob(id, state),
       promptMarkdown: null,
@@ -129,7 +129,7 @@ describe('TriageController · optimistic navigation on Accept', () => {
       log: [],
       summaryState: null,
       reviewEvidence: [],
-    }) as unknown as JobDetail;
+    }) as unknown as TaskDetail;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -142,9 +142,9 @@ describe('TriageController · optimistic navigation on Accept', () => {
     }).compileComponents();
 
     ctrl = TestBed.inject(TriageController);
-    selection = TestBed.inject(JobSelectionService);
-    prefetch = TestBed.inject(JobDetailPrefetchService);
-    jobService = TestBed.inject(JobService);
+    selection = TestBed.inject(TaskSelectionService);
+    prefetch = TestBed.inject(TaskDetailPrefetchService);
+    jobService = TestBed.inject(TaskService);
     prefetch.clear();
   });
 
@@ -161,8 +161,8 @@ describe('TriageController · optimistic navigation on Accept', () => {
     const detailSpy = vi.spyOn(jobService, 'getDetail').mockReturnValue(of(taskBDetail));
     TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.jobKey);
     selection.triageLaneState = '5-human-review';
-    (selection as unknown as { selected: ReturnType<typeof signal<JobDetail | null>> }).selected
-      = signal<JobDetail | null>(makeDetail('task-a', '5-human-review'));
+    (selection as unknown as { selected: ReturnType<typeof signal<TaskDetail | null>> }).selected
+      = signal<TaskDetail | null>(makeDetail('task-a', '5-human-review'));
 
     // POST never resolves so we can assert nav happened before completion.
     const movePost = new Subject<object>();
@@ -170,7 +170,7 @@ describe('TriageController · optimistic navigation on Accept', () => {
     vi.spyOn(jobService, 'applyOptimisticMove').mockReturnValue({} as never);
 
     ctrl.move(taskA, { targetState: '6-completed', actionId: 'mark-done' });
-    const observedSelectedDuringCall: JobDetail | null = selection.selected();
+    const observedSelectedDuringCall: TaskDetail | null = selection.selected();
 
     expect(observedSelectedDuringCall?.info.id).toBe('task-b');
     // POST is still on the wire — no `next` callback has fired yet.
@@ -189,8 +189,8 @@ describe('TriageController · optimistic navigation on Accept', () => {
     });
     TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.jobKey);
     selection.triageLaneState = '5-human-review';
-    (selection as unknown as { selected: ReturnType<typeof signal<JobDetail | null>> }).selected
-      = signal<JobDetail | null>(taskADetail);
+    (selection as unknown as { selected: ReturnType<typeof signal<TaskDetail | null>> }).selected
+      = signal<TaskDetail | null>(taskADetail);
 
     const revertSpy = vi.spyOn(jobService, 'revertOptimisticMove').mockImplementation(noop);
     vi.spyOn(jobService, 'applyOptimisticMove').mockReturnValue(

@@ -11,8 +11,8 @@ import {
 import type {
   CliOutputLine,
   ContinueMode,
-  JobDetail,
-  JobSummaryStatus,
+  TaskDetail,
+  TaskSummaryStatus,
   ReviewEvidenceEntry,
   CliType,
 } from '../../../../../models/task.model';
@@ -35,7 +35,7 @@ import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.componen
 
 import { FeatureFlagsService } from '../../../../../services/feature-flags.service';
 import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
-import { JobService } from '../../../../../services/task.service';
+import { TaskService } from '../../../../../services/task.service';
 import type {
   ConversationEvent,
   RawLineRange,
@@ -102,7 +102,7 @@ interface InterimSummaryState {
   styleUrls: ['./protocol-pane.component.scss'],
 })
 export class ProtocolPaneComponent implements OnDestroy {
-  readonly detail = input.required<JobDetail>();
+  readonly detail = input.required<TaskDetail>();
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);
@@ -147,7 +147,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly screenshotsPoll = inject(ScreenshotsPollService);
   private readonly nowTick = inject(NowTickService).now;
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
 
   /** Set after "Create follow-up" returns; used to render the success banner. */
   readonly followupCreated = signal<{ jobId: string; targetState: string } | null>(null);
@@ -270,7 +270,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     return { kind, label, emoji, tooltip, chainLength, segmentCount };
   });
 
-  readonly summaryStatus = computed<JobSummaryStatus>(
+  readonly summaryStatus = computed<TaskSummaryStatus>(
     () => this.detail().summaryState?.status ?? 'none',
   );
 

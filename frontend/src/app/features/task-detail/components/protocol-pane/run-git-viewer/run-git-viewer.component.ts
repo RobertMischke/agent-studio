@@ -10,10 +10,10 @@ import {
   DoCheck,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import type { JobInfo } from '../../../../../models/task.model';
+import type { TaskInfo } from '../../../../../models/task.model';
 import type { RunFileChange, RunRecord } from '../../../../../features/run-timeline';
 import type { GitStatus } from '../../../../git';
-import { JobService } from '../../../../../services/task.service';
+import { TaskService } from '../../../../../services/task.service';
 import { RunGitCacheService } from '../../../services/run-git-cache.service';
 import { highlightBlock } from '../../beautiful-results/highlight-lazy';
 import { perfMark, perfMeasure } from '../../../../../utils/perf-tracker';
@@ -42,7 +42,7 @@ import {
   styleUrl: './run-git-viewer.component.scss',
 })
 export class RunGitViewerComponent implements DoCheck, OnDestroy {
-  readonly job = input<JobInfo | null>(null);
+  readonly job = input<TaskInfo | null>(null);
   readonly run = input<RunRecord | null>(null);
   readonly visible = input<boolean>(false);
 
@@ -82,7 +82,7 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
   readonly worktreeStatus = signal<GitStatus | null>(null);
   readonly worktreeLoading = signal(false);
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly runGitCache = inject(RunGitCacheService);
   private currentLoadKey = '';
   private worktreeTimer: VisibleIntervalHandle | null = null;

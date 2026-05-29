@@ -14,8 +14,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { JobInfo, WatchPathEntry, RegistryWorkspaceListItem } from '../../models/task.model';
-import { JobService } from '../../services/task.service';
+import type { TaskInfo, WatchPathEntry, RegistryWorkspaceListItem } from '../../models/task.model';
+import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
@@ -23,7 +23,7 @@ import { TreeRowComponent } from '../../components/tree-row/tree-row.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
-import { JobSelectionService } from '../task-detail';
+import { TaskSelectionService } from '../task-detail';
 import { UiPreferencesService } from '../shell';
 import { BoardFiltersService } from '../board';
 import { UpdateClientService } from '../../services/update.service';
@@ -91,7 +91,7 @@ function cliColorFor(cli: string): string {
   styleUrl: './studio-shell.component.scss',
 })
 export class StudioShellComponent {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   readonly clientService = inject(ClientService);
 
   /**
@@ -114,7 +114,7 @@ export class StudioShellComponent {
   private readonly featureFlags = inject(FeatureFlagsService);
   private readonly tabState = inject(StudioTabStateService);
   private readonly panelState = inject(StudioPanelStateService);
-  private readonly jobSelection = inject(JobSelectionService);
+  private readonly jobSelection = inject(TaskSelectionService);
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
   readonly updateClient = inject(UpdateClientService);
@@ -595,7 +595,7 @@ export class StudioShellComponent {
       cur[key] += 1;
       out.set(name, cur);
     };
-    const visit = (lane: JobInfo[] | undefined, key: keyof ProjectLaneCounts) => {
+    const visit = (lane: TaskInfo[] | undefined, key: keyof ProjectLaneCounts) => {
       if (!lane) return;
       for (const job of lane) bump(job.projectName ?? '', key);
     };
@@ -661,14 +661,14 @@ export class StudioShellComponent {
    *  `Playwright Test` lives entirely in 7-archive or has nothing yet —
    *  it must still render as a picker target for the probe to land
    *  tasks). The set of "known projects" comes from
-   *  `JobService.getWatchPaths()` via the shell's `projectNames` input
+   *  `TaskService.getWatchPaths()` via the shell's `projectNames` input
    *  the host passes in app.html. */
   readonly projectRows = computed<ProjectSidebarRow[]>(() => {
     const grouped = this.grouped();
     const projects = new Map<string, number>();
     for (const [laneKey, lane] of Object.entries(grouped)) {
       if (laneKey === 'archive') continue; // A2: archive excluded from working-set count
-      for (const job of lane as JobInfo[]) {
+      for (const job of lane as TaskInfo[]) {
         const name = job.projectName ?? '';
         projects.set(name, (projects.get(name) ?? 0) + 1);
       }
@@ -757,9 +757,9 @@ export class StudioShellComponent {
     this.tabState.activateSticky();
   }
 
-  openTask(job: JobInfo): void {
+  openTask(job: TaskInfo): void {
     this.tabState.open({ kind: 'task', jobKey: job.jobKey });
-    // Keep the legacy JobSelectionService in sync so the embedded
+    // Keep the legacy TaskSelectionService in sync so the embedded
     // <app-job-detail> can pick the job up by reading the selected signal.
     this.jobSelection.openDetail(job);
   }
@@ -886,12 +886,12 @@ export class StudioShellComponent {
 
   /** Flat list of every job across all lanes; consumed by
    *  `ProjectDragDropService.onDrop` to find which jobs to move. */
-  private allJobs(): JobInfo[] {
+  private allJobs(): TaskInfo[] {
     const grouped = this.grouped();
     const seen = new Set<string>();
-    const out: JobInfo[] = [];
+    const out: TaskInfo[] = [];
     for (const lane of Object.values(grouped)) {
-      for (const job of lane as JobInfo[]) {
+      for (const job of lane as TaskInfo[]) {
         const key = `${job.watchPath}::${job.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -1142,10 +1142,10 @@ export class StudioShellComponent {
     return null;
   }
 
-  private findJob(jobKey: string): JobInfo | null {
+  private findJob(jobKey: string): TaskInfo | null {
     const grouped = this.grouped();
     for (const lane of Object.values(grouped)) {
-      for (const job of lane as JobInfo[]) {
+      for (const job of lane as TaskInfo[]) {
         if (job.jobKey === jobKey) return job;
       }
     }
@@ -1153,11 +1153,11 @@ export class StudioShellComponent {
   }
 
   /**
-   * Map a tab to its underlying JobInfo so the Open-Tabs hover popover
+   * Map a tab to its underlying TaskInfo so the Open-Tabs hover popover
    * can render a TaskStatusCard. Returns `null` for board / hub / diff /
    * welcome tabs that do not correspond to a single task.
    */
-  tabJob(tab: StudioTab): JobInfo | null {
+  tabJob(tab: StudioTab): TaskInfo | null {
     if (tab.kind !== 'task' && tab.kind !== 'activity') return null;
     return this.findJob(tab.jobKey);
   }

@@ -1,6 +1,6 @@
 import { Directive, OnDestroy } from '@angular/core';
 import { Observable } from 'rxjs';
-import type { JobInfo } from '../../../models/task.model';
+import type { TaskInfo } from '../../../models/task.model';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 
 /**
@@ -21,10 +21,10 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
  * synthesising a constructor for the abstract one.
  */
 @Directive()
-export abstract class JobBackgroundPoller<TResponse> implements OnDestroy {
+export abstract class TaskBackgroundPoller<TResponse> implements OnDestroy {
   protected abstract readonly intervalMs: number;
 
-  /** Subclass calls the relevant JobService method. */
+  /** Subclass calls the relevant TaskService method. */
   protected abstract fetch(jobId: string, watchPath: string): Observable<TResponse>;
 
   /** Subclass updates whatever signals it owns from the fresh response. */
@@ -39,7 +39,7 @@ export abstract class JobBackgroundPoller<TResponse> implements OnDestroy {
    * non-claude jobs (so the loop doesn't burn requests for jobs that
    * have nothing to report).
    */
-  protected shouldPoll(info: JobInfo): boolean {
+  protected shouldPoll(info: TaskInfo): boolean {
     void info;
     return true;
   }
@@ -53,7 +53,7 @@ export abstract class JobBackgroundPoller<TResponse> implements OnDestroy {
    * `shouldPoll`) to stop and clear. Re-arms the timer when the
    * effective key changes; a no-op when the same job is passed again.
    */
-  syncTo(info: JobInfo | null | undefined): void {
+  syncTo(info: TaskInfo | null | undefined): void {
     const willPoll = info != null && this.shouldPoll(info);
     const key = willPoll ? `${info!.watchPath}::${info!.id}` : '';
     if (key === this.currentKey) return;

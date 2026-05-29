@@ -9,8 +9,8 @@ import {
 } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import type { CliType, JobInfo } from '../../../../../models/task.model';
-import { CodeReviewListEntry, JobService } from '../../../../../services/task.service';
+import type { CliType, TaskInfo } from '../../../../../models/task.model';
+import { CodeReviewListEntry, TaskService } from '../../../../../services/task.service';
 
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 /**
@@ -47,7 +47,7 @@ import { CliModelSelectorComponent } from '../../../../../components/cli-model-s
   styleUrl: './code-review-panel.component.scss',
 })
 export class CodeReviewPanelComponent implements OnInit {
-  readonly job = input.required<JobInfo>();
+  readonly job = input.required<TaskInfo>();
   /** Optional override for the model dropdown's initial value. */
   readonly defaultModel = input<string>('claude-opus-4-7');
   /** Optional override for the CLI dropdown's initial value. */
@@ -62,7 +62,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly selectedModel = signal<string>('claude-opus-4-7');
   readonly selectedCli = signal<CliType>('claude');
 
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
 
   /** True when there is at least one MD listed and the user can drill in. */
   readonly hasEntries = computed(() => this.entries().length > 0);

@@ -4,8 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { JobCardComponent } from './task-card.component';
-import type { JobInfo, ClientSummary } from '../../../../models/task.model';
+import { TaskCardComponent } from './task-card.component';
+import type { TaskInfo, ClientSummary } from '../../../../models/task.model';
 import { buildEffectiveModelChip } from './task-card-view-model';
 
 /**
@@ -20,10 +20,10 @@ import { buildEffectiveModelChip } from './task-card-view-model';
  * note instead of a red test, which keeps this generator-driven layer
  * stable across template tweaks.
  */
-describe('JobCardComponent (smoke)', () => {
+describe('TaskCardComponent (smoke)', () => {
   it('compiles + instantiates without throwing', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -31,7 +31,7 @@ describe('JobCardComponent (smoke)', () => {
         provideRouter([]),
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     fixture.componentRef.setInput('job', undefined);
 
     // Required inputs seeded with undefined — replace with realistic defaults if needed:
@@ -39,14 +39,14 @@ describe('JobCardComponent (smoke)', () => {
     try { fixture.detectChanges(); } catch (e) {
       // Render needs more setup than the generic generator provides.
       // The instantiation above is still a real smoke check.
-      console.warn('[smoke] JobCardComponent initial render skipped:', (e as Error).message);
+      console.warn('[smoke] TaskCardComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
 
   it('commit tooltip exposes the actual file list, not just the count', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -55,7 +55,7 @@ describe('JobCardComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     const files = [
       'backend/Services/Analysis/AnalysisReportContract.cs',
       'backend/Services/Analysis/AnalysisReportStore.cs',
@@ -90,7 +90,7 @@ describe('JobCardComponent (smoke)', () => {
 
   it('commit tooltip caps the file list and reports overflow', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -99,7 +99,7 @@ describe('JobCardComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     const files = Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`);
     fixture.componentRef.setInput('job', makeJob({
       commit: {
@@ -124,7 +124,7 @@ describe('JobCardComponent (smoke)', () => {
 
   it('commit tooltip falls back to count-only when files array is empty', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -133,7 +133,7 @@ describe('JobCardComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     fixture.componentRef.setInput('job', makeJob({
       commit: {
         sha: 'abc12345',
@@ -159,7 +159,7 @@ describe('JobCardComponent (smoke)', () => {
 
   it('commit tooltip escapes HTML in file paths to prevent injection', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -168,7 +168,7 @@ describe('JobCardComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     fixture.componentRef.setInput('job', makeJob({
       commit: {
         sha: 'beefcafe',
@@ -192,7 +192,7 @@ describe('JobCardComponent (smoke)', () => {
 
   it('renders the indeterminate progress bar on running cards only (F39)', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -201,7 +201,7 @@ describe('JobCardComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     fixture.componentRef.setInput('job', makeJob({
       execution: {
         jobId: 'task-1',
@@ -237,7 +237,7 @@ describe('JobCardComponent (smoke)', () => {
     // pill. The lane is the single source of truth for liveness; the
     // execution overlay must only surface on actively-running cards.
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -246,7 +246,7 @@ describe('JobCardComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     const runningExecution = {
       jobId: 'task-7', jobKey: 'test::task-7', processId: 4242,
       startedAt: '2026-05-28T10:00:00Z', status: 'running',
@@ -278,7 +278,7 @@ describe('JobCardComponent (smoke)', () => {
 
   it('renders a runner outcome issue pill', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobCardComponent],
+      imports: [TaskCardComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -287,7 +287,7 @@ describe('JobCardComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobCardComponent);
+    const fixture = TestBed.createComponent(TaskCardComponent);
     fixture.componentRef.setInput('job', makeJob({
       outcomeIssue: {
         kind: 'permission-blocked',
@@ -396,7 +396,7 @@ function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {
   };
 }
 
-function makeJob(overrides: Partial<JobInfo> = {}): JobInfo {
+function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',
     jobKey: 'test::task-1',

@@ -14,9 +14,9 @@
  * `ConversationEvent[]`.
  */
 
-import type { CliOutputLine, JobInfo } from '../../models/task.model';
+import type { CliOutputLine, TaskInfo } from '../../models/task.model';
 import type { GitFileChange } from '../../features/git';
-import type { JobTokenSummary } from '../../features/tokens';
+import type { TaskTokenSummary } from '../../features/tokens';
 import type { RunRecord, RunTimeline } from '../../features/run-timeline';
 import {
   parseActivityLog,
@@ -58,9 +58,9 @@ export interface ConversationProjectionContext {
   source: string;
   /** Raw activity log lines. The projection numbers them 1-based for ranges. */
   lines: readonly CliOutputLine[];
-  job?: JobInfo | null;
+  job?: TaskInfo | null;
   runTimeline?: RunTimeline | null;
-  tokenSummary?: JobTokenSummary | null;
+  tokenSummary?: TaskTokenSummary | null;
   screenshots?: readonly ScreenshotEvidence[];
   commits?: readonly CommitEvidence[];
   /** When true, runs are emitted as `runMarker` events even if the timeline is empty. */
@@ -717,7 +717,7 @@ function toImageEvent(
 }
 
 function toTaskTokenMetric(
-  summary: JobTokenSummary,
+  summary: TaskTokenSummary,
   ctx: ConversationProjectionContext,
   lineNumbers: Map<CliOutputLine, number>
 ) {
@@ -785,7 +785,7 @@ function toRunMarker(matched: RunContext, range: RawLineRange) {
 }
 
 function toTaskMarker(
-  job: JobInfo,
+  job: TaskInfo,
   ctx: ConversationProjectionContext,
   lineNumbers: Map<CliOutputLine, number>
 ) {

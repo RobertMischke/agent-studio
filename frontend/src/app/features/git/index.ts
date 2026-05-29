@@ -4,9 +4,9 @@ export type {
   GitStatus,
   GitProjectSummary,
   GitHygieneStatus,
-  JobHygieneContext,
-  JobCommitInfo,
-  JobExcludedCommitInfo,
-  JobCommitDetail,
+  TaskHygieneContext,
+  TaskCommitInfo,
+  TaskExcludedCommitInfo,
+  TaskCommitDetail,
   RecentCommit,
 } from './models/git.model';

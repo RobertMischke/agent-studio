@@ -28,7 +28,7 @@ const WEIGHTS_FALLBACK: PaneWeights = { prompt: 3, protocol: 5, git: 4 };
  * column percentage. All persistence lives here so the component stays
  * concerned only with rendering.
  *
- * Provided locally on JobDetailComponent (`providers: [LayoutPanesService]`)
+ * Provided locally on TaskDetailComponent (`providers: [LayoutPanesService]`)
  * so each detail instance gets its own state — but persistence is shared
  * across instances via localStorage, matching the previous behaviour.
  */
@@ -99,7 +99,7 @@ export class LayoutPanesService {
   }
 
   /**
-   * Public so JobDetailComponent.ngOnDestroy can ensure listeners get
+   * Public so TaskDetailComponent.ngOnDestroy can ensure listeners get
    * cleaned up if the component is torn down mid-drag.
    */
   stopLayoutResize(): void {

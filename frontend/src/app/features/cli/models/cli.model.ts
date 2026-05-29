@@ -5,7 +5,7 @@
  * Covers the model catalog returned by `/api/cli/{type}/models` and the
  * cross-CLI usage report from `/api/cli/usage`. Job-coupled CLI types
  * (CliExecution, CliSettings, ContinueMode, ContextUsageSnapshot) stay
- * in job.model.ts because they participate in the JobInfo graph.
+ * in job.model.ts because they participate in the TaskInfo graph.
  */
 
 import type { CliType, SessionUsage } from '../../../models/task.model';

@@ -1,4 +1,4 @@
-import { JobInfo } from '../../../models/task.model';
+import { TaskInfo } from '../../../models/task.model';
 
 /**
  * Splits 4-review jobs into the two swim-lane sub-sections rendered by
@@ -14,12 +14,12 @@ export interface ReviewSubSection {
   readonly kind: 'orchestrator' | 'human';
   readonly label: string;
   readonly icon: string;
-  readonly jobs: JobInfo[];
+  readonly jobs: TaskInfo[];
 }
 
-export function groupReviewJobs(jobs: readonly JobInfo[]): readonly ReviewSubSection[] {
-  const orchestrator: JobInfo[] = [];
-  const human: JobInfo[] = [];
+export function groupReviewJobs(jobs: readonly TaskInfo[]): readonly ReviewSubSection[] {
+  const orchestrator: TaskInfo[] = [];
+  const human: TaskInfo[] = [];
   for (const j of jobs) {
     if (j.orchestratorVerdict) orchestrator.push(j);
     else human.push(j);

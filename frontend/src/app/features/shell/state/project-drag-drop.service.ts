@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import type { JobInfo, WatchPathEntry } from '../../../models/task.model';
-import { JobService } from '../../../services/task.service';
+import type { TaskInfo, WatchPathEntry } from '../../../models/task.model';
+import { TaskService } from '../../../services/task.service';
 
 /**
  * Owns the explorer sidebar's "drag a project onto another project to
@@ -13,14 +13,14 @@ import { JobService } from '../../../services/task.service';
  * through the entire shell.
  *
  * Project name and watch-path name are 1:1 in this app — the backend
- * stamps `JobInfo.projectName` from the matching `WatchPathEntry.Name` —
+ * stamps `TaskInfo.projectName` from the matching `WatchPathEntry.Name` —
  * so each project row in the explorer is effectively both the project
  * entry AND its workspace header. Dropping project A onto project B's
  * row means: move every job in project A to project B's watch path.
  */
 @Injectable({ providedIn: 'root' })
 export class ProjectDragDropService {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   readonly draggingProjectName = signal<string | null>(null);
   readonly dragOverProjectName = signal<string | null>(null);
@@ -79,7 +79,7 @@ export class ProjectDragDropService {
     }
   }
 
-  onDrop(event: DragEvent, overName: string, jobs: readonly JobInfo[]): void {
+  onDrop(event: DragEvent, overName: string, jobs: readonly TaskInfo[]): void {
     event.preventDefault();
     const source = this.draggingProjectName();
     this.draggingProjectName.set(null);
@@ -102,7 +102,7 @@ export class ProjectDragDropService {
   private moveProjectToWorkspace(
     sourceProject: string,
     targetProject: string,
-    sourceJobs: readonly JobInfo[],
+    sourceJobs: readonly TaskInfo[],
   ): void {
     const target = this.workspaceFor(targetProject);
     if (!target) return;

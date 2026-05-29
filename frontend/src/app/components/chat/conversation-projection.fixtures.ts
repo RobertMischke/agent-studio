@@ -141,7 +141,7 @@ export function waitLoopFragment(): CliOutputLine[] {
 /**
  * Token spike: orchestrator and supporting-agent calls land near each other
  * with conspicuously high usage. The fixture exposes the lines plus an
- * accompanying `JobTokenSummary` companion the projection can read.
+ * accompanying `TaskTokenSummary` companion the projection can read.
  */
 export function tokenSpikeFragment(): CliOutputLine[] {
   resetFixtureClock();
@@ -152,7 +152,7 @@ export function tokenSpikeFragment(): CliOutputLine[] {
   ];
 }
 
-export function tokenSpikeSummary(): import('../../features/tokens').JobTokenSummary {
+export function tokenSpikeSummary(): import('../../features/tokens').TaskTokenSummary {
   return {
     calls: 4,
     inputTokens: 280_000,

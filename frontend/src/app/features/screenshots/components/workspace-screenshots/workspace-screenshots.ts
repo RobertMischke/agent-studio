@@ -10,14 +10,14 @@ import {
   signal,
 } from '@angular/core';
 
-import { JobService } from '../../../../services/task.service';
-import type { JobScreenshot } from '../../../../features/screenshots';
+import { TaskService } from '../../../../services/task.service';
+import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ScreenshotStripComponent } from '../screenshot-strip/screenshot-strip.component';
 
 interface HourBucket {
   bucketKey: string;
   bucketLabel: string;
-  items: JobScreenshot[];
+  items: TaskScreenshot[];
 }
 
 const STORAGE_WINDOW_KEY = 'workspaceScreenshots.windowHours';
@@ -50,16 +50,16 @@ const WINDOW_OPTIONS: { hours: number; label: string; testId: string }[] = [
   styleUrl: './workspace-screenshots.scss',
 })
 export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
 
   readonly projectName = input<string | null>(null);
-  readonly openTask = output<JobScreenshot>();
+  readonly openTask = output<TaskScreenshot>();
 
   readonly windowOptions = WINDOW_OPTIONS;
 
   readonly windowHours = signal<number>(this.loadWindow());
   readonly projectFilter = signal<string | null>(this.loadProject());
-  readonly entries = signal<JobScreenshot[]>([]);
+  readonly entries = signal<TaskScreenshot[]>([]);
   readonly loading = signal<boolean>(false);
   readonly loaded = signal<boolean>(false);
 
@@ -145,7 +145,7 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
     });
   }
 
-  onOpenTask(s: JobScreenshot): void {
+  onOpenTask(s: TaskScreenshot): void {
     this.openTask.emit(s);
   }
 

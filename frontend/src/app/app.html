@@ -82,7 +82,7 @@
           (clearAll)="onSidesheetClearAll()" />
         <!-- Per-tab actions land in the tab bar via this slot. The board
              tab gets filter + compact + add-task; task tabs reuse the
-             existing detail-pane toggles via the JobDetail's own header. -->
+             existing detail-pane toggles via the TaskDetail's own header. -->
         <div studioTabActions class="studio-tab-actions">
           @if (studioTabState.activeTab()?.kind === 'board') {
             <button type="button"

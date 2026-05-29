@@ -14,7 +14,7 @@ import { ProjectSkillReadinessSectionComponent } from '../project-skill-readines
 import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/analysis-report-drilldown';
 import { ProjectRailKey } from '../project-shell/project-shell.config';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
-import type { JobScreenshot } from '../../../screenshots';
+import type { TaskScreenshot } from '../../../screenshots';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 /**
@@ -59,7 +59,7 @@ export class ProjectOverlaysComponent {
   readonly securityAuditQueued = output<{ projectName: string; jobId: string }>();
   readonly uxuiFollowUp = output<{ projectName: string; prefill: string; title: string }>();
   readonly uxuiActionQueued = output<{ projectName: string; action: string; jobId: string }>();
-  readonly openTask = output<JobScreenshot>();
+  readonly openTask = output<TaskScreenshot>();
 
   /** The shell needs to provide watchPaths for hash → name resolution on rail change. */
   readonly railChangeNeedsWatchPaths = output<ProjectRailKey>();

@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { JobService } from '../../../../../services/task.service';
+import { TaskService } from '../../../../../services/task.service';
 import { MarkdownRichEditorComponent } from '../../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
-import type { JobArtifact, JobArtifactKind } from '../../../../../models/task.model';
+import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.model';
 
 /**
  * Files tab body. Renders every `.md` file directly in the job folder
@@ -24,8 +24,8 @@ import type { JobArtifact, JobArtifactKind } from '../../../../../models/task.mo
  *
  * Content fetch: the artifact manifest already contains size + mtime
  * but no body. Content is fetched lazily per file through
- * `JobService.readJobFile` and cached in {@link fileContent}; the prompt
- * body is supplied by the parent (it's already part of `JobDetail`).
+ * `TaskService.readJobFile` and cached in {@link fileContent}; the prompt
+ * body is supplied by the parent (it's already part of `TaskDetail`).
  */
 @Component({
   selector: 'app-files-pane',
@@ -36,10 +36,10 @@ import type { JobArtifact, JobArtifactKind } from '../../../../../models/task.mo
   styleUrl: './files-pane.component.scss',
 })
 export class FilesPaneComponent {
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
 
-  readonly artifacts = input<JobArtifact[]>([]);
-  /** Prefilled body for `prompt.md` so we don't re-fetch what `JobDetail` already loaded. */
+  readonly artifacts = input<TaskArtifact[]>([]);
+  /** Prefilled body for `prompt.md` so we don't re-fetch what `TaskDetail` already loaded. */
   readonly promptContent = input<string>('');
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
@@ -117,7 +117,7 @@ export class FilesPaneComponent {
   }
 
   /** Resolves the body for a file. Prompt comes from the input; others come from the cache. */
-  bodyFor(file: JobArtifact): string | null | undefined {
+  bodyFor(file: TaskArtifact): string | null | undefined {
     if (file.kind === 'prompt') return this.promptContent();
     return this.content().get(file.name);
   }
@@ -127,7 +127,7 @@ export class FilesPaneComponent {
   }
 
   /** Renders the first ~12 lines of a file's content for the preview block. */
-  preview(file: JobArtifact): string | null {
+  preview(file: TaskArtifact): string | null {
     const body = this.bodyFor(file);
     if (body == null) return null;
     return this.generatePreview(body);
@@ -140,7 +140,7 @@ export class FilesPaneComponent {
       .join('\n');
   }
 
-  fileIcon(kind: JobArtifactKind): string {
+  fileIcon(kind: TaskArtifactKind): string {
     switch (kind) {
       case 'prompt': return '\u{1F4DD}'; // memo
       case 'aspect': return '\u{1F50D}'; // magnifying-glass

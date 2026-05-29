@@ -11,7 +11,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import type { CliType, JobInfo } from '../../../../../models/task.model';
+import type { CliType, TaskInfo } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
@@ -27,7 +27,7 @@ import {
   formatTokens,
 } from '../../../../../services/format.util';
 import { projectIdentity } from '../../../../../services/project-identity.util';
-import { JobService } from '../../../../../services/task.service';
+import { TaskService } from '../../../../../services/task.service';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
@@ -41,7 +41,7 @@ import { copyTextToClipboard } from '../../../../../services/clipboard.util';
   styleUrl: './overview-pane.component.scss',
 })
 export class OverviewPaneComponent {
-  readonly job = input.required<JobInfo>();
+  readonly job = input.required<TaskInfo>();
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   readonly isRunning = input(false);
   /** Optimistic CLI + model values from the parent task-detail. The badge
@@ -64,7 +64,7 @@ export class OverviewPaneComponent {
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly agentWorkPoll = inject(AgentWorkSummaryPollService);
   private readonly clients = inject(ClientService);
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly notifs = inject(NotificationService);
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);

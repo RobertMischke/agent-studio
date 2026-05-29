@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
-import type { AutoLoopSnapshot, JobInfo, PendingIntent } from '../../../../models/task.model';
+import type { AutoLoopSnapshot, TaskInfo, PendingIntent } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { ClientService } from '../../../../services/client.service';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
@@ -29,7 +29,7 @@ if (typeof window !== 'undefined') {
 }
 
 @Component({
-  selector: 'app-job-card',
+  selector: 'app-task-card, app-job-card',
   standalone: true,
   imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
@@ -42,8 +42,8 @@ if (typeof window !== 'undefined') {
   templateUrl: './task-card.component.html',
   styleUrl: './task-card.component.scss',
 })
-export class JobCardComponent implements OnInit, OnDestroy {
-  readonly job = input.required<JobInfo>();
+export class TaskCardComponent implements OnInit, OnDestroy {
+  readonly job = input.required<TaskInfo>();
   readonly compact = input<boolean>(false);
   /**
    * F2: when set and matches this card's job id, the card renders the
@@ -51,13 +51,13 @@ export class JobCardComponent implements OnInit, OnDestroy {
    * board. The host clears the signal after one animation cycle.
    */
   readonly highlightJobId = input<string | null>(null);
-  readonly deleteRequested = output<JobInfo>();
+  readonly deleteRequested = output<TaskInfo>();
   /**
    * F5: emitted when the user clicks the inline "Pick next" affordance
    * on a 2-ready card. The host wires this to `moveJobToTop` so the
    * runner picks it up on the next cycle.
    */
-  readonly pickNextRequested = output<JobInfo>();
+  readonly pickNextRequested = output<TaskInfo>();
   private readonly hostRef = inject(ElementRef<HTMLElement>);
 
   /** True when this card should render the just-created highlight. */
@@ -239,7 +239,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
   ]);
 
   readonly gitPill = computed(() => {
-    if (!JobCardComponent.LANES_WITH_GIT.has(this.job().state)) return null;
+    if (!TaskCardComponent.LANES_WITH_GIT.has(this.job().state)) return null;
     const projectName = this.job().projectName;
     const summary = this.gitSummary.value().find(s => s.projectName === projectName);
     return summary && summary.isRepo ? summary : null;
@@ -263,8 +263,8 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const c = this.job().commit;
     if (!c) return null;
     const state = this.job().state;
-    if (!JobCardComponent.LANES_WITH_COMMIT_PILL.has(state)) return null;
-    const variant = JobCardComponent.REVIEW_LANES.has(state) ? 'review' : 'full';
+    if (!TaskCardComponent.LANES_WITH_COMMIT_PILL.has(state)) return null;
+    const variant = TaskCardComponent.REVIEW_LANES.has(state) ? 'review' : 'full';
     return {
       variant,
       shortSha: c.shortSha,

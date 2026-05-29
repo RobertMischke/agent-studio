@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import type { RunTimeline } from '../../../features/run-timeline';
-import { JobService } from '../../../services/task.service';
-import { JobBackgroundPoller } from './task-background-poller';
+import { TaskService } from '../../../services/task.service';
+import { TaskBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls the per-job run timeline (`/api/jobs/{id}/runs`) every 5 s
@@ -16,8 +16,8 @@ import { JobBackgroundPoller } from './task-background-poller';
  * after the runner emits a new session-event row.
  */
 @Injectable()
-export class RunTimelinePollService extends JobBackgroundPoller<RunTimeline | null> {
-  private readonly jobService = inject(JobService);
+export class RunTimelinePollService extends TaskBackgroundPoller<RunTimeline | null> {
+  private readonly jobService = inject(TaskService);
 
   protected readonly intervalMs = 5_000;
 

@@ -16,23 +16,23 @@ import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import {
   BoardFiltersService,
-  CreateJobDialogComponent,
+  CreateTaskDialogComponent,
   FiltersDropdownComponent,
-  JobColumnComponent,
+  TaskColumnComponent,
   KanbanFilterSidesheetComponent,
   LaneCollapseService,
   ProjectTabsComponent,
   TypeFilterOption,
   BoardMutationsService,
-  CreateJobFormService,
+  CreateTaskFormService,
   buildProjectTokenChip,
   projectAutoInfo,
   projectRunnerIndicator,
   splitReadyByPhase,
 } from './features/board';
 import {
-  JobDetailComponent,
-  JobSelectionService,
+  TaskDetailComponent,
+  TaskSelectionService,
   TriageController,
   overflowActionsFor,
   primaryActionFor,
@@ -76,10 +76,10 @@ import {
   StudioTabStateService,
   StudioPanelStateService,
 } from './features/studio-shell';
-import { JobService } from './services/task.service';
+import { TaskService } from './services/task.service';
 import { ClientService } from './services/client.service';
 import { NotificationService } from './services/notification.service';
-import type { JobInfo, WatchPathEntry, CliType } from './models/task.model';
+import type { TaskInfo, WatchPathEntry, CliType } from './models/task.model';
 import { CLI_TYPES } from './models/task.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import {
@@ -96,29 +96,29 @@ import { UpdateNotificationBridge } from './services/update-notification-bridge.
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
-import { JobCompletionSoundService } from './services/task-completion-sound.service';
+import { TaskCompletionSoundService } from './services/task-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
 import { CliCatalogStore } from './services/cli-catalog.store';
 import type { CliOutputLine } from './models/task.model';
 import type { RunTimeline } from './features/run-timeline';
-import type { JobScreenshot } from './features/screenshots';
+import type { TaskScreenshot } from './features/screenshots';
 import { TooltipDirective } from './components/tooltip';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
-import type { JobTokenSummary } from './features/tokens'; // verbose-debug overlay context types
+import type { TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
   runTimeline: RunTimeline | null;
-  screenshots: JobScreenshot[];
-  tokenSummary: JobTokenSummary | null;
-  job: JobInfo | null;
+  screenshots: TaskScreenshot[];
+  tokenSummary: TaskTokenSummary | null;
+  job: TaskInfo | null;
 }
 
 @Component({
   selector: 'app-root',
   imports: [
-    JobColumnComponent,
-    JobDetailComponent,
+    TaskColumnComponent,
+    TaskDetailComponent,
     CliUsageSheetComponent,
     OrchestratorSideSheetComponent,
     OrchestratorSettingsModalComponent,
@@ -126,7 +126,7 @@ interface VerboseDebugContext {
     AutoReviewIndicatorComponent,
     StatusBarComponent,
     FormsModule,
-    CreateJobDialogComponent,
+    CreateTaskDialogComponent,
     ErrorDialogComponent,
     ConfirmDialogComponent,
     NotificationStackComponent,
@@ -155,7 +155,7 @@ interface VerboseDebugContext {
   // tree on every async event (every poll tick, every signal write).
   // OnPush means CD only runs when an @Input changes (signals already
   // mark themselves dirty), or an event handler in the template fires.
-  // The board sub-tree was already covered indirectly by JobCard's
+  // The board sub-tree was already covered indirectly by TaskCard's
   // OnPush; promoting the shell ensures the sibling sheets and the
   // header don't trigger whole-app passes during a 2 s grouped poll.
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -167,13 +167,13 @@ interface VerboseDebugContext {
   styleUrl: './app.scss',
 })
 export class App implements OnInit, OnDestroy {
-  readonly jobService = inject(JobService);
+  readonly jobService = inject(TaskService);
   readonly errorDialog = inject(ErrorDialogService);
   readonly devTools = inject(DevToolsService);
   readonly clientService = inject(ClientService);
   private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
-  private readonly _completionSound = inject(JobCompletionSoundService);
+  private readonly _completionSound = inject(TaskCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
@@ -181,18 +181,18 @@ export class App implements OnInit, OnDestroy {
 
   /**
    * Cycle 9j: selection state (selected detail, triage toast, lane
-   * peers, URL sync, request-token guard) lives in JobSelectionService.
+   * peers, URL sync, request-token guard) lives in TaskSelectionService.
    * The shell re-exposes the read signals so existing template
    * bindings + keyboard guards keep working unchanged. The triage
    * HANDLERS (onTriageMove/Delete/Start, advanceToNextInLane) stay
-   * here because they orchestrate JobService mutations + the
-   * JobDetailComponent ViewChild (`clearTriageActing`).
+   * here because they orchestrate TaskService mutations + the
+   * TaskDetailComponent ViewChild (`clearTriageActing`).
    */
-  private readonly jobSelection = inject(JobSelectionService);
+  private readonly jobSelection = inject(TaskSelectionService);
   readonly selectedJob = this.jobSelection.selected;
   readonly triageToast = this.jobSelection.triageToast;
 
-  @ViewChild('jobDetail') private jobDetailRef?: JobDetailComponent;
+  @ViewChild('jobDetail') private jobDetailRef?: TaskDetailComponent;
   @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
   /**
    * Signal-form view child for the orchestrator side-sheet. Lets the
@@ -222,11 +222,11 @@ export class App implements OnInit, OnDestroy {
   readonly orchestratorSettingsOpen = signal(false);
   /**
    * Cycle 10a: create-job dialog state + open/cancel/submit logic
-   * lives in CreateJobFormService. The shell re-exposes the visibility
+   * lives in CreateTaskFormService. The shell re-exposes the visibility
    * signal + the bound fields via getters so the existing template
    * bindings keep working unchanged.
    */
-  readonly createJobForm = inject(CreateJobFormService);
+  readonly createJobForm = inject(CreateTaskFormService);
   /** Cycle 10b: board-mutation handlers (drag/drop, reorder, delete, archive, etc.) live here. */
   private readonly boardMutations = inject(BoardMutationsService);
   /** Re-exposed for the column template so the Archive-all button can disable
@@ -350,7 +350,7 @@ export class App implements OnInit, OnDestroy {
   readonly devToolsMenuOpen = signal(false);
   /**
    * Free-text query for the kanban search box. Matched as a case-insensitive
-   * substring across every JobInfo field that's loaded for the grouped view
+   * substring across every TaskInfo field that's loaded for the grouped view
    * (title, id, project, agent, model, CLI, session, state, owner, phase,
    * type, tag ids). Prompt-body text is intentionally not searched here -
    * grouped jobs don't carry their prompts, so a "matches body" pretence
@@ -557,7 +557,7 @@ export class App implements OnInit, OnDestroy {
     //   4. 1-preparation                     — in human preparation
     //   5. 0-backlog                         — fresh inbox / triage
     const readySplit = splitReadyByPhase(grouped.ready);
-    const backlogLanes: { state: string; title: string; icon: string; jobs: JobInfo[] }[] = [];
+    const backlogLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [];
     backlogLanes.push({
       state: '2-ready',
       title: 'Human Ready',
@@ -598,7 +598,7 @@ export class App implements OnInit, OnDestroy {
       icon: '🗒️',
       jobs: grouped.backlog ?? [],
     });
-    const activeLanes: { state: string; title: string; icon: string; jobs: JobInfo[] }[] = [
+    const activeLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
     ];
     // ADR-0028: 3a-failed-pickup is hide-when-empty.
@@ -644,7 +644,7 @@ export class App implements OnInit, OnDestroy {
     () => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot',
   );
 
-  // Cycle 9j: triageLanePeers lives in JobSelectionService.
+  // Cycle 9j: triageLanePeers lives in TaskSelectionService.
   readonly triageLanePeers = this.jobSelection.triageLanePeers;
 
   /** Position (1-based) + total used by the slim-tab pager next to the
@@ -661,7 +661,7 @@ export class App implements OnInit, OnDestroy {
   readonly slimPagerTotal = computed<number>(() => this.triageLanePeers().length);
 
   // Cycle 10a: form state (newTitle/newPrompt/newCliType/etc.) lives in
-  // CreateJobFormService. Pass-through getters keep the existing
+  // CreateTaskFormService. Pass-through getters keep the existing
   // template `[(ngModel)]` and helper-method bindings working unchanged.
   readonly cliTypes = CLI_TYPES;
 
@@ -748,7 +748,7 @@ export class App implements OnInit, OnDestroy {
 
   /**
    * Slim detail-header proxies — the studio tab-bar surfaces a few
-   * task-tab actions that live on the embedded JobDetailComponent.
+   * task-tab actions that live on the embedded TaskDetailComponent.
    * Forward the click through the ViewChild so the action runs on the
    * same component instance the user is looking at.
    */
@@ -784,7 +784,7 @@ export class App implements OnInit, OnDestroy {
 
   constructor() {
     // Cycle 10a: refresh the kanban after a successful create — the
-    // CreateJobFormService doesn't call jobService.refresh itself
+    // CreateTaskFormService doesn't call jobService.refresh itself
     // because that orchestration concern lives here. F2: also flag the
     // new card so it pulses + scrolls into view, and surface a toast
     // with the title that the operator just submitted.
@@ -799,7 +799,7 @@ export class App implements OnInit, OnDestroy {
       }, 2500);
     });
 
-    // Cycle 10c: bridge TriageController to the JobDetailComponent's
+    // Cycle 10c: bridge TriageController to the TaskDetailComponent's
     // "acting" highlight via a closure so the ViewChild can resolve
     // lazily at call time. The closure is fine to register here because
     // it doesn't dereference jobDetailRef until invoked.
@@ -1118,13 +1118,13 @@ export class App implements OnInit, OnDestroy {
     this.jobService.refresh();
   }
 
-  openDetail(job: JobInfo) {
+  openDetail(job: TaskInfo) {
     this.jobSelection.openDetail(job);
   }
   closeDetail() {
     this.jobSelection.closeDetail();
   }
-  isSelectedJob(job: JobInfo): boolean {
+  isSelectedJob(job: TaskInfo): boolean {
     return this.jobSelection.isSelected(job);
   }
 
@@ -1189,7 +1189,7 @@ export class App implements OnInit, OnDestroy {
     this.dispatchStudioTriage(sel.info, button);
   }
 
-  private dispatchStudioTriage(info: JobInfo, button: TriageButton): void {
+  private dispatchStudioTriage(info: TaskInfo, button: TriageButton): void {
     const id = button.id;
     switch (button.intent.kind) {
       case 'move':
@@ -1215,23 +1215,23 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // to TriageController. The shell forwards events from JobDetailComponent.
-  onTriageMove(info: JobInfo, ev: { targetState: string; actionId: string }) {
+  // to TriageController. The shell forwards events from TaskDetailComponent.
+  onTriageMove(info: TaskInfo, ev: { targetState: string; actionId: string }) {
     this.triage.move(info, ev);
   }
-  onTriageMoveToTop(info: JobInfo, ev: { actionId: string }) {
+  onTriageMoveToTop(info: TaskInfo, ev: { actionId: string }) {
     this.triage.moveToTop(info, ev);
   }
-  onTriageDelete(info: JobInfo, ev: { actionId: string }) {
+  onTriageDelete(info: TaskInfo, ev: { actionId: string }) {
     this.triage.delete(info, ev);
   }
-  onTriageStart(info: JobInfo, ev: { actionId: string }) {
+  onTriageStart(info: TaskInfo, ev: { actionId: string }) {
     this.triage.start(info, ev);
   }
-  onTriageNext(info: JobInfo) {
+  onTriageNext(info: TaskInfo) {
     this.triage.next(info);
   }
-  onTriagePrev(info: JobInfo) {
+  onTriagePrev(info: TaskInfo) {
     this.triage.prev(info);
   }
   onCompleteAndNextReview() {
@@ -1245,7 +1245,7 @@ export class App implements OnInit, OnDestroy {
   onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) {
     this.boardMutations.reorderJobs(event);
   }
-  onDeleteFromBoard(job: JobInfo) {
+  onDeleteFromBoard(job: TaskInfo) {
     this.boardMutations.deleteFromBoard(job);
   }
 
@@ -1256,7 +1256,7 @@ export class App implements OnInit, OnDestroy {
    * "Do Next" already drove. Toasts on success so the operator gets a
    * clear "the runner now sees this first" moment.
    */
-  onPickNext(job: JobInfo) {
+  onPickNext(job: TaskInfo) {
     this.jobService.moveJobToTop(job.id, job.watchPath).subscribe({
       next: () => {
         this.notifications.success(
@@ -1274,10 +1274,10 @@ export class App implements OnInit, OnDestroy {
       },
     });
   }
-  onDeleteFromDetail(info: JobInfo) {
+  onDeleteFromDetail(info: TaskInfo) {
     this.boardMutations.deleteFromDetail(info);
   }
-  onStateChangeFromDetail(info: JobInfo, targetState: string) {
+  onStateChangeFromDetail(info: TaskInfo, targetState: string) {
     this.boardMutations.changeStateFromDetail(info, targetState);
   }
   onArchiveAll() {
@@ -1549,7 +1549,7 @@ export class App implements OnInit, OnDestroy {
    * originating job. Mirrors the open-task pattern used by the
    * orchestrator feed.
    */
-  onOpenTaskFromReel(s: JobScreenshot): void {
+  onOpenTaskFromReel(s: TaskScreenshot): void {
     this.closeWorkspaceScreenshots();
     if (!s?.jobId || !s?.watchPath) return;
     history.replaceState(
@@ -1637,7 +1637,7 @@ export class App implements OnInit, OnDestroy {
    * board is scoped to one project, or every job in the lane belongs to
    * the same project. Otherwise return null so the chip stays hidden.
    */
-  laneAutoProject(state: string, jobs: JobInfo[]): string | null {
+  laneAutoProject(state: string, jobs: TaskInfo[]): string | null {
     if (state !== '3-progress') return null;
     // Prefer the board's scoped project (Picker selection); fall back to
     // the only project actually in the lane.
@@ -1652,7 +1652,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   /** Current runner mode (lookup mirrors the studio-shell header chip). */
-  laneAutoMode(state: string, jobs: JobInfo[]): string {
+  laneAutoMode(state: string, jobs: TaskInfo[]): string {
     const proj = this.laneAutoProject(state, jobs);
     if (!proj) return 'manual';
     return this.jobService.runnerStatus().projects[proj]?.mode ?? 'manual';
@@ -1663,7 +1663,7 @@ export class App implements OnInit, OnDestroy {
    * the lane is not project-scoped). Drives the In-Progress lane's status
    * cluster pills (RUNNING / mode / Q:N).
    */
-  laneAutoRunner(state: string, jobs: JobInfo[]) {
+  laneAutoRunner(state: string, jobs: TaskInfo[]) {
     const proj = this.laneAutoProject(state, jobs);
     if (!proj) return null;
     return this.jobService.runnerStatus().projects[proj] ?? null;

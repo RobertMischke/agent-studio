@@ -1,4 +1,4 @@
-import type { JobOutcomeIssue, JobSummaryStatus } from '../../../../models/task.model';
+import type { TaskOutcomeIssue, TaskSummaryStatus } from '../../../../models/task.model';
 
 /**
  * Three-state simplified verdict shown at the very top of the protocol pane.
@@ -23,10 +23,10 @@ export interface ProtocolVerdict {
 
 export interface ProtocolVerdictInputs {
   isRunning: boolean;
-  summaryStatus: JobSummaryStatus;
+  summaryStatus: TaskSummaryStatus;
   /** Raw markdown of status.md (may be null/empty when no run yet). */
   statusMarkdown: string | null | undefined;
-  outcomeIssue: JobOutcomeIssue | null | undefined;
+  outcomeIssue: TaskOutcomeIssue | null | undefined;
   /** Has any cli-output / log activity been observed for this job at all? */
   hasActivity: boolean;
 }

@@ -3,7 +3,7 @@ import { Observable, Subject } from 'rxjs';
 import { CliType, CLI_TYPES, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 import { CliCatalogStore } from '../../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { CLIENT_ID } from '../../../services/client-id.interceptor';
@@ -22,12 +22,12 @@ import { CLIENT_ID } from '../../../services/client-id.interceptor';
  * cross-feature coupling.
  *
  * Refresh-after-submit is exposed as the `submitted$` event the shell
- * subscribes to; the service does not call `JobService.refresh` itself
+ * subscribes to; the service does not call `TaskService.refresh` itself
  * because the shell owns that orchestration concern.
  */
 @Injectable({ providedIn: 'root' })
-export class CreateJobFormService {
-  private readonly jobService = inject(JobService);
+export class CreateTaskFormService {
+  private readonly jobService = inject(TaskService);
   private readonly catalogStore = inject(CliCatalogStore);
   private readonly errorDialog = inject(ErrorDialogService);
 
@@ -80,7 +80,7 @@ export class CreateJobFormService {
     targetState?: string;
   }): void {
     const requested = opts.targetState ?? '';
-    this.newTargetState = (CreateJobFormService.ALLOWED_TARGET_STATES as readonly string[]).includes(requested)
+    this.newTargetState = (CreateTaskFormService.ALLOWED_TARGET_STATES as readonly string[]).includes(requested)
       ? requested
       : '1-preparation';
     this.newWatchPath = pickCreateWatchPath(opts.watchPaths, opts.activeProjects);

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input } from '@angular/core';
-import type { JobInfo } from '../../models/task.model';
+import type { TaskInfo } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
 import { cliTypeLabel } from '../../services/format.util';
 import { InfoButtonComponent } from '../info-button/info-button.component';
@@ -28,7 +28,7 @@ import { laneDocTopic } from '../info-button/lane-doc-topic';
   },
 })
 export class TaskStatusCardComponent {
-  readonly job = input.required<JobInfo>();
+  readonly job = input.required<TaskInfo>();
   readonly variant = input<'popover' | 'inline'>('inline');
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));

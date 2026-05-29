@@ -1,14 +1,14 @@
 import { Injectable, OnDestroy, computed, signal, inject } from '@angular/core';
-import type { JobInfo } from '../../../models/task.model';
+import type { TaskInfo } from '../../../models/task.model';
 import type {
   GitFileChange,
   GitStatus,
-  JobCommitDetail,
-  JobCommitInfo,
-  JobExcludedCommitInfo,
+  TaskCommitDetail,
+  TaskCommitInfo,
+  TaskExcludedCommitInfo,
   RecentCommit,
 } from '../../../features/git';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import {
   setVisibleInterval,
@@ -22,13 +22,13 @@ import {
  * its body, the commit-message draft, and the generate/commit progress
  * flags.
  *
- * Provided locally on JobDetailComponent. The component supplies the
- * current `JobInfo` (via setJob) and the service drives all backend
+ * Provided locally on TaskDetailComponent. The component supplies the
+ * current `TaskInfo` (via setJob) and the service drives all backend
  * traffic + signals from there.
  */
 @Injectable()
 export class GitPaneService implements OnDestroy {
-  private jobService = inject(JobService);
+  private jobService = inject(TaskService);
   private errorDialog = inject(ErrorDialogService);
 
   readonly status = signal<GitStatus | null>(null);
@@ -87,28 +87,28 @@ export class GitPaneService implements OnDestroy {
   // pane switches from "live working tree" to "what this task changed".
   // That data survives future work in the repo and is what the user wants
   // to see when reviewing a finished task.
-  readonly commitDetail = signal<JobCommitDetail | null>(null);
+  readonly commitDetail = signal<TaskCommitDetail | null>(null);
   readonly viewMode = computed<'commit' | 'worktree'>(() =>
     this.commitDetail()?.commit ? 'commit' : 'worktree',
   );
 
   /**
    * Ordered chain of commits attributed to this task (oldest -&gt; newest).
-   * Mirrors <c>JobInfo.commits</c>; surfaces an in-memory list so the
+   * Mirrors <c>TaskInfo.commits</c>; surfaces an in-memory list so the
    * git-pane can render a multi-commit strip and let the user pick which
    * commit's detail to display.
    */
-  readonly commitChain = signal<JobCommitInfo[]>([]);
+  readonly commitChain = signal<TaskCommitInfo[]>([]);
   /** SHA of the commit currently rendered in the commit detail view. Defaults to the newest entry. */
   readonly selectedCommitSha = signal<string | null>(null);
 
   /**
    * Commits the attribution rule withheld from this task (ADR
-   * "Commit-Attribution-Regel"). Mirrors <c>JobInfo.excludedCommits</c>;
+   * "Commit-Attribution-Regel"). Mirrors <c>TaskInfo.excludedCommits</c>;
    * surfaced under the git-pane "(N excluded)" expander so the operator can
    * see why each was held back and restore it if the rule got it wrong.
    */
-  readonly excludedCommits = signal<JobExcludedCommitInfo[]>([]);
+  readonly excludedCommits = signal<TaskExcludedCommitInfo[]>([]);
   /** True while an exclude/include override round-trip is in flight. */
   readonly overrideBusy = signal(false);
 
@@ -129,7 +129,7 @@ export class GitPaneService implements OnDestroy {
     return this.recentCommits().filter((c) => !taken.has(c.sha));
   });
 
-  private currentJob: JobInfo | null = null;
+  private currentJob: TaskInfo | null = null;
   private refreshTimer: VisibleIntervalHandle | null = null;
 
   /** Start polling git status every `intervalMs` ms. No-op if already running. */
@@ -162,7 +162,7 @@ export class GitPaneService implements OnDestroy {
    * state when the job actually changes; same-job calls are no-ops so
    * we don't blow away in-flight selections.
    */
-  setJob(info: JobInfo | null | undefined): void {
+  setJob(info: TaskInfo | null | undefined): void {
     const sameJob =
       this.currentJob &&
       info &&
@@ -222,7 +222,7 @@ export class GitPaneService implements OnDestroy {
     this.selectedCommitSha.set(sha);
     this.selectedDiffPath.set(null);
     this.diffText.set('');
-    // Compose a JobCommitDetail header from the chain entry directly,
+    // Compose a TaskCommitDetail header from the chain entry directly,
     // then load the file list from the per-sha endpoint. We don't have
     // a single "commit by sha" endpoint that returns both, so we shape
     // the same object here for the template's sake.
@@ -240,7 +240,7 @@ export class GitPaneService implements OnDestroy {
 
   /**
    * Load the recorded-commit snapshot for the current job. Tasks that have
-   * been auto-committed on progress→review carry a JobCommitInfo on
+   * been auto-committed on progress→review carry a TaskCommitInfo on
    * job.json — the backend re-derives the file list from `git show` so the
    * pane stays accurate even after history rewrites.
    */
@@ -311,7 +311,7 @@ export class GitPaneService implements OnDestroy {
     // right now. When the selected commit is one of the older entries on
     // the chain (not the newest singular commit), route to the per-sha
     // diff endpoint instead so the displayed diff matches the picked
-    // commit, not whichever one happens to be on `JobInfo.commit`.
+    // commit, not whichever one happens to be on `TaskInfo.commit`.
     if (this.viewMode() === 'commit') {
       const selectedSha = this.selectedCommitSha();
       const newest = this.commitChain()[this.commitChain().length - 1]?.sha ?? null;

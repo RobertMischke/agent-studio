@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { JobDetailComponent } from './task-detail';
+import { TaskDetailComponent } from './task-detail';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -18,7 +18,7 @@ import { JobDetailComponent } from './task-detail';
  * note instead of a red test, which keeps this generator-driven layer
  * stable across template tweaks.
  */
-describe('JobDetailComponent (smoke)', () => {
+describe('TaskDetailComponent (smoke)', () => {
   it('compiles + instantiates without throwing', async () => {
     // The smoke pattern can crash inside Angular's TestBed compile path when
     // module-load order leaves a transitive dependency undefined (cycle or
@@ -28,7 +28,7 @@ describe('JobDetailComponent (smoke)', () => {
     // siblings + the generator at scripts/generate-smoke-specs.mjs.
     try {
       await TestBed.configureTestingModule({
-        imports: [JobDetailComponent],
+        imports: [TaskDetailComponent],
         providers: [
           provideZonelessChangeDetection(),
           provideHttpClient(),
@@ -36,15 +36,15 @@ describe('JobDetailComponent (smoke)', () => {
           provideRouter([]),
         ],
       }).compileComponents();
-      const fixture = TestBed.createComponent(JobDetailComponent);
+      const fixture = TestBed.createComponent(TaskDetailComponent);
       fixture.componentRef.setInput('detail', undefined);
       try { fixture.detectChanges(); } catch (e) {
-        console.warn('[smoke] JobDetailComponent initial render skipped:', (e as Error).message);
+        console.warn('[smoke] TaskDetailComponent initial render skipped:', (e as Error).message);
       }
       expect(fixture.componentInstance).toBeTruthy();
     } catch (e) {
-      console.warn('[smoke] JobDetailComponent TestBed setup skipped:', (e as Error).message);
-      expect(JobDetailComponent).toBeTruthy();
+      console.warn('[smoke] TaskDetailComponent TestBed setup skipped:', (e as Error).message);
+      expect(TaskDetailComponent).toBeTruthy();
     }
   });
 });

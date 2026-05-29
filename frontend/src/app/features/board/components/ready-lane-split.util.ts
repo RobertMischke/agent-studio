@@ -1,4 +1,4 @@
-import { JobInfo } from '../../../models/task.model';
+import { TaskInfo } from '../../../models/task.model';
 
 /**
  * Lane phases for the 2-ready filesystem state. Mirrors backend
@@ -18,7 +18,7 @@ export type ReadyPhase = (typeof READY_PHASES)[keyof typeof READY_PHASES];
 
 export interface ReadyLaneSplit {
   /** Human Ready: cards the user has marked ready, no intake verdict yet. */
-  humanReady: JobInfo[];
+  humanReady: TaskInfo[];
   /**
    * Orchestrator Intake: cards the orchestrator-intake loop is processing
    * (`intake-running`), has flagged for human attention (`intake-blocked`),
@@ -26,7 +26,7 @@ export interface ReadyLaneSplit {
    * the UI render Intake as one column with phase-aware chips on cards;
    * the lane stays empty when no project has intake enabled.
    */
-  intake: JobInfo[];
+  intake: TaskInfo[];
 }
 
 /**
@@ -38,9 +38,9 @@ export interface ReadyLaneSplit {
  *
  * Pure so the lane projection stays unit-testable without TestBed.
  */
-export function splitReadyByPhase(jobs: readonly JobInfo[]): ReadyLaneSplit {
-  const humanReady: JobInfo[] = [];
-  const intake: JobInfo[] = [];
+export function splitReadyByPhase(jobs: readonly TaskInfo[]): ReadyLaneSplit {
+  const humanReady: TaskInfo[] = [];
+  const intake: TaskInfo[] = [];
   for (const j of jobs) {
     const phase = j.phase ?? READY_PHASES.humanReady;
     if (

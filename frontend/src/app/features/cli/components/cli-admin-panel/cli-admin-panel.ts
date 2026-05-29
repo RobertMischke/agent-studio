@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport } from '../../../../features/quota';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
@@ -43,7 +43,7 @@ interface CapRow {
 })
 export class CliAdminPanelComponent implements OnInit, OnDestroy {
   private readonly quotaApi = inject(QuotaApiService);
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   readonly loading = signal(false);
   readonly errorMsg = signal<string | null>(null);

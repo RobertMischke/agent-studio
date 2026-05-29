@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { TaskStatusCardComponent } from '../../../../components/task-status-card';
-import type { JobInfo } from '../../../../models/task.model';
+import type { TaskInfo } from '../../../../models/task.model';
 
 /**
  * Full-screen "Activity" tab. Looks up the owning job by jobKey and
@@ -23,11 +23,11 @@ import type { JobInfo } from '../../../../models/task.model';
   styleUrl: './activity-tab-view.component.scss',
 })
 export class StudioActivityViewComponent {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   readonly jobKey = input.required<string>();
 
-  readonly job = computed<JobInfo | null>(() => {
+  readonly job = computed<TaskInfo | null>(() => {
     const key = this.jobKey();
     return this.jobService.jobs().find(j => j.jobKey === key) ?? null;
   });

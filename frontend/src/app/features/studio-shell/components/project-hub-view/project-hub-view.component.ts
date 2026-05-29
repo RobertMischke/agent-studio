@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
-import type { JobInfo } from '../../../../models/task.model';
+import { TaskService } from '../../../../services/task.service';
+import type { TaskInfo } from '../../../../models/task.model';
 import {
   ProjectShellComponent,
   ProjectDetailComponent,
@@ -68,7 +68,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   styleUrl: './project-hub-view.component.scss',
 })
 export class ProjectHubViewComponent {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly overlays = inject(ProjectOverlaysService);
 
   readonly projectName = input.required<string>();
@@ -87,11 +87,11 @@ export class ProjectHubViewComponent {
     });
   }
 
-  readonly jobsForProject = computed<JobInfo[]>(() => {
+  readonly jobsForProject = computed<TaskInfo[]>(() => {
     const grouped = this.jobService.grouped();
-    const out: JobInfo[] = [];
+    const out: TaskInfo[] = [];
     for (const lane of Object.values(grouped)) {
-      for (const job of lane as JobInfo[]) {
+      for (const job of lane as TaskInfo[]) {
         if (job.projectName === this.projectName()) out.push(job);
       }
     }

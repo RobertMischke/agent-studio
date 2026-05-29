@@ -7,7 +7,7 @@ import {
   inject,
 } from '@angular/core';
 import { TaskStatusCardComponent } from './task-status-card.component';
-import type { JobInfo } from '../../models/task.model';
+import type { TaskInfo } from '../../models/task.model';
 
 const GAP = 8;
 const VIEWPORT_PAD = 6;
@@ -40,7 +40,7 @@ export class TaskStatusCardPopover {
   private currentAnchor: HTMLElement | null = null;
   private hoverIntent = false;
 
-  show(anchor: HTMLElement, job: JobInfo): void {
+  show(anchor: HTMLElement, job: TaskInfo): void {
     const host = this.ensureHost();
     const card = this.ensureCard();
     this.currentAnchor = anchor;

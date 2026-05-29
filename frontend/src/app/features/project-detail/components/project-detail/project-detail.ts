@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
@@ -71,7 +71,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly openFeed = output<string>();
   readonly openReport = output<AnalysisReport>();
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   readonly settings = signal<ProjectSettingsRow | null>(null);
   readonly runnerStatus = signal<RunnerStatus | null>(null);
@@ -264,7 +264,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       error: () => { /* silent; keep last snapshot */ }
     });
     // Board feed stays separate (it covers all projects, not just this
-    // one) and is owned by JobService's own 2 s poll. We just nudge it.
+    // one) and is owned by TaskService's own 2 s poll. We just nudge it.
     this.jobService.refresh(true);
     setTimeout(() => this.grouped.set(this.jobService.grouped()), 50);
   }

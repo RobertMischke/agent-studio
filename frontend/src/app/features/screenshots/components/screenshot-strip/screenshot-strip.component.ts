@@ -11,7 +11,7 @@ import {
   signal,
 } from '@angular/core';
 
-import type { JobScreenshot } from '../../../../features/screenshots';
+import type { TaskScreenshot } from '../../../../features/screenshots';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 
@@ -46,11 +46,11 @@ import { TooltipDirective } from '../../../../components/tooltip';
   styleUrl: './screenshot-strip.component.scss',
 })
 export class ScreenshotStripComponent {
-  readonly screenshots = input.required<JobScreenshot[]>();
+  readonly screenshots = input.required<TaskScreenshot[]>();
   /** 'task' = per-task strip in protocol pane; 'reel' = workspace reel. */
   readonly variant = input<'task' | 'reel'>('task');
 
-  readonly openTask = output<JobScreenshot>();
+  readonly openTask = output<TaskScreenshot>();
 
   readonly activeIndex = signal<number>(-1);
 
@@ -60,7 +60,7 @@ export class ScreenshotStripComponent {
       : null,
   );
 
-  readonly current = computed<JobScreenshot | null>(() => {
+  readonly current = computed<TaskScreenshot | null>(() => {
     const i = this.activeIndex();
     if (i < 0) return null;
     const all = this.screenshots();
@@ -105,7 +105,7 @@ export class ScreenshotStripComponent {
     this.pathCopyState.set('idle');
   }
 
-  thumbTitle(s: JobScreenshot): string {
+  thumbTitle(s: TaskScreenshot): string {
     const ts = formatLocalDateTime(s.timestampUtc);
     const lines = [s.caption, s.fileName, ts];
     if (s.projectName) lines.push(s.projectName);
@@ -130,14 +130,14 @@ export class ScreenshotStripComponent {
     return formatLocalDateTime(iso);
   }
 
-  async copyLocalPath(s: JobScreenshot): Promise<void> {
+  async copyLocalPath(s: TaskScreenshot): Promise<void> {
     if (!s.localPath) return;
     const ok = await copyTextToClipboard(s.localPath);
     this.pathCopyState.set(ok ? 'copied' : 'failed');
     setTimeout(() => this.pathCopyState.set('idle'), 1800);
   }
 
-  onOpenTask(s: JobScreenshot): void {
+  onOpenTask(s: TaskScreenshot): void {
     this.openTask.emit(s);
   }
 

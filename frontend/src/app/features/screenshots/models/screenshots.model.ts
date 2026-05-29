@@ -6,7 +6,7 @@
  * `<job>/results/`; the relativePath always begins with `results/`.
  */
 
-export interface JobScreenshot {
+export interface TaskScreenshot {
   jobId: string;
   jobTitle: string;
   projectName: string;
@@ -23,13 +23,13 @@ export interface JobScreenshot {
   timestampUtc: string;
 }
 
-export interface JobScreenshotsResponse {
+export interface TaskScreenshotsResponse {
   jobId: string;
-  screenshots: JobScreenshot[];
+  screenshots: TaskScreenshot[];
 }
 
 export interface WorkspaceScreenshotsResponse {
   windowHours: number;
   projectFilter: string | null;
-  screenshots: JobScreenshot[];
+  screenshots: TaskScreenshot[];
 }

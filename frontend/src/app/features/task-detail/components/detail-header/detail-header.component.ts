@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
-import { JobInfo } from '../../../../models/task.model';
+import { TaskInfo } from '../../../../models/task.model';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
@@ -38,7 +38,7 @@ import {
   styleUrl: './detail-header.component.scss'
 })
 export class DetailHeaderComponent {
-  readonly info = input.required<JobInfo>();
+  readonly info = input.required<TaskInfo>();
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
   readonly savingTitle = input(false);

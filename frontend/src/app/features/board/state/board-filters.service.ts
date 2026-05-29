@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { GroupedJobs, JobInfo } from '../../../models/task.model';
-import { JobService } from '../../../services/task.service';
+import { GroupedJobs, TaskInfo } from '../../../models/task.model';
+import { TaskService } from '../../../services/task.service';
 import { ClientService } from '../../../services/client.service';
 import { TagRegistryStore } from '../../../services/tag-registry.store';
 import { projectIdentity } from '../../../services/project-identity.util';
@@ -38,7 +38,7 @@ export interface ActiveFilterPill {
 
 @Injectable({ providedIn: 'root' })
 export class BoardFiltersService {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly clientService = inject(ClientService);
   private readonly tagRegistryStore = inject(TagRegistryStore);
 
@@ -100,7 +100,7 @@ export class BoardFiltersService {
     const query = this.searchQuery().trim().toLowerCase();
     const noFilters = active.size === 0 && !ownerId && types.size === 0 && tagIds.size === 0 && !query;
     if (noFilters) return grouped;
-    const matchesQuery = (j: JobInfo) => {
+    const matchesQuery = (j: TaskInfo) => {
       if (!query) return true;
       const haystack = [
         j.title, j.id, j.projectName, j.agent,
@@ -110,7 +110,7 @@ export class BoardFiltersService {
       ].join(' ').toLowerCase();
       return haystack.includes(query);
     };
-    const filterJobs = (jobs: JobInfo[]) => jobs.filter(j => {
+    const filterJobs = (jobs: TaskInfo[]) => jobs.filter(j => {
       if (active.size > 0 && !active.has(j.projectName)) return false;
       if (ownerId && j.ownerClientId !== ownerId) return false;
       if (types.size > 0) {

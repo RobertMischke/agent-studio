@@ -4,8 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { JobDetailPrefetchService } from './job-detail-prefetch.service';
-import type { JobDetail } from '../../../models/task.model';
+import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
+import type { TaskDetail } from '../../../models/task.model';
 
 /**
  * Covers the lane-pager prefetch cache that backs the
@@ -22,11 +22,11 @@ import type { JobDetail } from '../../../models/task.model';
  * without them the optimistic navigation could either fan out N parallel
  * GETs or serve the same stale snapshot twice in a row.
  */
-describe('JobDetailPrefetchService', () => {
-  let service: JobDetailPrefetchService;
+describe('TaskDetailPrefetchService', () => {
+  let service: TaskDetailPrefetchService;
   let http: HttpTestingController;
 
-  const makeDetail = (id: string, watchPath: string): JobDetail =>
+  const makeDetail = (id: string, watchPath: string): TaskDetail =>
     ({
       info: {
         id,
@@ -43,7 +43,7 @@ describe('JobDetailPrefetchService', () => {
       log: [],
       summaryState: null,
       reviewEvidence: [],
-    }) as unknown as JobDetail;
+    }) as unknown as TaskDetail;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -55,7 +55,7 @@ describe('JobDetailPrefetchService', () => {
       ],
     }).compileComponents();
 
-    service = TestBed.inject(JobDetailPrefetchService);
+    service = TestBed.inject(TaskDetailPrefetchService);
     http = TestBed.inject(HttpTestingController);
     // `providedIn: 'root'` plus vitest's worker-level module cache means
     // an entry could carry over from a sibling spec file; clear so each

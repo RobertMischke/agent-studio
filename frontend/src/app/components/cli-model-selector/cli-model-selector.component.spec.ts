@@ -8,7 +8,7 @@ import { of } from 'rxjs';
 import { CliModelSelectorComponent } from './cli-model-selector.component';
 import type { CliModelInfo } from '../../features/cli';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
-import { JobService } from '../../services/task.service';
+import { TaskService } from '../../services/task.service';
 
 /**
  * Behavioural specs for the unified CLI + model picker. Generalised from
@@ -124,7 +124,7 @@ describe('CliModelSelectorComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         {
-          provide: JobService,
+          provide: TaskService,
           useValue: {
             getCliModelCatalog: (cli: string) => of({
               models: cli === 'codex' ? codexModels : claudeModels,
@@ -194,7 +194,7 @@ describe('CliModelSelectorComponent', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         {
-          provide: JobService,
+          provide: TaskService,
           useValue: {
             getCliModelCatalog: (cli: string) => of({
               models: cli === 'codex' ? codexModels : claudeModels,

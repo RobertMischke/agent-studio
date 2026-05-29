@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import type { OrchestratorSession } from '../../../../features/orchestrator';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -24,7 +24,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
   styleUrl: './global-orchestrator-card.scss'
 })
 export class GlobalOrchestratorCardComponent implements OnInit, OnDestroy {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   readonly session = signal<OrchestratorSession | null>(null);
   readonly loading = signal(true);
   private timer: ReturnType<typeof setInterval> | null = null;

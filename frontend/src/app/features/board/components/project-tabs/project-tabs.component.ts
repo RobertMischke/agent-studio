@@ -6,7 +6,7 @@ export interface ProjectRunnerIndicator { icon: string; cls: string; }
 
 /**
  * Compact token rollup rendered next to the project name on the board's
- * project chip strip. Aggregated client-side from every `JobInfo.tokenSummary`
+ * project chip strip. Aggregated client-side from every `TaskInfo.tokenSummary`
  * for the project so it reflects the same per-task numbers the kanban card
  * popover shows; the orchestrator-log-based `/api/projects/.../token-summary`
  * endpoint feeds the deeper drill-down on the project page.

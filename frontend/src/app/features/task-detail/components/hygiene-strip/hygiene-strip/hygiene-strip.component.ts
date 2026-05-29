@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 
-import type { JobInfo } from '../../../../../models/task.model';
+import type { TaskInfo } from '../../../../../models/task.model';
 import type { GitHygieneStatus } from '../../../../../features/git';
 import { GitHygieneService } from '../../../../../services/git-hygiene.service';
 import { ErrorDialogService } from '../../../../../services/error-dialog.service';
@@ -41,7 +41,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
   styleUrls: ['./hygiene-strip.component.scss'],
 })
 export class HygieneStripComponent implements OnDestroy {
-  readonly job = input.required<JobInfo>();
+  readonly job = input.required<TaskInfo>();
   /**
    * Whether this job is the runner's currently-active job for its
    * project. Worktree-isolation rule: the "Accepted task work is
@@ -137,13 +137,13 @@ export class HygieneStripComponent implements OnDestroy {
     });
   }
 
-  private startPolling(j: JobInfo): void {
+  private startPolling(j: TaskInfo): void {
     this.stopPolling();
     this.refreshOnce(j);
     this.pollTimer = setVisibleInterval(() => this.refreshOnce(j), 15_000);
   }
 
-  private refreshOnce(j: JobInfo): void {
+  private refreshOnce(j: TaskInfo): void {
     this.hygieneSvc.fetchForJob(j.id, j.watchPath).subscribe({
       next: (s) => this.hygiene.set(s),
       error: () => {

@@ -1,9 +1,9 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { JobDetail, JobInfo } from '../../../models/task.model';
-import { JobService } from '../../../services/task.service';
+import { TaskDetail, TaskInfo } from '../../../models/task.model';
+import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
-import { JobDetailPrefetchService } from './job-detail-prefetch.service';
+import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { LanePagerService } from './lane-pager.service';
 import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
 
@@ -12,7 +12,7 @@ import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
  * job" state across the shell. Lifted out of `app.ts` per ADR-0034.
  *
  * Responsibilities:
- *   - `selected`        which JobDetail (if any) the side panel renders
+ *   - `selected`        which TaskDetail (if any) the side panel renders
  *   - `triageToast`     transient banner shown by the triage panel
  *   - `triageLanePeers` siblings in the same lane (drives j/k navigation)
  *   - URL sync          `?job=<id>&watchPath=<wp>` reproduces the open detail
@@ -20,18 +20,18 @@ import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
  *                       flash back open after Esc/lane-cleared close
  *
  * The triage HANDLERS (onTriageMove/Delete/Start, advanceToNextInLane)
- * stay in the shell because they orchestrate JobService mutations,
- * ErrorDialogService, and the JobDetailComponent ViewChild
+ * stay in the shell because they orchestrate TaskService mutations,
+ * ErrorDialogService, and the TaskDetailComponent ViewChild
  * (`clearTriageActing`). This service is just the selection state +
  * navigation primitives those handlers call.
  */
 @Injectable({ providedIn: 'root' })
-export class JobSelectionService {
-  private readonly jobService = inject(JobService);
+export class TaskSelectionService {
+  private readonly jobService = inject(TaskService);
   private readonly errorDialog = inject(ErrorDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly pager = inject(LanePagerService);
-  private readonly prefetch = inject(JobDetailPrefetchService);
+  private readonly prefetch = inject(TaskDetailPrefetchService);
 
   /** How many slots ahead of the current pager index to warm. */
   private static readonly PREFETCH_LOOKAHEAD = 2;
@@ -77,11 +77,11 @@ export class JobSelectionService {
     // Detail prefetch: warm the next 1..PREFETCH_LOOKAHEAD entries in the
     // current pager snapshot whenever it changes. This is what makes the
     // accept -> next-task navigation feel instant: by the time the user
-    // clicks Mark-as-Done, the next peer's JobDetail is already cached.
+    // clicks Mark-as-Done, the next peer's TaskDetail is already cached.
     effect(() => {
       const snap = this.pager.snapshot();
       if (!snap) return;
-      const lookahead = JobSelectionService.PREFETCH_LOOKAHEAD;
+      const lookahead = TaskSelectionService.PREFETCH_LOOKAHEAD;
       for (let offset = 1; offset <= lookahead; offset++) {
         const entry = snap.jobs[snap.index + offset];
         if (!entry) break;
@@ -125,7 +125,7 @@ export class JobSelectionService {
     } catch { /* the click mark may have been GC'd; not fatal */ }
   }
 
-  readonly selected = signal<JobDetail | null>(null);
+  readonly selected = signal<TaskDetail | null>(null);
 
   /**
    * Transient banner shown by the triage panel auto-advance flow.
@@ -159,7 +159,7 @@ export class JobSelectionService {
    * sub-lanes (e.g. `2-ready-intake`) merge back into their parent
    * because they share the same disk lane.
    */
-  readonly triageLanePeers = computed<JobInfo[]>(() => {
+  readonly triageLanePeers = computed<TaskInfo[]>(() => {
     const sel = this.selected();
     if (!sel) return [];
     return this.peersForLane(sel.info.state);
@@ -171,7 +171,7 @@ export class JobSelectionService {
    * still the previous detail (or null) and the lookup must key off the
    * incoming job's state, not the stale signal.
    */
-  peersForLane(state: string): JobInfo[] {
+  peersForLane(state: string): TaskInfo[] {
     const g = this.jobService.grouped();
     switch (state) {
       case '0-backlog':              return g.backlog ?? [];
@@ -189,7 +189,7 @@ export class JobSelectionService {
     }
   }
 
-  isSelected(job: JobInfo): boolean {
+  isSelected(job: TaskInfo): boolean {
     return this.selected()?.info.jobKey === job.jobKey;
   }
 
@@ -199,7 +199,7 @@ export class JobSelectionService {
    * pass `{ keepPagerSnapshot: true }` from the pager step itself so
    * the in-progress iteration is preserved rather than re-captured.
    */
-  openDetail(job: JobInfo, opts: { keepPagerSnapshot?: boolean } = {}): void {
+  openDetail(job: TaskInfo, opts: { keepPagerSnapshot?: boolean } = {}): void {
     // Step 1 of the perf-baseline contract: job-select click span. The
     // accept-to-next-task pipeline owns its own marks via markAcceptClick;
     // this one covers ad-hoc board clicks where no accept-click preceded.
@@ -352,7 +352,7 @@ export class JobSelectionService {
    * publish an intermediate state). Caller is responsible for the
    * URL update + token check; we just set the signal.
    */
-  setSelectedFromAdvance(detail: JobDetail, expectedToken: number): void {
+  setSelectedFromAdvance(detail: TaskDetail, expectedToken: number): void {
     if (expectedToken !== this.openDetailToken) return;
     this.selected.set(detail);
     this.markNextTaskRendered();

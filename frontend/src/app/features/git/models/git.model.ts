@@ -61,7 +61,7 @@ export interface GitHygieneStatus {
   lastCommitShortSha: string | null;
   lastCommitSubject: string | null;
   lastCommitAtUtc: string | null;
-  job: JobHygieneContext | null;
+  job: TaskHygieneContext | null;
   error: string | null;
 }
 
@@ -72,7 +72,7 @@ export interface GitHygieneStatus {
  * and belong on the project-level surface, never on a per-task
  * detail page.
  */
-export interface JobHygieneContext {
+export interface TaskHygieneContext {
   jobId: string;
   state: string;
   jobInfoCommitPresent: boolean;
@@ -80,7 +80,7 @@ export interface JobHygieneContext {
   acceptedTaskUncommitted: boolean;
 }
 
-export interface JobCommitInfo {
+export interface TaskCommitInfo {
   sha: string;
   shortSha: string;
   message: string;
@@ -101,9 +101,9 @@ export interface JobCommitInfo {
  * A commit the attribution rule withheld from this task. Surfaced under the
  * "(N excluded)" expander in the git pane; `reason` explains why it was held
  * back and `manual` marks an operator exclusion. Mirrors backend
- * `JobExcludedCommitInfo`.
+ * `TaskExcludedCommitInfo`.
  */
-export interface JobExcludedCommitInfo {
+export interface TaskExcludedCommitInfo {
   sha: string;
   shortSha: string;
   reason: string;
@@ -112,8 +112,8 @@ export interface JobExcludedCommitInfo {
   manual?: boolean;
 }
 
-export interface JobCommitDetail {
-  commit: JobCommitInfo | null;
+export interface TaskCommitDetail {
+  commit: TaskCommitInfo | null;
   files: GitFileChange[];
 }
 

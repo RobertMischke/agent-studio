@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CodeReviewPanelComponent } from './code-review-panel.component';
-import type { JobInfo } from '../../../../../models/task.model';
+import type { TaskInfo } from '../../../../../models/task.model';
 
 /**
  * Behaviour spec for the user-triggered code-review panel. Pins the four
@@ -36,7 +36,7 @@ describe('CodeReviewPanelComponent', () => {
     }).compileComponents();
   }
 
-  function seedJob(): JobInfo {
+  function seedJob(): TaskInfo {
     return {
       id: 'demo-job',
       jobKey: 'p::demo-job',
@@ -52,7 +52,7 @@ describe('CodeReviewPanelComponent', () => {
       folderPath: 'C:/projects/foo/3-progress/demo-job',
       createdAt: '2026-05-01T00:00:00Z',
       sessionChain: [],
-    } as unknown as JobInfo;
+    } as unknown as TaskInfo;
   }
 
   it('pulls the listing on init and renders an empty-state when no MDs exist', async () => {

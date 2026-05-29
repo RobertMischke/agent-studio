@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, effect, inject, input, signal } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { SteeringDocsService } from '../../../../services/steering-docs.service';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import {
   SteeringDocsOverview,
@@ -60,7 +60,7 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
 
   private readonly svc = inject(SteeringDocsService);
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
 
   readonly actions = ACTIONS;
 

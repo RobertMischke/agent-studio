@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 import { NotificationService } from '../../../services/notification.service';
 import { WorkspaceManagerService } from './workspace-manager.service';
 
@@ -25,7 +25,7 @@ import { WorkspaceManagerService } from './workspace-manager.service';
  */
 @Injectable({ providedIn: 'root' })
 export class WorkspaceSettingsService {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly notifications = inject(NotificationService);
   private readonly manager = inject(WorkspaceManagerService);
 

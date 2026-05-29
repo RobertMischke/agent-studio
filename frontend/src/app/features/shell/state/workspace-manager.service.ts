@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 
 /**
  * Owns the visibility of the "+ Add workspace" modal plus the
@@ -22,7 +22,7 @@ import { JobService } from '../../../services/task.service';
  */
 @Injectable({ providedIn: 'root' })
 export class WorkspaceManagerService {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   readonly createOpen = signal(false);
   readonly knownNames = signal<readonly string[]>([]);

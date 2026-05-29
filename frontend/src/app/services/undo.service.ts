@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { NotificationService } from './notification.service';
-import { JobService } from './task.service';
+import { TaskService } from './task.service';
 import { ErrorDialogService } from './error-dialog.service';
 
 /**
@@ -31,7 +31,7 @@ import { ErrorDialogService } from './error-dialog.service';
 @Injectable({ providedIn: 'root' })
 export class UndoController {
   private readonly notifications = inject(NotificationService);
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly errorDialog = inject(ErrorDialogService);
 
   private static readonly WINDOW_MS = 8000;

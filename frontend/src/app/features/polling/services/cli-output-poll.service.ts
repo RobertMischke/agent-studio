@@ -1,8 +1,8 @@
 import { Injectable, OnDestroy, computed, signal, inject } from '@angular/core';
 import { CliExecution, CliOutputLine } from '../../../models/task.model';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 
-interface JobRef {
+interface TaskRef {
   id: string;
   watchPath: string;
 }
@@ -13,7 +13,7 @@ interface JobRef {
  * component supplies the current job (via setJob) and the methods
  * below; the service drives all timers + signals from there.
  *
- * Provided locally on JobDetailComponent so each detail instance has
+ * Provided locally on TaskDetailComponent so each detail instance has
  * its own state and timers.
  */
 /**
@@ -40,7 +40,7 @@ function capLines(lines: CliOutputLine[]): CliOutputLine[] {
 
 @Injectable()
 export class CliOutputPollService implements OnDestroy {
-  private jobService = inject(JobService);
+  private jobService = inject(TaskService);
 
   // The polled buffer is what GET /api/jobs/{id}/output returns — it's the
   // authoritative server state. We keep it separate from the optimistic
@@ -69,9 +69,9 @@ export class CliOutputPollService implements OnDestroy {
   private elapsedTimer: ReturnType<typeof setInterval> | null = null;
   private pollGeneration = 0;
   private pollTimeout: ReturnType<typeof setTimeout> | null = null;
-  private currentJob: JobRef | null = null;
+  private currentJob: TaskRef | null = null;
 
-  setJob(job: JobRef | null): void {
+  setJob(job: TaskRef | null): void {
     this.currentJob = job;
   }
 

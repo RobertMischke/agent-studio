@@ -9,7 +9,7 @@ import {
   OnDestroy,
 } from '@angular/core';
 import type { RegressionRadarResult, SpecChangeEntry } from '../models/regression-radar.model';
-import { JobService } from '../../../services/task.service';
+import { TaskService } from '../../../services/task.service';
 import { TooltipDirective } from '../../../components/tooltip';
 
 @Component({
@@ -24,7 +24,7 @@ export class RegressionRadarComponent implements OnInit, OnDestroy {
   readonly jobId = input.required<string>();
   readonly watchPath = input<string>();
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly result = signal<RegressionRadarResult | null>(null);

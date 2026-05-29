@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal, computed } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import type { CliType } from '../../../../models/task.model';
 import { QuotaApiService } from '../../../../features/quota';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
@@ -28,7 +28,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class QuotaStripComponent implements OnInit, OnDestroy {
-  private jobService = inject(JobService);
+  private jobService = inject(TaskService);
 
   private readonly quotaApi = inject(QuotaApiService);
   readonly report = signal<QuotaReport | null>(null);

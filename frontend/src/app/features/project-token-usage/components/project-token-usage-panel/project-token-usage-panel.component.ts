@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectTokenCategory, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary } from '../../../../features/project-token-usage';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -53,7 +53,7 @@ interface TimelineBucket {
   styleUrl: './project-token-usage-panel.component.scss',
 })
 export class ProjectTokenUsagePanelComponent {
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
 
   readonly projectName = input.required<string>();
 

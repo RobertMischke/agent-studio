@@ -3,10 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import { WorkspaceManagerService } from '../../../shell';
-import type { JobInfo, WatchPathEntry } from '../../../../models/task.model';
+import type { TaskInfo, WatchPathEntry } from '../../../../models/task.model';
 import { TooltipDirective } from '../../../../components/tooltip';
 
 /**
@@ -27,7 +27,7 @@ export class ProjectWorkspaceSectionComponent implements OnInit {
   readonly projectName = input.required<string>();
   readonly currentWatchPath = input.required<string>();
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
 
@@ -43,18 +43,18 @@ export class ProjectWorkspaceSectionComponent implements OnInit {
     return d !== '' && d !== this.currentWatchPath() && !this.saving();
   });
 
-  readonly jobsInProject = computed<readonly JobInfo[]>(() => {
+  readonly jobsInProject = computed<readonly TaskInfo[]>(() => {
     const grouped = this.jobService.grouped();
     if (!grouped) return [];
     const proj = this.projectName();
-    const lanes: readonly (readonly JobInfo[] | undefined)[] = [
+    const lanes: readonly (readonly TaskInfo[] | undefined)[] = [
       grouped.backlog, grouped.preparation, grouped.orchestratorPrep,
       grouped.needsHumanReview, grouped.ready, grouped.progress,
       grouped.failedPickup, grouped.review, grouped.autoReview,
       grouped.humanReview, grouped.completed, grouped.archive,
     ];
     const seen = new Set<string>();
-    const out: JobInfo[] = [];
+    const out: TaskInfo[] = [];
     for (const lane of lanes) {
       if (!lane) continue;
       for (const j of lane) {

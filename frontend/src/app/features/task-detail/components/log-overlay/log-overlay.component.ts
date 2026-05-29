@@ -9,7 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { CliOutputLine, JobLogEntry } from '../../../../models/task.model';
+import { CliOutputLine, TaskLogEntry } from '../../../../models/task.model';
 import { ActivityLogViewComponent } from '../activity-log-view/activity-log-view';
 import { formatTime as fmtTime } from '../../../../services/format.util';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
@@ -31,7 +31,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 })
 export class LogOverlayComponent implements AfterViewInit, OnDestroy {
   readonly cliOutput = input<CliOutputLine[]>([]);
-  readonly log = input<JobLogEntry[]>([]);
+  readonly log = input<TaskLogEntry[]>([]);
   readonly isRunning = input(false);
 
   readonly closeRequest = output<void>();

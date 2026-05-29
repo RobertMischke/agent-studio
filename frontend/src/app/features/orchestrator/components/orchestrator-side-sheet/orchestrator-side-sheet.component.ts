@@ -12,7 +12,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { WatchPathEntry } from '../../../../models/task.model';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
@@ -216,7 +216,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     }
   });
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private pollTimer: VisibleIntervalHandle | null = null;
 
   /**

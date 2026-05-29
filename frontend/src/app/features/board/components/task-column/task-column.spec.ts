@@ -4,8 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { JobColumnComponent } from './task-column';
-import type { CliExecution, JobInfo, ProjectRunnerStatus } from '../../../../models/task.model';
+import { TaskColumnComponent } from './task-column';
+import type { CliExecution, TaskInfo, ProjectRunnerStatus } from '../../../../models/task.model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -19,10 +19,10 @@ import type { CliExecution, JobInfo, ProjectRunnerStatus } from '../../../../mod
  * note instead of a red test, which keeps this generator-driven layer
  * stable across template tweaks.
  */
-describe('JobColumnComponent (smoke)', () => {
+describe('TaskColumnComponent (smoke)', () => {
   it('compiles + instantiates without throwing', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobColumnComponent],
+      imports: [TaskColumnComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -30,7 +30,7 @@ describe('JobColumnComponent (smoke)', () => {
         provideRouter([]),
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(JobColumnComponent);
+    const fixture = TestBed.createComponent(TaskColumnComponent);
     fixture.componentRef.setInput('title', undefined);
     fixture.componentRef.setInput('state', undefined);
     fixture.componentRef.setInput('jobs', undefined);
@@ -40,7 +40,7 @@ describe('JobColumnComponent (smoke)', () => {
     try { fixture.detectChanges(); } catch (e) {
       // Render needs more setup than the generic generator provides.
       // The instantiation above is still a real smoke check.
-      console.warn('[smoke] JobColumnComponent initial render skipped:', (e as Error).message);
+      console.warn('[smoke] TaskColumnComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
@@ -55,9 +55,9 @@ describe('JobColumnComponent (smoke)', () => {
   //      tooltip explicitly mentions the circuit-breaker.
   // ─────────────────────────────────────────────────────────────────────
 
-  async function buildColumn(opts: { mode: string; status?: ProjectRunnerStatus | null; jobs?: JobInfo[] }) {
+  async function buildColumn(opts: { mode: string; status?: ProjectRunnerStatus | null; jobs?: TaskInfo[] }) {
     await TestBed.configureTestingModule({
-      imports: [JobColumnComponent],
+      imports: [TaskColumnComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -65,7 +65,7 @@ describe('JobColumnComponent (smoke)', () => {
         provideRouter([]),
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(JobColumnComponent);
+    const fixture = TestBed.createComponent(TaskColumnComponent);
     fixture.componentRef.setInput('title', 'In Progress');
     fixture.componentRef.setInput('state', '3-progress');
     fixture.componentRef.setInput('jobs', opts.jobs ?? []);
@@ -276,7 +276,7 @@ describe('JobColumnComponent (smoke)', () => {
 
   it('cluster: hidden when state is not 3-progress', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobColumnComponent],
+      imports: [TaskColumnComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -284,7 +284,7 @@ describe('JobColumnComponent (smoke)', () => {
         provideRouter([]),
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(JobColumnComponent);
+    const fixture = TestBed.createComponent(TaskColumnComponent);
     fixture.componentRef.setInput('title', 'Ready');
     fixture.componentRef.setInput('state', '2-ready');
     fixture.componentRef.setInput('jobs', []);
@@ -295,7 +295,7 @@ describe('JobColumnComponent (smoke)', () => {
 
   it('forwards card delete requests from regular lanes', async () => {
     await TestBed.configureTestingModule({
-      imports: [JobColumnComponent],
+      imports: [TaskColumnComponent],
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
@@ -304,9 +304,9 @@ describe('JobColumnComponent (smoke)', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(JobColumnComponent);
+    const fixture = TestBed.createComponent(TaskColumnComponent);
     const job = makeJob();
-    const deleted: JobInfo[] = [];
+    const deleted: TaskInfo[] = [];
     fixture.componentInstance.jobDeleteRequest.subscribe((value) => deleted.push(value));
     fixture.componentRef.setInput('title', 'Ready');
     fixture.componentRef.setInput('state', '2-ready');
@@ -349,7 +349,7 @@ function makeStatus(overrides: Partial<ProjectRunnerStatus> = {}): ProjectRunner
   };
 }
 
-function makeJob(overrides: Partial<JobInfo> = {}): JobInfo {
+function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',
     jobKey: 'test::task-1',

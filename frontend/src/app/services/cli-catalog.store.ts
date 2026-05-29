@@ -3,7 +3,7 @@ import { Observable, ReplaySubject, of } from 'rxjs';
 import { catchError, finalize, tap } from 'rxjs/operators';
 import { CLI_TYPES, type CliType } from '../models/task.model';
 import type { CliModelCatalog, CliModelInfo } from '../features/cli';
-import { JobService } from './task.service';
+import { TaskService } from './task.service';
 
 interface CatalogEntry {
   models: readonly CliModelInfo[];
@@ -27,7 +27,7 @@ interface CatalogEntry {
 export class CliCatalogStore {
   private static readonly TTL_MS = 60 * 60 * 1000; // 1h
 
-  private readonly jobs = inject(JobService);
+  private readonly jobs = inject(TaskService);
   private readonly entries = signal<ReadonlyMap<CliType, CatalogEntry>>(new Map());
   private readonly inFlight = new Map<CliType, ReplaySubject<readonly CliModelInfo[]>>();
 

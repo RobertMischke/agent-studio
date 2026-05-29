@@ -1,11 +1,11 @@
 import { Injectable, inject } from '@angular/core';
-import { JobInfo } from '../../../models/task.model';
-import { JobService } from '../../../services/task.service';
+import { TaskInfo } from '../../../models/task.model';
+import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UndoController } from '../../../services/undo.service';
-import { JobDetailPrefetchService } from './job-detail-prefetch.service';
-import { JobSelectionService } from './task-selection.service';
+import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
+import { TaskSelectionService } from './task-selection.service';
 import { LanePagerService, LANE_LABELS } from './lane-pager.service';
 import { laneLabelFor } from './triage-actions.model';
 
@@ -15,10 +15,10 @@ import { laneLabelFor } from './triage-actions.model';
  * navigation, and the auto-advance-after-mutation flow that walks the
  * user to the next job in the same lane.
  *
- * Bridges to the shell's `JobDetailComponent` ViewChild (where
+ * Bridges to the shell's `TaskDetailComponent` ViewChild (where
  * `triageActing` lives) via a tiny callback the shell registers in
  * `ngAfterViewInit`. Avoids a hard dependency on the component class
- * here — the controller is a pure state-machine + JobService caller.
+ * here — the controller is a pure state-machine + TaskService caller.
  *
  * The auto-advance EFFECT stays in the shell because it needs to
  * read `jobDetailRef.triageActingId()` reactively; the effect calls
@@ -26,16 +26,16 @@ import { laneLabelFor } from './triage-actions.model';
  */
 @Injectable({ providedIn: 'root' })
 export class TriageController {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly errorDialog = inject(ErrorDialogService);
   private readonly confirmDialog = inject(ConfirmDialogService);
-  private readonly jobSelection = inject(JobSelectionService);
+  private readonly jobSelection = inject(TaskSelectionService);
   private readonly lanePager = inject(LanePagerService);
-  private readonly prefetch = inject(JobDetailPrefetchService);
+  private readonly prefetch = inject(TaskDetailPrefetchService);
   private readonly undo = inject(UndoController);
 
   /**
-   * Invoked at every triage decision so the JobDetailComponent's
+   * Invoked at every triage decision so the TaskDetailComponent's
    * "acting" highlight clears even when the move/delete fails. The
    * shell registers this callback once in `ngAfterViewInit`.
    */
@@ -71,7 +71,7 @@ export class TriageController {
    * series. With the lane-pager prefetch already warming the next
    * peer's detail, step 3 is now a synchronous signal flip.
    */
-  move(info: JobInfo, ev: { targetState: string; actionId: string }): void {
+  move(info: TaskInfo, ev: { targetState: string; actionId: string }): void {
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
     // Capture prev lane + slot BEFORE the optimistic move so undo can
@@ -133,7 +133,7 @@ export class TriageController {
   }
 
   /** Triage "Move to top" (only on 2-ready). Stays in lane; clears acting. */
-  moveToTop(info: JobInfo, ev: { actionId: string }): void {
+  moveToTop(info: TaskInfo, ev: { actionId: string }): void {
     void ev;
     // Capture the lane's exact ordered list BEFORE the promote so undo
     // can replay it via /api/jobs/reorder. Same-lane reorders cannot be
@@ -175,7 +175,7 @@ export class TriageController {
    * menu's delete flow (so the user does not lose the safety net by
    * accident).
    */
-  async delete(info: JobInfo, ev: { actionId: string }): Promise<void> {
+  async delete(info: TaskInfo, ev: { actionId: string }): Promise<void> {
     void ev;
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
@@ -217,7 +217,7 @@ export class TriageController {
    * Triage "Run now": kick the start path then leave the panel on the
    * same job (it will transition to 3-progress on its own).
    */
-  start(info: JobInfo, ev: { actionId: string }): void {
+  start(info: TaskInfo, ev: { actionId: string }): void {
     void ev;
     this.jobService.startJob(info.id, info.watchPath).subscribe({
       next: () => this.clearActing(),
@@ -244,7 +244,7 @@ export class TriageController {
     // by scanning the grouped buckets for jobs whose `state` matches.
     const found: { jobId: string; watchPath: string }[] = [];
     for (const list of Object.values(grouped)) {
-      for (const j of list as JobInfo[]) {
+      for (const j of list as TaskInfo[]) {
         if (j.state === state) found.push({ jobId: j.id, watchPath: j.watchPath });
       }
     }
@@ -263,7 +263,7 @@ export class TriageController {
    * Falls back to the live lane peers when no snapshot is available
    * (e.g. detail opened from a URL with no prior iteration).
    */
-  next(info: JobInfo): void {
+  next(info: TaskInfo): void {
     if (this.jobSelection.pagerStep(1)) return;
     const peers = this.jobSelection.triageLanePeers();
     if (peers.length === 0) return;
@@ -274,7 +274,7 @@ export class TriageController {
   }
 
   /** k / ↑ / ← / pager-prev: see `next` - same snapshot semantics. */
-  prev(info: JobInfo): void {
+  prev(info: TaskInfo): void {
     if (this.jobSelection.pagerStep(-1)) return;
     const peers = this.jobSelection.triageLanePeers();
     if (peers.length === 0) return;
@@ -297,7 +297,7 @@ export class TriageController {
   advanceToNextInLane(
     lane: string,
     departingJobKey: string,
-    peersBefore: readonly JobInfo[],
+    peersBefore: readonly TaskInfo[],
     external = false,
   ): boolean {
     this.clearActing();
@@ -306,7 +306,7 @@ export class TriageController {
     // the moving job, but we want the next peer that was after it in
     // the original list.
     const idx = peersBefore.findIndex((p) => p.jobKey === departingJobKey);
-    let next: JobInfo | null = null;
+    let next: TaskInfo | null = null;
     if (idx >= 0) {
       next = peersBefore[idx + 1] ?? peersBefore[idx - 1] ?? null;
     } else if (peersBefore.length > 0) {
@@ -328,7 +328,7 @@ export class TriageController {
         '',
         `?job=${encodeURIComponent(candidate.id)}&watchPath=${encodeURIComponent(candidate.watchPath)}`,
       );
-      // Optimistic-paint: serve a prefetched JobDetail when available
+      // Optimistic-paint: serve a prefetched TaskDetail when available
       // so the panel re-renders without waiting for the GET roundtrip.
       // The follow-up fetch reconciles any drift on the eventual reply.
       const cached = this.prefetch.take(candidate.id, candidate.watchPath);

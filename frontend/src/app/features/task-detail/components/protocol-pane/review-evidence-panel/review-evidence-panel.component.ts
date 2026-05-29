@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import {
-  JobInfo,
+  TaskInfo,
   ReviewEvidenceEntry,
   ReviewEvidenceSeverity,
 } from '../../../../../models/task.model';
@@ -36,7 +36,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 })
 export class ReviewEvidencePanelComponent {
   readonly entries = input.required<ReviewEvidenceEntry[]>();
-  readonly job = input.required<JobInfo>();
+  readonly job = input.required<TaskInfo>();
 
   readonly acknowledge = output<{ entry: ReviewEvidenceEntry; acknowledged: boolean }>();
   readonly createFollowup = output<ReviewEvidenceEntry>();

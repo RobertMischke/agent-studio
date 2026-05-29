@@ -1,4 +1,4 @@
-import type { JobOutcomeIssue, JobSummaryStatus } from '../../../../../models/task.model';
+import type { TaskOutcomeIssue, TaskSummaryStatus } from '../../../../../models/task.model';
 import type { ClaudeRateLimitSnapshot, ClaudeSessionInfo } from '../../../../../features/claude';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 import {
@@ -13,7 +13,7 @@ import {
  * stays compact and the tab catalogue is unit-testable in isolation.
  */
 export function buildInspectorTabs(args: {
-  summaryStatus: JobSummaryStatus;
+  summaryStatus: TaskSummaryStatus;
   hasStatusMarkdown: boolean;
   isRunning: boolean;
 }): readonly PaneTabDef[] {
@@ -52,7 +52,7 @@ export function formatResetIn(epoch: number, now: number): string {
   return fmtResetIn(epoch, now);
 }
 
-export function outcomeIssueExplanation(issue: JobOutcomeIssue): string {
+export function outcomeIssueExplanation(issue: TaskOutcomeIssue): string {
   switch (issue.kind) {
     case 'permission-blocked':
       return 'The orchestrator detected a permission failure. It gets one soft intervention that asks the agent to continue with the permissions already available. If the same category appears again, the task is routed to Human Review.';

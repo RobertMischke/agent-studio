@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { RowComponent } from '../../../../components/row/row.component';
-import type { JobInfo } from '../../../../models/task.model';
+import type { TaskInfo } from '../../../../models/task.model';
 
 /**
  * Full-screen "Diff" tab. Resolves the owning job for a commit SHA by
@@ -25,7 +25,7 @@ import type { JobInfo } from '../../../../models/task.model';
   styleUrl: './diff-tab-view.component.scss',
 })
 export class StudioDiffViewComponent {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   readonly commitSha = input.required<string>();
 
@@ -44,7 +44,7 @@ export class StudioDiffViewComponent {
     return lines.slice(1).some((l) => l.trim().length > 0);
   }
 
-  readonly owner = computed<{ job: JobInfo; commit: { sha: string; message?: string; filesChanged?: number; at?: string } } | null>(() => {
+  readonly owner = computed<{ job: TaskInfo; commit: { sha: string; message?: string; filesChanged?: number; at?: string } } | null>(() => {
     const sha = this.commitSha();
     const short = sha.slice(0, 7);
     const jobs = this.jobService.jobs();

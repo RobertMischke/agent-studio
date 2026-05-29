@@ -10,10 +10,10 @@ import {
 } from '@angular/core';
 
 import { ModalStackService } from '../../../../services/modal-stack.service';
-import type { CliOutputLine, JobInfo } from '../../../../models/task.model';
+import type { CliOutputLine, TaskInfo } from '../../../../models/task.model';
 import type { RunRecord, RunTimeline } from '../../../../features/run-timeline';
-import type { JobScreenshot } from '../../../../features/screenshots';
-import type { JobTokenSummary } from '../../../../features/tokens';
+import type { TaskScreenshot } from '../../../../features/screenshots';
+import type { TaskTokenSummary } from '../../../../features/tokens';
 import { projectConversation } from '../../../../components/chat/conversation-projection';
 import type {
   ConversationEvent,
@@ -113,9 +113,9 @@ const TOOL_LABELS: Record<ToolFamily, string> = {
 export class VerboseDebugOverlayComponent {
   readonly lines = input<readonly CliOutputLine[]>([]);
   readonly runTimeline = input<RunTimeline | null>(null);
-  readonly screenshots = input<readonly JobScreenshot[]>([]);
-  readonly tokenSummary = input<JobTokenSummary | null>(null);
-  readonly job = input<JobInfo | null>(null);
+  readonly screenshots = input<readonly TaskScreenshot[]>([]);
+  readonly tokenSummary = input<TaskTokenSummary | null>(null);
+  readonly job = input<TaskInfo | null>(null);
   readonly source = input<string>('cli-output.log');
   readonly latestResult = input<string | null>(null);
   readonly initialTab = input<VerboseDebugTab>('overview');

@@ -4,8 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { BoardFiltersService } from './board-filters.service';
-import { JobService } from '../../../services/task.service';
-import type { GroupedJobs, JobInfo } from '../../../models/task.model';
+import { TaskService } from '../../../services/task.service';
+import type { GroupedJobs, TaskInfo } from '../../../models/task.model';
 
 /**
  * Regression test for the cross-project counter "leak": ensure that
@@ -17,7 +17,7 @@ import type { GroupedJobs, JobInfo } from '../../../models/task.model';
  * counts only crept by however many Lotta jobs exist.
  */
 
-function makeJob(id: string, projectName: string, state: string): JobInfo {
+function makeJob(id: string, projectName: string, state: string): TaskInfo {
   return {
     id,
     jobKey: `${projectName}::${id}`,
@@ -31,10 +31,10 @@ function makeJob(id: string, projectName: string, state: string): JobInfo {
     createdAt: '2026-01-01T00:00:00Z',
     lastActivity: null,
     execution: null,
-  } as unknown as JobInfo;
+  } as unknown as TaskInfo;
 }
 
-function makeGrouped(jobs: JobInfo[]): GroupedJobs {
+function makeGrouped(jobs: TaskInfo[]): GroupedJobs {
   const byState = (s: string) => jobs.filter((j) => j.state === s);
   return {
     backlog: byState('0-backlog'),
@@ -54,7 +54,7 @@ function makeGrouped(jobs: JobInfo[]): GroupedJobs {
 
 describe('BoardFiltersService project selection', () => {
   let svc: BoardFiltersService;
-  let jobs: JobService;
+  let jobs: TaskService;
 
   beforeEach(() => {
     localStorage.clear();
@@ -65,10 +65,10 @@ describe('BoardFiltersService project selection', () => {
         provideHttpClientTesting(),
       ],
     });
-    jobs = TestBed.inject(JobService);
+    jobs = TestBed.inject(TaskService);
     svc = TestBed.inject(BoardFiltersService);
 
-    const fixture: JobInfo[] = [
+    const fixture: TaskInfo[] = [
       // Agent Task Processor - the loud project
       makeJob('atp-r-1', 'Agent Task Processor', '2-ready'),
       makeJob('atp-r-2', 'Agent Task Processor', '2-ready'),

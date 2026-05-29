@@ -1,5 +1,5 @@
 import type { ClaudeRateLimitSnapshot, ClaudeSessionInfo } from '../../claude';
-import type { CliType, JobInfo } from '../../../models/task.model';
+import type { CliType, TaskInfo } from '../../../models/task.model';
 import {
   cliTypeLabel as fmtCliTypeLabel,
   formatDate as fmtDate,
@@ -86,15 +86,15 @@ export function isCliErrorMessage(message: string | null | undefined): boolean {
  * Commit count + tooltip for the Git pane-toggle badge. Replaces the
  * legacy `COMMITTED N commits` inline strip above the activity log; the
  * Git pane already shows the full commit list with files and diffs.
- * Reads `JobInfo.commits` (preferred) and falls back to the legacy
- * singular `JobInfo.commit` for unmigrated jobs. Tooltip is null when
+ * Reads `TaskInfo.commits` (preferred) and falls back to the legacy
+ * singular `TaskInfo.commit` for unmigrated jobs. Tooltip is null when
  * there are no commits — callers fall back to the default Git tooltip.
  */
-export function gitCommitCount(info: JobInfo): number {
+export function gitCommitCount(info: TaskInfo): number {
   return info.commits?.length || (info.commit ? 1 : 0);
 }
 
-export function gitToggleTooltip(info: JobInfo): string | null {
+export function gitToggleTooltip(info: TaskInfo): string | null {
   const commits = info.commits?.length ? info.commits : (info.commit ? [info.commit] : []);
   const n = commits.length;
   if (n === 0) return null;

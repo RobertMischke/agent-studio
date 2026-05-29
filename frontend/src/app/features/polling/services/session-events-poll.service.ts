@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import type { SessionEventsResponse } from '../../../features/session-events';
-import { JobService } from '../../../services/task.service';
-import { JobBackgroundPoller } from './task-background-poller';
+import { TaskService } from '../../../services/task.service';
+import { TaskBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls the per-job session-event log every 10 s. Drives the
@@ -14,8 +14,8 @@ import { JobBackgroundPoller } from './task-background-poller';
  * session events only flip on start/continue/recovery, not per turn.
  */
 @Injectable()
-export class SessionEventsPollService extends JobBackgroundPoller<SessionEventsResponse | null> {
-  private readonly jobService = inject(JobService);
+export class SessionEventsPollService extends TaskBackgroundPoller<SessionEventsResponse | null> {
+  private readonly jobService = inject(TaskService);
 
   protected readonly intervalMs = 10_000;
 

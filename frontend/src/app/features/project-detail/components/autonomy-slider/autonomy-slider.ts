@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 interface AutonomyStop {
@@ -35,7 +35,7 @@ export class AutonomySliderComponent implements OnInit {
   readonly projectName = input.required<string>();
   readonly stops = STOPS;
 
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   readonly level = signal<number>(2);
 

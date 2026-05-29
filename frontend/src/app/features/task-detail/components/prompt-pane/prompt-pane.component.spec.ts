@@ -5,9 +5,9 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { PromptPaneComponent } from './prompt-pane.component';
-import type { JobInfo } from '../../../../models/task.model';
+import type { TaskInfo } from '../../../../models/task.model';
 
-function baseJob(overrides: Partial<JobInfo> = {}): JobInfo {
+function baseJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'test-1', jobKey: 'wp::test-1', title: 'Test', state: '2-ready',
     order: 1, agent: 'human', createdAt: new Date().toISOString(),
@@ -19,7 +19,7 @@ function baseJob(overrides: Partial<JobInfo> = {}): JobInfo {
   };
 }
 
-async function build(initialJob: JobInfo) {
+async function build(initialJob: TaskInfo) {
   await TestBed.configureTestingModule({
     imports: [PromptPaneComponent],
     providers: [

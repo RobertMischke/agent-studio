@@ -3,24 +3,24 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import type {
   CreateJobRequest,
   GroupedJobs,
-  JobArtifactsResponse,
-  JobDetail,
-  JobInfo,
+  TaskArtifactsResponse,
+  TaskDetail,
+  TaskInfo,
   WatchPathEntry,
   RegistryWorkspaceListItem,
   CliOutputLine,
   RunnerStatus,
   CliSettings,
-  JobOrderItem,
+  TaskOrderItem,
   ContextUsageSnapshot,
   CliType,
   ContinueMode,
-  ContinueJobResponse,
+  ContinueTaskResponse,
   ProjectSnapshot,
 } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
-import type { GitFileChange, GitStatus, JobCommitDetail, RecentCommit } from '../features/git';
+import type { GitFileChange, GitStatus, TaskCommitDetail, RecentCommit } from '../features/git';
 import type {
   OrchestratorLogResponse,
   OrchestratorSessionResponse,
@@ -45,7 +45,7 @@ import type {
   RunFilesResponse,
   RunDiffResponse,
 } from '../features/run-timeline';
-import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
+import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { AgentWorkSummary, SessionEventsResponse } from '../features/session-events';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
@@ -95,7 +95,7 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
 };
 
 @Injectable({ providedIn: 'root' })
-export class JobService {
+export class TaskService {
   private http = inject(HttpClient);
   private errorDialog = inject(ErrorDialogService);
 
@@ -128,10 +128,10 @@ export class JobService {
   }
   endOptimisticPersist(): void {
     if (this.pendingPersistCount > 0) this.pendingPersistCount--;
-    this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;
+    this.pendingGroupedSuppressUntil = Date.now() + TaskService.OPTIMISTIC_GRACE_MS;
   }
 
-  readonly jobs = signal<JobInfo[]>([]);
+  readonly jobs = signal<TaskInfo[]>([]);
   readonly grouped = signal<GroupedJobs>({
     backlog: [],
     preparation: [],
@@ -165,7 +165,7 @@ export class JobService {
       return true;
     };
 
-    this.http.get<JobInfo[]>(`${this.baseUrl}/jobs`).subscribe({
+    this.http.get<TaskInfo[]>(`${this.baseUrl}/jobs`).subscribe({
       next: (jobs) => {
         if (acceptOptimisticTarget()) {
           this.jobs.set(jobs);
@@ -238,13 +238,13 @@ export class JobService {
   applyOptimisticReorder(
     state: string,
     orderedKeys: { jobId: string; watchPath: string }[],
-  ): JobInfo[] | null {
+  ): TaskInfo[] | null {
     const lane = STATE_TO_LANE[state];
     if (!lane) return null;
     const current = this.grouped();
     const before = current[lane] ?? [];
     const byKey = new Map(before.map((j) => [`${j.watchPath}::${j.id}`, j]));
-    const reordered: JobInfo[] = [];
+    const reordered: TaskInfo[] = [];
     const seen = new Set<string>();
     for (const k of orderedKeys) {
       const key = `${k.watchPath}::${k.jobId}`;
@@ -262,7 +262,7 @@ export class JobService {
     }
     this.grouped.set({ ...current, [lane]: reordered });
     this.mutationVersion++;
-    this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;
+    this.pendingGroupedSuppressUntil = Date.now() + TaskService.OPTIMISTIC_GRACE_MS;
     return before;
   }
 
@@ -279,13 +279,13 @@ export class JobService {
     watchPath: string,
     targetState: string,
     insertAt?: number,
-  ): { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] } | null {
+  ): { fromLane: LaneKey; before: TaskInfo[]; toLane: LaneKey; toBefore: TaskInfo[] } | null {
     const toLane = STATE_TO_LANE[targetState];
     if (!toLane) return null;
     const current = this.grouped();
     const key = `${watchPath}::${jobId}`;
     let fromLane: LaneKey | null = null;
-    let moving: JobInfo | null = null;
+    let moving: TaskInfo | null = null;
     for (const k of Object.keys(current) as LaneKey[]) {
       const found = (current[k] ?? []).find((j) => `${j.watchPath}::${j.id}` === key);
       if (found) {
@@ -316,12 +316,12 @@ export class JobService {
     }
     this.grouped.set(next);
     this.mutationVersion++;
-    this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;
+    this.pendingGroupedSuppressUntil = Date.now() + TaskService.OPTIMISTIC_GRACE_MS;
     return { fromLane, before: fromBefore, toLane, toBefore };
   }
 
   /** Roll back a failed optimistic reorder to the captured snapshot. */
-  revertOptimisticReorder(state: string, before: JobInfo[]): void {
+  revertOptimisticReorder(state: string, before: TaskInfo[]): void {
     const lane = STATE_TO_LANE[state];
     if (!lane) return;
     const current = this.grouped();
@@ -333,9 +333,9 @@ export class JobService {
   /** Roll back a failed optimistic cross-lane move. */
   revertOptimisticMove(snapshot: {
     fromLane: LaneKey;
-    before: JobInfo[];
+    before: TaskInfo[];
     toLane: LaneKey;
-    toBefore: JobInfo[];
+    toBefore: TaskInfo[];
   }): void {
     const current = this.grouped();
     const next: GroupedJobs = { ...current };
@@ -356,7 +356,7 @@ export class JobService {
   }
 
   getDetail(jobId: string, watchPath?: string) {
-    return this.http.get<JobDetail>(
+    return this.http.get<TaskDetail>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`,
       this.withWatchPath(watchPath),
     );
@@ -584,7 +584,7 @@ export class JobService {
    * individual file contents lazily through {@link readJobFile}.
    */
   listJobArtifacts(jobId: string, watchPath?: string) {
-    return this.http.get<JobArtifactsResponse>(
+    return this.http.get<TaskArtifactsResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/artifacts`,
       this.withWatchPath(watchPath),
     );
@@ -603,7 +603,7 @@ export class JobService {
     );
   }
 
-  reorderJobs(jobs: JobOrderItem[]) {
+  reorderJobs(jobs: TaskOrderItem[]) {
     return this.http.post(`${this.baseUrl}/jobs/reorder`, { jobs });
   }
 
@@ -673,7 +673,7 @@ export class JobService {
   // Per-task commit snapshot — what the auto-commit recorded on the
   // progress→review transition, plus a live re-derivation of the file list.
   getJobCommit(jobId: string, watchPath?: string) {
-    return this.http.get<JobCommitDetail>(
+    return this.http.get<TaskCommitDetail>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit`,
       this.withWatchPath(watchPath),
     );
@@ -840,7 +840,7 @@ export class JobService {
     const body: { model?: string; cliType?: CliType } = {};
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
-    return this.http.post<ContinueJobResponse>(
+    return this.http.post<ContinueTaskResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`,
       body,
       this.withWatchPath(watchPath),
@@ -882,7 +882,7 @@ export class JobService {
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
     if (mode) body.mode = mode;
-    return this.http.post<ContinueJobResponse>(
+    return this.http.post<ContinueTaskResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`,
       body,
       this.withWatchPath(watchPath),
@@ -921,7 +921,7 @@ export class JobService {
 
   // Cycle 10d: quota / subscription rate-limit reporting moved to
   // QuotaApiService (`features/quota/services/`). Caller migration:
-  // `inject(QuotaApiService)` instead of `inject(JobService)` + the
+  // `inject(QuotaApiService)` instead of `inject(TaskService)` + the
   // method names stay identical.
 
   setJobTitle(jobId: string, title: string, watchPath?: string) {
@@ -1126,7 +1126,7 @@ export class JobService {
 
   // Cycle 10d: token-aggregate endpoints moved to TokensApiService
   // (`features/tokens/services/`). Caller migration:
-  // `inject(TokensApiService)` instead of `inject(JobService)` + the
+  // `inject(TokensApiService)` instead of `inject(TaskService)` + the
   // method names stay identical. Methods covered: getTokenSummary,
   // getTokenSummaryAggregate, getTokenSummaryAggregateCached,
   // getAdHocUsage, getWorkspaceTokensTimeline.
@@ -1185,7 +1185,7 @@ export class JobService {
   getJobScreenshots(jobId: string, watchPath?: string | null) {
     let params = new HttpParams();
     if (watchPath) params = params.set('watchPath', watchPath);
-    return this.http.get<JobScreenshotsResponse>(
+    return this.http.get<TaskScreenshotsResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/screenshots`,
       { params },
     );

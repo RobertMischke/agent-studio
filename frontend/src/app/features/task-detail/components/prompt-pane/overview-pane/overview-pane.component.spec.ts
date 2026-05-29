@@ -7,10 +7,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
 import { OverviewPaneComponent } from './overview-pane.component';
-import type { JobInfo } from '../../../../../models/task.model';
+import type { TaskInfo } from '../../../../../models/task.model';
 import type { AgentWorkSummary } from '../../../../session-events';
 
-function baseJob(overrides: Partial<JobInfo> = {}): JobInfo {
+function baseJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'test-1', jobKey: 'wp::test-1', title: 'Test', state: '2-ready',
     order: 1, agent: 'human', createdAt: new Date().toISOString(),
@@ -22,7 +22,7 @@ function baseJob(overrides: Partial<JobInfo> = {}): JobInfo {
   };
 }
 
-async function build(job: JobInfo, agentWork: AgentWorkSummary | null = null) {
+async function build(job: TaskInfo, agentWork: AgentWorkSummary | null = null) {
   await TestBed.configureTestingModule({
     imports: [OverviewPaneComponent],
     providers: [

@@ -1,4 +1,4 @@
-import type { JobInfo, RunnerStatus } from '../../../../models/task.model';
+import type { TaskInfo, RunnerStatus } from '../../../../models/task.model';
 import type {
   ProjectAutoInfo,
   ProjectRunnerIndicator,
@@ -6,7 +6,7 @@ import type {
 } from './project-tabs.component';
 
 export function buildProjectTokenChip(
-  jobs: readonly JobInfo[],
+  jobs: readonly TaskInfo[],
   name: string,
 ): ProjectTokenChipInfo | null {
   let totalTokens = 0;

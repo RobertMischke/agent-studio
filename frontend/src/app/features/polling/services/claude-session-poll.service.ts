@@ -1,13 +1,13 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
-import type { JobInfo } from '../../../models/task.model';
+import type { TaskInfo } from '../../../models/task.model';
 import type {
   ClaudeRateLimitSnapshot,
   ClaudeSessionInfo,
   ClaudeSessionResponse,
 } from '../../../features/claude';
-import { JobService } from '../../../services/task.service';
-import { JobBackgroundPoller } from './task-background-poller';
+import { TaskService } from '../../../services/task.service';
+import { TaskBackgroundPoller } from './task-background-poller';
 
 /**
  * Polls live Claude session telemetry every 5 s for the currently-open
@@ -20,15 +20,15 @@ import { JobBackgroundPoller } from './task-background-poller';
  * Skips polling for non-claude jobs (other CLIs report nothing here).
  */
 @Injectable()
-export class ClaudeSessionPollService extends JobBackgroundPoller<ClaudeSessionResponse | null> {
-  private readonly jobService = inject(JobService);
+export class ClaudeSessionPollService extends TaskBackgroundPoller<ClaudeSessionResponse | null> {
+  private readonly jobService = inject(TaskService);
 
   protected readonly intervalMs = 5_000;
 
   readonly session = signal<ClaudeSessionInfo | null>(null);
   readonly rateLimit = signal<ClaudeRateLimitSnapshot | null>(null);
 
-  protected override shouldPoll(info: JobInfo): boolean {
+  protected override shouldPoll(info: TaskInfo): boolean {
     return info.cliType === 'claude';
   }
 

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output } from '@angular/core';
-import { JobInfo, JobOrderItem, ProjectRunnerStatus } from '../../../../models/task.model';
-import { JobCardComponent } from '../task-card/task-card.component';
+import { TaskInfo, TaskOrderItem, ProjectRunnerStatus } from '../../../../models/task.model';
+import { TaskCardComponent } from '../task-card/task-card.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -12,11 +12,11 @@ import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic'
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
 @Component({
-  selector: 'app-job-column',
+  selector: 'app-task-column, app-job-column',
   standalone: true,
-  imports: [JobCardComponent, TooltipDirective, InfoButtonComponent],
+  imports: [TaskCardComponent, TooltipDirective, InfoButtonComponent],
   // Cycle 7b: OnPush. The board mounts ~10 columns and re-renders the
-  // full @for of cards every CD pass under Default. JobCard is already
+  // full @for of cards every CD pass under Default. TaskCard is already
   // OnPush; promoting the column propagates that benefit upward so a
   // poll tick that didn't change THIS lane's jobs() input doesn't
   // walk the lane's children either. Inputs are signal-based so OnPush
@@ -25,13 +25,13 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
   templateUrl: './task-column.html',
   styleUrl: './task-column.scss'
 })
-export class JobColumnComponent implements OnInit, OnDestroy {
+export class TaskColumnComponent implements OnInit, OnDestroy {
   private readonly autoReviewStatus = inject(AutoReviewStatusStore);
 
   readonly title = input.required<string>();
   readonly icon = input<string>('');
   readonly state = input.required<string>();
-  readonly jobs = input.required<JobInfo[]>();
+  readonly jobs = input.required<TaskInfo[]>();
   readonly reorderDisabled = input<boolean>(false);
   readonly collapsed = input<boolean>(false);
   readonly compact = input<boolean>(false);
@@ -62,17 +62,17 @@ export class JobColumnComponent implements OnInit, OnDestroy {
    */
   readonly nowMs = input<number>(0);
 
-  readonly jobClick = output<JobInfo>();
+  readonly jobClick = output<TaskInfo>();
   // `targetIndex` is the 0-based insertion slot in this column the user
   // dropped the card on. Stable across silent polls because the backend
   // rewrites every sibling's `order` field when the move applies the
   // slot (see JobTransitionService.MoveAsync). Without it the card
   // keeps its source-lane order value and snaps to a stale position.
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string; targetIndex: number }>();
-  readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
-  readonly jobDeleteRequest = output<JobInfo>();
+  readonly jobReorder = output<{ state: string; jobs: TaskOrderItem[] }>();
+  readonly jobDeleteRequest = output<TaskInfo>();
   /** F5: bubbled "Pick next" click from a 2-ready card. */
-  readonly jobPickNextRequest = output<JobInfo>();
+  readonly jobPickNextRequest = output<TaskInfo>();
   readonly addTask = output<string>();
   readonly archiveAll = output<void>();
   readonly collapseToggle = output<void>();
@@ -400,7 +400,7 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   }
 
   readonly archiveVisible = computed(() => {
-    if (!this.isArchive()) return [] as JobInfo[];
+    if (!this.isArchive()) return [] as TaskInfo[];
     return [...this.jobs()]
       .sort((a, b) => (b.lastActivity ?? '').localeCompare(a.lastActivity ?? ''))
       .slice(0, ARCHIVE_VISIBLE_LIMIT);
@@ -413,7 +413,7 @@ export class JobColumnComponent implements OnInit, OnDestroy {
 
   readonly identityFor = (name: string) => projectIdentity(name);
 
-  archiveTooltip(job: JobInfo): string {
+  archiveTooltip(job: TaskInfo): string {
     const lines: string[] = [];
     lines.push(job.title || job.id);
     lines.push('');
@@ -460,7 +460,7 @@ export class JobColumnComponent implements OnInit, OnDestroy {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  onDragStart(event: DragEvent, job: JobInfo) {
+  onDragStart(event: DragEvent, job: TaskInfo) {
     event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, jobKey: job.jobKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
     // Mark the host so the dimmed-while-dragging style applies. Released

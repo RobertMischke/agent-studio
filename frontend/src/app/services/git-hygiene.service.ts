@@ -79,7 +79,7 @@ export class GitHygieneService {
 
   /**
    * POST the manual "commit accepted task evidence" action. The backend
-   * runs the platform-owned commit-message path, stamps `JobInfo.Commit`,
+   * runs the platform-owned commit-message path, stamps `TaskInfo.Commit`,
    * and writes a [decision] orchestrator-chat entry into the activity log.
    */
   commitAcceptedEvidence(jobId: string, watchPath: string) {

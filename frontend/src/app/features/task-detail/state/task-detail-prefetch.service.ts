@@ -1,10 +1,10 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, of, ReplaySubject } from 'rxjs';
-import { JobDetail } from '../../../models/task.model';
-import { JobService } from '../../../services/task.service';
+import { TaskDetail } from '../../../models/task.model';
+import { TaskService } from '../../../services/task.service';
 
 /**
- * Tiny in-memory prefetch + cache for `JobDetail` payloads keyed by
+ * Tiny in-memory prefetch + cache for `TaskDetail` payloads keyed by
  * `watchPath::id` (`jobKey`). Owns three jobs:
  *
  * 1. **Prefetch** the next 1-2 peers in the active lane-pager iteration
@@ -26,13 +26,13 @@ import { JobService } from '../../../services/task.service';
  * consumer is the triage / pager navigation path.
  */
 @Injectable({ providedIn: 'root' })
-export class JobDetailPrefetchService {
-  private readonly jobService = inject(JobService);
+export class TaskDetailPrefetchService {
+  private readonly jobService = inject(TaskService);
 
   private static readonly TTL_MS = 30_000;
 
-  private readonly cache = new Map<string, { detail: JobDetail; cachedAt: number }>();
-  private readonly inFlight = new Map<string, ReplaySubject<JobDetail>>();
+  private readonly cache = new Map<string, { detail: TaskDetail; cachedAt: number }>();
+  private readonly inFlight = new Map<string, ReplaySubject<TaskDetail>>();
 
   private keyOf(id: string, watchPath: string): string {
     return `${watchPath}::${id}`;
@@ -46,10 +46,10 @@ export class JobDetailPrefetchService {
   prefetch(id: string, watchPath: string): void {
     const key = this.keyOf(id, watchPath);
     const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.cachedAt < JobDetailPrefetchService.TTL_MS) return;
+    if (cached && Date.now() - cached.cachedAt < TaskDetailPrefetchService.TTL_MS) return;
     if (this.inFlight.has(key)) return;
 
-    const subject = new ReplaySubject<JobDetail>(1);
+    const subject = new ReplaySubject<TaskDetail>(1);
     this.inFlight.set(key, subject);
     this.jobService.getDetail(id, watchPath).subscribe({
       next: (detail) => {
@@ -76,11 +76,11 @@ export class JobDetailPrefetchService {
    * within the same lane walk still paints instantly without firing a
    * second prefetch round.
    */
-  take(id: string, watchPath: string): JobDetail | null {
+  take(id: string, watchPath: string): TaskDetail | null {
     const key = this.keyOf(id, watchPath);
     const entry = this.cache.get(key);
     if (!entry) return null;
-    if (Date.now() - entry.cachedAt >= JobDetailPrefetchService.TTL_MS) {
+    if (Date.now() - entry.cachedAt >= TaskDetailPrefetchService.TTL_MS) {
       this.cache.delete(key);
       return null;
     }
@@ -93,7 +93,7 @@ export class JobDetailPrefetchService {
    * otherwise issues a fresh GET. The result is cached on success so a
    * subsequent `take` lands the same payload without re-fetching.
    */
-  getOrFetch(id: string, watchPath: string): Observable<JobDetail> {
+  getOrFetch(id: string, watchPath: string): Observable<TaskDetail> {
     const cached = this.take(id, watchPath);
     if (cached) return of(cached);
 
@@ -101,7 +101,7 @@ export class JobDetailPrefetchService {
     const pending = this.inFlight.get(key);
     if (pending) return pending.asObservable();
 
-    const subject = new ReplaySubject<JobDetail>(1);
+    const subject = new ReplaySubject<TaskDetail>(1);
     this.inFlight.set(key, subject);
     this.jobService.getDetail(id, watchPath).subscribe({
       next: (detail) => {

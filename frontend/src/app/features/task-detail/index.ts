@@ -3,13 +3,13 @@
  *
  * Sub-components (cli-config-card, command-deck, detail-header, git-pane,
  * hygiene-strip, log-overlay, pane-toggle-bar, prompt-pane, protocol-pane)
- * are private to the feature — only `JobDetailComponent` is exported.
+ * are private to the feature — only `TaskDetailComponent` is exported.
  * The lane-action primary button + overflow menu now render inside
  * `detail-header`; the catalogue is headless in `state/triage-actions.model.ts`.
  * Hygiene helpers + parsers used cross-feature stay exported.
  */
-export { JobDetailComponent } from './task-detail';
-export { JobSelectionService } from './state/task-selection.service';
+export { TaskDetailComponent } from './task-detail';
+export { TaskSelectionService } from './state/task-selection.service';
 export { TriageController } from './state/triage-controller.service';
 export {
   overflowActionsFor,

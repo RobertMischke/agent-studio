@@ -1,5 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { JobInfo } from '../../../models/task.model';
+import { TaskInfo } from '../../../models/task.model';
 
 /**
  * Lane pager snapshot: the captured iteration the detail header walks
@@ -83,7 +83,7 @@ export class LanePagerService {
    * iteration index at `currentJobKey`. Pass an empty `peers` list (or
    * a job not in the lane) to clear the snapshot.
    */
-  capture(lane: string, peers: readonly JobInfo[], currentJobKey: string): void {
+  capture(lane: string, peers: readonly TaskInfo[], currentJobKey: string): void {
     if (peers.length === 0) {
       this.clear();
       return;

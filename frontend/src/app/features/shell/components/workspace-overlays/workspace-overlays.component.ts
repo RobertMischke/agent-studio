@@ -3,7 +3,7 @@ import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service
 import { WorkspaceTokenTimelineComponent } from '../../../tokens';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { CliAdminPanelComponent } from '../../../cli';
-import type { JobScreenshot } from '../../../../features/screenshots';
+import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -26,7 +26,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 })
 export class WorkspaceOverlaysComponent {
   readonly overlays = inject(WorkspaceOverlaysService);
-  readonly openTask = output<JobScreenshot>();
+  readonly openTask = output<TaskScreenshot>();
 
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);

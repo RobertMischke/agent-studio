@@ -6,13 +6,13 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { of, throwError } from 'rxjs';
 import { UndoController } from './undo.service';
 import { NotificationService } from './notification.service';
-import { JobService } from './task.service';
+import { TaskService } from './task.service';
 import { ErrorDialogService } from './error-dialog.service';
 
 describe('UndoController', () => {
   let undo: UndoController;
   let notifications: NotificationService;
-  let jobService: JobService;
+  let jobService: TaskService;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -25,7 +25,7 @@ describe('UndoController', () => {
     });
     undo = TestBed.inject(UndoController);
     notifications = TestBed.inject(NotificationService);
-    jobService = TestBed.inject(JobService);
+    jobService = TestBed.inject(TaskService);
   });
 
   afterEach(() => {

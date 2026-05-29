@@ -7,7 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { JobService } from '../../../../services/task.service';
+import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { TokenTimeline, TokenTimelineCell } from '../../../../features/tokens';
 import { TokensApiService } from '../../../../features/tokens';
@@ -60,7 +60,7 @@ interface BucketSegment {
 })
 export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
   private readonly tokensApi = inject(TokensApiService);
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
 
   // Hard-coded SVG canvas. CSS scales the rendered box; the viewBox keeps
   // the math simple and lets the chart resize without a ResizeObserver.

@@ -8,7 +8,7 @@
  * here too because it's always paired with the rollups it explains.
  */
 
-export interface JobTokenCall {
+export interface TaskTokenCall {
   ts: string;
   model: string | null;
   inputTokens: number;
@@ -17,7 +17,7 @@ export interface JobTokenCall {
   cacheCreationTokens: number;
 }
 
-export interface JobTokenSummary {
+export interface TaskTokenSummary {
   calls: number;
   inputTokens: number;
   outputTokens: number;
@@ -26,7 +26,7 @@ export interface JobTokenSummary {
   totalTokens: number;
   lastModel: string | null;
   lastUpdate: string | null;
-  entries: JobTokenCall[];
+  entries: TaskTokenCall[];
 }
 
 export interface TokenSummaryByModel {

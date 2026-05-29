@@ -1,11 +1,11 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
-import { JobInfo } from '../../../models/task.model';
-import { JobService } from '../../../services/task.service';
+import { TaskInfo } from '../../../models/task.model';
+import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UndoController } from '../../../services/undo.service';
-import { JobSelectionService, laneLabelFor } from '../../task-detail';
+import { TaskSelectionService, laneLabelFor } from '../../task-detail';
 
 /**
  * Cycle 10b board-feature service: orchestrates the board's mutation
@@ -13,11 +13,11 @@ import { JobSelectionService, laneLabelFor } from '../../task-detail';
  * archive-all, file-saved, project-changed) so the shell stays a thin
  * coordinator. Each method:
  *
- *   - calls the relevant JobService API
+ *   - calls the relevant TaskService API
  *   - applies optimistic snapshots where the board paints ahead of the
  *     POST (move + reorder)
  *   - reverts the snapshot + raises an ErrorDialog on failure
- *   - keeps the open detail in sync via JobSelectionService
+ *   - keeps the open detail in sync via TaskSelectionService
  *
  * The shell's confirm-UX gate (unified `ConfirmDialogService`) lives in
  * `confirmAndDeleteJob` so the service is the single place a delete
@@ -25,10 +25,10 @@ import { JobSelectionService, laneLabelFor } from '../../task-detail';
  */
 @Injectable({ providedIn: 'root' })
 export class BoardMutationsService {
-  private readonly jobService = inject(JobService);
+  private readonly jobService = inject(TaskService);
   private readonly errorDialog = inject(ErrorDialogService);
   private readonly confirmDialog = inject(ConfirmDialogService);
-  private readonly jobSelection = inject(JobSelectionService);
+  private readonly jobSelection = inject(TaskSelectionService);
   private readonly undo = inject(UndoController);
 
   // ---------- drag-and-drop move ----------
@@ -96,15 +96,15 @@ export class BoardMutationsService {
 
   // ---------- delete (board + detail) ----------
 
-  deleteFromBoard(job: JobInfo): void {
+  deleteFromBoard(job: TaskInfo): void {
     this.confirmAndDeleteJob(job, 'board');
   }
 
-  deleteFromDetail(info: JobInfo): void {
+  deleteFromDetail(info: TaskInfo): void {
     this.confirmAndDeleteJob(info, 'detail');
   }
 
-  private async confirmAndDeleteJob(job: JobInfo, source: 'board' | 'detail'): Promise<void> {
+  private async confirmAndDeleteJob(job: TaskInfo, source: 'board' | 'detail'): Promise<void> {
     const label = job.title || job.id;
     const ok = await this.confirmDialog.confirm({
       title: 'Delete this task?',
@@ -149,7 +149,7 @@ export class BoardMutationsService {
    * "changing" flag is cleared by the detail component's effect when
    * the new `state` arrives.
    */
-  changeStateFromDetail(info: JobInfo, targetState: string): void {
+  changeStateFromDetail(info: TaskInfo, targetState: string): void {
     if (!targetState || targetState === info.state) return;
     // Capture the prev lane + slot BEFORE the optimistic move so the
     // undo toast can put the card back at the exact position it sat in.
@@ -219,7 +219,7 @@ export class BoardMutationsService {
    * passes the list (typically `filteredGrouped().completed`) so the
    * service stays free of BoardFilters coupling.
    */
-  archiveAllCompleted(completed: readonly JobInfo[]): void {
+  archiveAllCompleted(completed: readonly TaskInfo[]): void {
     if (completed.length === 0) return;
     if (this.archiving()) return;
     this.archiving.set(true);

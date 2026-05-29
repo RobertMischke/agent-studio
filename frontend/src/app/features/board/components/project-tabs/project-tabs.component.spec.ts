@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import type { JobInfo, RunnerStatus } from '../../../../models/task.model';
+import type { TaskInfo, RunnerStatus } from '../../../../models/task.model';
 import { buildProjectTokenChip, projectAutoInfo, projectRunnerIndicator } from './project-chip-view-model';
 import { ProjectTabsComponent } from './project-tabs.component';
 
@@ -95,7 +95,7 @@ function projectJob(
   outputTokens: number,
   model: string,
   ts: string,
-): JobInfo {
+): TaskInfo {
   return {
     projectName,
     tokenSummary: {
@@ -116,5 +116,5 @@ function projectJob(
         cacheCreationTokens: 0,
       }],
     },
-  } as JobInfo;
+  } as TaskInfo;
 }

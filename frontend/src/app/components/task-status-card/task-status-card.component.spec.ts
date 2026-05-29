@@ -5,10 +5,10 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import { TaskStatusCardComponent } from './task-status-card.component';
-import type { JobInfo } from '../../models/task.model';
+import type { TaskInfo } from '../../models/task.model';
 
-function fixtureJob(overrides: Partial<JobInfo> = {}): JobInfo {
-  const base: Partial<JobInfo> = {
+function fixtureJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
+  const base: Partial<TaskInfo> = {
     id: 'demo-task',
     jobKey: 'C:/x::demo-task',
     key: 'ATP-001',
@@ -29,7 +29,7 @@ function fixtureJob(overrides: Partial<JobInfo> = {}): JobInfo {
     execution: null,
     commit: null,
   };
-  return { ...(base as JobInfo), ...overrides };
+  return { ...(base as TaskInfo), ...overrides };
 }
 
 describe('TaskStatusCardComponent', () => {
