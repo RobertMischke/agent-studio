@@ -14,6 +14,9 @@
           data-testid="task-status-card-lane">
       <span class="task-status-card__lane-dot" aria-hidden="true">●</span>
       {{ laneLabel() }}
+      @if (laneTopic(); as topic) {
+        <app-info-button [topic]="topic" />
+      }
     </span>
     <span class="task-status-card__chip task-status-card__project"
           [style.--project-color]="identity().color"

@@ -12,6 +12,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TooltipDirective } from '../tooltip';
 import { MarkdownViewComponent } from '../markdown-view/markdown-view.component';
+import { DialogComponent } from '../dialog/dialog.component';
 import { ModalStackService } from '../../services/modal-stack.service';
 
 interface ConceptDocPayload {
@@ -21,20 +22,21 @@ interface ConceptDocPayload {
 }
 
 /**
- * Subtle "i" trigger that opens a side-drawer with the rendered concept
- * doc for the given topic. The doc body is fetched on first open from
- * <c>GET /api/concept-docs/{topic}</c>; the FE never duplicates the
- * prose. Reuses the markdown renderer the chat surface uses.
+ * Subtle "i" trigger that opens a centered modal with the rendered
+ * concept doc for the given topic. The doc body is fetched on first open
+ * from <c>GET /api/concept-docs/{topic}</c>; the FE never duplicates the
+ * prose. Body is rendered through the canonical {@link MarkdownViewComponent},
+ * and the modal shell is the app-wide {@link DialogComponent} so the
+ * surface flips light/dark from studio tokens with no per-host colours.
  *
- * Selective placement: this component is opt-in per surface. Wire it in
- * lane headers (or anywhere else) only when the behaviour is non-obvious.
- * Adding it everywhere would clutter; that's the explicit anti-pattern
- * called out in the design.
+ * Every lane carries one: the trigger is wired from the board lane header
+ * (and the studio-shell active panel) so an operator can read what any
+ * lane means without leaving the surface.
  */
 @Component({
   selector: 'app-info-button',
   standalone: true,
-  imports: [TooltipDirective, MarkdownViewComponent],
+  imports: [TooltipDirective, MarkdownViewComponent, DialogComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './info-button.component.html',
   styleUrl: './info-button.component.scss'

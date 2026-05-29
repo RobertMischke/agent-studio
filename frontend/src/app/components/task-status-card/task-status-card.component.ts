@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input 
 import type { JobInfo } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
 import { cliTypeLabel } from '../../services/format.util';
+import { InfoButtonComponent } from '../info-button/info-button.component';
+import { laneDocTopic } from '../info-button/lane-doc-topic';
 
 /**
  * Shared compact task status card. Used as:
@@ -15,6 +17,7 @@ import { cliTypeLabel } from '../../services/format.util';
 @Component({
   selector: 'app-task-status-card',
   standalone: true,
+  imports: [InfoButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './task-status-card.component.html',
@@ -31,6 +34,9 @@ export class TaskStatusCardComponent {
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 
   readonly laneLabel = computed(() => laneLabelFor(this.job().state));
+
+  /** Concept-doc topic for the lane-info modal, or null when none exists. */
+  readonly laneTopic = computed(() => laneDocTopic(this.job().state));
   readonly cliLabel = computed(() => {
     const t = this.job().cliType;
     return t ? cliTypeLabel(t) : null;

@@ -4,14 +4,13 @@ import * as path from 'path';
 import { api, BACKEND } from '../helpers/api';
 
 /**
- * Selective info-button on lane headers.
+ * Lane-info on lane headers.
  *
- * The `<app-info-button>` is opt-in per lane: only `4-auto-review` and
- * `3-progress` carry one because their semantics are non-obvious; the
- * other lanes (Backlog / Ready / Done / Archive) deliberately have
- * nothing. The button fetches the rendered concept-doc body from
- * `GET /api/concept-docs/{topic}` (single source of truth in
- * `docs/concept-docs/`) and shows it in a side-drawer.
+ * Every lane carries an `<app-info-button>`: each maps to a committed
+ * concept doc (`docs/concept-docs/lane-*.md`, the single source of
+ * truth) fetched from `GET /api/concept-docs/{topic}` and shown in the
+ * centered lane-info modal (the app-wide `<app-dialog>` surface, so it
+ * flips light/dark from studio tokens).
  *
  * This spec uses `page.route` intercepts so it doesn't require a real
  * job pipeline; the live backend is still reached for /api/concept-docs
@@ -187,7 +186,7 @@ test.describe('Info button on lane headers (selective placement)', () => {
     expect(res.status).toBe(404);
   });
 
-  test('4-auto-review lane header carries an info button that opens the drawer', async ({ page }) => {
+  test('4-auto-review lane header carries an info button that opens the modal', async ({ page }) => {
     await installMocks(page, [
       jobStub({ id: 'fix-a', title: 'A', state: '4-auto-review' }),
       jobStub({ id: 'fix-b', title: 'B', state: '3-progress' })
@@ -200,18 +199,18 @@ test.describe('Info button on lane headers (selective placement)', () => {
     await expect(trigger).toBeVisible({ timeout: 10_000 });
     await trigger.click();
 
-    const drawer = page.getByTestId('info-button-drawer-lane-4-auto-review');
-    await expect(drawer).toBeVisible();
-    await expect(page.getByTestId('info-button-title-lane-4-auto-review')).toHaveText('Auto-Review');
+    const modal = page.getByTestId('info-button-modal-lane-4-auto-review');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('.dialog__title')).toHaveText('Auto-Review');
     const body = page.getByTestId('info-button-body-lane-4-auto-review');
     await expect(body).toContainText(/multi-aspect/i);
 
     await page.setViewportSize({ width: 1400, height: 900 });
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/01-auto-review-drawer.png`, fullPage: false });
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/01-auto-review-modal.png`, fullPage: false });
 
-    // ESC closes the drawer.
+    // ESC closes the modal.
     await page.keyboard.press('Escape');
-    await expect(drawer).toHaveCount(0);
+    await expect(modal).toHaveCount(0);
   });
 
   test('3-progress lane header carries its own info button', async ({ page }) => {
@@ -226,33 +225,45 @@ test.describe('Info button on lane headers (selective placement)', () => {
     await expect(trigger).toBeVisible({ timeout: 10_000 });
     await trigger.click();
 
-    const drawer = page.getByTestId('info-button-drawer-lane-3-progress');
-    await expect(drawer).toBeVisible();
-    await expect(page.getByTestId('info-button-title-lane-3-progress')).toContainText(/progress/i);
+    const modal = page.getByTestId('info-button-modal-lane-3-progress');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('.dialog__title')).toContainText(/progress/i);
     const body = page.getByTestId('info-button-body-lane-3-progress');
     await expect(body).toContainText(/orchestrator/i);
 
     await page.setViewportSize({ width: 1400, height: 900 });
-    await page.screenshot({ path: `${SCREENSHOT_DIR}/02-progress-drawer.png`, fullPage: false });
+    await page.screenshot({ path: `${SCREENSHOT_DIR}/02-progress-modal.png`, fullPage: false });
 
-    await page.getByTestId('info-button-close-lane-3-progress').click();
-    await expect(drawer).toHaveCount(0);
+    await page.getByTestId('info-button-modal-lane-3-progress-close').click();
+    await expect(modal).toHaveCount(0);
   });
 
-  test('Backlog / Ready / Done / Archive headers carry NO info button', async ({ page }) => {
+  test('every lane header now carries its own info button', async ({ page }) => {
     await installMocks(page, [
       jobStub({ id: 'fix-d', title: 'D', state: '2-ready' }),
       jobStub({ id: 'fix-e', title: 'E', state: '6-completed' }),
-      jobStub({ id: 'fix-f', title: 'F', state: '7-archive' })
+      jobStub({ id: 'fix-f', title: 'F', state: '7-archive' }),
+      jobStub({ id: 'fix-g', title: 'G', state: '0-backlog' }),
+      jobStub({ id: 'fix-h', title: 'H', state: '1-preparation' }),
+      jobStub({ id: 'fix-i', title: 'I', state: '5-human-review' })
     ]);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+    await dismissErrorDialogIfPresent(page);
 
-    // The kanban renders eagerly, so once any lane is visible we can
-    // assert across siblings without polling.
+    // The kanban renders eagerly; once a lane is visible we can assert
+    // across siblings without polling. Lanes that used to deliberately
+    // have nothing now each expose a lane-info trigger.
     await expect(page.getByTestId('lane-2-ready')).toBeVisible({ timeout: 10_000 });
     for (const state of ['0-backlog', '1-preparation', '2-ready', '5-human-review', '6-completed', '7-archive']) {
-      await expect(page.getByTestId(`info-button-lane-${state}`)).toHaveCount(0);
+      await expect(page.getByTestId(`info-button-lane-${state}`)).toBeVisible();
     }
+
+    // Opening any of the newly-covered lanes resolves real prose.
+    await page.getByTestId('info-button-lane-2-ready').click();
+    const modal = page.getByTestId('info-button-modal-lane-2-ready');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('.dialog__title')).toHaveText('Ready');
+    await expect(page.getByTestId('info-button-body-lane-2-ready')).toContainText(/oldest-first/i);
   });
 });

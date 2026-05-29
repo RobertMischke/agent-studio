@@ -6,22 +6,13 @@
         [appTooltip]="'How does this lane work?'"
         (click)="toggle($event)">i</button>
 @if (open()) {
-  <div class="info-btn__backdrop"
-       [attr.data-testid]="'info-button-backdrop-' + topic()"
-       (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
-  <aside class="info-btn__drawer"
-         role="dialog"
-         [attr.aria-label]="title()"
-         [attr.data-testid]="'info-button-drawer-' + topic()">
-    <header class="info-btn__head">
-      <h2 class="info-btn__title"
-          [attr.data-testid]="'info-button-title-' + topic()">{{ title() }}</h2>
-      <button type="button"
-              class="info-btn__close"
-              [attr.data-testid]="'info-button-close-' + topic()"
-              aria-label="Close"
-              (click)="close()">×</button>
-    </header>
+  <app-dialog
+    eyebrow="Lane"
+    [title]="title()"
+    role="dialog"
+    [testid]="'info-button-modal-' + topic()"
+    (closeRequest)="close()"
+    (backdropClick)="close()">
     <div class="info-btn__body"
          [attr.data-testid]="'info-button-body-' + topic()">
       @if (loading()) {
@@ -29,9 +20,8 @@
       } @else if (errorMessage(); as msg) {
         <p class="info-btn__error">{{ msg }}</p>
       } @else if (body(); as md) {
-        <app-markdown class="info-btn__rendered" [source]="md" />
+        <app-markdown [source]="md" />
       }
     </div>
-  </aside>
+  </app-dialog>
 }
-  

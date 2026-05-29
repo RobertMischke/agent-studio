@@ -194,25 +194,25 @@ test.describe('Auto-review multi-aspect surface', () => {
     const card = page.locator('[data-testid="job-card"]', { hasText: 'All aspects pass' });
     await expect(card.getByTestId('job-card-auto-review-status')).toContainText('reviewing now');
 
-    // Info button next to the lane title opens the side-drawer with
-    // the rendered concept doc fetched from /api/concept-docs/. The
-    // body text comes from docs/concept-docs/lane-4-auto-review.md.
+    // Info button next to the lane title opens the centered lane-info
+    // modal with the rendered concept doc fetched from /api/concept-docs/.
+    // The body text comes from docs/concept-docs/lane-4-auto-review.md.
     const infoBtn = page.getByTestId('info-button-lane-4-auto-review');
     await expect(infoBtn).toBeVisible();
     await infoBtn.click();
 
-    const drawer = page.getByTestId('info-button-drawer-lane-4-auto-review');
-    await expect(drawer).toBeVisible();
-    await expect(drawer).toContainText(/multi-aspect/i);
-    await expect(drawer).toContainText(/aspect-/);
+    const modal = page.getByTestId('info-button-modal-lane-4-auto-review');
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText(/multi-aspect/i);
+    await expect(modal).toContainText(/aspect-/);
 
-    // Capture lane-header evidence (status string + open drawer + info button).
+    // Capture lane-header evidence (status string + open modal + info button).
     await page.setViewportSize({ width: 1400, height: 900 });
     await page.screenshot({ path: 'screenshots/auto-review/auto-review-lane-header.png', fullPage: false });
 
-    // Close the drawer.
-    await page.getByTestId('info-button-close-lane-4-auto-review').click();
-    await expect(drawer).toHaveCount(0);
+    // Close the modal.
+    await page.getByTestId('info-button-modal-lane-4-auto-review-close').click();
+    await expect(modal).toHaveCount(0);
   });
 
   test('job with quality:concerns tag renders a ⚠ concern chip', async ({ page }) => {

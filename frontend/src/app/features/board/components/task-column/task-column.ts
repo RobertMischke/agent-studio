@@ -7,6 +7,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 import { groupReviewJobs } from '../review-grouping.util';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
+import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
@@ -339,19 +340,14 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Selective info-button placement (per the design contract): only
-   * lanes whose semantics are non-obvious get the small "i" trigger.
-   * Returns the topic id under <c>docs/concept-docs/</c> for the
-   * current lane, or <c>null</c> when no concept doc exists for it.
-   * Backlog / Ready / Done deliberately have nothing here.
+   * Every lane carries an info trigger: each one maps to a committed
+   * concept doc under <c>docs/concept-docs/lane-*.md</c>, served by
+   * <c>GET /api/concept-docs/{topic}</c> and shown in the lane-info
+   * modal. Virtual sub-lanes (e.g. <c>2-ready-intake</c>, <c>4-review</c>)
+   * collapse to their parent's doc. Returns <c>null</c> only for a state
+   * with no doc, in which case the trigger is hidden.
    */
-  readonly infoTopic = computed<string | null>(() => {
-    switch (this.state()) {
-      case '4-auto-review': return 'lane-4-auto-review';
-      case '3-progress':    return 'lane-3-progress';
-      default:              return null;
-    }
-  });
+  readonly infoTopic = computed<string | null>(() => laneDocTopic(this.state()));
 
   /**
    * One-line live status string for the 4-auto-review lane header. Reads

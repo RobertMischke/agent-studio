@@ -25,10 +25,32 @@ import { markdownToHtml, type MarkdownImageOptions } from '../markdown-utils';
  * preferred once F22 lands per-job.
  *
  * The host background stays transparent; consumers paint the surrounding
- * surface (chat bubble, prompt-history card, info-button drawer). The
+ * surface (chat bubble, prompt-history card, info-button modal). The
  * grey-on-grey "layer around headings" regression came from per-host
  * background drift on the inline markdown div; centralising the wrapper
  * here fixes it once.
+ *
+ * Canonical contract (this is the single markdown render surface):
+ *   - Selector is `app-markdown` (file: markdown-view.component.ts). No
+ *     other component may call `marked()` / `markdownToHtml()` or bind
+ *     `[innerHTML]` for *markdown* output — route prose through here so
+ *     sanitisation, the `.markdown-body` typography (light + dark), the
+ *     image lightbox, and link/code handling stay identical everywhere.
+ *   - Non-markdown HTML (syntax-highlighted diffs, search-hit `<b>`
+ *     snippets, plain-text-escaped strings) is *not* this component's
+ *     job and legitimately stays on its own `[innerHTML]` path.
+ *
+ * Variants (the surface's "modes"):
+ *   - default   full-document prose (task description, lane-info modal,
+ *               project steering docs). Heading underlines on.
+ *   - [dense]   compact column width (chat, activity-log, prompt-history):
+ *               smaller font, tighter rhythm, no h1/h2 underlines.
+ *   - [editor]  the markdown-rich-editor live-preview surface: min-height
+ *               + caret so the contenteditable doesn't collapse.
+ *
+ * Input precedence: [html] (pre-rendered, e.g. F22 server projection)
+ * wins over [source] (raw markdown). Both end in the same `.markdown-body`
+ * container so styling is render-path-independent.
  */
 @Component({
   selector: 'app-markdown',

@@ -1,5 +1,8 @@
 :host { display: inline-flex; align-items: center; }
 
+/* Subtle "i" trigger. Theme-aware: reads studio tokens so it stays
+   legible on both the dark and light shells (the old hardcoded slate
+   palette rendered invisibly on the light lane header). */
 .info-btn {
   display: inline-grid;
   place-items: center;
@@ -7,9 +10,9 @@
   height: 18px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(148, 163, 184, 0.45);
+  border: 1px solid var(--studio-border);
   background: transparent;
-  color: rgba(226, 232, 240, 0.78);
+  color: var(--studio-fg-muted);
   font-family: Georgia, 'Times New Roman', serif;
   font-style: italic;
   font-size: 11px;
@@ -19,92 +22,15 @@
 }
 .info-btn:hover,
 .info-btn:focus-visible {
-  border-color: rgba(148, 163, 184, 0.75);
-  background: rgba(148, 163, 184, 0.14);
-  color: #f1f5f9;
+  border-color: var(--studio-border-strong, var(--studio-border));
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
   outline: none;
 }
 
-.info-btn__backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  z-index: 200;
-}
-.info-btn__drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(460px, 94vw);
-  background: #161624;
-  color: #cdd6f4;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 201;
-  overflow-y: auto;
-  padding: 1rem 1.25rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  font-size: 0.875rem;
-  line-height: 1.55;
-}
-.info-btn__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 0.5rem;
-}
-.info-btn__title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0;
-  color: #f1f5f9;
-}
-.info-btn__close {
-  background: transparent;
-  border: none;
-  color: inherit;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
-.info-btn__close:hover { color: #f1f5f9; }
-.info-btn__body { flex: 1 1 auto; }
-.info-btn__loading { color: rgba(205, 214, 244, 0.6); }
-.info-btn__error   { color: #f38ba8; }
-
-/* Match the chat surface's markdown look without copying its rules
-   wholesale: paragraphs and lists need legible spacing inside the
-   drawer, code chips stay subtle. */
-.info-btn__rendered :first-child { margin-top: 0; }
-.info-btn__rendered :last-child  { margin-bottom: 0; }
-.info-btn__rendered p { margin: 0 0 0.65rem; }
-.info-btn__rendered ul,
-.info-btn__rendered ol { margin: 0 0 0.75rem; padding-left: 1.25rem; }
-.info-btn__rendered li { margin: 0.25rem 0; }
-.info-btn__rendered h1,
-.info-btn__rendered h2,
-.info-btn__rendered h3 {
-  margin: 1rem 0 0.4rem;
-  color: #e2e8f0;
-  font-weight: 600;
-}
-.info-btn__rendered h2 { font-size: 0.95rem; }
-.info-btn__rendered h3 { font-size: 0.875rem; text-transform: none; letter-spacing: 0; }
-.info-btn__rendered code {
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-family: ui-monospace, monospace;
-  font-size: 0.8125rem;
-}
-.info-btn__rendered a {
-  color: #a5b4fc;
-  text-decoration: none;
-}
-.info-btn__rendered a:hover { color: #c4b5fd; text-decoration: underline; }
-  
+/* Modal body. The shell (centred panel, backdrop, header, theming) is
+   owned by <app-dialog>; the rendered prose is owned by <app-markdown>.
+   Only the load/error placeholders need local styling, and they read
+   studio tokens so they flip per theme. */
+.info-btn__loading { color: var(--studio-fg-muted); }
+.info-btn__error   { color: var(--severity-high, #f38ba8); }
