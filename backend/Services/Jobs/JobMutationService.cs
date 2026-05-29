@@ -32,8 +32,14 @@ public class JobMutationService
     // tests that construct JobMutationService directly may pass null and
     // simply skip the timeline event.
     private readonly TimelineLog? _timeline;
+    // Lane mutex: serialise the slug-uniqueness check + folder create in
+    // CreateJob with the other lane writers (move/archive/delete) so two
+    // concurrent creates cannot pick the same dedupe suffix and land two
+    // folders on the same slug. Optional so test fixtures that build the
+    // service directly keep compiling; the NullSingleton still serialises.
+    private readonly LaneMutexRegistry _laneMutex;
 
-    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, JobChangeNotifier notifier, ILogger<JobMutationService> logger, TimelineLog? timeline = null)
+    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, JobChangeNotifier notifier, ILogger<JobMutationService> logger, TimelineLog? timeline = null, LaneMutexRegistry? laneMutex = null)
     {
         _scanner = scanner;
         _clients = clients;
@@ -41,6 +47,7 @@ public class JobMutationService
         _notifier = notifier;
         _logger = logger;
         _timeline = timeline;
+        _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
     }
 
     /// <summary>
@@ -489,15 +496,34 @@ public class JobMutationService
         };
 
         // Sanitize ID: transliterate umlauts, lowercase, replace spaces with dashes, only allow safe chars
-        var jobId = string.IsNullOrWhiteSpace(req.Id)
+        var baseSlug = string.IsNullOrWhiteSpace(req.Id)
             ? ToSlug(req.Title)
             : req.Id;
-        if (string.IsNullOrEmpty(jobId)) return null;
+        if (string.IsNullOrEmpty(baseSlug)) return null;
 
-        var jobDir = Path.Combine(entry.Path, targetState, jobId);
-        if (Directory.Exists(jobDir)) return null; // already exists
-
-        Directory.CreateDirectory(jobDir);
+        // Root-cause fix for duplicate-slug folders: a slug must be unique
+        // across ALL lanes of this watch path (including 7-archive), not just
+        // the target lane. ToSlug is deterministic, so the same title always
+        // produces the same base slug; without this check a job whose title
+        // slugifies to a name already parked in another lane creates a second
+        // folder with the same slug, and any later cross-lane move (archive,
+        // complete) collides on the occupied slug -> 409. Reserve the resolved
+        // slug + create the folder under the lane mutex so two concurrent
+        // creates cannot pick the same suffix.
+        string jobId;
+        string jobDir;
+        using (_laneMutex.Acquire(entry.Path))
+        {
+            jobId = EnsureUniqueSlug(entry.Path, baseSlug);
+            jobDir = Path.Combine(entry.Path, targetState, jobId);
+            Directory.CreateDirectory(jobDir);
+        }
+        if (!string.Equals(jobId, baseSlug, StringComparison.Ordinal))
+        {
+            _logger.LogInformation(
+                "job-slug-deduped baseSlug={BaseSlug} resolvedSlug={ResolvedSlug} watchPath={WatchPath} targetState={TargetState}",
+                baseSlug, jobId, entry.Path, targetState);
+        }
 
         // Land new jobs at the bottom of their target lane so the visible order
         // in the UI matches the backend pickup order (OrderBy(Order) ascending).

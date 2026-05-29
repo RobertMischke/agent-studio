@@ -225,6 +225,59 @@ public class CommitAttributionServiceTests
     }
 
     [Fact]
+    public void MisAttributionReproducer_TodaysSymptom_OnlyOwnWorkIsAttributed()
+    {
+        // Faithful reproducer of the 2026-05-28 symptom: opening this very task
+        // surfaced a crash-recovery commit that belonged to the *lint-scss*
+        // task (real SHA 9b8892e in this repo), plus release-stream noise. The
+        // operator could no longer tell which changes belonged to the decision
+        // under review. The shapes below mirror the actual git log of that day.
+        const string thisTask = "feature-post-step-git-commit-attribution-deterministic-commit-to-task-binding";
+        const string otherTask = "pipeline-lintscss-as-configurable-post-step--auto-reissue-on-fail--bring-repo-to-0-errors";
+
+        var window = new DateTime(2026, 5, 28, 12, 0, 0, DateTimeKind.Utc);
+        var result = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = thisTask,
+            AgentMarker = "Claude",
+            WorkingDirPrefix = "agent-taskboard-dev/",
+            WindowStartUtc = window,
+            Candidates =
+            [
+                // The task's own work - the only thing that should be attributed.
+                Candidate("ownwork1", "feat(attribution): deterministic commit-to-task binding",
+                    author: "Claude", at: window.AddMinutes(20),
+                    files: ["agent-taskboard-dev/backend/Services/Jobs/CommitAttributionService.cs"]),
+                // THE BUG: a crash-recovery commit for a *different* task.
+                Candidate("9b8892e", $"chore(crash-recovery): rescue orphan changes for {otherTask}",
+                    author: "Crash Recovery", at: window.AddMinutes(25),
+                    files: ["agent-taskboard-dev/frontend/src/x.scss"]),
+                // Release-stream noise that belongs to no single task.
+                Candidate("bumpdev1", "chore(submodules): bump dev to deadbee",
+                    at: window.AddMinutes(30)),
+                Candidate("mergez01", "Merge branch 'main' into update-stable",
+                    at: window.AddMinutes(35)) with { IsMerge = true },
+            ],
+        });
+
+        // Only the task's own work is attributed - the heart of the fix.
+        var attributed = Assert.Single(result.Attributed);
+        Assert.Equal("ownwork1", attributed.ShortSha);
+
+        // The cross-task crash-recovery commit is excluded with the right reason
+        // (this is the exact line item the operator saw mis-attributed).
+        var crossTask = result.Excluded.Single(e => e.ShortSha == "9b8892e");
+        Assert.Equal(CommitExclusionReasons.CrashRecoveryOfOtherTask, crossTask.Reason);
+
+        // Release-stream noise is excluded too, never attributed.
+        Assert.Equal(CommitExclusionReasons.UpdateStableBump,
+            result.Excluded.Single(e => e.ShortSha == "bumpdev1").Reason);
+        Assert.Equal(CommitExclusionReasons.MergeCommit,
+            result.Excluded.Single(e => e.ShortSha == "mergez01").Reason);
+        Assert.DoesNotContain(result.Attributed, c => c.ShortSha != "ownwork1");
+    }
+
+    [Fact]
     public void Attribution_IsDeterministic_SameInputSameOutput()
     {
         var input = new AttributionInput
