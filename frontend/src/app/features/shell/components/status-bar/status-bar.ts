@@ -10,6 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { JobService } from '../../../../services/task.service';
+import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import type { CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
@@ -43,6 +44,7 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 })
 export class StatusBarComponent implements OnInit {
   private readonly jobService = inject(JobService);
+  private readonly catalogStore = inject(CliCatalogStore);
   private readonly clientDefaults = inject(ClientDefaultsService);
 
   readonly projectNames = input<string[]>([]);
@@ -176,11 +178,23 @@ export class StatusBarComponent implements OnInit {
   }
 
   private loadModels(cliType: CliType, refresh = false) {
+    // ADR-0046: read through the process-wide CliCatalogStore so
+    // re-opening the status-bar model picker is a synchronous render
+    // after the first hydration.
+    if (!refresh && this.catalogStore.hasFresh(cliType)) {
+      this.models.set([...this.catalogStore.modelsFor(cliType)]);
+      this.modelsLoading.set(false);
+      this.modelsError.set(false);
+      return;
+    }
     this.modelsLoading.set(true);
     this.modelsError.set(false);
-    this.jobService.getCliModelCatalog(cliType, refresh).subscribe({
-      next: (catalog) => {
-        this.models.set(catalog.models ?? []);
+    const source$ = refresh
+      ? this.catalogStore.refresh(cliType)
+      : this.catalogStore.ensure(cliType);
+    source$.subscribe({
+      next: (models) => {
+        this.models.set([...models]);
         this.modelsLoading.set(false);
       },
       error: () => {

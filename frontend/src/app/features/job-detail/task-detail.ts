@@ -27,6 +27,7 @@ import type {
 import { CLI_TYPES } from '../../models/task.model';
 import type { CliModelInfo } from '../../features/cli';
 import { JobService } from '../../services/task.service';
+import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { NowTickService } from '../../services/now-tick.service';
 import { LayoutPanesService } from './services/layout-panes.service';
@@ -109,6 +110,7 @@ import { TooltipDirective } from '../../components/tooltip';
 })
 export class JobDetailComponent implements OnDestroy {
   private jobService = inject(JobService);
+  private catalogStore = inject(CliCatalogStore);
   private errorDialog = inject(ErrorDialogService);
 
   readonly detail = input.required<JobDetail>();
@@ -238,7 +240,6 @@ export class JobDetailComponent implements OnDestroy {
   readonly availableModels = signal<CliModelInfo[]>([]);
   readonly cliTypes = CLI_TYPES;
   readonly cliTypeDraft = signal<CliType>('copilot');
-  readonly modelCatalogSource = signal<string>('');
 
   modelMultiplier(id: string | null | undefined): number | null {
     if (!id) return null;
@@ -340,13 +341,24 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   private loadModelCatalog(cliType: CliType) {
-    this.jobService.getCliModelCatalog(cliType).subscribe({
-      next: (catalog) => {
-        const models = catalog.models ?? [];
-        this.availableModels.set(models);
-        this.modelCatalogSource.set(catalog.source ?? '');
+    // ADR-0046: synchronous cache hit when the boot-time hydration has
+    // already happened (the common case). Falls through to a real fetch
+    // on first boot or after an explicit invalidation.
+    if (this.catalogStore.hasFresh(cliType)) {
+      const models = [...this.catalogStore.modelsFor(cliType)];
+      this.availableModels.set(models);
+      if (!this.modelDraft()) {
+        const def = models.find((m) => m.isDefault);
+        if (def) this.modelDraft.set(def.id);
+      }
+      return;
+    }
+    this.catalogStore.ensure(cliType).subscribe({
+      next: (models) => {
+        const list = [...models];
+        this.availableModels.set(list);
         if (!this.modelDraft()) {
-          const def = models.find((m) => m.isDefault);
+          const def = list.find((m) => m.isDefault);
           if (def) this.modelDraft.set(def.id);
         }
       },
@@ -811,10 +823,19 @@ export class JobDetailComponent implements OnDestroy {
    * `model` of '' clears back to the CLI default. The two backend endpoints
    * are independent, but ordering matters: cli-type first ensures the
    * subsequent model PUT validates against the new CLI's catalog.
+   *
+   * ADR-0046 (Optimistic-UI). The badge re-renders from `cliTypeDraft` /
+   * `modelDraft` synchronously here, before either PUT reaches the wire.
+   * On a non-network error the previous values are restored and the user
+   * gets a clear toast via `showError`; on a network failure the parent's
+   * refresh-on-fileSaved path heals the UI back to the on-disk state.
    */
   onAgentConfigCommit(change: { cliType: CliType; model: string }): void {
     const info = this.detail().info;
-    const currentCli = this.cliTypeDraft();
+    const previousCli = this.cliTypeDraft();
+    const previousModel = this.modelDraft();
+    const previousCatalog = this.availableModels();
+    const currentCli = previousCli;
     const currentModel = (info.model ?? '').trim();
     const cliChanged = change.cliType !== currentCli;
     const modelChanged = change.model !== currentModel;
@@ -826,10 +847,17 @@ export class JobDetailComponent implements OnDestroy {
       this.cliTypeDraft.set(change.cliType);
       // Refresh the visible catalog to match the new CLI so the legacy
       // commandbar dropdown does not show stale options between PUT and
-      // detail-refetch.
+      // detail-refetch. Reads through CliCatalogStore (ADR-0046) so the
+      // cache hit is synchronous when the catalog was already hydrated.
       this.loadModelCatalog(change.cliType);
     }
     this.modelDraft.set(change.model);
+
+    const revert = () => {
+      this.cliTypeDraft.set(previousCli);
+      this.modelDraft.set(previousModel);
+      this.availableModels.set(previousCatalog);
+    };
 
     const modelPut = () => {
       this.jobService
@@ -840,7 +868,10 @@ export class JobDetailComponent implements OnDestroy {
         )
         .subscribe({
           next: () => this.fileSaved.emit(),
-          error: (err) => this.showError(err),
+          error: (err) => {
+            revert();
+            this.showError(err);
+          },
         });
     };
 
@@ -852,7 +883,10 @@ export class JobDetailComponent implements OnDestroy {
             if (modelChanged) modelPut();
             else this.fileSaved.emit();
           },
-          error: (err) => this.showError(err),
+          error: (err) => {
+            revert();
+            this.showError(err);
+          },
         });
       return;
     }

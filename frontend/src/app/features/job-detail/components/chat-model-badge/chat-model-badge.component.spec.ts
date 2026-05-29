@@ -4,8 +4,11 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { of } from 'rxjs';
 import { ChatModelBadgeComponent } from './chat-model-badge.component';
 import type { CliModelInfo } from '../../../cli';
+import { CliCatalogStore } from '../../../../services/cli-catalog.store';
+import { JobService } from '../../../../services/task.service';
 
 /**
  * Behavioural specs for the chat-compose CLI + model picker. Covers the
@@ -96,6 +99,57 @@ describe('ChatModelBadgeComponent', () => {
     fixture.componentInstance.onCancelClick();
     expect(fixture.componentInstance.pickerOpen()).toBe(false);
     expect(commits).toBe(0);
+  });
+
+  it('uses the cached catalog synchronously when opening on a hydrated CLI (ADR-0046)', async () => {
+    // Stub the JobService so the store can be hydrated without HTTP.
+    const codexModels: CliModelInfo[] = [
+      { id: 'gpt-5', label: 'GPT-5', multiplier: 3, vendor: 'openai', isDefault: true },
+    ];
+    TestBed.configureTestingModule({
+      imports: [ChatModelBadgeComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: JobService,
+          useValue: {
+            getCliModelCatalog: (cli: string) => of({
+              models: cli === 'codex' ? codexModels : claudeModels,
+              source: 'test',
+              fetchedAt: '2026-05-29T00:00:00Z',
+            }),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const store = TestBed.inject(CliCatalogStore);
+    store.hydrateAll();
+    expect(store.hasFresh('claude')).toBe(true);
+    expect(store.hasFresh('codex')).toBe(true);
+
+    const fixture = TestBed.createComponent(ChatModelBadgeComponent);
+    fixture.componentRef.setInput('cliType', 'claude');
+    fixture.componentRef.setInput('model', 'claude-opus-4-7');
+    // Pass an EMPTY availableModels input so the only way the picker
+    // can render Claude's catalogue is via the store cache.
+    fixture.componentRef.setInput('availableModels', []);
+    fixture.componentRef.setInput('disabled', false);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+    expect(fixture.componentInstance.pickerOpen()).toBe(true);
+    expect(fixture.componentInstance.draftAvailableModels()).toEqual(claudeModels);
+    expect(fixture.componentInstance.loadingCatalog()).toBe(false);
+
+    // Switching CLI inside the open picker also resolves from cache - no spinner.
+    fixture.componentInstance.onCliPillClick('codex');
+    expect(fixture.componentInstance.draftCliType()).toBe('codex');
+    expect(fixture.componentInstance.draftAvailableModels()).toEqual(codexModels);
+    expect(fixture.componentInstance.loadingCatalog()).toBe(false);
   });
 
   it('Done emits the atomic commit and skips no-op commits', async () => {

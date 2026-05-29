@@ -4,6 +4,7 @@ import { CliType, CLI_TYPES, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { JobService } from '../../../services/task.service';
+import { CliCatalogStore } from '../../../services/cli-catalog.store';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { CLIENT_ID } from '../../../services/client-id.interceptor';
 
@@ -27,6 +28,7 @@ import { CLIENT_ID } from '../../../services/client-id.interceptor';
 @Injectable({ providedIn: 'root' })
 export class CreateJobFormService {
   private readonly jobService = inject(JobService);
+  private readonly catalogStore = inject(CliCatalogStore);
   private readonly errorDialog = inject(ErrorDialogService);
 
   readonly visible = signal(false);
@@ -230,12 +232,23 @@ export class CreateJobFormService {
   // ---------- internal ----------
 
   private loadCreateModels(cliType: CliType): void {
-    this.jobService.getCliModelCatalog(cliType).subscribe({
-      next: (catalog) => {
-        const models = catalog.models ?? [];
-        this.availableModels.set(models);
+    // ADR-0046: prefer the shared cache so the Create dialog renders the
+    // model dropdown synchronously when the user opens it.
+    if (this.catalogStore.hasFresh(cliType)) {
+      const models = [...this.catalogStore.modelsFor(cliType)];
+      this.availableModels.set(models);
+      if (!this.newModel) {
+        const def = models.find((m) => m.isDefault);
+        if (def) this.newModel = def.id;
+      }
+      return;
+    }
+    this.catalogStore.ensure(cliType).subscribe({
+      next: (models) => {
+        const list = [...models];
+        this.availableModels.set(list);
         if (!this.newModel) {
-          const def = models.find((m) => m.isDefault);
+          const def = list.find((m) => m.isDefault);
           if (def) this.newModel = def.id;
         }
       },

@@ -415,6 +415,14 @@ See `docs/filesystem-contract.md` for full details.
 - Keep the detail view as a simple protocol view, without tabs or metrics grids unless the product direction changes.
 - Prefer small, scoped changes and avoid rewriting unrelated code.
 
+### Optimistic-UI for mutations + boot-hydrated catalog caches (ADR-0046)
+
+Frontend mutations on durable user-owned fields (job title, model, CLI type, tags, drag-and-drop reorder, lane move) are **optimistic by default**: the local signal updates synchronously before the HTTP call leaves the browser, the call runs fire-and-forget, and a server error rolls the signal back and surfaces a toast. The canonical revert shape is snapshot → mutate → fire → on-error revert+toast, all visible at the call site (no generic wrapper). See `onAgentConfigCommit` in [frontend/src/app/features/job-detail/task-detail.ts](frontend/src/app/features/job-detail/task-detail.ts) and the kanban `applyOptimisticReorder` / `applyOptimisticMove` / `revertOptimistic*` pair in [frontend/src/app/services/task.service.ts](frontend/src/app/services/task.service.ts).
+
+Durable reference lists (per-CLI model catalogs, tag registry, client identities, workspace registry) live in process-wide `*Store` services that pre-hydrate at app boot and are read synchronously from a signal. The first cache on the contract is [`CliCatalogStore`](frontend/src/app/services/cli-catalog.store.ts) (`hasFresh` / `modelsFor` / `ensure` / `refresh` / `invalidate`, 1 h TTL, in-flight dedupe); it is hydrated in `App.ngOnInit` via `cliCatalogStore.hydrateAll()`. Opening a model picker after boot is a synchronous render, not a round-trip.
+
+Exceptions (stay synchronous with spinner): destructive operations (delete, bulk back-fill), and runner side effects (`start` / `continue`). For these, the truthful UI is the spinner; an optimistic mid-state would mislead the operator.
+
 ### Menu surfaces are text-only
 
 Context menus, dropdown menus, and overflow menus contain text only. No leading icons on menu items. This applies to `<app-menu>` and every consumer (tab right-click, card right-click, detail-header title menu, status-bar CLI / model pickers, project picker, markdown-editor mode toggle, protocol-pane overflow, chat model badge, future menu surfaces).

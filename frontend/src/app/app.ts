@@ -98,6 +98,7 @@ import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { JobCompletionSoundService } from './services/task-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
+import { CliCatalogStore } from './services/cli-catalog.store';
 import type { CliOutputLine } from './models/task.model';
 import type { RunTimeline } from './features/run-timeline';
 import type { JobScreenshot } from './features/screenshots';
@@ -277,6 +278,7 @@ export class App implements OnInit, OnDestroy {
    */
   private readonly boardFilters = inject(BoardFiltersService);
   private readonly tagRegistryStore = inject(TagRegistryStore);
+  private readonly cliCatalogStore = inject(CliCatalogStore);
   readonly activeProjects = this.boardFilters.activeProjects;
   /** Active project names as a plain readonly array for the workspace banner input. */
   readonly bannerProjects = this.boardFilters.bannerProjects;
@@ -966,6 +968,11 @@ export class App implements OnInit, OnDestroy {
     // rendering so a bookmark or copy-paste lands on the same view.
     this.boardFilters.hydrateFromUrl();
     this.loadTagRegistry();
+    // ADR-0046: pre-fetch every CLI's model catalog at boot so the
+    // chat-model badge, status-bar picker, and create dialog can render
+    // their model lists synchronously instead of paying a round-trip on
+    // first open.
+    this.cliCatalogStore.hydrateAll();
     // 1-Hz wall-clock tick for the lane status RUNNING pill's elapsed
     // string. Light enough to leave running without gating - the only
     // consumer is the lane column's statusCluster computed.

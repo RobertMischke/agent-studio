@@ -24,8 +24,8 @@ import {
   shortModelName,
 } from '../protocol-pane/protocol-pane/model-badge-menu-builders';
 import { TooltipDirective } from '../../../../components/tooltip';
-import { JobService } from '../../../../services/task.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
+import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 
 /**
  * Subtle CLI + model badge sitting next to the chat composer. Click /
@@ -34,12 +34,9 @@ import { ModalStackService } from '../../../../services/modal-stack.service';
  * a model in one interaction. Nothing is persisted until Done is clicked;
  * Esc / outside-click / Cancel reverts the draft without firing a PUT.
  *
- * Catalog fetches for non-active CLIs go through the same
- * `JobService.getCliModelCatalog` endpoint the parent uses on startup; the
- * badge caches them per CLI for the lifetime of the open picker so a
- * second visit to the same CLI is instant. (A repo-wide catalog cache is
- * tracked separately as
- * `feature-app-wide-optimistic-ui-pattern-and-client-side-model-catalog-cache`.)
+ * Catalog fetches go through `CliCatalogStore` (process-wide cache,
+ * hydrated at app boot). The badge therefore opens without a network
+ * round-trip in steady state — see ADR-0046.
  *
  * Emits a single `commit` event with `{cliType, model}` so the parent can
  * make the two-field change atomic — empty-string `model` means
@@ -67,16 +64,14 @@ export class ChatModelBadgeComponent {
 
   readonly pickerOpen = signal<boolean>(false);
 
-  private readonly jobs = inject(JobService);
   private readonly modalStack = inject(ModalStackService);
+  private readonly catalogStore = inject(CliCatalogStore);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
 
   /** Draft state — initialised when the picker opens. */
   readonly draftCliType = signal<CliType | null>(null);
   readonly draftModel = signal<string>('');
-  /** Model catalog cached per CLI for the lifetime of the open picker. */
-  private readonly catalogCache = new Map<CliType, readonly CliModelInfo[]>();
   /** UI catalog list for the currently-drafted CLI. */
   readonly draftAvailableModels = signal<readonly CliModelInfo[]>([]);
   /** True while a catalog fetch is in flight for the just-clicked CLI. */
@@ -155,16 +150,15 @@ export class ChatModelBadgeComponent {
     // Snapshot inputs into draft.
     const currentCli = this.cliType();
     const currentModel = (this.model() ?? '').trim();
-    const currentCatalog = this.availableModels();
     this.draftCliType.set(currentCli);
     this.draftModel.set(currentModel);
-    this.draftAvailableModels.set(currentCatalog);
-    this.catalogCache.clear();
-    if (currentCli) {
-      this.catalogCache.set(currentCli, currentCatalog);
-    }
     this.catalogError.set(null);
     this.loadingCatalog.set(false);
+    // Prefer the process-wide cache (ADR-0046) so the picker has a model
+    // list to render synchronously. Fall back to the parent's snapshot for
+    // the very first open before boot-hydration has completed.
+    const cached = currentCli ? this.catalogStore.modelsFor(currentCli) : [];
+    this.draftAvailableModels.set(cached.length > 0 ? cached : this.availableModels());
     this.pickerOpen.set(true);
   }
 
@@ -177,25 +171,23 @@ export class ChatModelBadgeComponent {
 
   /** User clicked a CLI pill. Stay open, refresh model list, default-select. */
   onCliPillClick(t: CliType): void {
-    if (t === this.draftCliType() && this.catalogCache.has(t)) return;
+    if (t === this.draftCliType() && this.catalogStore.hasFresh(t)) return;
     this.draftCliType.set(t);
-    const cached = this.catalogCache.get(t);
-    if (cached) {
-      this.applyCatalog(cached);
+    // Process-wide cache hit (ADR-0046): apply synchronously, no spinner.
+    if (this.catalogStore.hasFresh(t)) {
+      this.applyCatalog(this.catalogStore.modelsFor(t));
       return;
     }
     this.catalogError.set(null);
     this.loadingCatalog.set(true);
-    // Optimistically clear the list so stale models do not linger while the
-    // fetch is in flight. The spinner row in the template fills the gap.
+    // Clear so stale models from the previous CLI do not linger. The
+    // spinner row in the template fills the gap.
     this.draftAvailableModels.set([]);
     this.draftModel.set('');
-    this.jobs.getCliModelCatalog(t).subscribe({
-      next: (catalog) => {
-        const models = catalog.models ?? [];
+    this.catalogStore.ensure(t).subscribe({
+      next: (models) => {
         // Race guard: only apply if the user hasn't already clicked another CLI.
         if (this.draftCliType() !== t) return;
-        this.catalogCache.set(t, models);
         this.loadingCatalog.set(false);
         this.applyCatalog(models);
       },
