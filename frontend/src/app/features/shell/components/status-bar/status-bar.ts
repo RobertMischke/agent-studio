@@ -99,7 +99,6 @@ export class StatusBarComponent implements OnInit {
       cliTypes: this.cliTypes,
       defaultCli: this.defaultCli(),
       cliLabel: cliTypeLabel,
-      cliIcon: cliTypeIcon,
     }),
   );
 

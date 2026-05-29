@@ -37,8 +37,8 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   /** Overflow `…` menu that hosts the rich ↔ markdown-source toggle. */
   readonly modeMenuOpen = signal(false);
   readonly modeMenuItems = computed<MenuItem[]>(() => [
-    { kind: 'row', id: 'rich',   label: 'View as rich text',       icon: 'P', active: this.mode() === 'rich'   },
-    { kind: 'row', id: 'source', label: 'View as Markdown source', icon: 'M', active: this.mode() === 'source' },
+    { kind: 'row', id: 'rich',   label: 'View as rich text',       active: this.mode() === 'rich'   },
+    { kind: 'row', id: 'source', label: 'View as Markdown source', active: this.mode() === 'source' },
   ]);
   toggleModeMenu(): void { this.modeMenuOpen.update(v => !v); }
   onModeMenuClick(ev: MenuItemClickEvent): void {

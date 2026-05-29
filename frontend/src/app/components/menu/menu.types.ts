@@ -6,8 +6,12 @@
  *   - `separator` a thin hairline; never focusable, never clickable.
  *   - `header`    a small uppercase section label; never focusable, never clickable.
  *
- * Optional row fields cover every existing menu surface the F23 migration
- * touches without forcing callers into bespoke variants:
+ * Menu rows are **text-only**. No `icon` field — see the "Menu surfaces are
+ * text-only" convention in AGENTS.md. `leadingGlyph` is the one allowed
+ * leading affordance and is reserved for project-picker-style coloured
+ * initial chips, not for decorative icons.
+ *
+ * Optional row fields:
  *
  *   - `leadingGlyph` — coloured circular initial (project picker chip).
  *   - `trailingBadge` — count chip on the right (project picker job count).
@@ -23,7 +27,6 @@ export interface MenuRow {
   id: string;
   label: string;
   hint?: string;
-  icon?: string;
   disabled?: boolean;
   danger?: boolean;
   active?: boolean;

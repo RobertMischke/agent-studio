@@ -6,7 +6,6 @@ export function buildCliMenuItems(input: {
   cliTypes: readonly CliType[];
   defaultCli: CliType;
   cliLabel: (t: CliType) => string;
-  cliIcon: (t: CliType) => string;
 }): readonly MenuItem[] {
   const items: MenuItem[] = [
     { kind: 'header', label: 'Default CLI for new tasks' },
@@ -16,7 +15,6 @@ export function buildCliMenuItems(input: {
       kind: 'row',
       id: `cli:${t}`,
       label: input.cliLabel(t),
-      icon: input.cliIcon(t),
       active: t === input.defaultCli,
     });
   }
@@ -37,7 +35,6 @@ export function buildModelMenuItems(input: {
       kind: 'row',
       id: 'model:__default__',
       label: 'CLI default',
-      icon: '·',
       active: !input.defaultModel,
     },
   ];
@@ -65,7 +62,7 @@ export function buildModelMenuItems(input: {
         kind: 'row',
         id: `model:${m.id}`,
         label: m.label || m.id,
-        icon: m.isDefault ? '★' : '·',
+        hint: m.isDefault ? 'default' : undefined,
         active: m.id === input.defaultModel,
         tooltip: m.id,
       });
@@ -77,7 +74,6 @@ export function buildModelMenuItems(input: {
     kind: 'row',
     id: 'model:__refresh__',
     label: 'Refresh catalog',
-    icon: '↻',
     disabled: input.modelsLoading,
   });
 

@@ -698,7 +698,6 @@ export class App implements OnInit, OnDestroy {
         id: 'orch-config',
         label: 'Orchestrator config',
         hint: 'supervisor + meta-cycle flags',
-        icon: '⚙',
       },
     ];
     if (flags.updateStableEnabled || flags.deleteE2EJobsEnabled) {
@@ -710,7 +709,6 @@ export class App implements OnInit, OnDestroy {
         id: 'update-stable',
         label: 'Update Stable',
         hint: 'open resilient update center',
-        icon: '⟳',
       });
     }
     if (flags.deleteE2EJobsEnabled) {
@@ -719,7 +717,6 @@ export class App implements OnInit, OnDestroy {
         id: 'delete-e2e',
         label: 'Delete E2E Tasks',
         hint: 'across all projects',
-        icon: '🧹',
         danger: true,
       });
     }

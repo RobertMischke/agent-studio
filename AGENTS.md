@@ -415,6 +415,22 @@ See `docs/filesystem-contract.md` for full details.
 - Keep the detail view as a simple protocol view, without tabs or metrics grids unless the product direction changes.
 - Prefer small, scoped changes and avoid rewriting unrelated code.
 
+### Menu surfaces are text-only
+
+Context menus, dropdown menus, and overflow menus contain text only. No leading icons on menu items. This applies to `<app-menu>` and every consumer (tab right-click, card right-click, detail-header title menu, status-bar CLI / model pickers, project picker, markdown-editor mode toggle, protocol-pane overflow, chat model badge, future menu surfaces).
+
+Icons remain allowed everywhere else: toolbars, status chips, lane glyphs, task-type chips, file-type icons in trees, the chat model badge's own pill glyph. The single allowed leading affordance on a menu row is `leadingGlyph`, the coloured-initial chip used by the project picker — it is intentionally not a decorative icon.
+
+Rationale: visual calm and information density. A 5-item menu with 3 leading emoji is louder than the same menu in plain text. Operator preference is firm; do not re-introduce icons "just for this one menu".
+
+Mechanics:
+
+- `MenuRow` in [frontend/src/app/components/menu/menu.types.ts](frontend/src/app/components/menu/menu.types.ts) has no `icon` field. Adding one is a regression.
+- The render template ([frontend/src/app/components/menu/menu.component.html](frontend/src/app/components/menu/menu.component.html)) intentionally renders only `leadingGlyph`, `label`, `hint`, and `trailingBadge`.
+- Regression cover: [frontend/e2e/menu/menu-no-icons.spec.ts](frontend/e2e/menu/menu-no-icons.spec.ts) opens the tab context menu and asserts the panel contains no `img` / `svg` / `.app-menu__icon` element. Extend this spec when you add a new menu surface.
+
+If a future destructive row truly needs a caution glyph, treat it as a per-case operator decision and propose it explicitly; do not slip it in as a "small exception".
+
 ### Selectors in Playwright tests
 
 Prefer `data-testid="..."` for stable test hooks. If a feature you're touching lacks one and a spec needs it, add it to the component rather than reaching for a CSS-class selector.

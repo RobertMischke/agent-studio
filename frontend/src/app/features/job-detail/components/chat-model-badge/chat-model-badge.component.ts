@@ -13,6 +13,9 @@ import {
   cliTypeIcon as fmtCliTypeIcon,
   cliTypeLabel as fmtCliTypeLabel,
 } from '../../../../services/format.util';
+// `fmtCliTypeIcon` is used for the badge's leading glyph (not a menu surface);
+// the model menu itself is text-only per the "Menu surfaces are text-only"
+// convention.
 import {
   buildModelMenuItems,
   cliTypeFromMenuId,
@@ -97,7 +100,6 @@ export class ChatModelBadgeComponent {
       availableModels: this.availableModels(),
       cliTypes: CLI_TYPES,
       cliTypeLabel: fmtCliTypeLabel,
-      cliTypeIcon: fmtCliTypeIcon,
     }),
   );
 

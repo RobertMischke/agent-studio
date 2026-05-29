@@ -27,11 +27,11 @@ export function buildTabCtxMenuItems(input: TabCtxMenuInputs): readonly MenuItem
 
   if (input.task) {
     items.push(
-      { kind: 'row', id: 'copy-name', label: 'Copy Name', icon: '📋' },
-      { kind: 'row', id: 'copy-id', label: 'Copy ID', icon: '🔗' },
+      { kind: 'row', id: 'copy-name', label: 'Copy Name' },
+      { kind: 'row', id: 'copy-id', label: 'Copy ID' },
     );
     if (input.task.key) {
-      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${input.task.key})`, icon: '🏷' });
+      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${input.task.key})` });
     }
     items.push({ kind: 'separator' });
   }

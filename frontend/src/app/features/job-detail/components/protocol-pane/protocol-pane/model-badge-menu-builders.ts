@@ -22,7 +22,6 @@ export interface ModelMenuInputs {
   availableModels: readonly CliModelInfo[];
   cliTypes: readonly CliType[];
   cliTypeLabel: (t: CliType) => string;
-  cliTypeIcon: (t: CliType) => string;
 }
 
 /**
@@ -87,7 +86,7 @@ export function buildModelMenuItems(input: ModelMenuInputs): readonly MenuItem[]
     items.push({
       kind: 'row',
       id: `cli:${t}`,
-      label: `${input.cliTypeIcon(t)}  ${input.cliTypeLabel(t)}`,
+      label: input.cliTypeLabel(t),
       active: input.cliType === t,
     });
   }

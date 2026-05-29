@@ -282,11 +282,11 @@ export class DetailHeaderComponent {
   readonly titleCtxMenuItems = computed<readonly MenuItem[]>(() => {
     const info = this.info();
     const items: MenuItem[] = [
-      { kind: 'row', id: 'copy-name', label: 'Copy Name', icon: '📋' },
-      { kind: 'row', id: 'copy-id', label: 'Copy ID', icon: '🔗' },
+      { kind: 'row', id: 'copy-name', label: 'Copy Name' },
+      { kind: 'row', id: 'copy-id', label: 'Copy ID' },
     ];
     if (info.key) {
-      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${info.key})`, icon: '🏷' });
+      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${info.key})` });
     }
     return items;
   });

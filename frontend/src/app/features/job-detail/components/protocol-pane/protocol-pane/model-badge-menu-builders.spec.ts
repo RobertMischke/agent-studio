@@ -20,12 +20,6 @@ const labels: Record<CliType, string> = {
   copilot: 'Copilot',
   gemini: 'Gemini',
 };
-const icons: Record<CliType, string> = {
-  claude: 'C',
-  codex: 'X',
-  copilot: 'P',
-  gemini: 'G',
-};
 
 const models: CliModelInfo[] = [
   { id: 'claude-opus-4-7', label: 'Opus 4.7', multiplier: 5, vendor: 'anthropic', isDefault: true },
@@ -107,7 +101,6 @@ describe('buildModelMenuItems', () => {
       availableModels: models,
       cliTypes: CLI_TYPES,
       cliTypeLabel: (t) => labels[t],
-      cliTypeIcon: (t) => icons[t],
       ...overrides,
     });
   }

@@ -705,7 +705,6 @@ export class ProtocolPaneComponent implements OnDestroy {
         kind: 'row',
         id: 'regenerate',
         label: 'Regenerate from CLI output',
-        icon: '✨',
         disabled: !this.canRegenerate(),
       },
       { kind: 'separator' },

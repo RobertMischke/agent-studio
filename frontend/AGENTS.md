@@ -40,6 +40,7 @@ Never select by CSS class names; they belong to styling and change often.
 - State via Angular signals; service singletons go in `app/services/`.
 - Keep the dark Catppuccin-inspired direction.
 - The detail view is a simple protocol view — don't add tabs or metrics grids unless the product direction changes.
+- **Menus are text-only.** `<app-menu>` rows never carry decorative icons. The `MenuRow` type has no `icon` field and the template renders no icon span. The single allowed leading affordance is `leadingGlyph` (the coloured-initial chip used by the project picker). Icons elsewhere (toolbars, chips, lane glyphs, the chat model badge pill) are fine. Full rationale in the root AGENTS.md under "Menu surfaces are text-only".
 
 ## Side-sheet layout contract (`<app-orchestrator-side-sheet>`, `<app-cli-usage-sheet>`, `<app-kanban-filter-sidesheet>`)
 

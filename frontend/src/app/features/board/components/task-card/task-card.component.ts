@@ -528,11 +528,11 @@ export class JobCardComponent implements OnInit, OnDestroy {
   readonly cardCtxMenuItems = computed<readonly MenuItem[]>(() => {
     const job = this.job();
     const items: MenuItem[] = [
-      { kind: 'row', id: 'copy-name', label: 'Copy Name', icon: '📋' },
-      { kind: 'row', id: 'copy-id', label: 'Copy ID', icon: '🔗' },
+      { kind: 'row', id: 'copy-name', label: 'Copy Name' },
+      { kind: 'row', id: 'copy-id', label: 'Copy ID' },
     ];
     if (job.key) {
-      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${job.key})`, icon: '🏷' });
+      items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${job.key})` });
     }
     return items;
   });

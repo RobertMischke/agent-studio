@@ -67,7 +67,8 @@
   // ---------------------------------------------------------------------------
   &__row {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    // Text-only rows: label | trailingBadge.
+    grid-template-columns: 1fr auto;
     grid-template-rows: auto auto;
     column-gap: 10px;
     align-items: center;
@@ -83,9 +84,14 @@
     cursor: pointer;
     transition: background 0.12s ease, color 0.12s ease;
 
-    // Rows without a leading glyph + hint collapse to a single content row.
+    // Rows without a hint collapse to a single content row.
     &:not(.app-menu__row--has-hint) {
       grid-template-rows: auto;
+    }
+
+    // Project-picker style rows carry a coloured initial chip on the left.
+    &.app-menu__row--has-glyph {
+      grid-template-columns: auto 1fr auto;
     }
   }
 
@@ -116,18 +122,12 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Row pieces — icon / glyph / label / hint / badge
+  // Row pieces — glyph / label / hint / badge.
+  //
+  // Menu rows are text-only (see "Menu surfaces are text-only" in AGENTS.md);
+  // the leading column is only populated by `leadingGlyph` (project-picker
+  // chip), not by decorative icons.
   // ---------------------------------------------------------------------------
-  &__icon {
-    grid-row: 1 / span 2;
-    grid-column: 1;
-    font-size: 14px;
-    line-height: 1;
-    width: 18px;
-    text-align: center;
-    color: inherit;
-  }
-
   &__glyph {
     grid-row: 1 / span 2;
     grid-column: 1;
@@ -145,16 +145,20 @@
 
   &__label {
     grid-row: 1;
-    grid-column: 2;
+    grid-column: 1;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  &__row--has-glyph &__label {
+    grid-column: 2;
+  }
+
   &__hint {
     grid-row: 2;
-    grid-column: 2;
+    grid-column: 1;
     font-size: 11px;
     font-weight: 400;
     color: var(--studio-fg-muted);
@@ -163,9 +167,13 @@
     white-space: nowrap;
   }
 
+  &__row--has-glyph &__hint {
+    grid-column: 2;
+  }
+
   &__badge {
     grid-row: 1 / span 2;
-    grid-column: 3;
+    grid-column: 2;
     align-self: center;
     min-width: 18px;
     padding: 0 6px;
@@ -177,5 +185,9 @@
     font-size: 10.5px;
     font-weight: 600;
     text-align: center;
+  }
+
+  &__row--has-glyph &__badge {
+    grid-column: 3;
   }
 }
