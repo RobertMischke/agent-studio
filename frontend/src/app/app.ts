@@ -268,6 +268,7 @@ export class App implements OnInit, OnDestroy {
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
   private hashListener: (() => void) | null = null;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
+  private boardShortcutListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   /**
    * Cycle 9 / ADR-0034: search query, four faceted filters, URL hash +
@@ -1066,6 +1067,28 @@ export class App implements OnInit, OnDestroy {
       }
     };
     window.addEventListener('keydown', this.kanbanKeyListener);
+
+    // Global Ctrl+B (Cmd+B on macOS): focus the sticky default board tab.
+    // Sister to the activity-bar Board button — the user can be inside any
+    // task / hub / diff tab and snap back to the board without aiming for
+    // a button. Suppressed inside text inputs so Ctrl+B keeps its bold
+    // behaviour in markdown editors / textareas.
+    this.boardShortcutListener = (ev: KeyboardEvent) => {
+      if (ev.defaultPrevented) return;
+      if (!this.featureFlags.vsCodeLayout()) return;
+      const mod = ev.ctrlKey || ev.metaKey;
+      if (!mod || ev.altKey || ev.shiftKey) return;
+      if (ev.key.toLowerCase() !== 'b') return;
+      const target = ev.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (target.isContentEditable) return;
+      }
+      this.studioTabState.activateSticky();
+      ev.preventDefault();
+    };
+    window.addEventListener('keydown', this.boardShortcutListener);
   }
 
   ngOnDestroy() {
@@ -1076,6 +1099,10 @@ export class App implements OnInit, OnDestroy {
     if (this.kanbanKeyListener) {
       window.removeEventListener('keydown', this.kanbanKeyListener);
       this.kanbanKeyListener = null;
+    }
+    if (this.boardShortcutListener) {
+      window.removeEventListener('keydown', this.boardShortcutListener);
+      this.boardShortcutListener = null;
     }
     if (this.nowMsTickHandle !== null) {
       clearInterval(this.nowMsTickHandle);

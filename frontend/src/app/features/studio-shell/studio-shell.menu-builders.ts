@@ -20,6 +20,13 @@ export interface TabCtxMenuInputs {
   hasTabsToLeft: boolean;
   /** When the tab is a task, provide its identifiers for copy actions. */
   task?: { title: string; id: string; key?: string | null } | null;
+  /**
+   * True when the right-clicked tab is the sticky default board tab.
+   * Hides the per-tab Close action (sticky tabs can't be closed) and
+   * disables Close-Others so the user can't strand themselves on a single
+   * non-sticky lane by accident.
+   */
+  isSticky?: boolean;
 }
 
 export function buildTabCtxMenuItems(input: TabCtxMenuInputs): readonly MenuItem[] {
@@ -36,8 +43,10 @@ export function buildTabCtxMenuItems(input: TabCtxMenuInputs): readonly MenuItem
     items.push({ kind: 'separator' });
   }
 
+  if (!input.isSticky) {
+    items.push({ kind: 'row', id: 'close', label: 'Close' });
+  }
   items.push(
-    { kind: 'row', id: 'close', label: 'Close' },
     {
       kind: 'row',
       id: 'close-others',

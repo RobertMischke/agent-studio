@@ -23,5 +23,13 @@ export class StudioActivityBarComponent {
   readonly sidebarVisible = input.required<boolean>();
   /** Per-item badge counts. Items with count > 0 show a small badge on the icon. */
   readonly badgeCounts = input<Readonly<Record<string, number>>>({});
+  /**
+   * Whether the sticky Board tab is currently the active editor tab.
+   * Drives the Board button's active highlight so the operator can tell
+   * at a glance whether clicking it would switch context or no-op.
+   */
+  readonly boardActive = input<boolean>(false);
   readonly panelToggle = output<StudioActivityPanelKey | 'settings'>();
+  /** Fires when the user clicks the always-visible Board button. */
+  readonly openBoardRequest = output<void>();
 }

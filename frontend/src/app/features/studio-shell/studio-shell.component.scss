@@ -507,6 +507,16 @@
     color: inherit;
   }
 
+  // Always-on Board destination button. Sits above the panel toggles
+  // (logically a *destination*, not a *panel*) and reads as the
+  // navigation home for the editor area. Subtle baseline pulse so the
+  // operator notices it the first time after a fresh install; no
+  // animation, just a slightly stronger idle colour than the panel
+  // toggles so it doesn't disappear into the rail.
+  &__btn--board:not(&__btn--active) {
+    color: var(--studio-fg-default, var(--studio-fg-strong));
+  }
+
   &__spacer {
     flex: 1;
   }
@@ -1882,6 +1892,22 @@
   &--welcome {
     border-right: 0;
     cursor: default;
+  }
+
+  // Sticky tabs (default Board) carry a pin glyph in place of the close
+  // X. The pin tints with the accent so the visual rhythm reads "this
+  // tab is permanent" rather than "missing close button".
+  &__pin {
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    color: var(--studio-accent);
+    flex: 0 0 auto;
+  }
+
+  &--sticky {
+    cursor: pointer;
   }
 }
 

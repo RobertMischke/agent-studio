@@ -1,4 +1,23 @@
 <aside class="studio-activitybar" data-testid="studio-activity-bar">
+  <!-- Always-on Board button. The studio shell guarantees a sticky default
+       board tab is mounted; clicking this button focuses that tab so the
+       user can always get back to the kanban from any other view. Sits
+       above the panel toggles so it reads as a first-class destination,
+       not a sidebar toggle. -->
+  <button type="button"
+          class="studio-ab__btn studio-ab__btn--board"
+          [class.studio-ab__btn--active]="boardActive()"
+          title="Open board (Ctrl+B)"
+          data-testid="studio-ab-board"
+          (click)="openBoardRequest.emit()">
+    <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <rect x="3" y="4" width="5" height="16" rx="1" />
+      <rect x="10" y="4" width="5" height="11" rx="1" />
+      <rect x="17" y="4" width="4" height="7" rx="1" />
+    </svg>
+  </button>
   @for (item of items(); track item.key) {
     <button type="button"
             class="studio-ab__btn"

@@ -14,8 +14,15 @@ export type StudioTabKind = 'board' | 'task' | 'hub' | 'diff' | 'activity' | 'we
 /** Sidebar panel kinds reachable from the ActivityBar. */
 export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'settings';
 
-/** Board tab — pinned per project; key `board:<projectName>` or `board:__all__`. */
-export interface BoardTab { kind: 'board'; projectName: string; }
+/**
+ * Board tab — pinned per project; key `board:<projectName>` or `board:__all__`.
+ *
+ * `sticky` marks the default Board tab that the shell always keeps mounted
+ * so the user can never get stranded in a "no tabs open" limbo. The tab
+ * cannot be closed (close-X is hidden in the UI; service `close*` ops
+ * preserve it), and survives reloads via the same persistence path.
+ */
+export interface BoardTab { kind: 'board'; projectName: string; sticky?: boolean; }
 
 /** Task-detail tab — one per opened job; key `task:<jobKey>`. */
 export interface TaskTab { kind: 'task'; jobKey: string; }

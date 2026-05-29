@@ -4,6 +4,7 @@ import type { StudioTab } from '../studio-shell.types';
 import { studioTabKey } from '../studio-shell.types';
 
 const STORAGE_KEY = 'atp.studio.tabs.v1';
+const STICKY_KEY = 'board:__all__';
 
 describe('StudioTabStateService', () => {
   let svc: StudioTabStateService;
@@ -19,10 +20,53 @@ describe('StudioTabStateService', () => {
     localStorage.removeItem(STORAGE_KEY);
   });
 
+  describe('sticky default board tab', () => {
+    it('mounts the sticky board:__all__ tab at boot when storage is empty', () => {
+      expect(svc.tabs()).toHaveLength(1);
+      const sticky = svc.tabs()[0];
+      expect(studioTabKey(sticky)).toBe(STICKY_KEY);
+      expect(sticky.kind).toBe('board');
+      expect((sticky as { sticky?: boolean }).sticky).toBe(true);
+      expect(svc.activeKey()).toBe(STICKY_KEY);
+      expect(svc.stickyKey()).toBe(STICKY_KEY);
+      expect(svc.isStickyKey(STICKY_KEY)).toBe(true);
+    });
+
+    it('promotes an existing board:__all__ tab from a pre-sticky snapshot', () => {
+      // Mimic an old persisted state from before the sticky feature shipped.
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          v: 1,
+          tabs: [
+            { kind: 'board', projectName: '__all__' },
+            { kind: 'task', jobKey: 'a' },
+          ],
+          activeKey: 'task:a',
+        }),
+      );
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+      expect(restored.tabs()).toHaveLength(2);
+      expect(restored.isStickyKey(STICKY_KEY)).toBe(true);
+      // Active key should NOT be overridden when a valid one was persisted.
+      expect(restored.activeKey()).toBe('task:a');
+    });
+
+    it('activateSticky() focuses the sticky tab from any other state', () => {
+      svc.open({ kind: 'task', jobKey: 'a' });
+      expect(svc.activeKey()).toBe('task:a');
+      const key = svc.activateSticky();
+      expect(key).toBe(STICKY_KEY);
+      expect(svc.activeKey()).toBe(STICKY_KEY);
+    });
+  });
+
   it('opens a tab and makes it active', () => {
     const tab: StudioTab = { kind: 'board', projectName: 'demo' };
     svc.open(tab);
-    expect(svc.tabs()).toEqual([tab]);
+    expect(svc.tabs()).toContainEqual(tab);
     expect(svc.activeKey()).toBe('board:demo');
     expect(svc.activeTab()).toEqual(tab);
   });
@@ -31,60 +75,78 @@ describe('StudioTabStateService', () => {
     const tab: StudioTab = { kind: 'task', jobKey: 'demo|x' };
     svc.open(tab);
     svc.open(tab);
-    expect(svc.tabs()).toHaveLength(1);
+    // Sticky + 1 task = 2.
+    expect(svc.tabs()).toHaveLength(2);
     expect(svc.activeKey()).toBe('task:demo|x');
   });
 
   it('closing the active tab falls back to the previous one', () => {
-    svc.open({ kind: 'board', projectName: 'demo' });
     svc.open({ kind: 'task', jobKey: 'a' });
     svc.open({ kind: 'task', jobKey: 'b' });
     expect(svc.activeKey()).toBe('task:b');
     svc.close('task:b');
-    expect(svc.tabs()).toHaveLength(2);
+    expect(svc.tabs()).toHaveLength(2); // sticky + task:a
     expect(svc.activeKey()).toBe('task:a');
   });
 
-  it('closing the last tab resets to no active tab', () => {
+  it('closing every non-sticky tab leaves the sticky board active', () => {
     const tab: StudioTab = { kind: 'task', jobKey: 'only' };
     svc.open(tab);
     svc.close(studioTabKey(tab));
-    expect(svc.tabs()).toEqual([]);
-    expect(svc.activeKey()).toBeNull();
-    expect(svc.activeTab()).toBeNull();
+    expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY]);
+    expect(svc.activeKey()).toBe(STICKY_KEY);
+    expect(svc.activeTab()).not.toBeNull();
   });
 
-  it('closeOthers keeps only the named tab', () => {
+  it('close() on the sticky key is a no-op', () => {
+    svc.open({ kind: 'task', jobKey: 'a' });
+    svc.close(STICKY_KEY);
+    expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY, 'task:a']);
+  });
+
+  it('closeOthers keeps the named tab AND the sticky tab', () => {
     svc.open({ kind: 'board', projectName: 'demo' });
     svc.open({ kind: 'task', jobKey: 'a' });
     svc.open({ kind: 'task', jobKey: 'b' });
     svc.closeOthers('task:a');
-    expect(svc.tabs().map(t => studioTabKey(t))).toEqual(['task:a']);
+    expect(svc.tabs().map(t => studioTabKey(t)).sort())
+      .toEqual([STICKY_KEY, 'task:a'].sort());
     expect(svc.activeKey()).toBe('task:a');
   });
 
-  it('closeRight removes everything strictly after the anchor', () => {
+  it('closeOthers on the sticky tab keeps only the sticky tab', () => {
+    svc.open({ kind: 'task', jobKey: 'a' });
+    svc.open({ kind: 'task', jobKey: 'b' });
+    svc.closeOthers(STICKY_KEY);
+    expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY]);
+    expect(svc.activeKey()).toBe(STICKY_KEY);
+  });
+
+  it('closeRight removes everything strictly after the anchor but keeps the sticky tab', () => {
+    // Sticky sits at index 0, then board:demo, task:a, task:b.
     svc.open({ kind: 'board', projectName: 'demo' });
     svc.open({ kind: 'task', jobKey: 'a' });
     svc.open({ kind: 'task', jobKey: 'b' });
     svc.closeRight('task:a');
-    expect(svc.tabs().map(t => studioTabKey(t))).toEqual(['board:demo', 'task:a']);
+    expect(svc.tabs().map(t => studioTabKey(t)))
+      .toEqual([STICKY_KEY, 'board:demo', 'task:a']);
   });
 
-  it('closeLeft removes everything strictly before the anchor', () => {
+  it('closeLeft removes everything strictly before the anchor but keeps the sticky tab', () => {
     svc.open({ kind: 'board', projectName: 'demo' });
     svc.open({ kind: 'task', jobKey: 'a' });
     svc.open({ kind: 'task', jobKey: 'b' });
     svc.closeLeft('task:a');
-    expect(svc.tabs().map(t => studioTabKey(t))).toEqual(['task:a', 'task:b']);
+    expect(svc.tabs().map(t => studioTabKey(t)).sort())
+      .toEqual([STICKY_KEY, 'task:a', 'task:b'].sort());
   });
 
-  it('closeAll wipes everything', () => {
+  it('closeAll preserves the sticky tab and activates it', () => {
     svc.open({ kind: 'board', projectName: 'demo' });
     svc.open({ kind: 'task', jobKey: 'a' });
     svc.closeAll();
-    expect(svc.tabs()).toEqual([]);
-    expect(svc.activeKey()).toBeNull();
+    expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY]);
+    expect(svc.activeKey()).toBe(STICKY_KEY);
   });
 
   describe('move (drag-reorder)', () => {
@@ -93,19 +155,21 @@ describe('StudioTabStateService', () => {
       svc.open({ kind: 'task', jobKey: 'a' });
       svc.open({ kind: 'task', jobKey: 'b' });
       svc.open({ kind: 'task', jobKey: 'c' });
-      // Active = task:c after seeding.
+      // Layout: [sticky, board:demo, task:a, task:b, task:c]. Active = task:c.
     }
 
     it('moves a tab to land before the target', () => {
       seed();
       svc.move('task:c', 'task:a');
-      expect(svc.tabs().map(t => studioTabKey(t))).toEqual(['board:demo', 'task:c', 'task:a', 'task:b']);
+      expect(svc.tabs().map(t => studioTabKey(t)))
+        .toEqual([STICKY_KEY, 'board:demo', 'task:c', 'task:a', 'task:b']);
     });
 
     it('moves a tab to the end when target is null', () => {
       seed();
       svc.move('board:demo', null);
-      expect(svc.tabs().map(t => studioTabKey(t))).toEqual(['task:a', 'task:b', 'task:c', 'board:demo']);
+      expect(svc.tabs().map(t => studioTabKey(t)))
+        .toEqual([STICKY_KEY, 'task:a', 'task:b', 'task:c', 'board:demo']);
     });
 
     it('keeps the active key stable across a move', () => {
@@ -132,18 +196,19 @@ describe('StudioTabStateService', () => {
     it('handles dropping a tab right after itself (forward move by one)', () => {
       seed();
       svc.move('task:a', 'task:c');
-      expect(svc.tabs().map(t => studioTabKey(t))).toEqual(['board:demo', 'task:b', 'task:a', 'task:c']);
+      expect(svc.tabs().map(t => studioTabKey(t)))
+        .toEqual([STICKY_KEY, 'board:demo', 'task:b', 'task:a', 'task:c']);
     });
   });
 
   describe('persistence across reloads', () => {
     it('writes the current state to localStorage on every change', () => {
-      svc.open({ kind: 'board', projectName: 'demo' });
       svc.open({ kind: 'task', jobKey: 'a' });
       const raw = localStorage.getItem(STORAGE_KEY);
       expect(raw).not.toBeNull();
       const parsed = JSON.parse(raw!);
       expect(parsed.v).toBe(1);
+      // Sticky + task:a = 2.
       expect(parsed.tabs).toHaveLength(2);
       expect(parsed.activeKey).toBe('task:a');
     });
@@ -157,11 +222,13 @@ describe('StudioTabStateService', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({ providers: [StudioTabStateService] });
       const restored = TestBed.inject(StudioTabStateService);
-      expect(restored.tabs().map(t => studioTabKey(t))).toEqual(['board:demo', 'task:a', 'task:b']);
+      expect(restored.tabs().map(t => studioTabKey(t)))
+        .toEqual([STICKY_KEY, 'board:demo', 'task:a', 'task:b']);
       expect(restored.activeKey()).toBe('task:b');
+      expect(restored.isStickyKey(STICKY_KEY)).toBe(true);
     });
 
-    it('drops the payload when the version prefix does not match', () => {
+    it('drops the payload when the version prefix does not match but still mounts the sticky tab', () => {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({ v: 99, tabs: [{ kind: 'task', jobKey: 'z' }], activeKey: 'task:z' }),
@@ -169,8 +236,8 @@ describe('StudioTabStateService', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({ providers: [StudioTabStateService] });
       const restored = TestBed.inject(StudioTabStateService);
-      expect(restored.tabs()).toEqual([]);
-      expect(restored.activeKey()).toBeNull();
+      expect(restored.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY]);
+      expect(restored.activeKey()).toBe(STICKY_KEY);
     });
 
     it('falls back to the trailing tab when the persisted activeKey is gone', () => {
@@ -179,6 +246,7 @@ describe('StudioTabStateService', () => {
         JSON.stringify({
           v: 1,
           tabs: [
+            { kind: 'board', projectName: '__all__', sticky: true },
             { kind: 'board', projectName: 'demo' },
             { kind: 'task', jobKey: 'a' },
           ],
@@ -188,11 +256,11 @@ describe('StudioTabStateService', () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({ providers: [StudioTabStateService] });
       const restored = TestBed.inject(StudioTabStateService);
-      expect(restored.tabs()).toHaveLength(2);
+      expect(restored.tabs()).toHaveLength(3);
       expect(restored.activeKey()).toBe('task:a');
     });
 
-    it('survives a corrupt payload without throwing', () => {
+    it('survives a corrupt payload without throwing and still mounts the sticky tab', () => {
       localStorage.setItem(STORAGE_KEY, 'not-json{');
       expect(() => {
         TestBed.resetTestingModule();
@@ -200,7 +268,7 @@ describe('StudioTabStateService', () => {
         TestBed.inject(StudioTabStateService);
       }).not.toThrow();
       const restored = TestBed.inject(StudioTabStateService);
-      expect(restored.tabs()).toEqual([]);
+      expect(restored.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY]);
     });
   });
 });

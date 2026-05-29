@@ -149,7 +149,9 @@
       [activePanel]="activePanel()"
       [sidebarVisible]="sidebarVisible()"
       [badgeCounts]="activityBarBadgeCounts()"
-      (panelToggle)="togglePanel($event)" />
+      [boardActive]="isBoardTabActive()"
+      (panelToggle)="togglePanel($event)"
+      (openBoardRequest)="onActivityBarOpenBoard()" />
 
     <!-- Sidebar host -->
     @if (sidebarVisible()) {
@@ -319,11 +321,14 @@
                             [appTaskStatusPopover]="tabJob(t)"
                             [appTaskStatusPopoverOnlyTruncated]="false"
                             [attr.data-testid]="'studio-explorer-open-tab-' + tabKey(t)"
+                            [attr.data-sticky]="isTabSticky(t) ? 'true' : null"
                             (click)="selectTab(tabKey(t))">
                       <span class="studio-tree-row__name" data-truncatable>{{ tabLabel(t) }}</span>
-                      <span class="studio-tree-row__close"
-                            (click)="closeTab(tabKey(t), $event)"
-                            aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>
+                      @if (!isTabSticky(t)) {
+                        <span class="studio-tree-row__close"
+                              (click)="closeTab(tabKey(t), $event)"
+                              aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>
+                      }
                     </button>
                   }
                   }
@@ -712,11 +717,13 @@
             <div class="studio-tab"
                  role="tab"
                  tabindex="0"
-                 draggable="true"
+                 [attr.draggable]="isTabSticky(t) ? 'false' : 'true'"
                  [class.studio-tab--active]="activeKey() === tabKey(t)"
+                 [class.studio-tab--sticky]="isTabSticky(t)"
                  [class.studio-tab--dragging]="draggingTabKey() === tabKey(t)"
                  [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
                  [attr.data-tab-key]="tabKey(t)"
+                 [attr.data-sticky]="isTabSticky(t) ? 'true' : null"
                  (click)="selectTab(tabKey(t))"
                  (keydown.enter)="selectTab(tabKey(t))"
                  (keydown.space)="selectTab(tabKey(t)); $event.preventDefault()"
@@ -729,11 +736,21 @@
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
+              @if (isTabSticky(t)) {
+                <span class="studio-tab__pin"
+                      aria-label="Pinned tab"
+                      title="This tab is pinned and cannot be closed"
+                      data-testid="studio-tab-pin">
+                  <app-studio-icon name="pin" [size]="11"></app-studio-icon>
+                </span>
+              }
               <span class="studio-tab__title">{{ tabLabel(t) }}</span>
-              <button type="button"
-                      class="studio-tab__close"
-                      aria-label="Close tab"
-                      (click)="closeTab(tabKey(t), $event)">×</button>
+              @if (!isTabSticky(t)) {
+                <button type="button"
+                        class="studio-tab__close"
+                        aria-label="Close tab"
+                        (click)="closeTab(tabKey(t), $event)">×</button>
+              }
             </div>
           }
           <!-- Invisible spacer that catches drops past the last tab so users can

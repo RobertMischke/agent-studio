@@ -1,9 +1,20 @@
+// Sticky default board tab — see ensureStickyDefault().
 import { Injectable, computed, signal } from '@angular/core';
-import type { StudioTab } from '../studio-shell.types';
+import type { StudioTab, BoardTab } from '../studio-shell.types';
 import { studioTabKey } from '../studio-shell.types';
 
 const STORAGE_KEY = 'atp.studio.tabs.v1';
 const STORAGE_VERSION = 1;
+
+/**
+ * Always-on default board tab. Mounted at boot, restored on reload, and
+ * preserved through every close-style op so the editor area can never
+ * fall into a navigation dead-end. Default is the cross-project board
+ * (`__all__`). A follow-up may let the user choose between cross-project
+ * and last-active project; the navigation-deadend fix only needs the
+ * default present.
+ */
+const STICKY_DEFAULT: BoardTab = { kind: 'board', projectName: '__all__', sticky: true };
 
 interface PersistedState {
   v: number;
@@ -41,6 +52,67 @@ export class StudioTabStateService {
 
   constructor() {
     this.restore();
+    this.ensureStickyDefault();
+  }
+
+  /** True when the tab keyed by `key` is the sticky default board tab. */
+  isStickyKey(key: string): boolean {
+    return this._tabs().some(t => studioTabKey(t) === key && this.isSticky(t));
+  }
+
+  /** Resolve the sticky tab's key, or null if none is mounted yet. */
+  stickyKey(): string | null {
+    const sticky = this._tabs().find(t => this.isSticky(t));
+    return sticky ? studioTabKey(sticky) : null;
+  }
+
+  /**
+   * Focus the sticky default board tab; called from the activity-bar
+   * Board button and the Ctrl+B shortcut. Returns the activated key, or
+   * null if no sticky tab is mounted (shouldn't happen — `ensureStickyDefault`
+   * runs at construction and after restore).
+   */
+  activateSticky(): string | null {
+    const key = this.stickyKey();
+    if (!key) return null;
+    this._activeKey.set(key);
+    this.persist();
+    return key;
+  }
+
+  private isSticky(tab: StudioTab): boolean {
+    return tab.kind === 'board' && !!tab.sticky;
+  }
+
+  /**
+   * Guarantee the sticky default board tab is present in the list. Called
+   * once at construction (after `restore()`). If a non-sticky board tab
+   * for the same project name already exists, promote it instead of
+   * inserting a duplicate. If no active key is set, activate the sticky
+   * tab so the editor surface is never blank.
+   */
+  private ensureStickyDefault(): void {
+    const tabs = this._tabs();
+    if (tabs.some(t => this.isSticky(t))) {
+      // Existing sticky → only re-anchor the active key when the persisted
+      // value is gone (e.g. corrupted payload restored without an activeKey).
+      if (this._activeKey() === null) this._activeKey.set(this.stickyKey());
+      return;
+    }
+    const existingIdx = tabs.findIndex(
+      t => t.kind === 'board' && t.projectName === STICKY_DEFAULT.projectName,
+    );
+    if (existingIdx >= 0) {
+      const next = tabs.slice();
+      next[existingIdx] = { ...(next[existingIdx] as BoardTab), sticky: true };
+      this._tabs.set(next);
+    } else {
+      this._tabs.set([STICKY_DEFAULT, ...tabs]);
+    }
+    if (this._activeKey() === null) {
+      this._activeKey.set(studioTabKey(STICKY_DEFAULT));
+    }
+    this.persist();
   }
 
   /** Open the tab if it's not already there, then focus it. */
@@ -59,8 +131,13 @@ export class StudioTabStateService {
     }
   }
 
-  /** Close the tab; if it was active, fall back to the last remaining tab. */
+  /**
+   * Close the tab; if it was active, fall back to the last remaining tab.
+   * Sticky tabs (`isSticky`) are preserved — calling close on the sticky
+   * key is a no-op so the editor area never empties.
+   */
   close(key: string): void {
+    if (this.isStickyKey(key)) return;
     const list = this._tabs();
     const next = list.filter(t => studioTabKey(t) !== key);
     this._tabs.set(next);
@@ -70,20 +147,33 @@ export class StudioTabStateService {
     this.persist();
   }
 
-  /** Close every tab except the one given. */
+  /**
+   * Close every tab except the one given. Sticky tabs are preserved in
+   * addition to the named one.
+   */
   closeOthers(keepKey: string): void {
-    const keep = this._tabs().find(t => studioTabKey(t) === keepKey);
-    this._tabs.set(keep ? [keep] : []);
-    this._activeKey.set(keep ? keepKey : null);
+    const list = this._tabs();
+    const next = list.filter(t => studioTabKey(t) === keepKey || this.isSticky(t));
+    this._tabs.set(next);
+    if (next.some(t => studioTabKey(t) === keepKey)) {
+      this._activeKey.set(keepKey);
+    } else if (next.length) {
+      this._activeKey.set(studioTabKey(next[next.length - 1]));
+    } else {
+      this._activeKey.set(null);
+    }
     this.persist();
   }
 
-  /** Close every tab whose index is strictly greater than the anchor's. */
+  /**
+   * Close every tab whose index is strictly greater than the anchor's.
+   * Sticky tabs are preserved even when they sit past the anchor.
+   */
   closeRight(anchorKey: string): void {
     const list = this._tabs();
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
-    const next = list.slice(0, idx + 1);
+    const next = list.filter((t, i) => i <= idx || this.isSticky(t));
     this._tabs.set(next);
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
@@ -91,12 +181,15 @@ export class StudioTabStateService {
     this.persist();
   }
 
-  /** Close every tab whose index is strictly less than the anchor's. */
+  /**
+   * Close every tab whose index is strictly less than the anchor's.
+   * Sticky tabs are preserved even when they sit before the anchor.
+   */
   closeLeft(anchorKey: string): void {
     const list = this._tabs();
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
-    const next = list.slice(idx);
+    const next = list.filter((t, i) => i >= idx || this.isSticky(t));
     this._tabs.set(next);
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
@@ -104,10 +197,11 @@ export class StudioTabStateService {
     this.persist();
   }
 
-  /** Close every tab. */
+  /** Close every tab. Sticky tabs are preserved and one becomes active. */
   closeAll(): void {
-    this._tabs.set([]);
-    this._activeKey.set(null);
+    const sticky = this._tabs().filter(t => this.isSticky(t));
+    this._tabs.set(sticky);
+    this._activeKey.set(sticky.length ? studioTabKey(sticky[0]) : null);
     this.persist();
   }
 
@@ -153,6 +247,8 @@ export class StudioTabStateService {
   purgeStaleProjectTabs(validNames: ReadonlySet<string>): void {
     const before = this._tabs();
     const after = before.filter(t => {
+      // Sticky tabs are immune — the navigation fallback must always exist.
+      if (this.isSticky(t)) return true;
       if (t.kind === 'board' && t.projectName !== '__all__') return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
       return true;

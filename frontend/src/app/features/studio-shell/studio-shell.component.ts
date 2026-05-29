@@ -737,6 +737,26 @@ export class StudioShellComponent {
     this.tabState.open({ kind: 'board', projectName });
   }
 
+  /** True when the tab is the sticky default board (cannot be closed). */
+  isTabSticky(tab: StudioTab): boolean {
+    return tab.kind === 'board' && !!tab.sticky;
+  }
+
+  /** True when the currently active editor tab is the sticky default board. */
+  isBoardTabActive(): boolean {
+    const tab = this.activeTab();
+    return !!tab && this.isTabSticky(tab);
+  }
+
+  /**
+   * Activity-bar Board button click. Focuses (or restores) the sticky
+   * default board tab so the user can always get back to the kanban,
+   * regardless of which other tab is currently active.
+   */
+  onActivityBarOpenBoard(): void {
+    this.tabState.activateSticky();
+  }
+
   openTask(job: JobInfo): void {
     this.tabState.open({ kind: 'task', jobKey: job.jobKey });
     // Keep the legacy JobSelectionService in sync so the embedded
@@ -931,6 +951,7 @@ export class StudioShellComponent {
       hasTabsToRight: idx >= 0 && idx < tabs.length - 1,
       hasTabsToLeft: idx > 0,
       task,
+      isSticky: tab ? this.isTabSticky(tab) : false,
     });
   });
   readonly tabCtxMenuPosition = computed(() => {
