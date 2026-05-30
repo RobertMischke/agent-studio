@@ -22,12 +22,44 @@ import { test, expect, type Page } from '@playwright/test';
 
 const STICKY_TAB_KEY = 'board:__all__';
 
+/** Empty-but-valid GroupedJobs payload (mirrors the service signal default). */
+const EMPTY_GROUPED = {
+  backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [],
+  ready: [], progress: [], failedPickup: [], review: [], autoReview: [],
+  humanReview: [], completed: [], archive: [],
+};
+
 async function bootStudio(page: Page): Promise<void> {
-  // Reset persisted tab state so each test starts from a known-empty
-  // baseline (the service then re-mounts the sticky tab on construction).
-  await page.addInitScript(() => {
-    try { localStorage.removeItem('atp.studio.tabs.v1'); } catch { /* ignore */ }
+  // This spec exercises a purely front-end concern (sticky tab + recovery
+  // paths), so it must not depend on a live backend. With the backend down
+  // every boot GET 500s and the shell raises a blocking <app-error-dialog>
+  // overlay that intercepts pointer events (Board button, tab close X).
+  // Stub the boot endpoints with empty-but-valid payloads so no overlay ever
+  // appears. The stub persists for the page lifetime, covering the initial
+  // load, every reload, and background polls. Against a live backend it is a
+  // harmless no-data response that does not affect the navigation assertions.
+  await page.route('**/api/**', route => {
+    const url = route.request().url();
+    const json = (body: unknown) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    // Only these four boot GETs surface a *blocking* error-dialog overlay
+    // when they fail; stub them with empty-but-valid payloads.
+    if (url.includes('/api/tasks/grouped')) return json(EMPTY_GROUPED);
+    if (url.includes('/api/runner/status')) return json({ projects: {} });
+    if (/\/api\/tasks(\?|$)/.test(url)) return json([]);
+    if (url.includes('/api/watch-paths')) return json([]);
+    // Everything else (quota, workspaces, config, …) is left to fail the way
+    // the app already handles it — inline, non-blocking. Returning a wrong-
+    // shaped success here would crash a consumer (e.g. the header quota cards).
+    return route.continue();
   });
+
+  // Each Playwright test runs in its own fresh browser context, so
+  // localStorage already starts empty and the tab-state service mounts the
+  // sticky board tab on construction. We deliberately do NOT register a
+  // persistent addInitScript that clears the storage key: such a script
+  // re-runs on every navigation, and the seeded tests below set the key and
+  // then reload — a persistent clear would wipe the seed before the app boots.
   await page.goto('/');
   await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 15_000 });
 }
@@ -63,8 +95,8 @@ test.describe('studio-shell · navigation has no dead end', () => {
         v: 1,
         tabs: [
           { kind: 'board', projectName: '__all__', sticky: true },
-          { kind: 'task', jobKey: 'fake-jobkey-a' },
-          { kind: 'task', jobKey: 'fake-jobkey-b' },
+          { kind: 'task', taskKey: 'fake-jobkey-a' },
+          { kind: 'task', taskKey: 'fake-jobkey-b' },
         ],
         activeKey: 'task:fake-jobkey-b',
       };
@@ -108,7 +140,7 @@ test.describe('studio-shell · navigation has no dead end', () => {
         v: 1,
         tabs: [
           { kind: 'board', projectName: '__all__', sticky: true },
-          { kind: 'task', jobKey: 'fake-jobkey-x' },
+          { kind: 'task', taskKey: 'fake-jobkey-x' },
         ],
         activeKey: 'task:fake-jobkey-x',
       };
@@ -131,7 +163,7 @@ test.describe('studio-shell · navigation has no dead end', () => {
         v: 1,
         tabs: [
           { kind: 'board', projectName: '__all__', sticky: true },
-          { kind: 'task', jobKey: 'fake-jobkey-shortcut' },
+          { kind: 'task', taskKey: 'fake-jobkey-shortcut' },
         ],
         activeKey: 'task:fake-jobkey-shortcut',
       };
