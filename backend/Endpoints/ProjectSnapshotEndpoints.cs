@@ -159,9 +159,13 @@ public static class ProjectSnapshotEndpoints
             var failed = new List<object>();
             // ADR-0024: enumerate orphan folders through the layer
             // (which knows the lane shape) rather than constructing the
-            // lane paths here. Each repair routes through
-            // MoveOrphanToFailedPickup so the move and the reason file
-            // land in one typed call.
+            // lane paths here. Failed-pickup-elimination (supersedes
+            // ADR-0028/0029, cause #9): a folder with no job.json is debris,
+            // not a runnable task, so the repair archives it to 7-archive with
+            // its evidence intact instead of parking a card in the retired
+            // 3a-failed-pickup lane. Each repair routes through
+            // ArchiveOrphanFolder so the move and the reason file land in one
+            // typed call.
             foreach (var entryFolder in taskAccess.ListAllLaneFolders(entry.Path).Where(e => !e.HasJobJson))
             {
                 var destinationSlug = BuildRepairSlug(entryFolder.Lane, entryFolder.Slug, entry.Path, taskAccess);
@@ -169,8 +173,9 @@ public static class ProjectSnapshotEndpoints
                     "# Queue health repair\n\n" +
                     $"Original folder: `{entryFolder.Lane}/{entryFolder.Slug}`\n\n" +
                     "This folder did not contain `job.json`, so it could not be governed by the normal job API. " +
-                    "The queue-health repair action moved it here through the application state machine and preserved its files.\n";
-                var outcome = taskAccess.MoveOrphanToFailedPickup(
+                    "It is debris, not a runnable task. The queue-health repair action archived it here through the " +
+                    "application state machine and preserved its files.\n";
+                var outcome = taskAccess.ArchiveOrphanFolder(
                     entry.Path,
                     entryFolder.Lane,
                     entryFolder.Slug,
@@ -199,10 +204,10 @@ public static class ProjectSnapshotEndpoints
     private static string BuildRepairSlug(string lane, string slug, string watchPath, ITaskAccess taskAccess)
     {
         var safeLane = lane.Replace(Path.DirectorySeparatorChar, '-').Replace(Path.AltDirectorySeparatorChar, '-');
-        var baseSlug = $"orphan-{safeLane}-{slug}-{DateTime.UtcNow:yyyy-MM-dd}";
+        var baseSlug = $"debris-{safeLane}-{slug}-{DateTime.UtcNow:yyyy-MM-dd}";
         var candidate = baseSlug;
         var i = 2;
-        while (taskAccess.SlugExistsInLane(watchPath, TaskStates.FailedPickup, candidate))
+        while (taskAccess.SlugExistsInLane(watchPath, TaskStates.Archive, candidate))
         {
             candidate = $"{baseSlug}-{i++}";
         }

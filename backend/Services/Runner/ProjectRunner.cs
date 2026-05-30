@@ -748,7 +748,7 @@ public class ProjectRunner
                         slug: jobId,
                         outputLines: 0,
                         durationSeconds: 0.0,
-                        executionStatus: "spawn-failed");
+                        executionStatus: SpawnFailedExecutionStatus);
                 }
                 // Spawn failure is the terminal end of this run's lifecycle:
                 // no OnCliFinishedAsync will fire, so release the pickup lock
@@ -2525,8 +2525,17 @@ public class ProjectRunner
     // mtime before considering 2-ready, and dead-letters any folder that
     // has exhausted the retry budget without producing CLI output.
 
-    /// <summary>Default retry budget before a 3-progress folder is dead-lettered.</summary>
+    /// <summary>Default retry budget before a 3-progress folder is rerouted off the pickup path.</summary>
     internal const int PickupFailureThreshold = 3;
+
+    /// <summary>
+    /// <see cref="PickupAttemptDiagnostic.ExecutionStatus"/> value recorded
+    /// when a pickup attempt never started the CLI process (spawn failure).
+    /// Used by the reroute classifier to tell "the CLI is unavailable"
+    /// (requeue to 2-ready and pause) apart from "the CLI ran but produced
+    /// nothing" (escalate to 5-human-review).
+    /// </summary>
+    internal const string SpawnFailedExecutionStatus = "spawn-failed";
     /// <summary>
     /// Per-attempt deadline (seconds) within which the spawned CLI must
     /// produce at least one streamed output line for the attempt to count
@@ -2579,11 +2588,29 @@ public class ProjectRunner
     }
 
     /// <summary>Test seam: lets a unit test prime the per-slug attempt counter
-    /// without driving a real failed run.</summary>
-    internal void SetPickupAttemptsForTest(string slug, int count)
+    /// without driving a real failed run. When <paramref name="executionStatus"/>
+    /// is supplied, the attempt history is also primed with that status on every
+    /// entry so the over-budget classifier can be exercised: pass
+    /// <see cref="SpawnFailedExecutionStatus"/> to drive the spawn-failure ->
+    /// 2-ready + pause path, or leave it null for the task-shaped ->
+    /// 5-human-review path. History is bounded at the threshold to mirror the
+    /// real recorder.</summary>
+    internal void SetPickupAttemptsForTest(string slug, int count, string? executionStatus = null)
     {
         var state = _pickupAttempts.GetOrAdd(slug, _ => new PickupAttemptState());
         state.Count = count;
+        state.History.Clear();
+        var entries = Math.Min(count, PickupFailureThreshold);
+        for (var i = 0; i < entries; i++)
+        {
+            state.History.Enqueue(new PickupAttemptDiagnostic
+            {
+                At = DateTime.UtcNow,
+                DurationSeconds = 0,
+                OutputLines = 0,
+                ExecutionStatus = executionStatus
+            });
+        }
     }
 
     /// <summary>Test seam: read the per-slug attempt counter.</summary>
@@ -2665,7 +2692,7 @@ public class ProjectRunner
             var slug = Path.GetFileName(candidate.FolderPath);
             if (candidate.Info == null)
             {
-                MoveProgressOrphanToFailedPickup(candidate, slug);
+                HandleStaleProgressOrphan(candidate, slug);
                 continue;
             }
 
@@ -2675,15 +2702,18 @@ public class ProjectRunner
             var attempts = GetPickupAttempts(slug);
             if (attempts >= PickupFailureThreshold)
             {
-                var trippedDuringThisDeadLetter = DeadLetterUnrecoverableFolder(candidate, slug, attempts);
-                // Cross-slug infra circuit breaker (loop-inventory:
-                // pickup.cross-slug-infra-circuit-breaker). If THIS
-                // dead-letter just tripped the breaker, halt the
-                // iteration so the remaining 3-progress folders are NOT
-                // dead-lettered too. The mode flip also short-circuits
-                // the next TickAsync via the "manual" gate at the head
-                // of the tick, so this guard is mid-iteration only.
-                if (trippedDuringThisDeadLetter) return null;
+                var pausedDuringReroute = RerouteOverBudgetFolder(candidate, slug, attempts);
+                // Spawn-failure pause (loop-inventory:
+                // pickup.spawn-failure-budget-pause / cross-slug-infra-circuit-breaker).
+                // If rerouting this over-budget folder just paused the runner
+                // (its CLI could not be spawned), halt the iteration so the
+                // remaining 3-progress folders are not touched this tick. The
+                // mode flip also short-circuits the next TickAsync via the
+                // "manual" gate at the head of the tick, so this guard is
+                // mid-iteration only. A task-shaped or zombie escalation does
+                // not pause: the folder leaves the loop (5-human-review), so we
+                // simply continue to the next candidate.
+                if (pausedDuringReroute) return null;
                 continue;
             }
 
@@ -2709,11 +2739,11 @@ public class ProjectRunner
                     var zombieReason =
                         $"Auto-pickup gave up resuming a session-less 3-progress folder after {resumeFailures} failed resume attempts " +
                         $"(budget {ZombieResumeFailureThreshold}): no active process and no resumable session id to continue.";
-                    var trippedDuringZombieDeadLetter = DeadLetterUnrecoverableFolder(
+                    var pausedDuringZombieReroute = RerouteOverBudgetFolder(
                         candidate, slug, resumeFailures,
                         thresholdOverride: ZombieResumeFailureThreshold,
                         reasonOverride: zombieReason);
-                    if (trippedDuringZombieDeadLetter) return null;
+                    if (pausedDuringZombieReroute) return null;
                     continue;
                 }
             }
@@ -2723,7 +2753,7 @@ public class ProjectRunner
         return null;
     }
 
-    private void MoveProgressOrphanToFailedPickup(ProgressPickupCandidate candidate, string slug)
+    private void HandleStaleProgressOrphan(ProgressPickupCandidate candidate, string slug)
     {
         // Distinguish a genuine pickup orphan from post-move cleanup debris.
         //
@@ -2759,11 +2789,13 @@ public class ProjectRunner
         // tick will not mis-classify it either. No orphan entry is ever
         // written for cleanup debris.
         //
-        // The original genuine-orphan path (no post-progress twin) is
-        // preserved verbatim below: a user who manually creates an empty
-        // 3-progress/<slug>/ folder, or a hard backend crash that loses
-        // job.json without moving the job on, still produces a loud
-        // failed-pickup entry the operator can investigate.
+        // The genuine-orphan path (no post-progress twin) is below. A folder
+        // with no job.json is not a runnable task: a user who manually created
+        // an empty 3-progress/<slug>/ folder, or a hard backend crash that
+        // lost job.json without moving the job on. failed-pickup-elimination
+        // cause #5: this is debris, not a pickup failure, so it is archived to
+        // 7-archive with its evidence (logs, status.md) intact rather than
+        // parked in a dead-end failure lane the operator has to triage.
         if (TryFindSlugInPostProgressLane(slug, out var locatedLane))
         {
             // ADR-0024: skeleton delete routes through the typed layer.
@@ -2794,27 +2826,21 @@ public class ProjectRunner
 
         var now = DateTime.UtcNow;
         var destinationSlug = BuildProgressOrphanSlug(slug, now,
-            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, TaskStates.FailedPickup, name));
+            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, TaskStates.Archive, name));
 
-        var reason =
-            "# Stale progress orphan\n\n" +
-            $"Original folder slug: `{slug}`\n\n" +
-            "The auto-pickup loop found this folder under `3-progress`, but it did not contain `job.json`. " +
-            "A progress folder without application-owned metadata is not a runnable job. The folder was moved here " +
-            "without counting as a CLI spawn failure, so the runner can continue with the next real job.\n";
-        var moveResult = _taskAccess.MoveOrphanToFailedPickup(
-            Entry.Path, TaskStates.Progress, slug, destinationSlug, reason);
+        var moveResult = _taskAccess.ArchiveOrphanFolder(
+            Entry.Path, TaskStates.Progress, slug, destinationSlug);
         if (moveResult.Status != OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
         {
             _logger.LogWarning(
-                "Progress orphan move refused for {Slug} on {Project}: {Status} {Message}",
+                "Progress orphan archive refused for {Slug} on {Project}: {Status} {Message}",
                 slug, ProjectName, moveResult.Status, moveResult.Message);
             return;
         }
 
         _pickupAttempts.TryRemove(slug, out _);
-        _logger.LogWarning(
-            "[taskboard] moved stale 3-progress orphan {Slug} on {Project} to {Destination}; auto-pickup will continue",
+        _logger.LogInformation(
+            "[taskboard] archived stale 3-progress orphan {Slug} on {Project} to {Destination} (no job.json, no downstream twin); auto-pickup will continue",
             slug, ProjectName, destinationSlug);
     }
 
@@ -2959,34 +2985,43 @@ public class ProjectRunner
     }
 
     /// <summary>
-    /// Dead-letter a 3-progress folder whose autopickup attempts have
-    /// exhausted the retry budget. ADR-0028: the destination is the visible
-    /// <see cref="TaskStates.FailedPickup"/> lane, not <c>7-archive</c>; pickup
-    /// failures are loud, never silent. Single-state-machine authority
-    /// (per-task constraint): the move goes through
-    /// <see cref="TaskStateMachine.MoveFolderToFailedPickup"/>, not direct file
-    /// IO. Writes a <see cref="PickupFailureRecord"/> row to
-    /// <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c> and clears the
-    /// per-slug attempt counter.
+    /// Reroute a 3-progress folder whose autopickup attempts have exhausted
+    /// the retry budget. failed-pickup-elimination doctrine: a folder that
+    /// carries a <c>job.json</c> is a real task and is NEVER parked in a
+    /// dead-end failure lane. The budget-exhaustion cause decides where it
+    /// goes instead:
+    ///
+    /// <list type="bullet">
+    ///   <item><b>Spawn failure</b> (every recorded attempt shows the CLI
+    ///   process never started): the CLI is unavailable, not the task. The
+    ///   task is returned to <see cref="TaskStates.Ready"/> and the runner is
+    ///   paused so it does not spin against a dead CLI - a human fixes the CLI
+    ///   and resumes. (failed-pickup-elimination cause #6)</item>
+    ///   <item><b>Task-shaped / zombie</b> (the CLI did spawn but produced no
+    ///   output, or a session-less folder exhausted its resume budget):
+    ///   terminal, but the task still deserves a person, so it is escalated to
+    ///   <see cref="TaskStates.HumanReview"/>. The folder leaves 3-progress so
+    ///   the loop ends without a dead-letter lane, and the runner continues to
+    ///   the next candidate. (failed-pickup-elimination causes #7, #8)</item>
+    /// </list>
+    ///
+    /// <para>Single-state-machine authority: the move goes through
+    /// <see cref="TaskStateMachine.MoveJob"/> (the by-id move the rest of this
+    /// class already uses), not direct file IO. A
+    /// <see cref="PickupFailureRecord"/> row is appended to
+    /// <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c> for forensics and
+    /// the per-slug counters are cleared.</para>
+    ///
+    /// <para>Returns <c>true</c> when this reroute paused the runner (the
+    /// caller halts the surrounding iteration); <c>false</c> when the runner
+    /// is still auto and the caller should continue to the next candidate.</para>
     /// </summary>
-    /// <summary>
-    /// Dead-letter one over-budget 3-progress folder. Returns <c>true</c>
-    /// when this dead-letter just tripped the cross-slug infra circuit
-    /// breaker (caller halts the surrounding iteration); <c>false</c>
-    /// otherwise (caller continues to the next candidate).
-    /// </summary>
-    private bool DeadLetterUnrecoverableFolder(
+    private bool RerouteOverBudgetFolder(
         ProgressPickupCandidate candidate, string slug, int attempts,
         int? thresholdOverride = null, string? reasonOverride = null)
     {
         var now = DateTime.UtcNow;
         var threshold = thresholdOverride ?? PickupFailureThreshold;
-        // ADR-0024: dead-letter slug collision check goes through the
-        // typed layer; the move itself uses MoveOrphanToFailedPickup so
-        // the architecture test doesn't see a Path.Combine + lane
-        // construction here.
-        var destinationSlug = PickupFailureLog.BuildArchiveSlug(slug, now,
-            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, TaskStates.FailedPickup, name));
 
         var jobIdBeforeMove = candidate.Info?.Id ?? slug;
         var cliTypeBeforeMove = candidate.Info?.CliType;
@@ -2994,51 +3029,64 @@ public class ProjectRunner
             ? state.History.ToList()
             : new List<PickupAttemptDiagnostic>();
 
-        var moveResult = _taskAccess.MoveOrphanToFailedPickup(
-            Entry.Path, TaskStates.Progress, slug, destinationSlug, reasonMarkdown: null);
-        if (moveResult.Status != OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
+        // Classify the budget-exhaustion cause. A zombie escalation (passed an
+        // explicit reasonOverride) is always task-shaped: a session-less folder
+        // that cannot be resumed goes to a human. A spawn failure is read from
+        // the attempt history - every recorded attempt shows the CLI never
+        // started. Anything else is task-shaped (the CLI ran but stayed silent).
+        var isZombieEscalation = reasonOverride != null;
+        var spawnFailure = !isZombieEscalation
+            && historySnapshot.Count > 0
+            && historySnapshot.All(h => string.Equals(h.ExecutionStatus, SpawnFailedExecutionStatus, StringComparison.Ordinal));
+
+        var targetState = spawnFailure ? TaskStates.Ready : TaskStates.HumanReview;
+
+        var moveResult = _states.MoveJob(jobIdBeforeMove, targetState, Entry.Path);
+        if (moveResult.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "PickupFailureLog: failed-pickup move refused for {Slug} on {Project}: {Status} {Message}",
-                slug, ProjectName, moveResult.Status, moveResult.Message);
-            // Reset the counter so we don't loop on the same failed move every
+                "[taskboard] reroute of over-budget 3-progress folder {Slug} on {Project} to {Target} refused: {Status} {Message}; leaving in place for the operator",
+                slug, ProjectName, targetState, moveResult.Status, moveResult.Message);
+            // Reset the counters so we don't loop on the same failed move every
             // tick. The folder stays in 3-progress; the operator can intervene.
             _pickupAttempts.TryRemove(slug, out _);
             _zombieResumeFailures.TryRemove(slug, out _);
             return false;
         }
 
+        var reason = reasonOverride
+            ?? (spawnFailure
+                ? $"Auto-pickup could not start the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}': {attempts} consecutive attempts (budget {threshold}) failed to spawn a process. The task is unchanged and was returned to {TaskStates.Ready}; the runner paused so it does not spin against an unavailable CLI."
+                : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated to {TaskStates.HumanReview} for a person to look at.");
+
         var record = new PickupFailureRecord
         {
             At = now,
-            Kind = PickupFailureKinds.PickupFailed,
+            Kind = spawnFailure ? PickupFailureKinds.RequeuedReady : PickupFailureKinds.EscalatedHumanReview,
             ProjectName = ProjectName,
             Slug = slug,
             JobId = jobIdBeforeMove,
-            DestinationSlug = destinationSlug,
+            DestinationSlug = slug,
             Attempts = attempts,
             Threshold = threshold,
             OutputDeadlineSeconds = PickupOutputDeadlineSeconds,
             AttemptHistory = historySnapshot.Count == 0 ? null : historySnapshot,
-            Reason = reasonOverride ?? $"Auto-pickup exhausted retry budget: {attempts} consecutive runs finished without producing a CLI output line within {PickupOutputDeadlineSeconds}s. Folder dead-lettered to {TaskStates.FailedPickup}/{destinationSlug}."
+            Reason = reason
         };
         _pickupFailures.Append(record);
         _logger.LogWarning(
-            "[taskboard] dead-lettered 3-progress folder {Slug} on {Project} after {Attempts} failed autopickup attempts (threshold {Threshold}) (-> {Destination})",
-            slug, ProjectName, attempts, threshold, destinationSlug);
+            "[taskboard] rerouted over-budget 3-progress folder {Slug} on {Project} after {Attempts} attempts (threshold {Threshold}) -> {Target}",
+            slug, ProjectName, attempts, threshold, targetState);
 
-        // Drop a chat-log note on the moved folder so the protocol pane
-        // surfaces why the lane returned to one-task-per-project. Best-effort.
+        // Chat-log note on the moved folder so the protocol pane surfaces why
+        // the lane returned to one-task-per-project. Best-effort.
         try
         {
             var moved = _scanner.FindJob(jobIdBeforeMove, Entry.Path);
             if (moved != null)
             {
-                var chatNote = reasonOverride != null
-                    ? $"{reasonOverride} Folder surfaced in {TaskStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready."
-                    : $"Auto-pickup gave up after {attempts} consecutive silent runs (no CLI output within {PickupOutputDeadlineSeconds}s). " +
-                      $"Folder surfaced in {TaskStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready.";
-                _chatLog.AppendSupervisor(moved, "pickup-failed", chatNote);
+                var tag = spawnFailure ? "pickup-requeued" : "pickup-escalated";
+                _chatLog.AppendSupervisor(moved, tag, reason);
             }
         }
         catch (Exception ex)
@@ -3049,16 +3097,29 @@ public class ProjectRunner
         _pickupAttempts.TryRemove(slug, out _);
         _zombieResumeFailures.TryRemove(slug, out _);
 
-        // Cross-slug infra circuit breaker. The per-slug breaker just
-        // dead-lettered ONE folder; if the same CLI now has N distinct
-        // slugs dead-lettered within the rolling window, the failures are
-        // infra-shaped (broken CLI binary), not task-shaped, and pickup
-        // must halt across the project rather than continuing to drain
-        // 2-ready one slug at a time. Single-state-machine principle:
-        // the breaker raises a TripOutcome here; this method does the
-        // mode flip via the same SetMode path the API uses (so existing
-        // audit/event paths fire).
-        return TripInfraBreakerIfNeeded(cliTypeBeforeMove, slug, jobIdBeforeMove, now);
+        if (spawnFailure)
+        {
+            // CLI unavailable. Feed the cross-slug infra breaker so its
+            // distinct-slug accounting and infra-halts.jsonl audit still fire,
+            // then pause the runner regardless of the breaker threshold: even a
+            // single task burning its budget against an unspawnable CLI must not
+            // loop 2-ready -> 3-progress -> fail -> 2-ready. If the breaker
+            // already flipped the mode, return its verdict; otherwise pause here.
+            var trippedByBreaker = TripInfraBreakerIfNeeded(cliTypeBeforeMove, slug, jobIdBeforeMove, now);
+            if (trippedByBreaker) return true;
+            if (IsAutoMode(_mode))
+            {
+                SetMode("manual",
+                    $"auto-pickup paused: the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}' could not be started after {attempts} attempts; the task waits in {TaskStates.Ready} until the CLI is fixed");
+                return true;
+            }
+            return false;
+        }
+
+        // Task-shaped / zombie escalation. The folder left 3-progress, so the
+        // loop is already broken; the runner continues to the next 3-progress
+        // folder (then 2-ready) so one stuck task does not stall the queue.
+        return false;
     }
 
     /// <summary>

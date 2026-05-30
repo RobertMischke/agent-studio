@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/pickup-failure.schema.json",
   "title": "PickupFailureRecord",
-  "description": "One row appended to <workspace>/logs/pickup-failures.jsonl. Two row shapes share the file, disambiguated by the 'kind' field: 'pickup-failed' (the per-project pickup loop dead-letters a 3-progress folder; the strict-iteration pickup walks every 3-progress folder oldest-first by mtime before considering 2-ready, and a folder whose run finished without producing a CLI output line for several attempts in a row is unrecoverable and gets surfaced loudly in 3a-failed-pickup/<slug>-pickup-failed-<utc-date>/ - ADR-0028: pickup failures are loud, never silently archived) and 'pickup-restored' (an operator restored a folder from 3a-failed-pickup back into a live lane via POST /api/jobs/{id}/restore-from-failed-pickup). The two-row trail makes the dead-letter -> restore lifecycle reviewable per-slug.",
+  "description": "One row appended to <workspace>/logs/pickup-failures.jsonl. The per-project pickup loop walks every 3-progress folder oldest-first by mtime before considering 2-ready, and a folder whose run finished without producing a CLI output line for several attempts in a row is over budget. Row shapes share the file, disambiguated by the 'kind' field. ADR-0051 (failed-pickup elimination, supersedes ADR-0028/0029): an over-budget folder is no longer dead-lettered to 3a-failed-pickup; it routes by cause - 'requeued-ready' (spawn failure: the CLI never started, so the task returns to 2-ready and the runner pauses until the CLI is fixed) or 'escalated-human-review' (the CLI did spawn but never produced output, or a session-less zombie exhausted its resume budget, so the task moves to 5-human-review). 'pickup-failed' is the legacy dead-letter kind kept for old on-disk rows. 'pickup-restored' records an operator (or the boot drain) lifting a folder out of the retired 3a-failed-pickup lane via POST /api/jobs/{id}/restore-from-failed-pickup. The trail makes the over-budget -> reroute / restore lifecycle reviewable per-slug.",
   "oneOf": [
     {
       "type": "object",
@@ -16,8 +16,8 @@
         },
         "kind": {
           "type": "string",
-          "const": "pickup-failed",
-          "description": "Dead-letter row. The pickup loop gave up on a 3-progress folder."
+          "enum": ["pickup-failed", "requeued-ready", "escalated-human-review"],
+          "description": "Over-budget row. 'requeued-ready' (spawn failure -> 2-ready + runner paused) and 'escalated-human-review' (task-shaped / zombie -> 5-human-review) are the ADR-0051 routings. 'pickup-failed' is the legacy dead-letter-to-3a-failed-pickup kind, retained for old on-disk rows."
         },
         "projectName": {
           "type": "string",
@@ -36,7 +36,7 @@
         "destinationSlug": {
           "type": "string",
           "minLength": 1,
-          "description": "Slug under 3a-failed-pickup after the dead-letter move (ADR-0028). Format: '<original>-pickup-failed-<yyyy-mm-dd>', with a numeric suffix on collisions."
+          "description": "Folder slug after the move. For 'requeued-ready' / 'escalated-human-review' (ADR-0051) the folder keeps its original slug as it moves to 2-ready / 5-human-review, so this equals 'slug'. For the legacy 'pickup-failed' kind it was the renamed '<original>-pickup-failed-<yyyy-mm-dd>' slug under 3a-failed-pickup."
         },
         "attempts": {
           "type": "integer",

@@ -121,6 +121,23 @@ public interface ITaskAccess
         string? reasonMarkdown);
 
     /// <summary>
+    /// Archive a stale folder (typically a <c>3-progress</c> orphan with no
+    /// <c>job.json</c> and no downstream twin) to <c>7-archive</c> under
+    /// <paramref name="destinationSlug"/>. This is the debris path of the
+    /// failed-pickup-elimination doctrine: a folder that is not a runnable
+    /// task is cleaned up with its evidence intact, never parked in a
+    /// failure lane. The move goes through
+    /// <see cref="OrchestratorApi.Services.Jobs.TaskStateMachine"/> inside
+    /// the layer.
+    /// </summary>
+    TaskMutationResult ArchiveOrphanFolder(
+        string watchPath,
+        string sourceLane,
+        string sourceSlug,
+        string destinationSlug,
+        string? reasonMarkdown = null);
+
+    /// <summary>
     /// Best-effort delete of a lane subfolder (e.g. an empty post-move
     /// skeleton in <c>3-progress</c>). Wraps <c>Directory.Delete</c>
     /// inside the layer so the architecture test stays green at every

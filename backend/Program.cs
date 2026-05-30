@@ -431,7 +431,14 @@ catch (Exception ex)
 // rescues changes, this rescues the lane (one running job per project, ADR-0001).
 try
 {
-    app.Services.GetRequiredService<StaleProgressArchiver>().SweepAsync().GetAwaiter().GetResult();
+    var archiver = app.Services.GetRequiredService<StaleProgressArchiver>();
+    archiver.SweepAsync().GetAwaiter().GetResult();
+    // Failed-pickup-elimination (supersedes ADR-0028/0029): drain any folders
+    // that linger in the retired 3a-failed-pickup lane from before this change
+    // - real tasks back to 2-ready, debris to 7-archive - after the sweep so a
+    // folder requeued from 3-progress is never also drained. Idempotent once
+    // the lane is empty.
+    archiver.DrainFailedPickupLaneAsync().GetAwaiter().GetResult();
 }
 catch (Exception ex)
 {

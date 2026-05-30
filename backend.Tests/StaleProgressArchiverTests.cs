@@ -12,18 +12,18 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Boot-time stale-progress sweep (pairs with ADR-0020 crash recovery, ADR-0028
-/// loud-not-archived). Five cases plus the active-job defensive guard:
+/// Boot-time stale-progress sweep (pairs with ADR-0020 crash recovery; routing
+/// per ADR-0051 failed-pickup elimination, supersedes ADR-0028/0029). Five cases
+/// plus the active-job defensive guard:
 ///
 /// <list type="number">
 ///   <item>Sentinel + stale -> finished missed transition into 4-auto-review
 ///   with a <c>recovered-from-stuck-progress</c> supervisor chat note.</item>
-///   <item>No sentinel + stale -> moved to <c>3a-failed-pickup</c> as
-///   <c>-orphan-&lt;date&gt;</c> with a <c>failed-pickup-reason.md</c>
-///   placard (ADR-0028: never silently archived).</item>
-///   <item>Empty + stale -> moved to <c>3a-failed-pickup</c> as
-///   <c>-empty-&lt;date&gt;</c> with a placard and a synthesized
-///   <c>job.json</c>.</item>
+///   <item>No sentinel + stale + has <c>job.json</c> -> requeued to
+///   <c>2-ready</c> so the pickup loop retries the same task (an interrupted run
+///   is not a failure). No new orphan card.</item>
+///   <item>Empty + stale + no <c>job.json</c> -> archived to <c>7-archive</c> as
+///   <c>-debris-&lt;date&gt;</c> (debris, not a runnable task).</item>
 ///   <item>Fresh -> untouched (progress-first pickup will resume).</item>
 ///   <item>Re-run on the same lane -> no further changes (idempotency).</item>
 ///   <item>Active job -> never touched even when stale (defensive guard).</item>
@@ -91,9 +91,12 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
-    public async Task Sweep_StaleFolderWithoutSentinel_IsMovedToFailedPickupNotSilentlyArchived()
+    public async Task Sweep_StaleFolderWithJobJsonNoSentinel_IsRequeuedToReadyNotDeadLettered()
     {
-        // ADR-0028: orphan folders surface in 3a-failed-pickup, not 7-archive.
+        // ADR-0051 (failed-pickup elimination): a stale 3-progress folder that
+        // still carries a job.json is a real task whose run was interrupted, not
+        // a task that failed. It is requeued to 2-ready so the pickup loop
+        // retries the same task. No new orphan card, nothing in failed-pickup.
         WriteJob(TaskStates.Progress, "no-sentinel");
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "no-sentinel");
         WriteCliLog(folder, "agent talked but never finished");
@@ -103,35 +106,32 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var (archiver, _) = Build();
         var decisions = await archiver.SweepAsync();
 
-        Assert.False(Directory.Exists(folder));
+        Assert.False(Directory.Exists(folder), "source 3-progress folder must be moved");
         var d = Assert.Single(decisions);
-        Assert.Equal(StaleProgressDecisionKinds.MovedToFailedPickup, d.Kind);
-        Assert.Equal("orphan", d.FailureKind);
-        Assert.NotNull(d.FailedPickupSlug);
-        Assert.StartsWith("no-sentinel-orphan-", d.FailedPickupSlug);
-        Assert.Equal(TaskStates.FailedPickup, d.TargetState);
+        Assert.Equal(StaleProgressDecisionKinds.RequeuedToReady, d.Kind);
+        Assert.Equal(TaskStates.Ready, d.TargetState);
 
-        var moved = Path.Combine(_watchPath, TaskStates.FailedPickup, d.FailedPickupSlug!);
-        Assert.True(Directory.Exists(moved), "folder must land in 3a-failed-pickup, not 7-archive");
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, d.FailedPickupSlug!)),
-            "loud-not-archived: nothing may land in 7-archive on this path");
+        // The same task returns to 2-ready under its original slug.
+        var requeued = Path.Combine(_watchPath, TaskStates.Ready, "no-sentinel");
+        Assert.True(Directory.Exists(requeued), "interrupted task must return to 2-ready under its original slug");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.FailedPickup, "no-sentinel")),
+            "failed-pickup elimination: nothing may land in 3a-failed-pickup");
 
-        // Placard captures kind + timestamps so the operator sees what the
-        // sweep saw without re-parsing logs.
-        var placard = File.ReadAllText(Path.Combine(moved, "failed-pickup-reason.md"));
-        Assert.Contains("**Kind**: orphan", placard);
-        Assert.Contains("Pickup failure", placard);
+        // A supervisor chat note travels with the folder so the requeue is never silent.
+        var log = File.ReadAllText(Path.Combine(requeued, "logs", "cli-output.log"));
+        Assert.Contains("retries the same task", log);
 
         var jsonl = File.ReadAllText(Path.Combine(_workspaceRoot, "logs", "orphan-recoveries.jsonl"));
-        Assert.Contains("moved-to-failed-pickup", jsonl);
-        Assert.DoesNotContain("archived-orphan", jsonl);
+        Assert.Contains("requeued-to-ready", jsonl);
+        Assert.DoesNotContain("moved-to-failed-pickup", jsonl);
     }
 
     [Fact]
-    public async Task Sweep_EmptyStaleFolder_IsMovedToFailedPickupNotSilentlyArchived()
+    public async Task Sweep_EmptyStaleFolderNoJobJson_IsArchivedAsDebrisNotDeadLettered()
     {
-        // ADR-0028: even empty stale folders surface in 3a-failed-pickup so
-        // the operator sees that the runner could not resume them.
+        // ADR-0051 (failed-pickup elimination): an empty stale folder with no
+        // job.json is not a runnable task. It is debris and is archived to
+        // 7-archive with its evidence intact, never parked in a dead-end lane.
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "empty-shell");
         Directory.CreateDirectory(folder);
         // No job.json, no logs. MeasureFolder treats this as epoch 0 so it
@@ -142,21 +142,19 @@ public sealed class StaleProgressArchiverTests : IDisposable
 
         Assert.False(Directory.Exists(folder));
         var d = Assert.Single(decisions);
-        Assert.Equal(StaleProgressDecisionKinds.MovedToFailedPickup, d.Kind);
-        Assert.Equal("empty", d.FailureKind);
+        Assert.Equal(StaleProgressDecisionKinds.ArchivedDebris, d.Kind);
+        Assert.Equal(TaskStates.Archive, d.TargetState);
         Assert.NotNull(d.FailedPickupSlug);
-        Assert.StartsWith("empty-shell-empty-", d.FailedPickupSlug);
+        Assert.StartsWith("empty-shell-debris-", d.FailedPickupSlug);
 
-        var moved = Path.Combine(_watchPath, TaskStates.FailedPickup, d.FailedPickupSlug!);
-        Assert.True(Directory.Exists(moved));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, d.FailedPickupSlug!)),
-            "loud-not-archived: nothing may land in 7-archive on this path");
+        var archived = Path.Combine(_watchPath, TaskStates.Archive, d.FailedPickupSlug!);
+        Assert.True(Directory.Exists(archived), "debris must land in 7-archive");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.FailedPickup, d.FailedPickupSlug!)),
+            "failed-pickup elimination: nothing may land in 3a-failed-pickup");
 
-        // Empty folders gain a synthetic job.json so the kanban can render the
-        // card and the state-field invariant holds.
-        var jobJson = Path.Combine(moved, "job.json");
-        Assert.True(File.Exists(jobJson));
-        Assert.Contains(TaskStates.FailedPickup, File.ReadAllText(jobJson));
+        var jsonl = File.ReadAllText(Path.Combine(_workspaceRoot, "logs", "orphan-recoveries.jsonl"));
+        Assert.Contains("archived-debris", jsonl);
+        Assert.DoesNotContain("moved-to-failed-pickup", jsonl);
     }
 
     [Fact]

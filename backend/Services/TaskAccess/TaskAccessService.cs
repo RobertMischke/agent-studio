@@ -644,6 +644,70 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         };
     }
 
+    public TaskMutationResult ArchiveOrphanFolder(
+        string watchPath,
+        string sourceLane,
+        string sourceSlug,
+        string destinationSlug,
+        string? reasonMarkdown = null)
+    {
+        if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(sourceLane) || string.IsNullOrWhiteSpace(sourceSlug) || string.IsNullOrWhiteSpace(destinationSlug))
+            return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = "watchPath, sourceLane, sourceSlug, destinationSlug are required" };
+        if (!TaskStates.All.Contains(sourceLane))
+            return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = $"Unknown source lane '{sourceLane}'" };
+
+        var sourceFolder = Path.Combine(watchPath, sourceLane, sourceSlug);
+        if (!Directory.Exists(sourceFolder))
+            return new TaskMutationResult { Status = TaskMutationStatus.NotFound, Message = $"Source folder '{sourceLane}/{sourceSlug}' not found" };
+
+        var outcome = _states.ArchiveFolder(sourceFolder, destinationSlug);
+        if (outcome.Status == MoveJobStatus.TargetFolderExists)
+            return new TaskMutationResult { Status = TaskMutationStatus.Conflict, Message = outcome.Message };
+        if (outcome.Status == MoveJobStatus.NotFound)
+            return new TaskMutationResult { Status = TaskMutationStatus.NotFound, Message = outcome.Message };
+        if (outcome.Status != MoveJobStatus.Success)
+            return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = outcome.Message };
+
+        if (!string.IsNullOrEmpty(reasonMarkdown))
+        {
+            try
+            {
+                var reasonPath = Path.Combine(watchPath, TaskStates.Archive, destinationSlug, "archive-reason.md");
+                File.WriteAllText(reasonPath, reasonMarkdown);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "TaskAccess.ArchiveOrphanFolder: failed to write reason for {Slug}", destinationSlug);
+            }
+        }
+
+        // Same scanner-side-effect avoidance as MoveOrphanToFailedPickup: skip
+        // a post-move FindJob so the lazy ownerClientId migration does not bump
+        // sibling mtimes mid-sweep.
+        var version = BumpVersion(destinationSlug, info: null);
+        var projectName = _scanner.GetWatchPaths()
+            .FirstOrDefault(w => string.Equals(w.Path, watchPath, StringComparison.OrdinalIgnoreCase))?.Name ?? string.Empty;
+        if (!string.IsNullOrEmpty(projectName))
+        {
+            DispatchChange(projectName, new TaskChange
+            {
+                At = DateTime.UtcNow,
+                ProjectName = projectName,
+                JobId = destinationSlug,
+                Kind = TaskChangeKind.Transitioned,
+                FromLane = sourceLane,
+                ToLane = TaskStates.Archive,
+                Version = version,
+            });
+        }
+        return new TaskMutationResult
+        {
+            Status = TaskMutationStatus.Applied,
+            Job = null,
+            Version = version,
+        };
+    }
+
     public TaskMutationResult DeleteLaneFolder(string watchPath, string lane, string slug)
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane) || string.IsNullOrWhiteSpace(slug))

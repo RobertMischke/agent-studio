@@ -15,7 +15,8 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Locks the strict-iteration progress-first pickup contract:
+/// Locks the strict-iteration progress-first pickup contract (routing per
+/// ADR-0051 failed-pickup elimination, supersedes ADR-0028/0029):
 ///
 /// <list type="number">
 ///   <item>The pickup tick prefers ANY 3-progress folder over 2-ready -
@@ -24,11 +25,14 @@ namespace OrchestratorApi.Tests;
 ///   anything), not the most-skippable.</item>
 ///   <item>Iteration order is deterministic: oldest-first by mtime
 ///   (cli-output.log when present, else job.json, else folder).</item>
-///   <item>A 3-progress folder past the retry budget is dead-lettered
-///   into <c>3a-failed-pickup</c> via <see cref="TaskStateMachine.MoveFolderToFailedPickup"/>
-///   (single-state-machine authority), a row is appended to
-///   <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>, and the picker
-///   moves on to the next 3-progress folder, then to 2-ready.</item>
+///   <item>A 3-progress folder past the retry budget is no longer
+///   dead-lettered. It routes by cause: a spawn failure (CLI never started)
+///   returns the task to <c>2-ready</c> and pauses the runner; a task-shaped
+///   silence (CLI ran but stayed quiet) or a session-less zombie escalates to
+///   <c>5-human-review</c> and the picker continues. A no-<c>job.json</c>
+///   orphan with no downstream twin is archived to <c>7-archive</c> as debris.
+///   Every routing appends a row to
+///   <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>.</item>
 /// </list>
 /// </summary>
 public sealed class PickupLoopStrictIterationTests : IDisposable
@@ -170,18 +174,20 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Equal(new[] { "oldest", "middle", "newest" }, ordered.Select(c => c.Slug).ToArray());
     }
 
-    // ===== Scenario 3: dead-letter on threshold =====
+    // ===== Scenario 3: over-budget routing (no dead-letter lane) =====
 
     /// <summary>
     /// Three 3-progress folders, all with the per-slug attempt counter primed
-    /// at the failure threshold. The picker dead-letters each via the state
-    /// machine, writes one row per dead-letter into pickup-failures.jsonl,
-    /// and returns null so TickAsync falls through to 2-ready.
+    /// at the failure threshold and the attempt history task-shaped (the CLI
+    /// did spawn but produced no output). ADR-0051: a task-shaped over-budget
+    /// folder is escalated to 5-human-review, not dead-lettered. The picker
+    /// keeps going (no pause) and returns null so TickAsync falls through to
+    /// 2-ready. Nothing lands in 3a-failed-pickup.
     /// </summary>
     [Fact]
-    public void StrictIteration_AllProgressFoldersExhausted_DeadLettersAllAndFallsThrough()
+    public void StrictIteration_AllProgressFoldersExhausted_EscalateToHumanReviewAndFallThrough()
     {
-        // Three folders that never produced a CLI output line on prior pickups.
+        // Three folders that ran the CLI but never produced a CLI output line.
         WriteJob(TaskStates.Progress, "stuck-a");
         WriteJob(TaskStates.Progress, "stuck-b");
         WriteJob(TaskStates.Progress, "stuck-c");
@@ -191,41 +197,45 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         WriteJob(TaskStates.Ready, "ready-after-drain");
 
         var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        // No executionStatus override -> task-shaped (CLI spawned, stayed silent).
         runner.SetPickupAttemptsForTest("stuck-a", ProjectRunner.PickupFailureThreshold);
         runner.SetPickupAttemptsForTest("stuck-b", ProjectRunner.PickupFailureThreshold);
         runner.SetPickupAttemptsForTest("stuck-c", ProjectRunner.PickupFailureThreshold);
 
-        // Drive the picker. We invoke the private iteration helper via the
-        // public-facing GetStatus path: instead of touching CLI infra we walk
-        // the same scan that TickAsync would walk. The simpler path: invoke
-        // the picker through the public test seam and assert effects.
-        InvokePickerLoop(runner);
+        var picked = InvokePickerLoop(runner);
 
-        // Each folder is now under 3a-failed-pickup with the dead-letter slug.
+        // Task-shaped escalation does not pause the runner: the folder leaves
+        // 3-progress so there is no spin, and pausing would stall the queue.
+        Assert.Null(picked);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+
+        // Each folder is now under 5-human-review under its ORIGINAL slug; the
+        // 3a-failed-pickup lane is never touched.
         foreach (var slug in new[] { "stuck-a", "stuck-b", "stuck-c" })
         {
             Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, slug)),
                 $"{slug} must have been moved out of 3-progress");
-
-            var failedPickupRoot = Path.Combine(_watchPath, TaskStates.FailedPickup);
-            var matches = Directory.EnumerateDirectories(failedPickupRoot)
-                .Where(d => Path.GetFileName(d).StartsWith($"{slug}-pickup-failed-", StringComparison.Ordinal))
-                .ToList();
-            Assert.Single(matches);
+            Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, slug)),
+                $"{slug} must have been escalated to 5-human-review under its original slug");
         }
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.FailedPickup))
+            && Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.FailedPickup)).Any(),
+            "failed-pickup elimination: nothing may land in 3a-failed-pickup");
 
-        // pickup-failures.jsonl carries one row per dead-letter.
+        // pickup-failures.jsonl carries one row per escalation.
         var jsonlPath = Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl");
         Assert.True(File.Exists(jsonlPath));
         var rows = File.ReadAllLines(jsonlPath).Where(l => l.Length > 0).ToList();
         Assert.Equal(3, rows.Count);
         foreach (var row in rows)
         {
-            Assert.Contains("\"kind\":\"pickup-failed\"", row);
+            Assert.Contains("\"kind\":\"escalated-human-review\"", row);
             Assert.Contains("\"projectName\":\"demo\"", row);
             Assert.Contains("\"threshold\":3", row);
             Assert.Contains("\"outputDeadlineSeconds\":60", row);
-            Assert.Contains("\"destinationSlug\":", row);
+            // The folder keeps its original slug as it moves to 5-human-review.
+            Assert.DoesNotContain("-pickup-failed-", row);
         }
 
         // 2-ready folder is untouched - the runner reaches it only on the
@@ -234,12 +244,12 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     }
 
     /// <summary>
-    /// One folder past the threshold, two below. The over-threshold folder
-    /// is dead-lettered, and the next-iteration call returns one of the
-    /// remaining folders. Three iterations exhaust 3-progress.
+    /// One folder past the threshold (task-shaped), two below. The over-budget
+    /// folder is escalated to 5-human-review, and the next-iteration call
+    /// returns one of the remaining folders to resume.
     /// </summary>
     [Fact]
-    public void StrictIteration_OneExhaustedTwoFresh_DeadLettersExhaustedAndPicksNext()
+    public void StrictIteration_OneExhaustedTwoFresh_EscalatesExhaustedAndPicksNext()
     {
         WriteJob(TaskStates.Progress, "exhausted");
         SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "exhausted", "job.json"), TimeSpan.FromMinutes(-90));
@@ -249,13 +259,15 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "newest", "job.json"), TimeSpan.FromMinutes(-5));
 
         var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
         runner.SetPickupAttemptsForTest("exhausted", ProjectRunner.PickupFailureThreshold);
 
         InvokePickerLoop(runner);
 
-        // 'exhausted' moved out; 'second-oldest' and 'newest' remain because
-        // a single TickAsync only starts ONE job per project (ADR-0001).
+        // 'exhausted' escalated to 5-human-review; 'second-oldest' and 'newest'
+        // remain in 3-progress because a single tick starts ONE job (ADR-0001).
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "exhausted")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "exhausted")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "second-oldest")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "newest")));
 
@@ -264,6 +276,46 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         var rows = File.ReadAllLines(jsonlPath).Where(l => l.Length > 0).ToList();
         Assert.Single(rows);
         Assert.Contains("\"slug\":\"exhausted\"", rows[0]);
+        Assert.Contains("\"kind\":\"escalated-human-review\"", rows[0]);
+    }
+
+    /// <summary>
+    /// A spawn failure (every recorded attempt shows the CLI never started)
+    /// is infrastructure, not a task fault. ADR-0051 cause #6: the task is
+    /// returned to 2-ready unchanged and the runner pauses so it does not spin
+    /// against an unavailable CLI. Nothing lands in 3a-failed-pickup; the row
+    /// is kind 'requeued-ready'.
+    /// </summary>
+    [Fact]
+    public void StrictIteration_SpawnFailureOverBudget_RequeuesToReadyAndPausesRunner()
+    {
+        WriteJob(TaskStates.Progress, "cli-down");
+        WriteJob(TaskStates.Ready, "waiting-behind");
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        // Every attempt shows the CLI process never spawned.
+        runner.SetPickupAttemptsForTest("cli-down", ProjectRunner.PickupFailureThreshold,
+            executionStatus: ProjectRunner.SpawnFailedExecutionStatus);
+
+        var picked = InvokePickerLoop(runner);
+
+        // Spawn failure pauses the runner so it does not loop against a dead CLI.
+        Assert.Null(picked);
+        Assert.Equal("manual", runner.GetStatus().Mode);
+
+        // The task is returned to 2-ready UNCHANGED (original slug), not
+        // dead-lettered and not escalated.
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "cli-down")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "cli-down")),
+            "spawn-failure task must wait in 2-ready under its original slug");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "cli-down")));
+
+        var jsonlPath = Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl");
+        var row = File.ReadAllLines(jsonlPath).Single(l => l.Length > 0);
+        Assert.Contains("\"kind\":\"requeued-ready\"", row);
+        Assert.Contains("\"slug\":\"cli-down\"", row);
+        Assert.Contains("\"destinationSlug\":\"cli-down\"", row);
     }
 
     [Fact]
@@ -348,13 +400,14 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
     /// <summary>
     /// Genuine orphan: a 3-progress folder with no job.json AND no twin in
-    /// any post-progress lane. This is the case a manual filesystem
-    /// intervention or a hard backend crash before the move leaves behind.
-    /// It must still produce a loud failed-pickup entry with the canonical
-    /// reason file, because there is no provenance trail to recover from.
+    /// any post-progress lane. A manual filesystem intervention or a hard
+    /// backend crash before the move leaves this behind. ADR-0051 cause #5:
+    /// a folder with no job.json is not a runnable task, it is debris. It is
+    /// archived to 7-archive with its evidence (logs, status.md) intact,
+    /// never parked in a dead-end failure lane the operator must triage.
     /// </summary>
     [Fact]
-    public void StrictIteration_GenuineOrphan_NoTwin_IsMovedToFailedPickup()
+    public void StrictIteration_GenuineOrphan_NoTwin_IsArchivedAsDebris()
     {
         WriteOrphanProgressFolder("genuine-orphan-no-twin");
         WriteJob(TaskStates.Ready, "ready-after-orphan");
@@ -368,24 +421,34 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "genuine-orphan-no-twin")));
 
-        var failedPickupRoot = Path.Combine(_watchPath, TaskStates.FailedPickup);
-        var moved = Directory.EnumerateDirectories(failedPickupRoot)
+        // Debris lands in 7-archive with its evidence intact, not in failed-pickup.
+        var archiveRoot = Path.Combine(_watchPath, TaskStates.Archive);
+        var archived = Directory.EnumerateDirectories(archiveRoot)
             .Where(d => Path.GetFileName(d).StartsWith("orphan-genuine-orphan-no-twin-", StringComparison.Ordinal))
             .ToList();
-        var only = Assert.Single(moved);
-        Assert.True(File.Exists(Path.Combine(only, "logs", "cli-output.log")));
-        Assert.True(File.Exists(Path.Combine(only, "job.json")));
-        Assert.True(File.Exists(Path.Combine(only, "failed-pickup-reason.md")));
+        var only = Assert.Single(archived);
+        Assert.True(File.Exists(Path.Combine(only, "logs", "cli-output.log")), "evidence must travel to the archive");
+        Assert.True(File.Exists(Path.Combine(only, "status.md")), "evidence must travel to the archive");
+
+        var failedPickupRoot = Path.Combine(_watchPath, TaskStates.FailedPickup);
+        var inFailedPickup = Directory.Exists(failedPickupRoot)
+            ? Directory.EnumerateDirectories(failedPickupRoot)
+                .Where(d => Path.GetFileName(d).Contains("genuine-orphan-no-twin", StringComparison.Ordinal))
+                .ToList()
+            : new List<string>();
+        Assert.Empty(inFailedPickup);
 
         Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
             "stale metadata orphans are queue-hygiene issues, not CLI infra failures");
     }
 
     [Fact]
-    public void DeadLetterRow_IncludesAttemptHistoryWhenAvailable()
+    public void OverBudgetRow_IncludesAttemptHistoryWhenAvailable()
     {
         WriteJob(TaskStates.Progress, "history-task");
         var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        // Task-shaped (no spawn-failed status) so it escalates to 5-human-review.
         runner.SetPickupAttemptsForTest("history-task", ProjectRunner.PickupFailureThreshold);
 
         InvokePickerLoop(runner);
@@ -393,16 +456,18 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         var jsonlPath = Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl");
         var line = File.ReadAllLines(jsonlPath).Single(l => l.Length > 0);
 
-        // Assert the row shape against the schema's required fields.
+        // Assert the row shape against the schema's required fields. ADR-0051:
+        // the task keeps its original slug as it moves to 5-human-review.
         Assert.Contains("\"at\":\"", line);
-        Assert.Contains("\"kind\":\"pickup-failed\"", line);
+        Assert.Contains("\"kind\":\"escalated-human-review\"", line);
         Assert.Contains("\"projectName\":\"demo\"", line);
         Assert.Contains("\"slug\":\"history-task\"", line);
         Assert.Contains("\"jobId\":\"history-task\"", line);
-        Assert.Contains("\"destinationSlug\":\"history-task-pickup-failed-", line);
+        Assert.Contains("\"destinationSlug\":\"history-task\"", line);
         Assert.Contains("\"attempts\":3", line);
         Assert.Contains("\"threshold\":3", line);
         Assert.Contains("\"outputDeadlineSeconds\":60", line);
+        Assert.Contains("\"attemptHistory\":[", line);
         Assert.Contains("\"reason\":\"", line);
 
         // Surface a sample JSONL row to the task job folder so the task report
@@ -423,16 +488,19 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     // pickup.cross-slug-infra-circuit-breaker) =====
 
     /// <summary>
-    /// Integration scenario for the cross-slug infra breaker. Three
-    /// 3-progress folders, all primed at the per-slug failure threshold,
-    /// all carrying <c>cliType=copilot</c>. The first dead-letter is the
-    /// 1st distinct slug for the (project, cliType) pair; the second is
-    /// the 2nd and trips the breaker, flipping the runner to manual. The
-    /// THIRD folder must NOT be dead-lettered - it stays in 3-progress
-    /// for the operator to inspect after fixing the infra.
+    /// Integration scenario for the cross-slug infra breaker under ADR-0051.
+    /// A spawn failure pauses the runner on the FIRST over-budget folder
+    /// (per-task pause), so a single tick can never reach a second slug; the
+    /// breaker's distinct-slug cascade therefore unfolds across ticks. Tick 1:
+    /// stuck-a spawn-fails, requeues to 2-ready, mode flips to manual, the
+    /// breaker records its 1st distinct slug (no audit row yet). The operator
+    /// resumes (mode back to auto). Tick 2: stuck-b spawn-fails, the breaker
+    /// records its 2nd distinct slug and trips, writing one
+    /// <c>cross-slug-spawn-failed-cascade</c> row to infra-halts.jsonl. stuck-c
+    /// is never touched.
     /// </summary>
     [Fact]
-    public void CrossSlug_TwoSpawnFailedDeadLetters_TripsBreakerAndHaltsThirdPickup()
+    public void CrossSlug_SpawnFailuresAcrossTicks_TripBreakerOnSecondDistinctSlug()
     {
         WriteJob(TaskStates.Progress, "stuck-a");
         SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a", "job.json"), TimeSpan.FromMinutes(-90));
@@ -443,27 +511,38 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
-        runner.SetPickupAttemptsForTest("stuck-a", ProjectRunner.PickupFailureThreshold);
-        runner.SetPickupAttemptsForTest("stuck-b", ProjectRunner.PickupFailureThreshold);
-        runner.SetPickupAttemptsForTest("stuck-c", ProjectRunner.PickupFailureThreshold);
+        runner.SetPickupAttemptsForTest("stuck-a", ProjectRunner.PickupFailureThreshold,
+            executionStatus: ProjectRunner.SpawnFailedExecutionStatus);
+        runner.SetPickupAttemptsForTest("stuck-b", ProjectRunner.PickupFailureThreshold,
+            executionStatus: ProjectRunner.SpawnFailedExecutionStatus);
+        runner.SetPickupAttemptsForTest("stuck-c", ProjectRunner.PickupFailureThreshold,
+            executionStatus: ProjectRunner.SpawnFailedExecutionStatus);
 
+        // Tick 1: oldest (stuck-a) spawn-fails, requeues to 2-ready, pauses.
         InvokePickerLoop(runner);
-
-        // Mode flipped to manual on the second dead-letter.
         Assert.Equal("manual", runner.GetStatus().Mode);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stuck-a")));
+        Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
+            "the first distinct slug does not trip the breaker");
 
-        // First two dead-lettered, third stays in 3-progress.
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-b")));
+        // Operator fixes the CLI and resumes.
+        runner.SetMode("auto-continuous");
+
+        // Tick 2: stuck-b spawn-fails, the breaker's 2nd distinct slug trips it.
+        InvokePickerLoop(runner);
+        Assert.Equal("manual", runner.GetStatus().Mode);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stuck-b")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-c")),
-            "third folder must NOT have been dead-lettered after the cross-slug breaker tripped");
+            "third folder must NOT have been touched after the cross-slug breaker tripped");
 
-        // pickup-failures.jsonl carries exactly two rows (one per dead-letter).
+        // Both spawn failures requeued to 2-ready; nothing dead-lettered.
         var pickupJsonl = Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl");
         Assert.True(File.Exists(pickupJsonl));
-        Assert.Equal(2, File.ReadAllLines(pickupJsonl).Count(l => l.Length > 0));
+        var pickupRows = File.ReadAllLines(pickupJsonl).Where(l => l.Length > 0).ToList();
+        Assert.Equal(2, pickupRows.Count);
+        Assert.All(pickupRows, r => Assert.Contains("\"kind\":\"requeued-ready\"", r));
 
-        // infra-halts.jsonl carries exactly one row.
+        // infra-halts.jsonl carries exactly one cross-slug cascade row.
         var infraJsonl = Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl");
         Assert.True(File.Exists(infraJsonl));
         var infraRows = File.ReadAllLines(infraJsonl).Where(l => l.Length > 0).ToList();
@@ -472,31 +551,6 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Contains("\"projectName\":\"demo\"", infraRows[0]);
         Assert.Contains("\"cliType\":\"copilot\"", infraRows[0]);
         Assert.Contains("\"slugs\":[\"stuck-a\",\"stuck-b\"]", infraRows[0]);
-    }
-
-    /// <summary>
-    /// A single dead-letter does NOT trip the cross-slug breaker. The
-    /// per-slug breaker still works the same way it did before this layer.
-    /// </summary>
-    [Fact]
-    public void CrossSlug_OneSpawnFailedDeadLetter_DoesNotTripBreakerOrFlipMode()
-    {
-        WriteJob(TaskStates.Progress, "stuck-a");
-        WriteJob(TaskStates.Progress, "stuck-b");
-
-        var runner = BuildRunner();
-        runner.SetMode("auto-continuous");
-        runner.SetPickupAttemptsForTest("stuck-a", ProjectRunner.PickupFailureThreshold);
-        // 'stuck-b' is healthy: not over threshold.
-
-        InvokePickerLoop(runner);
-
-        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-b")));
-
-        var infraJsonl = Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl");
-        Assert.False(File.Exists(infraJsonl));
     }
 
     // ===== Helpers =====

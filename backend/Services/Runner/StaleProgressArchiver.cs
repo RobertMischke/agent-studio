@@ -41,18 +41,22 @@ namespace OrchestratorApi.Services.Runner;
 ///   <c>3-progress -&gt; 4-auto-review</c> transition the orchestrator missed
 ///   and appends a <c>[recovered-from-stuck-progress]</c> note to the chat
 ///   log.</item>
-///   <item>If older with no sentinel and at least one file present, the
-///   folder is moved to
-///   <c>3a-failed-pickup/&lt;original-slug&gt;-orphan-&lt;utc-date&gt;/</c>
-///   (ADR-0028: pickup failures are loud, not silent). A
-///   <c>failed-pickup-reason.md</c> placard records the kind, last activity,
-///   and sweep timestamp.</item>
-///   <item>If older AND empty (no <c>job.json</c>, no <c>cli-output.log</c>),
-///   the folder is moved to
-///   <c>3a-failed-pickup/&lt;original-slug&gt;-empty-&lt;utc-date&gt;/</c>
-///   with the same placard. Empty stale folders gain a synthetic
-///   <c>job.json</c> so the kanban can render the card.</item>
+///   <item>If older with no sentinel but **with** a <c>job.json</c>, the run
+///   was interrupted, not failed: the folder is a real task and is requeued to
+///   <c>2-ready</c> so the pickup loop retries the same task. No new card is
+///   minted. (ADR-0051, failed-pickup elimination, supersedes ADR-0028/0029.)</item>
+///   <item>If older with no <c>job.json</c>, the folder is not a runnable task:
+///   it is debris (an empty folder, a lost-metadata shell, a hand-made
+///   directory) and is archived to <c>7-archive</c> under
+///   <c>&lt;original-slug&gt;-debris-&lt;utc-date&gt;/</c> with its evidence
+///   intact, never parked in a dead-end failure lane.</item>
 /// </list>
+///
+/// <para>A second responsibility, <see cref="DrainFailedPickupLaneAsync"/>,
+/// drains any folders that linger in the retired <c>3a-failed-pickup</c> lane
+/// from before ADR-0051: real tasks back to <c>2-ready</c>, debris to
+/// <c>7-archive</c>. It runs once per boot after the sweep and is idempotent
+/// once the lane is empty.</para>
 ///
 /// <para>Single-state-machine authority: every move goes through
 /// <see cref="TaskStateMachine"/> or <see cref="TaskTransitionService"/>; the
@@ -140,11 +144,26 @@ public sealed class StaleProgressArchiver
             // ADR-0024: enumerate 3-progress through the typed layer.
             // ListLaneFolders includes orphan folders (no job.json),
             // which is the case this sweep was designed to catch.
+            //
+            // Measure every folder BEFORE acting on any of them. The requeue
+            // and recover paths call _scanner.FindJob, which stamps
+            // ownerClientId onto sibling legacy job.json files and bumps their
+            // mtime; acting on one folder must not reclassify a sibling that has
+            // not been processed yet (it would look freshly active and be
+            // skipped). Snapshotting the age verdict up front judges each folder
+            // on its pre-sweep state. (See JobScannerService.FindJob mtime side
+            // effect.)
+            var candidates = new List<(string Slug, string JobFolder, DateTime LastActivity)>();
             foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
-                var slug = laneFolder.Slug;
-                var jobFolder = laneFolder.FolderPath;
+                var (measured, _) = MeasureFolder(laneFolder.FolderPath);
+                candidates.Add((laneFolder.Slug, laneFolder.FolderPath, measured));
+            }
+
+            foreach (var (slug, jobFolder, lastActivity) in candidates)
+            {
+                ct.ThrowIfCancellationRequested();
 
                 if (!string.IsNullOrEmpty(activeJobId)
                     && string.Equals(slug, activeJobId, StringComparison.OrdinalIgnoreCase))
@@ -153,7 +172,6 @@ public sealed class StaleProgressArchiver
                     continue;
                 }
 
-                var (lastActivity, isEmpty) = MeasureFolder(jobFolder);
                 var age = now - lastActivity;
                 if (age < threshold)
                 {
@@ -169,18 +187,30 @@ public sealed class StaleProgressArchiver
                     continue;
                 }
 
+                // Routing (failed-pickup elimination, supersedes ADR-0028/0029):
+                //   * has job.json + completion sentinel -> finish the missed
+                //     transition to 4-auto-review (unchanged).
+                //   * has job.json, no sentinel            -> the run was
+                //     interrupted, not failed; requeue the same task to 2-ready
+                //     so the pickup loop retries it. No new orphan card.
+                //   * no job.json                          -> debris (an empty
+                //     folder, a lost-metadata shell, a hand-made directory).
+                //     Not a runnable task; archive it to 7-archive with its
+                //     evidence intact instead of parking a card in a dead-end
+                //     lane.
+                var hasJobJson = File.Exists(Path.Combine(jobFolder, "job.json"));
                 StaleProgressDecision decision;
-                if (isEmpty)
-                {
-                    decision = MoveToFailedPickup(entry, jobFolder, slug, now, kind: FailureKind.Empty, lastActivity: lastActivity);
-                }
-                else if (TryFindSentinel(jobFolder, out var keyword))
+                if (hasJobJson && TryFindSentinel(jobFolder, out var keyword))
                 {
                     decision = await RecoverViaTransitionAsync(entry, jobFolder, slug, keyword!, now, ct);
                 }
+                else if (hasJobJson)
+                {
+                    decision = await RequeueOrphanToReadyAsync(entry, jobFolder, slug, now, lastActivity, ct);
+                }
                 else
                 {
-                    decision = MoveToFailedPickup(entry, jobFolder, slug, now, kind: FailureKind.Orphan, lastActivity: lastActivity);
+                    decision = ArchiveDebrisFolder(entry, jobFolder, slug, now, lastActivity);
                 }
 
                 decisions.Add(decision);
@@ -189,8 +219,10 @@ public sealed class StaleProgressArchiver
         }
 
         var actionable = decisions.Count(d =>
-            d.Kind == StaleProgressDecisionKinds.MovedToFailedPickup ||
-            d.Kind == StaleProgressDecisionKinds.MoveToFailedPickupFailed ||
+            d.Kind == StaleProgressDecisionKinds.RequeuedToReady ||
+            d.Kind == StaleProgressDecisionKinds.RequeueFailed ||
+            d.Kind == StaleProgressDecisionKinds.ArchivedDebris ||
+            d.Kind == StaleProgressDecisionKinds.ArchiveFailed ||
             d.Kind == StaleProgressDecisionKinds.RecoveredToReview ||
             d.Kind == StaleProgressDecisionKinds.RecoveryFailed);
         _logger.LogInformation(
@@ -200,7 +232,117 @@ public sealed class StaleProgressArchiver
         return decisions;
     }
 
-    private enum FailureKind { Orphan, Empty }
+    /// <summary>
+    /// One-time-per-boot drain of folders that linger in
+    /// <c>3a-failed-pickup</c> from before the failed-pickup-elimination
+    /// change (failed-pickup-elimination, supersedes ADR-0028/0029, row 10).
+    /// The lane is no longer populated by any live path; this drains the
+    /// historical backlog so the lane reaches and stays empty, then can be
+    /// retired:
+    /// <list type="bullet">
+    ///   <item>A folder that carries a <c>job.json</c> is a real task. It is
+    ///   restored to <c>2-ready</c> (original slug recovered when the
+    ///   dead-letter shape is recognised, otherwise kept) so the pickup loop
+    ///   retries the same task.</item>
+    ///   <item>A folder with no <c>job.json</c> is debris and is archived to
+    ///   <c>7-archive</c> with its evidence intact.</item>
+    /// </list>
+    /// Idempotent: a boot with an already-empty lane is a no-op. Runs after
+    /// <see cref="SweepAsync"/> so a folder requeued from <c>3-progress</c> is
+    /// never also drained.
+    /// </summary>
+    public async Task<IReadOnlyList<StaleProgressDecision>> DrainFailedPickupLaneAsync(CancellationToken ct = default)
+    {
+        var decisions = new List<StaleProgressDecision>();
+        var now = DateTime.UtcNow;
+
+        foreach (var entry in _scanner.GetWatchPaths())
+        {
+            ct.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
+
+            // ListLaneFolders includes folders with no job.json, which is the
+            // debris case the drain must catch.
+            foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.FailedPickup))
+            {
+                ct.ThrowIfCancellationRequested();
+                var slug = laneFolder.Slug;
+                var jobFolder = laneFolder.FolderPath;
+                var hasJobJson = File.Exists(Path.Combine(jobFolder, "job.json"));
+
+                var decision = hasJobJson
+                    ? DrainRealTaskToReady(entry, slug, now)
+                    : ArchiveAsDebris(
+                        entry, jobFolder, slug, now,
+                        $"folder left in {TaskStates.FailedPickup} with no job.json (debris); archived to {TaskStates.Archive} on the failed-pickup-lane drain");
+
+                decisions.Add(decision);
+                AppendOrphanRecoveryEntry(decision);
+            }
+        }
+
+        if (decisions.Count > 0)
+        {
+            _logger.LogInformation(
+                "StaleProgressArchiver: drained {Total} folder(s) out of {Lane}; the lane is being retired.",
+                decisions.Count, TaskStates.FailedPickup);
+        }
+
+        return decisions;
+    }
+
+    /// <summary>
+    /// Restore a real task (a folder carrying <c>job.json</c>) out of
+    /// <c>3a-failed-pickup</c> and back to <c>2-ready</c>. The state machine
+    /// recovers the original slug when the dead-letter shape is recognised; for
+    /// the older <c>-orphan-</c> / <c>-empty-</c> / <c>orphan-</c> shapes that
+    /// do not match, it falls back to keeping the slug so the move still
+    /// happens.
+    /// </summary>
+    private StaleProgressDecision DrainRealTaskToReady(WatchPathEntry entry, string slug, DateTime now)
+    {
+        var outcome = _states.RestoreFromFailedPickup(slug, entry.Path, keepDeadLetterSlug: false);
+        if (outcome.Status == RestoreFromFailedPickupStatus.InvalidSlug)
+        {
+            outcome = _states.RestoreFromFailedPickup(slug, entry.Path, keepDeadLetterSlug: true);
+        }
+
+        if (outcome.Status != RestoreFromFailedPickupStatus.Success
+            && outcome.Status != RestoreFromFailedPickupStatus.NoOp)
+        {
+            return new StaleProgressDecision
+            {
+                At = now,
+                Kind = StaleProgressDecisionKinds.RequeueFailed,
+                ProjectName = entry.Name,
+                Slug = slug,
+                Reason = $"drain to {TaskStates.Ready} refused: {outcome.Status} {outcome.Message}"
+            };
+        }
+
+        var restoredSlug = outcome.RestoredSlug ?? slug;
+        var moved = _scanner.FindJob(restoredSlug, entry.Path);
+        if (moved != null)
+        {
+            _chatLog.AppendSupervisor(
+                moved,
+                "drained-from-failed-pickup",
+                "Boot drain found this real task lingering in the retired 3a-failed-pickup lane. " +
+                "Failing pickup is treated as a bug in the pickup path, not a state a task should sit in; " +
+                "the task was returned to 2-ready so the orchestrator retries it.");
+        }
+
+        return new StaleProgressDecision
+        {
+            At = now,
+            Kind = StaleProgressDecisionKinds.RequeuedToReady,
+            ProjectName = entry.Name,
+            Slug = slug,
+            JobId = restoredSlug,
+            TargetState = TaskStates.Ready,
+            Reason = $"real task drained from {TaskStates.FailedPickup} to {TaskStates.Ready} (failed-pickup lane retired)"
+        };
+    }
 
     private Dictionary<string, string?> SafeGetActiveJobIds()
     {
@@ -392,84 +534,168 @@ public sealed class StaleProgressArchiver
         }
     }
 
-    private StaleProgressDecision MoveToFailedPickup(
+    /// <summary>
+    /// A stale <c>3-progress</c> folder that still carries a <c>job.json</c> is
+    /// a real task whose run was interrupted (a backend that died mid-run, an
+    /// <c>update-stable.sh</c> cycle that killed the runner, a pickup that never
+    /// streamed a sentinel). The task is not failed; requeue it to <c>2-ready</c>
+    /// so the pickup loop retries the same task. No new orphan card is created.
+    /// (Failed-pickup elimination, supersedes ADR-0028/0029.)
+    /// </summary>
+    private async Task<StaleProgressDecision> RequeueOrphanToReadyAsync(
         WatchPathEntry entry,
         string jobFolder,
         string slug,
         DateTime now,
-        FailureKind kind,
-        DateTime lastActivity)
+        DateTime lastActivity,
+        CancellationToken ct)
     {
-        // ADR-0028: orphan and empty 3-progress folders move to the visible
-        // 3a-failed-pickup lane, not silently into 7-archive. The lane card
-        // carries a failed-pickup-reason.md placard so the user sees what the
-        // boot sweep saw.
-        var suffix = kind == FailureKind.Empty ? "empty" : "orphan";
-        var datePart = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var newSlug = $"{slug}-{suffix}-{datePart}";
-        var attempt = newSlug;
-        // ADR-0024: collision avoidance via the typed layer instead of
-        // Path.Combine(..., TaskStates.FailedPickup, ...).
-        for (int i = 2; _taskAccess.SlugExistsInLane(entry.Path, TaskStates.FailedPickup, attempt) && i < 1000; i++)
-        {
-            attempt = $"{newSlug}-{i}";
-        }
+        var jobId = TryReadJobId(jobFolder) ?? slug;
 
-        var placard = BuildReasonPlacard(kind, lastActivity, now);
-        var moveResult = _taskAccess.MoveOrphanToFailedPickup(
-            entry.Path,
-            TaskStates.Progress,
-            slug,
-            attempt,
-            placard);
-        if (moveResult.Status != TaskMutationStatus.Applied)
+        // Co-locate a human-readable trace in the job folder before the move so
+        // the requeue is never silent (it travels with the folder).
+        WriteRequeueDiagnostic(jobFolder, lastActivity, now);
+
+        try
+        {
+            var outcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
+            if (outcome.Status != MoveJobStatus.Success)
+            {
+                return new StaleProgressDecision
+                {
+                    At = now,
+                    Kind = StaleProgressDecisionKinds.RequeueFailed,
+                    ProjectName = entry.Name,
+                    Slug = slug,
+                    JobId = jobId,
+                    Reason = $"requeue to {TaskStates.Ready} refused: {outcome.Status} {outcome.Message}"
+                };
+            }
+
+            var moved = _scanner.FindJob(jobId, entry.Path);
+            if (moved != null)
+            {
+                _chatLog.AppendSupervisor(
+                    moved,
+                    "requeued-from-stuck-progress",
+                    "Boot sweep found this task in 3-progress past the resume window with no completion " +
+                    "sentinel. The run was interrupted, not failed; requeued to 2-ready so the orchestrator " +
+                    "retries the same task. This interruption does not count as a task failure.");
+            }
+
+            return new StaleProgressDecision
+            {
+                At = now,
+                Kind = StaleProgressDecisionKinds.RequeuedToReady,
+                ProjectName = entry.Name,
+                Slug = slug,
+                JobId = jobId,
+                TargetState = TaskStates.Ready,
+                Reason = "stale progress run interrupted with no completion sentinel; requeued to 2-ready to retry the same task"
+            };
+        }
+        catch (Exception ex)
         {
             return new StaleProgressDecision
             {
                 At = now,
-                Kind = StaleProgressDecisionKinds.MoveToFailedPickupFailed,
+                Kind = StaleProgressDecisionKinds.RequeueFailed,
                 ProjectName = entry.Name,
                 Slug = slug,
-                FailedPickupSlug = attempt,
-                Reason = $"move to {TaskStates.FailedPickup} refused: {moveResult.Status} {moveResult.Message}"
+                JobId = jobId,
+                Reason = $"exception: {ex.Message}"
+            };
+        }
+    }
+
+    /// <summary>
+    /// A stale <c>3-progress</c> folder with no <c>job.json</c> is not a runnable
+    /// task: it is debris (an empty folder, a lost-metadata shell, a hand-made
+    /// directory). Archive it to <c>7-archive</c> so its evidence is preserved
+    /// without parking a card in a dead-end lane. (Failed-pickup elimination.)
+    /// </summary>
+    private StaleProgressDecision ArchiveDebrisFolder(
+        WatchPathEntry entry,
+        string jobFolder,
+        string slug,
+        DateTime now,
+        DateTime lastActivity)
+        => ArchiveAsDebris(
+            entry, jobFolder, slug, now,
+            "stale folder with no job.json (debris, not a runnable task); archived to 7-archive");
+
+    /// <summary>
+    /// Move <paramref name="jobFolder"/> to <c>7-archive</c> under a
+    /// collision-safe <c>&lt;slug&gt;-debris-&lt;utc-date&gt;</c> name. Shared
+    /// by the live boot sweep (a no-<c>job.json</c> <c>3-progress</c> folder)
+    /// and the one-time failed-pickup drain (a no-<c>job.json</c> folder left
+    /// in the retired lane). The move goes through
+    /// <see cref="TaskStateMachine.ArchiveFolder"/>, which works without a
+    /// <c>job.json</c>.
+    /// </summary>
+    private StaleProgressDecision ArchiveAsDebris(
+        WatchPathEntry entry,
+        string jobFolder,
+        string slug,
+        DateTime now,
+        string reason)
+    {
+        var datePart = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var newSlug = $"{slug}-debris-{datePart}";
+        var attempt = newSlug;
+        for (int i = 2; _taskAccess.SlugExistsInLane(entry.Path, TaskStates.Archive, attempt) && i < 1000; i++)
+        {
+            attempt = $"{newSlug}-{i}";
+        }
+
+        var outcome = _states.ArchiveFolder(jobFolder, attempt);
+        if (outcome.Status != MoveJobStatus.Success)
+        {
+            return new StaleProgressDecision
+            {
+                At = now,
+                Kind = StaleProgressDecisionKinds.ArchiveFailed,
+                ProjectName = entry.Name,
+                Slug = slug,
+                Reason = $"archive to {TaskStates.Archive} refused: {outcome.Status} {outcome.Message}"
             };
         }
 
         return new StaleProgressDecision
         {
             At = now,
-            Kind = StaleProgressDecisionKinds.MovedToFailedPickup,
+            Kind = StaleProgressDecisionKinds.ArchivedDebris,
             ProjectName = entry.Name,
             Slug = slug,
             FailedPickupSlug = attempt,
-            FailureKind = suffix,
-            TargetState = TaskStates.FailedPickup,
-            Reason = kind == FailureKind.Empty
-                ? "stale folder with no job.json or cli-output.log; surfaced in 3a-failed-pickup"
-                : "stale folder past resume window with no completion sentinel; surfaced in 3a-failed-pickup"
+            TargetState = TaskStates.Archive,
+            Reason = reason
         };
     }
 
-    private static string BuildReasonPlacard(FailureKind kind, DateTime lastActivity, DateTime sweepAt)
+    private void WriteRequeueDiagnostic(string jobFolder, DateTime lastActivity, DateTime sweepAt)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("# Pickup failure");
-        sb.AppendLine();
-        sb.Append("**Kind**: ").AppendLine(kind == FailureKind.Empty ? "empty" : "orphan");
-        sb.Append("**Detected at**: ").AppendLine(sweepAt.ToString("o", CultureInfo.InvariantCulture));
-        if (lastActivity > DateTime.MinValue.ToUniversalTime())
+        try
         {
-            sb.Append("**Last activity**: ").AppendLine(lastActivity.ToString("o", CultureInfo.InvariantCulture));
+            var logsDir = Path.Combine(jobFolder, TaskPaths.LogsDirName);
+            Directory.CreateDirectory(logsDir);
+            var logPath = Path.Combine(logsDir, TaskPaths.CliOutputLogFileName);
+            var lastSeen = lastActivity > DateTime.MinValue.ToUniversalTime()
+                ? lastActivity.ToString("u", CultureInfo.InvariantCulture)
+                : "unknown";
+            var line =
+                $"[{sweepAt:HH:mm:ss.fff}] [system] [taskboard] Boot sweep found this run stuck in 3-progress " +
+                $"(last activity {lastSeen}, no completion sentinel). Requeued to 2-ready to retry the same task; " +
+                "this interruption does not count as a task failure.";
+            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
+                File.AppendAllText(logPath, Environment.NewLine + line, Encoding.UTF8);
+            else
+                File.WriteAllText(logPath, line, Encoding.UTF8);
         }
-        else
+        catch (Exception ex)
         {
-            sb.AppendLine("**Last activity**: none (folder had no job.json or cli-output.log)");
+            _logger.LogDebug(ex, "StaleProgressArchiver: failed to write requeue diagnostic for {Folder}", jobFolder);
         }
-        sb.AppendLine();
-        sb.AppendLine(kind == FailureKind.Empty
-            ? "The boot-time sweep found a `3-progress` folder with no `job.json` and no `cli-output.log`. The runner could not resume it; the orchestrator never finished a transition. Surfacing it loudly in `3a-failed-pickup` so it is not silently archived."
-            : "The boot-time sweep found a `3-progress` folder past the resume window with no completion sentinel (`[[TASK_DONE]]` / `[[TASK_BLOCKED]]` / `[[TASK_NEEDS_INPUT]]`) in the tail of `cli-output.log`. Either the run died mid-stream and the orchestrator did not see it, or the agent never emitted a sentinel. Surfacing it loudly in `3a-failed-pickup` so it is not silently archived.");
-        return sb.ToString();
     }
 
     private static StaleProgressDecision Skip(string projectName, string slug, string reason, DateTime at)
@@ -557,8 +783,12 @@ public static class StaleProgressDecisionKinds
     public const string RecoveredToReview = "recovered-to-review";
     /// <summary>Sentinel found but the transition refused or threw.</summary>
     public const string RecoveryFailed = "recovery-failed";
-    /// <summary>Stale orphan or empty folder moved to <c>3a-failed-pickup</c> (ADR-0028).</summary>
-    public const string MovedToFailedPickup = "moved-to-failed-pickup";
-    /// <summary>Move to <c>3a-failed-pickup</c> refused (e.g. target slug already exists).</summary>
-    public const string MoveToFailedPickupFailed = "move-to-failed-pickup-failed";
+    /// <summary>Stale folder with <c>job.json</c> (interrupted real task) requeued to <c>2-ready</c> (failed-pickup elimination).</summary>
+    public const string RequeuedToReady = "requeued-to-ready";
+    /// <summary>Requeue of an interrupted task to <c>2-ready</c> refused or threw.</summary>
+    public const string RequeueFailed = "requeue-failed";
+    /// <summary>Stale folder with no <c>job.json</c> (debris) archived to <c>7-archive</c> (failed-pickup elimination).</summary>
+    public const string ArchivedDebris = "archived-debris";
+    /// <summary>Archive of a no-<c>job.json</c> debris folder refused (e.g. target slug already exists).</summary>
+    public const string ArchiveFailed = "archive-failed";
 }

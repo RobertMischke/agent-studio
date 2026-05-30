@@ -9,14 +9,21 @@ using OrchestratorApi.Services.Persistence;
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
-/// Appends one row per dead-letter to <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>.
+/// Appends one row per over-budget reroute to <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>.
 /// Pairs with <see cref="StaleProgressArchiver"/>'s <c>orphan-recoveries.jsonl</c>:
 /// that one records the boot-time sweep, this one records the live pickup
 /// loop giving up on a 3-progress folder after the configured retry budget.
 ///
-/// <para>ADR-0028: dead-letter destination is <c>3a-failed-pickup</c>, not
-/// <c>7-archive</c>. The slug builder name is unchanged for log-format
-/// continuity but the destination state is the visible failure lane.</para>
+/// <para>ADR-0051 (failed-pickup elimination, supersedes ADR-0028/0029): an
+/// over-budget folder is no longer dead-lettered to <c>3a-failed-pickup</c>. It
+/// routes by cause - a spawn failure returns the task to <c>2-ready</c> (row
+/// kind <see cref="PickupFailureKinds.RequeuedReady"/>) and pauses the runner;
+/// a task-shaped silence or session-less zombie escalates to
+/// <c>5-human-review</c> (row kind
+/// <see cref="PickupFailureKinds.EscalatedHumanReview"/>). The legacy
+/// <see cref="PickupFailureKinds.PickupFailed"/> kind and the
+/// <c>BuildArchiveSlug</c> helper survive only for reading old on-disk rows and
+/// draining historical lane contents.</para>
 ///
 /// <para>Schema: <c>docs/schemas/pickup-failure.schema.json</c>.</para>
 /// </summary>
@@ -183,6 +190,17 @@ public static class PickupFailureKinds
 {
     public const string PickupFailed = "pickup-failed";
     public const string PickupRestored = "pickup-restored";
+
+    /// <summary>An over-budget folder whose CLI never spawned was requeued to
+    /// <c>2-ready</c> (the task is sound; the runner pauses until the CLI is
+    /// fixed). Replaces the old spawn-failure dead-letter verdict.</summary>
+    public const string RequeuedReady = "requeued-ready";
+
+    /// <summary>An over-budget folder whose CLI did spawn but never produced
+    /// output, or a session-less zombie that exhausted its resume budget, was
+    /// escalated to <c>5-human-review</c>. Replaces the old task-shaped /
+    /// zombie dead-letter verdict.</summary>
+    public const string EscalatedHumanReview = "escalated-human-review";
 }
 
 /// <summary>
