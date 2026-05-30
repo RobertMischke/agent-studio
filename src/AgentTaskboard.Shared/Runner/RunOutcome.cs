@@ -3,7 +3,7 @@ using OrchestratorApi.Models;
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
-/// Why <see cref="ProjectRunner"/> declined to spawn a CLI run for the
+/// Why <c>ProjectRunner</c> declined to spawn a CLI run for the
 /// requested job. Used to drive the busy-project queue path: when the
 /// reason is <see cref="ProjectBusy"/> the caller persists the user's
 /// intent on the target job and promotes the job to <c>2-ready</c>
@@ -37,7 +37,7 @@ public sealed record RunRejection(
     string? BusyJobTitle = null);
 
 /// <summary>
-/// Thrown by <see cref="OrchestratorApi.Services.TaskRunnerService"/> when a
+/// Thrown by <c>OrchestratorApi.Services.TaskRunnerService</c> when a
 /// continue / start request cannot be honored AND the failure is not the
 /// busy-project-queue case (which becomes a 202). Carries an HTTP status
 /// hint for the endpoint layer.
@@ -52,7 +52,7 @@ public sealed class TaskOperationException : Exception
 }
 
 /// <summary>
-/// Outcome of <see cref="ProjectRunner"/>'s run-spawn entry points.
+/// Outcome of <c>ProjectRunner</c>'s run-spawn entry points.
 /// Either <see cref="Execution"/> is non-null (the run started) or
 /// <see cref="Rejection"/> is non-null (the runner declined). Mutually
 /// exclusive; both null is illegal.

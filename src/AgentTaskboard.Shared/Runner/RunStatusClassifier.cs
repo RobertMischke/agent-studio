@@ -35,7 +35,7 @@ public enum RunStopReason
     SentinelDetected,
     /// <summary>
     /// The CLI base class detected an OS-level / sandbox-level blocker in
-    /// the child's stdout/stderr (see <see cref="AgentEnvironmentDetector"/>)
+    /// the child's stdout/stderr (see <c>AgentEnvironmentDetector</c>)
     /// and killed the process before the agent could burn the full silence
     /// budget retrying against an unrecoverable host error.
     /// </summary>
@@ -54,8 +54,8 @@ public static class RunStatuses
 
 /// <summary>
 /// Pure decision library that maps <c>(exitCode, stopReason)</c> to the
-/// final run status. Same shape as <see cref="Watchdog"/> and
-/// <see cref="RunCompletionPolicy"/>: inputs in, status out, no side
+/// final run status. Same shape as <c>Watchdog</c> and
+/// <c>RunCompletionPolicy</c>: inputs in, status out, no side
 /// effects. Tested as a matrix in <c>RunStatusClassifierTests</c>.
 ///
 /// <para>
