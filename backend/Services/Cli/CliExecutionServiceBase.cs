@@ -1078,10 +1078,48 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         catch (InvalidOperationException ex) when (ex.Message.Contains("calling process", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogWarning(
-                "Whole-tree kill refused for PID {Pid} ({Cli}): backend is inside the tree. Falling back to single-process kill.",
+                "Whole-tree kill refused for PID {Pid} ({Cli}): backend is inside the tree. Falling back to OS tree-kill (taskkill /T) to reap descendants.",
                 entry.ProcessId, CliType);
+            // The plain proc.Kill() below kills ONLY the direct child, leaving the
+            // real CLI grandchild (e.g. claude) orphaned and holding the job's
+            // logs/cli-output.log handle — the next run for that job then fails with
+            // "file in use by another process", which trips the auto-failure
+            // circuit-breaker and halts the whole runner. taskkill /T has no
+            // calling-process restriction and DOES reap the descendants.
+            if (OperatingSystem.IsWindows() && TryOsTreeKill(entry.ProcessId)) return;
         }
         proc.Kill();
+    }
+
+    /// <summary>
+    /// Windows fallback when the managed whole-tree kill is refused: ask the OS
+    /// to terminate the process and all descendants via <c>taskkill /F /T</c>.
+    /// Unlike <see cref="Process.Kill(bool)"/> this has no "calling process in
+    /// the tree" restriction, so it reaps the orphaned CLI grandchild that would
+    /// otherwise keep <c>logs/cli-output.log</c> locked.
+    /// </summary>
+    private bool TryOsTreeKill(int pid)
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo
+            {
+                FileName = "taskkill",
+                Arguments = $"/F /T /PID {pid}",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            if (p is null) return false;
+            p.WaitForExit(5000);
+            return p.HasExited && p.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "taskkill tree-kill for PID {Pid} failed; falling back to single-process kill", pid);
+            return false;
+        }
     }
 
     /// <summary>Per-process bookkeeping shared with subclasses.</summary>
