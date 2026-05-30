@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\src\AgentTaskboard.Shared\AgentTaskboard.Shared.csproj" />
     <ProjectReference Include="..\src\AgentTaskboard.OutputParser\AgentTaskboard.OutputParser.csproj" />
+    <ProjectReference Include="..\src\AgentTaskboard.Runner\AgentTaskboard.Runner.csproj" />
   </ItemGroup>
 
   <ItemGroup>
