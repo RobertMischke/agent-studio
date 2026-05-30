@@ -80,6 +80,7 @@ public sealed class CliModelRegistry : ICliModelRegistry
     private static readonly Dictionary<string, long> Sizes = new(StringComparer.OrdinalIgnoreCase)
     {
         // Claude family
+        ["claude-opus-4-8"]     = 200_000,
         ["claude-opus-4-7"]     = 200_000,
         ["claude-opus-4-6"]     = 200_000,
         ["claude-sonnet-4-6"]   = 200_000,

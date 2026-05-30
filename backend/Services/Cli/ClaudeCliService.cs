@@ -750,8 +750,9 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // user picks one, the CLI validates. Empty list also works (default).
         var models = new List<CliModelInfo>
         {
+            new() { Id = "claude-opus-4-8",       Label = "Claude Opus 4.8",     Vendor = "anthropic", IsDefault = true },
             new() { Id = "claude-opus-4-7",       Label = "Claude Opus 4.7",     Vendor = "anthropic" },
-            new() { Id = "claude-sonnet-4-6",     Label = "Claude Sonnet 4.6",   Vendor = "anthropic", IsDefault = true },
+            new() { Id = "claude-sonnet-4-6",     Label = "Claude Sonnet 4.6",   Vendor = "anthropic" },
             new() { Id = "claude-haiku-4-5",      Label = "Claude Haiku 4.5",    Vendor = "anthropic" }
         };
         return Task.FromResult(new CliModelCatalog

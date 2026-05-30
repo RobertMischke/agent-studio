@@ -67,6 +67,7 @@ public static class TokenPricing
     public static readonly IReadOnlyDictionary<string, ModelPrice> Catalog =
         new Dictionary<string, ModelPrice>(StringComparer.OrdinalIgnoreCase)
         {
+            ["claude-opus-4-8"]   = new("claude-opus-4-8",   5.00m, 25.00m),
             ["claude-opus-4-7"]   = new("claude-opus-4-7",   5.00m, 25.00m),
             ["claude-opus-4-6"]   = new("claude-opus-4-6",   5.00m, 25.00m),
             ["claude-opus-4-5"]   = new("claude-opus-4-5",   5.00m, 25.00m),
