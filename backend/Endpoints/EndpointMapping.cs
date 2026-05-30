@@ -29,6 +29,7 @@ public static class EndpointMapping
 
         app.MapCompletedLaneAuditEndpoints();
         app.MapRunnerEndpoints();
+        app.MapLeaseEndpoints();
         app.MapRegistryEndpoints();
         app.MapWorkspaceEndpoints();
         app.MapProjectSettingsEndpoints();
