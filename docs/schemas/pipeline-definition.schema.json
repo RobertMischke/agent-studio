@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/pipeline-definition.schema.json",
+  "title": "PipelineDefinition",
+  "description": "One versioned task-processing pipeline definition for a project. Source of truth on disk at <TaskRepository>/.metadata/pipelines/<projectId>/<version>.json, with a sibling current.json pointer. Mirrored into the derived pipeline-history.db for the editor history view and step_runs joins. Extends ADR-0045's TaskPipeline with the configurable common envelope and the llm/script step types. ADR-0051.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["projectId", "version", "createdAt", "pre", "post"],
+  "properties": {
+    "projectId": {
+      "type": "string",
+      "description": "Canonical project id (PROJ-NNN, ADR-0042) this definition belongs to."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonic definition version. Each save writes a new version; old versions are retained so a step_run can name the exact version it ran against."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC time this version was saved."
+    },
+    "createdBy": {
+      "type": ["string", "null"],
+      "description": "Client identity id (client-identity.schema.json) that saved this version. Null for the boot-seeded default."
+    },
+    "seeded": {
+      "type": "boolean",
+      "default": false,
+      "description": "True for version 1 when it was seeded from PipelineCatalogue.Standard rather than authored by an operator."
+    },
+    "pre": {
+      "type": "array",
+      "description": "Ordered pre-processing steps (run before the core agent run).",
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "post": {
+      "type": "array",
+      "description": "Ordered post-processing steps (run after the core agent run).",
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "phase", "order", "type", "failureMode", "orchestratorReaction", "enabled"],
+      "description": "One configurable step. The common envelope plus a type-specific body (command for script, model+prompt for llm).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Stable slug, unique within the definition."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable name shown in the editor and timeline."
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["Pre", "Post"],
+          "description": "Which phase this step belongs to. Core is the agent run and is not user-editable."
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sort key within the phase. Drag-to-reorder rewrites these."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["Llm", "Script"],
+          "description": "Body discriminator. Llm = prompt + model, streams progress, produces a markdown artifact. Script = shell command, exit-code driven, captured output artifact."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["Module", "Core", "Aspect", "Orchestrator", "Tool"],
+          "description": "Internal implementation binding (ADR-0045 StepKind). Defaults: Script -> Tool, Llm -> Module (or Aspect for aspect-style reviews). Present so built-in steps keep their service binding."
+        },
+        "failureMode": {
+          "type": "string",
+          "enum": ["Hard", "Soft"],
+          "description": "Hard fails the whole pipeline (gate); Soft records a warning and continues."
+        },
+        "orchestratorReaction": {
+          "type": "string",
+          "enum": ["Review", "Scripted"],
+          "description": "Review = orchestrator makes an LLM judgement on the artifact (pass/reopen/escalate via ADR-0032). Scripted = deterministic pass/fail on the step's own result, no LLM."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "When false the step is shown greyed in the timeline and skipped at runtime."
+        },
+        "model": {
+          "type": ["string", "null"],
+          "description": "Llm steps only. Per-step model override via the shared selector (ASS-544/562). Null defers to job/project/client default."
+        },
+        "cliType": {
+          "type": ["string", "null"],
+          "description": "Llm steps only. Optional per-step CLI override (claude/codex/copilot/gemini)."
+        },
+        "prompt": {
+          "type": ["string", "null"],
+          "description": "Llm steps only. The instruction for the step."
+        },
+        "command": {
+          "type": ["string", "null"],
+          "description": "Script steps only. The shell command (e.g. 'dotnet build', 'npm run lint:scss')."
+        },
+        "timeoutMs": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Optional wall-clock cap. On breach the step fails with reason 'timeout'."
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Step ids within the same phase that must finish before this step starts. Empty means no intra-phase dependency; siblings with no edges may run in parallel (ADR-0045 bounded fan-out)."
+        }
+      }
+    }
+  }
+}

@@ -18,7 +18,8 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 
 | File | What's inside |
 |---|---|
-| [architecture-decisions.md](architecture-decisions.md) | The ADR archive (ADR-0001 … ADR-0032). Load-bearing: product boundaries, non-goals, reasoning styles. Bug-fix-grade decisions belong in commits, not here. |
+| [architecture-decisions.md](architecture-decisions.md) | The ADR archive (ADR-0001 … ADR-0050). Load-bearing: product boundaries, non-goals, reasoning styles. Bug-fix-grade decisions belong in commits, not here. |
+| [adr/adr-0051-task-processing-pipeline.md](adr/adr-0051-task-processing-pipeline.md) | Concept ADR (proposed): CI/CD-style task pipeline. Two step types (llm/script) + common envelope, orchestratorReaction semantics, the derived-SQLite-index DB choice (not EF Core) + DDL, slicing plan. Extends ADR-0045; folds into the archive on acceptance. |
 | [architecture-model.md](architecture-model.md) | Marble-style architecture map: <= 10 elements per project, the contract that drift analysis runs against. |
 | [design-principles.md](design-principles.md) | UX contract: top-level summary, always-available drill-down, run-as-unit-of-conversation, calm classical style. |
 | [design-system.md](design-system.md) | Visual contract: studio-shell tokens, shape/type/motion scale, component inventory, Material 3 Expressive mapping, theme switching. |
@@ -84,6 +85,7 @@ Each mockup is a click-dummy plus a design narrative. Implementation slices refe
 | [mockups/orchestrator-prep-and-autonomy/](mockups/orchestrator-prep-and-autonomy/) | The `1a-orchestrator-prep` lane + autonomy scale (ADR-0026). |
 | [mockups/chat-window-next-gen/](mockups/chat-window-next-gen/) | Project chat redesign: markdown rendering, embedded events, side rail, endless history. Source for the `project-chat-becomes-primary-surface-with-embedded-events` job and its slices. |
 | [mockups/vscode-layout/](mockups/vscode-layout/) | VS Code-shape chrome experiment behind the `Frontend:VsCodeLayout` flag. |
+| [mockups/task-processing-pipeline/](mockups/task-processing-pipeline/) | CI/CD-style pipeline (ADR-0051): the project pipeline editor (drag-reorder, per-step config, AI-assist) and the task-detail timeline (planned steps + live progress + per-step artifact + orchestrator verdict). Static ASCII at concept stage. |
 
 ## Research (deep dives that inform decisions)
 
@@ -122,6 +124,8 @@ JSON Schemas pinned by tests. If you change one, update the corresponding fixtur
 | [schemas/executive-summary.schema.json](schemas/executive-summary.schema.json) | Cross-project executive summary contract. |
 | [schemas/client-identity.schema.json](schemas/client-identity.schema.json) | Registered client identity records. |
 | [schemas/orphan-recovery.schema.json](schemas/orphan-recovery.schema.json) | Stale-progress-archiver decision rows (now: `failedPickupSlug` / `failureKind`, ADR-0029). |
+| [schemas/pipeline-definition.schema.json](schemas/pipeline-definition.schema.json) | One versioned project pipeline definition: ordered pre/post steps, common envelope, llm/script types (ADR-0051). |
+| [schemas/step-run.schema.json](schemas/step-run.schema.json) | One (task, step, attempt) telemetry row in `logs/step-runs.jsonl`; the source of truth the derived `pipeline-history.db` projects (ADR-0051). |
 | [schemas/pickup-failure.schema.json](schemas/pickup-failure.schema.json) | Live-pickup dead-letter rows (ADR-0028). |
 | [schemas/product-runtime-event.schema.json](schemas/product-runtime-event.schema.json) | Runtime events captured during a CLI run. |
 | [schemas/protocol-header.schema.json](schemas/protocol-header.schema.json) | `status.md` protocol-header structured block. |
