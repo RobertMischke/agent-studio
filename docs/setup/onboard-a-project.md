@@ -1,6 +1,6 @@
 # Onboarding a new project
 
-This page covers attaching an additional watched project to a running Agent Software Studio instance. The board can drive any number of projects in parallel (one sequential pipeline per project; see [../../AGENTS.md](../../AGENTS.md) "Product Goal & Non-Goals").
+This page covers attaching an additional watched project to a running agent-orchestrator instance. The board can drive any number of projects in parallel (one sequential pipeline per project; see [../../AGENTS.md](../../AGENTS.md) "Product Goal & Non-Goals").
 
 ## Prerequisites
 

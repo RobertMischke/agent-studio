@@ -1,6 +1,6 @@
 # Onboarding a new CLI agent
 
-Agent Software Studio drives four coding-agent CLIs: Claude Code, Codex, GitHub Copilot, and Gemini. Each is a separate install with its own auth, config file, and quirks. This page is the checklist to get one of them running cleanly on a new machine (or to fix one that has started misbehaving).
+agent-orchestrator drives four coding-agent CLIs: Claude Code, Codex, GitHub Copilot, and Gemini. Each is a separate install with its own auth, config file, and quirks. This page is the checklist to get one of them running cleanly on a new machine (or to fix one that has started misbehaving).
 
 For deep operational references (frame model, session capture, watchdog tuning, fixtures) read the matching per-CLI skill in [../cli-skills/](../cli-skills/) - this page links to them.
 

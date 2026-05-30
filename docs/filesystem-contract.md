@@ -28,7 +28,7 @@ With that pointer, jobs are resolved under the configured `TaskRepository` at `p
 
 In parallel with the legacy `<projectKey>` slug layout above, projects also live as records in `<TaskRepository>/.metadata/projects.json` with immutable identifiers (`PROJ-001`, `PROJ-002`, …) and a workspace membership in `<TaskRepository>/.metadata/workspaces.json`. At boot, every `WatchPaths` entry without a matching record is auto-registered. The id is monotonic and never re-used; the display name and storage location can change freely without breaking jobKeys derived from the id.
 
-Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for "Agent Software Studio" + sequence `130`).
+Per-project task counters move out of the sidecar `.task-counter.json` and onto the project record (`NextTaskKeySeq`). Display-keys like `ATP-130` are formatted as `<ShortCode>-<seq>` (e.g. `ATP` for the historic "Agent Task Processor" / `ASS` for the historic "Agent Software Studio" short code + sequence `130`; existing short codes are not auto-renamed by the agent-orchestrator rebrand because they are persisted on every existing card).
 
 The full layout migration (jobs sharded under `projects/PROJ-XXX/jobs/<bucket>/<slug>/`, jobKey moved to `PROJ-NNN::<slug>`) is tracked under F45c and is not active yet; jobs continue to live in the lane-folder layout shown below until that ships. New code that needs to address a project should prefer the registry id over the watch-path string; the resolver in [`backend/Services/Jobs/JobKeyResolver.cs`](../backend/Services/Jobs/JobKeyResolver.cs) accepts either form.
 
