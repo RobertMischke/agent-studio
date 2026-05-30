@@ -101,6 +101,7 @@
                     (click)="openCreate()">＋ Add task</button>
           }
           @if (studioTabState.activeTab()?.kind === 'task' && selectedJob(); as detail) {
+            @let gitCommitCount = detail.info.commits?.length || (detail.info.commit ? 1 : 0);
             <!-- Slim detail header inside the tab bar — pane toggles +
                  activity link + pager + complete. Replaces the wide
                  detail-header row that the reference design folded into
@@ -123,11 +124,16 @@
                 <app-studio-icon name="bot" [size]="14"></app-studio-icon>
               </button>
               <button type="button"
-                      class="studio-tab-action studio-tab-action--icon"
+                      class="studio-tab-action studio-tab-action--icon studio-tab-action--has-badge"
                       data-testid="studio-pane-toggle-git"
                       [appTooltip]="'Git diff &amp; file tree'"
                       (click)="onShellTogglePane('git')">
                 <app-studio-icon name="diff" [size]="14"></app-studio-icon>
+                @if (gitCommitCount > 0) {
+                  <span class="studio-tab-action__badge"
+                        data-testid="studio-pane-toggle-git-badge"
+                        [attr.aria-label]="gitCommitCount + ' commits'">{{ gitCommitCount }}</span>
+                }
               </button>
             </div>
             <span class="studio-tab-actions-sep" aria-hidden="true"></span>

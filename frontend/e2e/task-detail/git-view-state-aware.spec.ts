@@ -55,7 +55,7 @@ function makeDetail(state: string, includeCommits: boolean) {
   return {
     info: {
       id: 'git-view-state-test',
-      jobKey: `${WATCH_PATH}::git-view-state-test`,
+      taskKey: `${WATCH_PATH}::git-view-state-test`,
       title: 'State-aware git view fixture',
       state,
       agent: 'claude',
@@ -96,10 +96,10 @@ async function installRoutes(
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
   });
-  await page.route('**/api/jobs', (route) =>
+  await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
-  await page.route('**/api/jobs/grouped**', (route) =>
+  await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -165,7 +165,7 @@ async function installRoutes(
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ items: [] }),
+      body: JSON.stringify({ at: '2026-05-29T00:00:00Z', snapshots: [] }),
     }),
   );
   await page.route(/\/api\/runner\/status(\?|$)/, (route) =>
@@ -186,27 +186,27 @@ async function installRoutes(
     }),
   );
 
-  await page.route(new RegExp(`/api/jobs/${idEsc}/output(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/output(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
   );
-  await page.route(new RegExp(`/api/jobs/${idEsc}/runs(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/runs(\\?|$)`), (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ runs: [] }),
     }),
   );
-  await page.route(new RegExp(`/api/jobs/${idEsc}/session-events(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/session-events(\\?|$)`), (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ events: [], sessionChain: [] }),
     }),
   );
-  await page.route(new RegExp(`/api/jobs/${idEsc}/claude-session(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/claude-session(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }),
   );
-  await page.route(new RegExp(`/api/jobs/${idEsc}/git/hygiene(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/git/hygiene(\\?|$)`), (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -228,7 +228,7 @@ async function installRoutes(
       }),
     }),
   );
-  await page.route(new RegExp(`/api/jobs/${idEsc}/git/status(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/git/status(\\?|$)`), (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -245,7 +245,7 @@ async function installRoutes(
       ),
     }),
   );
-  await page.route(new RegExp(`/api/jobs/${idEsc}/commit(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}/commit(\\?|$)`), (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -259,7 +259,7 @@ async function installRoutes(
   );
   for (const c of COMMITS) {
     await page.route(
-      new RegExp(`/api/jobs/${idEsc}/commits/${c.sha}/diff(\\?|$)`),
+      new RegExp(`/api/tasks/${idEsc}/commits/${c.sha}/diff(\\?|$)`),
       (route) =>
         route.fulfill({
           status: 200,
@@ -270,7 +270,7 @@ async function installRoutes(
         }),
     );
   }
-  await page.route(new RegExp(`/api/jobs/${idEsc}(\\?|$)`), (route) =>
+  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -315,10 +315,11 @@ test.describe('F55: Git View state-aware display', () => {
     );
 
     // Detail-view chrome (always present once the detail mounts) is the
-    // proxy for "task detail rendered"; the Git pane-toggle in the header
-    // toolbar appears whether or not the Git pane is currently visible.
+    // proxy for "task detail rendered". The Git pane-toggle lives in the
+    // studio slim tab-bar header (the legacy in-detail toggle bar is hidden
+    // in studio mode) and appears whether or not the Git pane is visible.
     await dismissErrorDialog(page);
-    await expect(page.getByTestId('pane-toggle-git')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('studio-pane-toggle-git')).toBeVisible({ timeout: 10_000 });
 
     // The old inline view is gone — both the container and the commit cards.
     await expect(page.getByTestId('rgv-inline-committed')).toHaveCount(0);
@@ -332,15 +333,15 @@ test.describe('F55: Git View state-aware display', () => {
     );
 
     await dismissErrorDialog(page);
-    await expect(page.getByTestId('pane-toggle-git')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('studio-pane-toggle-git')).toBeVisible({ timeout: 10_000 });
 
-    const badge = page.getByTestId('pane-toggle-git-badge');
+    const badge = page.getByTestId('studio-pane-toggle-git-badge');
     await expect(badge).toBeVisible({ timeout: 10_000 });
     await expect(badge).toHaveText('3');
 
     if (RESULTS_DIR) {
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pane-toggle-git-badge-3.png'),
+        path: path.join(RESULTS_DIR, 'studio-pane-toggle-git-badge-3.png'),
       });
     }
   });
@@ -355,9 +356,9 @@ test.describe('F55: Git View state-aware display', () => {
     );
 
     await dismissErrorDialog(page);
-    await expect(page.getByTestId('pane-toggle-git')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('studio-pane-toggle-git')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('rgv-inline-committed')).toHaveCount(0);
-    await expect(page.getByTestId('pane-toggle-git-badge')).toHaveCount(0);
+    await expect(page.getByTestId('studio-pane-toggle-git-badge')).toHaveCount(0);
   });
 
   test('worktree mode shows live status with file list', async ({ page }) => {
