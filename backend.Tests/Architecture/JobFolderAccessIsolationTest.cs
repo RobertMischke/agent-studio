@@ -104,13 +104,11 @@ public class TaskFolderAccessIsolationTest
             ["backend/Services/Runner/CrashRecoveryService.cs"] =
                 "Boot-time recovery; runs before ITaskAccess could be available.",
 
-            // Tier 2 (unrelated to job folders): npm staging cleanup
-            // under the user's AppData / Roaming / npm tree, not the
-            // job-folder tree. The strict Directory.Delete rule catches
-            // every call site; this one is operating on its own folder
-            // space (Claude CLI shim staging orphans).
-            ["backend/Services/Cli/NpmShimHealer.cs"] =
-                "npm staging-orphan cleanup under %AppData%/Roaming/npm; not a job-folder operation.",
+            // NOTE: NpmShimHealer.cs used to be whitelisted here for its
+            // npm staging-orphan Directory.Delete (under %AppData%/Roaming/npm,
+            // not the job-folder tree). It moved to the AgentTaskboard.Runner
+            // project (src/) when the executor CLI layer was extracted, and this
+            // scan only covers backend/ — so the entry is no longer needed.
 
             // Tier 3 migration complete. All former MIGRATION TARGET
             // entries (ProjectRunner, StaleProgressArchiver,
