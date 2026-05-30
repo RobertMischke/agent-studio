@@ -1,0 +1,85 @@
+<div class="tl" data-testid="timeline-tab">
+  @if (hasLoop()) {
+    @let loop = completionLoop();
+    <!-- Prominent final-verdict banner: the at-a-glance answer to
+         "where did the completion loop land?" -->
+    <section class="tl-verdict"
+             [class]="'tl-verdict--' + verdictTone(loop.latestVerdict)"
+             data-testid="timeline-verdict-banner"
+             [attr.data-verdict]="loop.latestVerdict">
+      <div class="tl-verdict__head">
+        <span class="tl-verdict__label" data-testid="timeline-verdict-label">
+          {{ verdictLabel(loop.latestVerdict) }}
+        </span>
+        @if (attemptLabel(); as al) {
+          <span class="tl-verdict__attempt" data-testid="timeline-verdict-attempt">
+            Attempt {{ al }}
+          </span>
+        }
+        @if (loop.reopenCount > 0) {
+          <span class="tl-verdict__reopens" data-testid="timeline-verdict-reopens">
+            re-opened {{ loop.reopenCount }}×
+          </span>
+        }
+      </div>
+      @if (loop.reason; as reason) {
+        <p class="tl-verdict__reason" data-testid="timeline-verdict-reason">
+          <span class="tl-verdict__reason-label">{{ loop.latestVerdict === 'accepted' ? 'Note' : 'Gap' }}:</span>
+          {{ reason }}
+        </p>
+      }
+    </section>
+  }
+
+  @if (hasEvents()) {
+    <ol class="tl-list" data-testid="timeline-list">
+      @for (event of events(); track $index) {
+        <li class="tl-item"
+            [class]="'tl-item--' + rowTone(event.kind)"
+            [class.tl-item--verdict]="isVerdictKind(event.kind)"
+            data-testid="timeline-event"
+            [attr.data-kind]="event.kind">
+          <span class="tl-item__rail" aria-hidden="true">
+            <span class="tl-item__glyph" [appTooltip]="event.actor">{{ actorGlyph(event.actor) }}</span>
+          </span>
+          <div class="tl-item__body">
+            <div class="tl-item__head">
+              <span class="tl-item__kind" data-testid="timeline-event-kind">{{ kindLabel(event.kind) }}</span>
+              <time class="tl-item__time"
+                    [appTooltip]="formatAbsoluteTime(event.ts)">{{ formatTime(event.ts) }}</time>
+            </div>
+            @if (event.summary) {
+              <p class="tl-item__summary" data-testid="timeline-event-summary">{{ event.summary }}</p>
+            }
+            @if (event.details?.['gap']; as gap) {
+              <p class="tl-item__gap" data-testid="timeline-event-gap">
+                <span class="tl-item__gap-label">Gap:</span> {{ gap }}
+              </p>
+            }
+            @if (event.details?.['reason']; as reason) {
+              <p class="tl-item__gap" data-testid="timeline-event-reason">
+                <span class="tl-item__gap-label">Reason:</span> {{ reason }}
+              </p>
+            }
+            @if (detailEntries(event).length > 0) {
+              <div class="tl-item__details">
+                @for (d of detailEntries(event); track d.key) {
+                  <span class="tl-item__detail">
+                    <span class="tl-item__detail-key">{{ d.key }}</span>
+                    <span class="tl-item__detail-val">{{ d.value }}</span>
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        </li>
+      }
+    </ol>
+  } @else {
+    <div class="tl-empty" data-testid="timeline-empty">
+      No timeline events recorded for this task yet. Prompt creation, agent
+      runs, pipeline steps, and the orchestrator's completion-loop verdicts
+      will appear here as they happen.
+    </div>
+  }
+</div>

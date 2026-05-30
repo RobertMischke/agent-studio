@@ -12,6 +12,7 @@ import { PaneHeaderComponent } from '../../../../components/pane-header/pane-hea
 import { PaneTabsComponent, PaneTabDef } from '../../../../components/pane-tabs/pane-tabs.component';
 import { FilesPaneComponent } from './files-pane/files-pane.component';
 import { OverviewPaneComponent } from './overview-pane/overview-pane.component';
+import { TaskTimelinePaneComponent } from '../../../task-timeline';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -37,7 +38,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
+  imports: [FilesPaneComponent, MarkdownViewComponent, OverviewPaneComponent, TaskTimelinePaneComponent, PaneHeaderComponent, PaneTabsComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -75,7 +76,7 @@ export class PromptPaneComponent {
   readonly titleSaved = output<void>();
 
   /**
-   * overview | description | evidence | code-review.
+   * overview | description | timeline | evidence | code-review.
    *
    * The active tab is per-task and lives only in-memory: opening a task or
    * switching to a different one snaps back to Overview so the operator
@@ -84,7 +85,7 @@ export class PromptPaneComponent {
    * another task. Persistence across page reloads is intentionally out of
    * scope.
    */
-  readonly activeTab = signal<'overview' | 'description' | 'evidence' | 'code-review'>('overview');
+  readonly activeTab = signal<'overview' | 'description' | 'timeline' | 'evidence' | 'code-review'>('overview');
 
   /** Resets the active tab to Overview whenever the underlying task changes,
    *  so navigating between tasks always lands on Overview. Within the same
@@ -98,13 +99,13 @@ export class PromptPaneComponent {
     this.lastJobKey = key;
   });
 
-  setTab(tab: 'overview' | 'description' | 'evidence' | 'code-review'): void {
+  setTab(tab: 'overview' | 'description' | 'timeline' | 'evidence' | 'code-review'): void {
     this.activeTab.set(tab);
   }
 
   /** Type-safe bridge from the generic pane-tabs `tabChange` event. */
   onPromptTabChange(id: string): void {
-    if (id === 'overview' || id === 'description' || id === 'evidence' || id === 'code-review') {
+    if (id === 'overview' || id === 'description' || id === 'timeline' || id === 'evidence' || id === 'code-review') {
       this.setTab(id);
     }
   }
@@ -134,6 +135,12 @@ export class PromptPaneComponent {
       icon: 'folder',
       testid: 'prompt-tab-description',
       badge: this.filesCount() > 1 ? this.filesCount() : null,
+    },
+    {
+      id: 'timeline',
+      label: 'Timeline',
+      icon: 'activity',
+      testid: 'prompt-tab-timeline',
     },
     {
       id: 'evidence',

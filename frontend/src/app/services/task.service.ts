@@ -45,6 +45,7 @@ import type {
   RunFilesResponse,
   RunDiffResponse,
 } from '../features/run-timeline';
+import type { TaskTimelineEvent } from '../features/task-timeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { AgentWorkSummary, SessionEventsResponse } from '../features/session-events';
 import type { RegressionRadarResult } from '../features/regression-radar';
@@ -800,6 +801,19 @@ export class TaskService {
   getRunTimeline(jobId: string, watchPath?: string) {
     return this.http.get<RunTimeline>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/runs`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Per-task event ledger (`logs/timeline.jsonl`, ADR-0049 / ASS-566):
+   * the unified chronological list of lifecycle events including the
+   * orchestrator's completion-loop verdicts (accept / reopen / escalate).
+   * Drives the Overview attempt-cycle indicator + the Timeline tab.
+   */
+  getTaskTimeline(jobId: string, watchPath?: string) {
+    return this.http.get<TaskTimelineEvent[]>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/timeline`,
       this.withWatchPath(watchPath),
     );
   }

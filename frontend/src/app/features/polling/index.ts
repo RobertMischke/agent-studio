@@ -12,3 +12,4 @@ export { CliOutputPollService } from './services/cli-output-poll.service';
 export { RunTimelinePollService } from './services/run-timeline-poll.service';
 export { ScreenshotsPollService } from './services/screenshots-poll.service';
 export { SessionEventsPollService } from './services/session-events-poll.service';
+export { TaskTimelinePollService } from './services/task-timeline-poll.service';

@@ -82,6 +82,13 @@
     </div>
   </section>
 
+  <!-- Completion-loop attempt-cycle indicator (ADR-0049 / ASS-566): a
+       compact "Attempt N/M + latest verdict + reason" surface so the
+       operator sees the retry-until-truly-done loop at a glance. The full
+       reopen->retry->verdict cycle lives in the Timeline tab. Self-renders
+       (and hides) off the shared task-timeline poll snapshot. -->
+  <app-completion-loop-indicator />
+
   <!-- Agent block -->
   <section class="ov-section" data-testid="overview-agent">
     <h3 class="ov-section__title">Agent</h3>

@@ -94,6 +94,10 @@
         }
       }
 
+      @case ('timeline') {
+        <app-task-timeline-pane />
+      }
+
       @case ('evidence') {
         <section class="evidence-view" data-testid="evidence-view">
           @if (screenshots().length > 0) {

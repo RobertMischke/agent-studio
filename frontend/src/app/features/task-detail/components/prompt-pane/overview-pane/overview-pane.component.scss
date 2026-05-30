@@ -381,6 +381,7 @@
   }
 }
 
+// Completion-loop attempt-cycle indicator (ADR-0049 / ASS-566).
 @keyframes ov-pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.4; }

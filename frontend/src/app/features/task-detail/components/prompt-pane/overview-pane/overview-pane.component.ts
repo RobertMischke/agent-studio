@@ -15,6 +15,7 @@ import type { CliType, TaskInfo } from '../../../../../models/task.model';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
+import { CompletionLoopIndicatorComponent } from '../../../../task-timeline';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
@@ -36,7 +37,7 @@ import { copyTextToClipboard } from '../../../../../services/clipboard.util';
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CliModelSelectorComponent, RegressionRadarComponent, TooltipDirective, RowComponent],
+  imports: [CliModelSelectorComponent, RegressionRadarComponent, TooltipDirective, RowComponent, CompletionLoopIndicatorComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
