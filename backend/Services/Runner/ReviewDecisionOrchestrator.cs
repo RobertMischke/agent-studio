@@ -127,6 +127,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly TimelineLog? _timeline;
+    private readonly ProjectSettingsService? _projectSettings;
 
     /// <summary>
     /// Stable prefix on the <c>Reason</c> field of every
@@ -153,7 +154,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         GitService? git = null,
         PipelineExecutionLog? pipelineLog = null,
         ILintScssRunner? lintScssRunner = null,
-        TimelineLog? timeline = null)
+        TimelineLog? timeline = null,
+        ProjectSettingsService? projectSettings = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -171,6 +173,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _pipelineLog = pipelineLog;
         _lintScssRunner = lintScssRunner;
         _timeline = timeline;
+        _projectSettings = projectSettings;
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -665,7 +668,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // entirely (the recorder is fully optional).
         _pipelineLog?.Begin(current.FolderPath, PipelineCatalogue.Standard, entry.Name, current.Id);
 
-        var report = await _aspectRunner.RunAsync(inputs, aspects, cliBinary, aspectModel, perAspectTimeout, ct);
+        // Per-project pipeline config: drop aspects the project disabled and
+        // route each remaining aspect's CLI call to its configured model
+        // (falling back to the run-wide aspectModel). The resolver keys on
+        // the catalogue step id (aspect-{id}); see PipelineStepConfigResolver.
+        var settings = _projectSettings?.Get(entry.Name);
+        var enabledAspects = aspects
+            .Where(id => PipelineStepConfigResolver.IsEnabled(settings, $"aspect-{id}"))
+            .ToList();
+        Func<string, string>? modelForAspect = settings is null
+            ? null
+            : aspectId => PipelineStepConfigResolver.ResolveModel(settings, $"aspect-{aspectId}", aspectModel);
+
+        var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect);
 
         // ASS-563: run the lint-scss post-step BEFORE the pipeline Complete
         // mark so its step record lands in pipeline-execution.json while

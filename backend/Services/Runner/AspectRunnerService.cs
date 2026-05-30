@@ -163,7 +163,8 @@ public sealed class AspectRunnerService
         string cliBinary,
         string model,
         TimeSpan perAspectTimeout,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, string>? modelForAspect = null)
     {
         var now = DateTime.UtcNow;
 
@@ -190,8 +191,16 @@ public sealed class AspectRunnerService
         using var gate = new SemaphoreSlim(maxParallel, maxParallel);
 
         var tasks = resolved
-            .Select(entry => RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, model,
-                perAspectTimeout, gate, now, ct))
+            .Select(entry =>
+            {
+                // Per-step model routing: the orchestrator hands us a
+                // resolver keyed on the aspect id (aspect-{id}); a null
+                // resolver or a null reply means "use the run-wide model".
+                var stepModel = modelForAspect?.Invoke(entry.Def.Id);
+                if (string.IsNullOrWhiteSpace(stepModel)) stepModel = model;
+                return RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, stepModel,
+                    perAspectTimeout, gate, now, ct);
+            })
             .ToArray();
 
         var perIndex = await Task.WhenAll(tasks);

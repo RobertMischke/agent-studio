@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Pipeline;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Endpoints;
@@ -55,9 +56,69 @@ public static class ProjectSettingsEndpoints
                         lane => lane,
                         lane => LaneSortStrategies.Resolve(kv.Value, lane),
                         StringComparer.OrdinalIgnoreCase),
+                    // Per-step pipeline overrides (enabled / mode / model).
+                    // Only the steps the operator has touched appear here;
+                    // an absent step is on its built-in default.
+                    pipelineSteps = kv.Value.PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
                 },
                 StringComparer.OrdinalIgnoreCase);
             return Results.Ok(projected);
+        });
+
+        // The configurable pipeline-step catalogue: the code-defined steps a
+        // project can enable/disable, set a model on, or set a gate mode on.
+        // The Settings panel reads this to render one control per step
+        // without hardcoding the step list on the frontend.
+        app.MapGet("/api/projects/pipeline-catalogue", () =>
+        {
+            var pipeline = PipelineCatalogue.Standard;
+            var steps = pipeline.AllSteps.Select(s => new
+            {
+                id = s.Id,
+                displayName = s.DisplayName,
+                kind = s.Kind.ToString(),
+                // The core agent run cannot be disabled or model-overridden
+                // here (it uses the task's own CLI + model); aspect steps
+                // invoke an LLM so they accept a model; tool/orchestrator
+                // gate steps accept a mode.
+                usesModel = s.Kind == StepKind.Aspect,
+                supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
+                canDisable = s.Kind != StepKind.Core,
+            }).ToList();
+            return Results.Ok(new { pipelineId = pipeline.Id, steps });
+        });
+
+        // Per-project pipeline-step override. Sets enabled / mode / model for
+        // one step; an all-null body clears the override (revert to default).
+        app.MapPut("/api/projects/{projectName}/pipeline-step", (string projectName, SetPipelineStepRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            if (string.IsNullOrWhiteSpace(req.StepId))
+                return Results.BadRequest(new { error = "stepId is required" });
+
+            // Reject step ids the catalogue does not know so a typo fails loud
+            // instead of writing dead config that never reaches a real step.
+            var known_step = PipelineCatalogue.Standard.AllSteps
+                .Any(s => string.Equals(s.Id, req.StepId, StringComparison.OrdinalIgnoreCase));
+            if (!known_step)
+                return Results.BadRequest(new { error = $"Unknown pipeline step '{req.StepId}'" });
+
+            if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
+                return Results.BadRequest(new { error = $"Unsupported mode '{req.Mode}' (expected off / warn / fail)" });
+
+            settings.SetPipelineStep(projectName, req.StepId, new PipelineStepSetting
+            {
+                Enabled = req.Enabled,
+                Mode = req.Mode,
+                Model = req.Model,
+            });
+            return Results.Ok(new
+            {
+                stepId = req.StepId,
+                pipelineSteps = settings.Get(projectName).PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+            });
         });
 
         app.MapPut("/api/projects/{projectName}/auto-commit", (string projectName, SetAutoCommitRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>

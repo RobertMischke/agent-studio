@@ -46,6 +46,11 @@ import type {
   RunDiffResponse,
 } from '../features/run-timeline';
 import type { TaskTimelineEvent } from '../features/task-timeline';
+import type {
+  TaskPipelineResponse,
+  PipelineCatalogue,
+  PipelineStepSetting,
+} from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { AgentWorkSummary, SessionEventsResponse } from '../features/session-events';
 import type { RegressionRadarResult } from '../features/regression-radar';
@@ -806,6 +811,19 @@ export class TaskService {
   }
 
   /**
+   * Per-job pipeline: the static step catalogue this job targets, the
+   * recorded per-step execution, a derived per-step + task-total cost
+   * breakdown, and the per-project step config. Drives the Overview
+   * pipeline block (pre/post steps, status, per-step tokens/cost, total).
+   */
+  getJobPipeline(jobId: string, watchPath?: string) {
+    return this.http.get<TaskPipelineResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/pipeline`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
    * Per-task event ledger (`logs/timeline.jsonl`, ADR-0049 / ASS-566):
    * the unified chronological list of lifecycle events including the
    * orchestrator's completion-loop verdicts (accept / reopen / escalate).
@@ -1061,7 +1079,7 @@ export class TaskService {
     }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/queue-health/repair`, {});
   }
 
-  /** All per-project settings (auto-commit, auto-push, runner mode, orchestrator model). */
+  /** All per-project settings (auto-commit, auto-push, runner mode, orchestrator model, pipeline-step overrides). */
   getAllProjectSettings() {
     return this.http.get<
       Record<
@@ -1071,9 +1089,34 @@ export class TaskService {
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
           orchestratorModel: string | null;
+          pipelineSteps?: Record<string, PipelineStepSetting>;
         }
       >
     >(`${this.baseUrl}/projects/settings`);
+  }
+
+  /**
+   * Configurable pipeline-step catalogue (code-defined steps + capability
+   * flags). The Settings panel renders one control row per step from this,
+   * so the step list is never hardcoded on the frontend.
+   */
+  getPipelineCatalogue() {
+    return this.http.get<PipelineCatalogue>(`${this.baseUrl}/projects/pipeline-catalogue`);
+  }
+
+  /**
+   * Write one per-project pipeline-step override (enabled / mode / model).
+   * Omitted fields clear that facet; the backend rejects unknown step ids
+   * and unsupported modes. Returns the full updated `pipelineSteps` map.
+   */
+  setProjectPipelineStep(
+    projectName: string,
+    step: { stepId: string; enabled?: boolean | null; mode?: string | null; model?: string | null },
+  ) {
+    return this.http.put<{ stepId: string; pipelineSteps: Record<string, PipelineStepSetting> }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-step`,
+      step,
+    );
   }
 
   setProjectAutoCommit(projectName: string, enabled: boolean) {

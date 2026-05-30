@@ -167,6 +167,49 @@ public class ProjectSettingsService
         }
     }
 
+    /// <summary>
+    /// Upsert the per-project override for one pipeline step
+    /// (<see cref="ProjectSettings.PipelineSteps"/>). Null fields inside the
+    /// supplied <paramref name="setting"/> stay null (no override on that
+    /// dimension). Passing a null <paramref name="setting"/>, or one whose
+    /// every field is null, removes the entry so the step reverts to its
+    /// built-in defaults.
+    /// </summary>
+    public void SetPipelineStep(string projectName, string stepId, PipelineStepSetting? setting)
+    {
+        if (string.IsNullOrWhiteSpace(stepId)) return;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var map = current.PipelineSteps is null
+                ? new Dictionary<string, PipelineStepSetting>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, PipelineStepSetting>(current.PipelineSteps, StringComparer.OrdinalIgnoreCase);
+
+            var normalizedModel = string.IsNullOrWhiteSpace(setting?.Model) ? null : setting!.Model!.Trim();
+            var normalizedMode = string.IsNullOrWhiteSpace(setting?.Mode) ? null : setting!.Mode!.Trim().ToLowerInvariant();
+            var isEmpty = setting is null
+                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null);
+
+            if (isEmpty)
+            {
+                map.Remove(stepId.Trim());
+            }
+            else
+            {
+                map[stepId.Trim()] = new PipelineStepSetting
+                {
+                    Enabled = setting!.Enabled,
+                    Mode = normalizedMode,
+                    Model = normalizedModel,
+                };
+            }
+            _cache[projectName] = current with { PipelineSteps = map.Count == 0 ? null : map };
+            Persist();
+        }
+        _logger.LogInformation("Pipeline step '{StepId}' config updated for project {Project}", stepId, projectName);
+    }
+
     public void SetAnalysisSchedule(string projectName, string topic, string? cadence)
     {
         if (string.IsNullOrWhiteSpace(topic)) return;

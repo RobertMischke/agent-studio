@@ -38,6 +38,7 @@ import { SessionEventsPollService } from '../polling/services/session-events-pol
 import { RunTimelinePollService } from '../polling/services/run-timeline-poll.service';
 import { TaskTimelinePollService } from '../polling/services/task-timeline-poll.service';
 import { AgentWorkSummaryPollService } from '../polling/services/agent-work-summary-poll.service';
+import { TaskPipelinePollService } from '../polling/services/task-pipeline-poll.service';
 import { ScreenshotsPollService } from '../polling/services/screenshots-poll.service';
 import { GitPaneService } from './services/git-pane.service';
 import { shouldShowFailureToast } from './services/run-outcome.util';
@@ -81,6 +82,7 @@ import { TooltipDirective } from '../../components/tooltip';
     RunTimelinePollService,
     TaskTimelinePollService,
     AgentWorkSummaryPollService,
+    TaskPipelinePollService,
     ScreenshotsPollService,
     GitPaneService,
     CliOutputPollService,
@@ -626,6 +628,14 @@ export class TaskDetailComponent implements OnDestroy {
   private readonly agentWorkSummaryPoll = inject(AgentWorkSummaryPollService);
   private readonly agentWorkSummaryEffect = effect(() => {
     this.agentWorkSummaryPoll.syncTo(this.detail()?.info ?? null);
+  });
+
+  // ...and for the per-job pipeline poller (10 s cadence). Drives the
+  // Overview tab's pipeline block (pre/post steps + per-step tokens/cost
+  // + task total). The overview pane injects the service for its signals.
+  private readonly taskPipelinePoll = inject(TaskPipelinePollService);
+  private readonly taskPipelineEffect = effect(() => {
+    this.taskPipelinePoll.syncTo(this.detail()?.info ?? null);
   });
 
   // ...and for the per-job screenshots poller (10 s cadence). The

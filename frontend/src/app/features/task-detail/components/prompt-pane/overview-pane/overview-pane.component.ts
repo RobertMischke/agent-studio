@@ -17,6 +17,8 @@ import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { CompletionLoopIndicatorComponent } from '../../../../task-timeline';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
+import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
+import type { PipelineStep, PipelineStepStatus, StepKind } from '../../../../task-pipeline';
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
@@ -32,6 +34,22 @@ import { TaskService } from '../../../../../services/task.service';
 import { NotificationService } from '../../../../../services/notification.service';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
+
+/** One per-step row in the Overview pipeline block. */
+interface PipelineRowVm {
+  id: string;
+  label: string;
+  kind: StepKind;
+  enabled: boolean;
+  /** Effective display status: 'disabled' for project-disabled steps. */
+  status: PipelineStepStatus | 'disabled';
+  model: string | null;
+  verdict: string | null;
+  totalTokens: number;
+  costUsd: number;
+  /** False -> the model is not in the price table, render cost as n/a. */
+  costKnown: boolean;
+}
 
 @Component({
   selector: 'app-overview-pane',
@@ -64,6 +82,7 @@ export class OverviewPaneComponent {
 
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly agentWorkPoll = inject(AgentWorkSummaryPollService);
+  private readonly pipelinePoll = inject(TaskPipelinePollService);
   private readonly clients = inject(ClientService);
   private readonly jobService = inject(TaskService);
   private readonly notifs = inject(NotificationService);
@@ -300,6 +319,104 @@ export class OverviewPaneComponent {
     }
     return total;
   });
+
+  /**
+   * Per-step pipeline rows for the Overview pipeline block. Joins the
+   * static catalogue (ordered pre+core+post, gives label/kind) with the
+   * recorded execution (status/model/verdict/tokens), the derived cost,
+   * and the per-project config (enabled flag + model override). Steps the
+   * project disabled still render — as a struck-through "disabled" row —
+   * so the operator can see what was switched off, not just what ran.
+   */
+  readonly pipelineRows = computed<PipelineRowVm[]>(() => {
+    const res = this.pipelinePoll.pipeline();
+    if (res == null) return [];
+    const steps: PipelineStep[] =
+      res.pipeline.allSteps ??
+      [...res.pipeline.pre, ...res.pipeline.core, ...res.pipeline.post];
+
+    const exec = new Map((res.execution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
+    const cost = new Map((res.cost?.steps ?? []).map(c => [c.stepId.toLowerCase(), c]));
+
+    return steps.map(step => {
+      const key = step.id.toLowerCase();
+      const e = exec.get(key);
+      const c = cost.get(key);
+      const cfg = res.config?.[step.id];
+      const enabled = cfg?.enabled ?? true;
+      let status: PipelineRowVm['status'];
+      if (!enabled) status = 'disabled';
+      else if (e) status = e.status;
+      else if (step.stub) status = 'planned';
+      else status = 'pending';
+      return {
+        id: step.id,
+        label: step.displayName || step.id,
+        kind: step.kind,
+        enabled,
+        status,
+        model: e?.model ?? cfg?.model ?? step.model ?? null,
+        verdict: e?.verdict ?? null,
+        totalTokens: c?.totalTokens ?? 0,
+        costUsd: c?.costUsd ?? 0,
+        costKnown: c ? c.modelKnown : true,
+      };
+    });
+  });
+
+  readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
+
+  /** Task-total tokens + cost across all recorded steps. */
+  readonly pipelineTotal = computed(() => {
+    const c = this.pipelinePoll.pipeline()?.cost ?? null;
+    if (c == null) return null;
+    return { totalTokens: c.totalTokens, totalCostUsd: c.totalCostUsd, anyModelUnknown: c.anyModelUnknown };
+  });
+
+  /** True once at least one step has a recorded execution. */
+  readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
+
+  stepKindLabel(kind: StepKind): string {
+    switch (kind) {
+      case 'module':       return 'Pre';
+      case 'core':         return 'Core';
+      case 'aspect':       return 'Aspect';
+      case 'orchestrator': return 'Decision';
+      case 'tool':         return 'Tool';
+      default:             return kind;
+    }
+  }
+
+  stepStatusIcon(status: PipelineRowVm['status']): string {
+    switch (status) {
+      case 'passed':   return '✅';
+      case 'failed':   return '❌';
+      case 'running':  return '▶️';
+      case 'skipped':  return '⏭️';
+      case 'planned':  return '🕓';
+      case 'disabled': return '🚫';
+      default:         return '·';
+    }
+  }
+
+  stepStatusLabel(status: PipelineRowVm['status']): string {
+    switch (status) {
+      case 'passed':   return 'Passed';
+      case 'failed':   return 'Failed';
+      case 'running':  return 'Running';
+      case 'skipped':  return 'Skipped';
+      case 'planned':  return 'Planned';
+      case 'disabled': return 'Disabled';
+      default:         return 'Pending';
+    }
+  }
+
+  /** USD formatting: sub-cent costs need more than 2 dp to be non-zero. */
+  formatCost(usd: number): string {
+    if (usd <= 0) return '$0.00';
+    if (usd < 0.01) return `$${usd.toFixed(4)}`;
+    return `$${usd.toFixed(2)}`;
+  }
 
   laneLabel(state: string): string {
     switch (state) {

@@ -6,13 +6,15 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
+import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
 import { OverviewPaneComponent } from './overview-pane.component';
 import type { TaskInfo } from '../../../../../models/task.model';
 import type { AgentWorkSummary } from '../../../../session-events';
+import type { TaskPipelineResponse } from '../../../../task-pipeline';
 
 function baseJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
-    id: 'test-1', jobKey: 'wp::test-1', title: 'Test', state: '2-ready',
+    id: 'test-1', key: 'wp::test-1', title: 'Test', state: '2-ready',
     order: 1, agent: 'human', createdAt: new Date().toISOString(),
     watchPath: '/tmp', projectName: 'test', folderPath: '/tmp/test-1',
     lastActivity: new Date().toISOString(), sessionName: null,
@@ -32,6 +34,7 @@ async function build(job: TaskInfo, agentWork: AgentWorkSummary | null = null) {
       provideRouter([]),
       RunTimelinePollService,
       AgentWorkSummaryPollService,
+      TaskPipelinePollService,
     ],
   }).compileComponents();
   if (agentWork) {
@@ -147,6 +150,64 @@ describe('OverviewPaneComponent (smoke)', () => {
     // displayedTitle still reflects the underlying job because no optimistic
     // override was set.
     expect(c.displayedTitle()).toBe('Same title');
+  });
+
+  it('pipeline block: joins catalogue + execution + cost into per-step rows and a task total', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+          { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+          { id: 'aspect-tests-and-evidence', displayName: 'Tests and evidence', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', status: 'passed', durationMs: 1200, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
+        ],
+      },
+      cost: {
+        steps: [
+          { stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', modelKnown: true, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 1200, costUsd: 0.002 },
+        ],
+        totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false,
+      },
+      // tests-and-evidence disabled at project level; code-quality forced to Haiku.
+      config: {
+        'aspect-tests-and-evidence': { enabled: false, model: null, mode: null },
+        'aspect-code-quality': { enabled: true, model: 'claude-haiku-4-5', mode: null },
+      },
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const rows = c.pipelineRows();
+    expect(rows.map(r => r.id)).toEqual(['core-agent-run', 'aspect-code-quality', 'aspect-tests-and-evidence']);
+
+    const core = rows.find(r => r.id === 'core-agent-run')!;
+    expect(core.status).toBe('pending'); // no execution row, not a stub
+
+    const cq = rows.find(r => r.id === 'aspect-code-quality')!;
+    expect(cq.status).toBe('passed');
+    expect(cq.model).toBe('claude-haiku-4-5');
+    expect(cq.verdict).toBe('pass');
+    expect(cq.totalTokens).toBe(1200);
+    expect(cq.costKnown).toBe(true);
+
+    const tests = rows.find(r => r.id === 'aspect-tests-and-evidence')!;
+    expect(tests.status).toBe('disabled');
+    expect(tests.enabled).toBe(false);
+
+    expect(c.hasPipeline()).toBe(true);
+    expect(c.pipelineTotal()).toEqual({ totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false });
+    expect(c.formatCost(0.002)).toBe('$0.0020');
+    expect(c.formatCost(1.5)).toBe('$1.50');
   });
 
   it('session row was removed (component no longer exposes session-id helpers)', async () => {

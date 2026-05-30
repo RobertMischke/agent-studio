@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pipeline;
 
@@ -6,17 +7,20 @@ namespace OrchestratorApi.Endpoints.Jobs;
 
 /// <summary>
 /// Pipeline read surface for one job. Returns the static
-/// <see cref="TaskPipeline"/> the runtime targets for this job plus the
+/// <see cref="TaskPipeline"/> the runtime targets for this job, the
 /// latest <see cref="PipelineExecutionRecord"/> on disk
-/// (<c>pipeline-execution.json</c> in the job folder), or a
-/// "no execution yet" envelope when the job has not been processed.
+/// (<c>pipeline-execution.json</c> in the job folder), the per-project
+/// step configuration (enabled / model / mode resolved from
+/// <c>project-settings.json</c>), and a derived per-step + task-total
+/// cost breakdown.
 ///
 /// <para>
-/// Phase 1 always returns the standard pipeline; the per-project
-/// pipeline-settings override lands with the Settings panel follow-up
-/// task. Keeping the spec on the response (not just the execution)
-/// lets the Overview pipeline view render even before the first run
-/// has emitted any per-step records.
+/// The cost is computed on read from the already-recorded per-step
+/// tokens via the single <c>TokenPricing</c> table - cheap because one
+/// task has only a handful of steps. The config block lets the Overview
+/// render "what ran, on which model, what did it cost" and the Settings
+/// panel render the per-step enable / model / mode controls without a
+/// second round-trip.
 /// </para>
 /// </summary>
 public static class TaskPipelineEndpoints
@@ -27,6 +31,7 @@ public static class TaskPipelineEndpoints
             string jobId,
             string? watchPath,
             TaskScannerService scanner,
+            ProjectSettingsService projectSettings,
             PipelineExecutionLog pipelineLog) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
@@ -34,11 +39,27 @@ public static class TaskPipelineEndpoints
 
             var pipeline = PipelineCatalogue.Standard;
             var record = pipelineLog.Read(info.FolderPath);
+            var cost = PipelineCostCalculator.Summarize(record);
+
+            var settings = string.IsNullOrWhiteSpace(info.ProjectName)
+                ? null
+                : projectSettings.Get(info.ProjectName);
+            var config = pipeline.AllSteps.ToDictionary(
+                step => step.Id,
+                step => new
+                {
+                    enabled = PipelineStepConfigResolver.IsEnabled(settings, step.Id),
+                    model = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Model,
+                    mode = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Mode,
+                },
+                StringComparer.OrdinalIgnoreCase);
 
             return Results.Ok(new
             {
                 pipeline,
                 execution = record,
+                cost,
+                config,
             });
         });
     }

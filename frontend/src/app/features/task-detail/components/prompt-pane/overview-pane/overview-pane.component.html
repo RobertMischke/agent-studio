@@ -235,6 +235,75 @@
     }
   </section>
 
+  <!-- Pipeline block: ordered pre/core/post steps with per-step status,
+       model used, tokens and cost, plus the task total. Configuration of
+       which steps run and on which model lives in project Settings; this
+       block is the read-only "what ran, on which model, what did it cost"
+       view the feature spec asks for. -->
+  @if (hasPipeline()) {
+    <section class="ov-section" data-testid="overview-pipeline">
+      <h3 class="ov-section__title"
+          [appTooltip]="'Pre / core / post processing steps for this task. Per-step model and enable/disable are configured in project Settings.'">
+        Pipeline
+      </h3>
+
+      <div class="ov-pipeline" data-testid="overview-pipeline-steps">
+        @for (row of pipelineRows(); track row.id) {
+          <div class="ov-pl-step"
+               [class.ov-pl-step--disabled]="row.status === 'disabled'"
+               [attr.data-step-id]="row.id"
+               [attr.data-status]="row.status"
+               data-testid="overview-pipeline-step">
+            <span class="ov-pl-step__status"
+                  [appTooltip]="stepStatusLabel(row.status)"
+                  aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
+            <span class="ov-pl-step__kind">{{ stepKindLabel(row.kind) }}</span>
+            <span class="ov-pl-step__name">{{ row.label }}</span>
+            @if (row.verdict) {
+              <span class="ov-pl-step__verdict" [attr.data-verdict]="row.verdict">{{ row.verdict }}</span>
+            }
+            @if (row.model) {
+              <span class="ov-pl-step__model" data-testid="overview-pipeline-step-model"
+                    [appTooltip]="'Model used for this step'">{{ row.model }}</span>
+            }
+            <span class="ov-pl-step__tokens ov-value--mono"
+                  data-testid="overview-pipeline-step-tokens">
+              {{ row.totalTokens > 0 ? formatTokens(row.totalTokens) : '—' }}
+            </span>
+            <span class="ov-pl-step__cost ov-value--mono"
+                  data-testid="overview-pipeline-step-cost">
+              @if (row.totalTokens <= 0) {
+                —
+              } @else if (!row.costKnown) {
+                <span class="ov-dim" [appTooltip]="'No price on file for this model'">n/a</span>
+              } @else {
+                {{ formatCost(row.costUsd) }}
+              }
+            </span>
+          </div>
+        }
+      </div>
+
+      @if (pipelineTotal(); as total) {
+        <div class="ov-pl-total" data-testid="overview-pipeline-total">
+          <span class="ov-pl-total__label">Task total</span>
+          <span class="ov-pl-total__tokens ov-value--mono ov-value--strong"
+                data-testid="overview-pipeline-total-tokens">
+            {{ formatTokens(total.totalTokens) }}
+          </span>
+          <span class="ov-pl-total__cost ov-value--mono ov-value--strong"
+                data-testid="overview-pipeline-total-cost">
+            {{ formatCost(total.totalCostUsd) }}
+            @if (total.anyModelUnknown) {
+              <span class="ov-dim"
+                    [appTooltip]="'One or more steps used a model with no price on file; the total excludes them.'">*</span>
+            }
+          </span>
+        </div>
+      }
+    </section>
+  }
+
   <!-- Agent Work block (replaces the raw SESSION row).
        Aggregates session-events.jsonl + tool-calls.jsonl for a meaningful
        at-a-glance "what did the agent actually do" view. -->

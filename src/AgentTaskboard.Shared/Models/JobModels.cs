@@ -1081,6 +1081,54 @@ public record ProjectSettings
     /// unaffected.
     /// </summary>
     public Dictionary<string, string>? LaneSortStrategyOverrides { get; init; }
+
+    /// <summary>
+    /// Per-project pipeline-step configuration. Map of pipeline step id
+    /// (e.g. <c>aspect-code-quality</c>, <c>post-lint-scss</c>) to a
+    /// per-step override of <c>enabled</c> / <c>mode</c> / <c>model</c>.
+    /// A missing step id, or a null field inside an entry, falls through
+    /// to the built-in pipeline default. The known step ids come from
+    /// <c>PipelineCatalogue.Standard</c>; this map only overrides those
+    /// code-defined steps - it does not add or reorder steps, because the
+    /// runtime maps each step id to a concrete service. Resolution order
+    /// for <c>model</c> is step -&gt; <see cref="OrchestratorModel"/> -&gt;
+    /// runtime default; for <c>mode</c> it is step -&gt; built-in default.
+    /// Persisted in <c>project-settings.json</c>.
+    /// </summary>
+    public Dictionary<string, PipelineStepSetting>? PipelineSteps { get; init; }
+}
+
+/// <summary>
+/// Per-step project override stored in <see cref="ProjectSettings.PipelineSteps"/>.
+/// Every field is nullable: null means "no override, use the pipeline /
+/// runtime default" so a partial entry (e.g. only a model choice) leaves
+/// the other dimensions on their defaults.
+/// </summary>
+public record PipelineStepSetting
+{
+    /// <summary>
+    /// When <c>false</c>, the step is skipped for this project. Null or
+    /// <c>true</c> leaves the step enabled. Only honoured for steps the
+    /// runtime can actually skip (today: the aspect post-steps and the
+    /// lint-scss gate); the core agent run cannot be disabled.
+    /// </summary>
+    public bool? Enabled { get; init; }
+
+    /// <summary>
+    /// Gate mode for steps that support it (<c>off</c> / <c>warn</c> /
+    /// <c>fail</c>, see <c>PostStepMode</c>). Null falls through to the
+    /// built-in default. Ignored for steps that have no gate semantics.
+    /// </summary>
+    public string? Mode { get; init; }
+
+    /// <summary>
+    /// Model id that runs this step's LLM call (uses the shared CLI+model
+    /// selector vocabulary). Null falls back to the project
+    /// <see cref="ProjectSettings.OrchestratorModel"/> and then the runtime
+    /// default. Only meaningful for steps that invoke an LLM (the aspect
+    /// post-steps); deterministic tool steps ignore it.
+    /// </summary>
+    public string? Model { get; init; }
 }
 
 public static class LaneSortStrategies
@@ -1330,6 +1378,20 @@ public record SetLaneSortStrategyRequest
 {
     public string Lane { get; init; } = "";
     public string? Strategy { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{projectName}/pipeline-step</c>. Sets the
+/// per-project override for one pipeline step. Null fields leave that
+/// dimension on its built-in default; an all-null body clears the override.
+/// </summary>
+public record SetPipelineStepRequest
+{
+    /// <summary>Full pipeline step id (e.g. <c>aspect-code-quality</c>) or bare suffix (<c>code-quality</c>).</summary>
+    public string StepId { get; init; } = "";
+    public bool? Enabled { get; init; }
+    public string? Mode { get; init; }
+    public string? Model { get; init; }
 }
 
 /// <summary>

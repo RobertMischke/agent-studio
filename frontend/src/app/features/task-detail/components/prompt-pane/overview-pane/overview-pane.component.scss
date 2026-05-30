@@ -386,3 +386,133 @@
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.4; }
 }
+
+// Pipeline block: one compact row per pre/core/post step. The row is a
+// flex line — status icon, kind tag, name (grows), optional verdict +
+// model chips, then tokens and cost right-aligned in a monospace column.
+.ov-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ov-pl-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--studio-row-min-h);
+  padding-block: var(--studio-row-pad-block);
+  font-size: 12px;
+
+  &--disabled {
+    opacity: 0.5;
+
+    .ov-pl-step__name {
+      text-decoration: line-through;
+    }
+  }
+
+  &__status {
+    flex: 0 0 auto;
+    font-size: 12px;
+    line-height: 1;
+    width: 16px;
+    text-align: center;
+  }
+
+  &__kind {
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--studio-fg-dim);
+    background: var(--studio-bg-hover);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  &__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--studio-fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__verdict {
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg-dim);
+
+    &[data-verdict='pass']     { color: var(--lane-completed); }
+    &[data-verdict='concerns'] { color: var(--severity-warn); }
+    &[data-verdict='block']    { color: var(--severity-high); }
+  }
+
+  &__model {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--studio-fg-dim);
+    background: var(--studio-bg-hover);
+    border-radius: 4px;
+    padding: 1px 5px;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__tokens {
+    flex: 0 0 auto;
+    width: 56px;
+    text-align: right;
+    color: var(--studio-fg-dim);
+  }
+
+  &__cost {
+    flex: 0 0 auto;
+    width: 64px;
+    text-align: right;
+    color: var(--studio-fg);
+  }
+}
+
+.ov-pl-total {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 3px;
+  border-top: 1px dashed var(--studio-border);
+  font-size: 12px;
+
+  &__label {
+    flex: 1 1 auto;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--studio-fg-strong);
+  }
+
+  &__tokens {
+    flex: 0 0 auto;
+    width: 56px;
+    text-align: right;
+  }
+
+  &__cost {
+    flex: 0 0 auto;
+    width: 64px;
+    text-align: right;
+  }
+}

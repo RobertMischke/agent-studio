@@ -193,6 +193,61 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task PerAspectModel_RoutesEachAspectsCliCallToItsConfiguredModel()
+    {
+        // The load-bearing per-step-model-selection acceptance: when the
+        // orchestrator hands RunAsync a modelForAspect resolver, each
+        // aspect's CLI call must use the model that resolver returns, and
+        // the recorded run-wide model must stay the fallback for the rest.
+        var captured = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (aspectId, _, model, _, _, _) =>
+        {
+            captured[aspectId] = model;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        // code-quality pinned to Haiku; every other aspect uses the
+        // run-wide default the resolver echoes back unchanged.
+        const string runWide = "claude-opus-4-1";
+        Func<string, string> modelForAspect = id =>
+            id == "code-quality" ? "claude-haiku-4-5" : runWide;
+
+        var report = await runner.RunAsync(BuildInputs(),
+            new[] { "requirement-fit", "code-quality", "documentation-impact", "tests-and-evidence" },
+            "claude", runWide, TimeSpan.FromSeconds(5), CancellationToken.None, modelForAspect);
+
+        Assert.Equal(AspectStatus.Pass, report.Overall);
+        Assert.Equal("claude-haiku-4-5", captured["code-quality"]);
+        Assert.Equal(runWide, captured["requirement-fit"]);
+        Assert.Equal(runWide, captured["documentation-impact"]);
+        Assert.Equal(runWide, captured["tests-and-evidence"]);
+    }
+
+    [Fact]
+    public async Task NullModelForAspect_KeepsRunWideModelForEveryAspect()
+    {
+        var captured = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (aspectId, _, model, _, _, _) =>
+        {
+            captured[aspectId] = model;
+            return Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+        };
+
+        await runner.RunAsync(BuildInputs(),
+            new[] { "code-quality", "tests-and-evidence" },
+            "claude", "claude-haiku-4-5", TimeSpan.FromSeconds(5), CancellationToken.None, modelForAspect: null);
+
+        Assert.Equal("claude-haiku-4-5", captured["code-quality"]);
+        Assert.Equal("claude-haiku-4-5", captured["tests-and-evidence"]);
+    }
+
+    [Fact]
     public void AspectVerdictParsing_RoundTripsStatusToken()
     {
         var v = new AspectVerdict("code-quality", AspectStatus.Concerns, "summary text", "body", "quality:concerns");
