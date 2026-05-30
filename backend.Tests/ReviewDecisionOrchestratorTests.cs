@@ -27,6 +27,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 {
     private readonly string _workspace;
     private readonly string _watchPath;
+    private readonly TimelineLog _timeline = new(NullLogger<TimelineLog>.Instance);
     private const string Project = "demo";
 
     public ReviewDecisionOrchestratorTests()
@@ -716,6 +717,79 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_AllAspectsPass_EmitsOrchestratorVerdictAcceptedTimelineEvent()
+    {
+        // ASS-566: the positive terminal of the completion loop must reach
+        // the unified per-task ledger (ADR-0049) so the Overview/Timeline
+        // surfaces can show "orchestrator accepted" without re-deriving it
+        // from the decision journal.
+        SeedReviewJobWithDone("accept-timeline");
+        var orchestrator = BuildOrchestratorWithAspects(
+            aspectStub: _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // The event lands in the POST-MOVE folder (5-human-review), so it
+        // travels with the card.
+        var events = ReadTimeline(TaskStates.HumanReview, "accept-timeline");
+        var accept = Assert.Single(
+            events.Where(e => e.Kind == TimelineEventKinds.OrchestratorVerdictAccepted).ToList());
+        Assert.Equal(TimelineActors.Orchestrator, accept.Actor);
+        Assert.Equal("accept", accept.Details?["verdict"]);
+        // A clean accept never emits a reopen.
+        Assert.DoesNotContain(events, e => e.Kind == TimelineEventKinds.QualityLoopReopened);
+    }
+
+    [Fact]
+    public async Task TaskDone_OneAspectBlocks_EmitsQualityLoopReopenedTimelineEvent_WithGapAndAttempt()
+    {
+        // ASS-566: a "go again" verdict must be a first-class timeline event
+        // carrying the gap (what was missing) and the attempt counter, so the
+        // FE can render "Attempt N of M - reopened: <reason>".
+        SeedReviewJobWithDone("reopen-timeline");
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: aspect => aspect switch
+        {
+            "requirement-fit" => "[[ASPECT_VERDICT: status=block; summary=Acceptance criterion 2 missing.]]\n[[TASK_DONE]]",
+            _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Lands in the POST-MOVE folder (2-ready, where the reissue parks).
+        var events = ReadTimeline(TaskStates.Ready, "reopen-timeline");
+        var reopen = Assert.Single(
+            events.Where(e => e.Kind == TimelineEventKinds.QualityLoopReopened).ToList());
+        Assert.Equal(TimelineActors.QualityLoop, reopen.Actor);
+        Assert.Equal("multi-aspect-block", reopen.Details?["cause"]);
+        // First reopen: the initial run was attempt 1, so the upcoming attempt
+        // is 2 of (budget 2 + 1) = 3.
+        Assert.Equal("2", reopen.Details?["attempt"]);
+        Assert.Equal("3", reopen.Details?["maxAttempts"]);
+        // The specific gap is fed forward into the next attempt.
+        Assert.Contains("Acceptance criterion 2 missing.", reopen.Details?["gap"]);
+        Assert.DoesNotContain(events, e => e.Kind == TimelineEventKinds.OrchestratorVerdictAccepted);
+    }
+
+    [Fact]
+    public async Task Escalate_EmitsOrchestratorEscalatedTimelineEvent()
+    {
+        // ASS-566: handing the wheel to a human is the third terminal of the
+        // completion loop and must also be visible on the timeline.
+        SeedReviewJobWithNeedsInput("escalate-timeline", "use OAuth or magic-link?");
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=escalate; reason=Needs strategic call.]]");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var events = ReadTimeline(TaskStates.HumanReview, "escalate-timeline");
+        var escalate = Assert.Single(
+            events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
+        Assert.Equal(TimelineActors.Orchestrator, escalate.Actor);
+        Assert.Equal("needs-input-escalate", escalate.Details?["cause"]);
+        Assert.Contains("strategic call", escalate.Details?["reason"]);
+    }
+
+    [Fact]
     public async Task TaskDone_WithRunnerActiveClearedMarker_StillRunsAspects()
     {
         SeedReviewJobWithDone("marker-job", includeRunnerActiveClearedMarker: true);
@@ -881,7 +955,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var taskAccess = BuildTaskAccess(scanner, stateMachine, config);
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,
-            NullLogger<ReviewDecisionOrchestrator>.Instance);
+            NullLogger<ReviewDecisionOrchestrator>.Instance,
+            timeline: _timeline);
         return orchestrator;
     }
 
@@ -958,6 +1033,9 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     private string ReadCliLog(string state, string slug) =>
         File.ReadAllText(TaskPathLog(state, slug));
 
+    private List<TimelineEvent> ReadTimeline(string state, string slug) =>
+        _timeline.ReadAll(Path.Combine(_watchPath, state, slug));
+
     private void SeedReviewJobWithNeedsInput(string slug, string reason)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
@@ -1003,7 +1081,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var taskAccess = BuildTaskAccess(scanner, stateMachine, config);
         var orchestrator = new ReviewDecisionOrchestrator(
             scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot, config,
-            NullLogger<ReviewDecisionOrchestrator>.Instance);
+            NullLogger<ReviewDecisionOrchestrator>.Instance,
+            timeline: _timeline);
         orchestrator.CliRunner = (cli, model, prompt, timeout, ct) =>
         {
             onCall?.Invoke();

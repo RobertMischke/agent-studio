@@ -98,6 +98,16 @@ public static class TimelineEventKinds
     /// <summary>The orchestrator emitted a STEER block (see OrchestratorReplyParser).</summary>
     public const string OrchestratorSteered = "orchestrator_steered";
     /// <summary>
+    /// The orchestrator's auto-review pass judged the run genuinely done
+    /// and promoted it forward (to human review). The positive terminal of
+    /// the completion loop (ADR-0049 / ASS-566): the counterpart to
+    /// <see cref="QualityLoopReopened"/> ("go again") and
+    /// <see cref="OrchestratorEscalated"/> ("hand to a human"). Emitting it
+    /// lets the Overview/Timeline surfaces show the verdict that closed the
+    /// loop rather than re-deriving it from the decision journal.
+    /// </summary>
+    public const string OrchestratorVerdictAccepted = "orchestrator_verdict_accepted";
+    /// <summary>
     /// A downstream quality check (auto-review, completed-lane audit)
     /// disagreed with a previous <see cref="AgentRunFinished"/>
     /// "claimed=done" verdict and reissued the run.

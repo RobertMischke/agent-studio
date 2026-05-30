@@ -126,6 +126,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
+    private readonly TimelineLog? _timeline;
 
     /// <summary>
     /// Stable prefix on the <c>Reason</c> field of every
@@ -151,7 +152,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         TaskSessionLog? sessions = null,
         GitService? git = null,
         PipelineExecutionLog? pipelineLog = null,
-        ILintScssRunner? lintScssRunner = null)
+        ILintScssRunner? lintScssRunner = null,
+        TimelineLog? timeline = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -168,6 +170,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _git = git;
         _pipelineLog = pipelineLog;
         _lintScssRunner = lintScssRunner;
+        _timeline = timeline;
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -521,6 +524,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (moved != null)
         {
             await WriteFollowUpFileAsync(moved, followUp, ct);
+            EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+                TimelineActors.QualityLoop,
+                "Reopened: NOOP recovery, reissued with sharpened framing.",
+                BuildReopenDetails("noop-recovery",
+                    CountPriorReissues(workspace, entry.Name, current.Id),
+                    reason));
         }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -557,6 +566,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 "ReviewDecisionOrchestrator: failed to move {JobId} to {TargetState} after NOOP escalate: {Status} {Message}",
                 current.Id, targetState, move.Status, move.Message);
         }
+
+        EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
+            TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
+            BuildEscalateDetails("noop-escalate", reason,
+                CountPriorReissues(workspace, entry.Name, current.Id)));
 
         if (createHumanDecisionIntake)
         {
@@ -598,6 +612,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after BLOCKED: {Status} {Message}",
                 current.Id, move.Status, move.Message);
         }
+
+        EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
+            TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
+            BuildEscalateDetails("agent-blocked", reason,
+                CountPriorReissues(workspace, entry.Name, current.Id)));
 
         await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
@@ -722,6 +741,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             : $"Auto-review accepted \"{titleAccept}\" as done. Moved to 5-human-review for your approval.";
         _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision, verdictNote);
 
+        EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorVerdictAccepted,
+            TimelineActors.Orchestrator, verdictNote, new Dictionary<string, string>
+            {
+                ["verdict"] = "accept",
+                ["aspectOutcome"] = report.Overall == AspectStatus.Concerns ? "concerns" : "pass",
+                ["aspects"] = AspectSummaryLine(report),
+            });
+
         if (report.Overall == AspectStatus.Concerns)
         {
             _statusSnapshot.RecordAccept();
@@ -774,6 +801,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var blockNoun = blockCount == 1 ? "aspect" : "aspects";
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
             $"Auto-review sent \"{titleReissue}\" back to 2-ready ({blockCount} blocking {blockNoun}).");
+
+        EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            $"Reopened: {blockCount} blocking {blockNoun} from auto-review.",
+            BuildReopenDetails("multi-aspect-block",
+                CountPriorReissues(workspace, entry.Name, current.Id),
+                report.FollowUpSummary));
 
         _statusSnapshot.RecordReissue();
 
@@ -940,6 +974,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
                 _chatLog.AppendSupervisor(moved, "escalate",
                     $"Lint-scss post-step failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
+                EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
+                    TimelineActors.Orchestrator, reason,
+                    BuildEscalateDetails("lint-scss-double-fail", reason,
+                        CountPriorReissues(workspace, entry.Name, current.Id)));
                 await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
             }
             else
@@ -970,6 +1008,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var title = string.IsNullOrWhiteSpace(moved2.Title) ? moved2.Id : moved2.Title;
         _chatLog.Append(moved2, OrchestratorMessageKind.Reissue,
             $"Auto-review sent \"{title}\" back to 2-ready: lint-scss failed (exit {result.ExitCode}).");
+
+        EmitVerdictTimeline(moved2.FolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            $"Reopened: lint-scss post-step failed (exit {result.ExitCode}).",
+            BuildReopenDetails("lint-scss-fail",
+                CountPriorReissues(workspace, entry.Name, current.Id),
+                result.Output));
 
         _statusSnapshot.RecordReissue();
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -1121,6 +1166,78 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         return ReviewDecisionLog.ReadAll(workspace, project)
             .Count(r => r.JobId == jobId && r.Kind == ReviewDecisionKind.Reissue);
+    }
+
+    /// <summary>
+    /// Configured reissue budget (shared by NEEDS_INPUT / NOOP / aspect /
+    /// lint-scss reissues). Defaults to <see cref="MaxAutoReissueAttempts"/>.
+    /// Drives the <c>maxAttempts</c> detail on the completion-loop timeline
+    /// events so the FE can render "Attempt N of M" without re-reading
+    /// config itself.
+    /// </summary>
+    private int ConfiguredMaxReissues() =>
+        _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
+
+    /// <summary>
+    /// Tee one orchestrator verdict (accept / reopen / escalate) into the
+    /// unified per-task timeline ledger (ADR-0049) so the Overview/Timeline
+    /// surfaces can show the completion-loop cycle (ASS-566) without
+    /// re-deriving it from the decision journal and chat log. Best-effort:
+    /// the timeline is observability, never a state-machine input, so a
+    /// missing writer (test path) or a write failure cannot affect the
+    /// verdict. Always pass the POST-MOVE folder so the event lands in the
+    /// lane the card actually moved to, mirroring the chat-log firing-order
+    /// rule.
+    /// </summary>
+    private void EmitVerdictTimeline(
+        string? folderPath,
+        string kind,
+        string actor,
+        string summary,
+        Dictionary<string, string>? details = null)
+    {
+        if (_timeline == null || string.IsNullOrWhiteSpace(folderPath)) return;
+        _timeline.Append(folderPath!, kind, actor, summary, details: details);
+    }
+
+    /// <summary>
+    /// Build the <c>Details</c> bag shared by every "go again" timeline
+    /// event. <paramref name="priorReissues"/> is the count BEFORE this
+    /// reopen (the decision-journal record is appended after the emit), so
+    /// the upcoming attempt is <c>priorReissues + 2</c> (initial run = 1).
+    /// </summary>
+    private Dictionary<string, string> BuildReopenDetails(string cause, int priorReissues, string? gap = null)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var details = new Dictionary<string, string>
+        {
+            ["cause"] = cause,
+            ["attempt"] = (priorReissues + 2).ToString(inv),
+            ["maxAttempts"] = (ConfiguredMaxReissues() + 1).ToString(inv),
+        };
+        if (!string.IsNullOrWhiteSpace(gap))
+        {
+            details["gap"] = Truncate(gap!.Trim(), 600);
+        }
+        return details;
+    }
+
+    /// <summary>
+    /// Build the <c>Details</c> bag shared by every "hand to a human"
+    /// timeline event. The run that just finished is attempt
+    /// <c>priorReissues + 1</c> (initial run = 1); recording it next to the
+    /// budget makes a budget-exhaustion escalation legible on the timeline.
+    /// </summary>
+    private Dictionary<string, string> BuildEscalateDetails(string cause, string reason, int priorReissues)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return new Dictionary<string, string>
+        {
+            ["cause"] = cause,
+            ["reason"] = Truncate(reason ?? string.Empty, 600),
+            ["attempt"] = (priorReissues + 1).ToString(inv),
+            ["maxAttempts"] = (ConfiguredMaxReissues() + 1).ToString(inv),
+        };
     }
 
     private static NoOpProgressEvidence InspectNoOpProgressSinceLastRecovery(PendingDecision pending)
@@ -1328,6 +1445,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
             $"Auto-review sent \"{title}\" back to 2-ready for another attempt. Reason: {verdict.Reason}. Follow-up: {followUp}");
 
+        EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            $"Reopened: orchestrator answered NEEDS_INPUT. {verdict.Reason}",
+            BuildReopenDetails("needs-input",
+                CountPriorReissues(workspace, entry.Name, current.Id),
+                verdict.Reason));
+
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
             JobId: current.Id,
@@ -1374,6 +1498,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
             $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
+
+        EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
+            TimelineActors.Orchestrator, verdict.Reason,
+            BuildEscalateDetails("needs-input-escalate", verdict.Reason,
+                CountPriorReissues(workspace, entry.Name, current.Id)));
 
         await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
@@ -1423,6 +1552,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Decision,
             $"Auto-review accepted \"{title}\" as done. Moved to 5-human-review for your approval. Reason: {verdict.Reason}");
+
+        EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorVerdictAccepted,
+            TimelineActors.Orchestrator,
+            $"Accepted as done. {verdict.Reason}", new Dictionary<string, string>
+            {
+                ["verdict"] = "accept",
+                ["reason"] = Truncate(verdict.Reason ?? string.Empty, 600),
+            });
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,

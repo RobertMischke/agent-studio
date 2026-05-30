@@ -131,6 +131,19 @@ public static class TaskRunnerEndpoints
             return Results.Ok(timeline);
         });
 
+        // The unified per-task event ledger (logs/timeline.jsonl, ADR-0049):
+        // prompt-created, agent runs, pipeline steps, and the orchestrator's
+        // completion-loop verdicts (accept / reopen / escalate, ASS-566) in
+        // one greppable, time-ordered stream. Drives the Overview attempt
+        // indicator and the Timeline tab. Read-only and tolerant of torn
+        // trailing lines.
+        group.MapGet("/{jobId}/timeline", (string jobId, string? watchPath, TaskScannerService scanner, TimelineLog timeline) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            return Results.Ok(timeline.ReadAll(info.FolderPath));
+        });
+
         // Per-run software-side change set: the commits authored during
         // this run. Prefers the deterministic SHA range
         // HeadShaBefore..HeadShaAfter captured by ProjectRunner around
