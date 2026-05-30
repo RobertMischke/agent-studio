@@ -49,6 +49,15 @@ public sealed class PickupLockFile
 {
     private readonly ILogger<PickupLockFile> _logger;
     public const string LockFileName = ".pickup-lock.json";
+
+    /// <summary>
+    /// Lease time-to-live. A lease is refreshed (heartbeat) by the owner while
+    /// it works; once <c>now &gt; ExpiresAt</c> it is reclaimable. The TTL is
+    /// only load-bearing for a <b>remote</b> owner (different host), where the
+    /// pid cannot be probed — same-host ownership stays pid-liveness based, so
+    /// the TTL never causes a same-host run to lose its lease mid-flight.
+    /// </summary>
+    public const int LeaseTtlSeconds = 120;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -86,7 +95,7 @@ public sealed class PickupLockFile
             {
                 return LockAcquireOutcome.AlreadyOwn;
             }
-            if (IsForeignHostAlive(current))
+            if (IsForeignLeaseLive(current))
             {
                 _logger.LogInformation(
                     "PickupLockFile: foreign lock held on '{Folder}' by {Backend} (pid={Pid} host={Host} role={Role}); skipping pickup",
@@ -150,9 +159,35 @@ public sealed class PickupLockFile
         var path = Path.Combine(jobFolder, LockFileName);
         var current = Read(path);
         if (current == null) return false;
-        if (IsForeignHostAlive(current)) return false;
+        if (IsForeignLeaseLive(current)) return false;
         try { File.Delete(path); _logger.LogInformation("PickupLockFile.ClearIfStale: removed stale lock at '{Path}' (previous owner pid={Pid} host={Host})", path, current.Pid, current.Hostname); return true; }
         catch (Exception ex) { _logger.LogDebug(ex, "PickupLockFile.ClearIfStale: delete failed for '{Path}'", path); return false; }
+    }
+
+    /// <summary>
+    /// Heartbeat: extend the lease we already hold on <paramref name="jobFolder"/>
+    /// by another <see cref="LeaseTtlSeconds"/> window. No-op (returns false)
+    /// when the lock is missing or owned by someone else — a renewer must never
+    /// resurrect or steal a lease. This is what keeps a remote owner's lease
+    /// alive while it works; stop renewing (crash, network partition) and the
+    /// lease expires so the work can be reclaimed.
+    /// </summary>
+    public bool Renew(string jobFolder, PickupLockOwner owner)
+    {
+        if (string.IsNullOrEmpty(jobFolder)) return false;
+        var path = Path.Combine(jobFolder, LockFileName);
+        var current = Read(path);
+        if (current == null || !IsSameOwner(current, owner)) return false;
+        try
+        {
+            Write(path, current with { ExpiresAt = DateTime.UtcNow.AddSeconds(LeaseTtlSeconds) });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "PickupLockFile.Renew: failed to refresh lease at '{Path}'", path);
+            return false;
+        }
     }
 
     public PickupLockInfo? Peek(string jobFolder)
@@ -161,18 +196,23 @@ public sealed class PickupLockFile
         return Read(Path.Combine(jobFolder, LockFileName));
     }
 
-    private static PickupLockInfo BuildInfo(PickupLockOwner owner) => new()
+    private static PickupLockInfo BuildInfo(PickupLockOwner owner)
     {
-        Schema = "pickup-lock/v1",
-        Pid = owner.Pid,
-        Hostname = owner.Hostname,
-        Role = owner.Role,
-        BackendName = owner.BackendName,
-        BackendPort = owner.BackendPort,
-        ProjectName = owner.ProjectName,
-        JobId = owner.JobId,
-        AcquiredAt = DateTime.UtcNow
-    };
+        var now = DateTime.UtcNow;
+        return new()
+        {
+            Schema = "pickup-lock/v2",
+            Pid = owner.Pid,
+            Hostname = owner.Hostname,
+            Role = owner.Role,
+            BackendName = owner.BackendName,
+            BackendPort = owner.BackendPort,
+            ProjectName = owner.ProjectName,
+            JobId = owner.JobId,
+            AcquiredAt = now,
+            ExpiresAt = now.AddSeconds(LeaseTtlSeconds)
+        };
+    }
 
     private static bool IsSameOwner(PickupLockInfo info, PickupLockOwner owner)
     {
@@ -182,15 +222,30 @@ public sealed class PickupLockFile
     }
 
     /// <summary>
-    /// True when the lock looks like a live foreign hold; false when the
-    /// recorded pid is no longer running on this host (so we can reclaim).
-    /// A different hostname is treated as foreign-live because we cannot
-    /// safely verify a remote pid - the conservative choice is to skip.
+    /// True when the lock looks like a live hold we must not reclaim; false
+    /// when it can be reclaimed.
+    ///
+    /// <para>
+    /// <b>Same host:</b> pid-liveness is authoritative — a recorded pid that is
+    /// still running holds the lock; a dead pid is reclaimable. This is the
+    /// original behavior and the TTL plays no part, so a long same-host run can
+    /// never lose its lease just because the clock advanced.
+    /// </para>
+    /// <para>
+    /// <b>Different host (remote owner):</b> the pid cannot be probed, so the
+    /// lease's <see cref="PickupLockInfo.ExpiresAt"/> governs. While the owner
+    /// heartbeats (<see cref="Renew"/>) the lease stays live; once it expires it
+    /// is reclaimable — this is what lets a crashed remote runner's work be
+    /// requeued without a human clearing a wedged lock. A legacy v1 lock with no
+    /// <c>ExpiresAt</c> is treated as foreign-live forever (pre-lease behavior).
+    /// </para>
     /// </summary>
-    private static bool IsForeignHostAlive(PickupLockInfo info)
+    private static bool IsForeignLeaseLive(PickupLockInfo info)
     {
         if (!string.Equals(info.Hostname, Environment.MachineName, StringComparison.OrdinalIgnoreCase))
-            return true;
+        {
+            return info.ExpiresAt is not { } exp || DateTime.UtcNow <= exp;
+        }
         if (info.Pid <= 0) return false;
         try
         {
@@ -266,4 +321,11 @@ public sealed record PickupLockInfo
     public string? ProjectName { get; init; }
     public string? JobId { get; init; }
     public DateTime AcquiredAt { get; init; }
+
+    /// <summary>
+    /// Lease expiry (heartbeat-extended). Null on legacy <c>v1</c> locks, which
+    /// are treated as never-expiring (pre-lease behavior). For a remote owner
+    /// this is the only signal that the lease is still live.
+    /// </summary>
+    public DateTime? ExpiresAt { get; init; }
 }

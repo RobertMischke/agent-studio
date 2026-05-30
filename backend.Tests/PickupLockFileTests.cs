@@ -196,6 +196,130 @@ public sealed class PickupLockFileTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_jobFolder, PickupLockFile.LockFileName)));
     }
 
+    // ── Lease semantics (Step 6): a remote owner cannot be probed by pid, so a
+    //    heartbeat-extended TTL governs whether its lease is still live. ──────
+
+    private const string RemoteHost = "some-other-machine";
+
+    [Fact]
+    public void TryAcquire_RemoteOwner_UnexpiredLease_ReturnsForeignHeld()
+    {
+        WriteRawLock(new PickupLockInfo
+        {
+            Schema = "pickup-lock/v2",
+            Pid = 1234,
+            Hostname = RemoteHost,
+            Role = RunnerRoles.Orchestrator,
+            BackendName = "remote",
+            AcquiredAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddSeconds(60)   // still live
+        });
+        var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+
+        var outcome = lockFile.TryAcquire(_jobFolder, BuildOwner(5678, "stable"), out var existing);
+
+        Assert.Equal(LockAcquireOutcome.ForeignHeld, outcome);
+        Assert.Equal(RemoteHost, existing!.Hostname);
+    }
+
+    [Fact]
+    public void TryAcquire_RemoteOwner_ExpiredLease_ReclaimedAsStale()
+    {
+        WriteRawLock(new PickupLockInfo
+        {
+            Schema = "pickup-lock/v2",
+            Pid = 1234,
+            Hostname = RemoteHost,
+            Role = RunnerRoles.Orchestrator,
+            BackendName = "remote",
+            AcquiredAt = DateTime.UtcNow.AddSeconds(-300),
+            ExpiresAt = DateTime.UtcNow.AddSeconds(-60)  // lease lapsed → reclaimable
+        });
+        var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+
+        var outcome = lockFile.TryAcquire(_jobFolder, BuildOwner(5678, "stable"), out _);
+
+        Assert.Equal(LockAcquireOutcome.Stale, outcome);
+        Assert.Equal(System.Environment.MachineName, lockFile.Peek(_jobFolder)!.Hostname);
+    }
+
+    [Fact]
+    public void TryAcquire_RemoteOwner_LegacyV1NoExpiry_StaysForeignHeld()
+    {
+        // A v1 lock (no ExpiresAt) from a remote host must keep its
+        // pre-lease "foreign-forever" semantics so the upgrade is safe.
+        WriteRawLock(new PickupLockInfo
+        {
+            Pid = 1234,
+            Hostname = RemoteHost,
+            Role = RunnerRoles.Orchestrator,
+            BackendName = "remote",
+            AcquiredAt = DateTime.UtcNow.AddDays(-1)
+        });
+        var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+
+        var outcome = lockFile.TryAcquire(_jobFolder, BuildOwner(5678, "stable"), out _);
+
+        Assert.Equal(LockAcquireOutcome.ForeignHeld, outcome);
+    }
+
+    [Fact]
+    public void Renew_WhenOwner_ExtendsExpiry()
+    {
+        var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+        var owner = BuildOwner(1234, "stable");
+        lockFile.TryAcquire(_jobFolder, owner, out _);
+        var before = lockFile.Peek(_jobFolder)!.ExpiresAt;
+        Assert.NotNull(before);
+
+        System.Threading.Thread.Sleep(15);
+        var renewed = lockFile.Renew(_jobFolder, owner);
+
+        Assert.True(renewed);
+        Assert.True(lockFile.Peek(_jobFolder)!.ExpiresAt > before);
+    }
+
+    [Fact]
+    public void Renew_ForeignLock_ReturnsFalse_AndLeavesItUntouched()
+    {
+        WriteRawLock(new PickupLockInfo
+        {
+            Schema = "pickup-lock/v2",
+            Pid = 1234,
+            Hostname = RemoteHost,
+            BackendName = "remote",
+            Role = RunnerRoles.Orchestrator,
+            AcquiredAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddSeconds(60)
+        });
+        var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+        var before = lockFile.Peek(_jobFolder)!.ExpiresAt;
+
+        var renewed = lockFile.Renew(_jobFolder, BuildOwner(5678, "stable"));
+
+        Assert.False(renewed);
+        Assert.Equal(before, lockFile.Peek(_jobFolder)!.ExpiresAt);
+    }
+
+    [Fact]
+    public void ClearIfStale_RemovesExpiredRemoteLease()
+    {
+        WriteRawLock(new PickupLockInfo
+        {
+            Schema = "pickup-lock/v2",
+            Pid = 1234,
+            Hostname = RemoteHost,
+            BackendName = "remote",
+            Role = RunnerRoles.Orchestrator,
+            AcquiredAt = DateTime.UtcNow.AddSeconds(-300),
+            ExpiresAt = DateTime.UtcNow.AddSeconds(-60)
+        });
+        var lockFile = new PickupLockFile(NullLogger<PickupLockFile>.Instance);
+
+        Assert.True(lockFile.ClearIfStale(_jobFolder));
+        Assert.False(File.Exists(Path.Combine(_jobFolder, PickupLockFile.LockFileName)));
+    }
+
     private static PickupLockOwner BuildOwner(int pid, string backend) => new()
     {
         Pid = pid,
