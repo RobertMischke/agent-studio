@@ -457,25 +457,6 @@
                 </div>
               </div>
             </section>
-
-            @if (detail().info.lastUsage; as usage) {
-              <section class="sidebar-card sidebar-card--panel activity-metrics">
-                <div class="activity-metrics__row">
-                  <span class="activity-metrics__label">Changes</span>
-                  <span class="activity-metrics__value">{{ usage.changes || '—' }}</span>
-                </div>
-                @if (detail().info.cliType === 'claude') {
-                  <div class="activity-metrics__row">
-                    <span class="activity-metrics__label">Tokens</span>
-                    <span class="activity-metrics__value">{{ usage.tokens || '—' }}</span>
-                  </div>
-                }
-                <div class="activity-metrics__row">
-                  <span class="activity-metrics__label">Requests</span>
-                  <span class="activity-metrics__value">{{ usage.requests || '—' }}</span>
-                </div>
-              </section>
-            }
           </div>
         }
       </div>

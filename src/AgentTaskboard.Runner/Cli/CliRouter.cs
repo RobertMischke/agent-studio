@@ -44,6 +44,11 @@ public sealed class CliRouter
     public ICliExecutionService Get(string? cliType)
         => _byType.TryGetValue(CliTypes.Normalize(cliType), out var svc)
             ? svc
+            // Fallback for an unknown/unset cli is Claude, not Copilot: Claude is
+            // the project default and always has plan quota, whereas defaulting to
+            // Copilot sent every cli-less task into a 402 "no quota" retry loop
+            // that pinned the task in 3-progress and stalled the whole queue.
+            : _byType.TryGetValue(CliTypes.Claude, out var claude) ? claude
             : _byType[CliTypes.Copilot];
 
     public void ReattachAll()
