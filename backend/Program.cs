@@ -303,6 +303,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
         new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
 });
 builder.Services.AddSignalR();
+// Bridges JobChangeNotifier + JobTransitionService move events onto JobHub
+// (jobCreated / jobUpdated / jobMoved / jobDeleted / jobsReordered /
+// jobsBulkChanged). Resolved + move-source-attached during startup wiring
+// below so the notifier subscriptions are live before the first mutation.
+builder.Services.AddSingleton<OrchestratorApi.Hubs.JobHubBroadcaster>();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -492,6 +497,13 @@ _ = Task.Run(() =>
 var watcher = app.Services.GetRequiredService<JobWatcherService>();
 var hubContext = app.Services.GetRequiredService<IHubContext<JobHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
+
+// Fine-grained job-mutation push (jobCreated / jobUpdated / jobMoved /
+// jobDeleted / jobsReordered / jobsBulkChanged). Resolving the singleton
+// attaches its JobChangeNotifier subscriptions; AttachMoveSource hooks the
+// transition service's move event. See backend/Hubs/JobHubBroadcaster.cs.
+var jobHubBroadcaster = app.Services.GetRequiredService<OrchestratorApi.Hubs.JobHubBroadcaster>();
+jobHubBroadcaster.AttachMoveSource(app.Services.GetRequiredService<JobTransitionService>());
 
 // Cycle 1: bind the in-memory snapshot cache. JobScannerService.ScanAllJobs
 // now serves from cache; JobWatcherService.OnJobChanged invalidates it on

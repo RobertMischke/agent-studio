@@ -20,11 +20,17 @@ public class JobStateMachine
     private readonly JobScannerService _scanner;
     private readonly LaneMutexRegistry _laneMutex;
     private readonly ILogger<JobStateMachine> _logger;
+    // Optional so the many tests that construct JobStateMachine with the
+    // original 2/3-arg signature keep compiling. Production DI always
+    // supplies it; when null the SignalR push is simply skipped (the
+    // coarse file-watcher jobsChanged event still covers the change).
+    private readonly JobChangeNotifier? _notifier;
 
     public JobStateMachine(
         JobScannerService scanner,
         ILogger<JobStateMachine> logger,
-        LaneMutexRegistry? laneMutex = null)
+        LaneMutexRegistry? laneMutex = null,
+        JobChangeNotifier? notifier = null)
     {
         _scanner = scanner;
         _logger = logger;
@@ -32,6 +38,7 @@ public class JobStateMachine
         // construct JobStateMachine with the original two-arg signature
         // keep compiling. Production wiring always passes the singleton.
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
+        _notifier = notifier;
     }
 
     public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null)
@@ -143,6 +150,7 @@ public class JobStateMachine
             JobJsonFile.UpdateOrder(ordered[i].FolderPath, (i + 1) * step, _logger);
         }
         _scanner.InvalidateCache();
+        _notifier?.PublishBulkChanged();
 
         return ordered.FindIndex(j => j.Id == jobId) + 1;
     }
@@ -383,6 +391,7 @@ public class JobStateMachine
         {
             Directory.Delete(recheck.FolderPath, true);
             _scanner.InvalidateCache();
+            _notifier?.PublishDeleted(recheck.ProjectName, recheck.Id, recheck.WatchPath);
             return true;
         }
         catch (Exception ex)
@@ -674,6 +683,10 @@ public class JobStateMachine
             JobJsonFile.UpdateOrder(folder, i + 1, _logger);
         }
         _scanner.InvalidateCache();
+        // A bulk reorder rewrites many order fields, possibly across lanes;
+        // a single "re-pull suggested" nudge is cheaper and more robust than
+        // emitting a per-row event for each touched card.
+        _notifier?.PublishBulkChanged();
         return true;
     }
 }

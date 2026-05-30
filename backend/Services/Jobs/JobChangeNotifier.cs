@@ -42,6 +42,15 @@ public sealed class JobChangeNotifier
     /// </summary>
     public event Action<JobsReorderedEvent>? JobsReordered;
 
+    /// <summary>
+    /// Coarse "something changed broadly, re-pull suggested" signal. Carries
+    /// no payload. Fired by paths that touch many folders at once (bulk
+    /// reorder, queue promotion, boot-time sweeps/backfill) where patching
+    /// individual rows is not worth it - the frontend reacts with a single
+    /// silent re-fetch of <c>/api/jobs/grouped</c>.
+    /// </summary>
+    public event Action? JobsBulkChanged;
+
     public void PublishCreated(string projectName, string jobId, string watchPath)
         => Invoke(JobCreated, new JobChangeEvent(projectName, jobId, watchPath), nameof(JobCreated));
 
@@ -56,6 +65,17 @@ public sealed class JobChangeNotifier
 
     public void PublishReordered(string projectName, string watchPath, string? lane)
         => Invoke(JobsReordered, new JobsReorderedEvent(projectName, watchPath, lane), nameof(JobsReordered));
+
+    public void PublishBulkChanged()
+    {
+        var handler = JobsBulkChanged;
+        if (handler == null) return;
+        try { handler(); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "JobsBulkChanged subscriber threw");
+        }
+    }
 
     private void Invoke<T>(Action<T>? handler, T evt, string name)
     {

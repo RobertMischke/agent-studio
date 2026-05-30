@@ -621,6 +621,12 @@ public class JobMutationService
             });
 
         _scanner.InvalidateCache();
+        // Push a typed jobCreated to connected clients so other tabs render
+        // the new card within ~1s instead of waiting for the next board poll.
+        // Resolve the just-written JobInfo so the bridge can ship the canonical
+        // row; on the rare miss the bridge falls back to a bulk re-pull.
+        var created = _scanner.FindJob(jobId, entry.Path);
+        _notifier.PublishCreated(created?.ProjectName ?? string.Empty, jobId, entry.Path);
         return jobId;
     }
 
@@ -993,6 +999,28 @@ public class JobMutationService
 
         if (stamped > 0) _scanner.InvalidateCache();
         return stamped;
+    }
+
+    /// <summary>
+    /// Reserve a folder slug that is unique across <em>all</em> lanes of the
+    /// given watch path (including <c>7-archive</c>), not just the target
+    /// lane. Returns <paramref name="baseSlug"/> unchanged when it is free,
+    /// otherwise appends an incrementing <c>-N</c> suffix until an unused name
+    /// is found. Callers hold the lane mutex so the existence check + folder
+    /// create that follows is atomic against concurrent creates. See the
+    /// duplicate-slug root-cause note at the call site in <see cref="CreateJob"/>.
+    /// </summary>
+    private string EnsureUniqueSlug(string watchPath, string baseSlug)
+    {
+        bool Taken(string slug) =>
+            JobStates.All.Any(state => Directory.Exists(Path.Combine(watchPath, state, slug)));
+
+        if (!Taken(baseSlug)) return baseSlug;
+        for (var n = 2; ; n++)
+        {
+            var candidate = $"{baseSlug}-{n}";
+            if (!Taken(candidate)) return candidate;
+        }
     }
 
     private static string ToSlug(string text)
