@@ -378,18 +378,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             Model = string.IsNullOrWhiteSpace(invocationModel) ? null : invocationModel
         };
 
-        var logPath = GetOutputLogPath(jobKey);
+        var logDir = GetOutputLogDir(jobKey);
         var info = new ProcInfo(process, execution, workingDirectory)
         {
-            OutputLogPath = logPath,
-            OutputLog = new CliOutputLogStore(logPath),
+            OutputLogPath = logDir,
+            OutputLog = new RunLogStore(logDir),
             SessionName = sessionName,
             LastStreamedAt = execution.StartedAt,
             KillOverride = child.KillOverride,
             ChildStdin = child.Stdin
         };
         try { info.OutputLog.Reset(); }
-        catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", logPath); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", logDir); }
         _processes[jobKey] = info;
 
         // Persist the live PID + identity so a startup reaper can kill the
@@ -551,9 +551,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
         // No live process. Either the backend was restarted while a CLI run
         // was in flight, or the post-exit retention window elapsed. Recover
-        // from the persisted JSONL so the Activity Log isn't blank — this is
-        // the durability guarantee callers depend on.
-        return CliOutputLogStore.ReadAll(GetOutputLogPath(jobKey));
+        // from the persisted per-stream files (merged by timestamp) so the
+        // Activity Log isn't blank — this is the durability guarantee callers
+        // depend on. ReadMerged also falls back to the legacy single-file layout.
+        return RunLogStore.ReadMerged(GetOutputLogDir(jobKey));
     }
 
     public void DiscardPersistedOutput(string jobKey)
@@ -565,9 +566,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             try { info.OutputLog.Dispose(); } catch { /* already disposed */ }
         }
 
-        var path = GetOutputLogPath(jobKey);
-        try { if (File.Exists(path)) File.Delete(path); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log {Path}", path); }
+        try { RunLogStore.DeleteRun(GetOutputLogDir(jobKey)); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log dir for {JobKey}", jobKey); }
     }
 
     public CliExecution? GetExecution(string jobKey) =>
@@ -843,11 +843,12 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     // ── Output log persistence ───────────────────────────────────────────
 
     /// <summary>
-    /// Resolve the per-job runtime JSONL path. Public so the runner can
+    /// Resolve the per-run output directory (<c>.runtime/cli-output/&lt;cli&gt;-&lt;taskKey&gt;/</c>)
+    /// that holds one append-only file per stream. Public so the runner can
     /// recover the Activity Log from disk after a backend restart, when no
     /// <see cref="ProcInfo"/> exists in memory anymore.
     /// </summary>
-    public string GetOutputLogPath(string jobKey)
+    public string GetOutputLogDir(string jobKey)
     {
         var taskRepo = _configuration["TaskRepository"];
         var baseDir = !string.IsNullOrWhiteSpace(taskRepo)
@@ -855,8 +856,15 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             : Path.Combine(AppContext.BaseDirectory, "runtime", "cli-output");
         Directory.CreateDirectory(baseDir);
         var safe = SanitizeForFile($"{CliType}-{jobKey}");
-        return Path.Combine(baseDir, $"{safe}.jsonl");
+        return Path.Combine(baseDir, safe);
     }
+
+    /// <summary>
+    /// Legacy single-file path (pre-5b layout: <c>&lt;cli&gt;-&lt;taskKey&gt;.jsonl</c>).
+    /// Retained only so backward-compatible reads can find output from a run
+    /// that started before per-stream files existed.
+    /// </summary>
+    public string GetOutputLogPath(string jobKey) => GetOutputLogDir(jobKey) + ".jsonl";
 
     private static string SanitizeForFile(string value)
     {
@@ -1131,7 +1139,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         public List<CliOutputLine> OutputBuffer { get; } = [];
         public SessionUsage? LastUsage { get; set; }
         public string? OutputLogPath { get; init; }
-        public CliOutputLogStore OutputLog { get; init; } = null!;
+        public RunLogStore OutputLog { get; init; } = null!;
         public string? SessionName { get; set; }
         /// <summary>For Codex: the UUID extracted from the first <c>session_meta</c> JSON line.</summary>
         public string? CapturedSessionId { get; set; }

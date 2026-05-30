@@ -181,14 +181,14 @@ public class CopilotCliService : ICliExecutionService
             Model = string.IsNullOrWhiteSpace(model) ? null : model
         };
 
-        var outputLogPath = GetOutputLogPath(jobKey);
+        var outputLogDir = GetOutputLogDir(jobKey);
         var info = new CliProcessInfo(process, execution, workingDirectory)
         {
-            OutputLogPath = outputLogPath,
-            OutputLog = new CliOutputLogStore(outputLogPath)
+            OutputLogPath = outputLogDir,
+            OutputLog = new RunLogStore(outputLogDir)
         };
         try { info.OutputLog.Reset(); }
-        catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", outputLogPath); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log dir {Path}", outputLogDir); }
         _processes[jobKey] = info;
 
         UpsertPersisted(new PersistedExecution
@@ -269,9 +269,10 @@ public class CopilotCliService : ICliExecutionService
         if (_processes.TryGetValue(jobKey, out var info))
             return info.OutputBuffer.ToList();
 
-        // Fall back to the runtime JSONL — see CliExecutionServiceBase
-        // for the rationale (backend restart, post-exit cleanup).
-        return CliOutputLogStore.ReadAll(GetOutputLogPath(jobKey));
+        // Fall back to the persisted per-stream files (merged) — see
+        // CliExecutionServiceBase for the rationale (backend restart, post-exit
+        // cleanup). ReadMerged also reads the legacy single-file layout.
+        return RunLogStore.ReadMerged(GetOutputLogDir(jobKey));
     }
 
     public void DiscardPersistedOutput(string jobKey)
@@ -280,9 +281,8 @@ public class CopilotCliService : ICliExecutionService
         {
             try { info.OutputLog?.Dispose(); } catch { /* already disposed */ }
         }
-        var path = GetOutputLogPath(jobKey);
-        try { if (File.Exists(path)) File.Delete(path); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log {Path}", path); }
+        try { RunLogStore.DeleteRun(GetOutputLogDir(jobKey)); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log dir for {JobKey}", jobKey); }
     }
 
     public CliExecution? GetExecution(string jobKey)
@@ -655,7 +655,7 @@ public class CopilotCliService : ICliExecutionService
         return Path.Combine(baseDir, "executions.json");
     }
 
-    private string GetOutputLogPath(string jobKey)
+    private string GetOutputLogDir(string jobKey)
     {
         var taskRepo = _configuration["TaskRepository"];
         var baseDir = !string.IsNullOrWhiteSpace(taskRepo)
@@ -663,7 +663,7 @@ public class CopilotCliService : ICliExecutionService
             : Path.Combine(AppContext.BaseDirectory, "runtime", "cli-output");
         Directory.CreateDirectory(baseDir);
         var safe = SanitizeForFile(jobKey);
-        return Path.Combine(baseDir, $"{safe}.jsonl");
+        return Path.Combine(baseDir, safe);
     }
 
     private static string SanitizeForFile(string value)
@@ -781,14 +781,14 @@ public class CopilotCliService : ICliExecutionService
                     StartedAt = pe.StartedAt,
                     Status = "running"
                 };
-                var logPath = pe.OutputLogPath ?? GetOutputLogPath(pe.TaskKey);
+                var logDir = GetOutputLogDir(pe.TaskKey);
                 var info = new CliProcessInfo(proc, execution, pe.WorkingDirectory)
                 {
-                    OutputLogPath = logPath,
-                    OutputLog = new CliOutputLogStore(logPath)
+                    OutputLogPath = logDir,
+                    OutputLog = new RunLogStore(logDir)
                 };
                 // Rehydrate buffer from the on-disk capture so the user sees the full history.
-                foreach (var historical in CliOutputLogStore.ReadAll(logPath))
+                foreach (var historical in RunLogStore.ReadMerged(logDir))
                 {
                     info.OutputBuffer.Add(historical);
                     TryParseUsage(historical.Text, info);
@@ -797,7 +797,7 @@ public class CopilotCliService : ICliExecutionService
                 {
                     Timestamp = DateTime.UtcNow,
                     Stream = "stdout",
-                    Text = $"[reattached to running process PID {pe.ProcessId} — historical output rehydrated from {Path.GetFileName(logPath)}; new output from this point on is unavailable until the process exits]"
+                    Text = $"[reattached to running process PID {pe.ProcessId} — historical output rehydrated from {Path.GetFileName(logDir)}; new output from this point on is unavailable until the process exits]"
                 });
                 _processes[pe.TaskKey] = info;
 
@@ -820,7 +820,7 @@ public class CopilotCliService : ICliExecutionService
         public List<CliOutputLine> OutputBuffer { get; } = [];
         public SessionUsage? LastUsage { get; set; }
         public string? OutputLogPath { get; init; }
-        public CliOutputLogStore OutputLog { get; init; } = null!;
+        public RunLogStore OutputLog { get; init; } = null!;
         public DateTime LastStreamedAt { get; set; }
         public OrchestratorApi.Services.Runner.WatchdogState LastWatchdogState { get; set; } = OrchestratorApi.Services.Runner.WatchdogState.Healthy;
         /// <summary>See <c>CliExecutionServiceBase.ProcInfo.StopReason</c> for the rationale.</summary>
