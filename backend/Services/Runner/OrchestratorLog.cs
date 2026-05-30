@@ -144,14 +144,9 @@ public record OrchestratorLogEntry
     public OrchestratorIntervention? UserOverride { get; init; }
 }
 
-public record OrchestratorTokenUsage
-{
-    public string? Model { get; init; }
-    public int InputTokens { get; init; }
-    public int OutputTokens { get; init; }
-    public int CacheReadTokens { get; init; }
-    public int CacheCreationTokens { get; init; }
-}
+// OrchestratorTokenUsage moved to AgentTaskboard.Shared (Runner/OrchestratorTokenUsage.cs)
+// so the executor-side OneShot result envelope can reference it without depending
+// on the server-side orchestrator log types. Namespace preserved.
 
 public record OrchestratorIntervention
 {

@@ -24,4 +24,11 @@
     <ProjectReference Include="..\AgentTaskboard.OutputParser\AgentTaskboard.OutputParser.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The executor (CLI) services moved here from the monolith carry internal
+         test seams (BuildStartInfoForTest, TryExtractSessionId, ...). The unit
+         tests live in OrchestratorApi.Tests; grant it access as the monolith does. -->
+    <InternalsVisibleTo Include="OrchestratorApi.Tests" />
+  </ItemGroup>
+
 </Project>

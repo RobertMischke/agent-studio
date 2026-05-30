@@ -1,0 +1,17 @@
+namespace OrchestratorApi.Services.Runner;
+
+/// <summary>
+/// Token usage for a single orchestrator / one-shot LLM call. Lives in
+/// Shared (namespace preserved as <c>OrchestratorApi.Services.Runner</c>)
+/// so both the server-side orchestrator log and the executor-side
+/// <c>ICliOneShot</c> result envelope can reference it without the executor
+/// depending on the server's orchestrator-log types.
+/// </summary>
+public record OrchestratorTokenUsage
+{
+    public string? Model { get; init; }
+    public int InputTokens { get; init; }
+    public int OutputTokens { get; init; }
+    public int CacheReadTokens { get; init; }
+    public int CacheCreationTokens { get; init; }
+}

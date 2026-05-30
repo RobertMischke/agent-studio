@@ -5,7 +5,7 @@ namespace OrchestratorApi.Services.Cli;
 
 /// <summary>
 /// In-memory inverse index <c>sessionId -> owning TaskInfo summary</c>. Built
-/// from <see cref="TaskScannerService.ScanAllJobs"/> by walking each job's
+/// from <c>ITaskScanner.ScanAllJobs</c> by walking each job's
 /// <see cref="TaskInfo.SessionChain"/>. Lets the right-hand session list show
 /// a chip pointing back to the kanban task that originated the session.
 ///
