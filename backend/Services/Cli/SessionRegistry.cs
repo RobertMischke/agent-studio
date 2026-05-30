@@ -20,10 +20,10 @@ namespace OrchestratorApi.Services.Cli;
 public sealed class SessionRegistry
 {
     private readonly ILogger<SessionRegistry> _logger;
-    private readonly TaskScannerService _scanner;
+    private readonly ITaskScanner _scanner;
     private readonly SessionToJobIndex? _sessionIndex;
 
-    public SessionRegistry(ILogger<SessionRegistry> logger, TaskScannerService scanner)
+    public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner)
         : this(logger, scanner, sessionIndex: null) { }
 
     /// <summary>
@@ -34,7 +34,7 @@ public sealed class SessionRegistry
     /// without the index keep working (the chip is just empty in that
     /// case, which matches today's behaviour).
     /// </summary>
-    public SessionRegistry(ILogger<SessionRegistry> logger, TaskScannerService scanner, SessionToJobIndex? sessionIndex)
+    public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner, SessionToJobIndex? sessionIndex)
     {
         _logger = logger;
         _scanner = scanner;

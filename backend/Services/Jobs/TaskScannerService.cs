@@ -18,7 +18,7 @@ namespace OrchestratorApi.Services.Jobs;
 /// <see cref="TaskMutationService"/> for field-level edits and
 /// attachments, and <see cref="TaskSessionLog"/> for session telemetry.
 /// </summary>
-public class TaskScannerService
+public class TaskScannerService : ITaskScanner
 {
     private readonly IConfiguration _config;
     private readonly ILogger<TaskScannerService> _logger;

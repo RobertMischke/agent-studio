@@ -112,6 +112,7 @@ builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.ITaskScanner>(sp => sp.GetRequiredService<TaskScannerService>());
 // F45a: workspace / project registries + jobKey resolver. Additive layer;
 // not yet load-bearing for the existing lane-folder code paths (F45c).
 builder.Services.AddSingleton<OrchestratorApi.Services.Registry.WorkspaceRegistry>();
