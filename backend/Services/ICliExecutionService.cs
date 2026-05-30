@@ -28,7 +28,7 @@ public interface ICliExecutionService
         CancellationToken ct = default);
 
     /// <summary>
-    /// Terminate the live process for <paramref name="jobKey"/>. The
+    /// Terminate the live process for <paramref name="taskKey"/>. The
     /// <paramref name="reason"/> flows into <see cref="OrchestratorApi.Services.Runner.RunStatusClassifier"/>
     /// so user pauses, follow-up pause-and-send, and watchdog kills are
     /// reported as <c>status = "stopped"</c> rather than the misleading

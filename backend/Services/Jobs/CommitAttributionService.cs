@@ -64,8 +64,8 @@ public sealed record AttributionInput
 
 public sealed record AttributionResult
 {
-    public List<JobCommitInfo> Attributed { get; init; } = [];
-    public List<JobExcludedCommitInfo> Excluded { get; init; } = [];
+    public List<TaskCommitInfo> Attributed { get; init; } = [];
+    public List<TaskExcludedCommitInfo> Excluded { get; init; } = [];
 }
 
 /// <summary>
@@ -104,8 +104,8 @@ public static class CommitAttributionService
 
     public static AttributionResult Attribute(AttributionInput input)
     {
-        var attributed = new List<JobCommitInfo>();
-        var excluded = new List<JobExcludedCommitInfo>();
+        var attributed = new List<TaskCommitInfo>();
+        var excluded = new List<TaskExcludedCommitInfo>();
         var marker = string.IsNullOrWhiteSpace(input.AgentMarker) ? "Claude" : input.AgentMarker.Trim();
         var stamps = new HashSet<string>(input.PlatformStampShas, StringComparer.OrdinalIgnoreCase);
 
@@ -119,7 +119,7 @@ public static class CommitAttributionService
             // 0) Platform-stamped task commit: always attributed, full confidence.
             if (stamps.Contains(c.Sha))
             {
-                attributed.Add(new JobCommitInfo
+                attributed.Add(new TaskCommitInfo
                 {
                     Sha = c.Sha,
                     ShortSha = string.IsNullOrEmpty(c.ShortSha) ? Short(c.Sha) : c.ShortSha,
@@ -176,7 +176,7 @@ public static class CommitAttributionService
                 continue;
             }
 
-            attributed.Add(new JobCommitInfo
+            attributed.Add(new TaskCommitInfo
             {
                 Sha = c.Sha,
                 ShortSha = string.IsNullOrEmpty(c.ShortSha) ? Short(c.Sha) : c.ShortSha,
@@ -228,7 +228,7 @@ public static class CommitAttributionService
         return Math.Round(Math.Clamp(score, 0.0, 1.0), 2);
     }
 
-    private static JobExcludedCommitInfo Exclude(AttributionCandidate c, string reason) => new()
+    private static TaskExcludedCommitInfo Exclude(AttributionCandidate c, string reason) => new()
     {
         Sha = c.Sha,
         ShortSha = string.IsNullOrEmpty(c.ShortSha) ? Short(c.Sha) : c.ShortSha,

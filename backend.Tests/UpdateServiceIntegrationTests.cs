@@ -16,7 +16,7 @@ namespace OrchestratorApi.Tests;
 ///      + clone with one prepared commit + fake start/stop scripts);
 ///   2. a parallel in-process fake backend
 ///      (<see cref="FakeBackendHarness"/>) that answers /healthz,
-///      /api/runner/status, /api/jobs/grouped, /api/jobs, /api/clients,
+///      /api/runner/status, /api/tasks/grouped, /api/tasks, /api/clients,
 ///      /api/cli/quota, /api/_internal/probe, and PUT /api/runner/{p}/mode.
 ///
 /// Cases covered:
@@ -305,7 +305,7 @@ public class UpdateServiceIntegrationTests
         using var checkout = FakeStableCheckout.TryCreate();
         Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
 
-        // F58: /api/jobs/grouped fails the first call (simulating cold-start
+        // F58: /api/tasks/grouped fails the first call (simulating cold-start
         // delay), then succeeds on the retry. The verifier's new retry logic
         // should recover and the overall run should reach phase=done.
         await using var backend = new FakeBackendHarness { JobsGroupedFailFirstN = 1 };

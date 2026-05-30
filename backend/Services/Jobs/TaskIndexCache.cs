@@ -4,10 +4,10 @@ using OrchestratorApi.Models;
 namespace OrchestratorApi.Services.Jobs;
 
 /// <summary>
-/// In-memory snapshot cache of <see cref="JobInfo"/> across all watch paths,
+/// In-memory snapshot cache of <see cref="TaskInfo"/> across all watch paths,
 /// invalidated by <see cref="TaskWatcherService"/> events and by direct
 /// notifications from mutation services. The polled hot paths
-/// (<c>/api/jobs</c>, <c>/api/jobs/grouped</c>, <c>/api/runner/status</c>,
+/// (<c>/api/tasks</c>, <c>/api/tasks/grouped</c>, <c>/api/runner/status</c>,
 /// <c>FindJob</c>, <c>GetJobDetail</c>, supervisor observations) all bottom
 /// out in <see cref="TaskScannerService.ScanAllJobs"/>; routing that call
 /// through this cache turns each poll from an O(N) disk walk + JSON parse
@@ -38,7 +38,7 @@ public sealed class TaskIndexCache
     // Cache slot: snapshot + when it was taken + whether a mutation/watcher
     // event marked it stale before the next read got there.
     private readonly Lock _lock = new();
-    private ImmutableList<JobInfo> _snapshot = ImmutableList<JobInfo>.Empty;
+    private ImmutableList<TaskInfo> _snapshot = ImmutableList<TaskInfo>.Empty;
     private DateTime _snapshotAtUtc = DateTime.MinValue;
     private bool _dirty = true;
 
@@ -82,7 +82,7 @@ public sealed class TaskIndexCache
     /// <see cref="TaskScannerService.ScanAllJobsRaw"/> and replaces the
     /// snapshot atomically before returning.
     /// </summary>
-    public ImmutableList<JobInfo> GetSnapshot()
+    public ImmutableList<TaskInfo> GetSnapshot()
     {
         // Bounded retry: if a waiter wakes onto a racy in-flight snapshot
         // (_dirty=true), it must re-run the refresh path so the mutation that

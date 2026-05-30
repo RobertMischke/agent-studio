@@ -157,7 +157,7 @@ public sealed record PickupAttemptDiagnostic
 /// One row in <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c> that
 /// records the inverse of a dead-letter: an operator restored a folder
 /// from <c>3a-failed-pickup</c> back into a live lane (usually
-/// <c>2-ready</c>) via <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>.
+/// <c>2-ready</c>) via <c>POST /api/tasks/{id}/restore-from-failed-pickup</c>.
 /// The two row shapes share the file and are disambiguated by
 /// <c>kind</c>; see <c>docs/schemas/pickup-failure.schema.json</c>.
 /// </summary>
@@ -187,12 +187,12 @@ public static class PickupFailureKinds
 
 /// <summary>
 /// One folder on disk under a project's <c>3-progress</c> lane, paired with
-/// its measured mtime and (when available) its parsed <see cref="OrchestratorApi.Models.JobInfo"/>.
+/// its measured mtime and (when available) its parsed <see cref="OrchestratorApi.Models.TaskInfo"/>.
 /// Used by the strict-iteration progress-first picker; the picker walks
 /// these oldest-first by <see cref="Mtime"/>.
 /// </summary>
 public sealed record ProgressPickupCandidate(
     string FolderPath,
     string Slug,
-    OrchestratorApi.Models.JobInfo? Info,
+    OrchestratorApi.Models.TaskInfo? Info,
     DateTime Mtime);

@@ -15,7 +15,7 @@ public record SetIntakeEnabledRequest
 }
 
 /// <summary>
-/// Body for <c>POST /api/jobs/{jobId}/intake</c>. Optional explicit watch
+/// Body for <c>POST /api/tasks/{jobId}/intake</c>. Optional explicit watch
 /// path so a job id that exists in multiple workspaces resolves to the
 /// caller's project.
 /// </summary>
@@ -184,7 +184,7 @@ public static class ProjectSettingsEndpoints
         // job stays in 2-ready; only the phase + lifecycle.json change. Reuses
         // IntakeRunner so the manual trigger and the background loop share one
         // verdict implementation.
-        app.MapPost("/api/jobs/{jobId}/intake", (string jobId, IntakeRunRequestBody body, IntakeRunner intake) =>
+        app.MapPost("/api/tasks/{jobId}/intake", (string jobId, IntakeRunRequestBody body, IntakeRunner intake) =>
         {
             try
             {

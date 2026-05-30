@@ -314,7 +314,7 @@ public sealed class CrashRecoveryService
         // the recovered SHA on the card. Only when we have a target job.
         if (jobId != null && jobFolder != null && !string.IsNullOrWhiteSpace(commit.Sha))
         {
-            _mutations.SetJobCommitOnFolder(jobFolder, new JobCommitInfo
+            _mutations.SetJobCommitOnFolder(jobFolder, new TaskCommitInfo
             {
                 Sha = commit.Sha!,
                 ShortSha = commit.Sha!.Length > 7 ? commit.Sha[..7] : commit.Sha,
@@ -488,7 +488,7 @@ public sealed class CrashRecoveryService
         }
     }
 
-    private static (string? JobId, string? JobFolder) FindMostRecentlyActiveProgressJob(WatchPathEntry entry)
+    private static (string? JobId, string? TaskFolder) FindMostRecentlyActiveProgressJob(WatchPathEntry entry)
     {
         var progressDir = Path.Combine(entry.Path, TaskStates.Progress);
         if (!Directory.Exists(progressDir)) return (null, null);

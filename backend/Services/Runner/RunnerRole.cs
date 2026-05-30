@@ -21,7 +21,7 @@ public enum RunnerRole
     /// <see cref="ProjectRunner.TickAsync"/> still ticks watchdog /
     /// pending-decision scanner / reconciliation so the surface the test
     /// is observing stays live, but it never claims a new job and never
-    /// reverts the mode. Explicit <c>POST /api/jobs/{id}/start</c> calls
+    /// reverts the mode. Explicit <c>POST /api/tasks/{id}/start</c> calls
     /// still run so Playwright fixtures (driving dev's backend through
     /// <c>dev-lifecycle.sh</c>) can exercise a specific job on demand.
     /// Dev is this seat.

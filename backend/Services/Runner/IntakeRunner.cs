@@ -93,7 +93,7 @@ public sealed class IntakeRunner
     /// Pass verdict. Pure so unit tests can pin the outcome matrix without
     /// touching disk or services.
     /// </summary>
-    public static IntakeVerdict Evaluate(JobInfo target, string? promptMarkdown, IReadOnlyList<JobInfo> existingPeers)
+    public static IntakeVerdict Evaluate(TaskInfo target, string? promptMarkdown, IReadOnlyList<TaskInfo> existingPeers)
     {
         var prompt = promptMarkdown ?? string.Empty;
 
@@ -153,7 +153,7 @@ public sealed class IntakeRunner
     }
 
     /// <summary>Apply a precomputed verdict to a job (used by tests and by RunForJob).</summary>
-    public void ApplyVerdict(JobInfo info, IntakeVerdict verdict)
+    public void ApplyVerdict(TaskInfo info, IntakeVerdict verdict)
     {
         var phase = verdict.Outcome == IntakeOutcome.Pass
             ? LifecyclePhases.IntakePassed
@@ -179,12 +179,12 @@ public sealed class IntakeRunner
         _logger.LogInformation("Intake on {JobId}: {Outcome} ({Reason})", info.Id, verdict.Outcome, verdict.Reason);
     }
 
-    private void WritePhase(JobInfo info, string phase)
+    private void WritePhase(TaskInfo info, string phase)
     {
         _mutations.SetJobPhase(info.FolderPath, phase);
     }
 
-    private void WriteLifecycleSidecar(JobInfo info, IntakeVerdict verdict, string phase)
+    private void WriteLifecycleSidecar(TaskInfo info, IntakeVerdict verdict, string phase)
     {
         try
         {
@@ -214,7 +214,7 @@ public sealed class IntakeRunner
         }
     }
 
-    private void EmitChat(JobInfo info, string tag, string body)
+    private void EmitChat(TaskInfo info, string tag, string body)
     {
         try
         {
@@ -257,7 +257,7 @@ public sealed class IntakeRunner
         return null;
     }
 
-    private static IntakeVerdict? CheckDuplicate(JobInfo target, IReadOnlyList<JobInfo> existing)
+    private static IntakeVerdict? CheckDuplicate(TaskInfo target, IReadOnlyList<TaskInfo> existing)
     {
         // Duplicate detection: titles that share a significant prefix or
         // overlap by Jaccard similarity over normalised tokens. Conservative
@@ -288,7 +288,7 @@ public sealed class IntakeRunner
         return null;
     }
 
-    private static IntakeVerdict? CheckClarity(JobInfo target, string prompt)
+    private static IntakeVerdict? CheckClarity(TaskInfo target, string prompt)
     {
         // Cheap clarity probe: a prompt with under 20 non-whitespace
         // characters and no sentence terminator is almost always too thin

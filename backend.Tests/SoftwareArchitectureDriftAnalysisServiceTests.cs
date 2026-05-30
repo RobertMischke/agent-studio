@@ -202,8 +202,8 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
                     "sourceCoverage": 0.7,
                     "status": "New",
                     "summary": "Endpoints layer started reaching into runner internals.",
-                    "evidenceRefs": ["backend/Endpoints/JobEndpoints.cs", "backend/Services/Runner/"],
-                    "followUpTaskSuggestions": ["Audit JobEndpoints for runner-internal calls"]
+                    "evidenceRefs": ["backend/Endpoints/TaskEndpoints.cs", "backend/Services/Runner/"],
+                    "followUpTaskSuggestions": ["Audit TaskEndpoints for runner-internal calls"]
                   }
                 ]
               },
@@ -237,10 +237,10 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
         Assert.Equal(DriftSeverity.Warn, backend.Severity);
         Assert.Equal(0.7, backend.SourceCoverage);
         Assert.Equal(DriftFindingStatus.New, backend.Status);
-        Assert.Contains("backend/Endpoints/JobEndpoints.cs", backend.EvidenceRefs);
+        Assert.Contains("backend/Endpoints/TaskEndpoints.cs", backend.EvidenceRefs);
         Assert.Contains("backend/Services/Runner/", backend.EvidenceRefs);
         Assert.NotNull(backend.FollowUpTaskSuggestions);
-        Assert.Contains("Audit JobEndpoints for runner-internal calls", backend.FollowUpTaskSuggestions!);
+        Assert.Contains("Audit TaskEndpoints for runner-internal calls", backend.FollowUpTaskSuggestions!);
         // Source model fields (expectedRole, allowedDependencies, sourceRefs)
         // are denormalized into the projection so reviewers do not need the
         // source open.
@@ -354,7 +354,7 @@ public class SoftwareArchitectureDriftAnalysisServiceTests : IDisposable
               "overallScore": 92,
               "architectureModel": { "elements": [
                 {"elementId":"frontend-shell","score":95,"severity":"Info","sourceCoverage":0.9,"status":"New","summary":"Frontend shell on plan.","evidenceRefs":["frontend/src/app/"],"followUpTaskSuggestions":[]},
-                {"elementId":"backend-api","score":90,"severity":"Info","sourceCoverage":0.85,"status":"New","summary":"Backend API on plan.","evidenceRefs":["backend/Endpoints/JobEndpoints.cs"],"followUpTaskSuggestions":[]}
+                {"elementId":"backend-api","score":90,"severity":"Info","sourceCoverage":0.85,"status":"New","summary":"Backend API on plan.","evidenceRefs":["backend/Endpoints/TaskEndpoints.cs"],"followUpTaskSuggestions":[]}
               ]}
             }
             ```

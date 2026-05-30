@@ -21,7 +21,7 @@ namespace OrchestratorApi.Tests;
 /// with a session-events.jsonl that captures HeadShaBefore + HeadShaAfter
 /// (the deterministic linkage path), commits two files between the two
 /// SHAs, then exercises the same code paths the
-/// <c>/api/jobs/{id}/runs/{n}/commits</c> endpoint uses
+/// <c>/api/tasks/{id}/runs/{n}/commits</c> endpoint uses
 /// (<see cref="RunTimelineBuilder.Build"/> +
 /// <see cref="GitService.GetCommitsInShaRange"/>) and asserts both
 /// commits show up on the run. A second test pins the wall-clock
@@ -217,7 +217,7 @@ public class RunCommitsLinkageTests : IDisposable
         return (repoRoot, jobFolder, jobId, watchPath);
     }
 
-    private static (GitService git, TaskSessionLog sessions, JobInfo jobInfo) BuildServices(
+    private static (GitService git, TaskSessionLog sessions, TaskInfo jobInfo) BuildServices(
         string repoRoot, string watchPath, string jobId)
     {
         var dict = new Dictionary<string, string?>

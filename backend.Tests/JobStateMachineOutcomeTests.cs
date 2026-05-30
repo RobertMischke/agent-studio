@@ -15,13 +15,13 @@ namespace OrchestratorApi.Tests;
 /// reflect the move when those callers run; falling back to the stale source
 /// path resurrects 4-auto-review as a one-line skeleton (2026-05-16 incident).
 /// </summary>
-public class JobStateMachineOutcomeTests : IDisposable
+public class TaskStateMachineOutcomeTests : IDisposable
 {
     private readonly string _workspace;
     private readonly string _watchPath;
     private const string Project = "demo";
 
-    public JobStateMachineOutcomeTests()
+    public TaskStateMachineOutcomeTests()
     {
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-outcome-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);

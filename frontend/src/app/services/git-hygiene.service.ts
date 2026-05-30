@@ -74,7 +74,7 @@ export class GitHygieneService {
   fetchForJob(jobId: string, watchPath: string) {
     const params = new URLSearchParams({ watchPath });
     return this.http.get<GitHygieneStatus>(
-      `/api/jobs/${encodeURIComponent(jobId)}/git/hygiene?${params}`);
+      `/api/tasks/${encodeURIComponent(jobId)}/git/hygiene?${params}`);
   }
 
   /**
@@ -85,7 +85,7 @@ export class GitHygieneService {
   commitAcceptedEvidence(jobId: string, watchPath: string) {
     const params = new URLSearchParams({ watchPath });
     return this.http.post<{ commit: { sha: string; shortSha: string; message: string; filesChanged: number } }>(
-      `/api/jobs/${encodeURIComponent(jobId)}/git/commit-accepted-evidence?${params}`,
+      `/api/tasks/${encodeURIComponent(jobId)}/git/commit-accepted-evidence?${params}`,
       {});
   }
 

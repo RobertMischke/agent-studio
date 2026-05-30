@@ -42,21 +42,21 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     public void DefaultFor_Ready_IsHumanReady()
     {
         Assert.Equal(LifecyclePhases.HumanReady,
-            LifecyclePhases.DefaultFor(TaskStates.Ready, executionStatus: null, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(TaskStates.Ready, executionStatus: null, TaskSummaryStatus.None));
     }
 
     [Fact]
     public void DefaultFor_ProgressWithRunningExecution_IsExecutionRunning()
     {
         Assert.Equal(LifecyclePhases.ExecutionRunning,
-            LifecyclePhases.DefaultFor(TaskStates.Progress, "running", JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(TaskStates.Progress, "running", TaskSummaryStatus.None));
     }
 
     [Fact]
     public void DefaultFor_ProgressWithGeneratingSummary_IsPostProcessingRunning()
     {
         Assert.Equal(LifecyclePhases.PostProcessingRunning,
-            LifecyclePhases.DefaultFor(TaskStates.Progress, executionStatus: null, JobSummaryStatus.Generating));
+            LifecyclePhases.DefaultFor(TaskStates.Progress, executionStatus: null, TaskSummaryStatus.Generating));
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         // Today's UI treats a stopped / failed card in 3-progress as the
         // execution lane. The lane projection preserves that.
         Assert.Equal(LifecyclePhases.ExecutionRunning,
-            LifecyclePhases.DefaultFor(TaskStates.Progress, executionStatus: null, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(TaskStates.Progress, executionStatus: null, TaskSummaryStatus.None));
     }
 
     [Theory]
@@ -78,7 +78,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [InlineData(TaskStates.Archive)]
     public void DefaultFor_StatesWithoutSubstates_ReturnNull(string state)
     {
-        Assert.Null(LifecyclePhases.DefaultFor(state, executionStatus: null, JobSummaryStatus.None));
+        Assert.Null(LifecyclePhases.DefaultFor(state, executionStatus: null, TaskSummaryStatus.None));
     }
 
     // ---- IsAllowed -----------------------------------------------------------
@@ -119,7 +119,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         Assert.Null(info!.Phase);
         // Default-lane fallback covers the legacy folder.
         Assert.Equal(LifecyclePhases.HumanReady,
-            LifecyclePhases.DefaultFor(info.State, info.Execution?.Status, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(info.State, info.Execution?.Status, TaskSummaryStatus.None));
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         Assert.NotNull(info);
         Assert.Null(info!.Phase);
         Assert.Equal(LifecyclePhases.ExecutionRunning,
-            LifecyclePhases.DefaultFor(info.State, info.Execution?.Status, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(info.State, info.Execution?.Status, TaskSummaryStatus.None));
     }
 
     // ---- Scanner: jobs with explicit phase -----------------------------------
@@ -215,10 +215,10 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
 
         // Default-lane projection: legacy cards land in the right lane.
         Assert.Equal(LifecyclePhases.HumanReady,
-            LifecyclePhases.DefaultFor(jobs["ready-legacy"].State, null, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(jobs["ready-legacy"].State, null, TaskSummaryStatus.None));
         Assert.Equal(LifecyclePhases.ExecutionRunning,
-            LifecyclePhases.DefaultFor(jobs["exec-legacy"].State, null, JobSummaryStatus.None));
-        Assert.Null(LifecyclePhases.DefaultFor(jobs["review-card"].State, null, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(jobs["exec-legacy"].State, null, TaskSummaryStatus.None));
+        Assert.Null(LifecyclePhases.DefaultFor(jobs["review-card"].State, null, TaskSummaryStatus.None));
     }
 
     [Fact]

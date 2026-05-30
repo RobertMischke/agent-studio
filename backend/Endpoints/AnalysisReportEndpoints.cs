@@ -353,7 +353,7 @@ public static class AnalysisReportEndpoints
                 Warnings: scope.Warnings.Select(w => new SteeringDocsDriftWarningSummary(
                     w.Severity.ToString(), w.Kind.ToString(), w.Message, w.SourceId)).ToArray(),
                 RecentReports: scope.RecentAnalysisReports.Select(r => r.ReportId).ToArray(),
-                JobEvidence: scope.JobsByLane.ToDictionary(
+                TaskEvidence: scope.JobsByLane.ToDictionary(
                     kv => kv.Key,
                     kv => (IReadOnlyList<string>)kv.Value.Select(j => j.JobId).ToArray()),
                 Prompt: renderedPrompt));
@@ -694,5 +694,5 @@ public sealed record SteeringDocsDriftPromptResponse(
     IReadOnlyList<SteeringDocsDriftSourceSummary> Sources,
     IReadOnlyList<SteeringDocsDriftWarningSummary> Warnings,
     IReadOnlyList<string> RecentReports,
-    IReadOnlyDictionary<string, IReadOnlyList<string>> JobEvidence,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> TaskEvidence,
     string Prompt);

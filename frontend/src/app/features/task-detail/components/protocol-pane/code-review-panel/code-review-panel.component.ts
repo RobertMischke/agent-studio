@@ -34,7 +34,7 @@ import { CliModelSelectorComponent } from '../../../../../components/cli-model-s
  *
  * <p>The CLI list is intentionally not filtered (see
  * <code>docs/cli-model-selector-audit.md</code>): the backend
- * <code>POST /api/jobs/{id}/code-review</code> endpoint accepts an
+ * <code>POST /api/tasks/{id}/code-review</code> endpoint accepts an
  * arbitrary <code>cliType</code> field, so the operator may run a review
  * with any installed CLI even though Claude remains the default.</p>
  */

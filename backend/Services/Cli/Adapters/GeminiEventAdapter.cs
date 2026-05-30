@@ -41,7 +41,7 @@ public static class GeminiEventAdapter
             case "init":
             {
                 var id = root.TryGetProperty("session_id", out var sid) ? sid.GetString() : null;
-                yield return new CliRunEvent.SessionStarted(id) { JobKey = jobKey };
+                yield return new CliRunEvent.SessionStarted(id) { TaskKey = jobKey };
                 yield break;
             }
             case "message":
@@ -50,7 +50,7 @@ public static class GeminiEventAdapter
                 if (!string.Equals(role, "assistant", StringComparison.Ordinal)) yield break;
                 var content = root.TryGetProperty("content", out var c) ? c.GetString() : null;
                 if (!string.IsNullOrEmpty(content))
-                    yield return new CliRunEvent.OutputDelta(content) { JobKey = jobKey };
+                    yield return new CliRunEvent.OutputDelta(content) { TaskKey = jobKey };
                 yield break;
             }
             case "tool_call":
@@ -68,7 +68,7 @@ public static class GeminiEventAdapter
                         }
                     }
                 }
-                yield return new CliRunEvent.ToolStarted(name, arg) { JobKey = jobKey };
+                yield return new CliRunEvent.ToolStarted(name, arg) { TaskKey = jobKey };
                 yield break;
             }
             case "tool_result":
@@ -78,7 +78,7 @@ public static class GeminiEventAdapter
                 var firstLine = root.TryGetProperty("output", out var o) && o.ValueKind == JsonValueKind.String
                     ? FirstLine(o.GetString())
                     : null;
-                yield return new CliRunEvent.ToolCompleted(name, isError, firstLine) { JobKey = jobKey };
+                yield return new CliRunEvent.ToolCompleted(name, isError, firstLine) { TaskKey = jobKey };
                 yield break;
             }
             case "result":
@@ -89,16 +89,16 @@ public static class GeminiEventAdapter
                     string? usage = null;
                     if (root.TryGetProperty("stats", out var stats) && stats.ValueKind == JsonValueKind.Object)
                         usage = FormatStats(stats);
-                    yield return new CliRunEvent.TurnCompleted(usage) { JobKey = jobKey };
+                    yield return new CliRunEvent.TurnCompleted(usage) { TaskKey = jobKey };
                 }
                 else
                 {
-                    yield return new CliRunEvent.TurnFailed(status ?? "error") { JobKey = jobKey };
+                    yield return new CliRunEvent.TurnFailed(status ?? "error") { TaskKey = jobKey };
                 }
                 yield break;
             }
             default:
-                yield return new CliRunEvent.Unknown(Truncate(jsonLine, 200)) { JobKey = jobKey };
+                yield return new CliRunEvent.Unknown(Truncate(jsonLine, 200)) { TaskKey = jobKey };
                 yield break;
         }
     }

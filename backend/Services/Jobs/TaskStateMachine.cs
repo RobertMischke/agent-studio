@@ -106,7 +106,7 @@ public class TaskStateMachine
     /// non-active job, this promotes the target so the auto-pickup loop will
     /// run it next.
     ///
-    /// <para>Other queued jobs that already carry a <see cref="JobInfo.PendingIntent"/>
+    /// <para>Other queued jobs that already carry a <see cref="TaskInfo.PendingIntent"/>
     /// keep their relative order in front of this one, so the user's earlier
     /// queued intents are not overtaken. Plain queued jobs (no pending
     /// intent) shuffle down by one.</para>
@@ -139,7 +139,7 @@ public class TaskStateMachine
                      ?? _scanner.FindJob(jobId, watchPath); // post-move re-fetch
         if (target == null) return 0;
 
-        var ordered = new List<JobInfo>();
+        var ordered = new List<TaskInfo>();
         ordered.AddRange(pendingHead);
         ordered.Add(target);
         ordered.AddRange(rest);
@@ -192,10 +192,10 @@ public class TaskStateMachine
     /// Inverse of <see cref="MoveFolderToFailedPickup"/>: lift a folder
     /// out of <c>3a-failed-pickup</c> back into a live lane (default
     /// <c>2-ready</c>) and rename it back to its pre-dead-letter slug.
-    /// Surfaced as <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>
+    /// Surfaced as <c>POST /api/tasks/{id}/restore-from-failed-pickup</c>
     /// to close the gap that previously forced an operator to fall back
     /// to <c>mv</c> + manual rename - exactly the bypass the
-    /// <see cref="OrchestratorApi.Tests.Architecture.JobFolderAccessIsolationTest"/>
+    /// <see cref="OrchestratorApi.Tests.Architecture.TaskFolderAccessIsolationTest"/>
     /// and the AGENTS.md "API first" rule are meant to stop.
     ///
     /// <para>Single-state-machine principle: the move + the slug rewrite
@@ -633,7 +633,7 @@ public class TaskStateMachine
 
         var others = laneJobs.Where(j => j.Id != jobId).ToList();
         var slot = Math.Clamp(targetIndex, 0, others.Count);
-        var ordered = new List<JobInfo>(others.Count + 1);
+        var ordered = new List<TaskInfo>(others.Count + 1);
         ordered.AddRange(others.Take(slot));
         ordered.Add(moved);
         ordered.AddRange(others.Skip(slot));
@@ -646,7 +646,7 @@ public class TaskStateMachine
         return true;
     }
 
-    public bool ReorderJobs(List<JobOrderItem> jobs)
+    public bool ReorderJobs(List<TaskOrderItem> jobs)
     {
         if (jobs.Count == 0) return true;
 

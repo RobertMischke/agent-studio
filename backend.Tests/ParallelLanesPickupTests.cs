@@ -168,13 +168,13 @@ public sealed class ParallelLanesPickupTests : IDisposable
 
     // ===== Helpers =====
 
-    private static JobInfo? InvokeProgressPicker(ProjectRunner runner)
+    private static TaskInfo? InvokeProgressPicker(ProjectRunner runner)
     {
         var method = typeof(ProjectRunner).GetMethod(
             "TryPickProgressJobOrDeadLetter",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(method);
-        return method!.Invoke(runner, null) as JobInfo;
+        return method!.Invoke(runner, null) as TaskInfo;
     }
 
     private void WriteJob(string state, string slug, int order = 1)

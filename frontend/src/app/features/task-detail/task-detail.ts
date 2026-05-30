@@ -167,9 +167,9 @@ export class TaskDetailComponent implements OnDestroy {
    */
   readonly pagerPosition = computed(() => {
     const snap = this.lanePager.snapshot();
-    const currentJobKey = this.detail()?.info.jobKey;
+    const currentJobKey = this.detail()?.info.taskKey;
     if (!snap || !currentJobKey) return 0;
-    const idx = snap.jobs.findIndex(j => j.jobKey === currentJobKey);
+    const idx = snap.jobs.findIndex(j => j.taskKey === currentJobKey);
     if (idx < 0) return 0;
     return idx + 1;
   });
@@ -275,8 +275,8 @@ export class TaskDetailComponent implements OnDestroy {
    *  resolved peers yet (e.g. during the optimistic move grace window). */
   readonly laneIndex = computed(() => {
     const peers = this.lanePeers();
-    const key = this.detail().info.jobKey;
-    return peers.findIndex((p) => p.jobKey === key);
+    const key = this.detail().info.taskKey;
+    return peers.findIndex((p) => p.taskKey === key);
   });
   readonly laneSize = computed(() => this.lanePeers().length);
 
@@ -296,7 +296,7 @@ export class TaskDetailComponent implements OnDestroy {
   private currentJobKey: string | null = null;
   // Tracks which failed execution we've already surfaced as a modal so that
   // re-opening the detail view (or the 2s board refresh re-emitting the same
-  // failed snapshot) does not re-pop the dialog. Keyed by `${jobKey}|${startedAt}`.
+  // failed snapshot) does not re-pop the dialog. Keyed by `${taskKey}|${startedAt}`.
   private lastShownFailureKey: string | null = null;
 
   constructor() {
@@ -400,7 +400,7 @@ export class TaskDetailComponent implements OnDestroy {
   private lastObservedJobKeyForChangingState: string | null = null;
   private resetChangingStateOnUpdate = effect(() => {
     const state = this.detail().info.state;
-    const jobKey = this.detail().info.jobKey;
+    const taskKey = this.detail().info.taskKey;
     const stateChanged = this.lastObservedState !== null && state !== this.lastObservedState;
     // After a lane-pager auto-advance the panel lands on a new job whose
     // state may happen to match the previous one (e.g. triaging a 2-ready
@@ -409,18 +409,18 @@ export class TaskDetailComponent implements OnDestroy {
     // when we switch, otherwise the next dropdown click is disabled.
     const jobSwitched =
       this.lastObservedJobKeyForChangingState !== null &&
-      jobKey !== this.lastObservedJobKeyForChangingState;
+      taskKey !== this.lastObservedJobKeyForChangingState;
     if ((stateChanged || jobSwitched) && this.changingState()) {
       this.changingState.set(false);
     }
     this.lastObservedState = state;
-    this.lastObservedJobKeyForChangingState = jobKey;
+    this.lastObservedJobKeyForChangingState = taskKey;
   });
 
   private detailEffect = effect(() => {
     const d = this.detail();
-    const isJobSwitch = this.currentJobKey !== d.info.jobKey;
-    this.currentJobKey = d.info.jobKey;
+    const isJobSwitch = this.currentJobKey !== d.info.taskKey;
+    this.currentJobKey = d.info.taskKey;
     // Keep GitPaneService in sync with the open job; resets internal
     // state on actual job changes, no-ops on same-job refreshes.
     this.git.setJob(d.info);
@@ -933,9 +933,9 @@ export class TaskDetailComponent implements OnDestroy {
       // The backend keeps the failed CliExecution in memory until the next run,
       // so the same snapshot arrives on every detail refresh and on every job
       // re-open. Without de-duping we'd block the detail view behind a modal
-      // every 2 s. Key by jobKey + startedAt so a fresh failure (different
+      // every 2 s. Key by taskKey + startedAt so a fresh failure (different
       // startedAt) still surfaces.
-      const failureKey = `${execution.jobKey}|${execution.startedAt}`;
+      const failureKey = `${execution.taskKey}|${execution.startedAt}`;
       if (this.lastShownFailureKey === failureKey) return;
       this.lastShownFailureKey = failureKey;
 
@@ -1110,7 +1110,7 @@ export class TaskDetailComponent implements OnDestroy {
   /**
    * "Do Next": jump this 2-ready task to the head of the Ready queue so the
    * project's runner picks it up on the next tick. The backend reorder is
-   * atomic (POST /api/jobs/{id}/move-to-top → JobStateMachine.PromoteToReadyTop),
+   * atomic (POST /api/tasks/{id}/move-to-top → JobStateMachine.PromoteToReadyTop),
    * which preserves any earlier-queued PendingIntent jobs and avoids the
    * stale-grouped() race the optimistic-reorder path had.
    */
@@ -1120,7 +1120,7 @@ export class TaskDetailComponent implements OnDestroy {
     if (info.state !== '2-ready') return;
 
     // Capture the lane order BEFORE the promote so undo can replay it
-    // via /api/jobs/reorder. Same-lane reorders cannot be expressed via
+    // via /api/tasks/reorder. Same-lane reorders cannot be expressed via
     // the cross-lane move endpoint (it skips SetOrderInLane when
     // fromState == targetState).
     const prevOrder = this.captureLaneOrder('2-ready');
@@ -1164,7 +1164,7 @@ export class TaskDetailComponent implements OnDestroy {
   /**
    * Snapshot the current ordered list of `{jobId, watchPath}` in the
    * given state. Used by the undo flow to replay a pre-action order via
-   * `POST /api/jobs/reorder`.
+   * `POST /api/tasks/reorder`.
    */
   private captureLaneOrder(state: string): { jobId: string; watchPath: string }[] {
     const grouped = this.jobService.grouped();

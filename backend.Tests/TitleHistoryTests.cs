@@ -13,7 +13,7 @@ namespace OrchestratorApi.Tests;
 /// Feature: in-task iteration with evolving title + history.
 /// Renames recorded through <see cref="TaskMutationService.SetJobTitle"/>
 /// append a row to <c>title-history.json</c> in the job folder; the
-/// scanner surfaces the history on <see cref="JobDetail.TitleHistory"/>.
+/// scanner surfaces the history on <see cref="TaskDetail.TitleHistory"/>.
 /// </summary>
 public class TitleHistoryTests : IDisposable
 {

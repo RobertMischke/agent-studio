@@ -16,7 +16,7 @@ import { TaskInfo } from '../../../models/task.model';
  * iteration.
  */
 export interface LanePagerEntry {
-  jobKey: string;
+  taskKey: string;
   id: string;
   watchPath: string;
   title: string | null;
@@ -89,12 +89,12 @@ export class LanePagerService {
       return;
     }
     const jobs: LanePagerEntry[] = peers.map(p => ({
-      jobKey: p.jobKey,
+      taskKey: p.taskKey,
       id: p.id,
       watchPath: p.watchPath,
       title: p.title ?? null,
     }));
-    const idx = jobs.findIndex(j => j.jobKey === currentJobKey);
+    const idx = jobs.findIndex(j => j.taskKey === currentJobKey);
     if (idx < 0) {
       this.clear();
       return;
@@ -126,7 +126,7 @@ export class LanePagerService {
   }
 
   /**
-   * Drop `jobKey` from the snapshot and yield the entry that now sits
+   * Drop `taskKey` from the snapshot and yield the entry that now sits
    * at its slot. Use after a user-initiated mutation removes the
    * currently visible job from the iteration (delete from detail,
    * lane change via state dropdown, triage move/delete) so the pager
@@ -137,13 +137,13 @@ export class LanePagerService {
    * `i`, which is the "k+1" the user asked for. When the dropped
    * entry was the last in the list, the new index clamps to
    * `length - 1` so Prev/Next stay valid. Returns `null` (and clears
-   * the snapshot) when the lane is now empty, or when `jobKey` was
+   * the snapshot) when the lane is now empty, or when `taskKey` was
    * not part of the snapshot.
    */
-  removeAndAdvance(jobKey: string): LanePagerEntry | null {
+  removeAndAdvance(taskKey: string): LanePagerEntry | null {
     const s = this.snapshot();
     if (!s) return null;
-    const idx = s.jobs.findIndex(j => j.jobKey === jobKey);
+    const idx = s.jobs.findIndex(j => j.taskKey === taskKey);
     if (idx < 0) return null;
     const newJobs = [...s.jobs.slice(0, idx), ...s.jobs.slice(idx + 1)];
     if (newJobs.length === 0) {
@@ -158,17 +158,17 @@ export class LanePagerService {
   }
 
   /**
-   * Shrink the snapshot by removing `jobKey` without navigating.
+   * Shrink the snapshot by removing `taskKey` without navigating.
    * Unlike `removeAndAdvance`, the view stays on the current job even
    * though it is no longer part of the captured iteration (e.g. an
    * external lane change while the user is reading). The snapshot's
    * `index` clamps to `length - 1` so a subsequent Prev/Next step
    * lands on a valid peer. Clears the snapshot when it becomes empty.
    */
-  dropFromSnapshot(jobKey: string): void {
+  dropFromSnapshot(taskKey: string): void {
     const s = this.snapshot();
     if (!s) return;
-    const idx = s.jobs.findIndex(j => j.jobKey === jobKey);
+    const idx = s.jobs.findIndex(j => j.taskKey === taskKey);
     if (idx < 0) return;
     const newJobs = [...s.jobs.slice(0, idx), ...s.jobs.slice(idx + 1)];
     if (newJobs.length === 0) {
@@ -187,10 +187,10 @@ export class LanePagerService {
    * pager step (e.g. URL restore on reload). No-op when the job is
    * not part of the current snapshot.
    */
-  reanchorTo(jobKey: string): void {
+  reanchorTo(taskKey: string): void {
     const s = this.snapshot();
     if (!s) return;
-    const idx = s.jobs.findIndex(j => j.jobKey === jobKey);
+    const idx = s.jobs.findIndex(j => j.taskKey === taskKey);
     if (idx < 0 || idx === s.index) return;
     const updated: LanePagerSnapshot = { ...s, index: idx };
     this.snapshot.set(updated);

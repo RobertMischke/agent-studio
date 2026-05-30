@@ -114,7 +114,7 @@ public sealed class ChatNoteHostedService : BackgroundService
         {
             ct.ThrowIfCancellationRequested();
             byProject.TryGetValue(project, out var projectJobs);
-            projectJobs ??= new List<JobInfo>();
+            projectJobs ??= new List<TaskInfo>();
 
             try
             {
@@ -139,7 +139,7 @@ public sealed class ChatNoteHostedService : BackgroundService
     public string? EvaluateProject(
         string workspace,
         string project,
-        IReadOnlyList<JobInfo> projectJobs,
+        IReadOnlyList<TaskInfo> projectJobs,
         TimeSpan period)
     {
         var state = _state.GetOrAdd(project, _ => new ProjectChatNoteState());
@@ -258,7 +258,7 @@ public sealed class ChatNoteHostedService : BackgroundService
     }
 
     private static int CountJobsReachedReview(
-        IReadOnlyList<JobInfo> projectJobs,
+        IReadOnlyList<TaskInfo> projectJobs,
         DateTime from,
         DateTime to)
     {
@@ -279,7 +279,7 @@ public sealed class ChatNoteHostedService : BackgroundService
     /// Active job wins; otherwise the most recently active job in any of
     /// the project's user-visible lanes.
     /// </summary>
-    internal static JobInfo? SelectChatTarget(IReadOnlyList<JobInfo> projectJobs)
+    internal static TaskInfo? SelectChatTarget(IReadOnlyList<TaskInfo> projectJobs)
     {
         if (projectJobs.Count == 0) return null;
 

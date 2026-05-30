@@ -12,7 +12,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// in-process rate-limit snapshot into one payload the protocol
 /// pane consumes.
 /// </summary>
-public static class JobClaudeEndpoints
+public static class TaskClaudeEndpoints
 {
     public static void MapJobClaudeEndpoints(this RouteGroupBuilder group)
     {
@@ -27,7 +27,7 @@ public static class JobClaudeEndpoints
             // Live rate-limit snapshot is per-CLI-process and lives only for
             // the lifetime of the running CLI; merge it onto the JSONL-based
             // snapshot so the frontend gets one consistent payload.
-            var rateLimit = claude.GetLastRateLimit(info.JobKey);
+            var rateLimit = claude.GetLastRateLimit(info.TaskKey);
 
             if (string.IsNullOrWhiteSpace(info.SessionName))
                 return Results.Ok(new

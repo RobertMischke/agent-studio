@@ -8,19 +8,19 @@ namespace OrchestratorApi.Services.Jobs;
 /// inside one lane, so we group by project, sort each project's jobs using
 /// the strategy resolved from that project's <see cref="ProjectSettings"/>,
 /// and concatenate the groups in alphabetical project order for a stable
-/// global result. Pure function; called from <c>/api/jobs/grouped</c>.
+/// global result. Pure function; called from <c>/api/tasks/grouped</c>.
 /// </summary>
 public static class LaneSortApplier
 {
-    public static IEnumerable<JobInfo> Sort(
-        IEnumerable<JobInfo> jobs,
+    public static IEnumerable<TaskInfo> Sort(
+        IEnumerable<TaskInfo> jobs,
         string lane,
         Func<string, ProjectSettings> settingsResolver)
     {
         var byProject = jobs.GroupBy(j => j.ProjectName, StringComparer.OrdinalIgnoreCase)
             .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
 
-        var result = new List<JobInfo>();
+        var result = new List<TaskInfo>();
         foreach (var group in byProject)
         {
             var settings = settingsResolver(group.Key);

@@ -16,7 +16,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
  * - duration + exit code
  *
  * Clicking a card expands it. The expanded card requests the
- * software-side change set (`/api/jobs/.../runs/{n}/commits`) and
+ * software-side change set (`/api/tasks/.../runs/{n}/commits`) and
  * renders the commit list. The activity-log filter for the run's
  * line-span is the next iteration; this component already emits the
  * selected run via `runSelected` so the parent can apply it.

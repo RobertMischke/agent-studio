@@ -5,7 +5,7 @@ namespace OrchestratorApi.Services.Jobs;
 
 /// <summary>
 /// Reads and appends <c>title-history.json</c> in a job folder.
-/// The file is a JSON array of <see cref="JobTitleHistoryEntry"/> records,
+/// The file is a JSON array of <see cref="TaskTitleHistoryEntry"/> records,
 /// oldest first. Append is best-effort: a malformed or unreadable file
 /// is treated as empty so a rename never fails on a corrupt history
 /// sidecar.
@@ -16,7 +16,7 @@ internal static class TitleHistoryLog
 
     private static readonly JsonSerializerOptions WriteOpts = new() { WriteIndented = true };
 
-    public static List<JobTitleHistoryEntry> Read(string jobFolder)
+    public static List<TaskTitleHistoryEntry> Read(string jobFolder)
     {
         var path = Path.Combine(jobFolder, FileName);
         if (!File.Exists(path)) return [];
@@ -24,7 +24,7 @@ internal static class TitleHistoryLog
         {
             var json = File.ReadAllText(path);
             if (string.IsNullOrWhiteSpace(json)) return [];
-            var entries = JsonSerializer.Deserialize<List<JobTitleHistoryEntry>>(json, TaskJsonFile.ReadOpts);
+            var entries = JsonSerializer.Deserialize<List<TaskTitleHistoryEntry>>(json, TaskJsonFile.ReadOpts);
             return entries ?? [];
         }
         catch
@@ -33,7 +33,7 @@ internal static class TitleHistoryLog
         }
     }
 
-    public static void Append(string jobFolder, JobTitleHistoryEntry entry, ILogger logger)
+    public static void Append(string jobFolder, TaskTitleHistoryEntry entry, ILogger logger)
     {
         try
         {

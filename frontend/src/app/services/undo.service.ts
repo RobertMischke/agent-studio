@@ -146,7 +146,7 @@ export class UndoController {
   /**
    * Convenience for same-lane reorders (e.g. Move-to-top). The caller
    * captures the lane's ordered job list BEFORE the action; the undo
-   * replays that order via `/api/jobs/reorder` so the card returns to
+   * replays that order via `/api/tasks/reorder` so the card returns to
    * its original slot.
    */
   offerReorderRevert(params: {

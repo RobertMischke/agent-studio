@@ -6,7 +6,7 @@ namespace OrchestratorApi.Models;
 /// "open in Explorer" affordance; the URL is the routable form the
 /// frontend renders.
 /// </summary>
-public record JobScreenshot
+public record TaskScreenshot
 {
     public string JobId { get; init; } = "";
     public string JobTitle { get; init; } = "";
@@ -28,12 +28,12 @@ public record JobScreenshot
 }
 
 /// <summary>
-/// Wire shape for <c>GET /api/jobs/{id}/screenshots</c>.
+/// Wire shape for <c>GET /api/tasks/{id}/screenshots</c>.
 /// </summary>
-public record JobScreenshotsResponse
+public record TaskScreenshotsResponse
 {
     public string JobId { get; init; } = "";
-    public List<JobScreenshot> Screenshots { get; init; } = [];
+    public List<TaskScreenshot> Screenshots { get; init; } = [];
 }
 
 /// <summary>
@@ -45,5 +45,5 @@ public record WorkspaceScreenshotsResponse
 {
     public int WindowHours { get; init; }
     public string? ProjectFilter { get; init; }
-    public List<JobScreenshot> Screenshots { get; init; } = [];
+    public List<TaskScreenshot> Screenshots { get; init; } = [];
 }

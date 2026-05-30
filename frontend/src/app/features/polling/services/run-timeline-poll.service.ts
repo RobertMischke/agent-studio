@@ -5,7 +5,7 @@ import { TaskService } from '../../../services/task.service';
 import { TaskBackgroundPoller } from './task-background-poller';
 
 /**
- * Polls the per-job run timeline (`/api/jobs/{id}/runs`) every 5 s
+ * Polls the per-job run timeline (`/api/tasks/{id}/runs`) every 5 s
  * while a job is open. The timeline is the unit-of-conversation surface
  * documented in `docs/design-principles.md` - one card per CLI
  * invocation between user inputs - so the cadence has to keep up with

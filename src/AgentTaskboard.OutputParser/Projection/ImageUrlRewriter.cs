@@ -8,9 +8,9 @@ namespace OrchestratorApi.Services.Projection;
 ///
 /// Rules (matches the F22 prompt):
 /// <list type="bullet">
-/// <item>relative path under <c>attachments/</c> → <c>/api/jobs/{jobId}/attachments/...</c></item>
+/// <item>relative path under <c>attachments/</c> → <c>/api/tasks/{jobId}/attachments/...</c></item>
 /// <item>relative path under <c>chat-attachments/</c> → <c>/api/runner/{project}/orchestrator-chat/attachments/...</c></item>
-/// <item>relative path under <c>results/</c> → <c>/api/jobs/{jobId}/results/...</c></item>
+/// <item>relative path under <c>results/</c> → <c>/api/tasks/{jobId}/results/...</c></item>
 /// <item>absolute <c>http(s)://</c> URLs are passed through (sanitizer enforces scheme)</item>
 /// <item>any <c>..</c> traversal is stripped: the img is replaced by its alt text so
 ///   a malicious link cannot pull from outside the job tree</item>
@@ -83,12 +83,12 @@ public static partial class ImageUrlRewriter
         if (trimmed.StartsWith("attachments/", StringComparison.OrdinalIgnoreCase))
         {
             var rest = trimmed["attachments/".Length..];
-            return $"/api/jobs/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(rest)}";
+            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(rest)}";
         }
         if (trimmed.StartsWith("results/", StringComparison.OrdinalIgnoreCase))
         {
             var rest = trimmed["results/".Length..];
-            return $"/api/jobs/{Uri.EscapeDataString(ctx.JobId)}/results/{EscapePath(rest)}";
+            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/results/{EscapePath(rest)}";
         }
         if (trimmed.StartsWith("chat-attachments/", StringComparison.OrdinalIgnoreCase))
         {
@@ -102,7 +102,7 @@ public static partial class ImageUrlRewriter
         // emitted screenshot paths historically.
         if (!trimmed.Contains('/') && trimmed.Length > 0)
         {
-            return $"/api/jobs/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(trimmed)}";
+            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(trimmed)}";
         }
 
         return null;

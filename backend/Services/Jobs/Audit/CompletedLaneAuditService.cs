@@ -7,7 +7,7 @@ namespace OrchestratorApi.Services.Jobs.Audit;
 public enum ReEvaluateStatus
 {
     Success,
-    JobNotFound,
+    TaskNotFound,
     WrongLane,
     Failure,
 }
@@ -71,7 +71,7 @@ public sealed class CompletedLaneAuditService
     public ReEvaluateOutcome ReEvaluate(string jobId, string? watchPath, string actorEmail)
     {
         var job = _scanner.FindJob(jobId, watchPath);
-        if (job == null) return new ReEvaluateOutcome(ReEvaluateStatus.JobNotFound);
+        if (job == null) return new ReEvaluateOutcome(ReEvaluateStatus.TaskNotFound);
         if (job.State != TaskStates.Completed && job.State != TaskStates.Archive)
         {
             return new ReEvaluateOutcome(ReEvaluateStatus.WrongLane,
@@ -307,7 +307,7 @@ public sealed class CompletedLaneAuditService
         };
     }
 
-    private void AppendQualityLoopReopened(string folderPath, JobInfo job, List<EvidenceDiagnostic> diagnostics, string actorEmail)
+    private void AppendQualityLoopReopened(string folderPath, TaskInfo job, List<EvidenceDiagnostic> diagnostics, string actorEmail)
     {
         var details = new Dictionary<string, string>
         {

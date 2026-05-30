@@ -106,7 +106,7 @@ public sealed class RoadmapAlignmentReviewService
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(repoRoot);
 
-        var jobsByLane = new Dictionary<string, IReadOnlyList<JobSummary>>(StringComparer.Ordinal);
+        var jobsByLane = new Dictionary<string, IReadOnlyList<TaskSummary>>(StringComparer.Ordinal);
         var stray = new List<string>();
         foreach (var lane in InspectedLanes)
         {
@@ -312,11 +312,11 @@ public sealed class RoadmapAlignmentReviewService
             SchemaVersion: CurrentSchemaVersion);
     }
 
-    private static IReadOnlyList<JobSummary> ReadLane(string laneDir, string lane, List<string> stray)
+    private static IReadOnlyList<TaskSummary> ReadLane(string laneDir, string lane, List<string> stray)
     {
-        if (!Directory.Exists(laneDir)) return Array.Empty<JobSummary>();
+        if (!Directory.Exists(laneDir)) return Array.Empty<TaskSummary>();
 
-        var jobs = new List<JobSummary>();
+        var jobs = new List<TaskSummary>();
         foreach (var dir in Directory.EnumerateDirectories(laneDir))
         {
             var jobJson = Path.Combine(dir, "job.json");
@@ -348,7 +348,7 @@ public sealed class RoadmapAlignmentReviewService
                 var cliType = root.TryGetProperty("cliType", out var cliEl) && cliEl.ValueKind == JsonValueKind.String
                     ? cliEl.GetString()
                     : null;
-                jobs.Add(new JobSummary(id, title, lane, agent, cliType));
+                jobs.Add(new TaskSummary(id, title, lane, agent, cliType));
             }
             catch (JsonException)
             {
@@ -433,7 +433,7 @@ public sealed class RoadmapAlignmentReviewService
         {
             sb.Append("### ").AppendLine(lane);
             sb.AppendLine();
-            var jobs = scope.JobsByLane.TryGetValue(lane, out var list) ? list : Array.Empty<JobSummary>();
+            var jobs = scope.JobsByLane.TryGetValue(lane, out var list) ? list : Array.Empty<TaskSummary>();
             if (jobs.Count == 0)
             {
                 sb.AppendLine("(no jobs)");
@@ -568,7 +568,7 @@ public sealed class RoadmapAlignmentReviewService
     /// <summary>One queued / in-flight job entry. Title is the user-readable
     /// label; <see cref="Lane"/> records which inspected lane the entry came
     /// from so prompt rendering and reference building stay in lockstep.</summary>
-    public sealed record JobSummary(string JobId, string Title, string Lane, string? Agent, string? CliType);
+    public sealed record TaskSummary(string JobId, string Title, string Lane, string? Agent, string? CliType);
 
     /// <summary>One canonical document the agent should read.</summary>
     public sealed record DocReference(string Path, string Label);
@@ -616,7 +616,7 @@ public sealed class RoadmapAlignmentReviewScope
     public required string Project { get; init; }
     public required string ProjectRoot { get; init; }
     public required string RepoRoot { get; init; }
-    public required IReadOnlyDictionary<string, IReadOnlyList<RoadmapAlignmentReviewService.JobSummary>> JobsByLane { get; init; }
+    public required IReadOnlyDictionary<string, IReadOnlyList<RoadmapAlignmentReviewService.TaskSummary>> JobsByLane { get; init; }
     public required IReadOnlyList<string> StrayLaneFolders { get; init; }
     public required IReadOnlyList<RoadmapAlignmentReviewService.DocReference> Docs { get; init; }
     public required IReadOnlyList<RoadmapAlignmentReviewService.AnalysisReportPointer> RecentReports { get; init; }

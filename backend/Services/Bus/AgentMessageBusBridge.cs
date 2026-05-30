@@ -123,7 +123,7 @@ public sealed class AgentMessageBusBridge
     /// <c>Decision -&gt; decision/Info</c>, <c>Reissue -&gt; decision/Warn</c>,
     /// <c>HeuristicFallback -&gt; decision/Warn</c>, <c>GiveUp -&gt; decision/High</c>.
     /// </summary>
-    public Task EmitOrchestratorChatAsync(JobInfo info, OrchestratorMessageKind kind, string text, CancellationToken ct = default)
+    public Task EmitOrchestratorChatAsync(TaskInfo info, OrchestratorMessageKind kind, string text, CancellationToken ct = default)
     {
         if (info == null) return Task.CompletedTask;
         var severity = kind switch
@@ -164,7 +164,7 @@ public sealed class AgentMessageBusBridge
     /// <c>force-fail</c>, <c>chat-note</c>, <c>escalate</c>,
     /// <c>cycle-resume-failed</c>). One bus message per line.
     /// </summary>
-    public Task EmitSupervisorChatAsync(JobInfo info, string tag, string text, CancellationToken ct = default)
+    public Task EmitSupervisorChatAsync(TaskInfo info, string tag, string text, CancellationToken ct = default)
     {
         if (info == null) return Task.CompletedTask;
         var msg = NewMessage(
@@ -261,7 +261,7 @@ public sealed class AgentMessageBusBridge
     /// <see cref="ParticipantUser"/>; this is the message every later orchestrator
     /// or agent reply chains back to via <c>correlationId</c>.
     /// </summary>
-    public Task EmitUserPromptAsync(JobInfo info, string prompt, string mode, CancellationToken ct = default)
+    public Task EmitUserPromptAsync(TaskInfo info, string prompt, string mode, CancellationToken ct = default)
     {
         if (info == null) return Task.CompletedTask;
         var trimmed = (prompt ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
@@ -284,7 +284,7 @@ public sealed class AgentMessageBusBridge
     /// <summary>
     /// Run lifecycle: a fresh CLI process started for the job.
     /// </summary>
-    public Task EmitRunStartedAsync(JobInfo info, string cliType, DateTime startedAtUtc, string? sessionId, string intent, CancellationToken ct = default)
+    public Task EmitRunStartedAsync(TaskInfo info, string cliType, DateTime startedAtUtc, string? sessionId, string intent, CancellationToken ct = default)
     {
         if (info == null) return Task.CompletedTask;
         var runId = DeriveRunId(info.Id, startedAtUtc);
@@ -311,7 +311,7 @@ public sealed class AgentMessageBusBridge
     /// the <c>CliExecution.Status</c> string (<c>completed</c>,
     /// <c>failed</c>, <c>cancelled</c>, ...).
     /// </summary>
-    public Task EmitRunFinishedAsync(JobInfo info, string cliType, DateTime startedAtUtc, string status, double? durationSeconds, string? agentOutcome, CancellationToken ct = default)
+    public Task EmitRunFinishedAsync(TaskInfo info, string cliType, DateTime startedAtUtc, string status, double? durationSeconds, string? agentOutcome, CancellationToken ct = default)
     {
         if (info == null) return Task.CompletedTask;
         var severity = status switch
@@ -342,7 +342,7 @@ public sealed class AgentMessageBusBridge
     /// auto-mode policy. The actual termination still flows through
     /// <c>RunFinished</c>; this records the trigger.
     /// </summary>
-    public Task EmitRunStopRequestedAsync(JobInfo info, RunStopReason reason, string source, CancellationToken ct = default)
+    public Task EmitRunStopRequestedAsync(TaskInfo info, RunStopReason reason, string source, CancellationToken ct = default)
     {
         if (info == null) return Task.CompletedTask;
         var msg = NewMessage(
@@ -364,7 +364,7 @@ public sealed class AgentMessageBusBridge
     /// <c>1-preparation -&gt; 2-ready</c>). One <c>kind:lifecycle</c> message
     /// per actual transition the runtime applies.
     /// </summary>
-    public Task EmitJobLifecycleAsync(JobInfo info, string topic, string? fromState, string? toState, string? reason, CancellationToken ct = default)
+    public Task EmitJobLifecycleAsync(TaskInfo info, string topic, string? fromState, string? toState, string? reason, CancellationToken ct = default)
     {
         if (info == null) return Task.CompletedTask;
         var msg = NewMessage(
@@ -544,7 +544,7 @@ public sealed class AgentMessageBusBridge
         return s.Length <= 280 ? s : s[..277] + "...";
     }
 
-    private static AgentArtifactRef LogSliceArtifact(JobInfo info)
+    private static AgentArtifactRef LogSliceArtifact(TaskInfo info)
     {
         return new AgentArtifactRef
         {

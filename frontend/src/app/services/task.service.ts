@@ -61,7 +61,7 @@ export interface CodeReviewListEntry {
   runAt: string;
 }
 
-/** Reply from `POST /api/jobs/{id}/code-review` (see backend `CodeReviewStepEndpointResponse`). */
+/** Reply from `POST /api/tasks/{id}/code-review` (see backend `CodeReviewStepEndpointResponse`). */
 export interface CodeReviewRunResponse {
   fileName: string;
   verdict: string;
@@ -116,7 +116,7 @@ export class TaskService {
   //   stale relative to the optimistic UI.
   // - `pendingGroupedSuppressUntil` extends the rejection window past the
   //   last POST response so the on-disk rewrite (`job.json` files) has
-  //   time to materialise into the next /api/jobs/grouped snapshot.
+  //   time to materialise into the next /api/tasks/grouped snapshot.
   private mutationVersion = 0;
   private pendingPersistCount = 0;
   private pendingGroupedSuppressUntil = 0;
@@ -165,7 +165,7 @@ export class TaskService {
       return true;
     };
 
-    this.http.get<TaskInfo[]>(`${this.baseUrl}/jobs`).subscribe({
+    this.http.get<TaskInfo[]>(`${this.baseUrl}/tasks`).subscribe({
       next: (jobs) => {
         if (acceptOptimisticTarget()) {
           this.jobs.set(jobs);
@@ -193,7 +193,7 @@ export class TaskService {
       },
     });
 
-    this.http.get<GroupedJobs>(`${this.baseUrl}/jobs/grouped`).subscribe({
+    this.http.get<GroupedJobs>(`${this.baseUrl}/tasks/grouped`).subscribe({
       next: (grouped) => {
         if (acceptOptimisticTarget()) {
           this.grouped.set(grouped);
@@ -357,14 +357,14 @@ export class TaskService {
 
   getDetail(jobId: string, watchPath?: string) {
     return this.http.get<TaskDetail>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
       this.withWatchPath(watchPath),
     );
   }
 
   updateState(jobId: string, state: string, watchPath?: string) {
     return this.http.put(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/state`,
       { targetState: state },
       this.withWatchPath(watchPath),
     );
@@ -374,7 +374,7 @@ export class TaskService {
     const body: { targetState: string; targetIndex?: number } = { targetState };
     if (typeof targetIndex === 'number') body.targetIndex = targetIndex;
     return this.http.post(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/move`,
       body,
       this.withWatchPath(watchPath),
     );
@@ -460,7 +460,7 @@ export class TaskService {
   }
 
   createJob(req: CreateJobRequest) {
-    return this.http.post<{ id: string }>(`${this.baseUrl}/jobs`, req);
+    return this.http.post<{ id: string }>(`${this.baseUrl}/tasks`, req);
   }
 
   // Tag registry + per-job tag mutation. Backlog-lane spec.
@@ -481,7 +481,7 @@ export class TaskService {
 
   setJobTags(jobId: string, tags: string[], watchPath?: string) {
     return this.http.put(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/tags`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/tags`,
       { tags },
       this.withWatchPath(watchPath),
     );
@@ -494,7 +494,7 @@ export class TaskService {
    */
   listCodeReviews(jobId: string, watchPath?: string) {
     return this.http.get<{ entries: CodeReviewListEntry[] }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review/list`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/code-review/list`,
       this.withWatchPath(watchPath),
     );
   }
@@ -510,7 +510,7 @@ export class TaskService {
     watchPath?: string,
   ) {
     return this.http.post<CodeReviewRunResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/code-review`,
       body,
       this.withWatchPath(watchPath),
     );
@@ -521,7 +521,7 @@ export class TaskService {
    */
   readCodeReview(jobId: string, fileName: string, watchPath?: string) {
     return this.http.get<{ fileName: string; content: string }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review/${encodeURIComponent(fileName)}`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/code-review/${encodeURIComponent(fileName)}`,
       this.withWatchPath(watchPath),
     );
   }
@@ -538,7 +538,7 @@ export class TaskService {
     watchPath?: string,
   ) {
     return this.http.post(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/acknowledge`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/acknowledge`,
       { acknowledged },
       this.withWatchPath(watchPath),
     );
@@ -556,7 +556,7 @@ export class TaskService {
     watchPath?: string,
   ) {
     return this.http.post<{ jobId: string; targetState: string }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
       body,
       this.withWatchPath(watchPath),
     );
@@ -564,7 +564,7 @@ export class TaskService {
 
   setJobTaskType(jobId: string, taskType: string, watchPath?: string) {
     return this.http.put(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/task-type`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/task-type`,
       { taskType },
       this.withWatchPath(watchPath),
     );
@@ -572,7 +572,7 @@ export class TaskService {
 
   updateJobFile(jobId: string, fileName: string, content: string, watchPath?: string) {
     return this.http.put(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
       { content },
       this.withWatchPath(watchPath),
     );
@@ -585,7 +585,7 @@ export class TaskService {
    */
   listJobArtifacts(jobId: string, watchPath?: string) {
     return this.http.get<TaskArtifactsResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/artifacts`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/artifacts`,
       this.withWatchPath(watchPath),
     );
   }
@@ -598,13 +598,13 @@ export class TaskService {
   readJobFile(jobId: string, fileName: string, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);
     return this.http.get(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
       { ...opts, responseType: 'text' },
     );
   }
 
   reorderJobs(jobs: TaskOrderItem[]) {
-    return this.http.post(`${this.baseUrl}/jobs/reorder`, { jobs });
+    return this.http.post(`${this.baseUrl}/tasks/reorder`, { jobs });
   }
 
   /**
@@ -614,7 +614,7 @@ export class TaskService {
    */
   moveJobToTop(jobId: string, watchPath?: string) {
     return this.http.post<{ position: number }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move-to-top`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/move-to-top`,
       null,
       this.withWatchPath(watchPath),
     );
@@ -622,7 +622,7 @@ export class TaskService {
 
   changeProject(jobId: string, targetWatchPath: string, watchPath?: string) {
     return this.http.post(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/change-project`,
       { targetWatchPath },
       this.withWatchPath(watchPath),
     );
@@ -630,7 +630,7 @@ export class TaskService {
 
   deleteJob(jobId: string, watchPath?: string) {
     return this.http.delete(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`,
       this.withWatchPath(watchPath),
     );
   }
@@ -638,7 +638,7 @@ export class TaskService {
   // Git
   getGitStatus(jobId: string, watchPath?: string) {
     return this.http.get<GitStatus>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/status`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/status`,
       this.withWatchPath(watchPath),
     );
   }
@@ -647,7 +647,7 @@ export class TaskService {
     const opts = this.withWatchPath(watchPath);
     const params = (opts.params as Record<string, string> | undefined) ?? {};
     if (path) params['path'] = path;
-    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/diff`, {
+    return this.http.get(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/diff`, {
       ...opts,
       params,
       responseType: 'text',
@@ -656,7 +656,7 @@ export class TaskService {
 
   commitJob(jobId: string, message: string, watchPath?: string) {
     return this.http.post<{ sha?: string }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/commit`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/commit`,
       { message },
       this.withWatchPath(watchPath),
     );
@@ -664,7 +664,7 @@ export class TaskService {
 
   generateCommitMessage(jobId: string, watchPath?: string) {
     return this.http.post<{ message: string }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/generate-message`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/generate-message`,
       {},
       this.withWatchPath(watchPath),
     );
@@ -674,7 +674,7 @@ export class TaskService {
   // progress→review transition, plus a live re-derivation of the file list.
   getJobCommit(jobId: string, watchPath?: string) {
     return this.http.get<TaskCommitDetail>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commit`,
       this.withWatchPath(watchPath),
     );
   }
@@ -683,7 +683,7 @@ export class TaskService {
     const opts = this.withWatchPath(watchPath);
     const params = (opts.params as Record<string, string> | undefined) ?? {};
     if (path) params['path'] = path;
-    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit/diff`, {
+    return this.http.get(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commit/diff`, {
       ...opts,
       params,
       responseType: 'text',
@@ -697,7 +697,7 @@ export class TaskService {
    */
   getJobCommitFilesBySha(jobId: string, sha: string, watchPath?: string) {
     return this.http.get<{ sha: string; files: GitFileChange[] }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/files`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/files`,
       this.withWatchPath(watchPath),
     );
   }
@@ -712,7 +712,7 @@ export class TaskService {
     const params = (opts.params as Record<string, string> | undefined) ?? {};
     if (path) params['path'] = path;
     return this.http.get<{ diff: string }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
       { ...opts, params },
     );
   }
@@ -725,7 +725,7 @@ export class TaskService {
    */
   excludeCommit(jobId: string, sha: string, watchPath?: string) {
     return this.http.post<{ sha: string; excluded: boolean }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/exclude`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/exclude`,
       {},
       this.withWatchPath(watchPath),
     );
@@ -744,7 +744,7 @@ export class TaskService {
     watchPath?: string,
   ) {
     return this.http.post<{ sha: string; included: boolean }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/include`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/include`,
       body,
       this.withWatchPath(watchPath),
     );
@@ -756,14 +756,14 @@ export class TaskService {
     const params = (opts.params as Record<string, string> | undefined) ?? {};
     params['limit'] = String(limit);
     return this.http.get<{ commits: RecentCommit[] }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/recent-commits`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/recent-commits`,
       { ...opts, params },
     );
   }
 
   openInVsCode(jobId: string, watchPath?: string) {
     return this.http.post(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/open-in-vscode`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/open-in-vscode`,
       {},
       this.withWatchPath(watchPath),
     );
@@ -771,7 +771,7 @@ export class TaskService {
 
   getClaudeSessionInfo(jobId: string, watchPath?: string) {
     return this.http.get<ClaudeSessionResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/claude/session-info`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/claude/session-info`,
       this.withWatchPath(watchPath),
     );
   }
@@ -779,7 +779,7 @@ export class TaskService {
   /** Per-job session-event log: start/continue/recovery rows + sessionChain. */
   getSessionEvents(jobId: string, watchPath?: string) {
     return this.http.get<SessionEventsResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/session-events`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/session-events`,
       this.withWatchPath(watchPath),
     );
   }
@@ -791,7 +791,7 @@ export class TaskService {
    */
   getAgentWorkSummary(jobId: string, watchPath?: string) {
     return this.http.get<AgentWorkSummary>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/agent-work-summary`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/agent-work-summary`,
       this.withWatchPath(watchPath),
     );
   }
@@ -799,7 +799,7 @@ export class TaskService {
   /** Per-job run timeline: ordered list of CLI invocations + aggregates. */
   getRunTimeline(jobId: string, watchPath?: string) {
     return this.http.get<RunTimeline>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/runs`,
       this.withWatchPath(watchPath),
     );
   }
@@ -807,7 +807,7 @@ export class TaskService {
   /** Commits whose author date falls inside the given run's wall-clock window. */
   getRunCommits(jobId: string, runIndex: number, watchPath?: string) {
     return this.http.get<RunCommitsResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/commits`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/runs/${runIndex}/commits`,
       this.withWatchPath(watchPath),
     );
   }
@@ -815,7 +815,7 @@ export class TaskService {
   /** Aggregated file list for one run's SHA range - drives the run git viewer's file tree. */
   getRunFiles(jobId: string, runIndex: number, watchPath?: string) {
     return this.http.get<RunFilesResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/files`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/runs/${runIndex}/files`,
       this.withWatchPath(watchPath),
     );
   }
@@ -823,14 +823,14 @@ export class TaskService {
   /** Unified diff for one path inside a run's SHA range. */
   getRunDiff(jobId: string, runIndex: number, path: string, watchPath?: string) {
     return this.http.get<RunDiffResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/diff`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/runs/${runIndex}/diff`,
       this.withWatchPathAndPath(watchPath, path),
     );
   }
 
   getRegressionRadar(jobId: string, watchPath?: string) {
     return this.http.get<RegressionRadarResult>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/regression-radar`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/regression-radar`,
       this.withWatchPath(watchPath),
     );
   }
@@ -841,7 +841,7 @@ export class TaskService {
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
     return this.http.post<ContinueTaskResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/start`,
       body,
       this.withWatchPath(watchPath),
     );
@@ -862,7 +862,7 @@ export class TaskService {
     const base = this.withWatchPath(watchPath);
     const params = (base.params ?? new HttpParams()).set('reason', reason);
     return this.http.post(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/stop`,
       {},
       { ...base, params },
     );
@@ -883,7 +883,7 @@ export class TaskService {
     if (cliType) body.cliType = cliType;
     if (mode) body.mode = mode;
     return this.http.post<ContinueTaskResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/continue`,
       body,
       this.withWatchPath(watchPath),
     );
@@ -891,7 +891,7 @@ export class TaskService {
 
   setJobModel(jobId: string, model: string | null, watchPath?: string) {
     return this.http.put(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/model`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/model`,
       { model },
       this.withWatchPath(watchPath),
     );
@@ -901,7 +901,7 @@ export class TaskService {
     const body: { cliType: CliType; useOwnSession?: boolean } = { cliType };
     if (useOwnSession !== undefined) body.useOwnSession = useOwnSession;
     return this.http.put(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/cli-type`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/cli-type`,
       body,
       this.withWatchPath(watchPath),
     );
@@ -926,7 +926,7 @@ export class TaskService {
 
   setJobTitle(jobId: string, title: string, watchPath?: string) {
     return this.http.put(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/title`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/title`,
       { title },
       this.withWatchPath(watchPath),
     );
@@ -938,14 +938,14 @@ export class TaskService {
 
   getJobOutput(jobId: string, watchPath?: string) {
     return this.http.get<CliOutputLine[]>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/output`,
       this.withWatchPath(watchPath),
     );
   }
 
   refreshContextUsage(jobId: string, watchPath?: string) {
     return this.http.post<ContextUsageSnapshot>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/context-usage/refresh`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/context-usage/refresh`,
       {},
       this.withWatchPath(watchPath),
     );
@@ -953,7 +953,7 @@ export class TaskService {
 
   regenerateSummary(jobId: string, watchPath?: string) {
     return this.http.post(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/summary/regenerate`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/summary/regenerate`,
       {},
       this.withWatchPath(watchPath),
     );
@@ -967,7 +967,7 @@ export class TaskService {
    */
   requestInterimSummary(jobId: string, watchPath?: string) {
     return this.http.post<{ markdown: string; durationMs: number }>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/summary/interim`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/summary/interim`,
       {},
       this.withWatchPath(watchPath),
     );
@@ -1186,7 +1186,7 @@ export class TaskService {
     let params = new HttpParams();
     if (watchPath) params = params.set('watchPath', watchPath);
     return this.http.get<TaskScreenshotsResponse>(
-      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/screenshots`,
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/screenshots`,
       { params },
     );
   }

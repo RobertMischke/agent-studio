@@ -48,7 +48,7 @@ export class E2ECleanupDialogComponent implements OnInit {
       next: (jobs) => {
         this.jobs.set(jobs);
         // Pre-select everything: the common case is "kill all of them".
-        this.selected.set(new Set(jobs.map((j) => j.jobKey)));
+        this.selected.set(new Set(jobs.map((j) => j.taskKey)));
         this.phase.set('list');
       },
       error: (err) => {
@@ -76,7 +76,7 @@ export class E2ECleanupDialogComponent implements OnInit {
   }
 
   toggleAll(checked: boolean): void {
-    if (checked) this.selected.set(new Set(this.jobs().map((j) => j.jobKey)));
+    if (checked) this.selected.set(new Set(this.jobs().map((j) => j.taskKey)));
     else this.selected.set(new Set());
   }
 

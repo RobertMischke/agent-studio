@@ -150,7 +150,7 @@ public static class WorkspaceEndpoints
                 WorkspaceManagementOutcome.NotFound =>
                     Results.NotFound(new { error = result.Error }),
                 WorkspaceManagementOutcome.Conflict =>
-                    Results.Conflict(new { error = result.Error, jobCount = result.JobCount }),
+                    Results.Conflict(new { error = result.Error, jobCount = result.TaskCount }),
                 WorkspaceManagementOutcome.BadRequest =>
                     Results.BadRequest(new { error = result.Error }),
                 _ => Results.Problem("Unexpected outcome from workspace delete.")

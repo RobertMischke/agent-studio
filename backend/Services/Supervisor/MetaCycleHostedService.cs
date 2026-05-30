@@ -125,7 +125,7 @@ public sealed class MetaCycleHostedService : BackgroundService
             if (!config.Enabled) continue;
 
             byProject.TryGetValue(project, out var projectJobs);
-            projectJobs ??= new List<JobInfo>();
+            projectJobs ??= new List<TaskInfo>();
 
             try
             {
@@ -147,7 +147,7 @@ public sealed class MetaCycleHostedService : BackgroundService
         string workspace,
         string project,
         ProjectRunnerStatus projectStatus,
-        IReadOnlyList<JobInfo> projectJobs,
+        IReadOnlyList<TaskInfo> projectJobs,
         MetaCycleConfig config,
         CancellationToken ct)
     {
@@ -277,7 +277,7 @@ public sealed class MetaCycleHostedService : BackgroundService
         || state == TaskStates.Completed
         || state == TaskStates.Archive;
 
-    private static bool HasArtefacts(JobInfo job)
+    private static bool HasArtefacts(TaskInfo job)
     {
         try
         {
@@ -294,8 +294,8 @@ public sealed class MetaCycleHostedService : BackgroundService
         string workspace,
         string project,
         ProjectRunnerStatus projectStatus,
-        IReadOnlyList<JobInfo> windowJobs,
-        IReadOnlyList<JobInfo> allProjectJobs,
+        IReadOnlyList<TaskInfo> windowJobs,
+        IReadOnlyList<TaskInfo> allProjectJobs,
         MetaCycleConfig config,
         ProjectCycleState state)
     {
@@ -555,7 +555,7 @@ public sealed class MetaCycleHostedService : BackgroundService
     /// <summary>
     /// Pure builder for the supervisor chat-note text rendered next to the
     /// last job in the cycle window. Kept separate so the formatting is
-    /// asserted directly in tests without a JobInfo / OrchestratorChatLog.
+    /// asserted directly in tests without a TaskInfo / OrchestratorChatLog.
     /// </summary>
     public static string BuildResumeFailedChatNoteText(
         string project,

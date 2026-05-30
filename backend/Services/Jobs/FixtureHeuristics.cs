@@ -51,8 +51,8 @@ public static class FixtureHeuristics
     }
 
     /// <summary>
-    /// Convenience overload that pulls id + title off a <see cref="JobInfo"/>.
+    /// Convenience overload that pulls id + title off a <see cref="TaskInfo"/>.
     /// </summary>
-    public static bool IsLikelyFixture(JobInfo info) =>
+    public static bool IsLikelyFixture(TaskInfo info) =>
         IsLikelyFixture(info.Id, info.Title);
 }

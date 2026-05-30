@@ -140,7 +140,7 @@ public sealed class MergeService
         };
     }
 
-    private MergeOutcome DoConsolidateMerge(JobInfo primary, JobInfo secondary, string mode, string reason, string who)
+    private MergeOutcome DoConsolidateMerge(TaskInfo primary, TaskInfo secondary, string mode, string reason, string who)
     {
         var archiveRoot = _audit.GetArchiveMergedDir();
         if (archiveRoot == null)
@@ -236,7 +236,7 @@ public sealed class MergeService
         }
     }
 
-    private MergeOutcome DoLinkOnlyMerge(JobInfo primary, JobInfo secondary, string reason, string who)
+    private MergeOutcome DoLinkOnlyMerge(TaskInfo primary, TaskInfo secondary, string reason, string who)
     {
         // link-only: secondary stays in place; only the cross-reference
         // and an event on each side are recorded. No archive move; no
@@ -443,8 +443,8 @@ public sealed class MergeService
         string primaryId,
         string? primaryWatchPath,
         MergeRequest req,
-        out JobInfo? primary,
-        out JobInfo? secondary)
+        out TaskInfo? primary,
+        out TaskInfo? secondary)
     {
         primary = null;
         secondary = null;
@@ -500,7 +500,7 @@ public sealed class MergeService
         catch { return false; }
     }
 
-    private List<TimelineEvent> BuildProposedTimelineEvents(JobInfo primary, JobInfo secondary, string mode)
+    private List<TimelineEvent> BuildProposedTimelineEvents(TaskInfo primary, TaskInfo secondary, string mode)
     {
         var result = new List<TimelineEvent>();
         var now = DateTime.UtcNow;
@@ -542,7 +542,7 @@ public sealed class MergeService
         return result;
     }
 
-    private static int CountSecondaryRuns(JobInfo secondary)
+    private static int CountSecondaryRuns(TaskInfo secondary)
     {
         try
         {
@@ -556,7 +556,7 @@ public sealed class MergeService
         catch { return 0; }
     }
 
-    private static List<MergeConflict> DetectConflicts(JobInfo primary, JobInfo secondary)
+    private static List<MergeConflict> DetectConflicts(TaskInfo primary, TaskInfo secondary)
     {
         var conflicts = new List<MergeConflict>();
         if (primary.Commits.Count > 0 && secondary.Commits.Count > 0)
@@ -587,7 +587,7 @@ public sealed class MergeService
         return conflicts;
     }
 
-    private void MirrorArtefactsIntoPrimary(JobInfo primary, JobInfo secondary)
+    private void MirrorArtefactsIntoPrimary(TaskInfo primary, TaskInfo secondary)
     {
         try
         {

@@ -16,7 +16,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Locks the contract added for the wedge bug where moving the active job
-/// out of <c>3-progress</c> via <c>POST /api/jobs/{id}/move</c> left
+/// out of <c>3-progress</c> via <c>POST /api/tasks/{id}/move</c> left
 /// <see cref="ProjectRunner"/>'s in-memory <c>_activeJobId</c> pinned at
 /// the slug. Every subsequent pickup tick saw <c>active != null</c> and
 /// short-circuited; the project was wedged until a backend restart.

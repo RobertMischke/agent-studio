@@ -49,7 +49,7 @@ export class TaskSelectionService {
     // removes the open job from the snapshot (delete from menu, lane
     // dropdown move): `removeAndAdvance` shrinks the iteration BEFORE
     // `selected` is reset to the next job, so for one effect tick `snap`
-    // no longer contains `selected.jobKey`. Without the guard the effect
+    // no longer contains `selected.taskKey`. Without the guard the effect
     // would re-capture from the live (still-stale) grouped lane and
     // clobber the carefully-preserved iteration ordering.
     effect(() => {
@@ -58,20 +58,20 @@ export class TaskSelectionService {
         this.lastEnsuredJobKey = null;
         return;
       }
-      const jobKey = sel.info.jobKey;
+      const taskKey = sel.info.taskKey;
       const snap = this.pager.snapshot();
-      if (snap && snap.jobs.some(j => j.jobKey === jobKey)) {
+      if (snap && snap.jobs.some(j => j.taskKey === taskKey)) {
         // Existing iteration covers the open job; just keep the index
         // aligned (no-op when already aligned).
-        this.pager.reanchorTo(jobKey);
-        this.lastEnsuredJobKey = jobKey;
+        this.pager.reanchorTo(taskKey);
+        this.lastEnsuredJobKey = taskKey;
         return;
       }
-      if (this.lastEnsuredJobKey === jobKey) return;
+      if (this.lastEnsuredJobKey === taskKey) return;
       const peers = this.peersForLane(sel.info.state);
       if (peers.length === 0) return;
-      this.pager.capture(sel.info.state, peers, jobKey);
-      this.lastEnsuredJobKey = jobKey;
+      this.pager.capture(sel.info.state, peers, taskKey);
+      this.lastEnsuredJobKey = taskKey;
     });
 
     // Detail prefetch: warm the next 1..PREFETCH_LOOKAHEAD entries in the
@@ -190,7 +190,7 @@ export class TaskSelectionService {
   }
 
   isSelected(job: TaskInfo): boolean {
-    return this.selected()?.info.jobKey === job.jobKey;
+    return this.selected()?.info.taskKey === job.taskKey;
   }
 
   /**
@@ -212,7 +212,7 @@ export class TaskSelectionService {
       // lane, so the `triageLanePeers` computed (which keys off
       // `selected.info.state`) would yield the wrong list or an empty
       // list. `peersForLane` looks up the live grouped lane.
-      this.pager.capture(job.state, this.peersForLane(job.state), job.jobKey);
+      this.pager.capture(job.state, this.peersForLane(job.state), job.taskKey);
     }
     const token = ++this.openDetailToken;
     // Instant-paint path: serve a prefetched detail synchronously when
@@ -327,9 +327,9 @@ export class TaskSelectionService {
           // the job's lane once grouped() lands, so the pager appears
           // without requiring keyboard navigation first.
           const snap = this.pager.snapshot();
-          if (snap && snap.jobs.some(j => j.jobKey === detail.info.jobKey)) {
+          if (snap && snap.jobs.some(j => j.taskKey === detail.info.taskKey)) {
             this.triageLaneState = snap.lane;
-            this.pager.reanchorTo(detail.info.jobKey);
+            this.pager.reanchorTo(detail.info.taskKey);
           } else {
             if (snap) this.pager.clear();
             // Anchor triage navigation on the restored job's lane so the
@@ -375,7 +375,7 @@ export class TaskSelectionService {
    */
   advanceAfterMutation(departingJobKey: string): boolean {
     const snapBefore = this.pager.snapshot();
-    const wasInSnapshot = !!snapBefore && snapBefore.jobs.some(j => j.jobKey === departingJobKey);
+    const wasInSnapshot = !!snapBefore && snapBefore.jobs.some(j => j.taskKey === departingJobKey);
     const entry = this.pager.removeAndAdvance(departingJobKey);
     if (!entry) {
       if (wasInSnapshot) {

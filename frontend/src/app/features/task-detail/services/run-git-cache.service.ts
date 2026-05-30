@@ -6,8 +6,8 @@ import type { RunFilesResponse, RunDiffResponse } from '../../run-timeline';
 
 /**
  * In-memory cache for the SHA-range answers behind the run git viewer:
- * `GET /api/jobs/{id}/runs/{i}/files` and
- * `GET /api/jobs/{id}/runs/{i}/diff?path=...`.
+ * `GET /api/tasks/{id}/runs/{i}/files` and
+ * `GET /api/tasks/{id}/runs/{i}/diff?path=...`.
  *
  * Why this exists: clicking back into a previously-visible run used to
  * re-spawn the backend `git diff`. The backend now memoises the SHA

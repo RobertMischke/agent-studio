@@ -42,7 +42,7 @@ function capLines(lines: CliOutputLine[]): CliOutputLine[] {
 export class CliOutputPollService implements OnDestroy {
   private jobService = inject(TaskService);
 
-  // The polled buffer is what GET /api/jobs/{id}/output returns — it's the
+  // The polled buffer is what GET /api/tasks/{id}/output returns — it's the
   // authoritative server state. We keep it separate from the optimistic
   // echo buffer so a poll round-trip never wipes the user's just-typed
   // follow-up off the screen.

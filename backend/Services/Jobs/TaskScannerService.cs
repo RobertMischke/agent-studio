@@ -8,7 +8,7 @@ namespace OrchestratorApi.Services.Jobs;
 /// <summary>
 /// Discovery + read surface for jobs on disk. Resolves the configured
 /// watch paths (with the <c>.orchestrator.yml</c> pointer flow), scans
-/// the state subfolders into <see cref="JobInfo"/> records, hydrates
+/// the state subfolders into <see cref="TaskInfo"/> records, hydrates
 /// the per-job detail view (status / prompt / context-usage / log /
 /// summary state), and serves read-only file lookups including the
 /// <c>attachments/</c> and <c>results/</c> binary mirrors.
@@ -135,7 +135,7 @@ public class TaskScannerService
     /// invalidation from mutation services. Tests that build the scanner
     /// directly (no cache wired) keep the original disk-walk semantics.
     /// </summary>
-    public List<JobInfo> ScanAllJobs()
+    public List<TaskInfo> ScanAllJobs()
     {
         if (_indexCache != null)
         {
@@ -151,9 +151,9 @@ public class TaskScannerService
     /// <see cref="TaskIndexCache"/> for refresh and by callers that want to
     /// bypass the cache (tests, recovery paths).
     /// </summary>
-    public List<JobInfo> ScanAllJobsRaw()
+    public List<TaskInfo> ScanAllJobsRaw()
     {
-        var jobs = new List<JobInfo>();
+        var jobs = new List<TaskInfo>();
         foreach (var entry in GetWatchPaths())
         {
             if (!Directory.Exists(entry.Path))
@@ -180,7 +180,7 @@ public class TaskScannerService
         return jobs;
     }
 
-    public JobInfo? ScanJobFolder(string jobDir, WatchPathEntry entry, string state)
+    public TaskInfo? ScanJobFolder(string jobDir, WatchPathEntry entry, string state)
     {
         var jobJsonPath = Path.Combine(jobDir, "job.json");
         if (!File.Exists(jobJsonPath)) return null;
@@ -212,10 +212,10 @@ public class TaskScannerService
             var ownerClientId = ResolveOwnerClientId(raw, jobDir);
             var (commitChain, legacyCommit) = ReadCommitChain(raw);
 
-            return new JobInfo
+            return new TaskInfo
             {
                 Id = resolvedId,
-                JobKey = TaskIdentity.CreateKey(entry.Path, resolvedId),
+                TaskKey = TaskIdentity.CreateKey(entry.Path, resolvedId),
                 Key = ReadReferenceKey(raw),
                 OwnerClientId = ownerClientId,
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
@@ -257,7 +257,7 @@ public class TaskScannerService
         }
     }
 
-    public JobInfo? FindJob(string jobId, string? watchPath = null)
+    public TaskInfo? FindJob(string jobId, string? watchPath = null)
     {
         var matches = ScanAllJobs().Where(j => j.Id == jobId);
         if (!string.IsNullOrWhiteSpace(watchPath))
@@ -281,14 +281,14 @@ public class TaskScannerService
         return null;
     }
 
-    public JobDetail? GetJobDetail(string jobId, string? watchPath = null)
+    public TaskDetail? GetJobDetail(string jobId, string? watchPath = null)
     {
         var info = FindJob(jobId, watchPath);
         if (info == null) return null;
 
         var dir = info.FolderPath;
         var statusMd = ReadFileOrNull(Path.Combine(dir, "status.md"));
-        return new JobDetail
+        return new TaskDetail
         {
             Info = info,
             PromptMarkdown = ReadFileOrNull(Path.Combine(dir, "prompt.md")),
@@ -297,7 +297,7 @@ public class TaskScannerService
             StatusMarkdown = statusMd,
             ContextUsage = ReadContextUsage(dir),
             Log = BuildLog(dir),
-            SummaryState = ResolveSummaryState(info.JobKey, statusMd),
+            SummaryState = ResolveSummaryState(info.TaskKey, statusMd),
             ReviewEvidence = ReviewEvidenceLog.ReadLatestPerId(dir, _logger)
         };
     }
@@ -307,7 +307,7 @@ public class TaskScannerService
     /// session-events.jsonl SHA ranges plus the auto-commit on
     /// <c>job.json</c>. Drives the kanban "+N commits" hint without
     /// paying per-render git costs. The exact list is computed lazily
-    /// behind <c>/api/jobs/{id}/commits</c>.
+    /// behind <c>/api/tasks/{id}/commits</c>.
     ///
     /// Cheap by construction: skips the disk read entirely when the job
     /// has no auto-commit AND no logs/ directory, which covers the
@@ -423,7 +423,7 @@ public class TaskScannerService
     /// <summary>
     /// Reads the F33 Linear-style reference key (<c>ATP-130</c>, <c>RB-42</c>)
     /// from <c>job.json</c>. Returns null when the field is absent or
-    /// non-string so the UI can fall back to <see cref="JobInfo.Id"/>.
+    /// non-string so the UI can fall back to <see cref="TaskInfo.Id"/>.
     /// </summary>
     private static string? ReadReferenceKey(JsonElement raw)
     {
@@ -473,7 +473,7 @@ public class TaskScannerService
 
     private const int OutcomeIssueTailBytes = 16 * 1024;
 
-    private static JobOutcomeIssue? ResolveOutcomeIssue(string jobFolder)
+    private static TaskOutcomeIssue? ResolveOutcomeIssue(string jobFolder)
     {
         var logPath = TaskPaths.CliOutputLog(jobFolder);
         if (!File.Exists(logPath)) return null;
@@ -512,7 +512,7 @@ public class TaskScannerService
         }
     }
 
-    private static bool TryResolveOutcomeIssue(string line, DateTime lastSeenAt, out JobOutcomeIssue? issue)
+    private static bool TryResolveOutcomeIssue(string line, DateTime lastSeenAt, out TaskOutcomeIssue? issue)
     {
         issue = null;
         if (string.IsNullOrWhiteSpace(line)) return false;
@@ -557,7 +557,7 @@ public class TaskScannerService
         return false;
     }
 
-    private static JobOutcomeIssue BuildOutcomeIssue(string kind, string label, string severity, string rawLine, DateTime lastSeenAt)
+    private static TaskOutcomeIssue BuildOutcomeIssue(string kind, string label, string severity, string rawLine, DateTime lastSeenAt)
         => new()
         {
             Kind = kind,
@@ -585,9 +585,9 @@ public class TaskScannerService
     /// pane to render the blog-style timeline of task extensions written by
     /// Extend mode.
     /// </summary>
-    private static List<JobPromptHistoryEntry> ReadPromptHistory(string jobFolder)
+    private static List<TaskPromptHistoryEntry> ReadPromptHistory(string jobFolder)
     {
-        var result = new List<JobPromptHistoryEntry>();
+        var result = new List<TaskPromptHistoryEntry>();
         if (!Directory.Exists(jobFolder)) return result;
         foreach (var path in Directory.EnumerateFiles(jobFolder, "prompt-*.md"))
         {
@@ -601,7 +601,7 @@ public class TaskScannerService
             DateTime writtenAt;
             try { writtenAt = File.GetLastWriteTimeUtc(path); }
             catch { writtenAt = DateTime.UtcNow; }
-            result.Add(new JobPromptHistoryEntry
+            result.Add(new TaskPromptHistoryEntry
             {
                 Index = index,
                 FileName = Path.GetFileName(path),
@@ -620,13 +620,13 @@ public class TaskScannerService
     /// <c>Generating</c> / <c>Failed</c> state is forgotten — acceptable, since
     /// the user can simply re-run.
     /// </summary>
-    private JobSummaryState ResolveSummaryState(string jobKey, string? statusMarkdown)
+    private TaskSummaryState ResolveSummaryState(string jobKey, string? statusMarkdown)
     {
         var live = _summaryService.GetState(jobKey);
         if (live != null) return live;
-        return new JobSummaryState
+        return new TaskSummaryState
         {
-            Status = string.IsNullOrWhiteSpace(statusMarkdown) ? JobSummaryStatus.None : JobSummaryStatus.Ready,
+            Status = string.IsNullOrWhiteSpace(statusMarkdown) ? TaskSummaryStatus.None : TaskSummaryStatus.Ready,
             BytesWritten = statusMarkdown?.Length
         };
     }
@@ -640,7 +640,7 @@ public class TaskScannerService
     /// Reads the task's commit chain from <c>job.json</c>. Returns a tuple
     /// <c>(chain, legacy)</c> where <c>chain</c> is the ordered list of
     /// commits this task has produced (oldest -&gt; newest) and <c>legacy</c>
-    /// is the singular <see cref="JobInfo.Commit"/> value kept for
+    /// is the singular <see cref="TaskInfo.Commit"/> value kept for
     /// backwards compatibility with consumers that have not been
     /// migrated. Reads three shapes:
     /// <list type="bullet">
@@ -652,22 +652,22 @@ public class TaskScannerService
     /// <item>Neither field present -&gt; chain = [], legacy = null.</item>
     /// </list>
     /// </summary>
-    private static (List<JobCommitInfo> chain, JobCommitInfo? legacy) ReadCommitChain(JsonElement raw)
+    private static (List<TaskCommitInfo> chain, TaskCommitInfo? legacy) ReadCommitChain(JsonElement raw)
     {
-        var chain = new List<JobCommitInfo>();
+        var chain = new List<TaskCommitInfo>();
         if (raw.TryGetProperty("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in commitsEl.EnumerateArray())
             {
                 if (item.ValueKind != JsonValueKind.Object) continue;
-                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
+                var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                 if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
             }
         }
-        JobCommitInfo? legacy = null;
+        TaskCommitInfo? legacy = null;
         if (raw.TryGetProperty("commit", out var commitEl) && commitEl.ValueKind == JsonValueKind.Object)
         {
-            legacy = JsonSerializer.Deserialize<JobCommitInfo>(commitEl.GetRawText(), TaskJsonFile.ReadOpts);
+            legacy = JsonSerializer.Deserialize<TaskCommitInfo>(commitEl.GetRawText(), TaskJsonFile.ReadOpts);
         }
         if (chain.Count == 0 && legacy != null && !string.IsNullOrWhiteSpace(legacy.Sha))
         {
@@ -689,15 +689,15 @@ public class TaskScannerService
     /// through <see cref="CommitExclusionReasons.Normalize"/> so an
     /// unknown writer never produces an unrenderable badge.
     /// </summary>
-    private static List<JobExcludedCommitInfo> ReadExcludedCommits(JsonElement raw)
+    private static List<TaskExcludedCommitInfo> ReadExcludedCommits(JsonElement raw)
     {
-        var list = new List<JobExcludedCommitInfo>();
+        var list = new List<TaskExcludedCommitInfo>();
         if (!raw.TryGetProperty("excludedCommits", out var arr) || arr.ValueKind != JsonValueKind.Array)
             return list;
         foreach (var item in arr.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-            var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
+            var parsed = JsonSerializer.Deserialize<TaskExcludedCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
             if (parsed == null || string.IsNullOrWhiteSpace(parsed.Sha)) continue;
             list.Add(parsed with { Reason = CommitExclusionReasons.Normalize(parsed.Reason) });
         }
@@ -742,7 +742,7 @@ public class TaskScannerService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to read contextUsage from {JobDir}", jobDir);
+            _logger.LogWarning(ex, "Failed to read contextUsage from {TaskDir}", jobDir);
             return null;
         }
     }
@@ -772,15 +772,15 @@ public class TaskScannerService
     /// excluded because it has its own Protocol tab. Subfolders
     /// (<c>logs/</c>, <c>results/</c>, <c>attachments/</c>) are out of scope.
     /// </summary>
-    public JobArtifactsResponse? ListArtifacts(string jobId, string? watchPath = null)
+    public TaskArtifactsResponse? ListArtifacts(string jobId, string? watchPath = null)
     {
         var info = FindJob(jobId, watchPath);
         if (info == null) return null;
 
         var dir = info.FolderPath;
-        if (!Directory.Exists(dir)) return new JobArtifactsResponse { JobId = jobId, Files = [] };
+        if (!Directory.Exists(dir)) return new TaskArtifactsResponse { JobId = jobId, Files = [] };
 
-        var artifacts = new List<JobArtifact>();
+        var artifacts = new List<TaskArtifact>();
         foreach (var path in Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly))
         {
             var name = Path.GetFileName(path);
@@ -791,7 +791,7 @@ public class TaskScannerService
             try { fi = new FileInfo(path); }
             catch { continue; }
 
-            artifacts.Add(new JobArtifact
+            artifacts.Add(new TaskArtifact
             {
                 Name = name,
                 SizeBytes = fi.Length,
@@ -803,36 +803,36 @@ public class TaskScannerService
 
         artifacts.Sort(CompareArtifactsForFilesTab);
 
-        return new JobArtifactsResponse { JobId = jobId, Files = artifacts };
+        return new TaskArtifactsResponse { JobId = jobId, Files = artifacts };
     }
 
-    private static (JobArtifactKind Kind, string? AspectName) ClassifyArtifact(string fileName)
+    private static (TaskArtifactKind Kind, string? AspectName) ClassifyArtifact(string fileName)
     {
         if (string.Equals(fileName, "prompt.md", StringComparison.OrdinalIgnoreCase))
-            return (JobArtifactKind.Prompt, null);
+            return (TaskArtifactKind.Prompt, null);
 
         if (fileName.StartsWith("aspect-", StringComparison.OrdinalIgnoreCase) &&
             fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
         {
             var aspect = fileName.Substring("aspect-".Length, fileName.Length - "aspect-".Length - ".md".Length);
-            return (JobArtifactKind.Aspect, aspect);
+            return (TaskArtifactKind.Aspect, aspect);
         }
 
         if (fileName.EndsWith("_NOTE.md", StringComparison.OrdinalIgnoreCase) ||
             fileName.EndsWith("_NOTES.md", StringComparison.OrdinalIgnoreCase))
-            return (JobArtifactKind.Note, null);
+            return (TaskArtifactKind.Note, null);
 
-        return (JobArtifactKind.Other, null);
+        return (TaskArtifactKind.Other, null);
     }
 
-    private static int CompareArtifactsForFilesTab(JobArtifact a, JobArtifact b)
+    private static int CompareArtifactsForFilesTab(TaskArtifact a, TaskArtifact b)
     {
         // Prompt always wins; otherwise group by kind ordinal, then by display key.
-        int rank(JobArtifact x) => x.Kind switch
+        int rank(TaskArtifact x) => x.Kind switch
         {
-            JobArtifactKind.Prompt => 0,
-            JobArtifactKind.Aspect => 1,
-            JobArtifactKind.Note   => 2,
+            TaskArtifactKind.Prompt => 0,
+            TaskArtifactKind.Aspect => 1,
+            TaskArtifactKind.Note   => 2,
             _                      => 3,
         };
 
@@ -841,8 +841,8 @@ public class TaskScannerService
         if (rA != rB) return rA.CompareTo(rB);
 
         // Within aspect group, sort by aspect name; otherwise by file name.
-        var keyA = a.Kind == JobArtifactKind.Aspect ? (a.AspectName ?? a.Name) : a.Name;
-        var keyB = b.Kind == JobArtifactKind.Aspect ? (b.AspectName ?? b.Name) : b.Name;
+        var keyA = a.Kind == TaskArtifactKind.Aspect ? (a.AspectName ?? a.Name) : a.Name;
+        var keyB = b.Kind == TaskArtifactKind.Aspect ? (b.AspectName ?? b.Name) : b.Name;
         return string.Compare(keyA, keyB, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -885,14 +885,14 @@ public class TaskScannerService
         return (fullPath, contentType);
     }
 
-    private static List<JobLogEntry> BuildLog(string dir)
+    private static List<TaskLogEntry> BuildLog(string dir)
     {
-        var entries = new List<JobLogEntry>();
+        var entries = new List<TaskLogEntry>();
 
         var jobJson = Path.Combine(dir, "job.json");
         if (File.Exists(jobJson))
         {
-            entries.Add(new JobLogEntry
+            entries.Add(new TaskLogEntry
             {
                 Timestamp = File.GetCreationTime(jobJson),
                 Event = "Job created"
@@ -902,7 +902,7 @@ public class TaskScannerService
         var promptMd = Path.Combine(dir, "prompt.md");
         if (File.Exists(promptMd))
         {
-            entries.Add(new JobLogEntry
+            entries.Add(new TaskLogEntry
             {
                 Timestamp = File.GetLastWriteTime(promptMd),
                 Event = "Prompt written"
@@ -912,7 +912,7 @@ public class TaskScannerService
         var statusMd = Path.Combine(dir, "status.md");
         if (File.Exists(statusMd))
         {
-            entries.Add(new JobLogEntry
+            entries.Add(new TaskLogEntry
             {
                 Timestamp = File.GetLastWriteTime(statusMd),
                 Event = "Status updated"
@@ -925,7 +925,7 @@ public class TaskScannerService
         {
             foreach (var f in Directory.GetFiles(logsDir, "*", SearchOption.AllDirectories).Take(30))
             {
-                entries.Add(new JobLogEntry
+                entries.Add(new TaskLogEntry
                 {
                     Timestamp = File.GetLastWriteTime(f),
                     Event = "Log entry",

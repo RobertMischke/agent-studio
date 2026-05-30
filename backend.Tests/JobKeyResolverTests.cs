@@ -9,16 +9,16 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// F45a — canonical-format detection, legacy-to-canonical translation,
-/// and the build / parse round-trip for <see cref="JobKeyResolver"/>.
+/// and the build / parse round-trip for <see cref="TaskKeyResolver"/>.
 /// </summary>
-public class JobKeyResolverTests : IDisposable
+public class TaskKeyResolverTests : IDisposable
 {
     private readonly string _root;
     private readonly IConfiguration _config;
     private readonly ProjectRegistry _projects;
-    private readonly JobKeyResolver _resolver;
+    private readonly TaskKeyResolver _resolver;
 
-    public JobKeyResolverTests()
+    public TaskKeyResolverTests()
     {
         _root = Path.Combine(Path.GetTempPath(), "rdo-jobkey-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
@@ -26,7 +26,7 @@ public class JobKeyResolverTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _root })
             .Build();
         _projects = new ProjectRegistry(_config, NullLogger<ProjectRegistry>.Instance);
-        _resolver = new JobKeyResolver(_projects, NullLogger<JobKeyResolver>.Instance);
+        _resolver = new TaskKeyResolver(_projects, NullLogger<TaskKeyResolver>.Instance);
     }
 
     public void Dispose()
@@ -44,27 +44,27 @@ public class JobKeyResolverTests : IDisposable
     [InlineData(null, false)]
     public void IsCanonical_MatchesShape(string? key, bool expected)
     {
-        Assert.Equal(expected, JobKeyResolver.IsCanonical(key));
+        Assert.Equal(expected, TaskKeyResolver.IsCanonical(key));
     }
 
     [Fact]
     public void Build_ComposesCanonical()
     {
-        Assert.Equal("PROJ-001::f44-foo", JobKeyResolver.Build("PROJ-001", "f44-foo"));
+        Assert.Equal("PROJ-001::f44-foo", TaskKeyResolver.Build("PROJ-001", "f44-foo"));
     }
 
     [Fact]
     public void Build_RejectsBadProjectId()
     {
-        Assert.Throws<ArgumentException>(() => JobKeyResolver.Build("foo", "slug"));
-        Assert.Throws<ArgumentException>(() => JobKeyResolver.Build("PROJ-1", "slug"));
-        Assert.Throws<ArgumentException>(() => JobKeyResolver.Build("PROJ-001", ""));
+        Assert.Throws<ArgumentException>(() => TaskKeyResolver.Build("foo", "slug"));
+        Assert.Throws<ArgumentException>(() => TaskKeyResolver.Build("PROJ-1", "slug"));
+        Assert.Throws<ArgumentException>(() => TaskKeyResolver.Build("PROJ-001", ""));
     }
 
     [Fact]
     public void Parse_SplitsCanonicalKey()
     {
-        var (proj, slug) = JobKeyResolver.Parse("PROJ-007::my-slug");
+        var (proj, slug) = TaskKeyResolver.Parse("PROJ-007::my-slug");
         Assert.Equal("PROJ-007", proj);
         Assert.Equal("my-slug", slug);
     }
@@ -72,7 +72,7 @@ public class JobKeyResolverTests : IDisposable
     [Fact]
     public void Parse_ThrowsForLegacyFormat()
     {
-        Assert.Throws<FormatException>(() => JobKeyResolver.Parse("C:/path::slug"));
+        Assert.Throws<FormatException>(() => TaskKeyResolver.Parse("C:/path::slug"));
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class JobKeyResolverTests : IDisposable
     {
         // The separator is the first "::" only; downstream slugs that
         // happen to contain a colon are returned intact.
-        var (proj, slug) = JobKeyResolver.Parse("PROJ-001::weird::slug::form");
+        var (proj, slug) = TaskKeyResolver.Parse("PROJ-001::weird::slug::form");
         Assert.Equal("PROJ-001", proj);
         Assert.Equal("weird::slug::form", slug);
     }
@@ -141,8 +141,8 @@ public class JobKeyResolverTests : IDisposable
     [Fact]
     public void BuildAndParse_RoundTrip()
     {
-        var key = JobKeyResolver.Build("PROJ-042", "a-very-long-slug-with-dashes");
-        var (proj, slug) = JobKeyResolver.Parse(key);
+        var key = TaskKeyResolver.Build("PROJ-042", "a-very-long-slug-with-dashes");
+        var (proj, slug) = TaskKeyResolver.Parse(key);
         Assert.Equal("PROJ-042", proj);
         Assert.Equal("a-very-long-slug-with-dashes", slug);
     }

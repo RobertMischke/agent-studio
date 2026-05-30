@@ -74,8 +74,8 @@ public abstract record CliRunEvent
     /// <summary>UTC timestamp the runner observed the underlying byte that produced this event.</summary>
     public DateTime ObservedAt { get; init; } = DateTime.UtcNow;
 
-    /// <summary>Job key the event belongs to. Mirrors <see cref="CliExecution.JobKey"/>.</summary>
-    public string JobKey { get; init; } = "";
+    /// <summary>Job key the event belongs to. Mirrors <see cref="CliExecution.TaskKey"/>.</summary>
+    public string TaskKey { get; init; } = "";
 
     /// <summary>Process spawned. First event from any adapter.</summary>
     public sealed record RunStarted(int ProcessId, string CliType, string? Model) : CliRunEvent;

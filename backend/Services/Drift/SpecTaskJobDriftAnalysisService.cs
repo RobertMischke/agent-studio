@@ -466,12 +466,12 @@ public sealed class SpecTaskJobDriftAnalysisService
         return jobs;
     }
 
-    private static IReadOnlyList<JobRef> BuildRecentCompleted(string projectRoot)
+    private static IReadOnlyList<TaskRef> BuildRecentCompleted(string projectRoot)
     {
         var laneDir = Path.Combine(projectRoot, RecentCompletedLane);
-        if (!Directory.Exists(laneDir)) return Array.Empty<JobRef>();
+        if (!Directory.Exists(laneDir)) return Array.Empty<TaskRef>();
 
-        var entries = new List<JobRef>();
+        var entries = new List<TaskRef>();
         foreach (var dir in Directory.EnumerateDirectories(laneDir))
         {
             var entry = ReadJobRef(dir, RecentCompletedLane);
@@ -517,7 +517,7 @@ public sealed class SpecTaskJobDriftAnalysisService
         return new ActiveJobRef(id, title, lane, touched, promptExcerpt, hasStatus, hasLogs);
     }
 
-    private static JobRef? ReadJobRef(string dir, string lane)
+    private static TaskRef? ReadJobRef(string dir, string lane)
     {
         var jobJson = Path.Combine(dir, "job.json");
         if (!File.Exists(jobJson)) return null;
@@ -540,7 +540,7 @@ public sealed class SpecTaskJobDriftAnalysisService
         try { touched = Directory.GetLastWriteTimeUtc(dir); }
         catch { /* best-effort */ }
 
-        return new JobRef(id, title, lane, touched);
+        return new TaskRef(id, title, lane, touched);
     }
 
     private static string? ReadPromptExcerpt(string dir)
@@ -659,7 +659,7 @@ public sealed class SpecTaskJobDriftAnalysisService
         return sb.ToString().TrimEnd();
     }
 
-    private static string RenderJobRefs(IReadOnlyList<JobRef> jobs)
+    private static string RenderJobRefs(IReadOnlyList<TaskRef> jobs)
     {
         if (jobs.Count == 0) return "(no recent completed tasks)";
         var sb = new StringBuilder();
@@ -801,7 +801,7 @@ public sealed class SpecTaskJobDriftAnalysisService
 
     public sealed record DriftRef(string Path, string Label);
 
-    public sealed record JobRef(string JobId, string Title, string Lane, DateTime? LastWriteUtc);
+    public sealed record TaskRef(string JobId, string Title, string Lane, DateTime? LastWriteUtc);
 
     /// <summary>Active-queue job entry. Carries the prompt excerpt and a couple
     /// of "evidence on disk" booleans so the agent can decide where to drill
@@ -872,7 +872,7 @@ public sealed class SpecTaskJobDriftScope
     public required string RepoRoot { get; init; }
     public required IReadOnlyList<SpecTaskJobDriftAnalysisService.DriftRef> SpecDocs { get; init; }
     public required IReadOnlyList<SpecTaskJobDriftAnalysisService.ActiveJobRef> ActiveJobs { get; init; }
-    public required IReadOnlyList<SpecTaskJobDriftAnalysisService.JobRef> RecentCompleted { get; init; }
+    public required IReadOnlyList<SpecTaskJobDriftAnalysisService.TaskRef> RecentCompleted { get; init; }
     public required IReadOnlyList<SpecTaskJobDriftAnalysisService.DuplicateTaskPair> DuplicateCandidates { get; init; }
     public required IReadOnlyList<SpecTaskJobDriftAnalysisService.ReportPointer> RecentDriftReports { get; init; }
     public required IReadOnlyList<SpecTaskJobDriftAnalysisService.ReportPointer> RecentAnalysisReports { get; init; }

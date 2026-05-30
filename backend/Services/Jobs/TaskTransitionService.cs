@@ -74,7 +74,7 @@ public sealed class TaskTransitionService
             targetState == TaskStates.AutoReview &&
             settings.AutoCommit;
 
-        JobCommitInfo? commitToStamp = null;
+        TaskCommitInfo? commitToStamp = null;
         if (shouldAutoCommit)
         {
             commitToStamp = await TryAutoCommitAsync(jobId, watchPath, ct);
@@ -152,7 +152,7 @@ public sealed class TaskTransitionService
     /// items that already moved. The result list mirrors the input order
     /// one-for-one with a typed per-item status (<c>moved</c> / <c>not-found</c>
     /// / <c>conflict</c> / <c>rejected</c> / <c>failed</c>). This is the
-    /// endpoint backing <c>POST /api/jobs/batch-move</c> and exists so the
+    /// endpoint backing <c>POST /api/tasks/batch-move</c> and exists so the
     /// LLM never has to fall back to shell <c>mv</c> for a multi-job
     /// restore - the 2026-05-08 incident that motivated this method.
     /// </summary>
@@ -228,7 +228,7 @@ public sealed class TaskTransitionService
     /// (never a direct file write). Best-effort: any failure is logged and
     /// swallowed so attribution never blocks the lane transition.
     /// </summary>
-    private void RunCommitAttribution(JobInfo moved, string? watchPath)
+    private void RunCommitAttribution(TaskInfo moved, string? watchPath)
     {
         try
         {
@@ -242,7 +242,7 @@ public sealed class TaskTransitionService
             // is empty, so the aggregate is the raw union of run-range commits
             // and the just-stamped auto-commit - exactly the noisy input the
             // rule engine is meant to clean up.
-            var aggregate = JobCommitsAggregator.Aggregate(moved, timeline.Runs,
+            var aggregate = TaskCommitsAggregator.Aggregate(moved, timeline.Runs,
                 (before, after) => _git.GetCommitsInShaRange(moved.Id, watchPath, before, after));
 
             if (aggregate.Commits.Count == 0) return;
@@ -292,7 +292,7 @@ public sealed class TaskTransitionService
         }
     }
 
-    private async Task<JobCommitInfo?> TryAutoCommitAsync(string jobId, string? watchPath, CancellationToken ct)
+    private async Task<TaskCommitInfo?> TryAutoCommitAsync(string jobId, string? watchPath, CancellationToken ct)
     {
         try
         {
@@ -319,7 +319,7 @@ public sealed class TaskTransitionService
             }
 
             var files = _git.GetCommitFiles(jobId, watchPath, result.Sha);
-            return new JobCommitInfo
+            return new TaskCommitInfo
             {
                 Sha = result.Sha,
                 ShortSha = result.Sha.Length > 7 ? result.Sha[..7] : result.Sha,
@@ -336,7 +336,7 @@ public sealed class TaskTransitionService
         }
     }
 
-    public async Task<int> PushCompletedJobCommitsAsync(JobInfo job, string strategy, CancellationToken ct = default)
+    public async Task<int> PushCompletedJobCommitsAsync(TaskInfo job, string strategy, CancellationToken ct = default)
     {
         if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
         if (job.State != TaskStates.Completed) return 0;

@@ -29,10 +29,10 @@ public sealed class TaskChangeNotifier
         _logger = logger;
     }
 
-    public event Action<JobChangeEvent>? JobCreated;
-    public event Action<JobChangeEvent>? JobUpdated;
-    public event Action<JobMoveEvent>? JobMoved;
-    public event Action<JobChangeEvent>? JobDeleted;
+    public event Action<TaskChangeEvent>? TaskCreated;
+    public event Action<TaskChangeEvent>? TaskUpdated;
+    public event Action<TaskMoveEvent>? TaskMoved;
+    public event Action<TaskChangeEvent>? TaskDeleted;
 
     /// <summary>
     /// Lane-wide reorder: one or more jobs in a given project had their
@@ -47,21 +47,21 @@ public sealed class TaskChangeNotifier
     /// no payload. Fired by paths that touch many folders at once (bulk
     /// reorder, queue promotion, boot-time sweeps/backfill) where patching
     /// individual rows is not worth it - the frontend reacts with a single
-    /// silent re-fetch of <c>/api/jobs/grouped</c>.
+    /// silent re-fetch of <c>/api/tasks/grouped</c>.
     /// </summary>
     public event Action? JobsBulkChanged;
 
     public void PublishCreated(string projectName, string jobId, string watchPath)
-        => Invoke(JobCreated, new JobChangeEvent(projectName, jobId, watchPath), nameof(JobCreated));
+        => Invoke(TaskCreated, new TaskChangeEvent(projectName, jobId, watchPath), nameof(TaskCreated));
 
     public void PublishUpdated(string projectName, string jobId, string watchPath)
-        => Invoke(JobUpdated, new JobChangeEvent(projectName, jobId, watchPath), nameof(JobUpdated));
+        => Invoke(TaskUpdated, new TaskChangeEvent(projectName, jobId, watchPath), nameof(TaskUpdated));
 
     public void PublishMoved(string projectName, string jobId, string watchPath, string fromState, string toState)
-        => Invoke(JobMoved, new JobMoveEvent(projectName, jobId, watchPath, fromState, toState), nameof(JobMoved));
+        => Invoke(TaskMoved, new TaskMoveEvent(projectName, jobId, watchPath, fromState, toState), nameof(TaskMoved));
 
     public void PublishDeleted(string projectName, string jobId, string watchPath)
-        => Invoke(JobDeleted, new JobChangeEvent(projectName, jobId, watchPath), nameof(JobDeleted));
+        => Invoke(TaskDeleted, new TaskChangeEvent(projectName, jobId, watchPath), nameof(TaskDeleted));
 
     public void PublishReordered(string projectName, string watchPath, string? lane)
         => Invoke(JobsReordered, new JobsReorderedEvent(projectName, watchPath, lane), nameof(JobsReordered));
@@ -88,8 +88,8 @@ public sealed class TaskChangeNotifier
     }
 }
 
-public readonly record struct JobChangeEvent(string ProjectName, string JobId, string WatchPath);
+public readonly record struct TaskChangeEvent(string ProjectName, string JobId, string WatchPath);
 
-public readonly record struct JobMoveEvent(string ProjectName, string JobId, string WatchPath, string FromState, string ToState);
+public readonly record struct TaskMoveEvent(string ProjectName, string JobId, string WatchPath, string FromState, string ToState);
 
 public readonly record struct JobsReorderedEvent(string ProjectName, string WatchPath, string? Lane);

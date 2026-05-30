@@ -47,7 +47,7 @@ public sealed class RuntimeEventCaptureTests : IDisposable
         var writer = new RuntimeEventWriter();
         var evt = Make() with
         {
-            Operation = "GET /api/jobs",
+            Operation = "GET /api/tasks",
             Status = "Ok",
             Duration = new ProductRuntimeEventDuration { Ms = 12.5, StartedAt = new DateTime(2026, 5, 6, 11, 59, 59, DateTimeKind.Utc) },
             Tags = new[] { "ui-polled" },
@@ -55,7 +55,7 @@ public sealed class RuntimeEventCaptureTests : IDisposable
 
         await writer.AppendToJobAsync(jobFolder, evt);
 
-        var path = RuntimeEventPaths.JobDayFile(jobFolder, evt.Timestamp);
+        var path = RuntimeEventPaths.TaskDayFile(jobFolder, evt.Timestamp);
         Assert.True(File.Exists(path));
 
         var result = new RuntimeEventReader().Read(path);
@@ -77,7 +77,7 @@ public sealed class RuntimeEventCaptureTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => writer.AppendToJobAsync(jobFolder, bad));
 
-        var path = RuntimeEventPaths.JobDayFile(jobFolder, bad.Timestamp);
+        var path = RuntimeEventPaths.TaskDayFile(jobFolder, bad.Timestamp);
         Assert.False(File.Exists(path));
     }
 
@@ -85,7 +85,7 @@ public sealed class RuntimeEventCaptureTests : IDisposable
     public void Reader_PreservesGoodEvents_AndReportsParseWarnings()
     {
         var jobFolder = Path.Combine(_root, "3-progress", "feature-z");
-        var path = RuntimeEventPaths.JobDayFile(jobFolder, new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc));
+        var path = RuntimeEventPaths.TaskDayFile(jobFolder, new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
         var good = JsonSerializer.Serialize(Make(ev: "render.first-paint", subsystem: "frontend"), RuntimeEventReader.JsonOptions);
@@ -116,7 +116,7 @@ public sealed class RuntimeEventCaptureTests : IDisposable
         var jobFolder = Path.Combine(_root, "3-progress", "feature-warn");
         var writer = new RuntimeEventWriter();
         var day = new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc);
-        var path = RuntimeEventPaths.JobDayFile(jobFolder, day);
+        var path = RuntimeEventPaths.TaskDayFile(jobFolder, day);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
         var warning = new RuntimeEventParseWarning(path, 7, "json parse: unexpected token", "{not json");

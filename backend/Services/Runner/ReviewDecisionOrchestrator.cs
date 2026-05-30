@@ -748,7 +748,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
-        JobInfo current,
+        TaskInfo current,
         AspectRunReport report,
         CancellationToken ct)
     {
@@ -801,7 +801,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private async Task<LintScssResult?> RunLintScssPostStepAsync(
         string workspace,
         WatchPathEntry entry,
-        JobInfo current,
+        TaskInfo current,
         CancellationToken ct)
     {
         if (_lintScssRunner == null) return null;
@@ -902,7 +902,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "ReviewDecisionOrchestrator: failed to persist lint-scss log under {JobFolder}",
+                "ReviewDecisionOrchestrator: failed to persist lint-scss log under {TaskFolder}",
                 jobFolderPath);
         }
     }
@@ -919,7 +919,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
-        JobInfo current,
+        TaskInfo current,
         LintScssResult result,
         CancellationToken ct)
     {
@@ -1026,14 +1026,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// Build the diff summary fed to the per-aspect prompts. Aggregates
     /// every commit attributed to the job across all of its runs (via
     /// session-events SHA ranges) plus the auto-commit on
-    /// <see cref="JobInfo.Commit"/>. Same aggregation pipeline that
-    /// powers <c>/api/jobs/{id}/commits</c>, so the aspect reviewer sees
+    /// <see cref="TaskInfo.Commit"/>. Same aggregation pipeline that
+    /// powers <c>/api/tasks/{id}/commits</c>, so the aspect reviewer sees
     /// the same picture the human reviewer sees.
     ///
     /// <para>
     /// Why not just <c>job.Commit</c>: a crash-recovery commit lands as a
     /// near-empty fixup on top of the real work, then becomes
-    /// <see cref="JobInfo.Commit"/>. Reading that alone gives "0 files
+    /// <see cref="TaskInfo.Commit"/>. Reading that alone gives "0 files
     /// changed" and false-positive blocks the verdict (2026-05-11
     /// incident). Walking the full run range is the only source of truth
     /// for the actual change set.
@@ -1046,7 +1046,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// both services from DI.
     /// </para>
     /// </summary>
-    private string LoadDiffSummary(string project, string? watchPath, JobInfo job)
+    private string LoadDiffSummary(string project, string? watchPath, TaskInfo job)
     {
         if (_sessions == null || _git == null)
         {
@@ -1057,7 +1057,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var events = _sessions.ReadSessionEvents(job.Id, watchPath);
             var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(job.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-            var aggregate = JobCommitsAggregator.Aggregate(job, timeline.Runs,
+            var aggregate = TaskCommitsAggregator.Aggregate(job, timeline.Runs,
                 (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
             return BuildDiffSummary(aggregate, job.Commit);
         }
@@ -1070,7 +1070,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
     }
 
-    private static readonly JobCommitsAggregate EmptyAggregate = new() { Count = 0, Commits = [] };
+    private static readonly TaskCommitsAggregate EmptyAggregate = new() { Count = 0, Commits = [] };
 
     /// <summary>
     /// Pure renderer: turn an aggregate plus the legacy auto-commit into the
@@ -1079,7 +1079,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// (including the empty-HEAD-recovery-commit + non-empty prior
     /// commits scenario that triggered the 2026-05-11 false positive).
     /// </summary>
-    internal static string BuildDiffSummary(JobCommitsAggregate aggregate, JobCommitInfo? legacyAutoCommit)
+    internal static string BuildDiffSummary(TaskCommitsAggregate aggregate, TaskCommitInfo? legacyAutoCommit)
     {
         if (aggregate.Count == 0)
         {
@@ -1741,7 +1741,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// Lane-target for every auto-review reissue path (NEEDS_INPUT,
     /// NOOP recovery, multi-aspect block). Routes the task to
     /// <c>2-ready</c> at order 0, stamps the reissue tag for UI
-    /// highlighting, and returns the moved <see cref="JobInfo"/> so the
+    /// highlighting, and returns the moved <see cref="TaskInfo"/> so the
     /// caller can write follow-up evidence next to the prompt. Returning
     /// <c>null</c> means the move did not complete (logged and recorded
     /// in the decision journal upstream); the caller then skips the
@@ -1758,7 +1758,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// rule.
     /// </para>
     /// </summary>
-    private JobInfo? MoveReissueToReadyTop(JobInfo current, WatchPathEntry entry, string causeLabel)
+    private TaskInfo? MoveReissueToReadyTop(TaskInfo current, WatchPathEntry entry, string causeLabel)
     {
         var move = _stateMachine.MoveJob(current.Id, TaskStates.Ready, entry.Path);
         if (move.Status != MoveJobStatus.Success)
@@ -1791,7 +1791,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return moved;
     }
 
-    private async Task WriteFollowUpFileAsync(JobInfo moved, string followUp, CancellationToken ct)
+    private async Task WriteFollowUpFileAsync(TaskInfo moved, string followUp, CancellationToken ct)
     {
         try
         {
@@ -1818,7 +1818,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     private sealed record PendingDecision(
-        JobInfo Job,
+        TaskInfo Job,
         ReviewSignalKind Kind,
         int LineNumber,
         string? Reason,

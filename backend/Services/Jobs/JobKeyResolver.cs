@@ -25,16 +25,16 @@ namespace OrchestratorApi.Services.Jobs;
 /// back, ignore, or surface the unresolved key).</item>
 /// </list>
 /// </summary>
-public sealed class JobKeyResolver
+public sealed class TaskKeyResolver
 {
     private static readonly Regex CanonicalShape = new(
         @"^PROJ-\d{3,}::.+$",
         RegexOptions.Compiled);
 
     private readonly ProjectRegistry _projects;
-    private readonly ILogger<JobKeyResolver> _logger;
+    private readonly ILogger<TaskKeyResolver> _logger;
 
-    public JobKeyResolver(ProjectRegistry projects, ILogger<JobKeyResolver> logger)
+    public TaskKeyResolver(ProjectRegistry projects, ILogger<TaskKeyResolver> logger)
     {
         _projects = projects;
         _logger = logger;

@@ -70,7 +70,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
 
         // Wire the transition event so lane moves performed via the
-        // existing TaskTransitionService (e.g. through the /api/jobs/{id}/move
+        // existing TaskTransitionService (e.g. through the /api/tasks/{id}/move
         // endpoint) are visible to TaskAccess subscribers too. Without
         // this, callers that subscribe to the layer would only see
         // moves that came through TransitionLaneAsync; moves through
@@ -130,13 +130,13 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
 
     // ---------- ITaskAccess: reads ----------
 
-    public JobInfo? FindJob(string jobId, string? watchPath = null)
+    public TaskInfo? FindJob(string jobId, string? watchPath = null)
         => _scanner.FindJob(jobId, watchPath);
 
-    public JobDetail? GetJobDetail(string jobId, string? watchPath = null)
+    public TaskDetail? GetJobDetail(string jobId, string? watchPath = null)
         => _scanner.GetJobDetail(jobId, watchPath);
 
-    public IReadOnlyList<JobInfo> ListByLane(string projectName, string lane)
+    public IReadOnlyList<TaskInfo> ListByLane(string projectName, string lane)
     {
         if (string.IsNullOrWhiteSpace(projectName) || string.IsNullOrWhiteSpace(lane)) return [];
         return _scanner.ScanAllJobs()
@@ -146,7 +146,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             .ToList();
     }
 
-    public IReadOnlyList<JobInfo> ListByLaneInWorkspace(string watchPath, string lane)
+    public IReadOnlyList<TaskInfo> ListByLaneInWorkspace(string watchPath, string lane)
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane)) return [];
         return _scanner.ScanAllJobs()
@@ -156,7 +156,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             .ToList();
     }
 
-    public IReadOnlyList<JobInfo> ListByProject(string projectName)
+    public IReadOnlyList<TaskInfo> ListByProject(string projectName)
     {
         if (string.IsNullOrWhiteSpace(projectName)) return [];
         return _scanner.ScanAllJobs()
@@ -406,7 +406,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             Directory.CreateDirectory(logsDir);
             var logPath = Path.Combine(logsDir, "cli-output.log");
             File.AppendAllText(logPath, request.LogLine!.EndsWith('\n') ? request.LogLine : request.LogLine + "\n");
-            // No JobInfo field changes; skip cache invalidation and
+            // No TaskInfo field changes; skip cache invalidation and
             // version bump. Subscribers don't need a log-line tick.
             return Task.FromResult(new TaskMutationResult
             {
@@ -615,7 +615,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         // active to the next MeasureFolder call and broke the
         // boot-time sweep's idempotency. The DispatchChange below
         // raises a typed event with a synthetic Version - subscribers
-        // that need the JobInfo can call FindJob explicitly.
+        // that need the TaskInfo can call FindJob explicitly.
         var version = BumpVersion(destinationSlug, info: null);
         // Resolve a project name from the watch path so subscribers
         // wired by project still see the change. Avoid scanner.FindJob
@@ -712,21 +712,21 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
 
     // ---------- versioning ----------
 
-    private TaskAccessVersion CurrentVersion(string jobId, JobInfo? info)
+    private TaskAccessVersion CurrentVersion(string jobId, TaskInfo? info)
     {
         var v = _versions.GetOrAdd(jobId, _ => 0);
         var mtime = info?.LastActivity ?? DateTime.MinValue;
         return new TaskAccessVersion(v, mtime);
     }
 
-    private TaskAccessVersion BumpVersion(string jobId, JobInfo? info)
+    private TaskAccessVersion BumpVersion(string jobId, TaskInfo? info)
     {
         var v = _versions.AddOrUpdate(jobId, 1, (_, current) => current + 1);
         var mtime = info?.LastActivity ?? DateTime.UtcNow;
         return new TaskAccessVersion(v, mtime);
     }
 
-    private bool IsVersionCurrent(string jobId, JobInfo? info, TaskAccessVersion? expected)
+    private bool IsVersionCurrent(string jobId, TaskInfo? info, TaskAccessVersion? expected)
     {
         if (expected == null) return true; // caller did not opt into optimistic concurrency
         var current = CurrentVersion(jobId, info);

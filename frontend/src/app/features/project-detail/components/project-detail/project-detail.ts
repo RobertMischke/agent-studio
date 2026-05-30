@@ -271,7 +271,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   /**
    * Send a reply to a live decision sentinel through the existing
-   * /api/jobs/{jobId}/continue endpoint with mode 'steer'. The sentinel
+   * /api/tasks/{jobId}/continue endpoint with mode 'steer'. The sentinel
    * resolves on the backend's next tick (the [user] log line cancels it),
    * which clears the banner without an explicit dismiss.
    */

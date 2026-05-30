@@ -11,7 +11,7 @@ namespace OrchestratorApi.Services.Runner;
 /// <c>docs/design-principles.md</c>. Produced by
 /// <see cref="RunTimelineBuilder.Build"/> from <c>session-events.jsonl</c>
 /// + <c>cli-output.log</c>; consumed by the
-/// <c>/api/jobs/{id}/runs</c> endpoint and the protocol-pane run
+/// <c>/api/tasks/{id}/runs</c> endpoint and the protocol-pane run
 /// timeline.
 ///
 /// All fields are derived; nothing here is the source of truth on its
@@ -49,7 +49,7 @@ public sealed record RunRecord
 }
 
 /// <summary>
-/// Top-level session shape the <c>/api/jobs/{id}/runs</c> endpoint
+/// Top-level session shape the <c>/api/tasks/{id}/runs</c> endpoint
 /// returns. The runs list is the primary surface; the aggregates above
 /// it (<see cref="RunCount"/>, <see cref="LastActivityAt"/>) are derived
 /// once on the backend so every consumer renders the same numbers.

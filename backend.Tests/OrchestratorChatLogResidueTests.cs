@@ -8,7 +8,7 @@ namespace OrchestratorApi.Tests;
 /// <summary>
 /// Regression for the 2026-05-16 incident where 4-auto-review accumulated
 /// one-line "Moved to 5-human-review..." skeleton folders. Root cause: after a
-/// successful lane move, the chat-log caller fell back to the pre-move JobInfo
+/// successful lane move, the chat-log caller fell back to the pre-move TaskInfo
 /// when the scanner cache had not yet refreshed, and
 /// <see cref="OrchestratorChatLog.Append"/> unconditionally called
 /// <c>Directory.CreateDirectory</c> on its target — resurrecting the source
@@ -40,7 +40,7 @@ public class OrchestratorChatLogResidueTests : IDisposable
         var ghostFolder = Path.Combine(_root, "4-auto-review", "moved-elsewhere");
         Assert.False(Directory.Exists(ghostFolder));
 
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             Id = "moved-elsewhere",
             Title = "Moved Elsewhere",
@@ -65,7 +65,7 @@ public class OrchestratorChatLogResidueTests : IDisposable
         var ghostFolder = Path.Combine(_root, "4-auto-review", "escalated-elsewhere");
         Assert.False(Directory.Exists(ghostFolder));
 
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             Id = "escalated-elsewhere",
             Title = "Escalated Elsewhere",
@@ -89,7 +89,7 @@ public class OrchestratorChatLogResidueTests : IDisposable
         var liveFolder = Path.Combine(_root, "5-human-review", "still-here");
         Directory.CreateDirectory(liveFolder);
 
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             Id = "still-here",
             Title = "Still Here",

@@ -8,7 +8,7 @@ export interface DevToolsFlags {
 }
 
 export interface E2EJob {
-  jobKey: string;
+  taskKey: string;
   id: string;
   title: string;
   state: string;

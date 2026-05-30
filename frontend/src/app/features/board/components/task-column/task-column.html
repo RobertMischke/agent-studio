@@ -134,7 +134,7 @@
       }
       <div class="column__body">
         @if (isArchive()) {
-          @for (job of archiveVisible(); track job.jobKey) {
+          @for (job of archiveVisible(); track job.taskKey) {
             <button type="button"
                     class="archive-row"
                     [attr.data-testid]="'archive-row'"
@@ -165,7 +165,7 @@
                 <span>{{ group.label }}</span>
                 <span class="column__subsection-count">{{ group.jobs.length }}</span>
               </h3>
-              @for (job of group.jobs; track job.jobKey) {
+              @for (job of group.jobs; track job.taskKey) {
                 <app-job-card
                   [job]="job"
                   [compact]="compact()"
@@ -181,7 +181,7 @@
             </section>
           }
         } @else {
-          @for (job of jobs(); track job.jobKey; let i = $index) {
+          @for (job of jobs(); track job.taskKey; let i = $index) {
             @if (!reorderDisabled()) {
               <div class="column__drop-zone"
                    [class.column__drop-zone--active]="dropIndex === i"

@@ -13,7 +13,7 @@ namespace OrchestratorApi.Tests;
 /// rule under test: per-task hygiene answers questions about THIS task
 /// only. Repo-level signals (ahead of upstream, push pending, branch
 /// behind, untracked files at repo root) must NOT be surfaced through
-/// <see cref="JobHygieneContext"/>; they remain on the surrounding
+/// <see cref="TaskHygieneContext"/>; they remain on the surrounding
 /// <see cref="GitHygieneStatus"/> fields where the project-level
 /// surface reads them. Approval and push are decoupled in the
 /// workflow - "ahead of origin" is the repo's concern, not the task's.
@@ -46,7 +46,7 @@ public class TaskDetailHygieneScopeTests : IDisposable
     [InlineData(TaskStates.HumanReview)]
     [InlineData(TaskStates.Completed)]
     [InlineData(TaskStates.Archive)]
-    public void JobHygiene_RepoAheadOfUpstream_TaskScopeStaysSilent(string lane)
+    public void TaskHygiene_RepoAheadOfUpstream_TaskScopeStaysSilent(string lane)
     {
         var (repo, _) = SeedRepoAheadOfUpstream("ahead-" + lane.Replace("-", ""));
         SeedJobFolder(repo, "demo-task", lane, withCommit: true);
@@ -63,17 +63,17 @@ public class TaskDetailHygieneScopeTests : IDisposable
         // task itself is in good shape: stamped commit, clean tree,
         // not the active job, not in any uncommitted state.
         Assert.NotNull(hygiene.Job);
-        Assert.True(hygiene.Job!.JobInfoCommitPresent);
+        Assert.True(hygiene.Job!.TaskInfoCommitPresent);
         Assert.False(hygiene.Job.AcceptedTaskUncommitted);
         // The previous "CommitUnpushed" field has been removed from
-        // JobHygieneContext entirely; the property no longer exists on
+        // TaskHygieneContext entirely; the property no longer exists on
         // the record so callers cannot accidentally surface push-pending
         // through the per-task surface.
         AssertNoLegacyPushFieldOnTaskOverlay(hygiene.Job);
     }
 
     [Fact]
-    public void JobHygiene_NonActiveTaskInReview_DoesNotInheritDirtyTreeOnTaskOverlay()
+    public void TaskHygiene_NonActiveTaskInReview_DoesNotInheritDirtyTreeOnTaskOverlay()
     {
         // Working tree is dirty with changes that are not attributed
         // to this task. The task is in a review lane but is NOT the
@@ -110,7 +110,7 @@ public class TaskDetailHygieneScopeTests : IDisposable
         Assert.Null(hygiene.Job); // project surface has no per-task overlay
     }
 
-    private static void AssertNoLegacyPushFieldOnTaskOverlay(JobHygieneContext overlay)
+    private static void AssertNoLegacyPushFieldOnTaskOverlay(TaskHygieneContext overlay)
     {
         // The legacy CommitUnpushed flag was removed when push-pending
         // migrated off the per-task surface. Reflection guard so a

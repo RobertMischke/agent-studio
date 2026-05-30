@@ -12,7 +12,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// <c>status.md</c> image references. See
 /// <c>docs/protocol-style.md</c> for the storage contract.
 /// </summary>
-public static class JobFilesEndpoints
+public static class TaskFilesEndpoints
 {
     public static void MapJobFilesEndpoints(this RouteGroupBuilder group)
     {
@@ -76,7 +76,7 @@ public static class JobFilesEndpoints
             {
                 fileName,
                 relativePath = $"attachments/{fileName}",
-                url = $"/api/jobs/{Uri.EscapeDataString(jobId)}/attachments/{fileName}{watchPathQuery}"
+                url = $"/api/tasks/{Uri.EscapeDataString(jobId)}/attachments/{fileName}{watchPathQuery}"
             });
         }).DisableAntiforgery();
 
@@ -103,7 +103,7 @@ public static class JobFilesEndpoints
         group.MapGet("/{jobId}/screenshots", (string jobId, string? watchPath, ScreenshotIndexService screenshots) =>
         {
             var entries = screenshots.ListJobScreenshots(jobId, watchPath);
-            return Results.Ok(new JobScreenshotsResponse
+            return Results.Ok(new TaskScreenshotsResponse
             {
                 JobId = jobId,
                 Screenshots = entries.ToList()

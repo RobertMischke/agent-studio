@@ -1,9 +1,9 @@
 namespace OrchestratorApi.Models;
 
-public record JobInfo
+public record TaskInfo
 {
     public string Id { get; init; } = "";
-    public string JobKey { get; init; } = "";
+    public string TaskKey { get; init; } = "";
     /// <summary>
     /// Stable Linear-style reference key minted from the project's prefix
     /// plus a monotonic counter (<c>ATP-130</c>, <c>RB-42</c>). Unique
@@ -29,7 +29,7 @@ public record JobInfo
     /// project's <c>orchestrator.jsonl</c>, filtered by this job's id; null
     /// when the job has had no orchestrator LLM activity yet.
     /// </summary>
-    public JobTokenSummary? TokenSummary { get; init; }
+    public TaskTokenSummary? TokenSummary { get; init; }
     /// <summary>Name passed to Copilot CLI via <c>--name</c> on first start; reused with <c>--resume</c> for follow-ups.</summary>
     public string? SessionName { get; init; }
     /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
@@ -52,7 +52,7 @@ public record JobInfo
     /// legacy <c>job.json</c> files that only carry a singular <c>commit</c> object are
     /// migrated on the fly by the scanner so consumers can rely on either field.
     /// </summary>
-    public JobCommitInfo? Commit { get; init; }
+    public TaskCommitInfo? Commit { get; init; }
     /// <summary>
     /// Ordered chain of commits attributed to this task across iterations
     /// (oldest -&gt; newest). Tasks regularly produce more than one commit:
@@ -62,7 +62,7 @@ public record JobInfo
     /// singular <see cref="Commit"/> field: legacy <c>job.json</c> files
     /// without <c>commits</c> are surfaced as <c>[commit]</c> by the scanner.
     /// </summary>
-    public List<JobCommitInfo> Commits { get; init; } = [];
+    public List<TaskCommitInfo> Commits { get; init; } = [];
     /// <summary>
     /// Commits the deterministic attribution rule subtracted from this
     /// task's commit set (e.g. crash-recovery commits naming another
@@ -72,7 +72,7 @@ public record JobInfo
     /// in the protocol-pane "Git view" under a "(N excluded)" expander
     /// so the operator can audit what was withheld and why.
     /// </summary>
-    public List<JobExcludedCommitInfo> ExcludedCommits { get; init; } = [];
+    public List<TaskExcludedCommitInfo> ExcludedCommits { get; init; } = [];
     /// <summary>
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to
@@ -88,7 +88,7 @@ public record JobInfo
     /// <see cref="Commit"/>. The kanban card surfaces a "+N commits"
     /// hint when this is greater than 1 so reviewers can see at a
     /// glance that more than the single auto-commit is waiting. The
-    /// precise list lives behind <c>/api/jobs/{id}/commits</c>.
+    /// precise list lives behind <c>/api/tasks/{id}/commits</c>.
     /// </summary>
     public int CommitCount { get; init; }
     /// <summary>
@@ -125,7 +125,7 @@ public record JobInfo
     /// landed in review, instead of treating an empty status.md as a
     /// dead card.
     /// </summary>
-    public JobSummaryState? SummaryState { get; init; }
+    public TaskSummaryState? SummaryState { get; init; }
 
     /// <summary>
     /// Latest runner-outcome issue found in <c>logs/cli-output.log</c>.
@@ -134,7 +134,7 @@ public record JobInfo
     /// watchdog timeouts, missing terminal sentinels, and classifier
     /// ambiguity directly on the card and protocol header.
     /// </summary>
-    public JobOutcomeIssue? OutcomeIssue { get; init; }
+    public TaskOutcomeIssue? OutcomeIssue { get; init; }
 
     /// <summary>
     /// Latest orchestrator-review verdict for this job, populated at
@@ -153,7 +153,7 @@ public record JobInfo
     /// True when this job was created by an E2E spec / Playwright fixture and
     /// should be hidden from the default kanban response. Stored as
     /// <c>"fixture": true</c> in <c>job.json</c>. Endpoints filter fixtures
-    /// out of <c>/api/jobs</c> and <c>/api/jobs/grouped</c> by default;
+    /// out of <c>/api/tasks</c> and <c>/api/tasks/grouped</c> by default;
     /// <c>?includeFixtures=true</c> exposes them for debugging.
     /// </summary>
     public bool Fixture { get; init; }
@@ -194,7 +194,7 @@ public record JobInfo
     public List<string> Tags { get; init; } = [];
 }
 
-public record JobOutcomeIssue
+public record TaskOutcomeIssue
 {
     public string Kind { get; init; } = "";
     public string Label { get; init; } = "";
@@ -204,7 +204,7 @@ public record JobOutcomeIssue
 }
 
 /// <summary>
-/// String constants for <see cref="JobInfo.TaskType"/>. Kept as constants (not
+/// String constants for <see cref="TaskInfo.TaskType"/>. Kept as constants (not
 /// an enum) so the JSON wire format is the literal string and stable across
 /// enum renames. The default is <see cref="Chore"/>: existing technical work
 /// that predates the field migrates to the safe neutral category.
@@ -235,7 +235,7 @@ public static class TaskTypes
 
 /// <summary>
 /// String constants and helpers for the optional <c>phase</c> substate on
-/// <see cref="JobInfo"/>. The hybrid V1 model picked in
+/// <see cref="TaskInfo"/>. The hybrid V1 model picked in
 /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c> keeps the
 /// existing six folder-level states as the durable skeleton and adds this
 /// optional substate so the orchestrator-driven lanes (Intake, Post
@@ -302,13 +302,13 @@ public static class LifecyclePhases
     /// the orchestrator-prep / needs-human-review lanes, the review lanes,
     /// completed, archive).
     /// </summary>
-    public static string? DefaultFor(string state, string? executionStatus, JobSummaryStatus summaryStatus)
+    public static string? DefaultFor(string state, string? executionStatus, TaskSummaryStatus summaryStatus)
     {
         return state switch
         {
             TaskStates.Ready => HumanReady,
             TaskStates.Progress when string.Equals(executionStatus, "running", StringComparison.OrdinalIgnoreCase) => ExecutionRunning,
-            TaskStates.Progress when summaryStatus == JobSummaryStatus.Generating => PostProcessingRunning,
+            TaskStates.Progress when summaryStatus == TaskSummaryStatus.Generating => PostProcessingRunning,
             // Stopped / failed / unfinished runs still live in 3-progress;
             // the existing UI treats them as the execution lane today, so
             // the lane projection keeps that behavior under the new model.
@@ -334,7 +334,7 @@ public static class LifecyclePhases
 /// <summary>
 /// Optional sidecar file written next to <c>job.json</c> as
 /// <c>lifecycle.json</c>. Carries the richer phase history that does not
-/// fit on the wire-level <see cref="JobInfo.Phase"/> field: which intake
+/// fit on the wire-level <see cref="TaskInfo.Phase"/> field: which intake
 /// or post-processing checks were scheduled, when the current phase was
 /// entered, and the last blocking reason if any.
 ///
@@ -346,7 +346,7 @@ public static class LifecyclePhases
 public record LifecycleSnapshot
 {
     public int Version { get; init; } = 1;
-    /// <summary>The current phase. Mirrors <see cref="JobInfo.Phase"/>; the wire field is the source of truth.</summary>
+    /// <summary>The current phase. Mirrors <see cref="TaskInfo.Phase"/>; the wire field is the source of truth.</summary>
     public string? Phase { get; init; }
     /// <summary>UTC time the current phase was entered.</summary>
     public DateTime? PhaseEnteredAt { get; init; }
@@ -401,7 +401,7 @@ public record SessionUsage
 /// The frontend renders a single colour-tiered "bubble" with the total,
 /// and a hover popover with the breakdown plus per-call rows.
 /// </summary>
-public record JobTokenSummary
+public record TaskTokenSummary
 {
     public int Calls { get; init; }
     public long InputTokens { get; init; }
@@ -415,14 +415,14 @@ public record JobTokenSummary
     /// <summary>Timestamp of the most recent attributed orchestrator entry. Null when never updated.</summary>
     public DateTime? LastUpdate { get; init; }
     /// <summary>Per-call rows for the popover, oldest first.</summary>
-    public List<JobTokenCall> Entries { get; init; } = [];
+    public List<TaskTokenCall> Entries { get; init; } = [];
 }
 
 /// <summary>
 /// One orchestrator LLM call attributed to a job. Used by the popover to
 /// list per-run rows below the aggregate.
 /// </summary>
-public record JobTokenCall
+public record TaskTokenCall
 {
     public DateTime Ts { get; init; }
     public string? Model { get; init; }
@@ -506,9 +506,9 @@ public record AgentWorkToolCount
     public int Count { get; init; }
 }
 
-public record JobDetail
+public record TaskDetail
 {
-    public JobInfo Info { get; init; } = new();
+    public TaskInfo Info { get; init; } = new();
     public string? PromptMarkdown { get; init; }
     /// <summary>
     /// Append-only timeline of task extensions: <c>prompt-1.md</c>,
@@ -516,20 +516,20 @@ public record JobDetail
     /// has never extended the task. Read in the order the timeline was
     /// written; the original task body is in <see cref="PromptMarkdown"/>.
     /// </summary>
-    public List<JobPromptHistoryEntry> PromptHistory { get; init; } = [];
+    public List<TaskPromptHistoryEntry> PromptHistory { get; init; } = [];
     /// <summary>
     /// Append-only timeline of title changes recorded for this task in
     /// <c>title-history.json</c>. Each rename through
-    /// <c>PUT /api/jobs/{id}/title</c> appends one entry; the current
-    /// title stays on <see cref="JobInfo.Title"/>. Empty when the title
+    /// <c>PUT /api/tasks/{id}/title</c> appends one entry; the current
+    /// title stays on <see cref="TaskInfo.Title"/>. Empty when the title
     /// was never edited, including for legacy job folders that predate
     /// the file. Oldest first.
     /// </summary>
-    public List<JobTitleHistoryEntry> TitleHistory { get; init; } = [];
+    public List<TaskTitleHistoryEntry> TitleHistory { get; init; } = [];
     public string? StatusMarkdown { get; init; }
     public ContextUsageSnapshot? ContextUsage { get; init; }
-    public List<JobLogEntry> Log { get; init; } = [];
-    public JobSummaryState? SummaryState { get; init; }
+    public List<TaskLogEntry> Log { get; init; } = [];
+    public TaskSummaryState? SummaryState { get; init; }
     /// <summary>
     /// Task-level review evidence parsed from
     /// <c>results/review-evidence.jsonl</c>. Findings produced by security
@@ -618,7 +618,7 @@ public static class ReviewEvidenceSeverities
 }
 
 /// <summary>
-/// Body for <c>POST /api/jobs/{id}/review-evidence/{evidenceId}/follow-up</c>.
+/// Body for <c>POST /api/tasks/{id}/review-evidence/{evidenceId}/follow-up</c>.
 /// Optional title override; the endpoint defaults to the finding's title when
 /// omitted. The created task is queued in the same project as the source job
 /// and lands in <c>1-preparation</c>; the user promotes it to <c>2-ready</c>
@@ -645,7 +645,7 @@ public record CreateFollowupFromEvidenceResponse
 /// One entry in the task's prompt-extension timeline. Index matches the
 /// filename suffix (<c>prompt-3.md</c> → Index = 3).
 /// </summary>
-public record JobPromptHistoryEntry
+public record TaskPromptHistoryEntry
 {
     public int Index { get; init; }
     public string FileName { get; init; } = "";
@@ -658,10 +658,10 @@ public record JobPromptHistoryEntry
 /// <see cref="OrchestratorApi.Services.Jobs.TaskMutationService.SetJobTitle"/>
 /// to <c>title-history.json</c> in the job folder whenever the title
 /// actually changes (no-op renames are not recorded). The current title
-/// stays on <see cref="JobInfo.Title"/>; this is the audit trail of what
+/// stays on <see cref="TaskInfo.Title"/>; this is the audit trail of what
 /// it used to be.
 /// </summary>
-public record JobTitleHistoryEntry
+public record TaskTitleHistoryEntry
 {
     public DateTime At { get; init; }
     public string OldTitle { get; init; } = "";
@@ -675,7 +675,7 @@ public record JobTitleHistoryEntry
     public string Source { get; init; } = "api";
 }
 
-public enum JobSummaryStatus
+public enum TaskSummaryStatus
 {
     None,
     Generating,
@@ -683,9 +683,9 @@ public enum JobSummaryStatus
     Failed
 }
 
-public record JobSummaryState
+public record TaskSummaryState
 {
-    public JobSummaryStatus Status { get; init; } = JobSummaryStatus.None;
+    public TaskSummaryStatus Status { get; init; } = TaskSummaryStatus.None;
     public DateTime? StartedAt { get; init; }
     public DateTime? FinishedAt { get; init; }
     public string? ErrorMessage { get; init; }
@@ -716,7 +716,7 @@ public record ContextUsageSection
     public List<string> Items { get; init; } = [];
 }
 
-public record JobLogEntry
+public record TaskLogEntry
 {
     public DateTime Timestamp { get; init; }
     public string Event { get; init; } = "";
@@ -757,7 +757,7 @@ public enum MoveJobStatus
 /// </summary>
 public record MoveJobOutcome(MoveJobStatus Status, string? Message = null, string? NewFolderPath = null);
 
-/// <summary>Result of <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>.</summary>
+/// <summary>Result of <c>POST /api/tasks/{id}/restore-from-failed-pickup</c>.</summary>
 public enum RestoreFromFailedPickupStatus
 {
     /// <summary>Folder was restored into the target lane under the resolved slug.</summary>
@@ -777,7 +777,7 @@ public enum RestoreFromFailedPickupStatus
     Failure
 }
 
-/// <summary>Outcome of a <c>POST /api/jobs/{id}/restore-from-failed-pickup</c> call.
+/// <summary>Outcome of a <c>POST /api/tasks/{id}/restore-from-failed-pickup</c> call.
 /// On <see cref="RestoreFromFailedPickupStatus.Success"/> the caller can read
 /// <see cref="RestoredSlug"/> (the slug the folder now lives under) and
 /// <see cref="OriginalSlug"/> (the slug parsed back from the dead-letter name).</summary>
@@ -788,7 +788,7 @@ public record RestoreFromFailedPickupOutcome(
     string? SourceSlug = null,
     string? Message = null);
 
-/// <summary>Body for <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>.
+/// <summary>Body for <c>POST /api/tasks/{id}/restore-from-failed-pickup</c>.
 /// Body is optional; defaults to restoring the original slug.</summary>
 public record RestoreFromFailedPickupRequest
 {
@@ -799,7 +799,7 @@ public record RestoreFromFailedPickupRequest
 }
 
 /// <summary>
-/// Per-item entry for <c>POST /api/jobs/batch-move</c>. Each item names
+/// Per-item entry for <c>POST /api/tasks/batch-move</c>. Each item names
 /// the job, the watch path that disambiguates a slug that lives in two
 /// workspaces, the target lane, and an optional 0-based insertion slot
 /// (<see cref="MoveJobRequest.TargetIndex"/>). Items are processed
@@ -887,7 +887,7 @@ public record CreateJobRequest
 /// One entry in the workspace-level tag registry. Stored as one element of
 /// the JSON array at <c>&lt;TaskRepository&gt;/tags.json</c> and surfaced via
 /// <c>GET /api/tags</c>. The id is the lookup key referenced from each
-/// <see cref="JobInfo.Tags"/> entry; label, colour, and description are
+/// <see cref="TaskInfo.Tags"/> entry; label, colour, and description are
 /// pure display metadata.
 /// </summary>
 public record TagRegistryEntry
@@ -912,7 +912,7 @@ public record CreateTagRequest
 }
 
 /// <summary>
-/// Body for <c>PUT /api/jobs/{id}/tags</c>. Replace-all: the supplied list is
+/// Body for <c>PUT /api/tasks/{id}/tags</c>. Replace-all: the supplied list is
 /// the new full set of tag ids on the job. Empty list clears tags. Unknown
 /// ids are accepted (the registry may evolve), but they will render as a
 /// ghost chip until the registry catches up or the job is re-tagged.
@@ -923,7 +923,7 @@ public record SetJobTagsRequest
 }
 
 /// <summary>
-/// Body for <c>PUT /api/jobs/{id}/task-type</c>. Validated via
+/// Body for <c>PUT /api/tasks/{id}/task-type</c>. Validated via
 /// <see cref="TaskTypes.Normalize"/>; an unknown value collapses to
 /// <see cref="TaskTypes.Chore"/>.
 /// </summary>
@@ -935,10 +935,10 @@ public record SetJobTaskTypeRequest
 public record ReorderRequest
 {
     public List<string> JobIds { get; init; } = [];
-    public List<JobOrderItem> Jobs { get; init; } = [];
+    public List<TaskOrderItem> Jobs { get; init; } = [];
 }
 
-public record JobOrderItem
+public record TaskOrderItem
 {
     public string JobId { get; init; } = "";
     public string WatchPath { get; init; } = "";
@@ -957,11 +957,11 @@ public record UpdateJobFileRequest
 
 /// <summary>
 /// Kind classification for a job-folder markdown artifact, used by
-/// <c>GET /api/jobs/{id}/artifacts</c>. The frontend Files tab styles each
+/// <c>GET /api/tasks/{id}/artifacts</c>. The frontend Files tab styles each
 /// card by kind (prompt is editable; aspect carries the auto-review verdict
 /// section; note marks operator/recovery hand-offs).
 /// </summary>
-public enum JobArtifactKind
+public enum TaskArtifactKind
 {
     Prompt,
     Aspect,
@@ -972,24 +972,24 @@ public enum JobArtifactKind
 /// <summary>
 /// One markdown file in the job root surfaced by the Files tab. The
 /// content is not embedded; the existing
-/// <c>GET /api/jobs/{id}/files/{fileName}</c> endpoint serves it on
+/// <c>GET /api/tasks/{id}/files/{fileName}</c> endpoint serves it on
 /// demand so the listing stays cheap.
 /// </summary>
-public record JobArtifact
+public record TaskArtifact
 {
     public string Name { get; init; } = "";
     public long SizeBytes { get; init; }
     public DateTime Mtime { get; init; }
-    public JobArtifactKind Kind { get; init; }
+    public TaskArtifactKind Kind { get; init; }
     /// <summary>Set when <see cref="Kind"/> is <c>Aspect</c>; the part between <c>aspect-</c> and <c>.md</c>.</summary>
     public string? AspectName { get; init; }
 }
 
-/// <summary>Wire shape for <c>GET /api/jobs/{id}/artifacts</c>.</summary>
-public record JobArtifactsResponse
+/// <summary>Wire shape for <c>GET /api/tasks/{id}/artifacts</c>.</summary>
+public record TaskArtifactsResponse
 {
     public string JobId { get; init; } = "";
-    public List<JobArtifact> Files { get; init; } = [];
+    public List<TaskArtifact> Files { get; init; } = [];
 }
 
 public record GitCommitRequest
@@ -999,7 +999,7 @@ public record GitCommitRequest
 
 /// <summary>
 /// Body for the operator "include commit" override
-/// (<c>POST /api/jobs/{id}/commits/{sha}/include</c>). Optional metadata for
+/// (<c>POST /api/tasks/{id}/commits/{sha}/include</c>). Optional metadata for
 /// the add-from-recent case; the endpoint fills the rest from live git.
 /// </summary>
 public record IncludeCommitRequest
@@ -1177,21 +1177,21 @@ public static class LaneSortStrategies
 
     /// <summary>
     /// Returns the comparer that implements <paramref name="strategy"/> for
-    /// <see cref="JobInfo"/>. Unknown strategy ids fall back to manual.
+    /// <see cref="TaskInfo"/>. Unknown strategy ids fall back to manual.
     /// </summary>
-    public static IComparer<JobInfo> GetComparer(string strategy)
+    public static IComparer<TaskInfo> GetComparer(string strategy)
     {
         return Normalize(strategy) switch
         {
-            NewestFirst => Comparer<JobInfo>.Create(CompareNewestFirst),
-            OldestFirst => Comparer<JobInfo>.Create(CompareOldestFirst),
-            LastActivity => Comparer<JobInfo>.Create(CompareLastActivityDesc),
-            PickupPriority => Comparer<JobInfo>.Create(ComparePickupPriority),
-            _ => Comparer<JobInfo>.Create(CompareManual),
+            NewestFirst => Comparer<TaskInfo>.Create(CompareNewestFirst),
+            OldestFirst => Comparer<TaskInfo>.Create(CompareOldestFirst),
+            LastActivity => Comparer<TaskInfo>.Create(CompareLastActivityDesc),
+            PickupPriority => Comparer<TaskInfo>.Create(ComparePickupPriority),
+            _ => Comparer<TaskInfo>.Create(CompareManual),
         };
     }
 
-    private static int CompareManual(JobInfo a, JobInfo b)
+    private static int CompareManual(TaskInfo a, TaskInfo b)
     {
         var byOrder = a.Order.CompareTo(b.Order);
         if (byOrder != 0) return byOrder;
@@ -1200,28 +1200,28 @@ public static class LaneSortStrategies
         return CompareKeyDesc(a, b);
     }
 
-    private static int CompareNewestFirst(JobInfo a, JobInfo b)
+    private static int CompareNewestFirst(TaskInfo a, TaskInfo b)
     {
         var byKey = CompareKeyDesc(a, b);
         if (byKey != 0) return byKey;
         return b.CreatedAt.CompareTo(a.CreatedAt);
     }
 
-    private static int CompareOldestFirst(JobInfo a, JobInfo b)
+    private static int CompareOldestFirst(TaskInfo a, TaskInfo b)
     {
         var byKey = CompareKeyAsc(a, b);
         if (byKey != 0) return byKey;
         return a.CreatedAt.CompareTo(b.CreatedAt);
     }
 
-    private static int CompareLastActivityDesc(JobInfo a, JobInfo b)
+    private static int CompareLastActivityDesc(TaskInfo a, TaskInfo b)
     {
         var byActivity = b.LastActivity.CompareTo(a.LastActivity);
         if (byActivity != 0) return byActivity;
         return a.Order.CompareTo(b.Order);
     }
 
-    private static int ComparePickupPriority(JobInfo a, JobInfo b)
+    private static int ComparePickupPriority(TaskInfo a, TaskInfo b)
     {
         var byOrder = a.Order.CompareTo(b.Order);
         if (byOrder != 0) return byOrder;
@@ -1233,7 +1233,7 @@ public static class LaneSortStrategies
     /// at the dash so the numeric suffix sorts numerically, not
     /// lexicographically. Jobs with a null key fall to the end of the lane.
     /// </summary>
-    private static int CompareKeyAsc(JobInfo a, JobInfo b)
+    private static int CompareKeyAsc(TaskInfo a, TaskInfo b)
     {
         var ka = a.Key;
         var kb = b.Key;
@@ -1243,7 +1243,7 @@ public static class LaneSortStrategies
         return KeyComparer.Compare(ka, kb);
     }
 
-    private static int CompareKeyDesc(JobInfo a, JobInfo b)
+    private static int CompareKeyDesc(TaskInfo a, TaskInfo b)
     {
         // Keep "null keys to the bottom" regardless of direction; a naive
         // CompareKeyAsc(b, a) would float nulls to the top in desc order.
@@ -1360,7 +1360,7 @@ public record OrchestratorOverrideRequest
 /// engine" from "this was stamped before attribution existed".
 /// </para>
 /// </summary>
-public record JobCommitInfo
+public record TaskCommitInfo
 {
     public string Sha { get; init; } = "";
     public string ShortSha { get; init; } = "";
@@ -1392,7 +1392,7 @@ public record JobCommitInfo
 /// "(N excluded)" expander in the protocol-pane git view with the reason
 /// tooltip; lets the operator see *why* a commit was withheld.
 /// </summary>
-public record JobExcludedCommitInfo
+public record TaskExcludedCommitInfo
 {
     public string Sha { get; init; } = "";
     public string ShortSha { get; init; } = "";
@@ -1410,7 +1410,7 @@ public record JobExcludedCommitInfo
 }
 
 /// <summary>
-/// String constants for <see cref="JobCommitInfo.Attribution"/>. Kept as
+/// String constants for <see cref="TaskCommitInfo.Attribution"/>. Kept as
 /// constants (not an enum) so the wire format stays a literal string and
 /// hand-written job.json files remain readable.
 /// </summary>
@@ -1445,7 +1445,7 @@ public static class CommitAttributionKinds
 }
 
 /// <summary>
-/// String constants for <see cref="JobExcludedCommitInfo.Reason"/>. The
+/// String constants for <see cref="TaskExcludedCommitInfo.Reason"/>. The
 /// rule engine writes one of these; the UI maps each to a human-friendly
 /// hover label.
 /// </summary>
@@ -1488,7 +1488,7 @@ public record WatchPathEntry
 public record CliExecution
 {
     public string JobId { get; init; } = "";
-    public string JobKey { get; init; } = "";
+    public string TaskKey { get; init; } = "";
     public int ProcessId { get; init; }
     public DateTime StartedAt { get; init; }
     public string Status { get; init; } = "";      // running | completed | failed | cancelled
@@ -1591,8 +1591,8 @@ public record ContinueJobRequest
 }
 
 /// <summary>
-/// Discriminated response for <c>POST /api/jobs/{id}/continue</c> and
-/// <c>POST /api/jobs/{id}/start</c>. <c>started</c> means the run is
+/// Discriminated response for <c>POST /api/tasks/{id}/continue</c> and
+/// <c>POST /api/tasks/{id}/start</c>. <c>started</c> means the run is
 /// actually live; <c>queued</c> means the project was busy with another
 /// job, the user's intent has been saved as a draft on the target task,
 /// and the target task has been moved to the top of <c>2-ready</c> so the

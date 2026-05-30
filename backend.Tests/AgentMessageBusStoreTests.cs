@@ -262,7 +262,7 @@ public class AgentMessageBusStoreTests : IDisposable
     /// cloned the whole message list + id-dict on every appended line, so
     /// replaying an N-line bus file was O(N^2). On the real Runbook bus
     /// (~100K lines) that was minutes of CPU + multi-GB transient garbage and
-    /// wedged <c>/api/jobs</c> + <c>/api/jobs/grouped</c> (profiler showed every
+    /// wedged <c>/api/tasks</c> + <c>/api/tasks/grouped</c> (profiler showed every
     /// worker thread parked in Projection.Append -> Dictionary..ctor).
     ///
     /// The old <see cref="HighVolume_TenThousandMessages_LoadsAndQueriesQuickly"/>

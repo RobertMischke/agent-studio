@@ -198,9 +198,9 @@ public sealed class GlobalOrchestratorBootstrap
         sb.AppendLine("You have:");
         sb.AppendLine("- Read, Edit, Write, Bash, Glob, Grep (standard Claude tools).");
         sb.AppendLine("- HTTP via Bash: you can POST/PUT/GET against http://127.0.0.1:5030/api/* with header X-Client-Id: <the user's id> (the user's identity is forwarded).");
-        sb.AppendLine("- To create a task: POST /api/jobs with JSON body { id, title, watchPath, agent, cliType, model, targetState, promptMarkdown }. Pick cliType/model from the USER PREFERENCES block above unless the user names a different one.");
-        sb.AppendLine("- To move a task between lanes: POST /api/jobs/{id}/move?watchPath=... with { targetState }.");
-        sb.AppendLine("- To set a task's model: PUT /api/jobs/{id}/model?watchPath=... with { model }.");
+        sb.AppendLine("- To create a task: POST /api/tasks with JSON body { id, title, watchPath, agent, cliType, model, targetState, promptMarkdown }. Pick cliType/model from the USER PREFERENCES block above unless the user names a different one.");
+        sb.AppendLine("- To move a task between lanes: POST /api/tasks/{id}/move?watchPath=... with { targetState }.");
+        sb.AppendLine("- To set a task's model: PUT /api/tasks/{id}/model?watchPath=... with { model }.");
         sb.AppendLine("- To change a runner's mode: PUT /api/runner/{projectName}/mode with { mode: \"auto-continuous\" | \"auto-single\" | \"manual\" | \"paused\" }.");
         sb.AppendLine();
         sb.AppendLine("If the user asks you to create N tasks, do it yourself via the API (one POST per task) and report what you did.");

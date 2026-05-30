@@ -7,9 +7,9 @@ namespace OrchestratorApi.Endpoints;
 ///
 /// Layout:
 /// <list type="bullet">
-/// <item><c>GET /api/jobs/{jobId}/conversation</c> - full snapshot, optionally
+/// <item><c>GET /api/tasks/{jobId}/conversation</c> - full snapshot, optionally
 ///   restricted to events after <c>?sinceMs=</c>.</item>
-/// <item><c>POST /api/jobs/{jobId}/conversation/invalidate</c> - test /
+/// <item><c>POST /api/tasks/{jobId}/conversation/invalidate</c> - test /
 ///   debug hook that clears the cached projection for the given job.</item>
 /// </list>
 ///
@@ -24,7 +24,7 @@ public static class ConversationEndpoints
 {
     public static void MapConversationEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/jobs/{jobId}/conversation",
+        app.MapGet("/api/tasks/{jobId}/conversation",
             async (string jobId, string? watchPath, long? sinceMs, ConversationProjector projector, CancellationToken ct) =>
             {
                 var opts = new ProjectionOptions
@@ -37,7 +37,7 @@ public static class ConversationEndpoints
                 return Results.Ok(events);
             });
 
-        app.MapPost("/api/jobs/{jobId}/conversation/invalidate",
+        app.MapPost("/api/tasks/{jobId}/conversation/invalidate",
             (string jobId, ConversationProjector projector) =>
             {
                 projector.Invalidate(jobId);

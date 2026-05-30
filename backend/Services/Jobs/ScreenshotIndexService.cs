@@ -25,8 +25,8 @@ namespace OrchestratorApi.Services.Jobs;
 ///    window, and supports a project filter.
 ///
 /// File serving stays inside the existing
-/// <c>/api/jobs/{id}/results/{name}</c> endpoint for top-level files
-/// and the new <c>/api/jobs/{id}/screenshot</c> sub-path serving
+/// <c>/api/tasks/{id}/results/{name}</c> endpoint for top-level files
+/// and the new <c>/api/tasks/{id}/screenshot</c> sub-path serving
 /// endpoint for nested artifacts (results/playwright/&lt;spec&gt;/...).
 /// Path-traversal is rejected here so the endpoint stays a thin
 /// dispatcher.
@@ -44,7 +44,7 @@ public class ScreenshotIndexService
         _logger = logger;
     }
 
-    public IReadOnlyList<JobScreenshot> ListJobScreenshots(string jobId, string? watchPath)
+    public IReadOnlyList<TaskScreenshot> ListJobScreenshots(string jobId, string? watchPath)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return [];
@@ -54,13 +54,13 @@ public class ScreenshotIndexService
 
         var passFailIndex = ReadPlaywrightIndex(resultsDir);
 
-        var entries = new List<JobScreenshot>();
+        var entries = new List<TaskScreenshot>();
         foreach (var path in EnumerateImages(resultsDir))
         {
             var rel = Path.GetRelativePath(resultsDir, path).Replace('\\', '/');
             var ts = SafeLastWriteUtc(path);
             var (caption, status) = DescribeEntry(rel, passFailIndex);
-            entries.Add(new JobScreenshot
+            entries.Add(new TaskScreenshot
             {
                 JobId = info.Id,
                 JobTitle = info.Title,
@@ -79,11 +79,11 @@ public class ScreenshotIndexService
         return entries.OrderBy(e => e.TimestampUtc).ToList();
     }
 
-    public IReadOnlyList<JobScreenshot> ListWorkspaceScreenshots(int windowHours, string? projectFilter)
+    public IReadOnlyList<TaskScreenshot> ListWorkspaceScreenshots(int windowHours, string? projectFilter)
     {
         var cutoff = DateTime.UtcNow.AddHours(-Math.Max(1, windowHours));
         var jobs = _scanner.ScanAllJobs();
-        var collected = new List<JobScreenshot>();
+        var collected = new List<TaskScreenshot>();
 
         foreach (var job in jobs)
         {
@@ -117,7 +117,7 @@ public class ScreenshotIndexService
 
                 var rel = Path.GetRelativePath(resultsDir, path).Replace('\\', '/');
                 var (caption, status) = DescribeEntry(rel, passFailIndex);
-                collected.Add(new JobScreenshot
+                collected.Add(new TaskScreenshot
                 {
                     JobId = job.Id,
                     JobTitle = job.Title,
@@ -199,7 +199,7 @@ public class ScreenshotIndexService
         var watchQs = string.IsNullOrEmpty(watchPath) ? "" : $"&watchPath={Uri.EscapeDataString(watchPath)}";
         // Use the sub-path serving endpoint for everything so the
         // frontend has a single URL shape, including playwright/<spec>/...
-        return $"/api/jobs/{Uri.EscapeDataString(jobId)}/screenshot?path={Uri.EscapeDataString(relativeWithinResults)}{watchQs}";
+        return $"/api/tasks/{Uri.EscapeDataString(jobId)}/screenshot?path={Uri.EscapeDataString(relativeWithinResults)}{watchQs}";
     }
 
     private static DateTime SafeLastWriteUtc(string path)

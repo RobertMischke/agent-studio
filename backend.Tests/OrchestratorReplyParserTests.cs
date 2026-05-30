@@ -191,7 +191,7 @@ Options:
         Assert.Contains("Need:", resume);
     }
 
-    private static OrchestratorApi.Models.JobInfo FakeJob() => new()
+    private static OrchestratorApi.Models.TaskInfo FakeJob() => new()
     {
         Id = "test-job",
         Title = "Test job",

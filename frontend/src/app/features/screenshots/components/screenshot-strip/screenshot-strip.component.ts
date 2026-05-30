@@ -20,7 +20,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
  * Visual-evidence strip + lightbox. Two surfaces share this component:
  *
  * 1. The per-task strip in the protocol pane, populated from
- *    `GET /api/jobs/{id}/screenshots` (every image under
+ *    `GET /api/tasks/{id}/screenshots` (every image under
  *    `<job>/results/`, including the harvested Playwright artefacts).
  * 2. The workspace "Visual evidence" reel, populated from
  *    `GET /api/workspace/screenshots` and grouped by hour bucket on

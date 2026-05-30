@@ -11,7 +11,7 @@ namespace OrchestratorApi.Tests;
 /// <summary>
 /// Locks in the parsing contract for <c>results/review-evidence.jsonl</c>.
 /// The file is the durable surface for task-level review findings; a single
-/// malformed row must not break the rest of the file or the JobDetail
+/// malformed row must not break the rest of the file or the TaskDetail
 /// endpoint that reads it. Empty file, missing file, valid finding,
 /// malformed line, artifact paths, file refs, and append-then-fold-by-id
 /// all need explicit coverage.
@@ -174,13 +174,13 @@ public class ReviewEvidenceLogTests : IDisposable
 /// <summary>
 /// Integration test for <see cref="TaskScannerService.GetJobDetail"/>. Builds
 /// a job folder on disk, drops a review-evidence file next to it, then asserts
-/// that the field surfaces on <see cref="JobDetail.ReviewEvidence"/>.
+/// that the field surfaces on <see cref="TaskDetail.ReviewEvidence"/>.
 /// </summary>
-public class JobDetailReviewEvidenceTests : IDisposable
+public class TaskDetailReviewEvidenceTests : IDisposable
 {
     private readonly string _watchPath;
 
-    public JobDetailReviewEvidenceTests()
+    public TaskDetailReviewEvidenceTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "jobdetail-evidence-" + Guid.NewGuid().ToString("N"));
         foreach (var state in TaskStates.All)
@@ -258,15 +258,15 @@ public class JobDetailReviewEvidenceTests : IDisposable
 
 /// <summary>
 /// Locks the lightweight task-level outcome issue projection. The durable
-/// source remains logs/cli-output.log; JobInfo only exposes the latest
+/// source remains logs/cli-output.log; TaskInfo only exposes the latest
 /// categorized line so board and protocol header can show it without
 /// building a second storage path.
 /// </summary>
-public class JobOutcomeIssueScannerTests : IDisposable
+public class TaskOutcomeIssueScannerTests : IDisposable
 {
     private readonly string _watchPath;
 
-    public JobOutcomeIssueScannerTests()
+    public TaskOutcomeIssueScannerTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "job-outcome-issue-" + Guid.NewGuid().ToString("N"));
         foreach (var state in TaskStates.All)

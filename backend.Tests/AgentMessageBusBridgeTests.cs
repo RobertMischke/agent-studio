@@ -221,10 +221,10 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     public async Task EmitJobLifecycleAsync_RecordsStateTransition()
     {
         var info = NewJobInfo();
-        await _bridge.EmitJobLifecycleAsync(info, "JobStateMoved", "3-progress", "4-review", "agent reported done");
+        await _bridge.EmitJobLifecycleAsync(info, "TaskStateMoved", "3-progress", "4-review", "agent reported done");
         var msg = Assert.Single(_store.Recent(_workspace, info.ProjectName, 10));
         Assert.Equal("lifecycle", msg.Kind);
-        Assert.Equal("JobStateMoved", msg.Topic);
+        Assert.Equal("TaskStateMoved", msg.Topic);
         Assert.Contains("3-progress -> 4-review", msg.Summary);
     }
 
@@ -465,13 +465,13 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
         }
     }
 
-    private static JobInfo NewJobInfo(string id = "job-fixture", string project = "agent-taskboard")
+    private static TaskInfo NewJobInfo(string id = "job-fixture", string project = "agent-taskboard")
     {
         var folder = Path.Combine(Path.GetTempPath(), "bus-bridge-fake-job-" + Guid.NewGuid().ToString("N"));
-        return new JobInfo
+        return new TaskInfo
         {
             Id = id,
-            JobKey = $"watch::{id}",
+            TaskKey = $"watch::{id}",
             Title = "fixture job",
             State = "3-progress",
             ProjectName = project,

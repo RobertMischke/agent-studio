@@ -49,7 +49,7 @@ namespace OrchestratorApi.Tests.Architecture;
 /// </list>
 /// </para>
 /// </remarks>
-public class JobFolderAccessIsolationTest
+public class TaskFolderAccessIsolationTest
 {
     /// <summary>
     /// Files that may construct lane folder paths or perform structural
@@ -261,7 +261,7 @@ public class JobFolderAccessIsolationTest
     {
         var rendered = string.Join("\n  ", violations.Select(v => $"{v.RelativePath}:{v.Line}: {v.Source}"));
         return
-            $"Found {violations.Count} forbidden {ruleName} call(s) outside the JobFolderAccessIsolation whitelist.\n" +
+            $"Found {violations.Count} forbidden {ruleName} call(s) outside the TaskFolderAccessIsolation whitelist.\n" +
             $"Remediation: {remediation}\n" +
             $"Offending lines:\n  {rendered}";
     }

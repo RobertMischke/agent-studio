@@ -5,7 +5,7 @@ import { TaskService } from '../../../services/task.service';
 import { TaskBackgroundPoller } from './task-background-poller';
 
 /**
- * Polls the per-job screenshot listing (`/api/jobs/{id}/screenshots`)
+ * Polls the per-job screenshot listing (`/api/tasks/{id}/screenshots`)
  * on a slow cadence (10 s). Screenshots only appear when a Playwright
  * spec or an agent script writes a new file to `<job>/results/`, so a
  * shorter cadence would burn requests for nothing; the file system is

@@ -25,7 +25,7 @@ public sealed class SummaryGenerationService
     private readonly IConfiguration _configuration;
     private readonly RuntimePromptService _prompts;
     private readonly AdHocUsageRecorder? _usage;
-    private readonly ConcurrentDictionary<string, JobSummaryState> _states = new();
+    private readonly ConcurrentDictionary<string, TaskSummaryState> _states = new();
 
     public SummaryGenerationService(ILogger<SummaryGenerationService> logger, IConfiguration configuration)
         : this(logger, configuration, new RuntimePromptService(configuration, NullLogger<RuntimePromptService>.Instance), null)
@@ -48,31 +48,31 @@ public sealed class SummaryGenerationService
 
     private readonly CliOneShotRegistry? _oneShotRegistry;
 
-    public JobSummaryState? GetState(string jobKey)
+    public TaskSummaryState? GetState(string jobKey)
         => _states.TryGetValue(jobKey, out var s) ? s : null;
 
     /// <summary>
     /// Pure inflight check used by <see cref="GenerateAsync"/> and exposed
     /// for tests. A job is considered "still generating" when its previous
-    /// state is <see cref="JobSummaryStatus.Generating"/> AND the
-    /// <see cref="JobSummaryState.StartedAt"/> is younger than the Haiku
+    /// state is <see cref="TaskSummaryStatus.Generating"/> AND the
+    /// <see cref="TaskSummaryState.StartedAt"/> is younger than the Haiku
     /// timeout. Older Generating entries are treated as stuck and
     /// overwritten so the user can recover via the regenerate button.
     /// </summary>
-    public static bool IsInflight(JobSummaryState? prev, DateTime nowUtc, int timeoutSeconds)
+    public static bool IsInflight(TaskSummaryState? prev, DateTime nowUtc, int timeoutSeconds)
     {
         if (prev is null) return false;
-        if (prev.Status != JobSummaryStatus.Generating) return false;
+        if (prev.Status != TaskSummaryStatus.Generating) return false;
         if (prev.StartedAt is null) return false;
         return (nowUtc - prev.StartedAt.Value).TotalSeconds < timeoutSeconds;
     }
 
-    public Task GenerateAsync(JobInfo info, CancellationToken ct = default)
+    public Task GenerateAsync(TaskInfo info, CancellationToken ct = default)
         => GenerateAsync(info, runOutcome: null, ct);
 
-    public async Task GenerateAsync(JobInfo info, TerminalRunOutcome? runOutcome, CancellationToken ct = default)
+    public async Task GenerateAsync(TaskInfo info, TerminalRunOutcome? runOutcome, CancellationToken ct = default)
     {
-        var key = info.JobKey;
+        var key = info.TaskKey;
 
         // Inflight guard: if a previous GenerateAsync for the same job is
         // still inside its Haiku window, dropping this duplicate avoids
@@ -88,9 +88,9 @@ public sealed class SummaryGenerationService
             return;
         }
 
-        _states[key] = new JobSummaryState
+        _states[key] = new TaskSummaryState
         {
-            Status = JobSummaryStatus.Generating,
+            Status = TaskSummaryStatus.Generating,
             StartedAt = DateTime.UtcNow
         };
 
@@ -124,9 +124,9 @@ public sealed class SummaryGenerationService
             var target = Path.Combine(info.FolderPath, "status.md");
             WriteAllTextWithRetry(target, summary);
 
-            _states[key] = new JobSummaryState
+            _states[key] = new TaskSummaryState
             {
-                Status = JobSummaryStatus.Ready,
+                Status = TaskSummaryStatus.Ready,
                 StartedAt = _states[key].StartedAt,
                 FinishedAt = DateTime.UtcNow,
                 BytesWritten = summary.Length
@@ -154,7 +154,7 @@ public sealed class SummaryGenerationService
     /// while a run is alive so the user can peek at progress without
     /// stopping the agent.
     /// </summary>
-    public async Task<InterimSummaryResult> GenerateInterimAsync(JobInfo info, CancellationToken ct = default)
+    public async Task<InterimSummaryResult> GenerateInterimAsync(TaskInfo info, CancellationToken ct = default)
     {
         var logPath = TaskPaths.CliOutputLog(info.FolderPath);
         if (!File.Exists(logPath))
@@ -199,10 +199,10 @@ public sealed class SummaryGenerationService
 
     private void Fail(string key, string error)
     {
-        var prev = _states.TryGetValue(key, out var s) ? s : new JobSummaryState();
+        var prev = _states.TryGetValue(key, out var s) ? s : new TaskSummaryState();
         _states[key] = prev with
         {
-            Status = JobSummaryStatus.Failed,
+            Status = TaskSummaryStatus.Failed,
             FinishedAt = DateTime.UtcNow,
             ErrorMessage = error
         };

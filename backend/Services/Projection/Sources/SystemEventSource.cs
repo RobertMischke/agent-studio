@@ -14,8 +14,8 @@ public sealed class SystemEventSource : IConversationEventSource
 {
     public string SourceKind => "system";
 
-    public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(JobInfo jobInfo, CancellationToken ct)
+    public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(TaskInfo jobInfo, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<RawSourceEvent>>(Array.Empty<RawSourceEvent>());
 
-    public DateTime GetSourceMTimeUtc(JobInfo jobInfo) => DateTime.MinValue;
+    public DateTime GetSourceMTimeUtc(TaskInfo jobInfo) => DateTime.MinValue;
 }

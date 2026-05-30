@@ -48,9 +48,9 @@ public class OrchestratorIntakeTests : IDisposable
     public void Evaluate_HealthyPrompt_Passes()
     {
         var verdict = IntakeRunner.Evaluate(
-            new JobInfo { Id = "good", Title = "Add login button" },
+            new TaskInfo { Id = "good", Title = "Add login button" },
             "Add a login button to the header. Done when the button navigates to /login and a Playwright spec covers the click.",
-            existingPeers: Array.Empty<JobInfo>());
+            existingPeers: Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.Pass, verdict.Outcome);
     }
@@ -59,9 +59,9 @@ public class OrchestratorIntakeTests : IDisposable
     public void Evaluate_TooShort_NeedsClarification()
     {
         var verdict = IntakeRunner.Evaluate(
-            new JobInfo { Id = "thin", Title = "fix" },
+            new TaskInfo { Id = "thin", Title = "fix" },
             "fix it",
-            existingPeers: Array.Empty<JobInfo>());
+            existingPeers: Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.NeedsClarification, verdict.Outcome);
         Assert.Contains("short", verdict.Reason, StringComparison.OrdinalIgnoreCase);
@@ -70,12 +70,12 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void Evaluate_NearDuplicateTitle_FlagsDuplicate()
     {
-        var peers = new List<JobInfo>
+        var peers = new List<TaskInfo>
         {
             new() { Id = "older-twin", Title = "add login button to header", State = TaskStates.Ready }
         };
         var verdict = IntakeRunner.Evaluate(
-            new JobInfo { Id = "newer-twin", Title = "Add login button to header" },
+            new TaskInfo { Id = "newer-twin", Title = "Add login button to header" },
             "Add a login button to the header. Done when it navigates to /login.",
             peers);
 
@@ -87,9 +87,9 @@ public class OrchestratorIntakeTests : IDisposable
     public void Evaluate_OutOfScopePrompt_Blocks()
     {
         var verdict = IntakeRunner.Evaluate(
-            new JobInfo { Id = "scope", Title = "spawn parallel agents" },
+            new TaskInfo { Id = "scope", Title = "spawn parallel agents" },
             "Please run multiple agents at once on this repo so we can finish faster. Done when all branches merge cleanly.",
-            existingPeers: Array.Empty<JobInfo>());
+            existingPeers: Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.Blocked, verdict.Outcome);
     }
@@ -107,9 +107,9 @@ public class OrchestratorIntakeTests : IDisposable
             "## Section F", "task F details with enough length to clear clarity",
         });
         var verdict = IntakeRunner.Evaluate(
-            new JobInfo { Id = "bundle", Title = "do many things" },
+            new TaskInfo { Id = "bundle", Title = "do many things" },
             prompt,
-            existingPeers: Array.Empty<JobInfo>());
+            existingPeers: Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.NeedsSplit, verdict.Outcome);
     }
@@ -199,8 +199,8 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void PickupGate_Disabled_AllowsPickupRegardlessOfPhase()
     {
-        var humanReady = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady };
-        var blocked = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
+        var humanReady = new TaskInfo { State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady };
+        var blocked = new TaskInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
 
         Assert.True(ProjectRunner.IsPickupAllowed(humanReady, intakeEnabled: false));
         Assert.True(ProjectRunner.IsPickupAllowed(blocked, intakeEnabled: false));
@@ -209,10 +209,10 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void PickupGate_Enabled_OnlyAllowsIntakePassed()
     {
-        var humanReady = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady };
-        var running = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeRunning };
-        var blocked = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
-        var passed = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakePassed };
+        var humanReady = new TaskInfo { State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady };
+        var running = new TaskInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeRunning };
+        var blocked = new TaskInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
+        var passed = new TaskInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakePassed };
 
         Assert.False(ProjectRunner.IsPickupAllowed(humanReady, intakeEnabled: true));
         Assert.False(ProjectRunner.IsPickupAllowed(running, intakeEnabled: true));

@@ -67,11 +67,11 @@ public static class ClaudeEventAdapter
                 var sessionId = root.TryGetProperty("session_id", out var sid) ? sid.GetString() : null;
                 if (string.Equals(subtype, "init", StringComparison.Ordinal))
                 {
-                    yield return new CliRunEvent.SessionStarted(sessionId) { JobKey = jobKey };
+                    yield return new CliRunEvent.SessionStarted(sessionId) { TaskKey = jobKey };
                 }
                 else
                 {
-                    yield return new CliRunEvent.SessionInitializing { JobKey = jobKey };
+                    yield return new CliRunEvent.SessionInitializing { TaskKey = jobKey };
                 }
                 yield break;
             }
@@ -84,7 +84,7 @@ public static class ClaudeEventAdapter
                     var resetsAt = info.TryGetProperty("resetsAt", out var ra) && ra.TryGetInt64(out var v) ? v : 0L;
                     var overage = info.TryGetProperty("overageStatus", out var os) ? os.GetString() : null;
                     var using_ = info.TryGetProperty("isUsingOverage", out var iuo) && iuo.ValueKind == JsonValueKind.True;
-                    yield return new CliRunEvent.RateLimitObserved(window, status, resetsAt, overage, using_) { JobKey = jobKey };
+                    yield return new CliRunEvent.RateLimitObserved(window, status, resetsAt, overage, using_) { TaskKey = jobKey };
                 }
                 yield break;
             }
@@ -105,13 +105,13 @@ public static class ClaudeEventAdapter
                     {
                         var text = part.TryGetProperty("text", out var txt) ? txt.GetString() ?? "" : "";
                         if (!string.IsNullOrEmpty(text))
-                            yield return new CliRunEvent.OutputDelta(text) { JobKey = jobKey };
+                            yield return new CliRunEvent.OutputDelta(text) { TaskKey = jobKey };
                     }
                     else if (partType == "tool_use")
                     {
                         var name = part.TryGetProperty("name", out var n) ? n.GetString() ?? "Tool" : "Tool";
                         var argument = ExtractToolArgument(part);
-                        yield return new CliRunEvent.ToolStarted(name, argument) { JobKey = jobKey };
+                        yield return new CliRunEvent.ToolStarted(name, argument) { TaskKey = jobKey };
                     }
                     else if (partType == "thinking")
                     {
@@ -137,7 +137,7 @@ public static class ClaudeEventAdapter
                     var isError = part.TryGetProperty("is_error", out var ie) && ie.ValueKind == JsonValueKind.True;
                     var name = "tool"; // tool_use_id is opaque; we report a generic name
                     var firstLine = ExtractFirstLine(part);
-                    yield return new CliRunEvent.ToolCompleted(name, isError, firstLine) { JobKey = jobKey };
+                    yield return new CliRunEvent.ToolCompleted(name, isError, firstLine) { TaskKey = jobKey };
                 }
                 yield break;
             }
@@ -147,20 +147,20 @@ public static class ClaudeEventAdapter
                 if (isError)
                 {
                     var subtype = root.TryGetProperty("subtype", out var st) ? st.GetString() : "error";
-                    yield return new CliRunEvent.TurnFailed(subtype ?? "error") { JobKey = jobKey };
+                    yield return new CliRunEvent.TurnFailed(subtype ?? "error") { TaskKey = jobKey };
                 }
                 else
                 {
                     var usage = root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object
                         ? FormatUsage(u)
                         : null;
-                    yield return new CliRunEvent.TurnCompleted(usage) { JobKey = jobKey };
+                    yield return new CliRunEvent.TurnCompleted(usage) { TaskKey = jobKey };
                 }
                 yield break;
             }
             default:
             {
-                yield return new CliRunEvent.Unknown(Truncate(jsonLine, 200)) { JobKey = jobKey };
+                yield return new CliRunEvent.Unknown(Truncate(jsonLine, 200)) { TaskKey = jobKey };
                 yield break;
             }
         }

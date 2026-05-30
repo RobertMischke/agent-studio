@@ -20,10 +20,10 @@ public class SummaryGenerationInterimTests
         return new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
     }
 
-    private static JobInfo BuildJob(string folderPath) => new()
+    private static TaskInfo BuildJob(string folderPath) => new()
     {
         Id = "interim-test",
-        JobKey = $"::interim-test",
+        TaskKey = $"::interim-test",
         Title = "Interim test",
         State = "3-progress",
         FolderPath = folderPath,

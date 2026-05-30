@@ -234,7 +234,7 @@ public sealed class LaneSortStrategyTests : IDisposable
 
     private static DateTime T(int seconds) => new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(seconds);
 
-    private static JobInfo J(
+    private static TaskInfo J(
         string id,
         string? key = null,
         string? project = null,
@@ -242,10 +242,10 @@ public sealed class LaneSortStrategyTests : IDisposable
         DateTime? createdAt = null,
         DateTime? lastActivity = null)
     {
-        return new JobInfo
+        return new TaskInfo
         {
             Id = id,
-            JobKey = (project ?? "TestProject") + "::" + id,
+            TaskKey = (project ?? "TestProject") + "::" + id,
             Key = key,
             Title = id,
             Order = order,

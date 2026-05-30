@@ -13,7 +13,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// triggers. All routes funnel through <see cref="TaskRunnerService"/>;
 /// this file is the HTTP shell.
 /// </summary>
-public static class JobRunnerEndpoints
+public static class TaskRunnerEndpoints
 {
     public static void MapJobRunnerEndpoints(this RouteGroupBuilder group)
     {
@@ -274,7 +274,7 @@ public static class JobRunnerEndpoints
     /// in how they bound or pair runs.
     /// </summary>
     private static RunRecord? ResolveRun(
-        JobInfo info, TaskSessionLog sessions,
+        TaskInfo info, TaskSessionLog sessions,
         string jobId, string? watchPath, int index, out string error)
     {
         error = "";

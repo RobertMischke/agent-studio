@@ -239,7 +239,7 @@ export class DetailHeaderComponent {
   @ViewChild('stateSelect') private stateSelectEl?: ElementRef<HTMLSelectElement>;
 
   /**
-   * Force the lane dropdown's DOM value to follow `info().jobKey` even when
+   * Force the lane dropdown's DOM value to follow `info().taskKey` even when
    * the bound state string did not change. Without this, an auto-advance
    * from one job to another inside the SAME lane (e.g. triaging 2-ready)
    * leaves the user's last `selectOption` choice on screen because
@@ -250,8 +250,8 @@ export class DetailHeaderComponent {
   private lastSyncedJobKey: string | null = null;
   private syncStateSelectOnJobSwitch = effect(() => {
     const info = this.info();
-    if (this.lastSyncedJobKey === info.jobKey) return;
-    this.lastSyncedJobKey = info.jobKey;
+    if (this.lastSyncedJobKey === info.taskKey) return;
+    this.lastSyncedJobKey = info.taskKey;
     const el = this.stateSelectEl?.nativeElement;
     if (el && el.value !== info.state) {
       queueMicrotask(() => { if (el) el.value = info.state; });

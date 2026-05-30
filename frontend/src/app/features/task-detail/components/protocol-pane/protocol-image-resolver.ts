@@ -2,9 +2,9 @@
  * Maps image references inside `status.md` to the API URLs that serve the
  * actual files from the job folder. Three cases are recognised:
  *
- *   `attachments/foo.png` → /api/jobs/{id}/attachments/foo.png
- *   `results/foo.png`     → /api/jobs/{id}/results/foo.png
- *   `foo.png`             → /api/jobs/{id}/results/foo.png  (legacy fallback)
+ *   `attachments/foo.png` → /api/tasks/{id}/attachments/foo.png
+ *   `results/foo.png`     → /api/tasks/{id}/results/foo.png
+ *   `foo.png`             → /api/tasks/{id}/results/foo.png  (legacy fallback)
  *
  * Anything else (`http(s)://…`, `data:`, paths with sub-folders) is passed
  * through unchanged.
@@ -30,17 +30,17 @@ export function resolveProtocolImageSrc(
   if (src.startsWith(ATTACHMENTS_PREFIX)) {
     const name = src.slice(ATTACHMENTS_PREFIX.length);
     if (!isPlainFileName(name)) return src;
-    return `/api/jobs/${encodeURIComponent(jobId)}/attachments/${encodeURIComponent(name)}${watchQs}`;
+    return `/api/tasks/${encodeURIComponent(jobId)}/attachments/${encodeURIComponent(name)}${watchQs}`;
   }
 
   if (src.startsWith(RESULTS_PREFIX)) {
     const name = src.slice(RESULTS_PREFIX.length);
     if (!isPlainFileName(name)) return src;
-    return `/api/jobs/${encodeURIComponent(jobId)}/results/${encodeURIComponent(name)}${watchQs}`;
+    return `/api/tasks/${encodeURIComponent(jobId)}/results/${encodeURIComponent(name)}${watchQs}`;
   }
 
   if (isPlainFileName(src)) {
-    return `/api/jobs/${encodeURIComponent(jobId)}/results/${encodeURIComponent(src)}${watchQs}`;
+    return `/api/tasks/${encodeURIComponent(jobId)}/results/${encodeURIComponent(src)}${watchQs}`;
   }
 
   return src;

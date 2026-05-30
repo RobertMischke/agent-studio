@@ -60,7 +60,7 @@ public class TaskMutationService
     /// <see cref="TaskChangeNotifier"/> so the SignalR hub can push the
     /// change to connected clients without waiting for the next poll.
     /// </summary>
-    private bool Updated(JobInfo info)
+    private bool Updated(TaskInfo info)
     {
         _scanner.InvalidateCache();
         _notifier.PublishUpdated(info.ProjectName, info.Id, info.WatchPath);
@@ -71,7 +71,7 @@ public class TaskMutationService
     /// Folder-only invalidation for the internal helpers
     /// (<see cref="SetJobCommitOnFolder"/>, <see cref="AppendJobCommitOnFolder"/>,
     /// <see cref="SetJobLastProgressAt"/>, <see cref="SetJobPhase"/>) whose
-    /// callers do not always have a <see cref="JobInfo"/> in hand. Skips the
+    /// callers do not always have a <see cref="TaskInfo"/> in hand. Skips the
     /// SignalR push: those code paths are either user-invisible heartbeats
     /// (<c>lastProgressAt</c>), or land on a job that the user-facing
     /// surface (Move, CreateJob) is about to push for separately.
@@ -116,14 +116,14 @@ public class TaskMutationService
         return Updated();
     }
 
-    public bool SetJobCommit(string jobId, JobCommitInfo commit, string? watchPath = null)
+    public bool SetJobCommit(string jobId, TaskCommitInfo commit, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         return AppendJobCommitOnFolder(info.FolderPath, commit);
     }
 
-    public bool SetJobCommitOnFolder(string folderPath, JobCommitInfo commit)
+    public bool SetJobCommitOnFolder(string folderPath, TaskCommitInfo commit)
     {
         if (!Directory.Exists(folderPath)) return false;
         AppendJobCommitOnFolder(folderPath, commit);
@@ -148,7 +148,7 @@ public class TaskMutationService
     /// through this method so the detail view can render the full chain.
     /// </para>
     /// </summary>
-    public bool AppendJobCommitOnFolder(string folderPath, JobCommitInfo commit)
+    public bool AppendJobCommitOnFolder(string folderPath, TaskCommitInfo commit)
     {
         if (!Directory.Exists(folderPath)) return false;
         var jobJsonPath = Path.Combine(folderPath, "job.json");
@@ -159,19 +159,19 @@ public class TaskMutationService
             var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts)
                       ?? new Dictionary<string, JsonElement>();
 
-            var chain = new List<JobCommitInfo>();
+            var chain = new List<TaskCommitInfo>();
             if (doc.TryGetValue("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in commitsEl.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
+                    var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                     if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
                 }
             }
             else if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
             {
-                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
+                var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
                 if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
             }
 
@@ -201,8 +201,8 @@ public class TaskMutationService
     /// </summary>
     public bool SetCommitAttributionOnFolder(
         string folderPath,
-        IReadOnlyList<JobCommitInfo> attributed,
-        IReadOnlyList<JobExcludedCommitInfo> excluded)
+        IReadOnlyList<TaskCommitInfo> attributed,
+        IReadOnlyList<TaskExcludedCommitInfo> excluded)
     {
         if (!Directory.Exists(folderPath)) return false;
         var ordered = attributed
@@ -216,7 +216,7 @@ public class TaskMutationService
     /// <summary>
     /// Operator override: exclude a commit the rule engine had attributed to
     /// this task. Moves it from <c>commits</c> to <c>excludedCommits</c> with
-    /// <see cref="JobExcludedCommitInfo.Manual"/> set and reason
+    /// <see cref="TaskExcludedCommitInfo.Manual"/> set and reason
     /// <see cref="CommitExclusionReasons.ManualExclude"/>. No-op (returns
     /// true) when the SHA is already excluded or unknown, so the UI can fire
     /// the action without first reconciling state.
@@ -235,7 +235,7 @@ public class TaskMutationService
         var moved = idx >= 0 ? chain[idx] : null;
         if (idx >= 0) chain.RemoveAt(idx);
 
-        excluded.Add(new JobExcludedCommitInfo
+        excluded.Add(new TaskExcludedCommitInfo
         {
             Sha = sha,
             ShortSha = moved?.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
@@ -257,7 +257,7 @@ public class TaskMutationService
     /// add-from-recent case; for a restore the stored exclusion subject is
     /// used when no candidate is supplied.
     /// </summary>
-    public bool IncludeCommit(string jobId, string sha, JobCommitInfo? candidate, string? watchPath = null)
+    public bool IncludeCommit(string jobId, string sha, TaskCommitInfo? candidate, string? watchPath = null)
     {
         if (string.IsNullOrWhiteSpace(sha)) return false;
         var info = _scanner.FindJob(jobId, watchPath);
@@ -276,7 +276,7 @@ public class TaskMutationService
             ? CommitAttributionKinds.ManualIncludeAfterExclude
             : CommitAttributionKinds.ManualAdd;
 
-        chain.Add(new JobCommitInfo
+        chain.Add(new TaskCommitInfo
         {
             Sha = sha,
             ShortSha = candidate?.ShortSha ?? prior?.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
@@ -290,10 +290,10 @@ public class TaskMutationService
         return WriteCommitState(info.FolderPath, chain, excluded);
     }
 
-    private (List<JobCommitInfo> chain, List<JobExcludedCommitInfo> excluded) ReadCommitState(string folderPath)
+    private (List<TaskCommitInfo> chain, List<TaskExcludedCommitInfo> excluded) ReadCommitState(string folderPath)
     {
-        var chain = new List<JobCommitInfo>();
-        var excluded = new List<JobExcludedCommitInfo>();
+        var chain = new List<TaskCommitInfo>();
+        var excluded = new List<TaskExcludedCommitInfo>();
         var jobJsonPath = Path.Combine(folderPath, "job.json");
         if (!File.Exists(jobJsonPath)) return (chain, excluded);
         try
@@ -306,13 +306,13 @@ public class TaskMutationService
                 foreach (var item in commitsEl.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
+                    var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                     if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
                 }
             }
             else if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
             {
-                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
+                var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
                 if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
             }
             if (doc.TryGetValue("excludedCommits", out var exEl) && exEl.ValueKind == JsonValueKind.Array)
@@ -320,7 +320,7 @@ public class TaskMutationService
                 foreach (var item in exEl.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
+                    var parsed = JsonSerializer.Deserialize<TaskExcludedCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                     if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) excluded.Add(parsed);
                 }
             }
@@ -332,7 +332,7 @@ public class TaskMutationService
         return (chain, excluded);
     }
 
-    private bool WriteCommitState(string folderPath, List<JobCommitInfo> chain, List<JobExcludedCommitInfo> excluded)
+    private bool WriteCommitState(string folderPath, List<TaskCommitInfo> chain, List<TaskExcludedCommitInfo> excluded)
     {
         try
         {
@@ -361,7 +361,7 @@ public class TaskMutationService
             utcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture), _logger);
         // Intentionally NOT calling Updated(): this is the per-CLI-flush
         // heartbeat (called every few seconds during an active run), and
-        // lastProgressAt does not surface in JobInfo (the kanban card
+        // lastProgressAt does not surface in TaskInfo (the kanban card
         // reads LastActivity from disk mtime via GetLastActivityTime).
         // Invalidating here would force a full rescan on every CLI line.
         return true;
@@ -431,7 +431,7 @@ public class TaskMutationService
         var previous = info.Title ?? "";
         if (!string.Equals(previous, trimmed, StringComparison.Ordinal))
         {
-            TitleHistoryLog.Append(info.FolderPath, new JobTitleHistoryEntry
+            TitleHistoryLog.Append(info.FolderPath, new TaskTitleHistoryEntry
             {
                 At = DateTime.UtcNow,
                 OldTitle = previous,
@@ -623,7 +623,7 @@ public class TaskMutationService
         _scanner.InvalidateCache();
         // Push a typed jobCreated to connected clients so other tabs render
         // the new card within ~1s instead of waiting for the next board poll.
-        // Resolve the just-written JobInfo so the bridge can ship the canonical
+        // Resolve the just-written TaskInfo so the bridge can ship the canonical
         // row; on the rare miss the bridge falls back to a bulk re-pull.
         var created = _scanner.FindJob(jobId, entry.Path);
         _notifier.PublishCreated(created?.ProjectName ?? string.Empty, jobId, entry.Path);
@@ -646,7 +646,7 @@ public class TaskMutationService
         WriteAllTextWithRetry(filePath, content);
         // prompt.md does not affect kanban-card fields, but UpdateJobFile is
         // user-initiated (edit prompt) and the next read should see the
-        // change for any consumer that pulls JobDetail with the prompt body.
+        // change for any consumer that pulls TaskDetail with the prompt body.
         return Updated();
     }
 
@@ -771,7 +771,7 @@ public class TaskMutationService
             File.WriteAllText(path,
                 JsonSerializer.Serialize(intent, _pendingIntentWriteOpts),
                 Encoding.UTF8);
-            // PendingIntent appears on JobInfo (kanban card shows the intent),
+            // PendingIntent appears on TaskInfo (kanban card shows the intent),
             // so the snapshot must be invalidated for the next read to see it.
             _scanner.InvalidateCache();
             return intent;
@@ -808,7 +808,7 @@ public class TaskMutationService
             var stash = Path.Combine(jobFolder, "pending-intent.consumed.json");
             if (File.Exists(stash)) File.Delete(stash);
             File.Move(path, stash);
-            // pending-intent.json gone → JobInfo.PendingIntent should be null.
+            // pending-intent.json gone → TaskInfo.PendingIntent should be null.
             _scanner.InvalidateCache();
             return intent;
         }

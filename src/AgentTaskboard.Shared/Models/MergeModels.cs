@@ -42,7 +42,7 @@ public record MergeRequest
 
 public record MergeResponse
 {
-    public JobInfo? Primary { get; init; }
+    public TaskInfo? Primary { get; init; }
     public int AbsorbedRuns { get; init; }
     public int TimelineEventsAppended { get; init; }
     public string Mode { get; init; } = "";

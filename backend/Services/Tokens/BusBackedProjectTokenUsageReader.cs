@@ -26,7 +26,7 @@ namespace OrchestratorApi.Services.Tokens;
 /// <para>
 /// The parity test
 /// (<c>ProjectTokenUsageBusParityTests</c>) drives all four surfaces
-/// (Summary / Heatmap / Expensive / JobDetail) over the same data set
+/// (Summary / Heatmap / Expensive / TaskDetail) over the same data set
 /// and asserts numeric equality, including the deltas-vs-prior column
 /// on the drill-down and the chronological day-list on the heatmap.
 /// </para>
@@ -79,7 +79,7 @@ public sealed class BusBackedProjectTokenUsageReader
     /// </summary>
     public static ProjectTokenUsageSummary BuildSummaryFromStore(
         AgentMessageBusStore store, string workspaceRoot, string projectName,
-        IReadOnlyDictionary<string, JobInfo> jobsById, DateTime? nowUtc = null)
+        IReadOnlyDictionary<string, TaskInfo> jobsById, DateTime? nowUtc = null)
     {
         var entries = BusTokenEntryConverter.LoadOrchestratorEntries(store, workspaceRoot, projectName);
         return ProjectTokenUsageService.BuildSummaryFromEntries(projectName, entries, jobsById, nowUtc);
@@ -87,7 +87,7 @@ public sealed class BusBackedProjectTokenUsageReader
 
     public static ProjectTokenHeatmap BuildHeatmapFromStore(
         AgentMessageBusStore store, string workspaceRoot, string projectName,
-        IReadOnlyDictionary<string, JobInfo> jobsById, int days, DateTime? nowUtc = null)
+        IReadOnlyDictionary<string, TaskInfo> jobsById, int days, DateTime? nowUtc = null)
     {
         var entries = BusTokenEntryConverter.LoadOrchestratorEntries(store, workspaceRoot, projectName);
         return ProjectTokenUsageService.BuildHeatmapFromEntries(projectName, entries, jobsById, days, nowUtc);
@@ -95,7 +95,7 @@ public sealed class BusBackedProjectTokenUsageReader
 
     public static IReadOnlyList<ProjectExpensiveJob> BuildExpensiveJobsFromStore(
         AgentMessageBusStore store, string workspaceRoot, string projectName,
-        IReadOnlyDictionary<string, JobInfo> jobsById, int limit)
+        IReadOnlyDictionary<string, TaskInfo> jobsById, int limit)
     {
         var entries = BusTokenEntryConverter.LoadOrchestratorEntries(store, workspaceRoot, projectName);
         return ProjectTokenUsageService.BuildExpensiveJobsFromEntries(entries, jobsById, limit);
@@ -103,7 +103,7 @@ public sealed class BusBackedProjectTokenUsageReader
 
     public static ProjectJobTokenDetail? BuildJobDetailFromStore(
         AgentMessageBusStore store, string workspaceRoot, string projectName,
-        IReadOnlyDictionary<string, JobInfo> jobsById, string jobId)
+        IReadOnlyDictionary<string, TaskInfo> jobsById, string jobId)
     {
         if (string.IsNullOrWhiteSpace(jobId)) return null;
         var entries = BusTokenEntryConverter.LoadOrchestratorEntries(store, workspaceRoot, projectName);
@@ -117,9 +117,9 @@ public sealed class BusBackedProjectTokenUsageReader
         return BusTokenEntryConverter.LoadOrchestratorEntries(_store, workspace!, projectName);
     }
 
-    private IReadOnlyDictionary<string, JobInfo> BuildJobsById(string watchPath)
+    private IReadOnlyDictionary<string, TaskInfo> BuildJobsById(string watchPath)
     {
-        var map = new Dictionary<string, JobInfo>(StringComparer.Ordinal);
+        var map = new Dictionary<string, TaskInfo>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(watchPath)) return map;
         foreach (var job in _scanner.ScanAllJobs())
         {

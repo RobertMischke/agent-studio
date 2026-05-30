@@ -21,11 +21,11 @@ namespace OrchestratorApi.Tests;
 /// list, the persisted <c>order</c> values are the expected dense 1..N
 /// sequence, regardless of what numeric orders the lane started with.
 /// </summary>
-public class JobReorderTests : IDisposable
+public class TaskReorderTests : IDisposable
 {
     private readonly string _watchPath;
 
-    public JobReorderTests()
+    public TaskReorderTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-reorder-tests-" + Guid.NewGuid().ToString("N"));
         foreach (var state in TaskStates.All)
@@ -51,7 +51,7 @@ public class JobReorderTests : IDisposable
 
         // Act — frontend "drag gamma (bottom) to the top" gesture: gamma is
         // first in the new list, then alpha, then beta.
-        var success = machine.ReorderJobs(new List<JobOrderItem>
+        var success = machine.ReorderJobs(new List<TaskOrderItem>
         {
             new() { JobId = "gamma", WatchPath = _watchPath },
             new() { JobId = "alpha", WatchPath = _watchPath },
@@ -79,7 +79,7 @@ public class JobReorderTests : IDisposable
         var machine = BuildMachine();
 
         // "Drag alpha to the bottom": new list is beta, gamma, alpha.
-        var success = machine.ReorderJobs(new List<JobOrderItem>
+        var success = machine.ReorderJobs(new List<TaskOrderItem>
         {
             new() { JobId = "beta",  WatchPath = _watchPath },
             new() { JobId = "gamma", WatchPath = _watchPath },
@@ -103,7 +103,7 @@ public class JobReorderTests : IDisposable
         var machine = BuildMachine();
 
         // "Drag delta between alpha and beta": new list is alpha, delta, beta, gamma.
-        var success = machine.ReorderJobs(new List<JobOrderItem>
+        var success = machine.ReorderJobs(new List<TaskOrderItem>
         {
             new() { JobId = "alpha", WatchPath = _watchPath },
             new() { JobId = "delta", WatchPath = _watchPath },

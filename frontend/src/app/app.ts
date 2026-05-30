@@ -655,7 +655,7 @@ export class App implements OnInit, OnDestroy {
     const job = this.selectedJob();
     const peers = this.triageLanePeers();
     if (!job || peers.length === 0) return 0;
-    const idx = peers.findIndex((p) => p.jobKey === job.info.jobKey);
+    const idx = peers.findIndex((p) => p.taskKey === job.info.taskKey);
     return idx >= 0 ? idx + 1 : 0;
   });
   readonly slimPagerTotal = computed<number>(() => this.triageLanePeers().length);
@@ -843,12 +843,12 @@ export class App implements OnInit, OnDestroy {
       const selected = this.selectedJob();
       if (!this.featureFlags.vsCodeLayout()) return;
       if (!selected) return;
-      const key = `task:${selected.info.jobKey}`;
+      const key = `task:${selected.info.taskKey}`;
       const tabs = untracked(() => this.studioTabState.tabs());
-      const present = tabs.some((t) => t.kind === 'task' && t.jobKey === selected.info.jobKey);
+      const present = tabs.some((t) => t.kind === 'task' && t.taskKey === selected.info.taskKey);
       untracked(() => {
         if (!present) {
-          this.studioTabState.open({ kind: 'task', jobKey: selected.info.jobKey });
+          this.studioTabState.open({ kind: 'task', taskKey: selected.info.taskKey });
         } else {
           this.studioTabState.select(key);
         }
@@ -863,7 +863,7 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      const latest = jobs.find((job) => job.jobKey === selected.info.jobKey);
+      const latest = jobs.find((job) => job.taskKey === selected.info.taskKey);
       if (!latest) {
         return;
       }
@@ -924,7 +924,7 @@ export class App implements OnInit, OnDestroy {
       if (sel.info.state === lane) return;
       if (this.jobDetailRef?.triageActingId() != null) return;
       untracked(() =>
-        this.triage.handleExternalLaneChange(lane, sel.info.jobKey),
+        this.triage.handleExternalLaneChange(lane, sel.info.taskKey),
       );
     });
 

@@ -28,7 +28,7 @@ internal static class AgentWorkSummaryReader
         AllowTrailingCommas = true,
     };
 
-    public static AgentWorkSummary Read(JobInfo info)
+    public static AgentWorkSummary Read(TaskInfo info)
     {
         var sessionPath = TaskPaths.SessionEventsLog(info.FolderPath);
         var toolPath = ToolCallsLogPath(info.FolderPath);

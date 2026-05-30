@@ -123,7 +123,7 @@ public sealed class RegressionRadarService
     /// last run's HeadShaAfter as head.
     /// </summary>
     internal (string? BaselineSha, string? HeadSha) ResolveShaRange(
-        Models.JobInfo info, string? watchPath)
+        Models.TaskInfo info, string? watchPath)
     {
         var events = _sessions.ReadSessionEvents(info.Id, watchPath);
         var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));

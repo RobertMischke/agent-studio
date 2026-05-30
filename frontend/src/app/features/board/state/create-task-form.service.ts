@@ -267,7 +267,7 @@ export class CreateTaskFormService {
       try {
         const form = new FormData();
         form.append('file', att.file, att.file.name || `${att.alt}.png`);
-        const url = `/api/jobs/${encodeURIComponent(jobId)}/attachments`
+        const url = `/api/tasks/${encodeURIComponent(jobId)}/attachments`
           + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
         // The job folder was created milliseconds ago. Backend caches can
         // race against that creation under concurrent polling, returning a

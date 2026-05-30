@@ -27,16 +27,16 @@ namespace OrchestratorApi.Services.TaskAccess;
 /// </remarks>
 public interface ITaskAccess
 {
-    JobInfo? FindJob(string jobId, string? watchPath = null);
+    TaskInfo? FindJob(string jobId, string? watchPath = null);
 
-    JobDetail? GetJobDetail(string jobId, string? watchPath = null);
+    TaskDetail? GetJobDetail(string jobId, string? watchPath = null);
 
     /// <summary>
     /// List jobs in <paramref name="lane"/> within the project identified
     /// by <paramref name="projectName"/> (matches
     /// <see cref="WatchPathEntry.Name"/>, case-insensitive).
     /// </summary>
-    IReadOnlyList<JobInfo> ListByLane(string projectName, string lane);
+    IReadOnlyList<TaskInfo> ListByLane(string projectName, string lane);
 
     /// <summary>
     /// List jobs in <paramref name="lane"/> within the workspace identified
@@ -45,9 +45,9 @@ public interface ITaskAccess
     /// endpoints that already resolved a watch path and want to skip the
     /// project-name lookup.
     /// </summary>
-    IReadOnlyList<JobInfo> ListByLaneInWorkspace(string watchPath, string lane);
+    IReadOnlyList<TaskInfo> ListByLaneInWorkspace(string watchPath, string lane);
 
-    IReadOnlyList<JobInfo> ListByProject(string projectName);
+    IReadOnlyList<TaskInfo> ListByProject(string projectName);
 
     TaskAccessSnapshot Snapshot();
 

@@ -144,7 +144,7 @@ public class DescribeHttpFailureTests
     public void Status0_WithBackendAliveTrue_SaysStillStartingUp()
     {
         // Cold-start drain case: healthz answered 200 during the retry loop
-        // but /api/jobs/grouped did not drain inside the 120 s window. The
+        // but /api/tasks/grouped did not drain inside the 120 s window. The
         // operator-facing toast keys off the "still starting up" substring,
         // so this wording is load-bearing - keep it in sync with
         // update-notification-bridge.service.ts.

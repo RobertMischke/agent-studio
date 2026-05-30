@@ -15,7 +15,7 @@ public static class EndpointMapping
 {
     public static void MapAllEndpoints(this WebApplication app)
     {
-        var jobs = app.MapGroup("/api/jobs");
+        var jobs = app.MapGroup("/api/tasks");
         jobs.MapJobCrudEndpoints();
         jobs.MapJobFilesEndpoints();
         jobs.MapJobRunnerEndpoints();

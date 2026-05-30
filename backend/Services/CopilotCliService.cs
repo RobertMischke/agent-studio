@@ -174,7 +174,7 @@ public class CopilotCliService : ICliExecutionService
         var execution = new CliExecution
         {
             JobId = jobId,
-            JobKey = jobKey,
+            TaskKey = jobKey,
             ProcessId = process.Id,
             StartedAt = DateTime.UtcNow,
             Status = "running",
@@ -194,7 +194,7 @@ public class CopilotCliService : ICliExecutionService
         UpsertPersisted(new PersistedExecution
         {
             JobId = jobId,
-            JobKey = jobKey,
+            TaskKey = jobKey,
             WorkingDirectory = workingDirectory,
             ProcessId = process.Id,
             StartedAt = execution.StartedAt,
@@ -208,7 +208,7 @@ public class CopilotCliService : ICliExecutionService
         // Copilot does not yet have a content-level adapter (its TUI/PTY
         // shape needs screen-scraping heuristics; the runner falls back
         // to the legacy silence-only watchdog for content phases).
-        try { OnRunEvent?.Invoke(jobKey, new CliRunEvent.RunStarted(process.Id, "copilot", model) { JobKey = jobKey }); }
+        try { OnRunEvent?.Invoke(jobKey, new CliRunEvent.RunStarted(process.Id, "copilot", model) { TaskKey = jobKey }); }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent threw on Copilot RunStarted for {JobId}", jobKey); }
         _logger.LogInformation("Started Copilot CLI for job {JobId} (PID {Pid}) in {Cwd}", jobId, process.Id, workingDirectory);
 
@@ -478,7 +478,7 @@ public class CopilotCliService : ICliExecutionService
         UpsertPersisted(new PersistedExecution
         {
             JobId = info.Execution.JobId,
-            JobKey = jobKey,
+            TaskKey = jobKey,
             WorkingDirectory = info.WorkingDirectory,
             ProcessId = process.Id,
             StartedAt = info.Execution.StartedAt,
@@ -497,8 +497,8 @@ public class CopilotCliService : ICliExecutionService
         try
         {
             CliRunEvent terminal = info.StopReason != OrchestratorApi.Services.Runner.RunStopReason.None
-                ? new CliRunEvent.Killed(info.StopReason.ToString()) { JobKey = jobKey }
-                : new CliRunEvent.ProcessExited(exitCode, status, duration) { JobKey = jobKey };
+                ? new CliRunEvent.Killed(info.StopReason.ToString()) { TaskKey = jobKey }
+                : new CliRunEvent.ProcessExited(exitCode, status, duration) { TaskKey = jobKey };
             OnRunEvent?.Invoke(jobKey, terminal);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent threw on Copilot terminal for {JobId}", jobKey); }
@@ -516,7 +516,7 @@ public class CopilotCliService : ICliExecutionService
         try
         {
             // Find job folder — look through all watch paths
-            foreach (var proc in _processes.Values.Where(p => p.Execution.JobKey == jobKey))
+            foreach (var proc in _processes.Values.Where(p => p.Execution.TaskKey == jobKey))
             {
                 // The job folder is at {watchPath}/3-progress/{jobId} relative to root
                 // But we don't have direct access to the watch path here, so we write via the info's working directory
@@ -626,7 +626,7 @@ public class CopilotCliService : ICliExecutionService
     private record PersistedExecution
     {
         public string JobId { get; init; } = "";
-        public string JobKey { get; init; } = "";
+        public string TaskKey { get; init; } = "";
         public string WorkingDirectory { get; init; } = "";
         public int ProcessId { get; init; }
         public DateTime StartedAt { get; init; }
@@ -706,7 +706,7 @@ public class CopilotCliService : ICliExecutionService
         lock (_persistLock)
         {
             var list = ReadPersistedExecutions();
-            list.RemoveAll(e => e.JobKey == entry.JobKey);
+            list.RemoveAll(e => e.TaskKey == entry.TaskKey);
             list.Add(entry);
             WritePersistedExecutions(list);
         }
@@ -733,7 +733,7 @@ public class CopilotCliService : ICliExecutionService
             foreach (var pe in list.ToList())
             {
                 if (pe.Status != "running") continue;
-                if (_processes.ContainsKey(pe.JobKey)) continue;
+                if (_processes.ContainsKey(pe.TaskKey)) continue;
 
                 Process? proc = null;
                 try
@@ -776,12 +776,12 @@ public class CopilotCliService : ICliExecutionService
                 var execution = new CliExecution
                 {
                     JobId = pe.JobId,
-                    JobKey = pe.JobKey,
+                    TaskKey = pe.TaskKey,
                     ProcessId = pe.ProcessId,
                     StartedAt = pe.StartedAt,
                     Status = "running"
                 };
-                var logPath = pe.OutputLogPath ?? GetOutputLogPath(pe.JobKey);
+                var logPath = pe.OutputLogPath ?? GetOutputLogPath(pe.TaskKey);
                 var info = new CliProcessInfo(proc, execution, pe.WorkingDirectory)
                 {
                     OutputLogPath = logPath,
@@ -799,12 +799,12 @@ public class CopilotCliService : ICliExecutionService
                     Stream = "stdout",
                     Text = $"[reattached to running process PID {pe.ProcessId} — historical output rehydrated from {Path.GetFileName(logPath)}; new output from this point on is unavailable until the process exits]"
                 });
-                _processes[pe.JobKey] = info;
+                _processes[pe.TaskKey] = info;
 
                 try { proc.EnableRaisingEvents = true; } catch { /* best effort */ }
-                _ = MonitorProcessAsync(pe.JobKey, proc, info, CancellationToken.None);
+                _ = MonitorProcessAsync(pe.TaskKey, proc, info, CancellationToken.None);
 
-                OnStarted?.Invoke(pe.JobKey, execution);
+                OnStarted?.Invoke(pe.TaskKey, execution);
                 _logger.LogInformation("Reattached to running job {Job} (PID {Pid})", pe.JobId, pe.ProcessId);
             }
 

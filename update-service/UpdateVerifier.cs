@@ -165,7 +165,7 @@ public sealed class UpdateVerifier
     {
         // Cold-start drain window: the post-restart backend has to walk every
         // job folder, run the auto-push sweep, the boot ReviewDecision sweep,
-        // and the TaskKey backfill before /api/jobs/grouped can answer. On a
+        // and the TaskKey backfill before /api/tasks/grouped can answer. On a
         // workspace with several hundred jobs this routinely runs 60-120 s.
         // F58's 15 s window flagged that as "Update failed" while healthz was
         // already green, eroding operator trust. We now wait up to ~120 s and
@@ -180,7 +180,7 @@ public sealed class UpdateVerifier
 
         for (int i = 0; i < attempts; i++)
         {
-            var (status, body) = await _backend.GetAsync("/api/jobs/grouped", perAttemptTimeout, ct);
+            var (status, body) = await _backend.GetAsync("/api/tasks/grouped", perAttemptTimeout, ct);
             lastJobsGroupedStatus = status;
 
             if (status == 200)

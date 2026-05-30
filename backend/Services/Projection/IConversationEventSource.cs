@@ -16,7 +16,7 @@ public interface IConversationEventSource
     /// I/O errors are the source's responsibility to log and absorb.
     /// </summary>
     Task<IReadOnlyList<RawSourceEvent>> ReadAsync(
-        OrchestratorApi.Models.JobInfo jobInfo,
+        OrchestratorApi.Models.TaskInfo jobInfo,
         CancellationToken ct);
 
     /// <summary>
@@ -24,5 +24,5 @@ public interface IConversationEventSource
     /// hash into the cache key. <c>DateTime.MinValue</c> when nothing on disk
     /// matters or the source is empty for this job.
     /// </summary>
-    DateTime GetSourceMTimeUtc(OrchestratorApi.Models.JobInfo jobInfo);
+    DateTime GetSourceMTimeUtc(OrchestratorApi.Models.TaskInfo jobInfo);
 }

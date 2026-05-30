@@ -140,13 +140,13 @@ public sealed class CompanionSyncService : BackgroundService
         return CompanionSnapshotBuilder.Build(jobs, runner, quota, tokens, host, DateTimeOffset.UtcNow);
     }
 
-    private IReadOnlyList<OrchestratorApi.Models.JobInfo> SafeScan()
+    private IReadOnlyList<OrchestratorApi.Models.TaskInfo> SafeScan()
     {
         try { return _jobs.ScanAllJobs(); }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Companion: ScanAllJobs failed; sending empty job list");
-            return Array.Empty<OrchestratorApi.Models.JobInfo>();
+            return Array.Empty<OrchestratorApi.Models.TaskInfo>();
         }
     }
 

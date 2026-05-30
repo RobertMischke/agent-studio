@@ -478,9 +478,9 @@ public sealed class SteeringDocsSummaryDriftService
     // Job evidence assembly
     // ------------------------------------------------------------------
 
-    private static IReadOnlyDictionary<string, IReadOnlyList<JobEvidenceRef>> BuildJobsByLane(string projectRoot)
+    private static IReadOnlyDictionary<string, IReadOnlyList<TaskEvidenceRef>> BuildJobsByLane(string projectRoot)
     {
-        var byLane = new Dictionary<string, IReadOnlyList<JobEvidenceRef>>(StringComparer.Ordinal);
+        var byLane = new Dictionary<string, IReadOnlyList<TaskEvidenceRef>>(StringComparer.Ordinal);
         foreach (var lane in InspectedLanes)
         {
             var laneDir = Path.Combine(projectRoot, lane);
@@ -489,10 +489,10 @@ public sealed class SteeringDocsSummaryDriftService
         return byLane;
     }
 
-    private static IReadOnlyList<JobEvidenceRef> ReadLane(string laneDir, string lane)
+    private static IReadOnlyList<TaskEvidenceRef> ReadLane(string laneDir, string lane)
     {
-        if (!Directory.Exists(laneDir)) return Array.Empty<JobEvidenceRef>();
-        var entries = new List<(JobEvidenceRef Job, DateTime Touched)>();
+        if (!Directory.Exists(laneDir)) return Array.Empty<TaskEvidenceRef>();
+        var entries = new List<(TaskEvidenceRef Job, DateTime Touched)>();
         foreach (var dir in Directory.EnumerateDirectories(laneDir))
         {
             var jobJson = Path.Combine(dir, "job.json");
@@ -518,7 +518,7 @@ public sealed class SteeringDocsSummaryDriftService
             catch { touched = DateTime.MinValue; }
             var hasStatus = File.Exists(Path.Combine(dir, "status.md"));
             var hasLogs = Directory.Exists(Path.Combine(dir, "logs"));
-            entries.Add((new JobEvidenceRef(slug, title, lane, touched, hasStatus, hasLogs), touched));
+            entries.Add((new TaskEvidenceRef(slug, title, lane, touched, hasStatus, hasLogs), touched));
         }
         return entries
             .OrderByDescending(e => e.Touched)
@@ -595,7 +595,7 @@ public sealed class SteeringDocsSummaryDriftService
         return sb.ToString().TrimEnd();
     }
 
-    private static string RenderJobsByLane(IReadOnlyDictionary<string, IReadOnlyList<JobEvidenceRef>> byLane)
+    private static string RenderJobsByLane(IReadOnlyDictionary<string, IReadOnlyList<TaskEvidenceRef>> byLane)
     {
         if (byLane.All(kv => kv.Value.Count == 0))
             return "(no recent job evidence in the inspected lanes)";
@@ -776,7 +776,7 @@ public sealed class SteeringDocsSummaryDriftService
         string? SourceId,
         IReadOnlyList<string> EvidenceRefs);
 
-    public sealed record JobEvidenceRef(
+    public sealed record TaskEvidenceRef(
         string JobId,
         string Title,
         string Lane,
@@ -866,7 +866,7 @@ public sealed class SteeringDocsSummaryDriftScope
     public required string RepoRoot { get; init; }
     public required IReadOnlyList<SteeringDocsSummaryDriftService.SteeringSourceRef> Sources { get; init; }
     public required IReadOnlyList<SteeringDocsSummaryDriftService.SteeringInventoryWarning> Warnings { get; init; }
-    public required IReadOnlyDictionary<string, IReadOnlyList<SteeringDocsSummaryDriftService.JobEvidenceRef>> JobsByLane { get; init; }
+    public required IReadOnlyDictionary<string, IReadOnlyList<SteeringDocsSummaryDriftService.TaskEvidenceRef>> JobsByLane { get; init; }
     public required IReadOnlyList<SteeringDocsSummaryDriftService.AnalysisReportPointer> RecentAnalysisReports { get; init; }
     public required bool InventoryClean { get; init; }
     public required DateTime CapturedAt { get; init; }

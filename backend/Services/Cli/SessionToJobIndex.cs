@@ -4,14 +4,14 @@ using OrchestratorApi.Services.Jobs;
 namespace OrchestratorApi.Services.Cli;
 
 /// <summary>
-/// In-memory inverse index <c>sessionId -> owning JobInfo summary</c>. Built
+/// In-memory inverse index <c>sessionId -> owning TaskInfo summary</c>. Built
 /// from <see cref="TaskScannerService.ScanAllJobs"/> by walking each job's
-/// <see cref="JobInfo.SessionChain"/>. Lets the right-hand session list show
+/// <see cref="TaskInfo.SessionChain"/>. Lets the right-hand session list show
 /// a chip pointing back to the kanban task that originated the session.
 ///
 /// <para>
 /// The index is pure derived state. It owns no on-disk state and no
-/// schema; <see cref="JobInfo.SessionChain"/> remains the source of truth.
+/// schema; <see cref="TaskInfo.SessionChain"/> remains the source of truth.
 /// A rebuild is O(jobs * chain length); the chain is small in practice
 /// (one or a handful of ids), so the cost is effectively O(jobs).
 /// </para>
@@ -21,7 +21,7 @@ namespace OrchestratorApi.Services.Cli;
 /// chain break, not a session id. Multi-checkout collisions (the same
 /// session id appearing in jobs from two different watch paths, e.g.
 /// dev/ and stable/ sharing a <c>~/.claude</c> store) are resolved at
-/// lookup time by preferring the candidate whose <see cref="JobInfo.WatchPath"/>
+/// lookup time by preferring the candidate whose <see cref="TaskInfo.WatchPath"/>
 /// equals the session row's <c>cwd</c>. The contract is intentionally
 /// permissive on read: an unknown session id returns <c>null</c> rather
 /// than throwing so orphan sessions render cleanly.
@@ -29,13 +29,13 @@ namespace OrchestratorApi.Services.Cli;
 /// </summary>
 public sealed class SessionToJobIndex
 {
-    /// <summary>Sentinel entry in <see cref="JobInfo.SessionChain"/> marking a recovery break.</summary>
+    /// <summary>Sentinel entry in <see cref="TaskInfo.SessionChain"/> marking a recovery break.</summary>
     public const string RecoverySentinel = "(recovery)";
 
     /// <summary>
     /// Snapshot of the owning job, sufficient to render the chip and
     /// route the click. Intentionally a value record - the consumer
-    /// does not need the full <see cref="JobInfo"/>.
+    /// does not need the full <see cref="TaskInfo"/>.
     /// </summary>
     public sealed record LinkEntry(
         string JobId,
@@ -51,7 +51,7 @@ public sealed class SessionToJobIndex
     /// Atomic from a reader's perspective: a new dictionary is built and
     /// then swapped in; partial-rebuild visibility is not exposed.
     /// </summary>
-    public void Rebuild(IEnumerable<JobInfo> jobs)
+    public void Rebuild(IEnumerable<TaskInfo> jobs)
     {
         var next = new Dictionary<string, List<LinkEntry>>(StringComparer.Ordinal);
         foreach (var job in jobs)

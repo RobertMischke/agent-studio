@@ -12,7 +12,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// the protocol pane, and the IDE handoff. All routes operate on the
 /// project's RootPath repository.
 /// </summary>
-public static class JobGitEndpoints
+public static class TaskGitEndpoints
 {
     public static void MapJobGitEndpoints(this RouteGroupBuilder group)
     {
@@ -77,7 +77,7 @@ public static class JobGitEndpoints
             var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
 
-            var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
+            var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
                 (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
 
             return Results.Ok(aggregate);
@@ -154,7 +154,7 @@ public static class JobGitEndpoints
         // 3-progress -> 4-auto-review uses (Haiku via runtime/commit-message.md
         // with a deterministic fallback) so the user gets one consistent
         // commit voice regardless of which CLI did the work. Stamps the
-        // produced SHA onto JobInfo.Commit so the detail view picks it up,
+        // produced SHA onto TaskInfo.Commit so the detail view picks it up,
         // and writes a [commit] orchestrator-chat entry into the activity
         // log so the action is visible in the protocol pane.
         group.MapPost("/{jobId}/git/commit-accepted-evidence",
@@ -172,7 +172,7 @@ public static class JobGitEndpoints
             }
 
             var files = git.GetCommitFiles(jobId, watchPath, result.Sha);
-            var commitInfo = new JobCommitInfo
+            var commitInfo = new TaskCommitInfo
             {
                 Sha = result.Sha,
                 ShortSha = result.Sha.Length > 7 ? result.Sha[..7] : result.Sha,
@@ -227,11 +227,11 @@ public static class JobGitEndpoints
 
             // Enrich an add-from-recent pick with live git metadata so the
             // stored entry carries a real file count + subject, not just a SHA.
-            JobCommitInfo? candidate = null;
+            TaskCommitInfo? candidate = null;
             var files = git.GetCommitFiles(jobId, watchPath, sha);
             if (files.Count > 0)
             {
-                candidate = new JobCommitInfo
+                candidate = new TaskCommitInfo
                 {
                     Sha = sha,
                     ShortSha = sha.Length > 8 ? sha[..8] : sha,
@@ -255,7 +255,7 @@ public static class JobGitEndpoints
     }
 
     private static bool IsKnownJobCommit(
-        JobInfo info, TaskSessionLog sessions,
+        TaskInfo info, TaskSessionLog sessions,
         string jobId, string? watchPath, GitService git, string sha)
     {
         if (string.IsNullOrWhiteSpace(sha)) return false;
@@ -264,7 +264,7 @@ public static class JobGitEndpoints
         var events = sessions.ReadSessionEvents(jobId, watchPath);
         var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
         var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-        var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
+        var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
             (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
         return aggregate.Commits.Any(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase));
     }

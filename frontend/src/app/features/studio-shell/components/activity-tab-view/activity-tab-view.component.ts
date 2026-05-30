@@ -4,7 +4,7 @@ import { TaskStatusCardComponent } from '../../../../components/task-status-card
 import type { TaskInfo } from '../../../../models/task.model';
 
 /**
- * Full-screen "Activity" tab. Looks up the owning job by jobKey and
+ * Full-screen "Activity" tab. Looks up the owning job by taskKey and
  * renders the live execution + run-outcome summary, plus a CTA back to
  * the in-task chat workbench (which still owns the streaming protocol
  * pane). The inline activity log streaming is a follow-up.
@@ -25,10 +25,10 @@ import type { TaskInfo } from '../../../../models/task.model';
 export class StudioActivityViewComponent {
   private readonly jobService = inject(TaskService);
 
-  readonly jobKey = input.required<string>();
+  readonly taskKey = input.required<string>();
 
   readonly job = computed<TaskInfo | null>(() => {
-    const key = this.jobKey();
-    return this.jobService.jobs().find(j => j.jobKey === key) ?? null;
+    const key = this.taskKey();
+    return this.jobService.jobs().find(j => j.taskKey === key) ?? null;
   });
 }

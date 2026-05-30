@@ -24,9 +24,9 @@ public class SummaryGenerationInflightTests
     [Fact]
     public void Generating_StartedJustNow_IsInflight()
     {
-        var prev = new JobSummaryState
+        var prev = new TaskSummaryState
         {
-            Status = JobSummaryStatus.Generating,
+            Status = TaskSummaryStatus.Generating,
             StartedAt = Now.AddSeconds(-5)
         };
         Assert.True(SummaryGenerationService.IsInflight(prev, Now, 90));
@@ -35,9 +35,9 @@ public class SummaryGenerationInflightTests
     [Fact]
     public void Generating_StartedLongerAgoThanTimeout_NotInflight()
     {
-        var prev = new JobSummaryState
+        var prev = new TaskSummaryState
         {
-            Status = JobSummaryStatus.Generating,
+            Status = TaskSummaryStatus.Generating,
             StartedAt = Now.AddSeconds(-200)
         };
         // Treated as stuck so the user can recover by hitting Regenerate.
@@ -47,9 +47,9 @@ public class SummaryGenerationInflightTests
     [Fact]
     public void Ready_NeverInflight()
     {
-        var prev = new JobSummaryState
+        var prev = new TaskSummaryState
         {
-            Status = JobSummaryStatus.Ready,
+            Status = TaskSummaryStatus.Ready,
             StartedAt = Now.AddSeconds(-1)
         };
         Assert.False(SummaryGenerationService.IsInflight(prev, Now, 90));
@@ -58,9 +58,9 @@ public class SummaryGenerationInflightTests
     [Fact]
     public void Failed_NeverInflight()
     {
-        var prev = new JobSummaryState
+        var prev = new TaskSummaryState
         {
-            Status = JobSummaryStatus.Failed,
+            Status = TaskSummaryStatus.Failed,
             StartedAt = Now.AddSeconds(-1)
         };
         Assert.False(SummaryGenerationService.IsInflight(prev, Now, 90));
@@ -71,7 +71,7 @@ public class SummaryGenerationInflightTests
     {
         // Defensive: an upstream that forgot to set StartedAt must not
         // wedge the slot forever.
-        var prev = new JobSummaryState { Status = JobSummaryStatus.Generating };
+        var prev = new TaskSummaryState { Status = TaskSummaryStatus.Generating };
         Assert.False(SummaryGenerationService.IsInflight(prev, Now, 90));
     }
 }

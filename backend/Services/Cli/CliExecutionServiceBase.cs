@@ -371,7 +371,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         var execution = new CliExecution
         {
             JobId = jobId,
-            JobKey = jobKey,
+            TaskKey = jobKey,
             ProcessId = process.Id,
             StartedAt = DateTime.UtcNow,
             Status = "running",
@@ -400,7 +400,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         {
             UpsertActiveJob(new ActiveJob
             {
-                JobKey = jobKey,
+                TaskKey = jobKey,
                 JobId = jobId,
                 ProcessId = process.Id,
                 ProcessName = SafeProcessName(process),
@@ -417,7 +417,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // ADR-0013: typed event channel. Subclasses with an adapter raise
         // their own events from the read loop; the base class always
         // raises RunStarted so the runner's phase tracker can initialize.
-        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { JobKey = jobKey });
+        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { TaskKey = jobKey });
 
         _logger.LogInformation("Started {Cli} CLI for job {JobId} (PID {Pid}) in {Cwd}",
             CliType, jobId, process.Id, workingDirectory);
@@ -623,7 +623,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         try { match = AgentEnvironmentDetector.Match(rawLine.Text); }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Environment-blocker detector threw for {JobKey}", jobKey);
+            _logger.LogDebug(ex, "Environment-blocker detector threw for {TaskKey}", jobKey);
             return;
         }
         if (match == null) return;
@@ -645,17 +645,17 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         try
         {
             if (!info.OutputLog.Append(synthetic))
-                _logger.LogWarning("Failed to persist environment-blocker marker for {JobKey}", jobKey);
+                _logger.LogWarning("Failed to persist environment-blocker marker for {TaskKey}", jobKey);
         }
-        catch (Exception ex) { _logger.LogDebug(ex, "Persisting environment-blocker marker failed for {JobKey}", jobKey); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Persisting environment-blocker marker failed for {TaskKey}", jobKey); }
         try { OnOutput?.Invoke(jobKey, synthetic); } catch { }
 
         _logger.LogWarning(
-            "Environment blocker '{Pattern}' detected for {Cli} job {JobKey} after {Hits} hit(s); terminating run",
+            "Environment blocker '{Pattern}' detected for {Cli} job {TaskKey} after {Hits} hit(s); terminating run",
             match.Id, CliType, jobKey, info.EnvironmentBlockerHitCount);
 
         try { Stop(jobKey, RunStopReason.EnvironmentBlocker); }
-        catch (Exception ex) { _logger.LogWarning(ex, "Stop after environment-blocker failed for {JobKey}", jobKey); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Stop after environment-blocker failed for {TaskKey}", jobKey); }
     }
 
     private async Task ReadStreamAsync(string jobKey, StreamReader reader, string stream, ProcInfo info, CancellationToken ct)
@@ -778,7 +778,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // gone, before any subscriber notifications. Keeps the reaper file
             // tight and avoids killing the next process that gets the same PID.
             try { RemoveActiveJob(jobKey); }
-            catch (Exception ex) { _logger.LogDebug(ex, "Failed to clear active-job entry for {JobKey}", jobKey); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Failed to clear active-job entry for {TaskKey}", jobKey); }
 
             var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
             int? exitCode = null;
@@ -816,9 +816,9 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // exit was a deliberate Stop) so the runner's phase tracker
             // sees the terminal state on the typed channel too.
             if (info.StopReason != RunStopReason.None)
-                RaiseRunEvent(jobKey, new CliRunEvent.Killed(info.StopReason.ToString()) { JobKey = jobKey });
+                RaiseRunEvent(jobKey, new CliRunEvent.Killed(info.StopReason.ToString()) { TaskKey = jobKey });
             else
-                RaiseRunEvent(jobKey, new CliRunEvent.ProcessExited(exitCode, status, duration) { JobKey = jobKey });
+                RaiseRunEvent(jobKey, new CliRunEvent.ProcessExited(exitCode, status, duration) { TaskKey = jobKey });
 
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }
@@ -879,7 +879,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     private record ActiveJob
     {
-        public string JobKey { get; init; } = "";
+        public string TaskKey { get; init; } = "";
         public string JobId { get; init; } = "";
         public int ProcessId { get; init; }
         public string? ProcessName { get; init; }
@@ -932,7 +932,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         lock (_activeJobsLock)
         {
             var list = ReadActiveJobs();
-            list.RemoveAll(e => e.JobKey == entry.JobKey);
+            list.RemoveAll(e => e.TaskKey == entry.TaskKey);
             list.Add(entry);
             WriteActiveJobs(list);
         }
@@ -943,7 +943,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         lock (_activeJobsLock)
         {
             var list = ReadActiveJobs();
-            var removed = list.RemoveAll(e => e.JobKey == jobKey);
+            var removed = list.RemoveAll(e => e.TaskKey == jobKey);
             if (removed > 0) WriteActiveJobs(list);
         }
     }

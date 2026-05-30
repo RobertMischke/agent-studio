@@ -401,7 +401,7 @@ public sealed class UpdateOrchestrator
     {
         var hz = await _backend.ProbeHealthzAsync(ct);
         var (runnerHttp, _) = await _backend.GetAsync("/api/runner/status", TimeSpan.FromSeconds(5), ct);
-        var (jobsHttp, jobsBody) = await _backend.GetAsync("/api/jobs?limit=5", TimeSpan.FromSeconds(5), ct);
+        var (jobsHttp, jobsBody) = await _backend.GetAsync("/api/tasks?limit=5", TimeSpan.FromSeconds(5), ct);
         var jobsCount = TryCountJobs(jobsBody);
         var (clientsHttp, clientsBody) = await _backend.GetAsync("/api/clients", TimeSpan.FromSeconds(5), ct);
         var clientsCount = TryCountClients(clientsBody);

@@ -32,21 +32,21 @@ public class AutoPickupCascadeTests
     [Fact]
     public void HasResumableSession_NameAndChainEmpty_False()
     {
-        var info = new JobInfo { Id = "j", State = TaskStates.Progress };
+        var info = new TaskInfo { Id = "j", State = TaskStates.Progress };
         Assert.False(ProjectRunner.HasResumableSession(info));
     }
 
     [Fact]
     public void HasResumableSession_NameSet_True()
     {
-        var info = new JobInfo { Id = "j", State = TaskStates.Progress, SessionName = ValidUuid };
+        var info = new TaskInfo { Id = "j", State = TaskStates.Progress, SessionName = ValidUuid };
         Assert.True(ProjectRunner.HasResumableSession(info));
     }
 
     [Fact]
     public void HasResumableSession_OnlyChainHasEntry_True()
     {
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             Id = "j",
             State = TaskStates.Progress,
@@ -58,7 +58,7 @@ public class AutoPickupCascadeTests
     [Fact]
     public void HasResumableSession_ChainAllWhitespace_False()
     {
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             Id = "j",
             State = TaskStates.Progress,

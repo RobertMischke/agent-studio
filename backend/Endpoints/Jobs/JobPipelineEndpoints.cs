@@ -19,7 +19,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// has emitted any per-step records.
 /// </para>
 /// </summary>
-public static class JobPipelineEndpoints
+public static class TaskPipelineEndpoints
 {
     public static void MapJobPipelineEndpoints(this RouteGroupBuilder group)
     {

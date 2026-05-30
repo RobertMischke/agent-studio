@@ -5,7 +5,7 @@ namespace OrchestratorApi.Services.Jobs.Merge;
 /// <summary>
 /// Heuristic detector that surfaces "wrapper-of-this" or "wrapped-by-this"
 /// candidates for a given primary job. Used by
-/// <c>GET /api/jobs/{id}/merge/candidates</c> and as the seed list for the
+/// <c>GET /api/tasks/{id}/merge/candidates</c> and as the seed list for the
 /// completed-lane audit.
 ///
 /// <para>The detector is intentionally cheap: it walks the in-memory

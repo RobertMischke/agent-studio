@@ -28,7 +28,7 @@ import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orch
 
 export interface TaskInfo {
   id: string;
-  jobKey: string;
+  taskKey: string;
   key?: string | null;
   title: string;
   state: string;
@@ -242,7 +242,7 @@ export interface PendingIntent {
 }
 
 /**
- * Discriminated response for `POST /api/jobs/{id}/continue` and `/start`.
+ * Discriminated response for `POST /api/tasks/{id}/continue` and `/start`.
  * `started` means the run is live; `queued` means the project was busy
  * with another job, the user's intent has been saved on the target task,
  * and the target task is now at the top of `2-ready`. The frontend treats
@@ -419,7 +419,7 @@ export type TaskArtifactKind = 'prompt' | 'aspect' | 'note' | 'other';
 /**
  * One `.md` file in the job root surfaced by the Files tab. The content
  * itself is not embedded — the Files tab fetches it lazily through
- * `GET /api/jobs/{id}/files/{fileName}` only when the user expands the
+ * `GET /api/tasks/{id}/files/{fileName}` only when the user expands the
  * card (or when it's the sole prompt and auto-expanded).
  */
 export interface TaskArtifact {
@@ -539,7 +539,7 @@ export interface RegistryWorkspaceListItem {
 
 export interface CliExecution {
   jobId: string;
-  jobKey: string;
+  taskKey: string;
   processId: number;
   startedAt: string;
   status: string;

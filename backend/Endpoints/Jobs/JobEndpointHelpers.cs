@@ -10,9 +10,9 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// Internal helpers shared across the job endpoint groups: the
 /// <see cref="MoveJobOutcome"/> to <see cref="IResult"/> translation and the
 /// runtime overlay (CLI execution + auto-loop snapshot) applied to
-/// <see cref="JobInfo"/> and <see cref="JobDetail"/> on read.
+/// <see cref="TaskInfo"/> and <see cref="TaskDetail"/> on read.
 /// </summary>
-internal static class JobEndpointHelpers
+internal static class TaskEndpointHelpers
 {
     internal static IResult MoveResult(MoveJobOutcome outcome) => outcome.Status switch
     {
@@ -22,14 +22,14 @@ internal static class JobEndpointHelpers
         _ => Results.Json(new { error = outcome.Message ?? "Failed to move job" }, statusCode: StatusCodes.Status500InternalServerError)
     };
 
-    internal static JobInfo WithRuntime(JobInfo job, CliRouter router, TaskRunnerService runners)
+    internal static TaskInfo WithRuntime(TaskInfo job, CliRouter router, TaskRunnerService runners)
         => WithRuntime(job, router, runners, tokensByJobId: null, verdictsByJobKey: null);
 
-    internal static JobInfo WithRuntime(
-        JobInfo job,
+    internal static TaskInfo WithRuntime(
+        TaskInfo job,
         CliRouter router,
         TaskRunnerService runners,
-        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId)
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId)
         => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null);
 
     /// <summary>
@@ -40,11 +40,11 @@ internal static class JobEndpointHelpers
     /// <c>JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond</c>
     /// still holds.
     /// </summary>
-    internal static JobInfo WithRuntime(
-        JobInfo job,
+    internal static TaskInfo WithRuntime(
+        TaskInfo job,
         CliRouter router,
         TaskRunnerService runners,
-        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
     {
         // Lane is the single source of truth for "is this card live". A job
@@ -55,25 +55,25 @@ internal static class JobEndpointHelpers
         // Clearing at the wire-overlay layer keeps Lane > Execution-Status
         // > Default as the deterministic precedence for every consumer.
         var exec = job.State == TaskStates.Progress
-            ? router.Get(job.CliType).GetExecution(job.JobKey)
+            ? router.Get(job.CliType).GetExecution(job.TaskKey)
             : null;
         // Look up auto-loop state by ProjectName (O(1) ConcurrentDictionary
         // hit) rather than by re-scanning all jobs from disk. Locked by
         // JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond.
         var loop = runners.GetStuckLoopStateForJob(job.Id, job.ProjectName);
         // The summarizer is fire-and-forget after a job lands in 4-review.
-        // We surface its in-progress state on the JobInfo so the kanban
+        // We surface its in-progress state on the TaskInfo so the kanban
         // card can show "auto-reviewing" instead of looking idle while
         // the Haiku call is still working. Only return non-None states
         // so the field stays absent on cards where nothing is happening.
-        var summary = runners.SummaryService.GetState(job.JobKey);
-        JobTokenSummary? tokens = null;
-        if (tokensByJobId != null && tokensByJobId.TryGetValue(job.JobKey, out var t) && t.TotalTokens > 0)
+        var summary = runners.SummaryService.GetState(job.TaskKey);
+        TaskTokenSummary? tokens = null;
+        if (tokensByJobId != null && tokensByJobId.TryGetValue(job.TaskKey, out var t) && t.TotalTokens > 0)
         {
             tokens = t;
         }
         string? verdict = null;
-        if (verdictsByJobKey != null && verdictsByJobKey.TryGetValue(job.JobKey, out var v))
+        if (verdictsByJobKey != null && verdictsByJobKey.TryGetValue(job.TaskKey, out var v))
         {
             verdict = v;
         }
@@ -92,14 +92,14 @@ internal static class JobEndpointHelpers
                 LastReply = loop.LastReply,
                 LastError = loop.LastError
             },
-            SummaryState = summary != null && summary.Status != JobSummaryStatus.None ? summary : null,
+            SummaryState = summary != null && summary.Status != TaskSummaryStatus.None ? summary : null,
             TokenSummary = tokens,
             OrchestratorVerdict = verdict
         };
     }
 
     /// <summary>
-    /// Builds a per-JobKey lookup of the latest orchestrator-review
+    /// Builds a per-TaskKey lookup of the latest orchestrator-review
     /// verdict, sourced from <see cref="ReviewDecisionLog"/>. One JSONL
     /// read per (workspace, project) pair so the per-job overlay stays
     /// O(1). Maps <see cref="ReviewDecisionKind"/> to the wire enum
@@ -107,7 +107,7 @@ internal static class JobEndpointHelpers
     /// records do not surface a verdict.
     /// </summary>
     internal static Dictionary<string, string> BuildOrchestratorVerdictLookup(
-        IEnumerable<JobInfo> jobs,
+        IEnumerable<TaskInfo> jobs,
         IConfiguration configuration)
     {
         var verdicts = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -144,7 +144,7 @@ internal static class JobEndpointHelpers
                 ReviewDecisionKind.AcceptAsDone => "accept",
                 _                                => (string?)null
             };
-            if (verdict != null) verdicts[job.JobKey] = verdict;
+            if (verdict != null) verdicts[job.TaskKey] = verdict;
         }
         return verdicts;
     }
@@ -154,15 +154,15 @@ internal static class JobEndpointHelpers
     /// <c>WithRuntime</c> in the listing endpoints. Reads each unique
     /// project bus projection at most once.
     /// </summary>
-    internal static Dictionary<string, JobTokenSummary> BuildTokenLookup(
-        IEnumerable<JobInfo> jobs,
+    internal static Dictionary<string, TaskTokenSummary> BuildTokenLookup(
+        IEnumerable<TaskInfo> jobs,
         ITokenAggregator tokens)
     {
-        // Read each project projection at most once. Keyed by JobKey
+        // Read each project projection at most once. Keyed by TaskKey
         // (watchPath::jobId) so jobs that share an id across watched
         // workspaces stay distinct.
-        var byProject = new Dictionary<string, Dictionary<string, JobTokenSummary>>(StringComparer.OrdinalIgnoreCase);
-        var merged = new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
+        var byProject = new Dictionary<string, Dictionary<string, TaskTokenSummary>>(StringComparer.OrdinalIgnoreCase);
+        var merged = new Dictionary<string, TaskTokenSummary>(StringComparer.Ordinal);
         foreach (var job in jobs)
         {
             if (string.IsNullOrWhiteSpace(job.WatchPath)) continue;
@@ -176,27 +176,27 @@ internal static class JobEndpointHelpers
             }
             if (perJob.TryGetValue(job.Id, out var t))
             {
-                merged[job.JobKey] = t;
+                merged[job.TaskKey] = t;
             }
         }
         return merged;
     }
 
-    internal static JobDetail WithRuntime(JobDetail detail, CliRouter router, TaskRunnerService runners)
+    internal static TaskDetail WithRuntime(TaskDetail detail, CliRouter router, TaskRunnerService runners)
         => detail with { Info = WithRuntime(detail.Info, router, runners) };
 
-    internal static JobDetail WithRuntime(
-        JobDetail detail,
+    internal static TaskDetail WithRuntime(
+        TaskDetail detail,
         CliRouter router,
         TaskRunnerService runners,
-        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId)
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId)
         => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId) };
 
-    internal static JobDetail WithRuntime(
-        JobDetail detail,
+    internal static TaskDetail WithRuntime(
+        TaskDetail detail,
         CliRouter router,
         TaskRunnerService runners,
-        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, TaskTokenSummary>? tokensByJobId,
         IReadOnlyDictionary<string, string>? verdictsByJobKey)
         => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey) };
 }

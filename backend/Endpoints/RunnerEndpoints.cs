@@ -10,7 +10,7 @@ namespace OrchestratorApi.Endpoints;
 /// Project-runner control surface under <c>/api/runner</c>: the
 /// status snapshot the board polls plus the manual mode / start /
 /// stop toggles. Per-job execution lives in
-/// <see cref="OrchestratorApi.Endpoints.Jobs.JobRunnerEndpoints"/> —
+/// <see cref="OrchestratorApi.Endpoints.Jobs.TaskRunnerEndpoints"/> —
 /// these routes operate at project granularity.
 /// </summary>
 public static class RunnerEndpoints

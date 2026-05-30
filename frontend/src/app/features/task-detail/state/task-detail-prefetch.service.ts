@@ -5,7 +5,7 @@ import { TaskService } from '../../../services/task.service';
 
 /**
  * Tiny in-memory prefetch + cache for `TaskDetail` payloads keyed by
- * `watchPath::id` (`jobKey`). Owns three jobs:
+ * `watchPath::id` (`taskKey`). Owns three jobs:
  *
  * 1. **Prefetch** the next 1-2 peers in the active lane-pager iteration
  *    while the user is reading the current task, so the accept → next-task

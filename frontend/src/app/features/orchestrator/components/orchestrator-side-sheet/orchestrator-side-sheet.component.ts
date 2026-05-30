@@ -839,7 +839,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   /**
    * Slice E: parse `/bug <description>` and create a backlog task via
-   * the existing `POST /api/jobs` endpoint. The directive must land in
+   * the existing `POST /api/tasks` endpoint. The directive must land in
    * `0-backlog` with `taskType=bug` so it goes through triage instead of
    * skipping straight into `2-ready`. Hashtag patterns at the start of
    * any line in the description are parsed into workspace tag ids.

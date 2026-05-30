@@ -38,7 +38,7 @@ public sealed class AcceptanceEvidenceDetector
     /// <see cref="TaskStates.Completed"/> or <see cref="TaskStates.Archive"/>;
     /// the caller is responsible for filtering.
     /// </summary>
-    public (string verdict, List<EvidenceDiagnostic> diagnostics) Evaluate(JobInfo job)
+    public (string verdict, List<EvidenceDiagnostic> diagnostics) Evaluate(TaskInfo job)
     {
         var diagnostics = new List<EvidenceDiagnostic>();
         if (job == null) return (AuditVerdicts.Inconclusive, diagnostics);

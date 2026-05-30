@@ -18,9 +18,9 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Regression test for the multi-second lag the user hit on /api/jobs and
-/// /api/jobs/grouped after the auto-loop snapshot was folded onto every
-/// JobInfo.
+/// Regression test for the multi-second lag the user hit on /api/tasks and
+/// /api/tasks/grouped after the auto-loop snapshot was folded onto every
+/// TaskInfo.
 ///
 /// <para>
 /// Root cause that this test pins down: <c>WithRuntime</c> looked up the
@@ -34,7 +34,7 @@ namespace OrchestratorApi.Tests;
 /// </para>
 ///
 /// <para>
-/// The contract being locked: enriching N JobInfos with WithRuntime must
+/// The contract being locked: enriching N TaskInfos with WithRuntime must
 /// be O(N) in cheap in-memory lookups, with no per-job disk I/O. We
 /// assert the runtime overlay phase completes in &lt; 1 second on a
 /// realistic board of 200 jobs. That ceiling is generous (the real fix
@@ -76,13 +76,13 @@ public class JobsEndpointPerfTests : IDisposable
         // measuring the overlay, not the first-touch cost.
         var jobs = scanner.ScanAllJobs();
         Assert.Equal(jobCount, jobs.Count);
-        _ = jobs.Select(j => JobEndpointHelpersAccessor.WithRuntime(j, router, runners)).ToList();
+        _ = jobs.Select(j => TaskEndpointHelpersAccessor.WithRuntime(j, router, runners)).ToList();
 
         // Act — measure the overlay only. Even if ScanAllJobs gets faster
         // later, the regression we are guarding against was inside the
         // overlay (per-job FindJob causing a full rescan).
         var sw = Stopwatch.StartNew();
-        var enriched = jobs.Select(j => JobEndpointHelpersAccessor.WithRuntime(j, router, runners)).ToList();
+        var enriched = jobs.Select(j => TaskEndpointHelpersAccessor.WithRuntime(j, router, runners)).ToList();
         sw.Stop();
 
         // Assert — generous ceiling. The pre-fix path took ~7-15s for 144
@@ -107,27 +107,27 @@ public class JobsEndpointPerfTests : IDisposable
             MakeJob("job-b", "project-a", Path.Combine(_watchPath, "a")),
             MakeJob("job-a", "project-b", Path.Combine(_watchPath, "b")),
         };
-        var tokens = new FakeTokenAggregator(new Dictionary<string, Dictionary<string, JobTokenSummary>>(StringComparer.OrdinalIgnoreCase)
+        var tokens = new FakeTokenAggregator(new Dictionary<string, Dictionary<string, TaskTokenSummary>>(StringComparer.OrdinalIgnoreCase)
         {
             ["project-a"] = new(StringComparer.Ordinal)
             {
-                ["job-a"] = new JobTokenSummary { TotalTokens = 10 },
-                ["job-b"] = new JobTokenSummary { TotalTokens = 20 },
+                ["job-a"] = new TaskTokenSummary { TotalTokens = 10 },
+                ["job-b"] = new TaskTokenSummary { TotalTokens = 20 },
             },
             ["project-b"] = new(StringComparer.Ordinal)
             {
-                ["job-a"] = new JobTokenSummary { TotalTokens = 30 },
+                ["job-a"] = new TaskTokenSummary { TotalTokens = 30 },
             },
         });
 
-        var lookup = JobEndpointHelpersAccessor.BuildTokenLookup(jobs, tokens);
+        var lookup = TaskEndpointHelpersAccessor.BuildTokenLookup(jobs, tokens);
 
         Assert.Equal(2, tokens.Calls.Count);
         Assert.Contains(tokens.Calls, c => c.ProjectName == "project-a" && c.WatchPath == jobs[0].WatchPath);
         Assert.Contains(tokens.Calls, c => c.ProjectName == "project-b" && c.WatchPath == jobs[2].WatchPath);
-        Assert.Equal(10, lookup[jobs[0].JobKey].TotalTokens);
-        Assert.Equal(20, lookup[jobs[1].JobKey].TotalTokens);
-        Assert.Equal(30, lookup[jobs[2].JobKey].TotalTokens);
+        Assert.Equal(10, lookup[jobs[0].TaskKey].TotalTokens);
+        Assert.Equal(20, lookup[jobs[1].TaskKey].TotalTokens);
+        Assert.Equal(30, lookup[jobs[2].TaskKey].TotalTokens);
     }
 
     private void WriteJob(string state, string slug)
@@ -138,10 +138,10 @@ public class JobsEndpointPerfTests : IDisposable
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
     }
 
-    private static JobInfo MakeJob(string id, string projectName, string watchPath) => new()
+    private static TaskInfo MakeJob(string id, string projectName, string watchPath) => new()
     {
         Id = id,
-        JobKey = $"{watchPath}::{id}",
+        TaskKey = $"{watchPath}::{id}",
         Title = id,
         State = TaskStates.Progress,
         ProjectName = projectName,
@@ -228,10 +228,10 @@ public class JobsEndpointPerfTests : IDisposable
 
 internal sealed class FakeTokenAggregator : ITokenAggregator
 {
-    private readonly IReadOnlyDictionary<string, Dictionary<string, JobTokenSummary>> _perProject;
+    private readonly IReadOnlyDictionary<string, Dictionary<string, TaskTokenSummary>> _perProject;
     public List<(string ProjectName, string WatchPath)> Calls { get; } = [];
 
-    public FakeTokenAggregator(IReadOnlyDictionary<string, Dictionary<string, JobTokenSummary>> perProject)
+    public FakeTokenAggregator(IReadOnlyDictionary<string, Dictionary<string, TaskTokenSummary>> perProject)
     {
         _perProject = perProject;
     }
@@ -247,41 +247,41 @@ internal sealed class FakeTokenAggregator : ITokenAggregator
     public TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null) => throw new NotImplementedException();
     public AdHocUsageAggregate AdHocAggregate(DateTime? since = null) => throw new NotImplementedException();
 
-    public Dictionary<string, JobTokenSummary> WorkspacePerJob(string projectName, string watchPath)
+    public Dictionary<string, TaskTokenSummary> WorkspacePerJob(string projectName, string watchPath)
     {
         Calls.Add((projectName, watchPath));
         return _perProject.TryGetValue(projectName, out var perJob)
             ? perJob
-            : new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
+            : new Dictionary<string, TaskTokenSummary>(StringComparer.Ordinal);
     }
 }
 
 /// <summary>
-/// JobEndpointHelpers.WithRuntime is internal; this thin accessor lets the
+/// TaskEndpointHelpers.WithRuntime is internal; this thin accessor lets the
 /// regression test reach it without making the helper public on its own.
 /// Lives in the test project so the production surface stays unchanged.
 /// </summary>
-internal static class JobEndpointHelpersAccessor
+internal static class TaskEndpointHelpersAccessor
 {
-    public static JobInfo WithRuntime(JobInfo job, CliRouter router, TaskRunnerService runners)
+    public static TaskInfo WithRuntime(TaskInfo job, CliRouter router, TaskRunnerService runners)
     {
         // Reflection over the internal helper. Keeps the production access
         // modifier honest while still letting the test call into it.
-        var t = typeof(OrchestratorApi.Endpoints.Jobs.JobCrudEndpoints).Assembly
-            .GetType("OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers")!;
+        var t = typeof(OrchestratorApi.Endpoints.Jobs.TaskCrudEndpoints).Assembly
+            .GetType("OrchestratorApi.Endpoints.Jobs.TaskEndpointHelpers")!;
         var m = t.GetMethod("WithRuntime",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
-            new[] { typeof(JobInfo), typeof(CliRouter), typeof(TaskRunnerService) })!;
-        return (JobInfo)m.Invoke(null, new object[] { job, router, runners })!;
+            new[] { typeof(TaskInfo), typeof(CliRouter), typeof(TaskRunnerService) })!;
+        return (TaskInfo)m.Invoke(null, new object[] { job, router, runners })!;
     }
 
-    public static Dictionary<string, JobTokenSummary> BuildTokenLookup(IEnumerable<JobInfo> jobs, ITokenAggregator tokens)
+    public static Dictionary<string, TaskTokenSummary> BuildTokenLookup(IEnumerable<TaskInfo> jobs, ITokenAggregator tokens)
     {
-        var t = typeof(OrchestratorApi.Endpoints.Jobs.JobCrudEndpoints).Assembly
-            .GetType("OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers")!;
+        var t = typeof(OrchestratorApi.Endpoints.Jobs.TaskCrudEndpoints).Assembly
+            .GetType("OrchestratorApi.Endpoints.Jobs.TaskEndpointHelpers")!;
         var m = t.GetMethod("BuildTokenLookup",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
-            new[] { typeof(IEnumerable<JobInfo>), typeof(ITokenAggregator) })!;
-        return (Dictionary<string, JobTokenSummary>)m.Invoke(null, new object[] { jobs, tokens })!;
+            new[] { typeof(IEnumerable<TaskInfo>), typeof(ITokenAggregator) })!;
+        return (Dictionary<string, TaskTokenSummary>)m.Invoke(null, new object[] { jobs, tokens })!;
     }
 }

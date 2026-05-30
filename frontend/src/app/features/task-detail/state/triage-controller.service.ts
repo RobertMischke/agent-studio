@@ -93,9 +93,9 @@ export class TriageController {
     // and the prefetch cache, so the new panel paints without a
     // roundtrip.
     let advanced = false;
-    if (this.jobSelection.advanceAfterMutation(info.jobKey)) {
+    if (this.jobSelection.advanceAfterMutation(info.taskKey)) {
       advanced = true;
-    } else if (this.advanceToNextInLane(lane, info.jobKey, peers)) {
+    } else if (this.advanceToNextInLane(lane, info.taskKey, peers)) {
       advanced = true;
     }
 
@@ -136,7 +136,7 @@ export class TriageController {
   moveToTop(info: TaskInfo, ev: { actionId: string }): void {
     void ev;
     // Capture the lane's exact ordered list BEFORE the promote so undo
-    // can replay it via /api/jobs/reorder. Same-lane reorders cannot be
+    // can replay it via /api/tasks/reorder. Same-lane reorders cannot be
     // expressed via the cross-lane move endpoint (it skips
     // SetOrderInLane when fromState == targetState), so we replay the
     // full order.
@@ -199,8 +199,8 @@ export class TriageController {
         // Prefer the lane-pager snapshot when one is active so the
         // iteration count and URL update consistently with the
         // detail-header Delete and state-dropdown paths.
-        if (this.jobSelection.advanceAfterMutation(info.jobKey)) return;
-        this.advanceToNextInLane(lane, info.jobKey, peers);
+        if (this.jobSelection.advanceAfterMutation(info.taskKey)) return;
+        this.advanceToNextInLane(lane, info.taskKey, peers);
       },
       error: (err) => {
         this.clearActing();
@@ -236,7 +236,7 @@ export class TriageController {
    * Snapshot the current ordered list of `{jobId, watchPath}` in the
    * given state. Returns an empty array when the lane is unknown or
    * empty. Used by the undo flow to replay a pre-action order via
-   * `POST /api/jobs/reorder`.
+   * `POST /api/tasks/reorder`.
    */
   private captureLaneOrder(state: string): { jobId: string; watchPath: string }[] {
     const grouped = this.jobService.grouped();
@@ -267,7 +267,7 @@ export class TriageController {
     if (this.jobSelection.pagerStep(1)) return;
     const peers = this.jobSelection.triageLanePeers();
     if (peers.length === 0) return;
-    const idx = peers.findIndex((p) => p.jobKey === info.jobKey);
+    const idx = peers.findIndex((p) => p.taskKey === info.taskKey);
     const nextIdx = idx < 0 ? 0 : Math.min(peers.length - 1, idx + 1);
     if (nextIdx === idx) return;
     this.jobSelection.openDetail(peers[nextIdx]);
@@ -278,7 +278,7 @@ export class TriageController {
     if (this.jobSelection.pagerStep(-1)) return;
     const peers = this.jobSelection.triageLanePeers();
     if (peers.length === 0) return;
-    const idx = peers.findIndex((p) => p.jobKey === info.jobKey);
+    const idx = peers.findIndex((p) => p.taskKey === info.taskKey);
     const prevIdx = idx < 0 ? 0 : Math.max(0, idx - 1);
     if (prevIdx === idx) return;
     this.jobSelection.openDetail(peers[prevIdx]);
@@ -305,7 +305,7 @@ export class TriageController {
     // the mutation: optimistic-persist may have already filtered out
     // the moving job, but we want the next peer that was after it in
     // the original list.
-    const idx = peersBefore.findIndex((p) => p.jobKey === departingJobKey);
+    const idx = peersBefore.findIndex((p) => p.taskKey === departingJobKey);
     let next: TaskInfo | null = null;
     if (idx >= 0) {
       next = peersBefore[idx + 1] ?? peersBefore[idx - 1] ?? null;
@@ -316,9 +316,9 @@ export class TriageController {
     // it; we also want to skip jobs that have since been moved out of
     // the lane).
     const live = this.jobSelection.triageLanePeers().filter(
-      (p) => p.jobKey !== departingJobKey && p.state === lane,
+      (p) => p.taskKey !== departingJobKey && p.state === lane,
     );
-    const candidate = (next && live.find((p) => p.jobKey === next!.jobKey)) ?? live[0] ?? null;
+    const candidate = (next && live.find((p) => p.taskKey === next!.taskKey)) ?? live[0] ?? null;
     if (candidate) {
       // Re-anchor lane to the new job's state (same lane unless poll drift).
       this.jobSelection.triageLaneState = candidate.state;
@@ -366,10 +366,10 @@ export class TriageController {
    * by removing the job that just left the captured lane. The pager
    * total decrements by one; the displayed task stays put.
    */
-  handleExternalLaneChange(originLane: string, jobKey: string): void {
+  handleExternalLaneChange(originLane: string, taskKey: string): void {
     const snap = this.lanePager.snapshot();
-    if (snap && snap.jobs.some(j => j.jobKey === jobKey)) {
-      this.lanePager.dropFromSnapshot(jobKey);
+    if (snap && snap.jobs.some(j => j.taskKey === taskKey)) {
+      this.lanePager.dropFromSnapshot(taskKey);
     }
 
     const sel = this.jobSelection.selected();
@@ -399,8 +399,8 @@ export class TriageController {
    * pending review or close the panel if none remain.
    */
   completeAndNextReview(): void {
-    const currentJobKey = this.jobSelection.selected()?.info.jobKey;
-    const reviewJobs = this.jobService.grouped().review.filter((j) => j.jobKey !== currentJobKey);
+    const currentJobKey = this.jobSelection.selected()?.info.taskKey;
+    const reviewJobs = this.jobService.grouped().review.filter((j) => j.taskKey !== currentJobKey);
     this.jobService.refresh();
     if (reviewJobs.length > 0) {
       this.jobSelection.openDetail(reviewJobs[0]);

@@ -134,7 +134,7 @@ public class TaskRunnerService : BackgroundService
         {
             _logger.LogWarning(
                 "[runner-role] Auto-pickup is structurally DISABLED for this backend (role=test-subject). " +
-                "Explicit /api/jobs/{{id}}/start calls still execute (Playwright fixtures, manual debugging). " +
+                "Explicit /api/tasks/{{id}}/start calls still execute (Playwright fixtures, manual debugging). " +
                 "See ADR-0044 and AGENTS.md 'Dev backend lifecycle'.");
         }
     }
@@ -494,7 +494,7 @@ public class TaskRunnerService : BackgroundService
     /// </summary>
     private ContinueJobResponse ShapeOutcome(
         RunOutcome outcome,
-        JobInfo info,
+        TaskInfo info,
         string jobId,
         string? watchPath,
         string mode,
@@ -559,7 +559,7 @@ public class TaskRunnerService : BackgroundService
             };
         }
 
-        if (rej.Reason == RunRejectReason.JobNotFound)
+        if (rej.Reason == RunRejectReason.TaskNotFound)
             throw new TaskOperationException(rej.Message ?? "Job not found", 404);
 
         if (rej.Reason == RunRejectReason.QuotaCapExceeded)
@@ -597,8 +597,8 @@ public class TaskRunnerService : BackgroundService
     /// is O(1) - the previous variant accepted only <c>watchPath</c> and
     /// resolved the project via <see cref="TaskScannerService.FindJob"/>,
     /// which performs a full disk rescan per call. With the runtime
-    /// overlay applied to every JobInfo, that turned <c>/api/jobs</c> and
-    /// <c>/api/jobs/grouped</c> into O(N^2) disk reads (~7-15 s on a
+    /// overlay applied to every TaskInfo, that turned <c>/api/tasks</c> and
+    /// <c>/api/tasks/grouped</c> into O(N^2) disk reads (~7-15 s on a
     /// 150-job board) and froze the polling UI. Locked by
     /// <c>JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond</c>.
     /// </summary>
@@ -653,7 +653,7 @@ public class TaskRunnerService : BackgroundService
     /// own message in the conversation immediately - no silent gap between
     /// click and the agent's first reply.
     /// </summary>
-    private void AppendUserPromptToCliLog(JobInfo info, string prompt)
+    private void AppendUserPromptToCliLog(TaskInfo info, string prompt)
     {
         try
         {
@@ -677,7 +677,7 @@ public class TaskRunnerService : BackgroundService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        var stopped = _router.Get(info.CliType).Stop(info.JobKey, reason);
+        var stopped = _router.Get(info.CliType).Stop(info.TaskKey, reason);
         if (stopped)
         {
             // Lifecycle event: stop requested. The matching RunFinished message
@@ -699,7 +699,7 @@ public class TaskRunnerService : BackgroundService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        var execution = _router.Get(info.CliType).GetExecution(info.JobKey);
+        var execution = _router.Get(info.CliType).GetExecution(info.TaskKey);
         return execution?.Status == "running";
     }
 
@@ -709,7 +709,7 @@ public class TaskRunnerService : BackgroundService
         if (info == null) return [];
 
         var logPath = TaskPaths.CliOutputLog(info.FolderPath);
-        var liveOutput = _router.Get(info.CliType).GetOutput(info.JobKey);
+        var liveOutput = _router.Get(info.CliType).GetOutput(info.TaskKey);
 
         if (liveOutput.Count > 0)
         {
@@ -722,8 +722,8 @@ public class TaskRunnerService : BackgroundService
     }
 
     /// <summary>Looks up the CliExecution for a job from the right CLI backend.</summary>
-    public CliExecution? GetExecutionForJob(JobInfo info)
-        => _router.Get(info.CliType).GetExecution(info.JobKey);
+    public CliExecution? GetExecutionForJob(TaskInfo info)
+        => _router.Get(info.CliType).GetExecution(info.TaskKey);
 
     public async Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
     {
@@ -737,7 +737,7 @@ public class TaskRunnerService : BackgroundService
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
         if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
 
-        var execution = _cli.GetExecution(info.JobKey);
+        var execution = _cli.GetExecution(info.TaskKey);
         var canResumeSession = !string.IsNullOrWhiteSpace(info.SessionName) && execution?.Status != "running";
         var promptResult = await _cli.RunPromptOnceAsync(
             "/context usage",
@@ -768,7 +768,7 @@ public class TaskRunnerService : BackgroundService
     /// job out of <c>3-progress</c>. Wired off
     /// <see cref="TaskTransitionService.OnJobMoved"/> in <c>Program.cs</c> so
     /// the clear is atomic with the move from the API caller's perspective:
-    /// a successful <c>POST /api/jobs/{id}/move</c> guarantees the next
+    /// a successful <c>POST /api/tasks/{id}/move</c> guarantees the next
     /// pickup tick sees <c>active=null</c>.
     /// </summary>
     public bool ClearActiveJobForProject(string projectName, string jobId, string reason)

@@ -10,7 +10,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Phase-5 parity test for <see cref="ProjectTokenUsageService"/>. Drives
-/// every surface (Summary / Heatmap / ExpensiveJobs / JobDetail) through
+/// every surface (Summary / Heatmap / ExpensiveJobs / TaskDetail) through
 /// both the legacy reader (<c>orchestrator.jsonl</c>) and the Phase-4
 /// bus-backed reader (<see cref="BusBackedProjectTokenUsageReader"/>)
 /// and asserts byte-identical output.
@@ -293,12 +293,12 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
         return (log, bridge, store);
     }
 
-    private static IReadOnlyDictionary<string, JobInfo> BuildJobs(params (string Id, string Title)[] jobs)
+    private static IReadOnlyDictionary<string, TaskInfo> BuildJobs(params (string Id, string Title)[] jobs)
     {
-        var map = new Dictionary<string, JobInfo>(StringComparer.Ordinal);
+        var map = new Dictionary<string, TaskInfo>(StringComparer.Ordinal);
         foreach (var (id, title) in jobs)
         {
-            map[id] = new JobInfo
+            map[id] = new TaskInfo
             {
                 Id = id,
                 Title = title,

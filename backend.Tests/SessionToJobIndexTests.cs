@@ -117,7 +117,7 @@ public class SessionToJobIndexTests
         // a new id). The plan calls out the 200-job / <50 ms target.
         const int jobCount = 200;
         var rng = new Random(1337);
-        var jobs = new List<JobInfo>(jobCount);
+        var jobs = new List<TaskInfo>(jobCount);
         for (var i = 0; i < jobCount; i++)
         {
             var chainLen = 2 + rng.Next(3); // 2..4
@@ -151,10 +151,10 @@ public class SessionToJobIndexTests
             $"expected at least {jobCount} session ids; got {index.Count}");
     }
 
-    private static JobInfo MakeJob(string id, string lane, string watchPath, string[] chain) => new()
+    private static TaskInfo MakeJob(string id, string lane, string watchPath, string[] chain) => new()
     {
         Id = id,
-        JobKey = TaskIdentity.CreateKey(watchPath, id),
+        TaskKey = TaskIdentity.CreateKey(watchPath, id),
         Title = id,
         State = lane,
         WatchPath = watchPath,

@@ -64,7 +64,7 @@ public class ClientIdentityMiddlewareTests : IDisposable
     public async Task Mutation_WithoutHeader_Returns401()
     {
         var (mw, _, called) = BuildMiddleware();
-        var ctx = BuildContext("POST", "/api/jobs", clientId: null);
+        var ctx = BuildContext("POST", "/api/tasks", clientId: null);
         await mw.InvokeAsync(ctx);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, ctx.Response.StatusCode);
@@ -77,7 +77,7 @@ public class ClientIdentityMiddlewareTests : IDisposable
     public async Task Mutation_WithUnknownClient_Returns401()
     {
         var (mw, _, called) = BuildMiddleware();
-        var ctx = BuildContext("POST", "/api/jobs", clientId: "ghost-client");
+        var ctx = BuildContext("POST", "/api/tasks", clientId: "ghost-client");
         await mw.InvokeAsync(ctx);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, ctx.Response.StatusCode);
@@ -89,7 +89,7 @@ public class ClientIdentityMiddlewareTests : IDisposable
     {
         var (mw, store, called) = BuildMiddleware();
         var registered = store.Register(new RegisterClientRequest { DisplayName = "Tester" });
-        var ctx = BuildContext("POST", "/api/jobs", clientId: registered.Id);
+        var ctx = BuildContext("POST", "/api/tasks", clientId: registered.Id);
         await mw.InvokeAsync(ctx);
 
         Assert.True(called.Value);
@@ -101,7 +101,7 @@ public class ClientIdentityMiddlewareTests : IDisposable
     public async Task Mutation_WithDefaultIdentity_PassesThrough()
     {
         var (mw, _, called) = BuildMiddleware();
-        var ctx = BuildContext("PUT", "/api/jobs/foo/title", clientId: DefaultClientIdentity.Id);
+        var ctx = BuildContext("PUT", "/api/tasks/foo/title", clientId: DefaultClientIdentity.Id);
         await mw.InvokeAsync(ctx);
         Assert.True(called.Value);
         Assert.Equal(StatusCodes.Status200OK, ctx.Response.StatusCode);
@@ -111,7 +111,7 @@ public class ClientIdentityMiddlewareTests : IDisposable
     public async Task Read_WithoutHeader_PassesThrough()
     {
         var (mw, _, called) = BuildMiddleware();
-        var ctx = BuildContext("GET", "/api/jobs", clientId: null);
+        var ctx = BuildContext("GET", "/api/tasks", clientId: null);
         await mw.InvokeAsync(ctx);
         Assert.True(called.Value);
     }
@@ -120,7 +120,7 @@ public class ClientIdentityMiddlewareTests : IDisposable
     public async Task Read_WithUnknownClient_PassesThrough()
     {
         var (mw, _, called) = BuildMiddleware();
-        var ctx = BuildContext("GET", "/api/jobs/grouped", clientId: "ghost");
+        var ctx = BuildContext("GET", "/api/tasks/grouped", clientId: "ghost");
         await mw.InvokeAsync(ctx);
         Assert.True(called.Value);
     }

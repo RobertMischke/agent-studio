@@ -14,8 +14,8 @@ namespace OrchestratorApi.Services.Projection;
 /// optionally - broadcasts deltas over <see cref="TaskHub"/> so live
 /// listeners do not need to poll.
 ///
-/// The projector is the only component aware of <see cref="JobInfo"/>.
-/// Sources see <see cref="JobInfo"/> too but only to find their files on
+/// The projector is the only component aware of <see cref="TaskInfo"/>.
+/// Sources see <see cref="TaskInfo"/> too but only to find their files on
 /// disk; the renderer and cache stay pure.
 /// </summary>
 public sealed class ConversationProjector
@@ -70,7 +70,7 @@ public sealed class ConversationProjector
     /// new tail events on <see cref="TaskHub"/> so the file watcher can
     /// stream live appends to subscribers without re-fetching.
     /// </summary>
-    public async Task ProjectAndBroadcastAsync(JobInfo info, CancellationToken ct)
+    public async Task ProjectAndBroadcastAsync(TaskInfo info, CancellationToken ct)
     {
         if (_hub is null) return;
 
@@ -112,7 +112,7 @@ public sealed class ConversationProjector
     public static string GroupName(string jobId) => $"conv-{jobId}";
 
     private async Task<(IReadOnlyList<ProjectedEvent> Events, IReadOnlyDictionary<string, DateTime> MTimes)>
-        ProjectInternalAsync(JobInfo info, CancellationToken ct)
+        ProjectInternalAsync(TaskInfo info, CancellationToken ct)
     {
         var mtimes = SourceMTimes(info);
         if (_cache.TryGet(info.Id, mtimes, out var hit))
@@ -153,7 +153,7 @@ public sealed class ConversationProjector
         return (ordered, mtimes);
     }
 
-    private IReadOnlyDictionary<string, DateTime> SourceMTimes(JobInfo info)
+    private IReadOnlyDictionary<string, DateTime> SourceMTimes(TaskInfo info)
     {
         var d = new Dictionary<string, DateTime>(StringComparer.Ordinal);
         foreach (var s in _sources)

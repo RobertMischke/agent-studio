@@ -392,7 +392,7 @@ public class ProjectRunner
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info != null)
             {
-                _router.Get(info.CliType).Stop(info.JobKey, reason);
+                _router.Get(info.CliType).Stop(info.TaskKey, reason);
             }
         }
         catch (Exception ex)
@@ -453,7 +453,7 @@ public class ProjectRunner
         // only"). A test-subject backend never auto-picks: watchdog,
         // pending-decision scan, and reconciliation above all still ran so
         // the surface Playwright is observing stays live, but we structurally
-        // refuse to claim work here. Explicit POST /api/jobs/{id}/start still
+        // refuse to claim work here. Explicit POST /api/tasks/{id}/start still
         // routes through RunCliAsync directly and is allowed.
         if (_role == RunnerRole.TestSubject) return;
 
@@ -541,7 +541,7 @@ public class ProjectRunner
         try
         {
             var info = _scanner.FindJob(jobId, Entry.Path);
-            if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.JobNotFound, "Job not found"));
+            if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.TaskNotFound, "Job not found"));
 
             // Quota cap gate: refuse to start when the CLI is past its
             // configured per-window cap. Auto-pickup will retry on the next
@@ -910,7 +910,7 @@ public class ProjectRunner
         // The legacy text log already contains this implicitly; the
         // structured file makes it grep-friendly without parsing.
         try { AppendToolCallLog(jobKey, evt); }
-        catch (Exception ex) { _logger.LogDebug(ex, "tool-calls.jsonl append failed for {JobKey}", jobKey); }
+        catch (Exception ex) { _logger.LogDebug(ex, "tool-calls.jsonl append failed for {TaskKey}", jobKey); }
 
         // Sentinel-on-TurnCompleted gate. claude-code in stream-json mode
         // emits a `result:success` frame (mapped to TurnCompleted) and can
@@ -923,7 +923,7 @@ public class ProjectRunner
         if (evt is CliRunEvent.TurnCompleted && _sentinelStopRequested.TryAdd(jobKey, 1))
         {
             try { TryStopOnSentinel(jobKey); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Sentinel-stop check failed for {JobKey}", jobKey); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Sentinel-stop check failed for {TaskKey}", jobKey); }
         }
 
         // Mirror per-turn token usage emitted by the coding-agent CLI onto
@@ -936,7 +936,7 @@ public class ProjectRunner
         if (evt is CliRunEvent.TurnCompleted)
         {
             try { MirrorAgentTurnUsageToBus(jobKey); }
-            catch (Exception ex) { _logger.LogDebug(ex, "Per-turn bus mirror failed for {JobKey}", jobKey); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Per-turn bus mirror failed for {TaskKey}", jobKey); }
         }
 
         // Clean up on terminal events so a later run with the same key
@@ -983,7 +983,7 @@ public class ProjectRunner
         if (!found) return;
 
         _logger.LogInformation(
-            "TurnCompleted with sentinel for {JobKey}; killing lingering {Cli} process so OnCliFinished can run.",
+            "TurnCompleted with sentinel for {TaskKey}; killing lingering {Cli} process so OnCliFinished can run.",
             jobKey, cliType);
         cli.Stop(jobKey, RunStopReason.SentinelDetected);
     }
@@ -1053,7 +1053,7 @@ public class ProjectRunner
     {
         if (evt is not CliRunEvent.ToolStarted and not CliRunEvent.ToolCompleted) return;
 
-        var jobFolder = JobKeyToFolderPath(jobKey);
+        var jobFolder = TaskKeyToFolderPath(jobKey);
         if (jobFolder == null) return;
         var logsDir = System.IO.Path.Combine(jobFolder, "logs");
         try { System.IO.Directory.CreateDirectory(logsDir); } catch { return; }
@@ -1074,7 +1074,7 @@ public class ProjectRunner
     /// the on-disk folder for the job. The job may currently live in any
     /// lane; we walk the canonical lane order until one resolves.
     /// </summary>
-    private string? JobKeyToFolderPath(string jobKey)
+    private string? TaskKeyToFolderPath(string jobKey)
     {
         var sep = jobKey.IndexOf("::", StringComparison.Ordinal);
         if (sep < 0) return null;
@@ -1274,7 +1274,7 @@ public class ProjectRunner
     /// errors), accept the NeedsInput state and notify the user via the
     /// chat - the same fallback the manual path uses.
     /// </summary>
-    private async Task RunOrchestratorDecisionAsync(JobInfo info, string jobId, AgentOutcome outcome)
+    private async Task RunOrchestratorDecisionAsync(TaskInfo info, string jobId, AgentOutcome outcome)
     {
         try
         {
@@ -1570,7 +1570,7 @@ public class ProjectRunner
     /// context lives in an image.
     /// </para>
     /// </summary>
-    internal static string BuildOrchestratorResumePrompt(JobInfo info, string lastAgentText, string attachmentsList)
+    internal static string BuildOrchestratorResumePrompt(TaskInfo info, string lastAgentText, string attachmentsList)
     {
         var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
             ? $"\n\nAttachments on this task (read with your Read tool if relevant - the agent's question often hinges on these):\n{attachmentsList}"
@@ -1608,7 +1608,7 @@ public class ProjectRunner
     /// context lives in an image.
     /// </para>
     /// </summary>
-    internal static string BuildOrchestratorPrompt(JobInfo info, string promptText, string lastAgentText, string attachmentsList)
+    internal static string BuildOrchestratorPrompt(TaskInfo info, string promptText, string lastAgentText, string attachmentsList)
     {
         var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
             ? $"\n\nAttachments on this task (read with your Read tool if the agent's question hinges on them - e.g. a screenshot the agent referenced):\n{attachmentsList}"
@@ -1697,7 +1697,7 @@ public class ProjectRunner
             // these even before the post-run policy and lane move so a crash
             // mid-finalisation does not lose the lifecycle event. RunFinished
             // is the matching pair to the RunStarted emitted on spawn.
-            JobInfo? finishedInfo = null;
+            TaskInfo? finishedInfo = null;
             try
             {
                 finishedInfo = _scanner.FindJob(jobId, Entry.Path);
@@ -2189,7 +2189,7 @@ public class ProjectRunner
     /// chain break so the user can see the cut instead of being confused why
     /// the agent re-reads the job folder mid-conversation.
     /// </summary>
-    private void AppendSessionCutMarkerToCliLog(JobInfo info, string reason)
+    private void AppendSessionCutMarkerToCliLog(TaskInfo info, string reason)
     {
         try
         {
@@ -2221,7 +2221,7 @@ public class ProjectRunner
     /// operator has nothing to read. Best-effort: a write failure here must not
     /// mask the original spawn failure.
     /// </summary>
-    private void WriteSpawnFailureDiagnostic(JobInfo info, string? cliType, string? cliError)
+    private void WriteSpawnFailureDiagnostic(TaskInfo info, string? cliType, string? cliError)
     {
         try
         {
@@ -2247,14 +2247,14 @@ public class ProjectRunner
         }
     }
 
-    private bool WriteCliLog(JobInfo info, ICliExecutionService cli)
+    private bool WriteCliLog(TaskInfo info, ICliExecutionService cli)
     {
         try
         {
             Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
             var logPath = TaskPaths.CliOutputLog(info.FolderPath);
 
-            var output = cli.GetOutput(info.JobKey);
+            var output = cli.GetOutput(info.TaskKey);
             if (output.Count == 0)
             {
                 // GetOutput already falls back to the on-disk JSONL when the
@@ -2280,7 +2280,7 @@ public class ProjectRunner
         }
     }
 
-    private ICliExecutionService GetCliFor(JobInfo info) => _router.Get(info.CliType);
+    private ICliExecutionService GetCliFor(TaskInfo info) => _router.Get(info.CliType);
     private string GetJobKey(string jobId) => TaskIdentity.CreateKey(Entry.Path, jobId);
     private string? GetActiveJobKey() => _activeJobId != null ? GetJobKey(_activeJobId) : null;
 
@@ -2370,7 +2370,7 @@ public class ProjectRunner
         if (jobId == null) return false;
         if (_processing) return false;
 
-        JobInfo? info = null;
+        TaskInfo? info = null;
         try { info = _scanner.FindJob(jobId, Entry.Path); }
         catch (Exception ex) { _logger.LogDebug(ex, "Reconcile: FindJob threw for {JobId}", jobId); }
 
@@ -2390,7 +2390,7 @@ public class ProjectRunner
         _activeCliType = cliType;
     }
 
-    private string RenderPrompt(RunPlan plan, JobInfo info)
+    private string RenderPrompt(RunPlan plan, TaskInfo info)
     {
         if (plan.PromptOverride != null) return plan.PromptOverride;
         if (string.IsNullOrWhiteSpace(plan.PromptTemplate))
@@ -2453,7 +2453,7 @@ public class ProjectRunner
     /// the active-job latch in <see cref="TickAsync"/>, not by lane
     /// coupling. Pinned by <c>ParallelLanesPickupTests</c>.
     /// </remarks>
-    internal JobInfo? GetNextReadyJob()
+    internal TaskInfo? GetNextReadyJob()
     {
         var intakeEnabled = _projectSettings.Get(ProjectName).IntakeEnabled == true;
         return _scanner.ScanAllJobs()
@@ -2473,7 +2473,7 @@ public class ProjectRunner
     /// in <c>human-ready</c>, <c>intake-running</c>, or <c>intake-blocked</c>
     /// stay in 2-ready and the runner tick falls through to the next card.
     /// </summary>
-    internal static bool IsPickupAllowed(JobInfo job, bool intakeEnabled)
+    internal static bool IsPickupAllowed(TaskInfo job, bool intakeEnabled)
     {
         if (!intakeEnabled) return true;
         return job.Phase == LifecyclePhases.IntakePassed;
@@ -2485,8 +2485,8 @@ public class ProjectRunner
     /// prefers these over jobs in 2-ready so an interrupted in-flight run
     /// continues where it left off instead of being skipped while a fresh
     /// job is started. A job has resumable state when either
-    /// <see cref="JobInfo.SessionName"/> or any non-recovery-marker entry
-    /// in <see cref="JobInfo.SessionChain"/> is non-empty.
+    /// <see cref="TaskInfo.SessionName"/> or any non-recovery-marker entry
+    /// in <see cref="TaskInfo.SessionChain"/> is non-empty.
     /// </summary>
     /// <remarks>
     /// Retained because <see cref="AutoPickupCascadeTests"/> pins the
@@ -2496,7 +2496,7 @@ public class ProjectRunner
     /// 3-progress folder regardless of session state (the "no log" case
     /// is the most-restartable, not the most-skippable).
     /// </remarks>
-    private JobInfo? GetNextResumableProgressJob()
+    private TaskInfo? GetNextResumableProgressJob()
     {
         return _scanner.ScanAllJobs()
             .Where(j => j.ProjectName == ProjectName
@@ -2506,7 +2506,7 @@ public class ProjectRunner
             .FirstOrDefault();
     }
 
-    internal static bool HasResumableSession(JobInfo info)
+    internal static bool HasResumableSession(TaskInfo info)
     {
         if (!string.IsNullOrWhiteSpace(info.SessionName)) return true;
         if (info.SessionChain == null || info.SessionChain.Count == 0) return false;
@@ -2657,7 +2657,7 @@ public class ProjectRunner
     /// only when 3-progress contains no folders (or all of them were
     /// dead-lettered in this call).
     /// </summary>
-    private JobInfo? TryPickProgressJobOrDeadLetter()
+    private TaskInfo? TryPickProgressJobOrDeadLetter()
     {
         var folders = ListProgressFoldersOldestFirst();
         foreach (var candidate in folders)

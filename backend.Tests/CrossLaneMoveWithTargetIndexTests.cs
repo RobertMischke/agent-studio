@@ -13,7 +13,7 @@ namespace OrchestratorApi.Tests;
 /// Regression coverage for the "cross-lane drag doesn't remember the
 /// drop position" bug. The pre-fix path moved the folder, updated the
 /// state field, and left the job's <c>order</c> field at whatever value
-/// it carried over from the source lane. The next /api/jobs/grouped
+/// it carried over from the source lane. The next /api/tasks/grouped
 /// poll then sorted by that stale order, so the dropped card snapped
 /// to a position the user did not choose. The fix routes the desired
 /// 0-based insertion slot through <see cref="TaskStateMachine.SetOrderInLane"/>,

@@ -23,16 +23,16 @@ public static class RuntimeEventPaths
 {
     public const string WorkspaceScope = "_workspace";
 
-    public static string JobRuntimeDir(string jobFolderPath)
+    public static string TaskRuntimeDir(string jobFolderPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jobFolderPath);
         return Path.Combine(jobFolderPath, "logs", "runtime");
     }
 
-    public static string JobDayFile(string jobFolderPath, DateTime utcDay)
+    public static string TaskDayFile(string jobFolderPath, DateTime utcDay)
     {
         var name = utcDay.ToUniversalTime().ToString("yyyy-MM-dd") + ".jsonl";
-        return Path.Combine(JobRuntimeDir(jobFolderPath), name);
+        return Path.Combine(TaskRuntimeDir(jobFolderPath), name);
     }
 
     public static string WorkspaceRuntimeRoot(string workspaceRoot)

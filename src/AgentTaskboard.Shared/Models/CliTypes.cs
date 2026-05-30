@@ -43,7 +43,7 @@ public static class CliTypes
 /// <para>
 /// <c>reuse-project</c>: one persistent session per <c>(project, cliType)</c> tuple,
 /// reused across jobs so the model keeps cache/context. A job can opt out via
-/// <see cref="JobInfo.UseOwnSession"/>.
+/// <see cref="TaskInfo.UseOwnSession"/>.
 /// </para>
 /// <para><c>per-job</c>: every job gets its own session (current default behavior pre-refactor).</para>
 /// </summary>

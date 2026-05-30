@@ -43,11 +43,11 @@ public class CommitAttributionMutationTests : IDisposable
         var (scanner, mutations) = Build();
         var jobDir = SeedJobFolder("alpha");
 
-        var attributed = new List<JobCommitInfo>
+        var attributed = new List<TaskCommitInfo>
         {
             Commit("aaaaaaa", "feat: real work", CommitAttributionKinds.Automatic, 0.9),
         };
-        var excluded = new List<JobExcludedCommitInfo>
+        var excluded = new List<TaskExcludedCommitInfo>
         {
             new() { Sha = Pad("bbbbbbb"), ShortSha = "bbbbbbb", Reason = CommitExclusionReasons.CrashRecoveryOfOtherTask, Subject = "rescue other" },
         };
@@ -108,7 +108,7 @@ public class CommitAttributionMutationTests : IDisposable
         Assert.Equal("ddddddd", c.ShortSha);
     }
 
-    private static JobCommitInfo Commit(string shortSha, string message, string attribution, double? confidence) => new()
+    private static TaskCommitInfo Commit(string shortSha, string message, string attribution, double? confidence) => new()
     {
         Sha = Pad(shortSha),
         ShortSha = shortSha,

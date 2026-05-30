@@ -3,7 +3,7 @@ using OrchestratorApi.Services.RegressionRadar;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
-public static class JobRegressionRadarEndpoints
+public static class TaskRegressionRadarEndpoints
 {
     public static void MapJobRegressionRadarEndpoints(this RouteGroupBuilder group)
     {

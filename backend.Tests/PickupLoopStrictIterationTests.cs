@@ -508,12 +508,12 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     /// observe its decisions. Fragile against rename, but the rename will
     /// fail this test at the same time as the production change.
     ///
-    /// Returns the picker's verdict (the <see cref="JobInfo"/> it would
+    /// Returns the picker's verdict (the <see cref="TaskInfo"/> it would
     /// hand to <c>RunCliAsync</c>, or <c>null</c> if 3-progress drained
-    /// and <c>TickAsync</c> will fall through to <see cref="JobInfo"/> from
+    /// and <c>TickAsync</c> will fall through to <see cref="TaskInfo"/> from
     /// 2-ready next).
     /// </summary>
-    private static JobInfo? InvokePickerLoop(ProjectRunner runner)
+    private static TaskInfo? InvokePickerLoop(ProjectRunner runner)
     {
         var method = typeof(ProjectRunner).GetMethod("TryPickProgressJobOrDeadLetter",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
@@ -524,7 +524,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // all folders were exhausted. That single-call shape matches what
         // TickAsync invokes; tests that need multiple ticks can call this
         // helper repeatedly.
-        return method!.Invoke(runner, null) as JobInfo;
+        return method!.Invoke(runner, null) as TaskInfo;
     }
 
     private void WriteJob(string state, string slug)

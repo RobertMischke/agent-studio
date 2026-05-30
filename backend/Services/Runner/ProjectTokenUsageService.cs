@@ -95,7 +95,7 @@ public class ProjectTokenUsageService
     public static ProjectTokenUsageSummary BuildSummaryFromEntries(
         string projectName,
         IReadOnlyList<OrchestratorLogEntry> entries,
-        IReadOnlyDictionary<string, JobInfo> jobsById,
+        IReadOnlyDictionary<string, TaskInfo> jobsById,
         DateTime? nowUtc = null)
     {
         var now = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
@@ -172,7 +172,7 @@ public class ProjectTokenUsageService
     public static ProjectTokenHeatmap BuildHeatmapFromEntries(
         string projectName,
         IReadOnlyList<OrchestratorLogEntry> entries,
-        IReadOnlyDictionary<string, JobInfo> jobsById,
+        IReadOnlyDictionary<string, TaskInfo> jobsById,
         int days,
         DateTime? nowUtc = null)
     {
@@ -274,11 +274,11 @@ public class ProjectTokenUsageService
 
     public static IReadOnlyList<ProjectExpensiveJob> BuildExpensiveJobsFromEntries(
         IReadOnlyList<OrchestratorLogEntry> entries,
-        IReadOnlyDictionary<string, JobInfo> jobsById,
+        IReadOnlyDictionary<string, TaskInfo> jobsById,
         int limit)
     {
         var lim = ResolveExpensiveLimit(limit);
-        var perJobTotal = new Dictionary<string, JobAccumulator>(StringComparer.Ordinal);
+        var perJobTotal = new Dictionary<string, TaskAccumulator>(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
@@ -290,7 +290,7 @@ public class ProjectTokenUsageService
             if (total <= 0) continue;
             if (!perJobTotal.TryGetValue(jobId!, out var acc))
             {
-                acc = new JobAccumulator();
+                acc = new TaskAccumulator();
                 perJobTotal[jobId!] = acc;
             }
             acc.Total += total;
@@ -339,7 +339,7 @@ public class ProjectTokenUsageService
     public static ProjectJobTokenDetail? BuildJobDetailFromEntries(
         string projectName,
         IReadOnlyList<OrchestratorLogEntry> entries,
-        IReadOnlyDictionary<string, JobInfo> jobsById,
+        IReadOnlyDictionary<string, TaskInfo> jobsById,
         string jobId)
     {
         if (string.IsNullOrWhiteSpace(jobId)) return null;
@@ -412,15 +412,15 @@ public class ProjectTokenUsageService
     }
 
     /// <summary>
-    /// Build the (jobId → JobInfo) lookup for the current watch path.
+    /// Build the (jobId → TaskInfo) lookup for the current watch path.
     /// Single disk walk, dictionary indexed by id. Last-write-wins on
     /// duplicates (rare; an id is supposed to be unique within the
     /// project, but if a stale folder remains the latest scanner result
     /// is the one we keep).
     /// </summary>
-    private IReadOnlyDictionary<string, JobInfo> BuildJobsById(string watchPath)
+    private IReadOnlyDictionary<string, TaskInfo> BuildJobsById(string watchPath)
     {
-        var map = new Dictionary<string, JobInfo>(StringComparer.Ordinal);
+        var map = new Dictionary<string, TaskInfo>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(watchPath)) return map;
         foreach (var job in _scanner.ScanAllJobs())
         {
@@ -434,7 +434,7 @@ public class ProjectTokenUsageService
     /// Public test hook so the perf test can inject a pre-baked job
     /// lookup without going through the scanner's disk walk twice.
     /// </summary>
-    public static string Categorize(string? jobId, IReadOnlyDictionary<string, JobInfo> jobsById)
+    public static string Categorize(string? jobId, IReadOnlyDictionary<string, TaskInfo> jobsById)
     {
         if (string.IsNullOrWhiteSpace(jobId)) return ProjectTokenCategory.Orchestrator;
         if (jobsById.TryGetValue(jobId!, out var info))
@@ -478,7 +478,7 @@ public class ProjectTokenUsageService
         }
     }
 
-    private sealed class JobAccumulator
+    private sealed class TaskAccumulator
     {
         public long Total;
         public int Calls;

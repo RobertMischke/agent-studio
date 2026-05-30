@@ -19,7 +19,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// with a model they pick. Lane state is never touched - verdicts
 /// surface as tags only so the user keeps the final say.
 /// </summary>
-public static class JobCodeReviewEndpoints
+public static class TaskCodeReviewEndpoints
 {
     /// <summary>Configuration key for the default LLM model.</summary>
     public const string DefaultModelConfigKey = "CodeReviewStep:DefaultModel";
@@ -41,7 +41,7 @@ public static class JobCodeReviewEndpoints
 
     public static void MapJobCodeReviewEndpoints(this RouteGroupBuilder group)
     {
-        // GET /api/jobs/{jobId}/code-review/list
+        // GET /api/tasks/{jobId}/code-review/list
         // Returns the list of code-review-*.md artifacts in the job folder,
         // newest-first. Each entry carries the parsed frontmatter so the
         // frontend can render verdict + summary without fetching each file.
@@ -91,7 +91,7 @@ public static class JobCodeReviewEndpoints
             return Results.Ok(new CodeReviewListResponse { Entries = entries });
         });
 
-        // GET /api/jobs/{jobId}/code-review/{fileName}
+        // GET /api/tasks/{jobId}/code-review/{fileName}
         // Returns the raw MD body for one review. The caller passes a file
         // name that came from the list endpoint; we never accept arbitrary
         // paths.
@@ -124,7 +124,7 @@ public static class JobCodeReviewEndpoints
             }
         });
 
-        // POST /api/jobs/{jobId}/code-review
+        // POST /api/tasks/{jobId}/code-review
         // Body: { "watchPath"?: string, "model"?: string, "cliType"?: string, "commit"?: string }
         // Synchronous: returns the report once the review finishes.
         group.MapPost("/{jobId}/code-review",
@@ -212,13 +212,13 @@ public sealed record CodeReviewListEntry
     public required string RunAt { get; init; }
 }
 
-/// <summary>Response for <c>GET /api/jobs/{jobId}/code-review/list</c>.</summary>
+/// <summary>Response for <c>GET /api/tasks/{jobId}/code-review/list</c>.</summary>
 public sealed record CodeReviewListResponse
 {
     public required IReadOnlyList<CodeReviewListEntry> Entries { get; init; }
 }
 
-/// <summary>Body for <c>POST /api/jobs/{jobId}/code-review</c>. All fields optional.</summary>
+/// <summary>Body for <c>POST /api/tasks/{jobId}/code-review</c>. All fields optional.</summary>
 public sealed record CodeReviewStepEndpointRequest
 {
     public string? WatchPath { get; init; }

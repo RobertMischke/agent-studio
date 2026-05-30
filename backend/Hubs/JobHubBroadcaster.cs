@@ -11,8 +11,8 @@ namespace OrchestratorApi.Hubs;
 ///
 /// <para>Event map (server → client method / payload):</para>
 /// <list type="bullet">
-///   <item><c>jobCreated</c> → <c>JobInfo</c> (resolved from the scanner)</item>
-///   <item><c>jobUpdated</c> → <c>JobInfo</c> (a single field changed)</item>
+///   <item><c>jobCreated</c> → <c>TaskInfo</c> (resolved from the scanner)</item>
+///   <item><c>jobUpdated</c> → <c>TaskInfo</c> (a single field changed)</item>
 ///   <item><c>jobMoved</c>   → <c>{ id, fromState, toState }</c></item>
 ///   <item><c>jobDeleted</c> → <c>{ id, watchPath }</c></item>
 ///   <item><c>jobsReordered</c> → <c>{ projectName, lane }</c></item>
@@ -46,9 +46,9 @@ public sealed class TaskHubBroadcaster
         _scanner = scanner;
         _logger = logger;
 
-        notifier.JobCreated += OnCreated;
-        notifier.JobUpdated += OnUpdated;
-        notifier.JobDeleted += OnDeleted;
+        notifier.TaskCreated += OnCreated;
+        notifier.TaskUpdated += OnUpdated;
+        notifier.TaskDeleted += OnDeleted;
         notifier.JobsReordered += OnReordered;
         notifier.JobsBulkChanged += OnBulkChanged;
     }
@@ -64,10 +64,10 @@ public sealed class TaskHubBroadcaster
         transitions.OnJobMoved += OnMoved;
     }
 
-    private void OnCreated(JobChangeEvent e) => BroadcastInfo("jobCreated", e);
-    private void OnUpdated(JobChangeEvent e) => BroadcastInfo("jobUpdated", e);
+    private void OnCreated(TaskChangeEvent e) => BroadcastInfo("jobCreated", e);
+    private void OnUpdated(TaskChangeEvent e) => BroadcastInfo("jobUpdated", e);
 
-    private void OnDeleted(JobChangeEvent e) =>
+    private void OnDeleted(TaskChangeEvent e) =>
         Send("jobDeleted", new { id = e.JobId, watchPath = e.WatchPath });
 
     private void OnMoved(string projectName, string jobId, string fromState, string toState) =>
@@ -78,9 +78,9 @@ public sealed class TaskHubBroadcaster
 
     private void OnBulkChanged() => Send("jobsBulkChanged");
 
-    private void BroadcastInfo(string method, JobChangeEvent e)
+    private void BroadcastInfo(string method, TaskChangeEvent e)
     {
-        // Resolve the canonical JobInfo so the client can merge the row in
+        // Resolve the canonical TaskInfo so the client can merge the row in
         // place. A create/update can race a concurrent move that already
         // relocated the folder; in that case FindJob returns null and we
         // fall back to a bulk re-pull rather than dropping the event.

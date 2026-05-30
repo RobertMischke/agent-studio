@@ -320,7 +320,7 @@ public sealed record WorkspaceManagementResult(
     WorkspaceManagementOutcome Outcome,
     string? Error = null,
     WatchPathEntry? Entry = null,
-    int? JobCount = null)
+    int? TaskCount = null)
 {
     public static WorkspaceManagementResult Created(WatchPathEntry entry) =>
         new(WorkspaceManagementOutcome.Created, Entry: entry);
@@ -331,5 +331,5 @@ public sealed record WorkspaceManagementResult(
     public static WorkspaceManagementResult NotFound(string error) =>
         new(WorkspaceManagementOutcome.NotFound, Error: error);
     public static WorkspaceManagementResult Conflict(string error, int? jobCount = null) =>
-        new(WorkspaceManagementOutcome.Conflict, Error: error, JobCount: jobCount);
+        new(WorkspaceManagementOutcome.Conflict, Error: error, TaskCount: jobCount);
 }

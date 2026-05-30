@@ -28,8 +28,8 @@ public class ConversationProjectionTests
         var ctx = new ImageContext { JobId = "job-1" };
         var result = ImageUrlRewriter.Rewrite(html, ctx);
 
-        Assert.Contains("/api/jobs/job-1/attachments/shot.png", result);
-        Assert.Contains("data-lightbox-src=\"/api/jobs/job-1/attachments/shot.png\"", result);
+        Assert.Contains("/api/tasks/job-1/attachments/shot.png", result);
+        Assert.Contains("data-lightbox-src=\"/api/tasks/job-1/attachments/shot.png\"", result);
         Assert.Contains("loading=\"lazy\"", result);
         Assert.Contains("alt=\"first\"", result);
     }
@@ -39,7 +39,7 @@ public class ConversationProjectionTests
     {
         var html = "<img src=\"results/before.png\" alt=\"r\" />";
         var ctx = new ImageContext { JobId = "job-1" };
-        Assert.Contains("/api/jobs/job-1/results/before.png", ImageUrlRewriter.Rewrite(html, ctx));
+        Assert.Contains("/api/tasks/job-1/results/before.png", ImageUrlRewriter.Rewrite(html, ctx));
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class ConversationProjectionTests
     {
         var html = "<img src=\"diagram.png\" alt=\"d\" />";
         var ctx = new ImageContext { JobId = "job-1" };
-        Assert.Contains("/api/jobs/job-1/attachments/diagram.png",
+        Assert.Contains("/api/tasks/job-1/attachments/diagram.png",
             ImageUrlRewriter.Rewrite(html, ctx));
     }
 
@@ -136,7 +136,7 @@ public class ConversationProjectionTests
         var html = renderer.ToHtml("![shot](attachments/foo.png)",
             new ImageContext { JobId = "job-7" });
 
-        Assert.Contains("/api/jobs/job-7/attachments/foo.png", html);
+        Assert.Contains("/api/tasks/job-7/attachments/foo.png", html);
     }
 
     [Fact]
@@ -284,7 +284,7 @@ public class ConversationProjectionTests
         try
         {
             var src = new CliOutputSource();
-            var info = new JobInfo { Id = "job-x", FolderPath = dir };
+            var info = new TaskInfo { Id = "job-x", FolderPath = dir };
 
             var events = await src.ReadAsync(info, CancellationToken.None);
             Assert.Equal(2, events.Count);
@@ -302,7 +302,7 @@ public class ConversationProjectionTests
     public void CliOutputSource_MissingLog_ReturnsEmptyAndMinMTime()
     {
         var src = new CliOutputSource();
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             Id = "job-none",
             FolderPath = Path.Combine(Path.GetTempPath(), "this-folder-does-not-exist-" + Guid.NewGuid())
@@ -348,7 +348,7 @@ public class ConversationProjectionTests
             hub: null,
             logger: NullLogger<ConversationProjector>.Instance);
 
-        var info = new JobInfo { Id = "job-merge", FolderPath = Path.GetTempPath() };
+        var info = new TaskInfo { Id = "job-merge", FolderPath = Path.GetTempPath() };
         var (events, _) = await InvokeProjectInternalAsync(projector, info);
 
         Assert.Equal(2, events.Count);
@@ -377,7 +377,7 @@ public class ConversationProjectionTests
             scanner: null!, hub: null,
             logger: NullLogger<ConversationProjector>.Instance);
 
-        var info = new JobInfo { Id = "job-cache", FolderPath = Path.GetTempPath() };
+        var info = new TaskInfo { Id = "job-cache", FolderPath = Path.GetTempPath() };
         await InvokeProjectInternalAsync(projector, info);
         await InvokeProjectInternalAsync(projector, info);
 
@@ -385,7 +385,7 @@ public class ConversationProjectionTests
     }
 
     private static async Task<(IReadOnlyList<ProjectedEvent> Events, IReadOnlyDictionary<string, DateTime> MTimes)>
-        InvokeProjectInternalAsync(ConversationProjector projector, JobInfo info)
+        InvokeProjectInternalAsync(ConversationProjector projector, TaskInfo info)
     {
         // ProjectInternalAsync is private; the projector exposes the same
         // pipeline via ProjectAsync, but that requires the scanner. Use
@@ -411,11 +411,11 @@ public class ConversationProjectionTests
             SourceKind = kind;
             _events = events;
         }
-        public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(JobInfo jobInfo, CancellationToken ct)
+        public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(TaskInfo jobInfo, CancellationToken ct)
         {
             ReadCount++;
             return Task.FromResult(_events);
         }
-        public DateTime GetSourceMTimeUtc(JobInfo jobInfo) => new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        public DateTime GetSourceMTimeUtc(TaskInfo jobInfo) => new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     }
 }

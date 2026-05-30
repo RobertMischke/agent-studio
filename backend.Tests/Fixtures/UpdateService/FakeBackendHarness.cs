@@ -37,7 +37,7 @@ public sealed class FakeBackendHarness : IAsyncDisposable
     public int ProbeFailFirstN { get; set; }
     public int ProbeCallCount;
     /// <summary>
-    /// F58: when &gt; 0, the first N calls to <c>/api/jobs/grouped</c> return
+    /// F58: when &gt; 0, the first N calls to <c>/api/tasks/grouped</c> return
     /// 503 and subsequent calls return 200. Lets the integration suite verify
     /// that the verifier's retry logic recovers from a cold-start delay.
     /// </summary>
@@ -75,7 +75,7 @@ public sealed class FakeBackendHarness : IAsyncDisposable
             return Results.Json(new { projects });
         });
 
-        app.MapGet("/api/jobs/grouped", () =>
+        app.MapGet("/api/tasks/grouped", () =>
         {
             var call = System.Threading.Interlocked.Increment(ref JobsGroupedCallCount);
             if (JobsGroupedFailFirstN > 0 && call <= JobsGroupedFailFirstN)
@@ -88,7 +88,7 @@ public sealed class FakeBackendHarness : IAsyncDisposable
             });
         });
 
-        app.MapGet("/api/jobs", () => Results.Json(new[] { new { id = "demo" } }));
+        app.MapGet("/api/tasks", () => Results.Json(new[] { new { id = "demo" } }));
         app.MapGet("/api/clients", () => Results.Json(new[] { new { id = "fake-client" } }));
         app.MapGet("/api/cli/quota", () => Results.Json(new { ok = true }));
 

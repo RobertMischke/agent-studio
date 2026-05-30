@@ -41,7 +41,7 @@ export interface GitProjectSummary {
  *  - the job-detail review/completed hygiene strip (with the `job` overlay).
  *
  * Fetched from `GET /api/git/hygiene?project=<name>` (project) and
- * `GET /api/jobs/{id}/git/hygiene` (job). Both endpoints cache server-side
+ * `GET /api/tasks/{id}/git/hygiene` (job). Both endpoints cache server-side
  * for ~3 s.
  */
 export interface GitHygieneStatus {

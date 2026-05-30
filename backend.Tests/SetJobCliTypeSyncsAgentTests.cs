@@ -11,7 +11,7 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Regression for the 2026-05-12 mass-flip bug: PUT /api/jobs/{id}/cli-type
+/// Regression for the 2026-05-12 mass-flip bug: PUT /api/tasks/{id}/cli-type
 /// updated <c>cliType</c> but left the parallel <c>agent</c> field on its
 /// previous value. Cards then rendered the new icon (from <c>cliType</c>)
 /// next to the old text label (from <c>agent</c>), producing a "Claude

@@ -20,7 +20,7 @@ public record TaskAccessSnapshot
 {
     public DateTime CapturedAt { get; init; }
     public long Version { get; init; }
-    public IReadOnlyList<JobInfo> Jobs { get; init; } = [];
+    public IReadOnlyList<TaskInfo> Jobs { get; init; } = [];
 }
 
 /// <summary>
@@ -72,7 +72,7 @@ public record TaskTransitionRequest
 public record TaskMutationResult
 {
     public TaskMutationStatus Status { get; init; }
-    public JobInfo? Job { get; init; }
+    public TaskInfo? Job { get; init; }
     public TaskAccessVersion? Version { get; init; }
     public string? Message { get; init; }
 }

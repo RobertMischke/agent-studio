@@ -13,7 +13,7 @@ namespace OrchestratorApi.Tests;
 /// </summary>
 public class OrchestratorPromptTests
 {
-    private static JobInfo Job(string title = "Layout looks off") => new()
+    private static TaskInfo Job(string title = "Layout looks off") => new()
     {
         Id = "fix-layout",
         Title = title,

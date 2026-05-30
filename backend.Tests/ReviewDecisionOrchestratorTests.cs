@@ -153,7 +153,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // The orchestrator chat-log line that drives the workspace banner
         // (and the activity-log decision row) MUST land in the post-move
         // folder, never in 4-auto-review. We assert that here by spying on
-        // the chat log and recording the JobInfo.FolderPath at write time.
+        // the chat log and recording the TaskInfo.FolderPath at write time.
         SeedReviewJobWithNeedsInput("banner-timing", "anything?");
         var spy = new RecordingChatLog();
         var orchestrator = BuildOrchestrator(
@@ -241,7 +241,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         SeedReviewJobWithNeedsInput("already-answered", "anything?");
         // Append an orchestrator follow-up so the parser treats the chain as resolved.
-        var logPath = JobPathLog(TaskStates.AutoReview, "already-answered");
+        var logPath = TaskPathLog(TaskStates.AutoReview, "already-answered");
         File.AppendAllText(logPath,
             $"\n[12:00:30.000] [orchestrator] [reissue] previously answered{Environment.NewLine}");
 
@@ -445,7 +445,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         SeedReviewJobWithBlocked("already-escalated", "needs human");
         // Append a supervisor escalate so the parser treats the chain as resolved.
-        var logPath = JobPathLog(TaskStates.AutoReview, "already-escalated");
+        var logPath = TaskPathLog(TaskStates.AutoReview, "already-escalated");
         File.AppendAllText(logPath,
             $"[12:00:30.000] [supervisor] [escalate] previously escalated{Environment.NewLine}");
 
@@ -500,15 +500,15 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         var jobs = new[]
         {
-            new JobInfo { Id = "job-a", JobKey = $"{_watchPath}::job-a", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.HumanReview },
-            new JobInfo { Id = "job-b", JobKey = $"{_watchPath}::job-b", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.HumanReview },
-            new JobInfo { Id = "job-c", JobKey = $"{_watchPath}::job-c", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.AutoReview },
+            new TaskInfo { Id = "job-a", TaskKey = $"{_watchPath}::job-a", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.HumanReview },
+            new TaskInfo { Id = "job-b", TaskKey = $"{_watchPath}::job-b", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.HumanReview },
+            new TaskInfo { Id = "job-c", TaskKey = $"{_watchPath}::job-c", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.AutoReview },
         };
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _workspace })
             .Build();
 
-        var lookup = JobEndpointHelpers.BuildOrchestratorVerdictLookup(jobs, config);
+        var lookup = TaskEndpointHelpers.BuildOrchestratorVerdictLookup(jobs, config);
 
         Assert.Equal("escalate", lookup[$"{_watchPath}::job-a"]);
         Assert.Equal("accept",   lookup[$"{_watchPath}::job-b"]);
@@ -521,13 +521,13 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // Regression for the 2026-05-11 false positive: an empty
         // crash-recovery commit landed on HEAD on top of three real
         // commits with ~7 files / ~400 lines of work. The aspect runner
-        // was reading only HEAD (via JobInfo.Commit) and reporting
+        // was reading only HEAD (via TaskInfo.Commit) and reporting
         // "Files changed: 0", which led every aspect reviewer to BLOCK
         // with "no work landed". The aggregator-backed summary must
         // surface the union across all run-window commits so the LLM
         // sees the real changeset.
         var t = DateTime.UtcNow;
-        var emptyAutoCommit = new JobCommitInfo
+        var emptyAutoCommit = new TaskCommitInfo
         {
             Sha = "empty-head",
             ShortSha = "emptyh",
@@ -535,13 +535,13 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             FilesChanged = 0,
             At = t.AddMinutes(1)
         };
-        var aggregate = new JobCommitsAggregate
+        var aggregate = new TaskCommitsAggregate
         {
             Count = 3,
             TotalFilesChanged = 7,
             TotalAdded = 380,
             TotalRemoved = 60,
-            Commits = new List<JobCommitRecord>
+            Commits = new List<TaskCommitRecord>
             {
                 new() { Sha = "empty-head", ShortSha = "emptyh", AuthorDateUtc = t.AddMinutes(1), Subject = "chore(crash-recovery): collect leftover state", FilesChanged = 0, Added = 0, Removed = 0 },
                 new() { Sha = "real-two",   ShortSha = "rl2",    AuthorDateUtc = t,                Subject = "feat: token aggregation phase 2",            FilesChanged = 3, Added = 180, Removed = 25 },
@@ -580,7 +580,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // unambiguously that nothing landed rather than receiving a
         // misleading "Commit: " line or an empty string.
         var summary = ReviewDecisionOrchestrator.BuildDiffSummary(
-            new JobCommitsAggregate { Count = 0, Commits = [] },
+            new TaskCommitsAggregate { Count = 0, Commits = [] },
             legacyAutoCommit: null);
 
         Assert.Contains("No commits attributed to this task", summary);
@@ -593,7 +593,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // (test / missing deps). With a legacy auto-commit on hand we
         // still emit the old single-commit view so the prompt is not
         // empty.
-        var legacy = new JobCommitInfo
+        var legacy = new TaskCommitInfo
         {
             Sha = "abc123",
             ShortSha = "abc123",
@@ -602,7 +602,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             At = DateTime.UtcNow
         };
         var summary = ReviewDecisionOrchestrator.BuildDiffSummary(
-            new JobCommitsAggregate { Count = 0, Commits = [] }, legacy);
+            new TaskCommitsAggregate { Count = 0, Commits = [] }, legacy);
 
         Assert.Contains("abc123", summary);
         Assert.Contains("feat: legacy single-commit", summary);
@@ -952,11 +952,11 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             $"[12:01:01.001] [stdout] [[TASK_NOOP]]{Environment.NewLine}");
     }
 
-    private string JobPathLog(string state, string slug) =>
+    private string TaskPathLog(string state, string slug) =>
         Path.Combine(_watchPath, state, slug, "logs", "cli-output.log");
 
     private string ReadCliLog(string state, string slug) =>
-        File.ReadAllText(JobPathLog(state, slug));
+        File.ReadAllText(TaskPathLog(state, slug));
 
     private void SeedReviewJobWithNeedsInput(string slug, string reason)
     {
@@ -1015,7 +1015,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
 /// <summary>
 /// Test double that records every <see cref="OrchestratorChatLog.Append"/>
-/// call and the <see cref="JobInfo.FolderPath"/> at write time. Used to
+/// call and the <see cref="TaskInfo.FolderPath"/> at write time. Used to
 /// assert the firing-order rule: operator-facing decision notifications
 /// must only fire after the lane move has succeeded, never while the job
 /// is still in the source lane.
@@ -1026,7 +1026,7 @@ internal sealed class RecordingChatLog : OrchestratorChatLog
 
     public List<RecordedCall> Calls { get; } = new();
 
-    public override bool Append(JobInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
+    public override bool Append(TaskInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
     {
         Calls.Add(new RecordedCall(kind, info?.FolderPath ?? string.Empty, text));
         return base.Append(info!, kind, text, liveBuffer);

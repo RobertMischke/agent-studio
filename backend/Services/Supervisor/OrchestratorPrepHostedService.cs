@@ -175,7 +175,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         }
     }
 
-    private void ApplyDecision(JobInfo job, OrchestratorPrepRules.PrepDecision decision, int iteration)
+    private void ApplyDecision(TaskInfo job, OrchestratorPrepRules.PrepDecision decision, int iteration)
     {
         switch (decision.Verdict)
         {
@@ -205,7 +205,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         }
     }
 
-    private static string ReadPromptText(JobInfo job)
+    private static string ReadPromptText(TaskInfo job)
     {
         try
         {
@@ -215,7 +215,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         catch { return ""; }
     }
 
-    private int ReadIteration(JobInfo job)
+    private int ReadIteration(TaskInfo job)
     {
         try
         {
@@ -227,7 +227,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         catch { return 0; }
     }
 
-    private void WriteIterationMetadata(JobInfo job, int newIteration, OrchestratorPrepRules.PrepDecision decision)
+    private void WriteIterationMetadata(TaskInfo job, int newIteration, OrchestratorPrepRules.PrepDecision decision)
     {
         try
         {
@@ -247,7 +247,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         }
     }
 
-    private void WriteBounceMetadata(JobInfo job, OrchestratorPrepRules.PrepDecision decision)
+    private void WriteBounceMetadata(TaskInfo job, OrchestratorPrepRules.PrepDecision decision)
     {
         try
         {

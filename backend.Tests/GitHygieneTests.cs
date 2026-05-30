@@ -120,7 +120,7 @@ public class GitHygieneTests : IDisposable
     }
 
     [Fact]
-    public void JobHygiene_WithRecordedCommit_ReportsCommitPresent()
+    public void TaskHygiene_WithRecordedCommit_ReportsCommitPresent()
     {
         var repo = SeedRepo("with-job");
         // Seed a watched-target-style job folder under .orchestrator/jobs/4-auto-review.
@@ -157,7 +157,7 @@ public class GitHygieneTests : IDisposable
         var hygiene = git.GetJobHygiene("demo-task", null);
 
         Assert.NotNull(hygiene.Job);
-        Assert.True(hygiene.Job!.JobInfoCommitPresent);
+        Assert.True(hygiene.Job!.TaskInfoCommitPresent);
         Assert.Equal(TaskStates.AutoReview, hygiene.Job.State);
         // Repo is clean, so accepted-uncommitted is false even though the
         // job sits in a post-progress lane.
@@ -165,7 +165,7 @@ public class GitHygieneTests : IDisposable
     }
 
     [Fact]
-    public void JobHygiene_AcceptedLaneWithDirtyTree_FlagsAcceptedUncommitted()
+    public void TaskHygiene_AcceptedLaneWithDirtyTree_FlagsAcceptedUncommitted()
     {
         var repo = SeedRepo("dirty-after-accept");
         var jobsRoot = Path.Combine(repo, ".orchestrator", "jobs", TaskStates.HumanReview);
@@ -187,7 +187,7 @@ public class GitHygieneTests : IDisposable
         var hygiene = git.GetJobHygiene("leaky-task", null, isActiveJob: true);
 
         Assert.NotNull(hygiene.Job);
-        Assert.False(hygiene.Job!.JobInfoCommitPresent);
+        Assert.False(hygiene.Job!.TaskInfoCommitPresent);
         Assert.True(hygiene.Job.AcceptedTaskUncommitted);
         Assert.True(hygiene.IsDirty);
         Assert.True(hygiene.UntrackedCount >= 1);

@@ -399,9 +399,9 @@ public sealed class DocsMarketingDriftAnalysisService
         return entries;
     }
 
-    private static IReadOnlyList<JobRef> BuildQueueJobs(string projectRoot)
+    private static IReadOnlyList<TaskRef> BuildQueueJobs(string projectRoot)
     {
-        var jobs = new List<JobRef>();
+        var jobs = new List<TaskRef>();
         foreach (var lane in QueueLanes)
         {
             var laneDir = Path.Combine(projectRoot, lane);
@@ -420,12 +420,12 @@ public sealed class DocsMarketingDriftAnalysisService
         return jobs;
     }
 
-    private static IReadOnlyList<JobRef> BuildRecentCompleted(string projectRoot)
+    private static IReadOnlyList<TaskRef> BuildRecentCompleted(string projectRoot)
     {
         var laneDir = Path.Combine(projectRoot, RecentCompletedLane);
-        if (!Directory.Exists(laneDir)) return Array.Empty<JobRef>();
+        if (!Directory.Exists(laneDir)) return Array.Empty<TaskRef>();
 
-        var entries = new List<JobRef>();
+        var entries = new List<TaskRef>();
         foreach (var dir in Directory.EnumerateDirectories(laneDir))
         {
             var entry = ReadJobRef(dir, RecentCompletedLane);
@@ -438,7 +438,7 @@ public sealed class DocsMarketingDriftAnalysisService
             .ToArray();
     }
 
-    private static JobRef? ReadJobRef(string dir, string lane)
+    private static TaskRef? ReadJobRef(string dir, string lane)
     {
         var jobJson = Path.Combine(dir, "job.json");
         if (!File.Exists(jobJson)) return null;
@@ -465,7 +465,7 @@ public sealed class DocsMarketingDriftAnalysisService
         try { touched = Directory.GetLastWriteTimeUtc(dir); }
         catch { /* best-effort */ }
 
-        return new JobRef(id, title, lane, touched);
+        return new TaskRef(id, title, lane, touched);
     }
 
     private static MarketingScope BuildMarketingScope(string? marketingRepoRoot)
@@ -616,7 +616,7 @@ public sealed class DocsMarketingDriftAnalysisService
         return sb.ToString().TrimEnd();
     }
 
-    private static string RenderQueueJobs(IReadOnlyList<JobRef> jobs)
+    private static string RenderQueueJobs(IReadOnlyList<TaskRef> jobs)
     {
         if (jobs.Count == 0) return "(no queued jobs)";
         var sb = new StringBuilder();
@@ -628,7 +628,7 @@ public sealed class DocsMarketingDriftAnalysisService
         return sb.ToString().TrimEnd();
     }
 
-    private static string RenderRecentTasks(IReadOnlyList<JobRef> tasks)
+    private static string RenderRecentTasks(IReadOnlyList<TaskRef> tasks)
     {
         if (tasks.Count == 0) return "(no recent completed tasks)";
         var sb = new StringBuilder();
@@ -778,7 +778,7 @@ public sealed class DocsMarketingDriftAnalysisService
 
     public sealed record DriftRef(string Path, string Label);
 
-    public sealed record JobRef(string JobId, string Title, string Lane, DateTime? LastWriteUtc);
+    public sealed record TaskRef(string JobId, string Title, string Lane, DateTime? LastWriteUtc);
 
     public sealed record ReportPointer(string ReportId, string Topic, string CreatedAt);
 
@@ -839,8 +839,8 @@ public sealed class DocsMarketingDriftScope
     public required string RepoRoot { get; init; }
     public required IReadOnlyList<DocsMarketingDriftAnalysisService.DriftRef> CanonicalDocs { get; init; }
     public required IReadOnlyList<DocsMarketingDriftAnalysisService.DriftRef> MockupDocs { get; init; }
-    public required IReadOnlyList<DocsMarketingDriftAnalysisService.JobRef> QueueJobs { get; init; }
-    public required IReadOnlyList<DocsMarketingDriftAnalysisService.JobRef> RecentCompleted { get; init; }
+    public required IReadOnlyList<DocsMarketingDriftAnalysisService.TaskRef> QueueJobs { get; init; }
+    public required IReadOnlyList<DocsMarketingDriftAnalysisService.TaskRef> RecentCompleted { get; init; }
     public required DocsMarketingDriftAnalysisService.MarketingScope Marketing { get; init; }
     public required IReadOnlyList<DocsMarketingDriftAnalysisService.ReportPointer> RecentDriftReports { get; init; }
     public required IReadOnlyList<DocsMarketingDriftAnalysisService.ReportPointer> RecentAnalysisReports { get; init; }

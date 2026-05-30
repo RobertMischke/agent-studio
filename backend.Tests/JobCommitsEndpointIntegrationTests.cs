@@ -12,18 +12,18 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Integration test that walks the same path the
-/// <c>/api/jobs/{id}/commits</c> endpoint takes against a real on-disk
+/// <c>/api/tasks/{id}/commits</c> endpoint takes against a real on-disk
 /// git repo: scan job, build run timeline, ask GitService for each
 /// SHA range, run the aggregator, and assert the result. The pure
-/// aggregator tests in <see cref="JobCommitsAggregatorTests"/> cover
+/// aggregator tests in <see cref="TaskCommitsAggregatorTests"/> cover
 /// the dedup / ordering rules without git; this test pins the wiring
 /// so a refactor of GitService can't quietly break the endpoint.
 /// </summary>
-public class JobCommitsEndpointIntegrationTests : IDisposable
+public class TaskCommitsEndpointIntegrationTests : IDisposable
 {
     private readonly string _tempDir;
 
-    public JobCommitsEndpointIntegrationTests()
+    public TaskCommitsEndpointIntegrationTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "job-commits-integration-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
@@ -86,7 +86,7 @@ public class JobCommitsEndpointIntegrationTests : IDisposable
         var lines = CliOutputLogParser.ParseFile(Path.Combine(info.FolderPath, "logs", "cli-output.log"));
         var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
 
-        var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
+        var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
             (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
 
         Assert.Equal(2, aggregate.Count);
@@ -121,7 +121,7 @@ public class JobCommitsEndpointIntegrationTests : IDisposable
         var (git, sessions, info) = BuildServices(repoRoot, watchPath, jobId);
         var events = sessions.ReadSessionEvents(jobId, watchPath);
         var timeline = RunTimelineBuilder.Build(events, [], DateTime.UtcNow);
-        var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
+        var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
             (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
 
         Assert.Equal(1, aggregate.Count);
@@ -186,7 +186,7 @@ public class JobCommitsEndpointIntegrationTests : IDisposable
         return (repoRoot, jobFolder, jobId, watchPath);
     }
 
-    private static (GitService git, TaskSessionLog sessions, JobInfo jobInfo) BuildServices(
+    private static (GitService git, TaskSessionLog sessions, TaskInfo jobInfo) BuildServices(
         string repoRoot, string watchPath, string jobId)
     {
         var dict = new Dictionary<string, string?>

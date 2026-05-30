@@ -128,7 +128,7 @@ public class FixtureFilterTests : IDisposable
         var (scanner, _) = BuildServices();
         var raw = scanner.ScanAllJobs();
 
-        // This mirrors the exact filter expression in JobCrudEndpoints.cs
+        // This mirrors the exact filter expression in TaskCrudEndpoints.cs
         // (`includeFixtures != true` -> filter on `!j.Fixture`). Locking it
         // in here means a future refactor can't silently surface fixtures
         // on stable.

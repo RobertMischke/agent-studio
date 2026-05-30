@@ -15,14 +15,14 @@ namespace OrchestratorApi.Tests;
 /// see what was just written, and the safety TTL eventually picks up
 /// changes the watcher missed". These tests pin both.
 /// </summary>
-public class JobIndexCacheTests : IDisposable
+public class TaskIndexCacheTests : IDisposable
 {
     private readonly string _watchPath;
     private readonly IConfiguration _config;
     private readonly TaskScannerService _scanner;
     private readonly TaskIndexCache _cache;
 
-    public JobIndexCacheTests()
+    public TaskIndexCacheTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-cache-" + Guid.NewGuid().ToString("N"));
         foreach (var state in TaskStates.All)

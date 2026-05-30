@@ -17,13 +17,13 @@ namespace OrchestratorApi.Tests;
 /// <see cref="TaskScannerService.ParseJobJson"/> reader so the legacy
 /// path can never be silently dropped.
 /// </summary>
-public class JobJsonSchemaTests : IDisposable
+public class TaskJsonSchemaTests : IDisposable
 {
     private readonly string _workspace;
     private readonly string _watchPath;
     private const string Project = "demo";
 
-    public JobJsonSchemaTests()
+    public TaskJsonSchemaTests()
     {
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-jobjson-schema-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);

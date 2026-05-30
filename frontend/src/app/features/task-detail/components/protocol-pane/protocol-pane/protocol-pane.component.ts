@@ -529,7 +529,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   /**
    * Live "interim status" banner state. Populated when the user clicks the
    * `📊 Interim status` button while a run is in flight. The button calls
-   * `POST /api/jobs/{id}/summary/interim`, which fires a one-shot Haiku
+   * `POST /api/tasks/{id}/summary/interim`, which fires a one-shot Haiku
    * against the current cli-output.log but does NOT touch status.md. The
    * banner is transient: dismissing it clears the markdown back to null.
    */
@@ -822,7 +822,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   /**
    * Posts the chosen file to the job's attachments endpoint. Mirrors the
-   * upload path used by the prompt editor (`/api/jobs/{id}/attachments`)
+   * upload path used by the prompt editor (`/api/tasks/{id}/attachments`)
    * so the screenshot lands next to other task attachments where the
    * orchestrator can reference it on the next decision call.
    */
@@ -832,7 +832,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (!job?.id) return;
     const watchPath = job.watchPath ?? '';
     const url =
-      `/api/jobs/${encodeURIComponent(job.id)}/attachments` +
+      `/api/tasks/${encodeURIComponent(job.id)}/attachments` +
       (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
     const form = new FormData();
     form.append('file', file, file.name || 'steer-screenshot.png');

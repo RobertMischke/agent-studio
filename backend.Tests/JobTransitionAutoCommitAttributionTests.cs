@@ -30,14 +30,14 @@ namespace OrchestratorApi.Tests;
 /// and stamped on the job.
 /// </para>
 /// </summary>
-public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
+public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _watchPath;
     private readonly string _repoRoot;
     private const string ProjectName = "demo";
 
-    public JobTransitionAutoCommitAttributionTests()
+    public TaskTransitionAutoCommitAttributionTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "atp-attribution-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_tempDir, "jobs");
@@ -93,9 +93,9 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
         var movedA = ReadJob(TaskStates.AutoReview, "task-a");
         var movedB = ReadJob(TaskStates.Progress, "task-b");
         Assert.Null(movedA?.Commit);
-        Assert.Empty(movedA?.Commits ?? new List<JobCommitInfo>());
+        Assert.Empty(movedA?.Commits ?? new List<TaskCommitInfo>());
         Assert.Null(movedB?.Commit);
-        Assert.Empty(movedB?.Commits ?? new List<JobCommitInfo>());
+        Assert.Empty(movedB?.Commits ?? new List<TaskCommitInfo>());
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
         File.AppendAllText(Path.Combine(logsDir, "session-events.jsonl"), line, Encoding.UTF8);
     }
 
-    private JobInfo? ReadJob(string state, string slug)
+    private TaskInfo? ReadJob(string state, string slug)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         if (!Directory.Exists(dir)) return null;

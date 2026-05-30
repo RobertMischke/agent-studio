@@ -55,7 +55,7 @@ public sealed class AgentMessageBusStore
     /// <summary>
     /// Eagerly load the per-(workspace, project) projection so the first
     /// caller does not pay the cold-start jsonl deserialisation cost. Used
-    /// by boot-time warmup in Program.cs to keep /api/jobs/grouped fast on
+    /// by boot-time warmup in Program.cs to keep /api/tasks/grouped fast on
     /// the very first request after a restart; without this, the verifier
     /// run by update-service can time out while the Runbook bus (100K+ lines)
     /// is being deserialised inline on the request thread.
@@ -381,7 +381,7 @@ public sealed class AgentMessageBusStore
         /// instead of the O(N^2) that per-message <see cref="Append"/> costs
         /// (each Append clones the whole list + dict). On a 100K-line history
         /// that quadratic was minutes of CPU + multi-GB transient garbage and
-        /// was the root cause of the /api/jobs(/grouped) hang + 90% CPU.
+        /// was the root cause of the /api/tasks(/grouped) hang + 90% CPU.
         /// Caller MUST follow the load loop with <see cref="SortById"/> to
         /// restore id order, since this skips the incremental ordered insert.
         /// </summary>

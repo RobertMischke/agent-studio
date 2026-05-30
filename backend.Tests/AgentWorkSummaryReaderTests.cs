@@ -17,10 +17,10 @@ namespace OrchestratorApi.Tests;
 /// </summary>
 public class AgentWorkSummaryReaderTests
 {
-    private static JobInfo MakeJob(string folder)
+    private static TaskInfo MakeJob(string folder)
     {
         Directory.CreateDirectory(Path.Combine(folder, TaskPaths.LogsDirName));
-        return new JobInfo
+        return new TaskInfo
         {
             Id = "test-job",
             FolderPath = folder,

@@ -91,7 +91,7 @@ export class PromptPaneComponent {
    *  task (refreshes, status updates) the previously-selected tab persists. */
   private lastJobKey: string | null = null;
   private resetTabOnJobSwitch = effect(() => {
-    const key = this.job()?.jobKey ?? null;
+    const key = this.job()?.taskKey ?? null;
     if (this.lastJobKey !== null && key !== null && key !== this.lastJobKey) {
       this.activeTab.set('overview');
     }

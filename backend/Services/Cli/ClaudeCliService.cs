@@ -9,7 +9,7 @@ namespace OrchestratorApi.Services.Cli;
 /// <summary>
 /// Live rate-limit snapshot derived from Anthropic's <c>rate_limit_event</c>
 /// stream-json frames. Captured per-turn while the CLI is running and
-/// surfaced via <c>GET /api/jobs/{id}/claude/session-info</c> so the
+/// surfaced via <c>GET /api/tasks/{id}/claude/session-info</c> so the
 /// frontend's protocol-pane pill can show "5h reset in 12 min".
 /// </summary>
 public record ClaudeRateLimitSnapshot(

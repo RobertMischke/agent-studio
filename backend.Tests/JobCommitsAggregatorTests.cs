@@ -7,19 +7,19 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Pure-function tests for <see cref="JobCommitsAggregator"/>. The
+/// Pure-function tests for <see cref="TaskCommitsAggregator"/>. The
 /// aggregator is the load-bearing piece behind the protocol-pane
 /// "Commits and change set" panel and the kanban "+N commits" hint;
 /// the tests pin the dedup-by-SHA, ordering, deletion-only, and
 /// auto-commit-merging rules without standing up a real git repo.
 /// </summary>
-public class JobCommitsAggregatorTests
+public class TaskCommitsAggregatorTests
 {
     [Fact]
     public void Aggregate_NoRunsAndNoAutoCommit_ReturnsEmpty()
     {
-        var info = new JobInfo();
-        var result = JobCommitsAggregator.Aggregate(info, [], (_, _) => []);
+        var info = new TaskInfo();
+        var result = TaskCommitsAggregator.Aggregate(info, [], (_, _) => []);
         Assert.Equal(0, result.Count);
         Assert.Empty(result.Commits);
         Assert.Equal(0, result.TotalAdded);
@@ -29,9 +29,9 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_OneRunOneCommit_ReturnsThatCommit()
     {
-        var info = new JobInfo();
+        var info = new TaskInfo();
         var run = new RunRecord { Index = 1, HeadShaBefore = "aaa", HeadShaAfter = "bbb" };
-        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
         {
             new("bbb", "bbb", DateTime.UtcNow, "Alice", "feat: thing", 2, 10, 1)
         });
@@ -46,12 +46,12 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_MultipleRunsMultipleCommits_OrderedNewestFirst()
     {
-        var info = new JobInfo();
+        var info = new TaskInfo();
         var t0 = DateTime.UtcNow.AddMinutes(-30);
         var run1 = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "h1" };
         var run2 = new RunRecord { Index = 2, HeadShaBefore = "h1", HeadShaAfter = "h2" };
 
-        var result = JobCommitsAggregator.Aggregate(info, [run1, run2], (before, after) => after switch
+        var result = TaskCommitsAggregator.Aggregate(info, [run1, run2], (before, after) => after switch
         {
             "h1" => [new GitCommitInfo("c1", "c1", t0.AddMinutes(1), "A", "first", 1, 1, 0)],
             "h2" => [new GitCommitInfo("c2", "c2", t0.AddMinutes(20), "A", "second", 1, 2, 0)],
@@ -71,11 +71,11 @@ public class JobCommitsAggregatorTests
         // Two runs whose SHA ranges happen to overlap (e.g. a recovery
         // run that re-claims the previous range). The same commit must
         // not double-count.
-        var info = new JobInfo();
+        var info = new TaskInfo();
         var run1 = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "h1" };
         var run2 = new RunRecord { Index = 2, HeadShaBefore = "h0", HeadShaAfter = "h1" };
         var sharedCommit = new GitCommitInfo("dup", "dup", DateTime.UtcNow, "A", "shared", 1, 5, 0);
-        var result = JobCommitsAggregator.Aggregate(info, [run1, run2], (_, _) => [sharedCommit]);
+        var result = TaskCommitsAggregator.Aggregate(info, [run1, run2], (_, _) => [sharedCommit]);
 
         Assert.Equal(1, result.Count);
         Assert.Equal("dup", result.Commits[0].Sha);
@@ -85,11 +85,11 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_TrivialRangesAreSkipped()
     {
-        var info = new JobInfo();
+        var info = new TaskInfo();
         var trivial = new RunRecord { Index = 1, HeadShaBefore = "same", HeadShaAfter = "same" };
         var missing = new RunRecord { Index = 2, HeadShaBefore = null, HeadShaAfter = "x" };
         var fetched = false;
-        var result = JobCommitsAggregator.Aggregate(info, [trivial, missing], (_, _) =>
+        var result = TaskCommitsAggregator.Aggregate(info, [trivial, missing], (_, _) =>
         {
             fetched = true;
             return [];
@@ -101,10 +101,10 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_DeletionOnlyCommitIsIncluded()
     {
-        var info = new JobInfo();
+        var info = new TaskInfo();
         var run = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "h1" };
         var deletion = new GitCommitInfo("del", "del", DateTime.UtcNow, "A", "remove old", 3, 0, 42);
-        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => [deletion]);
+        var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => [deletion]);
 
         Assert.Equal(1, result.Count);
         Assert.Equal(0, result.Commits[0].Added);
@@ -116,9 +116,9 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_AutoCommitIsAddedWhenNotAlreadyCovered()
     {
-        var info = new JobInfo
+        var info = new TaskInfo
         {
-            Commit = new JobCommitInfo
+            Commit = new TaskCommitInfo
             {
                 Sha = "auto",
                 ShortSha = "auto",
@@ -128,7 +128,7 @@ public class JobCommitsAggregatorTests
                 At = DateTime.UtcNow
             }
         };
-        var result = JobCommitsAggregator.Aggregate(info, [], (_, _) => []);
+        var result = TaskCommitsAggregator.Aggregate(info, [], (_, _) => []);
         Assert.Equal(1, result.Count);
         Assert.Equal("auto", result.Commits[0].Sha);
         Assert.Null(result.Commits[0].RunIndex);
@@ -137,12 +137,12 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_AutoCommitNotDoubleCountedWhenAlreadyInRunRange()
     {
-        var info = new JobInfo
+        var info = new TaskInfo
         {
-            Commit = new JobCommitInfo { Sha = "auto", ShortSha = "auto", Message = "chore: snap", At = DateTime.UtcNow }
+            Commit = new TaskCommitInfo { Sha = "auto", ShortSha = "auto", Message = "chore: snap", At = DateTime.UtcNow }
         };
         var run = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "auto" };
-        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
         {
             new("auto", "auto", DateTime.UtcNow, "A", "real subject", 2, 5, 1)
         });
@@ -158,15 +158,15 @@ public class JobCommitsAggregatorTests
         // A crash-recovery for another task landed inside this task's run
         // window. Once attribution records it in ExcludedCommits, the
         // aggregate must drop it even though git still reaches it.
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             ExcludedCommits =
             [
-                new JobExcludedCommitInfo { Sha = "noise", ShortSha = "noise", Reason = CommitExclusionReasons.CrashRecoveryOfOtherTask }
+                new TaskExcludedCommitInfo { Sha = "noise", ShortSha = "noise", Reason = CommitExclusionReasons.CrashRecoveryOfOtherTask }
             ]
         };
         var run = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "h1" };
-        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
         {
             new("real", "real", DateTime.UtcNow, "Claude", "feat: real", 1, 3, 0),
             new("noise", "noise", DateTime.UtcNow, "boot", "chore(crash-recovery): rescue orphan changes for other", 1, 9, 0)
@@ -181,15 +181,15 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_OverlaysAttributionFromPersistedChain()
     {
-        var info = new JobInfo
+        var info = new TaskInfo
         {
             Commits =
             [
-                new JobCommitInfo { Sha = "bbb", ShortSha = "bbb", Message = "feat", At = DateTime.UtcNow, Attribution = CommitAttributionKinds.Automatic, Confidence = 0.9 }
+                new TaskCommitInfo { Sha = "bbb", ShortSha = "bbb", Message = "feat", At = DateTime.UtcNow, Attribution = CommitAttributionKinds.Automatic, Confidence = 0.9 }
             ]
         };
         var run = new RunRecord { Index = 1, HeadShaBefore = "aaa", HeadShaAfter = "bbb" };
-        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
         {
             new("bbb", "bbb", DateTime.UtcNow, "Claude", "feat: thing", 2, 10, 1)
         });
@@ -202,9 +202,9 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void Aggregate_RangeCommitWithoutPersistedEntry_DefaultsToLegacyAttribution()
     {
-        var info = new JobInfo();
+        var info = new TaskInfo();
         var run = new RunRecord { Index = 1, HeadShaBefore = "aaa", HeadShaAfter = "bbb" };
-        var result = JobCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
         {
             new("bbb", "bbb", DateTime.UtcNow, "A", "feat: thing", 1, 1, 0)
         });
@@ -215,7 +215,7 @@ public class JobCommitsAggregatorTests
     [Fact]
     public void CountCommitRangesPlusAutoCommit_CountsNonTrivialRanges()
     {
-        var info = new JobInfo();
+        var info = new TaskInfo();
         var events = new List<SessionEvent>
         {
             new() { HeadShaBefore = "a", HeadShaAfter = "b" },
@@ -223,36 +223,36 @@ public class JobCommitsAggregatorTests
             new() { HeadShaBefore = "c", HeadShaAfter = "c" }, // trivial
             new() { HeadShaBefore = null, HeadShaAfter = "x" } // missing
         };
-        Assert.Equal(2, JobCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
+        Assert.Equal(2, TaskCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
     }
 
     [Fact]
     public void CountCommitRangesPlusAutoCommit_AddsAutoCommitWhenDistinct()
     {
-        var info = new JobInfo
+        var info = new TaskInfo
         {
-            Commit = new JobCommitInfo { Sha = "z", ShortSha = "z", Message = "auto", At = DateTime.UtcNow }
+            Commit = new TaskCommitInfo { Sha = "z", ShortSha = "z", Message = "auto", At = DateTime.UtcNow }
         };
         var events = new List<SessionEvent>
         {
             new() { HeadShaBefore = "a", HeadShaAfter = "b" }
         };
         // 1 range + 1 auto-commit (auto-commit's sha "z" not in any range tail).
-        Assert.Equal(2, JobCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
+        Assert.Equal(2, TaskCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
     }
 
     [Fact]
     public void CountCommitRangesPlusAutoCommit_DoesNotDoubleCountAutoCommitInsideRange()
     {
-        var info = new JobInfo
+        var info = new TaskInfo
         {
-            Commit = new JobCommitInfo { Sha = "b", ShortSha = "b", Message = "auto", At = DateTime.UtcNow }
+            Commit = new TaskCommitInfo { Sha = "b", ShortSha = "b", Message = "auto", At = DateTime.UtcNow }
         };
         var events = new List<SessionEvent>
         {
             new() { HeadShaBefore = "a", HeadShaAfter = "b" }
         };
         // Range tail equals auto-commit sha → counted once.
-        Assert.Equal(1, JobCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
+        Assert.Equal(1, TaskCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
     }
 }

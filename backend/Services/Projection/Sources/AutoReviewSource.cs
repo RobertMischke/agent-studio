@@ -14,7 +14,7 @@ public sealed class AutoReviewSource : IConversationEventSource
 {
     public string SourceKind => "auto-review";
 
-    public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(JobInfo jobInfo, CancellationToken ct)
+    public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(TaskInfo jobInfo, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(jobInfo.FolderPath) || !Directory.Exists(jobInfo.FolderPath))
         {
@@ -41,7 +41,7 @@ public sealed class AutoReviewSource : IConversationEventSource
         return Task.FromResult(events);
     }
 
-    public DateTime GetSourceMTimeUtc(JobInfo jobInfo)
+    public DateTime GetSourceMTimeUtc(TaskInfo jobInfo)
     {
         if (string.IsNullOrWhiteSpace(jobInfo.FolderPath) || !Directory.Exists(jobInfo.FolderPath))
         {

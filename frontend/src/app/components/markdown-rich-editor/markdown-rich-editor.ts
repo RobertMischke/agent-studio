@@ -393,7 +393,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
     this.uploading.set(true);
     try {
       const watchPath = this.watchPath();
-      const url = `/api/jobs/${encodeURIComponent(jobId)}/attachments`
+      const url = `/api/tasks/${encodeURIComponent(jobId)}/attachments`
         + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
       const form = new FormData();
       form.append('file', file, file.name || 'pasted-image.png');
@@ -431,7 +431,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
       ? relativePath.slice(ATTACHMENTS_PREFIX.length)
       : relativePath;
     const qs = watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '';
-    return `/api/jobs/${encodeURIComponent(jobId)}/attachments/${encodeURIComponent(fileName)}${qs}`;
+    return `/api/tasks/${encodeURIComponent(jobId)}/attachments/${encodeURIComponent(fileName)}${qs}`;
   }
 
   private markdownOptions(): MarkdownImageOptions {

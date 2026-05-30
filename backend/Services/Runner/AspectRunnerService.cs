@@ -589,7 +589,7 @@ internal static class ConcernTagWriter
         catch (Exception ex)
         {
             logger.LogWarning(ex,
-                "ConcernTagWriter: failed to merge concern tags into {JobFolder}",
+                "ConcernTagWriter: failed to merge concern tags into {TaskFolder}",
                 jobFolderPath);
         }
     }

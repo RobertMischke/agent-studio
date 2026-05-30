@@ -38,7 +38,7 @@ public class TaskWatcherService : BackgroundService
     {
         _scanner = scanner;
         _logger = logger;
-        var debounceMs = int.TryParse(config["JobWatcher:DebounceMs"], out var v) ? v : 250;
+        var debounceMs = int.TryParse(config["TaskWatcher:DebounceMs"], out var v) ? v : 250;
         _debounce = TimeSpan.FromMilliseconds(Math.Max(50, debounceMs));
     }
 

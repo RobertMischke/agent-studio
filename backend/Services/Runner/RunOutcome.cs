@@ -12,7 +12,7 @@ namespace OrchestratorApi.Services.Runner;
 public enum RunRejectReason
 {
     None,
-    JobNotFound,
+    TaskNotFound,
     CliUnavailable,
     ProjectBusy,
     /// <summary>

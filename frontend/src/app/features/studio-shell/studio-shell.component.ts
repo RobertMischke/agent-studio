@@ -630,13 +630,13 @@ export class StudioShellComponent {
       case 'board':    return 'Board';
       case 'hub':      return 'Project Hub';
       case 'task': {
-        // jobKey on Windows looks like
+        // taskKey on Windows looks like
         // `C:\Projects\…\projects\agent-taskboard::<task-slug>`. The
         // previous `split('/').pop()` didn't help on backslash paths
         // and dumped the entire watch-path into the titlebar. Take the
         // tail after the last `\`, `/`, or `::` and clamp to ~36 chars
         // so the breadcrumb stays a single readable label.
-        const raw = tab.jobKey;
+        const raw = tab.taskKey;
         const tail = raw.split(/[\\/]|::/).filter(Boolean).pop() ?? raw;
         const clipped = tail.length > 36 ? tail.slice(0, 33) + '…' : tail;
         return `Task ${clipped}`;
@@ -715,7 +715,7 @@ export class StudioShellComponent {
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
     if (tab.kind === 'hub') return tab.projectName;
     if (tab.kind === 'task' || tab.kind === 'activity') {
-      const job = this.findJob(tab.jobKey);
+      const job = this.findJob(tab.taskKey);
       return job?.projectName ?? null;
     }
     return null;
@@ -758,7 +758,7 @@ export class StudioShellComponent {
   }
 
   openTask(job: TaskInfo): void {
-    this.tabState.open({ kind: 'task', jobKey: job.jobKey });
+    this.tabState.open({ kind: 'task', taskKey: job.taskKey });
     // Keep the legacy TaskSelectionService in sync so the embedded
     // <app-job-detail> can pick the job up by reading the selected signal.
     this.jobSelection.openDetail(job);
@@ -943,7 +943,7 @@ export class StudioShellComponent {
     const tab = idx >= 0 ? tabs[idx] : null;
     let task: { title: string; id: string; key?: string | null } | null = null;
     if (tab && (tab.kind === 'task' || tab.kind === 'activity')) {
-      const job = this.findJob(tab.jobKey);
+      const job = this.findJob(tab.taskKey);
       if (job) task = { title: job.title || job.id, id: job.id, key: job.key };
     }
     return buildTabCtxMenuItems({
@@ -975,7 +975,7 @@ export class StudioShellComponent {
     const tabs = this.tabs();
     const tab = tabs.find(t => studioTabKey(t) === tabKey);
     if (!tab || (tab.kind !== 'task' && tab.kind !== 'activity')) return;
-    const job = this.findJob(tab.jobKey);
+    const job = this.findJob(tab.taskKey);
     if (!job) return;
     let text = '';
     let label = '';
@@ -1035,7 +1035,7 @@ export class StudioShellComponent {
     this.workspaceManager.openCreate();
   }
 
-  /** Forces a fresh /api/jobs/grouped pull so the Explorer re-counts. */
+  /** Forces a fresh /api/tasks/grouped pull so the Explorer re-counts. */
   onRefreshWorkspace(): void {
     this.jobService.refresh();
   }
@@ -1112,16 +1112,16 @@ export class StudioShellComponent {
       case 'board':
         return tab.projectName === '__all__' ? 'All projects · Board' : `${tab.projectName} · Board`;
       case 'task': {
-        const job = this.findJob(tab.jobKey);
-        return job?.title || job?.id || tab.jobKey;
+        const job = this.findJob(tab.taskKey);
+        return job?.title || job?.id || tab.taskKey;
       }
       case 'hub':
         return `${tab.projectName} · Hub`;
       case 'diff':
         return tab.commitSha;
       case 'activity': {
-        const job = this.findJob(tab.jobKey);
-        return `Activity · ${job?.title || tab.jobKey}`;
+        const job = this.findJob(tab.taskKey);
+        return `Activity · ${job?.title || tab.taskKey}`;
       }
       case 'welcome':
         return 'Welcome';
@@ -1135,18 +1135,18 @@ export class StudioShellComponent {
    *  task tabs where the `#order` adds info the title doesn't repeat. */
   tabNum(tab: StudioTab): string | null {
     if (tab.kind === 'task') {
-      const job = this.findJob(tab.jobKey);
+      const job = this.findJob(tab.taskKey);
       if (!job) return null;
       return job.key || `#${job.order ?? '?'}`;
     }
     return null;
   }
 
-  private findJob(jobKey: string): TaskInfo | null {
+  private findJob(taskKey: string): TaskInfo | null {
     const grouped = this.grouped();
     for (const lane of Object.values(grouped)) {
       for (const job of lane as TaskInfo[]) {
-        if (job.jobKey === jobKey) return job;
+        if (job.taskKey === taskKey) return job;
       }
     }
     return null;
@@ -1159,6 +1159,6 @@ export class StudioShellComponent {
    */
   tabJob(tab: StudioTab): TaskInfo | null {
     if (tab.kind !== 'task' && tab.kind !== 'activity') return null;
-    return this.findJob(tab.jobKey);
+    return this.findJob(tab.taskKey);
   }
 }

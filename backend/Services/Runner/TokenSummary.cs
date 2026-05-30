@@ -78,11 +78,11 @@ public class TokenSummaryService
     /// Performance: O(N) over orchestrator entries, single sequential
     /// read of <c>orchestrator.jsonl</c>. Callers must batch this per
     /// watch path so the perf contract on
-    /// <c>JobEndpointHelpers.WithRuntime</c> (no per-job disk I/O)
+    /// <c>TaskEndpointHelpers.WithRuntime</c> (no per-job disk I/O)
     /// stays intact.
     /// </para>
     /// </summary>
-    public Dictionary<string, JobTokenSummary> SummarizePerJob(string watchPath)
+    public Dictionary<string, TaskTokenSummary> SummarizePerJob(string watchPath)
     {
         var entries = _log.Read(watchPath);
         return SummarizePerJob(entries);
@@ -91,7 +91,7 @@ public class TokenSummaryService
     /// <summary>
     /// Pure overload for tests: takes orchestrator log entries directly.
     /// </summary>
-    public static Dictionary<string, JobTokenSummary> SummarizePerJob(IReadOnlyList<OrchestratorLogEntry> entries)
+    public static Dictionary<string, TaskTokenSummary> SummarizePerJob(IReadOnlyList<OrchestratorLogEntry> entries)
     {
         var perJob = new Dictionary<string, Bucket>(StringComparer.Ordinal);
         foreach (var entry in entries)
@@ -115,7 +115,7 @@ public class TokenSummaryService
                 bucket.LastUpdate = entry.Ts;
                 bucket.LastModel = u.Model;
             }
-            bucket.Entries.Add(new JobTokenCall
+            bucket.Entries.Add(new TaskTokenCall
             {
                 Ts = entry.Ts,
                 Model = u.Model,
@@ -126,11 +126,11 @@ public class TokenSummaryService
             });
         }
 
-        var result = new Dictionary<string, JobTokenSummary>(perJob.Count, StringComparer.Ordinal);
+        var result = new Dictionary<string, TaskTokenSummary>(perJob.Count, StringComparer.Ordinal);
         foreach (var (jobId, b) in perJob)
         {
             var total = b.Input + b.Output + b.CacheRead + b.CacheCreate;
-            result[jobId] = new JobTokenSummary
+            result[jobId] = new TaskTokenSummary
             {
                 Calls = b.Calls,
                 InputTokens = b.Input,
@@ -155,7 +155,7 @@ public class TokenSummaryService
         public long CacheCreate;
         public string? LastModel;
         public DateTime? LastUpdate;
-        public List<JobTokenCall> Entries { get; } = [];
+        public List<TaskTokenCall> Entries { get; } = [];
     }
 
     /// <summary>

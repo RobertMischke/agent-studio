@@ -22,8 +22,8 @@ export class TaskArtifactsService {
       this.artifacts.set([]);
       return;
     }
-    if (this.currentKey === info.jobKey) return;
-    this.currentKey = info.jobKey;
+    if (this.currentKey === info.taskKey) return;
+    this.currentKey = info.taskKey;
     this.fetch(info);
   }
 

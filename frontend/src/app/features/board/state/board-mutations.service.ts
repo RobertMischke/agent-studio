@@ -36,7 +36,7 @@ export class BoardMutationsService {
   /**
    * Optimistic move: paint the new lane immediately, let the backend
    * catch up. While the POST is in flight, silent polls are suppressed
-   * so a stale `/api/jobs/grouped` response can't repaint the old lane.
+   * so a stale `/api/tasks/grouped` response can't repaint the old lane.
    * On failure, revert the local snapshot and surface the error.
    */
   moveJob(event: { jobId: string; watchPath: string; targetState: string; targetIndex?: number }): void {
@@ -124,7 +124,7 @@ export class BoardMutationsService {
           // pager has no active iteration (deep-link entry, no preceding
           // board click) advanceAfterMutation returns false and we fall
           // back to closing the detail like the legacy behaviour.
-          const advanced = this.jobSelection.advanceAfterMutation(job.jobKey);
+          const advanced = this.jobSelection.advanceAfterMutation(job.taskKey);
           if (!advanced) this.jobSelection.closeDetail();
         }
         this.jobService.refresh();
@@ -179,7 +179,7 @@ export class BoardMutationsService {
         // fall back to re-fetching the just-moved job so the lane dropdown
         // reflects the new state without surprising the user with a forced
         // close.
-        const advanced = this.jobSelection.advanceAfterMutation(info.jobKey);
+        const advanced = this.jobSelection.advanceAfterMutation(info.taskKey);
         if (!advanced) {
           // Re-anchor the triage lane to the user-chosen target so the
           // app-shell's external-advance effect does not interpret the user's

@@ -66,7 +66,7 @@ public static class DevToolsEndpoints
                 .Where(IsE2EJob)
                 .Select(j => new
                 {
-                    jobKey = j.JobKey,
+                    jobKey = j.TaskKey,
                     id = j.Id,
                     title = j.Title,
                     state = j.State,
@@ -106,12 +106,12 @@ public static class DevToolsEndpoints
             if (!config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled"))
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-            var requested = req.JobKeys ?? new List<string>();
+            var requested = req.TaskKeys ?? new List<string>();
             var keySet = new HashSet<string>(requested, StringComparer.Ordinal);
 
             var candidates = scanner.ScanAllJobs()
                 .Where(IsE2EJob)
-                .Where(j => keySet.Count == 0 || keySet.Contains(j.JobKey))
+                .Where(j => keySet.Count == 0 || keySet.Contains(j.TaskKey))
                 .ToList();
 
             var deleted = new List<string>();
@@ -119,9 +119,9 @@ public static class DevToolsEndpoints
             foreach (var job in candidates)
             {
                 if (states.DeleteJob(job.Id, job.WatchPath))
-                    deleted.Add(job.JobKey);
+                    deleted.Add(job.TaskKey);
                 else
-                    failed.Add(job.JobKey);
+                    failed.Add(job.TaskKey);
             }
 
             return Results.Ok(new
@@ -134,7 +134,7 @@ public static class DevToolsEndpoints
         });
     }
 
-    private static bool IsE2EJob(JobInfo job)
+    private static bool IsE2EJob(TaskInfo job)
     {
         return ContainsE2E(job.Id) || ContainsE2E(job.Title);
     }
@@ -275,5 +275,5 @@ public static class DevToolsEndpoints
 
 public sealed class DeleteE2EJobsRequest
 {
-    public List<string>? JobKeys { get; set; }
+    public List<string>? TaskKeys { get; set; }
 }

@@ -117,7 +117,7 @@ public sealed class RecurringOutputPatternService
         ArgumentException.ThrowIfNullOrWhiteSpace(project);
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
 
-        var jobs = new List<JobEvidence>();
+        var jobs = new List<TaskEvidence>();
         foreach (var lane in InspectedLanes)
         {
             var laneDir = Path.Combine(projectRoot, lane);
@@ -330,7 +330,7 @@ public sealed class RecurringOutputPatternService
     // Pattern extraction
     // ------------------------------------------------------------------
 
-    private static JobEvidence? ReadJobEvidence(string dir, string lane)
+    private static TaskEvidence? ReadJobEvidence(string dir, string lane)
     {
         var jobJson = Path.Combine(dir, "job.json");
         if (!File.Exists(jobJson)) return null;
@@ -374,7 +374,7 @@ public sealed class RecurringOutputPatternService
         var hasCommits = HasCommitMarker(logTail);
         var hasScreenshots = HasResultsScreenshots(dir);
 
-        return new JobEvidence
+        return new TaskEvidence
         {
             JobId = id,
             Title = title,
@@ -481,7 +481,7 @@ public sealed class RecurringOutputPatternService
         return false;
     }
 
-    private static List<RecurringPatternGroup> GroupPatterns(IReadOnlyList<JobEvidence> jobs)
+    private static List<RecurringPatternGroup> GroupPatterns(IReadOnlyList<TaskEvidence> jobs)
     {
         var groups = new Dictionary<string, RecurringPatternGroupBuilder>(StringComparer.Ordinal);
 
@@ -550,7 +550,7 @@ public sealed class RecurringOutputPatternService
     private static void AddTo(
         Dictionary<string, RecurringPatternGroupBuilder> groups,
         RecurringPatternKind kind,
-        JobEvidence job)
+        TaskEvidence job)
     {
         var key = kind.Kind + "::" + kind.NormalisedKey;
         if (!groups.TryGetValue(key, out var b))
@@ -772,7 +772,7 @@ public sealed class RecurringOutputPatternService
     // ------------------------------------------------------------------
 
     /// <summary>One job's extracted evidence.</summary>
-    public sealed record JobEvidence
+    public sealed record TaskEvidence
     {
         public required string JobId { get; init; }
         public required string Title { get; init; }
@@ -794,7 +794,7 @@ public sealed class RecurringOutputPatternService
         string Kind,
         string NormalisedKey,
         string SampleLabel,
-        IReadOnlyList<JobEvidence> Members);
+        IReadOnlyList<TaskEvidence> Members);
 
     /// <summary>Pointer to a recent analysis report so the agent can build on
     /// rather than restart the conversation.</summary>
@@ -805,7 +805,7 @@ public sealed class RecurringOutputPatternService
     private sealed class RecurringPatternGroupBuilder
     {
         public RecurringPatternKind Kind { get; }
-        public List<JobEvidence> Members { get; } = new();
+        public List<TaskEvidence> Members { get; } = new();
         public string NormalisedKey => Kind.NormalisedKey;
         public RecurringPatternGroupBuilder(RecurringPatternKind kind) { Kind = kind; }
         public RecurringPatternGroup ToRecord() =>
@@ -848,7 +848,7 @@ public sealed class RecurringPatternScope
     public required DateTime CapturedAt { get; init; }
     public required DateTime WindowFrom { get; init; }
     public required DateTime WindowTo { get; init; }
-    public required IReadOnlyList<RecurringOutputPatternService.JobEvidence> Jobs { get; init; }
+    public required IReadOnlyList<RecurringOutputPatternService.TaskEvidence> Jobs { get; init; }
     public required IReadOnlyList<RecurringOutputPatternService.RecurringPatternGroup> Groups { get; init; }
     public required IReadOnlyList<RecurringOutputPatternService.AnalysisReportPointer> RecentReports { get; init; }
 }

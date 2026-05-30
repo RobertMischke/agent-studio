@@ -33,7 +33,7 @@ public sealed partial class CliOutputSource : IConversationEventSource
 {
     public string SourceKind => "cli";
 
-    public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(JobInfo jobInfo, CancellationToken ct)
+    public Task<IReadOnlyList<RawSourceEvent>> ReadAsync(TaskInfo jobInfo, CancellationToken ct)
     {
         var path = GetLogPath(jobInfo);
         if (path is null || !File.Exists(path))
@@ -52,7 +52,7 @@ public sealed partial class CliOutputSource : IConversationEventSource
         return Task.FromResult<IReadOnlyList<RawSourceEvent>>(events);
     }
 
-    public DateTime GetSourceMTimeUtc(JobInfo jobInfo)
+    public DateTime GetSourceMTimeUtc(TaskInfo jobInfo)
     {
         var path = GetLogPath(jobInfo);
         if (path is null || !File.Exists(path)) return DateTime.MinValue;
@@ -60,7 +60,7 @@ public sealed partial class CliOutputSource : IConversationEventSource
         catch { return DateTime.MinValue; }
     }
 
-    private static string? GetLogPath(JobInfo jobInfo)
+    private static string? GetLogPath(TaskInfo jobInfo)
     {
         if (string.IsNullOrWhiteSpace(jobInfo.FolderPath)) return null;
         return Path.Combine(jobInfo.FolderPath, "logs", "cli-output.log");

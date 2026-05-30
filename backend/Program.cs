@@ -116,7 +116,7 @@ builder.Services.AddSingleton<TaskScannerService>();
 // not yet load-bearing for the existing lane-folder code paths (F45c).
 builder.Services.AddSingleton<OrchestratorApi.Services.Registry.WorkspaceRegistry>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Registry.ProjectRegistry>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.JobKeyResolver>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
 // before TaskStateMachine / TaskMutationService / TaskAccessService so
@@ -274,7 +274,7 @@ builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // F22: server-rendered conversation projection. The projector serves the
-// GET /api/jobs/{id}/conversation endpoint and (when the feature flag is
+// GET /api/tasks/{id}/conversation endpoint and (when the feature flag is
 // on) broadcasts deltas over TaskHub. Sources are registered so the
 // IEnumerable<IConversationEventSource> ctor gets a deterministic order.
 builder.Services.AddSingleton<IMarkdownRenderer, MarkdigRenderer>();
@@ -295,7 +295,7 @@ builder.Services.AddSingleton<CompanionCommandDispatcher>();
 builder.Services.AddHttpClient("companion-relay");
 builder.Services.AddHostedService<CompanionSyncService>();
 // Serialise enums as camelCase strings so the frontend can use string-literal
-// unions (e.g. JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed')
+// unions (e.g. TaskSummaryStatus = 'none' | 'generating' | 'ready' | 'failed')
 // instead of numeric values.
 builder.Services.ConfigureHttpJsonOptions(options =>
 {

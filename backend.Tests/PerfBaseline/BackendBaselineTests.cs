@@ -3,7 +3,7 @@ using OrchestratorApi.Endpoints.Jobs;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Runner;
-using OrchestratorApi.Tests; // for JobEndpointHelpersAccessor
+using OrchestratorApi.Tests; // for TaskEndpointHelpersAccessor
 using Xunit;
 using Xunit.Abstractions;
 
@@ -98,26 +98,26 @@ public class BackendBaselineTests
                     _ = queued;
                 }));
 
-            // 5) /api/jobs simulation: ScanAllJobs + WithRuntime per job.
-            metrics.Add(Measure($"/api/jobs (full pipeline)", fx, n, iterations, warmup,
+            // 5) /api/tasks simulation: ScanAllJobs + WithRuntime per job.
+            metrics.Add(Measure($"/api/tasks (full pipeline)", fx, n, iterations, warmup,
                 () =>
                 {
                     var raw = fx.Scanner.ScanAllJobs();
                     var enriched = raw
                         .Where(j => !j.Fixture)
-                        .Select(j => JobEndpointHelpersAccessor.WithRuntime(j, fx.Router, fx.Runners))
+                        .Select(j => TaskEndpointHelpersAccessor.WithRuntime(j, fx.Router, fx.Runners))
                         .ToList();
                     _ = enriched;
                 }));
 
-            // 6) /api/jobs/grouped simulation: same + grouping projection.
-            metrics.Add(Measure($"/api/jobs/grouped (full pipeline)", fx, n, iterations, warmup,
+            // 6) /api/tasks/grouped simulation: same + grouping projection.
+            metrics.Add(Measure($"/api/tasks/grouped (full pipeline)", fx, n, iterations, warmup,
                 () =>
                 {
                     var raw = fx.Scanner.ScanAllJobs();
                     var enriched = raw
                         .Where(j => !j.Fixture)
-                        .Select(j => JobEndpointHelpersAccessor.WithRuntime(j, fx.Router, fx.Runners))
+                        .Select(j => TaskEndpointHelpersAccessor.WithRuntime(j, fx.Router, fx.Runners))
                         .ToList();
                     var grouped = new
                     {
@@ -147,7 +147,7 @@ public class BackendBaselineTests
         _out.WriteLine($"Wrote backend perf report: {path}");
         foreach (var m in metrics)
         {
-            _out.WriteLine($"  {m.Name,-50} N={m.JobCount,4}  p50={m.Stats.P50Ms,7:F2}ms  p95={m.Stats.P95Ms,7:F2}ms  p99={m.Stats.P99Ms,7:F2}ms  max={m.Stats.MaxMs,7:F2}ms");
+            _out.WriteLine($"  {m.Name,-50} N={m.TaskCount,4}  p50={m.Stats.P50Ms,7:F2}ms  p95={m.Stats.P95Ms,7:F2}ms  p99={m.Stats.P99Ms,7:F2}ms  max={m.Stats.MaxMs,7:F2}ms");
         }
     }
 

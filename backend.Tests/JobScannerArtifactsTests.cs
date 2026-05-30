@@ -14,11 +14,11 @@ namespace OrchestratorApi.Tests;
 /// sort order is prompt-first, then aspects alphabetical, then notes,
 /// then everything else. Subfolder files are ignored.
 /// </summary>
-public class JobScannerArtifactsTests : IDisposable
+public class TaskScannerArtifactsTests : IDisposable
 {
     private readonly string _watchPath;
 
-    public JobScannerArtifactsTests()
+    public TaskScannerArtifactsTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "agent-taskboard-tests-" + Guid.NewGuid().ToString("N"));
         foreach (var state in TaskStates.All)
@@ -65,7 +65,7 @@ public class JobScannerArtifactsTests : IDisposable
         Assert.NotNull(response);
         Assert.Single(response!.Files);
         Assert.Equal("prompt.md", response.Files[0].Name);
-        Assert.Equal(JobArtifactKind.Prompt, response.Files[0].Kind);
+        Assert.Equal(TaskArtifactKind.Prompt, response.Files[0].Kind);
         Assert.Null(response.Files[0].AspectName);
         Assert.True(response.Files[0].SizeBytes > 0);
     }
@@ -109,14 +109,14 @@ public class JobScannerArtifactsTests : IDisposable
         }, names);
 
         var aspect = response.Files.First(f => f.Name == "aspect-code-quality.md");
-        Assert.Equal(JobArtifactKind.Aspect, aspect.Kind);
+        Assert.Equal(TaskArtifactKind.Aspect, aspect.Kind);
         Assert.Equal("code-quality", aspect.AspectName);
 
         var note = response.Files.First(f => f.Name == "REVIEW_NOTE.md");
-        Assert.Equal(JobArtifactKind.Note, note.Kind);
+        Assert.Equal(TaskArtifactKind.Note, note.Kind);
 
         var other = response.Files.First(f => f.Name == "follow-up-plan.md");
-        Assert.Equal(JobArtifactKind.Other, other.Kind);
+        Assert.Equal(TaskArtifactKind.Other, other.Kind);
     }
 
     [Fact]

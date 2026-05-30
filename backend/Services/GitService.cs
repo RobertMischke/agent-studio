@@ -93,14 +93,14 @@ public record GitHygieneStatus
     /// Job context, populated only when <see cref="GitService.GetJobHygiene"/>
     /// is the entry point. Null for project-only queries.
     /// </summary>
-    public JobHygieneContext? Job { get; init; }
+    public TaskHygieneContext? Job { get; init; }
     public string? Error { get; init; }
 }
 
 /// <summary>
 /// Per-job hygiene overlay. Scope is intentionally narrow: it answers
 /// task-scoped questions only - did the platform stamp a commit on
-/// this job (<see cref="JobInfoCommitPresent"/>), and does this task
+/// this job (<see cref="TaskInfoCommitPresent"/>), and does this task
 /// (only when active) look like its accepted work was left
 /// uncommitted (<see cref="AcceptedTaskUncommitted"/>)? Repo-level
 /// signals (ahead of upstream, push pending, branch behind, untracked
@@ -108,10 +108,10 @@ public record GitHygieneStatus
 /// <see cref="GitHygieneStatus"/> fields and are surfaced on a
 /// project-scoped UI surface, never on a per-task detail page.
 /// </summary>
-public record JobHygieneContext(
+public record TaskHygieneContext(
     string JobId,
     string State,
-    bool JobInfoCommitPresent,
+    bool TaskInfoCommitPresent,
     string? StampedCommitSha,
     bool AcceptedTaskUncommitted);
 
@@ -331,10 +331,10 @@ public class GitService
 
         return project with
         {
-            Job = new JobHygieneContext(
+            Job = new TaskHygieneContext(
                 JobId: info.Id,
                 State: info.State,
-                JobInfoCommitPresent: jobCommitPresent,
+                TaskInfoCommitPresent: jobCommitPresent,
                 StampedCommitSha: info.Commit?.Sha,
                 AcceptedTaskUncommitted: acceptedUncommitted)
         };

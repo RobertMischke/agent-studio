@@ -155,7 +155,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     // explains why nothing is being claimed even when AUTO is on.
     if (role === 'test-subject') {
       modeTooltip =
-        `${modeTooltip}\n\nThis backend is the test-subject seat (ADR-0044). The auto-pickup loop is structurally disabled regardless of mode; only explicit /api/jobs/{id}/start calls (Playwright fixtures, manual debugging) reach the CLI.`;
+        `${modeTooltip}\n\nThis backend is the test-subject seat (ADR-0044). The auto-pickup loop is structurally disabled regardless of mode; only explicit /api/tasks/{id}/start calls (Playwright fixtures, manual debugging) reach the CLI.`;
     }
 
     // Pick the active run. Two signals feed this:
@@ -461,7 +461,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   }
 
   onDragStart(event: DragEvent, job: TaskInfo) {
-    event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, jobKey: job.jobKey }));
+    event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, taskKey: job.taskKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
     // Mark the host so the dimmed-while-dragging style applies. Released
     // on dragend (or drop) so the source eases back to full opacity
@@ -606,7 +606,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     if (!payload) return;
 
     if (sourceState === this.state()) {
-      this.performSameLaneReorder(payload.jobKey, index);
+      this.performSameLaneReorder(payload.taskKey, index);
     } else {
       this.jobDrop.emit({
         jobId: payload.jobId,
@@ -645,7 +645,7 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
       // disables reorder so the orchestrator/human swim-lanes stay coherent).
       if (this.reorderDisabled() || this.isReview()) return;
       const slot = this.computeDropSlotFromCursor(event);
-      this.performSameLaneReorder(payload.jobKey, slot);
+      this.performSameLaneReorder(payload.taskKey, slot);
       return;
     }
     // Cross-lane drop on the column body (missed the per-strip drop zones,
@@ -694,9 +694,9 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
    * adjacent boundary), the call is a no-op so the optimistic-paint layer
    * doesn't churn for an empty reorder.
    */
-  private performSameLaneReorder(jobKey: string, slot: number): void {
-    const currentJobs = this.jobs().map(j => ({ jobId: j.id, watchPath: j.watchPath, jobKey: j.jobKey }));
-    const fromIndex = currentJobs.findIndex(job => job.jobKey === jobKey);
+  private performSameLaneReorder(taskKey: string, slot: number): void {
+    const currentJobs = this.jobs().map(j => ({ jobId: j.id, watchPath: j.watchPath, taskKey: j.taskKey }));
+    const fromIndex = currentJobs.findIndex(job => job.taskKey === taskKey);
     if (fromIndex < 0) return;
     if (slot === fromIndex || slot === fromIndex + 1) return;
     const [movedJob] = currentJobs.splice(fromIndex, 1);
@@ -708,12 +708,12 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     });
   }
 
-  private parsePayload(rawPayload?: string): { jobId: string; watchPath: string; jobKey: string } | null {
+  private parsePayload(rawPayload?: string): { jobId: string; watchPath: string; taskKey: string } | null {
     if (!rawPayload) return null;
     try {
-      const payload = JSON.parse(rawPayload) as { jobId?: string; watchPath?: string; jobKey?: string };
-      if (!payload.jobId || !payload.watchPath || !payload.jobKey) return null;
-      return { jobId: payload.jobId, watchPath: payload.watchPath, jobKey: payload.jobKey };
+      const payload = JSON.parse(rawPayload) as { jobId?: string; watchPath?: string; taskKey?: string };
+      if (!payload.jobId || !payload.watchPath || !payload.taskKey) return null;
+      return { jobId: payload.jobId, watchPath: payload.watchPath, taskKey: payload.taskKey };
     } catch {
       return null;
     }

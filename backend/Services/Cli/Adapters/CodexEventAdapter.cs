@@ -45,25 +45,25 @@ public static class CodexEventAdapter
             case "thread.started":
             {
                 var id = root.TryGetProperty("thread_id", out var tid) ? tid.GetString() : null;
-                yield return new CliRunEvent.SessionStarted(id) { JobKey = jobKey };
+                yield return new CliRunEvent.SessionStarted(id) { TaskKey = jobKey };
                 yield break;
             }
             case "session_meta":
             {
                 // Legacy shape; same semantic meaning as thread.started.
                 var id = root.TryGetProperty("session_id", out var sid) ? sid.GetString() : null;
-                yield return new CliRunEvent.SessionStarted(id) { JobKey = jobKey };
+                yield return new CliRunEvent.SessionStarted(id) { TaskKey = jobKey };
                 yield break;
             }
             case "turn.started":
-                yield return new CliRunEvent.TurnStarted { JobKey = jobKey };
+                yield return new CliRunEvent.TurnStarted { TaskKey = jobKey };
                 yield break;
             case "turn.completed":
             {
                 string? usage = null;
                 if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
                     usage = FormatUsage(u);
-                yield return new CliRunEvent.TurnCompleted(usage) { JobKey = jobKey };
+                yield return new CliRunEvent.TurnCompleted(usage) { TaskKey = jobKey };
                 yield break;
             }
             case "turn.failed":
@@ -71,14 +71,14 @@ public static class CodexEventAdapter
                 var reason = root.TryGetProperty("error", out var e) && e.TryGetProperty("message", out var m)
                     ? (m.GetString() ?? "error")
                     : "error";
-                yield return new CliRunEvent.TurnFailed(reason) { JobKey = jobKey };
+                yield return new CliRunEvent.TurnFailed(reason) { TaskKey = jobKey };
                 yield break;
             }
             case "item.started":
             {
                 var (kind, name, arg) = ClassifyItem(root);
                 if (kind == "tool")
-                    yield return new CliRunEvent.ToolStarted(name, arg) { JobKey = jobKey };
+                    yield return new CliRunEvent.ToolStarted(name, arg) { TaskKey = jobKey };
                 yield break;
             }
             case "item.completed":
@@ -87,17 +87,17 @@ public static class CodexEventAdapter
                 if (kind == "agent_message")
                 {
                     if (!string.IsNullOrEmpty(arg))
-                        yield return new CliRunEvent.OutputDelta(arg!) { JobKey = jobKey };
+                        yield return new CliRunEvent.OutputDelta(arg!) { TaskKey = jobKey };
                 }
                 else if (kind == "tool")
                 {
                     yield return new CliRunEvent.ToolCompleted(name, IsError: false, FirstLine: Truncate(arg, 200))
-                    { JobKey = jobKey };
+                    { TaskKey = jobKey };
                 }
                 yield break;
             }
             default:
-                yield return new CliRunEvent.Unknown(Truncate(jsonLine, 200) ?? "") { JobKey = jobKey };
+                yield return new CliRunEvent.Unknown(Truncate(jsonLine, 200) ?? "") { TaskKey = jobKey };
                 yield break;
         }
     }

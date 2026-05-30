@@ -6,11 +6,11 @@ namespace OrchestratorApi.Services.Jobs;
 /// <summary>
 /// One commit attributed to a job, augmented with the run index it was
 /// authored in. Drives the protocol-pane "Commits and change set" panel
-/// via the <c>/api/jobs/{id}/commits</c> endpoint. <c>RunIndex</c> is
+/// via the <c>/api/tasks/{id}/commits</c> endpoint. <c>RunIndex</c> is
 /// null when the commit comes from the auto-commit transition rather
 /// than a tracked run.
 /// </summary>
-public sealed record JobCommitRecord
+public sealed record TaskCommitRecord
 {
     public string Sha { get; init; } = "";
     public string ShortSha { get; init; } = "";
@@ -22,7 +22,7 @@ public sealed record JobCommitRecord
     public int Removed { get; init; }
     public int? RunIndex { get; init; }
     /// <summary>
-    /// Attribution kind overlaid from the persisted <see cref="JobInfo.Commits"/>
+    /// Attribution kind overlaid from the persisted <see cref="TaskInfo.Commits"/>
     /// chain (one of <see cref="CommitAttributionKinds"/>). Defaults to
     /// <see cref="CommitAttributionKinds.Legacy"/> when the rule engine has
     /// not yet stamped this commit (e.g. a range commit surfaced before the
@@ -33,25 +33,25 @@ public sealed record JobCommitRecord
     public double? Confidence { get; init; }
 }
 
-public sealed record JobCommitsAggregate
+public sealed record TaskCommitsAggregate
 {
     public int Count { get; init; }
     public int TotalAdded { get; init; }
     public int TotalRemoved { get; init; }
     public int TotalFilesChanged { get; init; }
-    public List<JobCommitRecord> Commits { get; init; } = [];
+    public List<TaskCommitRecord> Commits { get; init; } = [];
     /// <summary>
     /// Commits the attribution rule withheld from this task (ADR
     /// "Commit-Attribution-Regel"). Surfaced under the "(N excluded)"
     /// expander in the protocol-pane git view; carries the reason so the
     /// operator can see why each was held back.
     /// </summary>
-    public List<JobExcludedCommitInfo> Excluded { get; init; } = [];
+    public List<TaskExcludedCommitInfo> Excluded { get; init; } = [];
 }
 
 /// <summary>
 /// Pure aggregator over a job's run timeline plus the auto-commit stamped
-/// on <see cref="JobInfo.Commit"/>. Walks every run with a non-trivial SHA
+/// on <see cref="TaskInfo.Commit"/>. Walks every run with a non-trivial SHA
 /// range, asks <see cref="GitService.GetCommitsInShaRange"/> for that
 /// range's commits, dedupes by SHA so a commit can't double-count when
 /// two runs claim overlapping ranges, and orders the result newest first.
@@ -63,14 +63,14 @@ public sealed record JobCommitsAggregate
 /// production <c>GitService</c> binding.
 /// </para>
 /// </summary>
-public static class JobCommitsAggregator
+public static class TaskCommitsAggregator
 {
-    public static JobCommitsAggregate Aggregate(
-        JobInfo info,
+    public static TaskCommitsAggregate Aggregate(
+        TaskInfo info,
         IReadOnlyList<RunRecord> runs,
         Func<string, string, List<GitCommitInfo>> fetchRangeCommits)
     {
-        var ordered = new List<JobCommitRecord>();
+        var ordered = new List<TaskCommitRecord>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // SHAs the attribution rule withheld: subtracted from every source
@@ -83,7 +83,7 @@ public static class JobCommitsAggregator
 
         // Attribution overlay keyed by SHA from the persisted chain. Last
         // write wins so a manual re-include refreshes the kind.
-        var attrBySha = new Dictionary<string, JobCommitInfo>(StringComparer.OrdinalIgnoreCase);
+        var attrBySha = new Dictionary<string, TaskCommitInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var cm in info.Commits)
             if (!string.IsNullOrWhiteSpace(cm.Sha)) attrBySha[cm.Sha] = cm;
 
@@ -102,7 +102,7 @@ public static class JobCommitsAggregator
                 if (excludedShas.Contains(c.Sha)) continue;
                 if (!seen.Add(c.Sha)) continue;
                 attrBySha.TryGetValue(c.Sha, out var meta);
-                ordered.Add(new JobCommitRecord
+                ordered.Add(new TaskCommitRecord
                 {
                     Sha = c.Sha,
                     ShortSha = c.ShortSha,
@@ -127,7 +127,7 @@ public static class JobCommitsAggregator
             if (string.IsNullOrWhiteSpace(cm.Sha)) continue;
             if (excludedShas.Contains(cm.Sha)) continue;
             if (!seen.Add(cm.Sha)) continue;
-            ordered.Add(new JobCommitRecord
+            ordered.Add(new TaskCommitRecord
             {
                 Sha = cm.Sha,
                 ShortSha = cm.ShortSha,
@@ -145,12 +145,12 @@ public static class JobCommitsAggregator
 
         // Legacy singular auto-commit fold. The scanner mirrors `commit` into
         // the `commits` chain, so in production this is already covered above;
-        // it stays for callers that build JobInfo with only the singular field
+        // it stays for callers that build TaskInfo with only the singular field
         // set (legacy job.json read paths and unit fixtures).
         if (info.Commit != null && !string.IsNullOrWhiteSpace(info.Commit.Sha)
             && !excludedShas.Contains(info.Commit.Sha) && seen.Add(info.Commit.Sha))
         {
-            ordered.Add(new JobCommitRecord
+            ordered.Add(new TaskCommitRecord
             {
                 Sha = info.Commit.Sha,
                 ShortSha = info.Commit.ShortSha,
@@ -168,7 +168,7 @@ public static class JobCommitsAggregator
 
         ordered.Sort((a, b) => b.AuthorDateUtc.CompareTo(a.AuthorDateUtc));
 
-        return new JobCommitsAggregate
+        return new TaskCommitsAggregate
         {
             Count = ordered.Count,
             TotalAdded = ordered.Sum(c => c.Added),
@@ -182,7 +182,7 @@ public static class JobCommitsAggregator
     /// <summary>
     /// Lower-bound count of commits a job has produced, derived without
     /// running git per range. Reads only the captured SHA-range pairs in
-    /// session-events.jsonl plus the auto-commit on <see cref="JobInfo.Commit"/>;
+    /// session-events.jsonl plus the auto-commit on <see cref="TaskInfo.Commit"/>;
     /// each non-trivial range counts as ≥ 1. Used by the kanban card to
     /// surface a "more than one commit" hint without paying per-render
     /// git costs.
@@ -196,7 +196,7 @@ public static class JobCommitsAggregator
     /// </para>
     /// </summary>
     public static int CountCommitRangesPlusAutoCommit(
-        JobInfo info,
+        TaskInfo info,
         IReadOnlyList<SessionEvent> sessionEvents)
     {
         var seenRanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

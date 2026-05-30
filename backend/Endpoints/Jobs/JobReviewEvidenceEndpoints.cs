@@ -6,8 +6,8 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// <summary>
 /// Endpoints around the per-job review-evidence file
 /// (<c>results/review-evidence.jsonl</c>). The findings themselves are
-/// already exposed inside <see cref="JobDetail.ReviewEvidence"/> by
-/// <c>GET /api/jobs/{jobId}</c>; these routes are the small set of
+/// already exposed inside <see cref="TaskDetail.ReviewEvidence"/> by
+/// <c>GET /api/tasks/{jobId}</c>; these routes are the small set of
 /// mutations the UI needs:
 ///
 /// - acknowledge / un-acknowledge a finding,
@@ -19,11 +19,11 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// stays diff-friendly and the orchestrator never needs an exclusive
 /// writer lock.
 /// </summary>
-public static class JobReviewEvidenceEndpoints
+public static class TaskReviewEvidenceEndpoints
 {
     public static void MapJobReviewEvidenceEndpoints(this RouteGroupBuilder group)
     {
-        // POST /api/jobs/{jobId}/review-evidence/{evidenceId}/acknowledge
+        // POST /api/tasks/{jobId}/review-evidence/{evidenceId}/acknowledge
         // Body: { "acknowledged": true|false } — defaults to true.
         group.MapPost("/{jobId}/review-evidence/{evidenceId}/acknowledge",
             (string jobId, string evidenceId, string? watchPath, AcknowledgeEvidenceRequest? body, TaskScannerService scanner) =>
@@ -44,7 +44,7 @@ public static class JobReviewEvidenceEndpoints
             return Results.Ok(updated);
         });
 
-        // POST /api/jobs/{jobId}/review-evidence/{evidenceId}/follow-up
+        // POST /api/tasks/{jobId}/review-evidence/{evidenceId}/follow-up
         // Body: { "title"?: string, "targetState"?: string }
         // Creates a normal queued task in the same project, prefilled with
         // the finding's title + body + linked artifacts/file refs. Default
@@ -164,7 +164,7 @@ public static class JobReviewEvidenceEndpoints
 }
 
 /// <summary>
-/// Body for <c>POST /api/jobs/{jobId}/review-evidence/{evidenceId}/acknowledge</c>.
+/// Body for <c>POST /api/tasks/{jobId}/review-evidence/{evidenceId}/acknowledge</c>.
 /// Optional; an empty body or omitted <c>acknowledged</c> field defaults to
 /// <c>true</c> so the simple "I read this" click does not need a payload.
 /// </summary>

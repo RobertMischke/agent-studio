@@ -13,13 +13,13 @@ namespace OrchestratorApi.Tests;
 /// <c>5-completed</c>, <c>6-archive</c>) to the new layout, rewrites each
 /// job.json's <c>state</c> field, and is idempotent on a second pass.
 /// </summary>
-public class JobStateMachineMigrationTests : IDisposable
+public class TaskStateMachineMigrationTests : IDisposable
 {
     private readonly string _workspace;
     private readonly string _watchPath;
     private const string Project = "demo";
 
-    public JobStateMachineMigrationTests()
+    public TaskStateMachineMigrationTests()
     {
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-migr-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);

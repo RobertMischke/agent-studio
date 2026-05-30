@@ -294,7 +294,7 @@
             @case ('activity') {
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'activity') {
-                  <app-studio-activity-view [jobKey]="tab.jobKey" />
+                  <app-studio-activity-view [taskKey]="tab.taskKey" />
                 }
               }
             }
@@ -507,7 +507,7 @@
 
                     @if (group.jobs.length > 0 && !isGroupCollapsed(group.state)) {
                       <div class="task-nav__items">
-                        @for (job of group.jobs; track job.jobKey) {
+                        @for (job of group.jobs; track job.taskKey) {
                           <button class="task-nav__item"
                                   [class.task-nav__item--active]="isSelectedJob(job)"
                                   [style.--project-color]="identityFor(job.projectName).color"

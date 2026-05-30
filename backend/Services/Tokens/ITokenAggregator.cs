@@ -54,7 +54,7 @@ public interface ITokenAggregator
     TokenSummaryAggregate? CachedWorkspaceAggregate();
 
     /// <summary>Per-job rollup for one project's job-card token footers.</summary>
-    Dictionary<string, JobTokenSummary> WorkspacePerJob(string projectName, string watchPath);
+    Dictionary<string, TaskTokenSummary> WorkspacePerJob(string projectName, string watchPath);
 
     /// <summary>(project, time-bucket) cells for the workspace tokens timeline.</summary>
     TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null);

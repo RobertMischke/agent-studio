@@ -18,7 +18,7 @@ public class CompanionSnapshotBuilderTests
     public void EmptyInputs_ProducesEmptyPayloadWithoutThrowing()
     {
         var snap = CompanionSnapshotBuilder.Build(
-            jobs: Array.Empty<JobInfo>(),
+            jobs: Array.Empty<TaskInfo>(),
             runner: new RunnerStatus(),
             quota: null,
             tokenAggregate: new CompanionTokens(),
@@ -36,7 +36,7 @@ public class CompanionSnapshotBuilderTests
     [Fact]
     public void GroupsJobsByProjectAndRoutesToCorrectPipelineLane()
     {
-        var jobs = new List<JobInfo>
+        var jobs = new List<TaskInfo>
         {
             Job("a", "alpha", "C:/alpha", TaskStates.Ready, order: 2),
             Job("b", "alpha", "C:/alpha", TaskStates.Ready, order: 1),
@@ -91,7 +91,7 @@ public class CompanionSnapshotBuilderTests
         };
 
         var snap = CompanionSnapshotBuilder.Build(
-            Array.Empty<JobInfo>(), new RunnerStatus(), quota, new CompanionTokens(), Host, Now);
+            Array.Empty<TaskInfo>(), new RunnerStatus(), quota, new CompanionTokens(), Host, Now);
 
         Assert.Equal(3, snap.Payload.Quota.Count);
         var fiveHour = snap.Payload.Quota.Single(q => q.Cli == "claude" && q.Window == "five-hour");
@@ -111,7 +111,7 @@ public class CompanionSnapshotBuilderTests
             CacheReadTokens = 25, CacheCreateTokens = 10,
         };
         var snap = CompanionSnapshotBuilder.Build(
-            Array.Empty<JobInfo>(), new RunnerStatus(), null, tokens, Host, Now);
+            Array.Empty<TaskInfo>(), new RunnerStatus(), null, tokens, Host, Now);
 
         Assert.Equal(tokens, snap.Payload.Tokens);
     }
@@ -124,7 +124,7 @@ public class CompanionSnapshotBuilderTests
         Assert.StartsWith("task-", CompanionCommandDispatcher.SlugFromTitle("???"));
     }
 
-    private static JobInfo Job(string id, string project, string watchPath, string state, int order = 1) => new()
+    private static TaskInfo Job(string id, string project, string watchPath, string state, int order = 1) => new()
     {
         Id = id,
         Title = id.ToUpperInvariant(),

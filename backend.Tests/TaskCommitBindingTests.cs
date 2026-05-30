@@ -148,7 +148,7 @@ public class TaskCommitBindingTests : IDisposable
         Assert.False(mutations.AppendJobCommitOnFolder(nonexistent, commit));
     }
 
-    private string SeedJobFolder(string id, string lane, JobCommitInfo? legacyCommit)
+    private string SeedJobFolder(string id, string lane, TaskCommitInfo? legacyCommit)
     {
         var laneDir = Path.Combine(_watchPath, lane);
         Directory.CreateDirectory(laneDir);
@@ -186,10 +186,10 @@ public class TaskCommitBindingTests : IDisposable
         return jobDir;
     }
 
-    private static JobCommitInfo MakeCommit(string shortSha, string message, int filesChanged, string atIso)
+    private static TaskCommitInfo MakeCommit(string shortSha, string message, int filesChanged, string atIso)
     {
         var fullSha = Pad(shortSha);
-        return new JobCommitInfo
+        return new TaskCommitInfo
         {
             Sha = fullSha,
             ShortSha = shortSha,

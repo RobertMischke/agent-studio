@@ -4,7 +4,7 @@ using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
 using OrchestratorApi.Services.Tokens;
-using static OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers;
+using static OrchestratorApi.Endpoints.Jobs.TaskEndpointHelpers;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -14,7 +14,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// cli-type, title). These are the routes that read or rewrite the
 /// canonical <c>job.json</c> on disk.
 /// </summary>
-public static class JobCrudEndpoints
+public static class TaskCrudEndpoints
 {
     public static void MapJobCrudEndpoints(this RouteGroupBuilder group)
     {
@@ -51,7 +51,7 @@ public static class JobCrudEndpoints
                 }
                 return s;
             }
-            List<JobInfo> SortLane(string lane)
+            List<TaskInfo> SortLane(string lane)
                 => LaneSortApplier.Sort(jobs.Where(j => j.State == lane), lane, SettingsFor).ToList();
 
             // ADR-0025: explicit AutoReview + HumanReview lanes. The legacy
@@ -232,7 +232,7 @@ public static class JobCrudEndpoints
         {
             var jobs = req.Jobs.Count > 0
                 ? req.Jobs
-                : req.JobIds.Select(id => new JobOrderItem { JobId = id }).ToList();
+                : req.JobIds.Select(id => new TaskOrderItem { JobId = id }).ToList();
             var success = states.ReorderJobs(jobs);
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });

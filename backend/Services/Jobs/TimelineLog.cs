@@ -20,7 +20,7 @@ namespace OrchestratorApi.Services.Jobs;
 /// Callers pass the job folder path directly. The class deliberately does
 /// not route through <see cref="TaskScannerService.FindJob"/> - many of the
 /// producers (the runner, the review-decision orchestrator, the pipeline
-/// step recorder) already hold the <see cref="JobInfo"/> for the row they
+/// step recorder) already hold the <see cref="TaskInfo"/> for the row they
 /// are about to emit, and threading a scanner lookup through every call
 /// site would add cost and a stale-folder failure mode that the existing
 /// callers do not have today.

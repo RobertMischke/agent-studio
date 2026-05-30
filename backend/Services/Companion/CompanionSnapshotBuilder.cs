@@ -10,7 +10,7 @@ namespace OrchestratorApi.Services.Companion;
 public static class CompanionSnapshotBuilder
 {
     public static CompanionSnapshotEnvelope Build(
-        IReadOnlyList<JobInfo> jobs,
+        IReadOnlyList<TaskInfo> jobs,
         RunnerStatus runner,
         QuotaReport? quota,
         CompanionTokens tokenAggregate,
@@ -95,7 +95,7 @@ public static class CompanionSnapshotBuilder
         };
     }
 
-    private static List<CompanionJobCard> ToCards(IEnumerable<JobInfo> source) =>
+    private static List<CompanionJobCard> ToCards(IEnumerable<TaskInfo> source) =>
         source
             .OrderBy(j => j.Order)
             .ThenBy(j => j.CreatedAt)

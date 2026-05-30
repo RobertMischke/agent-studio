@@ -28,12 +28,12 @@
           <span class="toolbar__sub">{{ selectedCount() }} selected</span>
         </div>
         <ul class="list" data-testid="e2e-job-list">
-          @for (job of jobs(); track job.jobKey) {
-            <li class="row" [class.row--selected]="selected().has(job.jobKey)">
+          @for (job of jobs(); track job.taskKey) {
+            <li class="row" [class.row--selected]="selected().has(job.taskKey)">
               <label class="row__check">
                 <input type="checkbox"
-                       [checked]="selected().has(job.jobKey)"
-                       (change)="toggle(job.jobKey, $any($event.target).checked)" />
+                       [checked]="selected().has(job.taskKey)"
+                       (change)="toggle(job.taskKey, $any($event.target).checked)" />
               </label>
               <div class="row__main">
                 <div class="row__title">{{ job.title || job.id }}</div>

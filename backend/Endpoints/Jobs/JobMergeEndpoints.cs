@@ -7,7 +7,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// <summary>
 /// Merge / consolidation API for the
 /// <c>api-consolidationmerge-api--completed-lane-audit--agent-claimed-done-but-isnt-re-evaluation</c>
-/// task. Five routes mounted under <c>/api/jobs</c>:
+/// task. Five routes mounted under <c>/api/tasks</c>:
 ///
 /// <list type="bullet">
 /// <item><c>GET /{id}/merge/candidates</c> - heuristic wrapper detection.</item>
@@ -21,7 +21,7 @@ namespace OrchestratorApi.Endpoints.Jobs;
 /// caller's <c>X-Client-Id</c> (or "unknown") onto the audit-log row
 /// so the operator trail survives a backend restart.
 /// </summary>
-public static class JobMergeEndpoints
+public static class TaskMergeEndpoints
 {
     public static void MapJobMergeEndpoints(this RouteGroupBuilder group)
     {
@@ -66,7 +66,7 @@ public static class JobMergeEndpoints
             return outcome.Status switch
             {
                 ReEvaluateStatus.Success => Results.Ok(outcome.Response),
-                ReEvaluateStatus.JobNotFound => Results.NotFound(),
+                ReEvaluateStatus.TaskNotFound => Results.NotFound(),
                 ReEvaluateStatus.WrongLane => Results.BadRequest(new { error = outcome.Message }),
                 _ => Results.Problem(outcome.Message ?? "re-evaluate failed"),
             };

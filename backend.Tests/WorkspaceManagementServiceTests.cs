@@ -266,7 +266,7 @@ public class WorkspaceManagementServiceTests : IDisposable
 
         var result = svc.Delete("Busy");
         Assert.Equal(WorkspaceManagementOutcome.Conflict, result.Outcome);
-        Assert.Equal(1, result.JobCount);
+        Assert.Equal(1, result.TaskCount);
         Assert.Contains("still contains 1 job", result.Error!);
     }
 

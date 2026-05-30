@@ -52,11 +52,11 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_HealthyPrompt_Passes()
     {
-        var target = new JobInfo { Id = "alpha", Title = "Add a daily token rollup card", State = TaskStates.Ready };
+        var target = new TaskInfo { Id = "alpha", Title = "Add a daily token rollup card", State = TaskStates.Ready };
         var prompt = "Add a daily token rollup section to the project header. " +
                      "Acceptance: chip shows total tokens for the last 24 hours.";
 
-        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<JobInfo>());
+        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.Pass, v.Outcome);
     }
@@ -64,9 +64,9 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_TooShortPrompt_NeedsClarification()
     {
-        var target = new JobInfo { Id = "thin", Title = "fix it", State = TaskStates.Ready };
+        var target = new TaskInfo { Id = "thin", Title = "fix it", State = TaskStates.Ready };
 
-        var v = IntakeRunner.Evaluate(target, "fix it", Array.Empty<JobInfo>());
+        var v = IntakeRunner.Evaluate(target, "fix it", Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.NeedsClarification, v.Outcome);
         Assert.Contains("short", v.Reason, StringComparison.OrdinalIgnoreCase);
@@ -75,13 +75,13 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_NearDuplicateTitle_FlagsAsDuplicateCandidate()
     {
-        var target = new JobInfo
+        var target = new TaskInfo
         {
             Id = "dup-new",
             Title = "Add daily token rollup card to project header",
             State = TaskStates.Ready
         };
-        var peer = new JobInfo
+        var peer = new TaskInfo
         {
             Id = "dup-old",
             Title = "Add daily token rollup card project header",
@@ -97,10 +97,10 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_OutOfScopePrompt_HardBlocks()
     {
-        var target = new JobInfo { Id = "blocked", Title = "Run parallel coding agents on the API", State = TaskStates.Ready };
+        var target = new TaskInfo { Id = "blocked", Title = "Run parallel coding agents on the API", State = TaskStates.Ready };
         var prompt = "Spawn parallel coding agents on the API and have them race to fix the bug.";
 
-        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<JobInfo>());
+        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.Blocked, v.Outcome);
         Assert.Contains("non-goal", v.Reason, StringComparison.OrdinalIgnoreCase);
@@ -109,7 +109,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_PromptWithSixLevel2Headings_NeedsSplit()
     {
-        var target = new JobInfo { Id = "fan-out", Title = "Refactor the runner across many surfaces", State = TaskStates.Ready };
+        var target = new TaskInfo { Id = "fan-out", Title = "Refactor the runner across many surfaces", State = TaskStates.Ready };
         var prompt = string.Join('\n', new[]
         {
             "Top-level rewrite of the runner pickup loop with several independent deliverables.",
@@ -127,7 +127,7 @@ public class IntakeRunnerTests : IDisposable
             "Body F."
         });
 
-        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<JobInfo>());
+        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<TaskInfo>());
 
         Assert.Equal(IntakeOutcome.NeedsSplit, v.Outcome);
     }
@@ -140,8 +140,8 @@ public class IntakeRunnerTests : IDisposable
         // the user must clear the non-goal before the duplicate question
         // is meaningful. Pinning this so a future check reorder cannot
         // silently swap the priority.
-        var target = new JobInfo { Id = "ordering", Title = "Add worktree support to runner", State = TaskStates.Ready };
-        var peer = new JobInfo { Id = "ordering-peer", Title = "Add worktree support to runner pickup", State = TaskStates.Ready };
+        var target = new TaskInfo { Id = "ordering", Title = "Add worktree support to runner", State = TaskStates.Ready };
+        var peer = new TaskInfo { Id = "ordering-peer", Title = "Add worktree support to runner pickup", State = TaskStates.Ready };
 
         var v = IntakeRunner.Evaluate(target, "Add worktree support to runner. Done when worktrees launch on pickup.", new[] { peer });
 

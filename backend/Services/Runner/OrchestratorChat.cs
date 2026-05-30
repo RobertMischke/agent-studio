@@ -650,7 +650,7 @@ public class OrchestratorChatService
         // from the UI at any time; without this block the orchestrator
         // would keep proposing the boot-time default forever. The block
         // also names the X-Client-Id the orchestrator should forward when
-        // hitting /api/jobs on the user's behalf.
+        // hitting /api/tasks on the user's behalf.
         AppendCurrentUserPreferences(sb, clientId, _identityStore);
 
         AppendNavigationContext(sb, req.NavigationContext);
@@ -705,7 +705,7 @@ public class OrchestratorChatService
     internal static void AppendProjectStateSnapshot(
         StringBuilder sb,
         string projectName,
-        IReadOnlyCollection<JobInfo> tasksForProject)
+        IReadOnlyCollection<TaskInfo> tasksForProject)
     {
         sb.AppendLine($"AUTHORITATIVE current state of \"{projectName}\" ({tasksForProject.Count} tasks total):");
         if (tasksForProject.Count == 0)

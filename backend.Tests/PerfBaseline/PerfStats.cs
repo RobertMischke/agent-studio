@@ -42,7 +42,7 @@ internal sealed record PerfStats(
 internal sealed record PerfMetric(
     string Name,
     string Fixture,
-    int JobCount,
+    int TaskCount,
     PerfStats Stats,
     string? Notes = null);
 

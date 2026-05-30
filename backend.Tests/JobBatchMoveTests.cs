@@ -17,11 +17,11 @@ namespace OrchestratorApi.Tests;
 /// one item must not roll back items that already moved, and every item
 /// gets a typed status string in the response.
 /// </summary>
-public class JobBatchMoveTests : IDisposable
+public class TaskBatchMoveTests : IDisposable
 {
     private readonly string _watchPath;
 
-    public JobBatchMoveTests()
+    public TaskBatchMoveTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-batchmove-tests-" + Guid.NewGuid().ToString("N"));
         foreach (var state in TaskStates.All)

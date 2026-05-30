@@ -26,7 +26,7 @@ namespace OrchestratorApi.Tests;
 /// </summary>
 public class OrchestratorChatProjectStateSnapshotTests
 {
-    private static JobInfo Task(string project, string state) =>
+    private static TaskInfo Task(string project, string state) =>
         new() { Id = $"t-{state}-{System.Guid.NewGuid():N}", ProjectName = project, State = state };
 
     [Fact]
@@ -50,7 +50,7 @@ public class OrchestratorChatProjectStateSnapshotTests
     public void Snapshot_EmptyProject_RendersNoTasksMarker()
     {
         var sb = new StringBuilder();
-        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", System.Array.Empty<JobInfo>());
+        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", System.Array.Empty<TaskInfo>());
         var rendered = sb.ToString();
 
         Assert.Contains("AUTHORITATIVE current state of \"Runbook\" (0 tasks total):", rendered);

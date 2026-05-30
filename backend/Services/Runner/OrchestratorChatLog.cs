@@ -44,7 +44,7 @@ public class OrchestratorChatLog
     /// (e.g. <c>[reissue]</c>) so future parsers can pick out structured
     /// classes without re-deriving them from the prose.
     /// </summary>
-    public virtual bool Append(JobInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
+    public virtual bool Append(TaskInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
     {
         var ok = AppendWithStream(info, "orchestrator", $"[{kind.ToTag()}] {text}", liveBuffer);
         if (ok)
@@ -66,7 +66,7 @@ public class OrchestratorChatLog
     /// as a separate participant alongside <c>You</c>, the agent, and
     /// <c>Orchestrator</c>.
     /// </summary>
-    public bool AppendSupervisor(JobInfo info, string tag, string text, ICollection<CliOutputLine>? liveBuffer = null)
+    public bool AppendSupervisor(TaskInfo info, string tag, string text, ICollection<CliOutputLine>? liveBuffer = null)
     {
         var ok = AppendWithStream(info, "supervisor", $"[{tag}] {text}", liveBuffer);
         if (ok)
@@ -77,7 +77,7 @@ public class OrchestratorChatLog
         return ok;
     }
 
-    private bool AppendWithStream(JobInfo info, string streamTag, string body, ICollection<CliOutputLine>? liveBuffer)
+    private bool AppendWithStream(TaskInfo info, string streamTag, string body, ICollection<CliOutputLine>? liveBuffer)
     {
         if (info == null) return false;
         // If the job folder no longer exists, the job was moved (or deleted)

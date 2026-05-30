@@ -58,11 +58,11 @@ public sealed class BusBackedTokenSummaryReader
     /// Per-job rollup used by the kanban card's token bubble. Walks the
     /// same bus projection the project summary reads from.
     /// </summary>
-    public Dictionary<string, JobTokenSummary> SummarizePerJob(string projectName)
+    public Dictionary<string, TaskTokenSummary> SummarizePerJob(string projectName)
     {
         var workspace = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
-            return new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
+            return new Dictionary<string, TaskTokenSummary>(StringComparer.Ordinal);
         return SummarizePerJobFromStore(_store, workspace!, projectName);
     }
 
@@ -101,7 +101,7 @@ public sealed class BusBackedTokenSummaryReader
     /// Pure overload for the per-job rollup. Same conversion contract as
     /// <see cref="SummarizeFromStore"/>.
     /// </summary>
-    public static Dictionary<string, JobTokenSummary> SummarizePerJobFromStore(AgentMessageBusStore store, string workspaceRoot, string projectName)
+    public static Dictionary<string, TaskTokenSummary> SummarizePerJobFromStore(AgentMessageBusStore store, string workspaceRoot, string projectName)
     {
         var entries = BusTokenEntryConverter.LoadOrchestratorEntries(store, workspaceRoot, projectName);
         return TokenSummaryService.SummarizePerJob(entries);

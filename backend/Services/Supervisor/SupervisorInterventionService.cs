@@ -220,7 +220,7 @@ public sealed class SupervisorInterventionService
         File.AppendAllText(path, line + Environment.NewLine);
     }
 
-    private JobInfo? SafeFindJob(string jobId)
+    private TaskInfo? SafeFindJob(string jobId)
     {
         try { return _jobScanner.FindJob(jobId); }
         catch (Exception ex)

@@ -25,7 +25,7 @@ public sealed class RuntimeEventWriter
     public Task AppendToJobAsync(string jobFolderPath, ProductRuntimeEvent evt, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(jobFolderPath);
-        var path = RuntimeEventPaths.JobDayFile(jobFolderPath, evt.Timestamp);
+        var path = RuntimeEventPaths.TaskDayFile(jobFolderPath, evt.Timestamp);
         return AppendAsync(path, evt, ct);
     }
 

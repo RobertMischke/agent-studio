@@ -13,11 +13,11 @@ namespace OrchestratorApi.Tests;
 /// it must now return <c>TargetFolderExists</c> so the endpoint can map it to 409
 /// with a message that points at the stale duplicate.
 /// </summary>
-public class JobScannerMoveTests : IDisposable
+public class TaskScannerMoveTests : IDisposable
 {
     private readonly string _watchPath;
 
-    public JobScannerMoveTests()
+    public TaskScannerMoveTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "agent-taskboard-tests-" + Guid.NewGuid().ToString("N"));
         foreach (var state in TaskStates.All)

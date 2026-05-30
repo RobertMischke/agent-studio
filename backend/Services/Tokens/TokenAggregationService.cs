@@ -93,11 +93,11 @@ public sealed class TokenAggregationService : ITokenAggregator
     public TokenSummaryAggregate? CachedWorkspaceAggregate()
         => _summaryCache.Read();
 
-    public Dictionary<string, JobTokenSummary> WorkspacePerJob(string projectName, string watchPath)
+    public Dictionary<string, TaskTokenSummary> WorkspacePerJob(string projectName, string watchPath)
     {
         var workspace = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace) || string.IsNullOrWhiteSpace(watchPath))
-            return new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
+            return new Dictionary<string, TaskTokenSummary>(StringComparer.Ordinal);
         var resolvedProject = !string.IsNullOrWhiteSpace(projectName)
             ? projectName
             : ResolveProjectName(watchPath!) ?? Path.GetFileName(watchPath!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));

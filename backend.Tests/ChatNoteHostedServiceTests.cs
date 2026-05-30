@@ -119,16 +119,16 @@ public class ChatNoteHostedServiceTests : IDisposable
         Assert.Equal(2, CountChatNoteLines(jobLog));
     }
 
-    private (ChatNoteHostedService svc, List<JobInfo> jobs, string jobLog) BuildService(FakeTimeProvider time)
+    private (ChatNoteHostedService svc, List<TaskInfo> jobs, string jobLog) BuildService(FakeTimeProvider time)
     {
         var jobFolder = Path.Combine(_workspace, "jobs", "j-1");
         Directory.CreateDirectory(jobFolder);
         Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
 
-        var job = new JobInfo
+        var job = new TaskInfo
         {
             Id = "j-1",
-            JobKey = $"{_workspace}::j-1",
+            TaskKey = $"{_workspace}::j-1",
             Title = "test job",
             State = TaskStates.Progress,
             ProjectName = _project,
@@ -158,7 +158,7 @@ public class ChatNoteHostedServiceTests : IDisposable
             time: time);
 
         var jobLog = Path.Combine(jobFolder, "logs", "cli-output.log");
-        return (svc, new List<JobInfo> { job }, jobLog);
+        return (svc, new List<TaskInfo> { job }, jobLog);
     }
 
     private void AppendAdvisory(DateTime at, SupervisorSeverity severity, string topic)

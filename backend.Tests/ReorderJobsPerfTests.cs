@@ -16,7 +16,7 @@ namespace OrchestratorApi.Tests;
 /// <c>TaskScannerService.FindJob</c> once per item, and FindJob does a full
 /// disk-walking <c>ScanAllJobs</c> on every call. For an N-card lane on
 /// an M-job board that is O(N x M) folder reads. Subsequent
-/// <c>/api/jobs/{id}</c> requests then queue behind the loop, so the
+/// <c>/api/tasks/{id}</c> requests then queue behind the loop, so the
 /// detail panel feels like it hangs after a drop.
 ///
 /// Contract: ReorderJobs must complete in O(N+M) - a single scan, then a
@@ -65,7 +65,7 @@ public class ReorderJobsPerfTests : IDisposable
 
         // Reorder request: rotate the lane (move first to last).
         var rotated = laneIds.Skip(1).Append(laneIds[0]).ToList();
-        var payload = rotated.Select(id => new JobOrderItem { JobId = id, WatchPath = _watchPath }).ToList();
+        var payload = rotated.Select(id => new TaskOrderItem { JobId = id, WatchPath = _watchPath }).ToList();
 
         var sw = Stopwatch.StartNew();
         var success = machine.ReorderJobs(payload);

@@ -98,7 +98,7 @@ public class OrchestratorPromptUserPreferencesTests : IDisposable
 
         Assert.Contains("=== AVAILABLE TOOLS ===", prompt);
         // Concrete API hints the operator-reported regression required.
-        Assert.Contains("POST /api/jobs", prompt);
+        Assert.Contains("POST /api/tasks", prompt);
         Assert.Contains("X-Client-Id", prompt);
         Assert.Contains("Do NOT tell them they have to do it manually in the UI", prompt);
     }
