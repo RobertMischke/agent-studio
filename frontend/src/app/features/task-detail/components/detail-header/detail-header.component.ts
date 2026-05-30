@@ -42,8 +42,6 @@ export class DetailHeaderComponent {
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
   readonly savingTitle = input(false);
-  readonly isReview = input(false);
-  readonly completingAndNext = input(false);
   readonly changingState = input(false);
   readonly movingToTop = input(false);
   /** Lane pager position (1-based). 0 means no pager snapshot active. */
@@ -68,7 +66,6 @@ export class DetailHeaderComponent {
   readonly cancelTitleEdit = output<void>();
   readonly saveTitle = output<void>();
   readonly titleDraftChange = output<string>();
-  readonly completeAndNext = output<void>();
   /**
    * Delete request. The overflow menu's Delete row routes here instead of
    * through `triageAction` so the existing `boardMutations.deleteFromDetail`

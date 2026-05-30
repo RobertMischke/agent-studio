@@ -391,21 +391,4 @@ export class TriageController {
     }
   }
 
-  // ---------- post-review helper ----------
-
-  /**
-   * "Complete and next review": the user just accepted the open
-   * review job; refresh the board and either jump to the next
-   * pending review or close the panel if none remain.
-   */
-  completeAndNextReview(): void {
-    const currentJobKey = this.jobSelection.selected()?.info.taskKey;
-    const reviewJobs = this.jobService.grouped().review.filter((j) => j.taskKey !== currentJobKey);
-    this.jobService.refresh();
-    if (reviewJobs.length > 0) {
-      this.jobSelection.openDetail(reviewJobs[0]);
-    } else {
-      this.jobSelection.closeDetail();
-    }
-  }
 }

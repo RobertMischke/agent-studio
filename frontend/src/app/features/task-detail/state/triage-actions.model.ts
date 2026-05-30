@@ -92,7 +92,7 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     { id: 'reissue',      label: 'Reissue (→ Progress)',          variant: 'secondary', intent: { kind: 'move', targetState: '3-progress' } },
   ],
   '5-human-review': [
-    { id: 'mark-done',          label: 'Mark as Done',                              variant: 'primary',   intent: { kind: 'move', targetState: '6-completed' } },
+    { id: 'mark-done',          label: 'Send to Complete',                          variant: 'primary',   intent: { kind: 'move', targetState: '6-completed' } },
     { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)',                variant: 'secondary', intent: { kind: 'move', targetState: '2-ready' } },
     SEND_TO_BACKLOG,
     { id: 'need-clarification', label: 'Need clarification (→ Needs Human Review)', variant: 'secondary', intent: { kind: 'move', targetState: '1b-needs-human-review' } },

@@ -436,33 +436,8 @@
     .state--6-completed { background: color-mix(in srgb, var(--lane-completed) 15%, transparent); color: var(--lane-completed); }
     .state--6-archive { background: color-mix(in srgb, var(--lane-archive) 15%, transparent); color: var(--lane-archive); }
     .state--7-archive { background: color-mix(in srgb, var(--lane-archive) 15%, transparent); color: var(--lane-archive); }
-    .detail__complete-next {
-      background: color-mix(in srgb, var(--severity-pass) 12%, transparent);
-      border: 1px solid color-mix(in srgb, var(--severity-pass) 35%, transparent);
-      color: var(--severity-pass);
-      padding: 7px 14px;
-      border-radius: 999px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-      flex-shrink: 0;
-    }
-    .detail__complete-next:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--severity-pass) 22%, transparent);
-      border-color: color-mix(in srgb, var(--severity-pass) 60%, transparent);
-      filter: brightness(1.06);
-    }
-    .detail__complete-next:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-
-    /* "Do Next" — visible only on 2-ready cards, distinct from the green
-       "Complete & Next" review button so the two never read as the same
-       action. Uses the brand-orange accent to echo the start CTA on
-       in-progress lanes. */
+    /* "Do Next" — visible only on 2-ready cards. Uses the brand-orange
+       accent to echo the start CTA on in-progress lanes. */
     .detail__do-next {
       background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
       border: 1px solid color-mix(in srgb, var(--studio-accent) 35%, transparent);

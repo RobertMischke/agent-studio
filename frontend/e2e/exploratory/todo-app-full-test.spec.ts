@@ -240,11 +240,11 @@ test('full lifecycle: create → steer → complete (Playwright Test sandbox)', 
         await page.waitForTimeout(1000);
         await snapshot(page, ++seq, 'opened detail in review');
 
-        const completeBtn = page.getByTestId('studio-task-complete-next');
+        const completeBtn = page.getByTestId('studio-triage-action-mark-done');
         if (await completeBtn.isVisible()) {
           await completeBtn.click();
           await page.waitForTimeout(1500);
-          await snapshot(page, ++seq, 'clicked Complete');
+          await snapshot(page, ++seq, 'clicked Send to Complete');
           completed = true;
           break;
         } else {

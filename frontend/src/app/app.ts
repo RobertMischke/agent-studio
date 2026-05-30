@@ -1234,9 +1234,6 @@ export class App implements OnInit, OnDestroy {
   onTriagePrev(info: TaskInfo) {
     this.triage.prev(info);
   }
-  onCompleteAndNextReview() {
-    this.triage.completeAndNextReview();
-  }
 
   // Cycle 10b: board-mutation handlers delegate to BoardMutationsService.
   onJobDrop(event: { jobId: string; watchPath: string; targetState: string; targetIndex: number }) {

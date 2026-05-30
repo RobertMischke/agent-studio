@@ -146,12 +146,6 @@
                     data-testid="studio-task-next"
                     [appTooltip]="'Next task in lane'"
                     (click)="onTriageNext(detail.info)">›</button>
-            <span class="studio-tab-actions-sep" aria-hidden="true"></span>
-            <button type="button"
-                    class="studio-tab-action studio-tab-action--primary"
-                    data-testid="studio-task-complete-next"
-                    [appTooltip]="'Complete this task and move to the next review item'"
-                    (click)="onCompleteAndNextReview()">✓ Complete</button>
             @if (studioTriageHasActions()) {
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
@@ -257,7 +251,6 @@
                                   (back)="closeDetail()"
                                   (fileSaved)="onFileSaved()"
                                   (projectChanged)="onProjectChanged($event)"
-                                  (completeAndNextReview)="onCompleteAndNextReview()"
                                   (deleteRequested)="onDeleteFromDetail(detail.info)"
                                   (stateChangeRequested)="onStateChangeFromDetail(detail.info, $event.targetState)"
                                   (triageMoveRequested)="onTriageMove(detail.info, $event)"
@@ -548,7 +541,6 @@
                               (back)="closeDetail()"
                               (fileSaved)="onFileSaved()"
                               (projectChanged)="onProjectChanged($event)"
-                              (completeAndNextReview)="onCompleteAndNextReview()"
                               (deleteRequested)="onDeleteFromDetail(detail.info)"
                               (stateChangeRequested)="onStateChangeFromDetail(detail.info, $event.targetState)"
                               (triageMoveRequested)="onTriageMove(detail.info, $event)"

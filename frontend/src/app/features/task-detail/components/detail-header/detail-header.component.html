@@ -111,15 +111,6 @@
       {{ movingToTop() ? '⏳' : '↑ Do Next' }}
     </button>
   }
-  @if (isReview()) {
-    <button type="button"
-            class="detail__complete-next"
-            data-testid="complete-and-next-btn"
-            [disabled]="completingAndNext()"
-            (click)="completeAndNext.emit()">
-      {{ completingAndNext() ? '⏳' : '✓ Complete & Next' }}
-    </button>
-  }
   @if (hasTriageActions()) {
     <div class="detail__triage" data-testid="triage-panel" data-triage-root>
       <span class="detail__triage-counter visually-hidden"

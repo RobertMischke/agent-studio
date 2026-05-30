@@ -140,7 +140,6 @@ export class TaskDetailComponent implements OnDestroy {
     });
   }
   readonly projectChanged = output<string>();
-  readonly completeAndNextReview = output<void>();
   readonly deleteRequested = output<void>();
   readonly stateChangeRequested = output<{ targetState: string }>();
   /** Lane-move requested via the triage panel. Parent runs the API call so
@@ -264,7 +263,6 @@ export class TaskDetailComponent implements OnDestroy {
   readonly editingTitle = signal(false);
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
-  readonly completingAndNext = signal(false);
   readonly changingState = signal(false);
   readonly movingToTop = signal(false);
   /** Stable id of the triage button currently in flight (null when idle). */
@@ -952,14 +950,6 @@ export class TaskDetailComponent implements OnDestroy {
     return this.detail().info.state === '3-progress';
   }
 
-  isReview(): boolean {
-    const s = this.detail().info.state;
-    // ADR-0025: any review lane (auto or human) counts as "in review" for
-    // the detail-pane affordances. Legacy 4-review supported during
-    // transition.
-    return s === '4-auto-review' || s === '5-human-review' || s === '4-review';
-  }
-
   /**
    * Triage panel: route a typed lane action to the right handler. Move /
    * delete / move-to-top go to the parent (it owns the optimistic-paint and
@@ -1055,42 +1045,6 @@ export class TaskDetailComponent implements OnDestroy {
         event.preventDefault();
         return;
     }
-  }
-
-  completeAndNext() {
-    if (this.completingAndNext()) return;
-    this.completingAndNext.set(true);
-    const info = this.detail().info;
-    const { id, watchPath } = info;
-    // Capture the prev lane + slot BEFORE the move so the undo toast
-    // can return the card to its origin position.
-    const prevState = info.state;
-    const prevIndex = this.jobService.findLaneIndex(id, watchPath, prevState);
-    this.jobService.moveJob(id, '6-completed', watchPath).subscribe({
-      next: () => {
-        this.completingAndNext.set(false);
-        if (prevIndex >= 0) {
-          this.undo.offerLaneRevert({
-            jobId: id,
-            watchPath,
-            jobLabel: info.title || id,
-            actionLabel: 'Completed',
-            targetLaneLabel: laneLabelFor('6-completed'),
-            prevState,
-            prevIndex,
-          });
-        }
-        this.completeAndNextReview.emit();
-      },
-      error: (err) => {
-        this.completingAndNext.set(false);
-        this.errorDialog.show(err, {
-          title: 'Failed to complete task',
-          fallbackMessage: 'Failed to move task to Completed',
-          source: `Task ${id}`,
-        });
-      },
-    });
   }
 
   /**
