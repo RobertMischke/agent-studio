@@ -2484,12 +2484,39 @@ public class ProjectRunner
     /// </summary>
     internal const int PickupOutputDeadlineSeconds = 60;
 
+    /// <summary>
+    /// Small per-slug budget for resuming a <c>3-progress</c> folder that has
+    /// no resumable session id (a "zombie": no active process and nothing to
+    /// <c>--resume</c> against). The strict-iteration picker is progress-first
+    /// by design, so a zombie that is re-picked every tick silently jumps
+    /// ahead of the due 2-ready task forever. A zombie gets at most this many
+    /// failed resume attempts - an auto-pickup run that neither reaches review
+    /// nor captures a session id - before it is dead-lettered into
+    /// <see cref="JobStates.FailedPickup"/> so the queue can drain.
+    /// Deliberately smaller than <see cref="PickupFailureThreshold"/>: a
+    /// session-less folder has no real run to resume, so we give up sooner
+    /// than for a folder that just streamed nothing on one attempt.
+    /// </summary>
+    internal const int ZombieResumeFailureThreshold = 2;
+
     // Per-slug consecutive-silent-attempt counter. In-memory only - a
     // backend restart resets the counter, which matches the wider runner
     // pattern (a restart is itself a recovery boundary). Bounded by
     // <see cref="PickupFailureThreshold"/>; the same dictionary is read
     // when picking and written when the failed run finishes.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PickupAttemptState> _pickupAttempts = new();
+
+    // Per-slug failed-resume counter for session-less 3-progress folders.
+    // Unlike _pickupAttempts (which only counts FULLY SILENT runs and resets
+    // on any streamed output line), this counter increments on every
+    // auto-pickup resume that fails to make progress - one that neither
+    // reaches review nor captures a resumable session id - even when the run
+    // streamed an error line. That is the exact symptom behind the
+    // "zombie keeps getting picked" bug: a resume that prints
+    // "No conversation found" and exits non-zero used to reset the silent
+    // counter and be resumed forever. In-memory only (a restart is a
+    // recovery boundary). Reset on real progress.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _zombieResumeFailures = new();
 
     private sealed class PickupAttemptState
     {
@@ -2508,6 +2535,33 @@ public class ProjectRunner
     /// <summary>Test seam: read the per-slug attempt counter.</summary>
     internal int GetPickupAttempts(string slug)
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
+
+    /// <summary>Test seam: prime the per-slug zombie-resume-failure counter
+    /// so a regression test can drive the picker's zombie dead-letter path
+    /// without running a real failed resume end-to-end.</summary>
+    internal void SetZombieResumeFailuresForTest(string slug, int count)
+        => _zombieResumeFailures[slug] = count;
+
+    /// <summary>Test seam: read the per-slug zombie-resume-failure counter so
+    /// a regression test can prove it increments on each failed resume (the
+    /// "keeps getting picked" symptom) and resets on real progress.</summary>
+    internal int GetZombieResumeFailures(string slug)
+        => _zombieResumeFailures.TryGetValue(slug, out var n) ? n : 0;
+
+    /// <summary>
+    /// Records one failed resume against a session-less <c>3-progress</c>
+    /// folder. Called from both the spawn-failure path (no execution) and the
+    /// run-finish path (resume produced no resumable session and did not reach
+    /// review). Increments the per-slug counter the picker consults before
+    /// resuming a zombie.
+    /// </summary>
+    private void RecordZombieResumeFailure(string slug)
+    {
+        var n = _zombieResumeFailures.AddOrUpdate(slug, 1, (_, prev) => prev + 1);
+        _logger.LogInformation(
+            "[taskboard] zombie resume failure {N}/{Budget} for {Slug} on {Project} (no resumable session, no progress)",
+            n, ZombieResumeFailureThreshold, slug, ProjectName);
+    }
 
     /// <summary>Test seam: read the consecutive auto-failure counter so
     /// regression tests can prove the counter actually resets after a
@@ -2578,6 +2632,38 @@ public class ProjectRunner
                 if (trippedDuringThisDeadLetter) return null;
                 continue;
             }
+
+            // Zombie guard. Progress-first resume is correct in principle -
+            // don't abandon interrupted work - but a session-less folder has
+            // no real run to resume: re-picking it every tick just starts a
+            // fresh/recovery run that, when it also fails, leaves the folder
+            // stranded in 3-progress and silently jumps ahead of the due
+            // 2-ready task again. The project-wide pickup gate at the head of
+            // TickAsync already guarantees no active process for this project,
+            // so the only thing that distinguishes a resumable folder from a
+            // zombie here is a captured session id. A folder with no resumable
+            // session that has burned its small resume budget is dead-lettered
+            // immediately rather than resumed indefinitely. A fresh session-
+            // less folder (0-1 failures) is still resumed: the "no log" case
+            // is the most-restartable, so we grant a couple of grace attempts
+            // before giving up.
+            if (!HasResumableSession(candidate.Info))
+            {
+                var resumeFailures = GetZombieResumeFailures(slug);
+                if (resumeFailures >= ZombieResumeFailureThreshold)
+                {
+                    var zombieReason =
+                        $"Auto-pickup gave up resuming a session-less 3-progress folder after {resumeFailures} failed resume attempts " +
+                        $"(budget {ZombieResumeFailureThreshold}): no active process and no resumable session id to continue.";
+                    var trippedDuringZombieDeadLetter = DeadLetterUnrecoverableFolder(
+                        candidate, slug, resumeFailures,
+                        thresholdOverride: ZombieResumeFailureThreshold,
+                        reasonOverride: zombieReason);
+                    if (trippedDuringZombieDeadLetter) return null;
+                    continue;
+                }
+            }
+
             return candidate.Info;
         }
         return null;
@@ -2835,9 +2921,12 @@ public class ProjectRunner
     /// breaker (caller halts the surrounding iteration); <c>false</c>
     /// otherwise (caller continues to the next candidate).
     /// </summary>
-    private bool DeadLetterUnrecoverableFolder(ProgressPickupCandidate candidate, string slug, int attempts)
+    private bool DeadLetterUnrecoverableFolder(
+        ProgressPickupCandidate candidate, string slug, int attempts,
+        int? thresholdOverride = null, string? reasonOverride = null)
     {
         var now = DateTime.UtcNow;
+        var threshold = thresholdOverride ?? PickupFailureThreshold;
         // ADR-0024: dead-letter slug collision check goes through the
         // typed layer; the move itself uses MoveOrphanToFailedPickup so
         // the architecture test doesn't see a Path.Combine + lane
@@ -2861,6 +2950,7 @@ public class ProjectRunner
             // Reset the counter so we don't loop on the same failed move every
             // tick. The folder stays in 3-progress; the operator can intervene.
             _pickupAttempts.TryRemove(slug, out _);
+            _zombieResumeFailures.TryRemove(slug, out _);
             return false;
         }
 
@@ -2873,15 +2963,15 @@ public class ProjectRunner
             JobId = jobIdBeforeMove,
             DestinationSlug = destinationSlug,
             Attempts = attempts,
-            Threshold = PickupFailureThreshold,
+            Threshold = threshold,
             OutputDeadlineSeconds = PickupOutputDeadlineSeconds,
             AttemptHistory = historySnapshot.Count == 0 ? null : historySnapshot,
-            Reason = $"Auto-pickup exhausted retry budget: {attempts} consecutive runs finished without producing a CLI output line within {PickupOutputDeadlineSeconds}s. Folder dead-lettered to {JobStates.FailedPickup}/{destinationSlug}."
+            Reason = reasonOverride ?? $"Auto-pickup exhausted retry budget: {attempts} consecutive runs finished without producing a CLI output line within {PickupOutputDeadlineSeconds}s. Folder dead-lettered to {JobStates.FailedPickup}/{destinationSlug}."
         };
         _pickupFailures.Append(record);
         _logger.LogWarning(
-            "[taskboard] dead-lettered 3-progress folder {Slug} on {Project} after {Attempts} silent autopickup attempts (-> {Destination})",
-            slug, ProjectName, attempts, destinationSlug);
+            "[taskboard] dead-lettered 3-progress folder {Slug} on {Project} after {Attempts} failed autopickup attempts (threshold {Threshold}) (-> {Destination})",
+            slug, ProjectName, attempts, threshold, destinationSlug);
 
         // Drop a chat-log note on the moved folder so the protocol pane
         // surfaces why the lane returned to one-task-per-project. Best-effort.
@@ -2890,9 +2980,11 @@ public class ProjectRunner
             var moved = _scanner.FindJob(jobIdBeforeMove, Entry.Path);
             if (moved != null)
             {
-                _chatLog.AppendSupervisor(moved, "pickup-failed",
-                    $"Auto-pickup gave up after {attempts} consecutive silent runs (no CLI output within {PickupOutputDeadlineSeconds}s). " +
-                    $"Folder surfaced in {JobStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready.");
+                var chatNote = reasonOverride != null
+                    ? $"{reasonOverride} Folder surfaced in {JobStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready."
+                    : $"Auto-pickup gave up after {attempts} consecutive silent runs (no CLI output within {PickupOutputDeadlineSeconds}s). " +
+                      $"Folder surfaced in {JobStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready.";
+                _chatLog.AppendSupervisor(moved, "pickup-failed", chatNote);
             }
         }
         catch (Exception ex)
@@ -2901,6 +2993,7 @@ public class ProjectRunner
         }
 
         _pickupAttempts.TryRemove(slug, out _);
+        _zombieResumeFailures.TryRemove(slug, out _);
 
         // Cross-slug infra circuit breaker. The per-slug breaker just
         // dead-lettered ONE folder; if the same CLI now has N distinct
