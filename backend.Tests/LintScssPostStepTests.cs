@@ -36,7 +36,7 @@ public class LintScssPostStepTests : IDisposable
     {
         _workspace = Path.Combine(Path.GetTempPath(), "lint-scss-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -179,26 +179,26 @@ public class LintScssPostStepTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // Lane move: 4-auto-review -> 2-ready (the lint-scss reissue path).
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "lint-broken")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "lint-broken")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "lint-broken")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "lint-broken")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "lint-broken")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "lint-broken")));
 
         var followUp = File.ReadAllText(
-            Path.Combine(_watchPath, JobStates.Ready, "lint-broken", "orchestrator-follow-up.md"));
+            Path.Combine(_watchPath, TaskStates.Ready, "lint-broken", "orchestrator-follow-up.md"));
         Assert.Contains("lint-scss post-step found stylelint errors", followUp);
         Assert.Contains("Disallowed hex color", followUp);
 
         // pipeline-execution.json must have the lint-scss step recorded
         // as Failed so the FE badge can render "fail".
         var pipelineJson = File.ReadAllText(
-            Path.Combine(_watchPath, JobStates.Ready, "lint-broken",
+            Path.Combine(_watchPath, TaskStates.Ready, "lint-broken",
                 OrchestratorApi.Services.Pipeline.PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.LintScssStepId + "\"", pipelineJson);
         Assert.Contains("\"verdict\": \"fail\"", pipelineJson);
 
         // Truncated lint output is persisted under post-steps/ so the
         // operator can expand it from the timeline.
-        var postStepsDir = Path.Combine(_watchPath, JobStates.Ready, "lint-broken", "post-steps");
+        var postStepsDir = Path.Combine(_watchPath, TaskStates.Ready, "lint-broken", "post-steps");
         Assert.True(Directory.Exists(postStepsDir));
         var logFiles = Directory.GetFiles(postStepsDir, "lint-scss-*.log");
         Assert.Single(logFiles);
@@ -227,13 +227,13 @@ public class LintScssPostStepTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "lint-warn-only")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "lint-warn-only")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "lint-warn-only")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "lint-warn-only")));
 
         // Step verdict still recorded as Warn so the FE can render the
         // amber pill even though no reissue happened.
         var pipelineJson = File.ReadAllText(
-            Path.Combine(_watchPath, JobStates.HumanReview, "lint-warn-only",
+            Path.Combine(_watchPath, TaskStates.HumanReview, "lint-warn-only",
                 OrchestratorApi.Services.Pipeline.PipelineExecutionLog.FileName));
         Assert.Contains("\"verdict\": \"warn\"", pipelineJson);
     }
@@ -266,8 +266,8 @@ public class LintScssPostStepTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "lint-double-fail")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "lint-double-fail")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "lint-double-fail")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "lint-double-fail")));
 
         var records = ReviewDecisionLog.ReadAll(_workspace, Project);
         Assert.Equal(2, records.Count); // pre-seed + escalate
@@ -277,10 +277,10 @@ public class LintScssPostStepTests : IDisposable
 
     private void SeedReviewJobWithDone(string slug)
     {
-        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
@@ -305,8 +305,8 @@ public class LintScssPostStepTests : IDisposable
         };
         var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var stateMachine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var stateMachine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
@@ -315,16 +315,16 @@ public class LintScssPostStepTests : IDisposable
         aspectRunner.CliRunner = (_, _, _, _, _, _) =>
             Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
 
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
-        var mutations = new JobMutationService(
+        var mutations = new TaskMutationService(
             scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
             new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
-            new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance),
-            NullLogger<JobMutationService>.Instance);
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        var transitions = new JobTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, stateMachine, transitions, indexCache,
             NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);

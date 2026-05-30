@@ -17,13 +17,13 @@ public static class JobRunnerEndpoints
 {
     public static void MapJobRunnerEndpoints(this RouteGroupBuilder group)
     {
-        group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, StartJobRequest? req, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
+        group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, StartJobRequest? req, TaskRunnerService runner, TaskScannerService scanner, CancellationToken ct) =>
         {
             var job = scanner.FindJob(jobId, watchPath);
             if (job == null)
                 return Results.NotFound(new { error = "Job not found" });
 
-            if (job.State is not (JobStates.Ready or JobStates.Progress))
+            if (job.State is not (TaskStates.Ready or TaskStates.Progress))
                 return Results.BadRequest(new { error = $"Job is in state '{job.State}' - only jobs in 'ready' or 'progress' can be started" });
 
             try
@@ -33,7 +33,7 @@ public static class JobRunnerEndpoints
                     ? Results.Accepted(value: resp)
                     : Results.Ok(resp);
             }
-            catch (JobOperationException ex)
+            catch (TaskOperationException ex)
             {
                 return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
             }
@@ -70,7 +70,7 @@ public static class JobRunnerEndpoints
                     ? Results.Accepted(value: resp)
                     : Results.Ok(resp);
             }
-            catch (JobOperationException ex)
+            catch (TaskOperationException ex)
             {
                 return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
             }
@@ -88,7 +88,7 @@ public static class JobRunnerEndpoints
         // gives the user a paper trail when continuations don't behave as
         // expected. Includes the current sessionChain so the frontend can
         // render a chip without a second round-trip.
-        group.MapGet("/{jobId}/session-events", (string jobId, string? watchPath, JobScannerService scanner, JobSessionLog sessions) =>
+        group.MapGet("/{jobId}/session-events", (string jobId, string? watchPath, TaskScannerService scanner, TaskSessionLog sessions) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -108,7 +108,7 @@ public static class JobRunnerEndpoints
         // Drives the Overview tab's Agent Work block; replaces the inert
         // raw session-id row the operator flagged as no-value noise. The
         // current session id rides along for the debug tooltip only.
-        group.MapGet("/{jobId}/agent-work-summary", (string jobId, string? watchPath, JobScannerService scanner) =>
+        group.MapGet("/{jobId}/agent-work-summary", (string jobId, string? watchPath, TaskScannerService scanner) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -121,12 +121,12 @@ public static class JobRunnerEndpoints
         // can render line-spans for drill-down. See docs/design-principles.md
         // for the contract this surface has to honour: top-level summary +
         // always-available drill-down.
-        group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, JobScannerService scanner, JobSessionLog sessions) =>
+        group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, TaskScannerService scanner, TaskSessionLog sessions) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             var events = sessions.ReadSessionEvents(jobId, watchPath);
-            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
             return Results.Ok(timeline);
         });
@@ -141,7 +141,7 @@ public static class JobRunnerEndpoints
         // test pins. Index is 1-based to match RunRecord.Index.
         group.MapGet("/{jobId}/runs/{index:int}/commits", (
             string jobId, int index, string? watchPath,
-            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -171,7 +171,7 @@ public static class JobRunnerEndpoints
         // counts. Drives the file-tree side of the run's git viewer.
         group.MapGet("/{jobId}/runs/{index:int}/files", (
             string jobId, int index, string? watchPath,
-            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -205,7 +205,7 @@ public static class JobRunnerEndpoints
         // can consume it without re-parsing.
         group.MapGet("/{jobId}/runs/{index:int}/diff", (
             string jobId, int index, string? path, string? watchPath,
-            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -226,7 +226,7 @@ public static class JobRunnerEndpoints
         // GenerateAsync so the failure mode is recorded as a regular Failed
         // SummaryState the UI can render in-place — surfacing the precise
         // reason via the banner instead of a top-level error dialog.
-        group.MapPost("/{jobId}/summary/regenerate", (string jobId, string? watchPath, JobScannerService scanner, SummaryGenerationService summaries) =>
+        group.MapPost("/{jobId}/summary/regenerate", (string jobId, string? watchPath, TaskScannerService scanner, SummaryGenerationService summaries) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null)
@@ -244,7 +244,7 @@ public static class JobRunnerEndpoints
         // post-run summary still owns it. Surfaced by the "Interim status"
         // button in the protocol pane so the user can check on a long-running
         // task without stopping it.
-        group.MapPost("/{jobId}/summary/interim", async (string jobId, string? watchPath, JobScannerService scanner, SummaryGenerationService summaries, CancellationToken ct) =>
+        group.MapPost("/{jobId}/summary/interim", async (string jobId, string? watchPath, TaskScannerService scanner, SummaryGenerationService summaries, CancellationToken ct) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null)
@@ -274,12 +274,12 @@ public static class JobRunnerEndpoints
     /// in how they bound or pair runs.
     /// </summary>
     private static RunRecord? ResolveRun(
-        JobInfo info, JobSessionLog sessions,
+        JobInfo info, TaskSessionLog sessions,
         string jobId, string? watchPath, int index, out string error)
     {
         error = "";
         var events = sessions.ReadSessionEvents(jobId, watchPath);
-        var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
         var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
         if (index < 1 || index > timeline.Runs.Count)
         {

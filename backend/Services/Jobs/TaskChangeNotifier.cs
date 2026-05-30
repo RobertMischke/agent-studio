@@ -6,11 +6,11 @@ namespace OrchestratorApi.Services.Jobs;
 /// frontend waits for the next 2 s poll" pattern with synchronous push to
 /// the SignalR hub.
 ///
-/// <para>Publishers: <see cref="JobMutationService"/> (Create / Update),
-/// <see cref="JobTransitionService"/> (Move), <see cref="JobStateMachine"/>
+/// <para>Publishers: <see cref="TaskMutationService"/> (Create / Update),
+/// <see cref="TaskTransitionService"/> (Move), <see cref="TaskStateMachine"/>
 /// (Delete + lane-wide reorder).</para>
 ///
-/// <para>Subscribers: <see cref="OrchestratorApi.Hubs.JobHub"/> wiring in
+/// <para>Subscribers: <see cref="OrchestratorApi.Hubs.TaskHub"/> wiring in
 /// <c>Program.cs</c>, which broadcasts the typed methods
 /// <c>jobCreated</c> / <c>jobUpdated</c> / <c>jobMoved</c> / <c>jobDeleted</c>
 /// / <c>jobsReordered</c> to all connected clients.</para>
@@ -20,11 +20,11 @@ namespace OrchestratorApi.Services.Jobs;
 /// subscribers are caught and logged so a single bad handler cannot
 /// poison the mutation path.</para>
 /// </summary>
-public sealed class JobChangeNotifier
+public sealed class TaskChangeNotifier
 {
-    private readonly ILogger<JobChangeNotifier> _logger;
+    private readonly ILogger<TaskChangeNotifier> _logger;
 
-    public JobChangeNotifier(ILogger<JobChangeNotifier> logger)
+    public TaskChangeNotifier(ILogger<TaskChangeNotifier> logger)
     {
         _logger = logger;
     }

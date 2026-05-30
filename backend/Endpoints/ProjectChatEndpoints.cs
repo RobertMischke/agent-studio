@@ -18,7 +18,7 @@ public static class ProjectChatEndpoints
 
         group.MapGet("/search",
             (string project, string? q, int? limit,
-             JobScannerService scanner,
+             TaskScannerService scanner,
              ProjectChatIndex index) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == project);
@@ -46,7 +46,7 @@ public static class ProjectChatEndpoints
 
         group.MapGet("/turn/{turnId}",
             (string project, string turnId,
-             JobScannerService scanner,
+             TaskScannerService scanner,
              ProjectChatStore store) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == project);
@@ -70,7 +70,7 @@ public static class ProjectChatEndpoints
 
         group.MapGet("/stats",
             (string project,
-             JobScannerService scanner,
+             TaskScannerService scanner,
              ProjectChatStore store) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == project);
@@ -87,7 +87,7 @@ public static class ProjectChatEndpoints
 
         group.MapGet("/scroll",
             (string project, string? before, string? after, int? limit,
-             JobScannerService scanner,
+             TaskScannerService scanner,
              ProjectChatStore store) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == project);

@@ -51,7 +51,7 @@ public static class ProjectSettingsEndpoints
                     // F35: resolved per-lane strategy map (defaults filled in).
                     // The board uses this for the lane-header icon + the
                     // drag-disabled hint without a per-project round-trip.
-                    laneSortStrategies = JobStates.All.ToDictionary(
+                    laneSortStrategies = TaskStates.All.ToDictionary(
                         lane => lane,
                         lane => LaneSortStrategies.Resolve(kv.Value, lane),
                         StringComparer.OrdinalIgnoreCase),
@@ -60,7 +60,7 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(projected);
         });
 
-        app.MapPut("/api/projects/{projectName}/auto-commit", (string projectName, SetAutoCommitRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/auto-commit", (string projectName, SetAutoCommitRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             // Reject unknown project names so a typo in the URL fails loud rather than silently
             // adding orphan settings entries that never reach a board column.
@@ -71,7 +71,7 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(settings.Get(projectName));
         });
 
-        app.MapPut("/api/projects/{projectName}/auto-push-strategy", (string projectName, SetAutoPushStrategyRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/auto-push-strategy", (string projectName, SetAutoPushStrategyRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -87,7 +87,7 @@ public static class ProjectSettingsEndpoints
         // The orchestrator's model can be tuned per project. Defaults to
         // Opus when null. This is the only knob today; per-call overrides
         // are not exposed.
-        app.MapPut("/api/projects/{projectName}/orchestrator-model", (string projectName, SetOrchestratorModelRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/orchestrator-model", (string projectName, SetOrchestratorModelRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -99,7 +99,7 @@ public static class ProjectSettingsEndpoints
         // ADR-0026: per-project autonomy slider for the orchestrator-prep
         // loop. Returns the resolved level (default 2 when not set) so the
         // header can render the slider without a second round-trip.
-        app.MapGet("/api/projects/{projectName}/autonomy", (string projectName, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapGet("/api/projects/{projectName}/autonomy", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -108,7 +108,7 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(new { level = s.AutonomyLevel ?? 2 });
         });
 
-        app.MapPut("/api/projects/{projectName}/autonomy", (string projectName, SetAutonomyLevelRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/autonomy", (string projectName, SetAutonomyLevelRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -122,14 +122,14 @@ public static class ProjectSettingsEndpoints
         // a dropdown per lane without a second round-trip. PUT writes one
         // lane at a time; an empty/null strategy clears the override and the
         // lane reverts to its default.
-        app.MapGet("/api/projects/{projectName}/lane-sort-strategies", (string projectName, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapGet("/api/projects/{projectName}/lane-sort-strategies", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             var s = settings.Get(projectName);
             var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var lane in JobStates.All)
+            foreach (var lane in TaskStates.All)
                 resolved[lane] = LaneSortStrategies.Resolve(s, lane);
             return Results.Ok(new
             {
@@ -139,14 +139,14 @@ public static class ProjectSettingsEndpoints
             });
         });
 
-        app.MapPut("/api/projects/{projectName}/lane-sort-strategy", (string projectName, SetLaneSortStrategyRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/lane-sort-strategy", (string projectName, SetLaneSortStrategyRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             if (string.IsNullOrWhiteSpace(req.Lane))
                 return Results.BadRequest(new { error = "lane is required" });
-            if (!JobStates.All.Contains(req.Lane, StringComparer.OrdinalIgnoreCase))
+            if (!TaskStates.All.Contains(req.Lane, StringComparer.OrdinalIgnoreCase))
                 return Results.BadRequest(new { error = $"Unknown lane '{req.Lane}'" });
             // Empty/null clears. Non-empty must be user-selectable; the
             // internal pickup-priority strategy is not exposed to the UI.
@@ -170,7 +170,7 @@ public static class ProjectSettingsEndpoints
         // When enabled, the coding runner waits for intake to mark a 2-ready
         // card as intake-passed before picking it up. Default off so existing
         // projects keep their current behavior.
-        app.MapPut("/api/projects/{projectName}/intake", (string projectName, SetIntakeEnabledRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        app.MapPut("/api/projects/{projectName}/intake", (string projectName, SetIntakeEnabledRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });

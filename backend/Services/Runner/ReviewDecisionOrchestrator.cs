@@ -67,7 +67,7 @@ namespace OrchestratorApi.Services.Runner;
 /// <c>{workspace}/logs/decisions/{project}.jsonl</c>, plus the
 /// orchestrator chat log written into the job's <c>cli-output.log</c>.
 /// The single-state-machine rule still applies: lane transitions go
-/// through <see cref="JobStateMachine"/>.
+/// through <see cref="TaskStateMachine"/>.
 /// </para>
 ///
 /// <para>
@@ -88,8 +88,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     public const int MaxAutoReissueAttempts = 2;
 
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _stateMachine;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
     private readonly OrchestratorChatLog _chatLog;
     private readonly RuntimePromptService _prompts;
@@ -97,7 +97,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly AutoReviewStatusSnapshot _statusSnapshot;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ReviewDecisionOrchestrator> _logger;
-    private readonly JobSessionLog? _sessions;
+    private readonly TaskSessionLog? _sessions;
     private readonly GitService? _git;
 
     /// <summary>
@@ -137,8 +137,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
 
     public ReviewDecisionOrchestrator(
-        JobScannerService scanner,
-        JobStateMachine stateMachine,
+        TaskScannerService scanner,
+        TaskStateMachine stateMachine,
         ITaskAccess taskAccess,
         OrchestratorChatLog chatLog,
         RuntimePromptService prompts,
@@ -148,7 +148,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         ILogger<ReviewDecisionOrchestrator> logger,
         OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? usage = null,
         OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null,
-        JobSessionLog? sessions = null,
+        TaskSessionLog? sessions = null,
         GitService? git = null,
         PipelineExecutionLog? pipelineLog = null,
         ILintScssRunner? lintScssRunner = null)
@@ -478,7 +478,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 $"Escalated: {count} consecutive NOOPs without progress. " +
                 "The latest retry emitted only [[TASK_NOOP]] after NOOP recovery, with 0 tool calls and 0 file changes.";
             await EscalateNoOpAsync(workspace, entry, pending, reason, ct,
-                targetState: JobStates.NeedsHumanReview,
+                targetState: TaskStates.NeedsHumanReview,
                 createHumanDecisionIntake: false);
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator escalated {Project}/{JobId} after {NoOpCount} consecutive NOOPs without progress: toolCalls={ToolCalls} fileChanges={FileChanges} agentSubstanceChars={AgentSubstanceChars}",
@@ -540,7 +540,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         string reason,
         CancellationToken ct,
-        string targetState = JobStates.HumanReview,
+        string targetState = TaskStates.HumanReview,
         bool createHumanDecisionIntake = true)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
@@ -591,7 +591,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
 
         // ADR-0025: BLOCKED escalations move the task to 5-human-review.
-        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -680,7 +680,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         // Promote to 5-human-review with or without concern tags. ADR-0025:
         // accept-as-done routes to human-review, never directly to completed.
-        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             // Move failed -> do NOT fire the operator-facing "accepted as
@@ -702,7 +702,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // stale-cache race that previously fell back to the source folder
         // and left orphan logs/cli-output.log skeletons in 4-auto-review.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-        var movedInfo = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
+        var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
         if (report.ConcernTagIds.Count > 0 &&
             !string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
@@ -933,11 +933,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             var reason = $"lint-scss failed twice in a row (exit {result.ExitCode}); escalating per ASS-46 infinite-spin guard.";
             var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
-            var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-                var moved = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
+                var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
                 _chatLog.AppendSupervisor(moved, "escalate",
                     $"Lint-scss post-step failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
                 await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
@@ -1055,7 +1055,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         try
         {
             var events = _sessions.ReadSessionEvents(job.Id, watchPath);
-            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(job.FolderPath));
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(job.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
             var aggregate = JobCommitsAggregator.Aggregate(job, timeline.Runs,
                 (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
@@ -1125,7 +1125,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private static NoOpProgressEvidence InspectNoOpProgressSinceLastRecovery(PendingDecision pending)
     {
-        var logPath = JobPaths.CliOutputLog(pending.Job.FolderPath);
+        var logPath = TaskPaths.CliOutputLog(pending.Job.FolderPath);
         if (!File.Exists(logPath)) return NoOpProgressEvidence.None;
 
         string log;
@@ -1355,7 +1355,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // sees one concise reason for the handover. The intake under
         // 1-preparation is kept for now as an extra surface, but the
         // primary signal is the lane move itself.
-        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1370,7 +1370,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // the chat-log auto-creates its parent folder on write — so a
         // stale path resurrects the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-        var moved = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
+        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
             $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
@@ -1402,7 +1402,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // to 6-completed. The user always gets the final say on whether a
         // task is done; the orchestrator's accept signal is "the agent's
         // answer looks complete to me, please confirm."
-        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             // Move failed -> do NOT write the operator-facing "accepted as
@@ -1419,7 +1419,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // chat-log auto-creates its parent folder, so a stale path would
         // resurrect the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-        var moved = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
+        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Decision,
             $"Auto-review accepted \"{title}\" as done. Moved to 5-human-review for your approval. Reason: {verdict.Reason}");
@@ -1448,7 +1448,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // typed TaskAccess layer instead of building the lane path
         // locally. Same job already has an open intake -> don't
         // multiply.
-        if (_taskAccess.SlugExistsInLane(entry.Path, JobStates.Preparation, folderName))
+        if (_taskAccess.SlugExistsInLane(entry.Path, TaskStates.Preparation, folderName))
         {
             return;
         }
@@ -1471,7 +1471,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     Title = $"Human decision needed: {pending.Job.Title}",
                     Agent = "human",
                     Order = 1,
-                    TargetState = JobStates.Preparation,
+                    TargetState = TaskStates.Preparation,
                     WatchPath = entry.Path,
                     PromptMarkdown = promptBody,
                 },
@@ -1535,7 +1535,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var folder = pending.Job.FolderPath;
         var promptPath = Path.Combine(folder, "prompt.md");
         var task = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
-        var logPath = JobPaths.CliOutputLog(folder);
+        var logPath = TaskPaths.CliOutputLog(folder);
         var recent = File.Exists(logPath) ? TailLines(File.ReadAllText(logPath), 200) : string.Empty;
         return (Truncate(task, 4_000), Truncate(recent, 6_000));
     }
@@ -1587,9 +1587,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // instead of walking the lane directory by hand. The cache
         // dominates the cost, so iterating typed records is also
         // faster than the original folder-walk + ScanAllJobs FirstOrDefault.
-        foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, JobStates.AutoReview))
+        foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, TaskStates.AutoReview))
         {
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath)) continue;
 
             string log;
@@ -1760,7 +1760,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     private JobInfo? MoveReissueToReadyTop(JobInfo current, WatchPathEntry entry, string causeLabel)
     {
-        var move = _stateMachine.MoveJob(current.Id, JobStates.Ready, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Ready, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1775,16 +1775,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // stale path would resurrect 4-auto-review as a one-line skeleton
         // (see HandleAcceptAsDone for the same fix).
         var movedFolderPath = move.NewFolderPath
-            ?? Path.Combine(entry.Path, JobStates.Ready, Path.GetFileName(current.FolderPath));
-        var moved = current with { FolderPath = movedFolderPath, State = JobStates.Ready };
+            ?? Path.Combine(entry.Path, TaskStates.Ready, Path.GetFileName(current.FolderPath));
+        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Ready };
 
         // Order 0 lifts the reissue ahead of any fresh ready job (which
         // typically uses order >= 10) without rewriting their orders.
         // The runner picks by OrderBy(j => j.Order).
-        JobJsonFile.UpdateOrder(moved.FolderPath, 0, _logger);
+        TaskJsonFile.UpdateOrder(moved.FolderPath, 0, _logger);
         // UI hint only; the kanban shows the reissue tag distinctly.
         // Routed through ConcernTagWriter because the tag id uses the
-        // namespace:value grammar that JobMutationService.NormalizeTagId
+        // namespace:value grammar that TaskMutationService.NormalizeTagId
         // would strip the colon from.
         ConcernTagWriter.MergeConcernTags(moved.FolderPath, new[] { ReissueTagId }, _logger);
         _scanner.InvalidateCache();

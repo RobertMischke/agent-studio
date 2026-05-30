@@ -43,7 +43,7 @@ public static class AdminConfigEndpoints
             }
         });
 
-        app.MapGroup("/api/maintenance").MapPost("/backfill-keys", (JobMutationService mutations) =>
+        app.MapGroup("/api/maintenance").MapPost("/backfill-keys", (TaskMutationService mutations) =>
         {
             var count = mutations.BackfillTaskKeys();
             return Results.Ok(new { stamped = count });

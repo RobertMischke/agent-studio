@@ -35,8 +35,8 @@ public sealed class WorkspaceManagementService
 {
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _env;
-    private readonly JobScannerService _scanner;
-    private readonly JobIndexCache? _indexCache;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskIndexCache? _indexCache;
     private readonly ILogger<WorkspaceManagementService> _logger;
     private static readonly object FileLock = new();
 
@@ -45,9 +45,9 @@ public sealed class WorkspaceManagementService
     public WorkspaceManagementService(
         IConfiguration configuration,
         IHostEnvironment env,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         ILogger<WorkspaceManagementService> logger,
-        JobIndexCache? indexCache = null)
+        TaskIndexCache? indexCache = null)
     {
         _configuration = configuration;
         _env = env;
@@ -66,7 +66,7 @@ public sealed class WorkspaceManagementService
     /// resolved path is <c>{TaskRepository}/projects/{slug}</c>; the
     /// folder and its lane subdirectories are created on disk before
     /// the config entry is appended so the very first
-    /// <see cref="JobScannerService.GetWatchPaths"/> call after this
+    /// <see cref="TaskScannerService.GetWatchPaths"/> call after this
     /// returns sees a fully prepared workspace.
     /// </summary>
     public WorkspaceManagementResult Create(string? name)
@@ -120,7 +120,7 @@ public sealed class WorkspaceManagementService
         {
             // Only the workspace root is materialised here. Lane subfolders
             // (1-preparation / 2-ready / ...) are created on demand by
-            // JobMutationService.CreateJob the first time a job lands in
+            // TaskMutationService.CreateJob the first time a job lands in
             // each lane, so workspace creation stays a thin filesystem
             // operation and the per-lane structural mutations remain owned
             // by the storage authority (ADR-0024).
@@ -155,7 +155,7 @@ public sealed class WorkspaceManagementService
             ReloadConfiguration();
         }
 
-        _indexCache?.Invalidate(JobIndexCache.InvalidationSource.Mutation);
+        _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
         _logger.LogInformation(
             "Created workspace '{Name}' at {Path}", trimmed, resolvedPath);
 
@@ -217,7 +217,7 @@ public sealed class WorkspaceManagementService
             }
         }
 
-        _indexCache?.Invalidate(JobIndexCache.InvalidationSource.Mutation);
+        _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
         _logger.LogInformation(
             "Deleted workspace '{Name}' (path {Path} left on disk)",
             existing.Name, existing.Path);
@@ -228,7 +228,7 @@ public sealed class WorkspaceManagementService
     /// <summary>
     /// Counts every job folder under each lane of the workspace path.
     /// Mirrors the lane walk in
-    /// <see cref="JobScannerService.ScanAllJobsRaw"/> so the answer
+    /// <see cref="TaskScannerService.ScanAllJobsRaw"/> so the answer
     /// matches what the user sees on the kanban: lane subdir present,
     /// folder name does not start with <c>_</c>, <c>job.json</c> exists.
     /// </summary>
@@ -236,7 +236,7 @@ public sealed class WorkspaceManagementService
     {
         if (!Directory.Exists(entry.Path)) return 0;
         var count = 0;
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             var stateDir = Path.Combine(entry.Path, state);
             if (!Directory.Exists(stateDir)) continue;

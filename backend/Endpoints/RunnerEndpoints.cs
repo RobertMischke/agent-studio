@@ -105,7 +105,7 @@ public static class RunnerEndpoints
         // dedicated orchestrator process. The frontend renders this as
         // the "Orchestrator" feed in the project detail view.
         runnerGroup.MapGet("/{projectName}/orchestrator-log",
-            (string projectName, JobScannerService scanner, OrchestratorLog log) =>
+            (string projectName, TaskScannerService scanner, OrchestratorLog log) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -120,7 +120,7 @@ public static class RunnerEndpoints
         // say back?"), and cumulative token totals across the session's
         // lifetime. Read-only.
         runnerGroup.MapGet("/{projectName}/orchestrator-session",
-            (string projectName, JobScannerService scanner, OrchestratorSessionStore sessions) =>
+            (string projectName, TaskScannerService scanner, OrchestratorSessionStore sessions) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -133,7 +133,7 @@ public static class RunnerEndpoints
         // renders amounts prominently, the cost smaller and behind a
         // disclaimer (the user pays via CLI subscriptions, not API).
         runnerGroup.MapGet("/{projectName}/token-summary",
-            (string projectName, JobScannerService scanner, ITokenAggregator tokens) =>
+            (string projectName, TaskScannerService scanner, ITokenAggregator tokens) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -146,7 +146,7 @@ public static class RunnerEndpoints
         // the whole workspace" number on hover. Persisted to disk so
         // the modal renders last-known totals immediately on app start.
         runnerGroup.MapGet("/token-summary-aggregate",
-            (JobScannerService scanner, ITokenAggregator tokens) =>
+            (TaskScannerService scanner, ITokenAggregator tokens) =>
             {
                 var projects = scanner.GetWatchPaths()
                     .Select(e => (e.Name, e.Path))
@@ -171,7 +171,7 @@ public static class RunnerEndpoints
         // continuable state, routes the new direction through the existing
         // Continue path so the override actually takes effect on the agent.
         runnerGroup.MapPost("/{projectName}/orchestrator-log/override",
-            async (string projectName, OrchestratorOverrideRequest req, JobScannerService scanner, OrchestratorLog log, TaskRunnerService runner, CancellationToken ct) =>
+            async (string projectName, OrchestratorOverrideRequest req, TaskScannerService scanner, OrchestratorLog log, TaskRunnerService runner, CancellationToken ct) =>
             {
                 if (string.IsNullOrWhiteSpace(req?.NewDirection))
                     return Results.BadRequest(new { error = "newDirection is required" });
@@ -228,7 +228,7 @@ public static class RunnerEndpoints
         // session, scoped to one project tab. Persisted under
         // <watchPath>/.orchestrator/orchestrator-chat.jsonl.
         runnerGroup.MapGet("/{projectName}/orchestrator-chat",
-            (string projectName, JobScannerService scanner, OrchestratorChatService chatService) =>
+            (string projectName, TaskScannerService scanner, OrchestratorChatService chatService) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -237,7 +237,7 @@ public static class RunnerEndpoints
             });
 
         runnerGroup.MapPost("/{projectName}/orchestrator-chat",
-            async (string projectName, SendOrchestratorChatRequest req, HttpContext ctx, JobScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+            async (string projectName, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
             {
                 if (req == null || string.IsNullOrWhiteSpace(req.Text))
                     return Results.BadRequest(new { error = "text is required" });
@@ -259,7 +259,7 @@ public static class RunnerEndpoints
         // the chat message with the relative paths so the orchestrator
         // sees them as proper file references rather than placeholders.
         runnerGroup.MapPost("/{projectName}/orchestrator-chat/attachments",
-            async (string projectName, HttpRequest request, JobScannerService scanner, OrchestratorChat chat) =>
+            async (string projectName, HttpRequest request, TaskScannerService scanner, OrchestratorChat chat) =>
             {
                 if (!request.HasFormContentType)
                     return Results.BadRequest(new { error = "multipart/form-data expected" });
@@ -287,7 +287,7 @@ public static class RunnerEndpoints
             }).DisableAntiforgery();
 
         runnerGroup.MapGet("/{projectName}/orchestrator-chat/attachments/{fileName}",
-            (string projectName, string fileName, JobScannerService scanner, OrchestratorChat chat) =>
+            (string projectName, string fileName, TaskScannerService scanner, OrchestratorChat chat) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound();

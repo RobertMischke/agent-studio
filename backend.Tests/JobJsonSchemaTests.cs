@@ -14,7 +14,7 @@ namespace OrchestratorApi.Tests;
 /// ordered <c>commits</c> array (task: task-detail-worktree-isolation-and-multi-commit-support);
 /// existing on-disk jobs that predate the change must still parse and
 /// render correctly. These tests pin the
-/// <see cref="JobScannerService.ParseJobJson"/> reader so the legacy
+/// <see cref="TaskScannerService.ParseJobJson"/> reader so the legacy
 /// path can never be silently dropped.
 /// </summary>
 public class JobJsonSchemaTests : IDisposable
@@ -171,12 +171,12 @@ public class JobJsonSchemaTests : IDisposable
         File.WriteAllText(Path.Combine(jobDir, "prompt.md"), "fixture");
     }
 
-    private (JobScannerService scanner, JobMutationService mutations) Build()
+    private (TaskScannerService scanner, TaskMutationService mutations) Build()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         return (scanner, mutations);
     }
 

@@ -14,14 +14,14 @@ namespace OrchestratorApi.Services.Jobs;
 /// <c>attachments/</c> and <c>results/</c> binary mirrors.
 ///
 /// Writes against <c>job.json</c> live in the sibling services in this
-/// folder: <see cref="JobStateMachine"/> for folder moves,
-/// <see cref="JobMutationService"/> for field-level edits and
-/// attachments, and <see cref="JobSessionLog"/> for session telemetry.
+/// folder: <see cref="TaskStateMachine"/> for folder moves,
+/// <see cref="TaskMutationService"/> for field-level edits and
+/// attachments, and <see cref="TaskSessionLog"/> for session telemetry.
 /// </summary>
-public class JobScannerService
+public class TaskScannerService
 {
     private readonly IConfiguration _config;
-    private readonly ILogger<JobScannerService> _logger;
+    private readonly ILogger<TaskScannerService> _logger;
     private readonly SummaryGenerationService _summaryService;
 
     /// <summary>
@@ -30,9 +30,9 @@ public class JobScannerService
     /// (avoids the constructor cycle: cache needs scanner for raw reads,
     /// scanner needs cache for hot-path reads).
     /// </summary>
-    private JobIndexCache? _indexCache;
+    private TaskIndexCache? _indexCache;
 
-    public JobScannerService(IConfiguration config, ILogger<JobScannerService> logger, SummaryGenerationService summaryService)
+    public TaskScannerService(IConfiguration config, ILogger<TaskScannerService> logger, SummaryGenerationService summaryService)
     {
         _config = config;
         _logger = logger;
@@ -46,7 +46,7 @@ public class JobScannerService
     /// in pre-Cycle-1 disk-walk-on-every-read mode (the existing tests
     /// that build a scanner directly continue to work without a cache).
     /// </summary>
-    public void SetIndexCache(JobIndexCache cache) => _indexCache = cache;
+    public void SetIndexCache(TaskIndexCache cache) => _indexCache = cache;
 
     /// <summary>
     /// Invalidates the in-memory snapshot, if a cache is wired. Mutation
@@ -56,7 +56,7 @@ public class JobScannerService
     /// registered (test fixtures that build the scanner directly).
     /// </summary>
     public void InvalidateCache() =>
-        _indexCache?.Invalidate(JobIndexCache.InvalidationSource.Mutation);
+        _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
 
     public List<WatchPathEntry> GetWatchPaths()
     {
@@ -129,7 +129,7 @@ public class JobScannerService
 
     /// <summary>
     /// Returns all jobs across configured watch paths. Cycle-1 hot-path
-    /// optimization: when a <see cref="JobIndexCache"/> is registered (the
+    /// optimization: when a <see cref="TaskIndexCache"/> is registered (the
     /// production case), this returns the cached snapshot in O(1); the
     /// cache refreshes itself on FileSystemWatcher events and on explicit
     /// invalidation from mutation services. Tests that build the scanner
@@ -148,7 +148,7 @@ public class JobScannerService
 
     /// <summary>
     /// The uncached disk walk. Always reads from disk; used by
-    /// <see cref="JobIndexCache"/> for refresh and by callers that want to
+    /// <see cref="TaskIndexCache"/> for refresh and by callers that want to
     /// bypass the cache (tests, recovery paths).
     /// </summary>
     public List<JobInfo> ScanAllJobsRaw()
@@ -162,7 +162,7 @@ public class JobScannerService
                 continue;
             }
 
-            foreach (var state in JobStates.All)
+            foreach (var state in TaskStates.All)
             {
                 var stateDir = Path.Combine(entry.Path, state);
                 if (!Directory.Exists(stateDir)) continue;
@@ -188,7 +188,7 @@ public class JobScannerService
         try
         {
             var json = File.ReadAllText(jobJsonPath);
-            var raw = JsonSerializer.Deserialize<JsonElement>(json, JobJsonFile.ReadOpts);
+            var raw = JsonSerializer.Deserialize<JsonElement>(json, TaskJsonFile.ReadOpts);
 
             var lastActivity = GetLastActivityTime(jobDir);
 
@@ -205,7 +205,7 @@ public class JobScannerService
                 _logger.LogWarning(
                     "Job folder '{Dir}' has divergent id '{JsonId}' in job.json — rewriting to match folder name '{FolderId}'.",
                     jobDir, jsonId, folderId);
-                JobJsonFile.UpdateField(jobDir, "id", folderId, _logger);
+                TaskJsonFile.UpdateField(jobDir, "id", folderId, _logger);
             }
             var resolvedId = folderId;
 
@@ -215,7 +215,7 @@ public class JobScannerService
             return new JobInfo
             {
                 Id = resolvedId,
-                JobKey = JobIdentity.CreateKey(entry.Path, resolvedId),
+                JobKey = TaskIdentity.CreateKey(entry.Path, resolvedId),
                 Key = ReadReferenceKey(raw),
                 OwnerClientId = ownerClientId,
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
@@ -229,7 +229,7 @@ public class JobScannerService
                 LastActivity = lastActivity,
                 SessionName = raw.TryGetProperty("sessionName", out var sn) ? sn.GetString() : null,
                 LastUsage = raw.TryGetProperty("lastUsage", out var lu) && lu.ValueKind == JsonValueKind.Object
-                    ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), JobJsonFile.ReadOpts)
+                    ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), TaskJsonFile.ReadOpts)
                     : null,
                 Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null,
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
@@ -274,7 +274,7 @@ public class JobScannerService
             // earliest (most active) state so the user can still open and manage it.
             _logger.LogWarning("Duplicate job id {JobId} found in {Count} locations; returning job in earliest state", jobId, resolved.Count);
             return resolved
-                .OrderBy(j => Array.IndexOf(JobStates.All, j.State))
+                .OrderBy(j => Array.IndexOf(TaskStates.All, j.State))
                 .First();
         }
 
@@ -317,7 +317,7 @@ public class JobScannerService
     {
         var hasAutoCommit = raw.TryGetProperty("commit", out var commit)
             && commit.ValueKind == JsonValueKind.Object;
-        var sessionLog = JobPaths.SessionEventsLog(jobFolder);
+        var sessionLog = TaskPaths.SessionEventsLog(jobFolder);
         var hasSessionLog = File.Exists(sessionLog);
         if (!hasAutoCommit && !hasSessionLog) return 0;
 
@@ -331,7 +331,7 @@ public class JobScannerService
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 SessionEvent? evt;
-                try { evt = JsonSerializer.Deserialize<SessionEvent>(line, JobJsonFile.ReadOpts); }
+                try { evt = JsonSerializer.Deserialize<SessionEvent>(line, TaskJsonFile.ReadOpts); }
                 catch { continue; }
                 if (evt == null) continue;
                 if (string.IsNullOrWhiteSpace(evt.HeadShaBefore) || string.IsNullOrWhiteSpace(evt.HeadShaAfter)) continue;
@@ -371,7 +371,7 @@ public class JobScannerService
         // Migration: stamp the default identity on legacy jobs so attribution is
         // non-null everywhere. Idempotent against re-scans because subsequent
         // reads find the value above.
-        JobJsonFile.UpdateField(jobDir, "ownerClientId", DefaultClientIdentity.Id, _logger);
+        TaskJsonFile.UpdateField(jobDir, "ownerClientId", DefaultClientIdentity.Id, _logger);
         _logger.LogInformation("Migrated job folder '{Dir}' to ownerClientId='{Owner}'", jobDir, DefaultClientIdentity.Id);
         return DefaultClientIdentity.Id;
     }
@@ -463,7 +463,7 @@ public class JobScannerService
         try
         {
             var raw = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<PendingIntent>(raw, JobJsonFile.ReadOpts);
+            return JsonSerializer.Deserialize<PendingIntent>(raw, TaskJsonFile.ReadOpts);
         }
         catch
         {
@@ -475,7 +475,7 @@ public class JobScannerService
 
     private static JobOutcomeIssue? ResolveOutcomeIssue(string jobFolder)
     {
-        var logPath = JobPaths.CliOutputLog(jobFolder);
+        var logPath = TaskPaths.CliOutputLog(jobFolder);
         if (!File.Exists(logPath)) return null;
 
         var tail = ReadTailUtf8(logPath, OutcomeIssueTailBytes);
@@ -660,14 +660,14 @@ public class JobScannerService
             foreach (var item in commitsEl.EnumerateArray())
             {
                 if (item.ValueKind != JsonValueKind.Object) continue;
-                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                 if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
             }
         }
         JobCommitInfo? legacy = null;
         if (raw.TryGetProperty("commit", out var commitEl) && commitEl.ValueKind == JsonValueKind.Object)
         {
-            legacy = JsonSerializer.Deserialize<JobCommitInfo>(commitEl.GetRawText(), JobJsonFile.ReadOpts);
+            legacy = JsonSerializer.Deserialize<JobCommitInfo>(commitEl.GetRawText(), TaskJsonFile.ReadOpts);
         }
         if (chain.Count == 0 && legacy != null && !string.IsNullOrWhiteSpace(legacy.Sha))
         {
@@ -697,7 +697,7 @@ public class JobScannerService
         foreach (var item in arr.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-            var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+            var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
             if (parsed == null || string.IsNullOrWhiteSpace(parsed.Sha)) continue;
             list.Add(parsed with { Reason = CommitExclusionReasons.Normalize(parsed.Reason) });
         }
@@ -732,13 +732,13 @@ public class JobScannerService
         try
         {
             var json = File.ReadAllText(jobJsonPath);
-            var raw = JsonSerializer.Deserialize<JsonElement>(json, JobJsonFile.ReadOpts);
+            var raw = JsonSerializer.Deserialize<JsonElement>(json, TaskJsonFile.ReadOpts);
             if (!raw.TryGetProperty("contextUsage", out var contextUsage) || contextUsage.ValueKind != JsonValueKind.Object)
             {
                 return null;
             }
 
-            return JsonSerializer.Deserialize<ContextUsageSnapshot>(contextUsage.GetRawText(), JobJsonFile.ReadOpts);
+            return JsonSerializer.Deserialize<ContextUsageSnapshot>(contextUsage.GetRawText(), TaskJsonFile.ReadOpts);
         }
         catch (Exception ex)
         {

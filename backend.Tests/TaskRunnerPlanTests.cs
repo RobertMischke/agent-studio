@@ -72,7 +72,7 @@ public class TaskRunnerPlanTests
     public void Continue_EmptySessionNameButChainHasUuid_ResumesFromChain()
     {
         const string priorUuid = "11111111-2222-4333-8444-555555555555";
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: null,
                      followup: "tighten the spacing",
                      sessionChain: new[] { priorUuid });
 
@@ -90,7 +90,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_ChainTailIsRecoverySentinel_StillRoutesToRecovery()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: null,
                      followup: "do it",
                      sessionChain: new[] { "(recovery)" });
 
@@ -112,7 +112,7 @@ public class TaskRunnerPlanTests
     public void Continue_ChainHasUuidThenRecoveryTombstone_RoutesToRecovery()
     {
         const string deadUuid = "3e80651e-57fa-438a-94d0-7078a7112167";
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: null,
                      followup: "Continue from where the previous run left off.",
                      sessionChain: new[] { deadUuid, "(recovery)" });
 
@@ -130,7 +130,7 @@ public class TaskRunnerPlanTests
     {
         const string oldUuid = "11111111-2222-4333-8444-555555555555";
         const string newUuid = "99999999-8888-4777-a666-555555555555";
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: null,
                      followup: "keep going",
                      sessionChain: new[] { oldUuid, "(recovery)", newUuid });
 
@@ -187,7 +187,7 @@ public class TaskRunnerPlanTests
     {
         var p = RunPlanner.PlanRun(
             RunIntent.UserContinue,
-            JobStates.Progress,
+            TaskStates.Progress,
             sessionName: ValidUuid,
             cliType: CliTypes.Claude,
             isCompatibleSessionName: ClaudeCompat,
@@ -216,7 +216,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_NoSession_FallsBackToRecovery()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: null,
                      followup: "please continue with the chat box");
 
         Assert.Equal("recovery", p.EventKind);
@@ -238,7 +238,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_WithValidSession_Resumes()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: ValidUuid,
                      followup: "tighten the spacing");
 
         Assert.Equal("continue", p.EventKind);
@@ -268,7 +268,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_WithPlaceholderSlug_OnClaude_RoutesToRecovery()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: PlaceholderSlug,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: PlaceholderSlug,
                      followup: "go on");
 
         Assert.Equal("recovery", p.EventKind);
@@ -289,7 +289,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_WithPlaceholderSlug_OnCopilot_RoutesToRecoveryWithPlaceholderReason()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: PlaceholderSlug,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: PlaceholderSlug,
                      cliType: CliTypes.Copilot, compat: PermissiveCompat, followup: "go on");
 
         Assert.Equal("recovery", p.EventKind);
@@ -307,7 +307,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_WithForeignCliHandle_RoutesToRecovery()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ForeignSlug,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: ForeignSlug,
                      followup: "go on");
 
         Assert.Equal("recovery", p.EventKind);
@@ -325,9 +325,9 @@ public class TaskRunnerPlanTests
     /// be preserved.
     /// </summary>
     [Theory]
-    [InlineData(JobStates.Ready)]
-    [InlineData(JobStates.AutoReview)]
-    [InlineData(JobStates.Completed)]
+    [InlineData(TaskStates.Ready)]
+    [InlineData(TaskStates.AutoReview)]
+    [InlineData(TaskStates.Completed)]
     public void Continue_MovesJobBackToProgress(string state)
     {
         var p = Plan(RunIntent.UserContinue, state, sessionName: ValidUuid, followup: "go");
@@ -337,7 +337,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_AlreadyInProgress_DoesNotMove()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid, followup: "go");
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: ValidUuid, followup: "go");
         Assert.False(p.MoveJobToProgress);
     }
 
@@ -351,7 +351,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Start_FromReadyNoSession_FreshStart()
     {
-        var p = Plan(RunIntent.ManualStart, JobStates.Ready, sessionName: null);
+        var p = Plan(RunIntent.ManualStart, TaskStates.Ready, sessionName: null);
 
         Assert.Equal("start", p.EventKind);
         Assert.False(p.ResumeFlag);
@@ -372,8 +372,8 @@ public class TaskRunnerPlanTests
     [Fact]
     public void AutoPickup_AndManualStart_ProducePlansThatDifferOnlyByTrigger()
     {
-        var manual = Plan(RunIntent.ManualStart, JobStates.Ready, sessionName: null);
-        var auto = Plan(RunIntent.AutoPickup, JobStates.Ready, sessionName: null);
+        var manual = Plan(RunIntent.ManualStart, TaskStates.Ready, sessionName: null);
+        var auto = Plan(RunIntent.AutoPickup, TaskStates.Ready, sessionName: null);
 
         Assert.Equal(manual.PromptTemplate, auto.PromptTemplate);
         Assert.Equal(manual.PromptOverride, auto.PromptOverride);
@@ -393,7 +393,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Start_FromProgressWithSession_UsesResumePrompt()
     {
-        var p = Plan(RunIntent.ManualStart, JobStates.Progress, sessionName: ValidUuid);
+        var p = Plan(RunIntent.ManualStart, TaskStates.Progress, sessionName: ValidUuid);
 
         Assert.Equal("continue", p.EventKind);
         Assert.True(p.ResumeFlag);
@@ -411,7 +411,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Start_FromProgressNoSession_FallsBackToFreshPrompt()
     {
-        var p = Plan(RunIntent.ManualStart, JobStates.Progress, sessionName: null);
+        var p = Plan(RunIntent.ManualStart, TaskStates.Progress, sessionName: null);
 
         Assert.Equal("start", p.EventKind);
         Assert.False(p.ResumeFlag);
@@ -427,7 +427,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Start_DropsForeignSession_AndRecovers()
     {
-        var p = Plan(RunIntent.ManualStart, JobStates.Progress, sessionName: ForeignSlug);
+        var p = Plan(RunIntent.ManualStart, TaskStates.Progress, sessionName: ForeignSlug);
 
         Assert.Equal("recovery", p.EventKind);
         Assert.False(p.ResumeFlag);
@@ -447,7 +447,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Start_DropsLegacyPlaceholder_Quietly()
     {
-        var p = Plan(RunIntent.ManualStart, JobStates.Progress, sessionName: PlaceholderSlug);
+        var p = Plan(RunIntent.ManualStart, TaskStates.Progress, sessionName: PlaceholderSlug);
 
         Assert.Equal("start", p.EventKind);
         Assert.True(p.ClearStaleSessionName);
@@ -465,7 +465,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Start_Copilot_PreGeneratesSessionSlug()
     {
-        var p = Plan(RunIntent.ManualStart, JobStates.Ready, sessionName: null,
+        var p = Plan(RunIntent.ManualStart, TaskStates.Ready, sessionName: null,
                      cliType: CliTypes.Copilot, compat: PermissiveCompat);
 
         Assert.NotNull(p.PersistSessionName);
@@ -483,8 +483,8 @@ public class TaskRunnerPlanTests
     /// previous run completed and to act on the delta.
     /// </summary>
     [Theory]
-    [InlineData(JobStates.AutoReview)]
-    [InlineData(JobStates.Completed)]
+    [InlineData(TaskStates.AutoReview)]
+    [InlineData(TaskStates.Completed)]
     public void Start_FromReviewOrCompletedWithSession_UsesRestartPrompt(string state)
     {
         var p = Plan(RunIntent.ManualStart, state, sessionName: ValidUuid);
@@ -506,8 +506,8 @@ public class TaskRunnerPlanTests
     /// about to write to it).
     /// </summary>
     [Theory]
-    [InlineData(JobStates.AutoReview)]
-    [InlineData(JobStates.Completed)]
+    [InlineData(TaskStates.AutoReview)]
+    [InlineData(TaskStates.Completed)]
     public void Start_FromReviewOrCompletedNoSession_FallsBackToFreshStart(string state)
     {
         var p = Plan(RunIntent.ManualStart, state, sessionName: null);
@@ -521,7 +521,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Start_Claude_DoesNotPreGenerateSessionSlug()
     {
-        var p = Plan(RunIntent.ManualStart, JobStates.Ready, sessionName: null);
+        var p = Plan(RunIntent.ManualStart, TaskStates.Ready, sessionName: null);
         Assert.Null(p.PersistSessionName);
         Assert.Null(p.SessionToResume);
     }
@@ -540,7 +540,7 @@ public class TaskRunnerPlanTests
     [InlineData(RunIntent.UserContinue)]
     public void AnyIntent_WithValidSession_ResumesIt(RunIntent intent)
     {
-        var p = Plan(intent, JobStates.Progress, sessionName: ValidUuid, followup: "x");
+        var p = Plan(intent, TaskStates.Progress, sessionName: ValidUuid, followup: "x");
         Assert.True(p.ResumeFlag);
         Assert.Equal(ValidUuid, p.SessionToResume);
     }
@@ -553,28 +553,28 @@ public class TaskRunnerPlanTests
     /// matrix that has to stay green.
     /// </summary>
     [Theory]
-    [InlineData(RunIntent.ManualStart,  JobStates.Ready,    null)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Ready,    ValidUuid)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Ready,    PlaceholderSlug)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Ready,    ForeignSlug)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Progress, null)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Progress, ValidUuid)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Progress, PlaceholderSlug)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Progress, ForeignSlug)]
-    [InlineData(RunIntent.AutoPickup,   JobStates.Ready,    null)]
-    [InlineData(RunIntent.AutoPickup,   JobStates.Ready,    ValidUuid)]
-    [InlineData(RunIntent.UserContinue, JobStates.Progress, null)]
-    [InlineData(RunIntent.UserContinue, JobStates.Progress, ValidUuid)]
-    [InlineData(RunIntent.UserContinue, JobStates.Progress, PlaceholderSlug)]
-    [InlineData(RunIntent.UserContinue, JobStates.Progress, ForeignSlug)]
-    [InlineData(RunIntent.UserContinue, JobStates.AutoReview,   ValidUuid)]
-    [InlineData(RunIntent.UserContinue, JobStates.AutoReview,   null)]
-    [InlineData(RunIntent.UserContinue, JobStates.Completed,ValidUuid)]
-    [InlineData(RunIntent.UserContinue, JobStates.Completed,null)]
-    [InlineData(RunIntent.ManualStart,  JobStates.AutoReview,   ValidUuid)]
-    [InlineData(RunIntent.ManualStart,  JobStates.AutoReview,   null)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Completed,ValidUuid)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Completed,null)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Ready,    null)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Ready,    ValidUuid)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Ready,    PlaceholderSlug)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Ready,    ForeignSlug)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Progress, null)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Progress, ValidUuid)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Progress, PlaceholderSlug)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Progress, ForeignSlug)]
+    [InlineData(RunIntent.AutoPickup,   TaskStates.Ready,    null)]
+    [InlineData(RunIntent.AutoPickup,   TaskStates.Ready,    ValidUuid)]
+    [InlineData(RunIntent.UserContinue, TaskStates.Progress, null)]
+    [InlineData(RunIntent.UserContinue, TaskStates.Progress, ValidUuid)]
+    [InlineData(RunIntent.UserContinue, TaskStates.Progress, PlaceholderSlug)]
+    [InlineData(RunIntent.UserContinue, TaskStates.Progress, ForeignSlug)]
+    [InlineData(RunIntent.UserContinue, TaskStates.AutoReview,   ValidUuid)]
+    [InlineData(RunIntent.UserContinue, TaskStates.AutoReview,   null)]
+    [InlineData(RunIntent.UserContinue, TaskStates.Completed,ValidUuid)]
+    [InlineData(RunIntent.UserContinue, TaskStates.Completed,null)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.AutoReview,   ValidUuid)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.AutoReview,   null)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Completed,ValidUuid)]
+    [InlineData(RunIntent.ManualStart,  TaskStates.Completed,null)]
     public void Plan_AlwaysProducesRunnableOutput(RunIntent intent, string state, string? sessionName)
     {
         var p = Plan(intent, state, sessionName, followup: "go");
@@ -623,7 +623,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_FirstFollowupAfterFreshStart_ResumesSessionWithoutSideEffects()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: ValidUuid,
                      followup: "Now also add tests.");
 
         Assert.Equal("continue", p.EventKind);
@@ -646,8 +646,8 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_TwoConsecutiveFollowupsProduceSamePlanShape()
     {
-        var first  = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid, followup: "first");
-        var second = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid, followup: "second");
+        var first  = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: ValidUuid, followup: "first");
+        var second = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: ValidUuid, followup: "second");
 
         Assert.Equal(first.EventKind, second.EventKind);
         Assert.Equal(first.ResumeFlag, second.ResumeFlag);
@@ -669,7 +669,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_FromReview_MovesToProgressAndResumesWithFollowupVerbatim()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.AutoReview, sessionName: ValidUuid,
+        var p = Plan(RunIntent.UserContinue, TaskStates.AutoReview, sessionName: ValidUuid,
                      followup: "One more tweak: tighten the spacing.");
 
         Assert.Equal("continue", p.EventKind);
@@ -688,7 +688,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_EmptyFollowup_StillProducesRunnablePlan()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid, followup: "");
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: ValidUuid, followup: "");
 
         Assert.Equal("continue", p.EventKind);
         Assert.True(p.ResumeFlag);
@@ -707,7 +707,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_AfterChainRecovery_StartsFreshButKeepsUserFollowup()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: null,
                      followup: "Pick up where you left off please.");
 
         Assert.Equal("recovery", p.EventKind);
@@ -741,7 +741,7 @@ public class TaskRunnerPlanTests
     public void Continue_CopilotNonPlaceholderSlugSession_ResumesViaSlug()
     {
         const string copilotSlug = "user-named-session-2026";  // doesn't match placeholder regex
-        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: copilotSlug,
+        var p = Plan(RunIntent.UserContinue, TaskStates.Progress, sessionName: copilotSlug,
                      cliType: CliTypes.Copilot, compat: PermissiveCompat,
                      followup: "Try running the tests.");
 

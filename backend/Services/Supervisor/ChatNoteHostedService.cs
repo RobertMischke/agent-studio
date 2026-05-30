@@ -37,7 +37,7 @@ public sealed class ChatNoteHostedService : BackgroundService
     private const int DefaultPeriodMinutes = 30;
 
     private readonly TaskRunnerService _taskRunner;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly OrchestratorChatLog _chatLog;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ChatNoteHostedService> _logger;
@@ -48,7 +48,7 @@ public sealed class ChatNoteHostedService : BackgroundService
 
     public ChatNoteHostedService(
         TaskRunnerService taskRunner,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         OrchestratorChatLog chatLog,
         IConfiguration configuration,
         ILogger<ChatNoteHostedService> logger,
@@ -267,7 +267,7 @@ public sealed class ChatNoteHostedService : BackgroundService
         {
             // ADR-0025: a job that has reached either review lane (auto or
             // human) counts as "reached review" for the cycle counter.
-            if (job.State != JobStates.AutoReview && job.State != JobStates.HumanReview) continue;
+            if (job.State != TaskStates.AutoReview && job.State != TaskStates.HumanReview) continue;
             if (job.LastActivity <= from || job.LastActivity > to) continue;
             count++;
         }
@@ -284,17 +284,17 @@ public sealed class ChatNoteHostedService : BackgroundService
         if (projectJobs.Count == 0) return null;
 
         var inProgress = projectJobs
-            .Where(j => j.State == JobStates.Progress)
+            .Where(j => j.State == TaskStates.Progress)
             .OrderByDescending(j => j.LastActivity)
             .FirstOrDefault();
         if (inProgress != null) return inProgress;
 
         return projectJobs
-            .Where(j => j.State == JobStates.Progress
-                     || j.State == JobStates.Ready
-                     || j.State == JobStates.AutoReview
-                     || j.State == JobStates.HumanReview
-                     || j.State == JobStates.Completed)
+            .Where(j => j.State == TaskStates.Progress
+                     || j.State == TaskStates.Ready
+                     || j.State == TaskStates.AutoReview
+                     || j.State == TaskStates.HumanReview
+                     || j.State == TaskStates.Completed)
             .OrderByDescending(j => j.LastActivity)
             .FirstOrDefault()
             ?? projectJobs.OrderByDescending(j => j.LastActivity).FirstOrDefault();

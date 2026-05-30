@@ -9,15 +9,15 @@ namespace OrchestratorApi.Services.Jobs.Merge;
 /// completed-lane audit.
 ///
 /// <para>The detector is intentionally cheap: it walks the in-memory
-/// snapshot from <see cref="JobScannerService"/> and applies three signals
+/// snapshot from <see cref="TaskScannerService"/> and applies three signals
 /// (slug prefix, prompt mention, prompt similarity) with weights that
 /// agree with the ASS-30/ASS-182 textbook example.</para>
 /// </summary>
 public sealed class MergeCandidateFinder
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
 
-    public MergeCandidateFinder(JobScannerService scanner)
+    public MergeCandidateFinder(TaskScannerService scanner)
     {
         _scanner = scanner;
     }

@@ -24,7 +24,7 @@ public static class RegistryBootstrap
     public static void Run(
         WorkspaceRegistry workspaces,
         ProjectRegistry projects,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         ILogger logger,
         TimeProvider? clock = null)
     {

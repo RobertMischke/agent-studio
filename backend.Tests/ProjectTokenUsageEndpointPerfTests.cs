@@ -35,7 +35,7 @@ public class ProjectTokenUsageEndpointPerfTests : IDisposable
     public ProjectTokenUsageEndpointPerfTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-tu-perf-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
@@ -64,7 +64,7 @@ public class ProjectTokenUsageEndpointPerfTests : IDisposable
             var title = i % 17 == 0 ? $"Security audit {i}"
                 : i % 23 == 0 ? $"Drift analysis {i}"
                 : $"job-{i:D4}";
-            WriteJob(JobStates.Archive, $"job-{i:D4}", title);
+            WriteJob(TaskStates.Archive, $"job-{i:D4}", title);
         }
         WriteOrchestratorLog(jobCount, logEntries);
 
@@ -110,7 +110,7 @@ public class ProjectTokenUsageEndpointPerfTests : IDisposable
 
         for (var i = 0; i < jobCount; i++)
         {
-            WriteJob(JobStates.Archive, $"job-{i:D4}", $"job-{i:D4}");
+            WriteJob(TaskStates.Archive, $"job-{i:D4}", $"job-{i:D4}");
         }
         WriteOrchestratorLog(jobCount, logEntries);
 
@@ -179,11 +179,11 @@ public class ProjectTokenUsageEndpointPerfTests : IDisposable
         File.WriteAllText(path, sb.ToString());
     }
 
-    private (ProjectTokenUsageService svc, JobScannerService scanner) BuildRuntime(string projectName)
+    private (ProjectTokenUsageService svc, TaskScannerService scanner) BuildRuntime(string projectName)
     {
         var config = BuildConfig(projectName);
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var log = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
         var svc = new ProjectTokenUsageService(log, scanner);
         return (svc, scanner);

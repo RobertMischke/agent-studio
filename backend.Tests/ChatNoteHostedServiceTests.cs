@@ -130,7 +130,7 @@ public class ChatNoteHostedServiceTests : IDisposable
             Id = "j-1",
             JobKey = $"{_workspace}::j-1",
             Title = "test job",
-            State = JobStates.Progress,
+            State = TaskStates.Progress,
             ProjectName = _project,
             FolderPath = jobFolder,
             WatchPath = _workspace,

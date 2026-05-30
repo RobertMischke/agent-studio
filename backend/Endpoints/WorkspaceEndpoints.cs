@@ -35,7 +35,7 @@ public static class WorkspaceEndpoints
         // range values snap to the defaults rather than failing - the
         // status-bar entry into this view should always render.
         group.MapGet("/tokens/timeline",
-            (int? windowHours, int? bucketMinutes, JobScannerService scanner, ITokenAggregator tokens, WorkspaceTokensCacheStore cache) =>
+            (int? windowHours, int? bucketMinutes, TaskScannerService scanner, ITokenAggregator tokens, WorkspaceTokensCacheStore cache) =>
             {
                 var projects = scanner.GetWatchPaths()
                     .Select(e => (e.Name, e.Path))
@@ -65,7 +65,7 @@ public static class WorkspaceEndpoints
             });
 
         group.MapGet("/tokens/expensive-jobs",
-            (int? limit, JobScannerService scanner, ITokenAggregator tokens, WorkspaceTokensCacheStore cache) =>
+            (int? limit, TaskScannerService scanner, ITokenAggregator tokens, WorkspaceTokensCacheStore cache) =>
             {
                 var perProjectLimit = Math.Clamp(limit ?? ProjectTokenUsageService.DefaultExpensiveLimit, 1, 50);
                 var jobs = scanner.GetWatchPaths()

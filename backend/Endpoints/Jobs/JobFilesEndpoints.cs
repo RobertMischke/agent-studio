@@ -16,7 +16,7 @@ public static class JobFilesEndpoints
 {
     public static void MapJobFilesEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        group.MapGet("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
         {
             var content = scanner.ReadJobFile(jobId, fileName, watchPath);
             return content is null ? Results.NotFound() : Results.Text(content);
@@ -26,13 +26,13 @@ public static class JobFilesEndpoints
         // Drives the detail view's Files tab (F48): prompt + aspect verdicts +
         // operator notes surface as a sortable, kind-classified manifest, with
         // content fetched lazily through `/files/{fileName}`.
-        group.MapGet("/{jobId}/artifacts", (string jobId, string? watchPath, JobScannerService scanner) =>
+        group.MapGet("/{jobId}/artifacts", (string jobId, string? watchPath, TaskScannerService scanner) =>
         {
             var response = scanner.ListArtifacts(jobId, watchPath);
             return response is null ? Results.NotFound() : Results.Ok(response);
         });
 
-        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobMutationService mutations, TaskRunnerService runner) =>
+        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, TaskMutationService mutations, TaskRunnerService runner) =>
         {
             if (runner.IsJobLive(jobId, watchPath))
                 return Results.Conflict("Cannot edit while the CLI is running for this task — stop it first.");
@@ -54,7 +54,7 @@ public static class JobFilesEndpoints
 
         // Prompt-editor screenshot uploads — written to <job>/attachments/<id>.<ext> and
         // referenced from prompt.md as a relative path so the CLI agent finds them on disk.
-        group.MapPost("/{jobId}/attachments", async (string jobId, string? watchPath, HttpRequest request, JobMutationService mutations) =>
+        group.MapPost("/{jobId}/attachments", async (string jobId, string? watchPath, HttpRequest request, TaskMutationService mutations) =>
         {
             if (!request.HasFormContentType)
                 return Results.BadRequest(new { error = "multipart/form-data expected" });
@@ -80,7 +80,7 @@ public static class JobFilesEndpoints
             });
         }).DisableAntiforgery();
 
-        group.MapGet("/{jobId}/attachments/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        group.MapGet("/{jobId}/attachments/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
         {
             var (path, contentType) = scanner.ResolveAttachment(jobId, fileName, watchPath);
             return path is null ? Results.NotFound() : Results.File(path, contentType);
@@ -90,7 +90,7 @@ public static class JobFilesEndpoints
         // place where agents drop screenshots that should survive past the next
         // Playwright run. The protocol pane resolves `results/<name>` references
         // in status.md against this URL. See docs/protocol-style.md.
-        group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
         {
             var (path, contentType) = scanner.ResolveResult(jobId, fileName, watchPath);
             return path is null ? Results.NotFound() : Results.File(path, contentType);
@@ -111,7 +111,7 @@ public static class JobFilesEndpoints
         });
 
         // Sub-path aware companion to /results/{fileName}. The flat endpoint
-        // above rejects path separators by design (see JobScannerService);
+        // above rejects path separators by design (see TaskScannerService);
         // the screenshot listing returns nested paths under
         // results/playwright/<spec>/... which need this dedicated server.
         // Path traversal is rejected inside ResolveScreenshotFile.

@@ -47,16 +47,16 @@ public record MergeUndoOutcome(MergeUndoStatus Status, MergeUndoResponse? Respon
 /// </summary>
 public sealed class MergeService
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _states;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
     private readonly TimelineLog _timeline;
     private readonly MergeAuditLog _audit;
     private readonly MergeCandidateFinder _candidates;
     private readonly ILogger<MergeService> _logger;
 
     public MergeService(
-        JobScannerService scanner,
-        JobStateMachine states,
+        TaskScannerService scanner,
+        TaskStateMachine states,
         TimelineLog timeline,
         MergeAuditLog audit,
         MergeCandidateFinder candidates,
@@ -186,9 +186,9 @@ public sealed class MergeService
 
             // 4) Stamp the secondary's job.json with mergedInto so the
             //    archived record stays self-describing.
-            JobJsonFile.UpdateField(archivePath, "mergedInto", primary.Id, _logger);
-            JobJsonFile.UpdateField(archivePath, "mergedAt", now.ToString("o"), _logger);
-            JobJsonFile.UpdateField(archivePath, "mergeMode", mode, _logger);
+            TaskJsonFile.UpdateField(archivePath, "mergedInto", primary.Id, _logger);
+            TaskJsonFile.UpdateField(archivePath, "mergedAt", now.ToString("o"), _logger);
+            TaskJsonFile.UpdateField(archivePath, "mergeMode", mode, _logger);
 
             // 5) Audit row authorises the undo.
             var record = new MergeAuditRecord
@@ -245,9 +245,9 @@ public sealed class MergeService
         var token = MintRestoreToken();
         try
         {
-            JobJsonFile.UpdateField(secondary.FolderPath, "mergedInto", primary.Id, _logger);
-            JobJsonFile.UpdateField(secondary.FolderPath, "mergedAt", now.ToString("o"), _logger);
-            JobJsonFile.UpdateField(secondary.FolderPath, "mergeMode", MergeModes.LinkOnly, _logger);
+            TaskJsonFile.UpdateField(secondary.FolderPath, "mergedInto", primary.Id, _logger);
+            TaskJsonFile.UpdateField(secondary.FolderPath, "mergedAt", now.ToString("o"), _logger);
+            TaskJsonFile.UpdateField(secondary.FolderPath, "mergeMode", MergeModes.LinkOnly, _logger);
 
             var mergedInEvent = new TimelineEvent
             {
@@ -365,9 +365,9 @@ public sealed class MergeService
         // card is indistinguishable from a never-merged one.
         Directory.CreateDirectory(Path.GetDirectoryName(record.SecondaryOriginalFolderPath)!);
         Directory.Move(record.ArchivedFolderPath, record.SecondaryOriginalFolderPath);
-        JobJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedInto", "", _logger);
-        JobJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedAt", "", _logger);
-        JobJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergeMode", "", _logger);
+        TaskJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedInto", "", _logger);
+        TaskJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedAt", "", _logger);
+        TaskJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergeMode", "", _logger);
 
         // Drop the mirrored artefacts under primary/results/merged/<secondaryId>/
         // so the primary's detail view stops showing the absorbed history.
@@ -415,9 +415,9 @@ public sealed class MergeService
             return new MergeUndoOutcome(MergeUndoStatus.ArchiveMissing,
                 Message: "Linked secondary folder no longer exists.");
         }
-        JobJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedInto", "", _logger);
-        JobJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedAt", "", _logger);
-        JobJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergeMode", "", _logger);
+        TaskJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedInto", "", _logger);
+        TaskJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergedAt", "", _logger);
+        TaskJsonFile.UpdateField(record.SecondaryOriginalFolderPath, "mergeMode", "", _logger);
         _timeline.Append(record.PrimaryFolderPath, new TimelineEvent
         {
             Ts = now,
@@ -491,7 +491,7 @@ public sealed class MergeService
             if (!File.Exists(path)) return false;
             var json = File.ReadAllText(path);
             var doc = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>>(
-                json, JobJsonFile.ReadOpts);
+                json, TaskJsonFile.ReadOpts);
             if (doc == null) return false;
             return doc.TryGetValue("mergedInto", out var el)
                 && el.ValueKind == System.Text.Json.JsonValueKind.String
@@ -546,7 +546,7 @@ public sealed class MergeService
     {
         try
         {
-            var sessionEventsPath = JobPaths.SessionEventsLog(secondary.FolderPath);
+            var sessionEventsPath = TaskPaths.SessionEventsLog(secondary.FolderPath);
             if (!File.Exists(sessionEventsPath)) return 0;
             var lines = File.ReadAllLines(sessionEventsPath);
             // session-events.jsonl carries one row per CLI start/finish; we

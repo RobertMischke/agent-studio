@@ -22,7 +22,7 @@ namespace OrchestratorApi.Services.Companion;
 public sealed class CompanionSyncService : BackgroundService
 {
     private readonly IOptionsMonitor<CompanionSyncOptions> _options;
-    private readonly JobScannerService _jobs;
+    private readonly TaskScannerService _jobs;
     private readonly TaskRunnerService _runner;
     private readonly OrchestratorApi.Services.Quota.QuotaService _quota;
     private readonly OrchestratorApi.Services.Runner.TokenSummaryService _tokens;
@@ -37,7 +37,7 @@ public sealed class CompanionSyncService : BackgroundService
 
     public CompanionSyncService(
         IOptionsMonitor<CompanionSyncOptions> options,
-        JobScannerService jobs,
+        TaskScannerService jobs,
         TaskRunnerService runner,
         OrchestratorApi.Services.Quota.QuotaService quota,
         OrchestratorApi.Services.Runner.TokenSummaryService tokens,

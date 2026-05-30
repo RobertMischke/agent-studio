@@ -96,8 +96,8 @@ public class OrchestratorChatLog
         }
         try
         {
-            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             var ts = DateTime.UtcNow;
             var oneLine = (body ?? string.Empty).Replace("\r", " ").Replace("\n", " ").TrimEnd();
             var persistLine = $"[{ts:HH:mm:ss.fff}] [{streamTag}] {oneLine}";

@@ -67,18 +67,18 @@ public sealed class SpecTaskJobDriftAnalysisService
     /// in-flight work, not just completed evidence.</summary>
     public static readonly IReadOnlyList<string> ActiveLanes = new[]
     {
-        JobStates.Preparation,
-        JobStates.OrchestratorPrep,
-        JobStates.NeedsHumanReview,
-        JobStates.Ready,
-        JobStates.Progress,
-        JobStates.AutoReview,
-        JobStates.HumanReview,
+        TaskStates.Preparation,
+        TaskStates.OrchestratorPrep,
+        TaskStates.NeedsHumanReview,
+        TaskStates.Ready,
+        TaskStates.Progress,
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
     };
 
     /// <summary>Lane sampled for recently shipped evidence (used to spot
     /// completed work that contradicts the current backlog).</summary>
-    public const string RecentCompletedLane = JobStates.Completed;
+    public const string RecentCompletedLane = TaskStates.Completed;
 
     private static readonly Regex JsonFenceRegex = new(
         @"```\s*json\s*\r?\n(?<body>[\s\S]*?)```",

@@ -17,19 +17,19 @@ namespace OrchestratorApi.Services.Runner;
 public class ProjectRunner
 {
     private readonly ILogger _logger;
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _states;
-    private readonly JobSessionLog _sessions;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
+    private readonly TaskSessionLog _sessions;
     // ADR-0049: per-job timeline.jsonl ledger. Optional so existing test
     // fixtures keep working; production DI always supplies an instance.
     private readonly OrchestratorApi.Services.Jobs.TimelineLog? _timeline;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
-    private readonly JobTransitionService _transitions;
+    private readonly TaskTransitionService _transitions;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
-    private readonly JobMutationService _mutations;
+    private readonly TaskMutationService _mutations;
     private readonly OrchestratorRunner _orchestratorRunner;
     private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly ProjectSettingsService _projectSettings;
@@ -150,15 +150,15 @@ public class ProjectRunner
         string projectName,
         WatchPathEntry entry,
         ILogger logger,
-        JobScannerService scanner,
-        JobStateMachine states,
-        JobSessionLog sessions,
+        TaskScannerService scanner,
+        TaskStateMachine states,
+        TaskSessionLog sessions,
         CliRouter router,
         SummaryGenerationService summaryService,
         RuntimePromptService prompts,
-        JobTransitionService transitions,
+        TaskTransitionService transitions,
         OrchestratorChatLog chatLog,
-        JobMutationService mutations,
+        TaskMutationService mutations,
         OrchestratorLog orchestratorLog,
         OrchestratorRunner orchestratorRunner,
         OrchestratorSessionStore orchestratorSessions,
@@ -597,9 +597,9 @@ public class ProjectRunner
                 info.SessionChain,
                 continueMode: mode);
 
-            if (plan.MoveJobToProgress && info.State != JobStates.Progress)
+            if (plan.MoveJobToProgress && info.State != TaskStates.Progress)
             {
-                _states.MoveJob(jobId, JobStates.Progress, Entry.Path);
+                _states.MoveJob(jobId, TaskStates.Progress, Entry.Path);
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
             }
 
@@ -642,7 +642,7 @@ public class ProjectRunner
             _activeReissueAttempt = reissueAttempt;
             NotifyStatus();
 
-            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
+            Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
 
             // Diagnostic logs - surface the planner's decision in one place so
             // operators reading the log can tell which branch fired without
@@ -722,6 +722,12 @@ public class ProjectRunner
             {
                 _activeJobId = null;
                 _activeCliType = null;
+                // Mandatory diagnostic: a spawn failure used to leave ZERO
+                // trace in the job folder (no cli-output.log, empty logs/),
+                // so an operator could only guess why the run "finished
+                // failed". Write the reason into the job's cli-output.log
+                // before any other cleanup so the failure is never silent.
+                WriteSpawnFailureDiagnostic(info, cli.CliType, cliError);
                 // The OnCliFinished release path never runs (we never got an
                 // execution) so the on-disk pickup lock we just stamped would
                 // otherwise wedge the next auto-pickup tick. Drop it here so
@@ -736,7 +742,7 @@ public class ProjectRunner
                 // dead-letter purposes: the CLI never produced output. The
                 // OnCliFinished path that normally records this never fires
                 // because there is no execution.
-                if (intent == RunIntent.AutoPickup && info.State == JobStates.Progress)
+                if (intent == RunIntent.AutoPickup && info.State == TaskStates.Progress)
                 {
                     RecordPickupAttemptResult(
                         slug: jobId,
@@ -791,7 +797,7 @@ public class ProjectRunner
         try { cli = _router.Get(cliType); }
         catch { return; }
 
-        var jobKey = JobIdentity.CreateKey(Entry.Path, jobId);
+        var jobKey = TaskIdentity.CreateKey(Entry.Path, jobId);
         var exec = cli.GetExecution(jobKey);
         if (exec == null || !string.Equals(exec.Status, "running", StringComparison.OrdinalIgnoreCase))
             return;
@@ -1956,7 +1962,7 @@ public class ProjectRunner
                         Summary = $"Routed \"{activeInfo.Title}\" to human review after {ToIssueTopic(action.IssueKind)}.",
                         Reasoning = action.MetaMessage
                     });
-                    var move = await _transitions.MoveAsync(jobId, JobStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
+                    var move = await _transitions.MoveAsync(jobId, TaskStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
                     if (move.Status != MoveJobStatus.Success)
                     {
                         _logger.LogWarning(
@@ -2003,13 +2009,13 @@ public class ProjectRunner
                 {
                     CompletionMarker.Write(activeInfo.FolderPath, new CompletionMarker
                     {
-                        TargetState = JobStates.AutoReview,
+                        TargetState = TaskStates.AutoReview,
                         ExecutionStatus = execution.Status,
                         AgentOutcome = outcome.Kind.ToString()
                     }, _logger);
                 }
 
-                var moveOutcome = await _transitions.MoveAsync(jobId, JobStates.AutoReview, Entry.Path, CancellationToken.None);
+                var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, Entry.Path, CancellationToken.None);
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
@@ -2054,6 +2060,20 @@ public class ProjectRunner
                     _consecutiveAutoFailureCount = 0;
                     _recentAutoFailureJobIds.Clear();
                 }
+                else if (WasDeliberatelyStopped(execution.Status))
+                {
+                    // Neutral outcome. A run that was deliberately killed
+                    // (user pause, follow-up pause-and-send, silence watchdog,
+                    // host shutdown / backend restart, run cancellation) is NOT
+                    // a task failure: the agent never got to finish. Counting
+                    // it toward the auto-failure circuit-breaker is what let a
+                    // burst of backend restarts (the 2026-05-30 incident) trip
+                    // the breaker and halt the whole runner. Leave the counter
+                    // untouched - neither increment nor reset.
+                    _logger.LogInformation(
+                        "[taskboard] auto-pickup run for {JobId} ended as '{Status}' (deliberate stop); not counting toward the auto-failure circuit-breaker",
+                        jobId, execution.Status);
+                }
                 else
                 {
                     _consecutiveAutoFailureCount++;
@@ -2091,7 +2111,7 @@ public class ProjectRunner
                                 // Fire-and-forget: the move is the right
                                 // thing, but a failure here must not
                                 // prevent the auto-mode pause below.
-                                _ = _transitions.MoveAsync(jobId, JobStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
+                                _ = _transitions.MoveAsync(jobId, TaskStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
                             }
                             catch (Exception ex)
                             {
@@ -2173,8 +2193,8 @@ public class ProjectRunner
     {
         try
         {
-            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff");
             var line = $"[{ts}] [system] --- Session lost ({reason}) - recovering from job folder ---";
             var prefix = File.Exists(logPath) && new FileInfo(logPath).Length > 0
@@ -2193,12 +2213,46 @@ public class ProjectRunner
     /// caller uses this signal to decide whether the runtime JSONL backup
     /// can now be discarded.
     /// </returns>
+    /// <summary>
+    /// Appends a human-readable spawn-failure reason to the job's
+    /// <c>logs/cli-output.log</c>. A failed CLI spawn produces no process and
+    /// therefore no streamed output, so without this the run "finished failed"
+    /// with an empty <c>logs/</c> dir - the worst diagnostic shape, because the
+    /// operator has nothing to read. Best-effort: a write failure here must not
+    /// mask the original spawn failure.
+    /// </summary>
+    private void WriteSpawnFailureDiagnostic(JobInfo info, string? cliType, string? cliError)
+    {
+        try
+        {
+            Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
+            var now = DateTime.UtcNow;
+            var reason = string.IsNullOrWhiteSpace(cliError)
+                ? $"Failed to start {cliType ?? "CLI"} process (no error detail captured)."
+                : cliError;
+            var line =
+                $"[{now:HH:mm:ss.fff}] [system] [taskboard] {cliType ?? "CLI"} spawn failed: {reason}";
+            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
+                File.AppendAllText(logPath, Environment.NewLine + line, System.Text.Encoding.UTF8);
+            else
+                File.WriteAllText(logPath, line, System.Text.Encoding.UTF8);
+            _logger.LogWarning(
+                "[taskboard] spawn failed for job {JobId} on {Cli}: {Reason}",
+                info.Id, cliType ?? "CLI", reason);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write spawn-failure diagnostic for job {JobId}", info.Id);
+        }
+    }
+
     private bool WriteCliLog(JobInfo info, ICliExecutionService cli)
     {
         try
         {
-            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
 
             var output = cli.GetOutput(info.JobKey);
             if (output.Count == 0)
@@ -2227,7 +2281,7 @@ public class ProjectRunner
     }
 
     private ICliExecutionService GetCliFor(JobInfo info) => _router.Get(info.CliType);
-    private string GetJobKey(string jobId) => JobIdentity.CreateKey(Entry.Path, jobId);
+    private string GetJobKey(string jobId) => TaskIdentity.CreateKey(Entry.Path, jobId);
     private string? GetActiveJobKey() => _activeJobId != null ? GetJobKey(_activeJobId) : null;
 
     /// <summary>
@@ -2307,7 +2361,7 @@ public class ProjectRunner
     /// (deleted, moved by an external script, archived by the boot-time
     /// stuck-folder sweep), release the latch so the next pickup tick can
     /// choose freely. Cheap when there is no active job; costs one
-    /// <see cref="JobScannerService.FindJob"/> when there is.
+    /// <see cref="TaskScannerService.FindJob"/> when there is.
     /// </summary>
     /// <returns>True if the latch was held and got cleared by this call.</returns>
     public bool ReconcileActiveJobAgainstDisk()
@@ -2320,7 +2374,7 @@ public class ProjectRunner
         try { info = _scanner.FindJob(jobId, Entry.Path); }
         catch (Exception ex) { _logger.LogDebug(ex, "Reconcile: FindJob threw for {JobId}", jobId); }
 
-        if (info != null && info.State == JobStates.Progress) return false;
+        if (info != null && info.State == TaskStates.Progress) return false;
 
         var reason = info == null
             ? "active job folder no longer exists"
@@ -2404,7 +2458,7 @@ public class ProjectRunner
         var intakeEnabled = _projectSettings.Get(ProjectName).IntakeEnabled == true;
         return _scanner.ScanAllJobs()
             .Where(j => j.ProjectName == ProjectName
-                        && j.State == JobStates.Ready
+                        && j.State == TaskStates.Ready
                         && AgentTypes.IsAutoPickupEligible(j.Agent)
                         && IsPickupAllowed(j, intakeEnabled))
             .OrderBy(j => j.Order)
@@ -2446,7 +2500,7 @@ public class ProjectRunner
     {
         return _scanner.ScanAllJobs()
             .Where(j => j.ProjectName == ProjectName
-                        && j.State == JobStates.Progress
+                        && j.State == TaskStates.Progress
                         && HasResumableSession(j))
             .OrderBy(j => j.CreatedAt)
             .FirstOrDefault();
@@ -2492,7 +2546,7 @@ public class ProjectRunner
     /// ahead of the due 2-ready task forever. A zombie gets at most this many
     /// failed resume attempts - an auto-pickup run that neither reaches review
     /// nor captures a session id - before it is dead-lettered into
-    /// <see cref="JobStates.FailedPickup"/> so the queue can drain.
+    /// <see cref="TaskStates.FailedPickup"/> so the queue can drain.
     /// Deliberately smaller than <see cref="PickupFailureThreshold"/>: a
     /// session-less folder has no real run to resume, so we give up sooner
     /// than for a folder that just streamed nothing on one attempt.
@@ -2676,9 +2730,9 @@ public class ProjectRunner
         // Cleanup debris happens because the Windows + ASP.NET combination
         // sometimes leaves a skeleton 3-progress folder behind after the
         // job has already moved on. The race: while ProjectRunner finishes
-        // a job and JobStateMachine.MoveJob renames 3-progress/<slug> ->
+        // a job and TaskStateMachine.MoveJob renames 3-progress/<slug> ->
         // <lane>/<slug>, another in-process writer (CliOutputLogStore on
-        // cli-output.log, JobSessionLog on session-events.jsonl) may still
+        // cli-output.log, TaskSessionLog on session-events.jsonl) may still
         // hold a Read/Write file handle on a file inside that folder.
         // Those handles are opened with FileShare.ReadWrite but NOT
         // FileShare.Delete, which is exactly the share-flag that blocks
@@ -2715,7 +2769,7 @@ public class ProjectRunner
             // ADR-0024: skeleton delete routes through the typed layer.
             // Conflict (file lock) lets the next tick retry; Rejected
             // (access denied) is logged once for the operator.
-            var deleteResult = _taskAccess.DeleteLaneFolder(Entry.Path, JobStates.Progress, slug);
+            var deleteResult = _taskAccess.DeleteLaneFolder(Entry.Path, TaskStates.Progress, slug);
             if (deleteResult.Status == OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
             {
                 _logger.LogInformation(
@@ -2740,7 +2794,7 @@ public class ProjectRunner
 
         var now = DateTime.UtcNow;
         var destinationSlug = BuildProgressOrphanSlug(slug, now,
-            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, JobStates.FailedPickup, name));
+            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, TaskStates.FailedPickup, name));
 
         var reason =
             "# Stale progress orphan\n\n" +
@@ -2749,7 +2803,7 @@ public class ProjectRunner
             "A progress folder without application-owned metadata is not a runnable job. The folder was moved here " +
             "without counting as a CLI spawn failure, so the runner can continue with the next real job.\n";
         var moveResult = _taskAccess.MoveOrphanToFailedPickup(
-            Entry.Path, JobStates.Progress, slug, destinationSlug, reason);
+            Entry.Path, TaskStates.Progress, slug, destinationSlug, reason);
         if (moveResult.Status != OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
         {
             _logger.LogWarning(
@@ -2799,10 +2853,10 @@ public class ProjectRunner
     /// </summary>
     internal static readonly string[] PostProgressLanes =
     [
-        JobStates.AutoReview,
-        JobStates.HumanReview,
-        JobStates.Completed,
-        JobStates.Archive,
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+        TaskStates.Completed,
+        TaskStates.Archive,
     ];
 
     internal static string BuildProgressOrphanSlug(string slug, DateTime utcNow, Func<string, bool> existsInDestination)
@@ -2828,11 +2882,11 @@ public class ProjectRunner
         // ListLaneFolders returns orphan folders (no job.json) too,
         // which is exactly the case the pickup loop is built around.
         var byId = _scanner.ScanAllJobs()
-            .Where(j => j.ProjectName == ProjectName && j.State == JobStates.Progress)
+            .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Progress)
             .ToDictionary(j => j.Id, StringComparer.OrdinalIgnoreCase);
 
         var candidates = new List<ProgressPickupCandidate>();
-        foreach (var laneFolder in _taskAccess.ListLaneFolders(Entry.Path, JobStates.Progress))
+        foreach (var laneFolder in _taskAccess.ListLaneFolders(Entry.Path, TaskStates.Progress))
         {
             byId.TryGetValue(laneFolder.Slug, out var info);
             candidates.Add(new ProgressPickupCandidate(
@@ -2907,10 +2961,10 @@ public class ProjectRunner
     /// <summary>
     /// Dead-letter a 3-progress folder whose autopickup attempts have
     /// exhausted the retry budget. ADR-0028: the destination is the visible
-    /// <see cref="JobStates.FailedPickup"/> lane, not <c>7-archive</c>; pickup
+    /// <see cref="TaskStates.FailedPickup"/> lane, not <c>7-archive</c>; pickup
     /// failures are loud, never silent. Single-state-machine authority
     /// (per-task constraint): the move goes through
-    /// <see cref="JobStateMachine.MoveFolderToFailedPickup"/>, not direct file
+    /// <see cref="TaskStateMachine.MoveFolderToFailedPickup"/>, not direct file
     /// IO. Writes a <see cref="PickupFailureRecord"/> row to
     /// <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c> and clears the
     /// per-slug attempt counter.
@@ -2932,7 +2986,7 @@ public class ProjectRunner
         // the architecture test doesn't see a Path.Combine + lane
         // construction here.
         var destinationSlug = PickupFailureLog.BuildArchiveSlug(slug, now,
-            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, JobStates.FailedPickup, name));
+            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, TaskStates.FailedPickup, name));
 
         var jobIdBeforeMove = candidate.Info?.Id ?? slug;
         var cliTypeBeforeMove = candidate.Info?.CliType;
@@ -2941,7 +2995,7 @@ public class ProjectRunner
             : new List<PickupAttemptDiagnostic>();
 
         var moveResult = _taskAccess.MoveOrphanToFailedPickup(
-            Entry.Path, JobStates.Progress, slug, destinationSlug, reasonMarkdown: null);
+            Entry.Path, TaskStates.Progress, slug, destinationSlug, reasonMarkdown: null);
         if (moveResult.Status != OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
         {
             _logger.LogWarning(
@@ -2966,7 +3020,7 @@ public class ProjectRunner
             Threshold = threshold,
             OutputDeadlineSeconds = PickupOutputDeadlineSeconds,
             AttemptHistory = historySnapshot.Count == 0 ? null : historySnapshot,
-            Reason = reasonOverride ?? $"Auto-pickup exhausted retry budget: {attempts} consecutive runs finished without producing a CLI output line within {PickupOutputDeadlineSeconds}s. Folder dead-lettered to {JobStates.FailedPickup}/{destinationSlug}."
+            Reason = reasonOverride ?? $"Auto-pickup exhausted retry budget: {attempts} consecutive runs finished without producing a CLI output line within {PickupOutputDeadlineSeconds}s. Folder dead-lettered to {TaskStates.FailedPickup}/{destinationSlug}."
         };
         _pickupFailures.Append(record);
         _logger.LogWarning(
@@ -2981,9 +3035,9 @@ public class ProjectRunner
             if (moved != null)
             {
                 var chatNote = reasonOverride != null
-                    ? $"{reasonOverride} Folder surfaced in {JobStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready."
+                    ? $"{reasonOverride} Folder surfaced in {TaskStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready."
                     : $"Auto-pickup gave up after {attempts} consecutive silent runs (no CLI output within {PickupOutputDeadlineSeconds}s). " +
-                      $"Folder surfaced in {JobStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready.";
+                      $"Folder surfaced in {TaskStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready.";
                 _chatLog.AppendSupervisor(moved, "pickup-failed", chatNote);
             }
         }
@@ -3079,6 +3133,17 @@ public class ProjectRunner
     /// run does not wedge a productive folder. Called from
     /// <see cref="OnCliFinishedAsync"/>.
     /// </summary>
+    /// <summary>
+    /// True when a run ended because something deliberately killed it rather
+    /// than because the task failed: a host shutdown / backend restart, a user
+    /// pause, a follow-up pause-and-send, the silence watchdog, or a run
+    /// cancellation. <see cref="RunStatusClassifier"/> maps all of those to
+    /// <see cref="RunStatuses.Stopped"/>. Such runs are interruptions, not
+    /// failures, and must stay neutral for the auto-pickup circuit-breakers.
+    /// </summary>
+    private static bool WasDeliberatelyStopped(string? executionStatus)
+        => string.Equals(executionStatus, RunStatuses.Stopped, StringComparison.OrdinalIgnoreCase);
+
     private void RecordPickupAttemptResult(string slug, int outputLines, double durationSeconds, string? executionStatus)
     {
         if (outputLines > 0)
@@ -3092,6 +3157,20 @@ public class ProjectRunner
             // ride on top of a stale cascade.
             try { _infraBreaker.OnProductivePickup(ProjectName, _activeCliType); }
             catch (Exception ex) { _logger.LogDebug(ex, "CrossSlugInfraCircuitBreaker reset failed for {Project}", ProjectName); }
+            return;
+        }
+
+        // A deliberately-stopped run (host shutdown / backend restart, user
+        // pause, watchdog, cancellation) produced no output only because it was
+        // interrupted, not because the pickup is broken. Do NOT feed it to the
+        // per-slug silent-attempt counter that dead-letters a folder after
+        // PickupFailureThreshold silent runs - that would punish a job for a
+        // restart it had no part in.
+        if (WasDeliberatelyStopped(executionStatus))
+        {
+            _logger.LogInformation(
+                "[taskboard] silent auto-pickup run for {Slug} was a deliberate stop ('{Status}'); not counting toward the per-slug dead-letter budget",
+                slug, executionStatus);
             return;
         }
 
@@ -3126,7 +3205,7 @@ public class ProjectRunner
     private List<string> GetQueuedJobIds()
     {
         return _scanner.ScanAllJobs()
-            .Where(j => j.ProjectName == ProjectName && j.State == JobStates.Ready)
+            .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Ready)
             .OrderBy(j => j.Order)
             .Select(j => j.Id)
             .ToList();
@@ -3185,7 +3264,7 @@ public class ProjectRunner
             return;
         }
 
-        var jobKey = JobIdentity.CreateKey(Entry.Path, jobId);
+        var jobKey = TaskIdentity.CreateKey(Entry.Path, jobId);
         List<CliOutputLine> output;
         try { output = cli.GetOutput(jobKey); }
         catch (Exception ex)

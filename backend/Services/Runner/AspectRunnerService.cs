@@ -543,7 +543,7 @@ public sealed record AspectRunReport(
 
 /// <summary>
 /// Helpers that the orchestrator uses to update the job's tags array
-/// without going through <c>JobMutationService.NormalizeTagId</c>:
+/// without going through <c>TaskMutationService.NormalizeTagId</c>:
 /// concern tags use a different grammar (<c>{namespace}:concerns</c>)
 /// that the standard tag normaliser would strip the colon from.
 /// </summary>
@@ -564,7 +564,7 @@ internal static class ConcernTagWriter
         try
         {
             var json = File.ReadAllText(jobJsonPath);
-            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JobJsonFile.ReadOpts)
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts)
                       ?? new Dictionary<string, JsonElement>();
             var existing = new List<string>();
             if (doc.TryGetValue("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
@@ -584,7 +584,7 @@ internal static class ConcernTagWriter
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            JobJsonFile.UpdateField(jobFolderPath, "tags", merged, logger);
+            TaskJsonFile.UpdateField(jobFolderPath, "tags", merged, logger);
         }
         catch (Exception ex)
         {

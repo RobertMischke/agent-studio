@@ -23,7 +23,7 @@ public class ClientIdentityTests : IDisposable
     {
         _root = Path.Combine(Path.GetTempPath(), "agent-taskboard-clients-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_root, "watch");
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -51,10 +51,10 @@ public class ClientIdentityTests : IDisposable
     private ClientIdentityStore BuildStore(IConfiguration config)
         => new(config, NullLogger<ClientIdentityStore>.Instance);
 
-    private JobScannerService BuildScanner(IConfiguration config)
+    private TaskScannerService BuildScanner(IConfiguration config)
     {
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class ClientIdentityTests : IDisposable
         var config = BuildConfig();
         var scanner = BuildScanner(config);
 
-        var dir = Path.Combine(_watchPath, JobStates.Ready, "legacy-job");
+        var dir = Path.Combine(_watchPath, TaskStates.Ready, "legacy-job");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
             "{\"id\":\"legacy-job\",\"title\":\"Legacy\",\"state\":\"2-ready\",\"order\":1,\"agent\":\"copilot\"}");
@@ -173,7 +173,7 @@ public class ClientIdentityTests : IDisposable
         var config = BuildConfig();
         var scanner = BuildScanner(config);
 
-        var dir = Path.Combine(_watchPath, JobStates.Ready, "owned-job");
+        var dir = Path.Combine(_watchPath, TaskStates.Ready, "owned-job");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
             "{\"id\":\"owned-job\",\"title\":\"Owned\",\"state\":\"2-ready\",\"order\":1,\"agent\":\"copilot\",\"ownerClientId\":\"layer-3-review\"}");

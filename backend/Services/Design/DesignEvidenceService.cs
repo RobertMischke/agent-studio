@@ -22,14 +22,14 @@ namespace OrchestratorApi.Services.Design;
 /// </summary>
 public sealed class DesignEvidenceService
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<DesignEvidenceService> _logger;
 
     private static readonly Regex DateInFileNameRegex = new(
         @"^(?<date>\d{4}-\d{2}-\d{2})\b",
         RegexOptions.Compiled);
 
-    public DesignEvidenceService(JobScannerService scanner, ILogger<DesignEvidenceService> logger)
+    public DesignEvidenceService(TaskScannerService scanner, ILogger<DesignEvidenceService> logger)
     {
         _scanner = scanner;
         _logger = logger;

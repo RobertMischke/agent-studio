@@ -28,7 +28,7 @@ public class MergeServiceTests : IDisposable
         _workspace = Path.Combine(Path.GetTempPath(), "atp-merge-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
         Directory.CreateDirectory(_watchPath);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -43,11 +43,11 @@ public class MergeServiceTests : IDisposable
     public void Candidates_FindsWrapperByPromptMention()
     {
         var (merges, _, _) = Build();
-        WriteJob(JobStates.Completed, "primary-card", "Primary",
+        WriteJob(TaskStates.Completed, "primary-card", "Primary",
             "## Goal\nThis is the primary card. It does the work and ships changes.");
-        WriteJob(JobStates.Backlog, "human-decision-needed-primary-card", "Wrapper",
+        WriteJob(TaskStates.Backlog, "human-decision-needed-primary-card", "Wrapper",
             "Wrapper around primary-card. Asks the user to make a decision.");
-        WriteJob(JobStates.Ready, "unrelated-thing", "Unrelated", "Totally different task.");
+        WriteJob(TaskStates.Ready, "unrelated-thing", "Unrelated", "Totally different task.");
 
         var result = merges.FindCandidates("primary-card", _watchPath);
 
@@ -59,8 +59,8 @@ public class MergeServiceTests : IDisposable
     public void Preview_ReturnsProposedEventsWithoutTouchingDisk()
     {
         var (merges, _, scanner) = Build();
-        WriteJob(JobStates.Ready, "primary", "Primary", "Primary prompt");
-        WriteJob(JobStates.Backlog, "wrapper", "Wrapper", "Refers to primary");
+        WriteJob(TaskStates.Ready, "primary", "Primary", "Primary prompt");
+        WriteJob(TaskStates.Backlog, "wrapper", "Wrapper", "Refers to primary");
         AppendTimelineEvent("wrapper", "agent_run_started", "Run started");
 
         var outcome = merges.Preview("primary", _watchPath, new MergeRequest
@@ -84,8 +84,8 @@ public class MergeServiceTests : IDisposable
     public void Merge_Consolidate_ArchivesSecondaryAndAppendsTimeline()
     {
         var (merges, audit, scanner) = Build();
-        WriteJob(JobStates.Ready, "primary", "Primary", "Primary prompt");
-        WriteJob(JobStates.Backlog, "wrapper", "Wrapper",
+        WriteJob(TaskStates.Ready, "primary", "Primary", "Primary prompt");
+        WriteJob(TaskStates.Backlog, "wrapper", "Wrapper",
             "This is a wrapper task that references the primary card.");
         AppendTimelineEvent("wrapper", "agent_run_started", "Wrapper run started");
         AppendTimelineEvent("wrapper", "agent_run_finished", "Wrapper run finished");
@@ -133,8 +133,8 @@ public class MergeServiceTests : IDisposable
     public void Merge_Consolidate_Undo_RestoresArchivedFolder()
     {
         var (merges, audit, scanner) = Build();
-        WriteJob(JobStates.Ready, "primary", "Primary", "Primary prompt");
-        WriteJob(JobStates.Backlog, "wrapper", "Wrapper", "Wrapper text");
+        WriteJob(TaskStates.Ready, "primary", "Primary", "Primary prompt");
+        WriteJob(TaskStates.Backlog, "wrapper", "Wrapper", "Wrapper text");
 
         var mergeOutcome = merges.Merge("primary", _watchPath, new MergeRequest
         {
@@ -156,7 +156,7 @@ public class MergeServiceTests : IDisposable
         // Wrapper is back in its original lane (0-backlog).
         var restored = scanner.FindJob("wrapper", _watchPath);
         Assert.NotNull(restored);
-        Assert.Equal(JobStates.Backlog, restored!.State);
+        Assert.Equal(TaskStates.Backlog, restored!.State);
 
         // Audit log now has 2 rows: the original + the undo marker.
         var records = audit.ReadAll();
@@ -168,7 +168,7 @@ public class MergeServiceTests : IDisposable
     public void Undo_WithUnknownToken_ReturnsTokenNotFound()
     {
         var (merges, _, _) = Build();
-        WriteJob(JobStates.Ready, "primary", "Primary", "Primary prompt");
+        WriteJob(TaskStates.Ready, "primary", "Primary", "Primary prompt");
 
         var outcome = merges.Undo("primary",
             new MergeUndoRequest { RestoreToken = "deadbeef" },
@@ -181,7 +181,7 @@ public class MergeServiceTests : IDisposable
     public void Merge_RejectsSameJob()
     {
         var (merges, _, _) = Build();
-        WriteJob(JobStates.Ready, "primary", "Primary", "x");
+        WriteJob(TaskStates.Ready, "primary", "Primary", "x");
 
         var outcome = merges.Merge("primary", _watchPath, new MergeRequest
         {
@@ -195,7 +195,7 @@ public class MergeServiceTests : IDisposable
     public void Merge_RejectsMissingSecondary()
     {
         var (merges, _, _) = Build();
-        WriteJob(JobStates.Ready, "primary", "Primary", "x");
+        WriteJob(TaskStates.Ready, "primary", "Primary", "x");
 
         var outcome = merges.Merge("primary", _watchPath, new MergeRequest
         {
@@ -209,8 +209,8 @@ public class MergeServiceTests : IDisposable
     public void Merge_LinkOnly_SetsMergedIntoFieldWithoutMoving()
     {
         var (merges, _, scanner) = Build();
-        WriteJob(JobStates.Ready, "primary", "Primary", "x");
-        WriteJob(JobStates.Backlog, "linked", "Linked", "y");
+        WriteJob(TaskStates.Ready, "primary", "Primary", "x");
+        WriteJob(TaskStates.Backlog, "linked", "Linked", "y");
 
         var outcome = merges.Merge("primary", _watchPath, new MergeRequest
         {
@@ -223,7 +223,7 @@ public class MergeServiceTests : IDisposable
         // Secondary is still in its original lane.
         var still = scanner.FindJob("linked", _watchPath);
         Assert.NotNull(still);
-        Assert.Equal(JobStates.Backlog, still!.State);
+        Assert.Equal(TaskStates.Backlog, still!.State);
 
         // job.json carries mergedInto pointer.
         var json = File.ReadAllText(Path.Combine(still.FolderPath, "job.json"));
@@ -233,7 +233,7 @@ public class MergeServiceTests : IDisposable
 
     // ---- Helpers --------------------------------------------------------
 
-    private (MergeService merges, MergeAuditLog audit, JobScannerService scanner) Build()
+    private (MergeService merges, MergeAuditLog audit, TaskScannerService scanner) Build()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -244,8 +244,8 @@ public class MergeServiceTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
         var audit = new MergeAuditLog(config, scanner, NullLogger<MergeAuditLog>.Instance);
         var candidates = new MergeCandidateFinder(scanner);
@@ -265,7 +265,7 @@ public class MergeServiceTests : IDisposable
     private void AppendTimelineEvent(string slug, string kind, string summary)
     {
         var jobDir = FindJobDir(slug);
-        var logsDir = JobPaths.LogsDir(jobDir);
+        var logsDir = TaskPaths.LogsDir(jobDir);
         Directory.CreateDirectory(logsDir);
         var line = System.Text.Json.JsonSerializer.Serialize(new TimelineEvent
         {
@@ -278,13 +278,13 @@ public class MergeServiceTests : IDisposable
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
         });
-        File.AppendAllText(JobPaths.TimelineLog(jobDir), line + Environment.NewLine);
+        File.AppendAllText(TaskPaths.TimelineLog(jobDir), line + Environment.NewLine);
     }
 
     private List<TimelineEvent> ReadTimeline(string slug)
     {
         var jobDir = FindJobDir(slug);
-        var path = JobPaths.TimelineLog(jobDir);
+        var path = TaskPaths.TimelineLog(jobDir);
         if (!File.Exists(path)) return [];
         var result = new List<TimelineEvent>();
         foreach (var line in File.ReadAllLines(path))
@@ -303,7 +303,7 @@ public class MergeServiceTests : IDisposable
 
     private string FindJobDir(string slug)
     {
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             var dir = Path.Combine(_watchPath, state, slug);
             if (Directory.Exists(dir)) return dir;

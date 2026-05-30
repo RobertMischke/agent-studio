@@ -11,7 +11,7 @@ namespace OrchestratorApi.Services.Projection;
 /// Coordinator. Asks each <see cref="IConversationEventSource"/> for raw
 /// events, renders bodies through <see cref="IMarkdownRenderer"/>, sorts
 /// by timestamp, caches the result against the source mtime tuple, and -
-/// optionally - broadcasts deltas over <see cref="JobHub"/> so live
+/// optionally - broadcasts deltas over <see cref="TaskHub"/> so live
 /// listeners do not need to poll.
 ///
 /// The projector is the only component aware of <see cref="JobInfo"/>.
@@ -23,16 +23,16 @@ public sealed class ConversationProjector
     private readonly IReadOnlyList<IConversationEventSource> _sources;
     private readonly IMarkdownRenderer _renderer;
     private readonly ConversationCache _cache;
-    private readonly JobScannerService _scanner;
-    private readonly IHubContext<JobHub>? _hub;
+    private readonly TaskScannerService _scanner;
+    private readonly IHubContext<TaskHub>? _hub;
     private readonly ILogger<ConversationProjector> _logger;
 
     public ConversationProjector(
         IEnumerable<IConversationEventSource> sources,
         IMarkdownRenderer renderer,
         ConversationCache cache,
-        JobScannerService scanner,
-        IHubContext<JobHub>? hub,
+        TaskScannerService scanner,
+        IHubContext<TaskHub>? hub,
         ILogger<ConversationProjector> logger)
     {
         _sources = sources.ToList();
@@ -67,7 +67,7 @@ public sealed class ConversationProjector
 
     /// <summary>
     /// Re-project, compare against the cached snapshot, and broadcast any
-    /// new tail events on <see cref="JobHub"/> so the file watcher can
+    /// new tail events on <see cref="TaskHub"/> so the file watcher can
     /// stream live appends to subscribers without re-fetching.
     /// </summary>
     public async Task ProjectAndBroadcastAsync(JobInfo info, CancellationToken ct)

@@ -12,7 +12,7 @@ namespace OrchestratorApi.Tests;
 /// <summary>
 /// Pins the operator-override side of commit attribution: persisting the
 /// rule-engine result, then excluding and re-including a commit through
-/// <see cref="JobMutationService"/> (the API-only path - no direct
+/// <see cref="TaskMutationService"/> (the API-only path - no direct
 /// job.json writes). Mirrors the binding rules in ADR
 /// "Commit-Attribution-Regel": an exclude moves a commit from
 /// <c>commits</c> to <c>excludedCommits</c> with a manual marker; a
@@ -140,17 +140,17 @@ public class CommitAttributionMutationTests : IDisposable
 
     private static string Pad(string s) => s.Length >= 40 ? s : s + new string('0', 40 - s.Length);
 
-    private (JobScannerService scanner, JobMutationService mutations) Build()
+    private (TaskScannerService scanner, TaskMutationService mutations) Build()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var mutations = new TaskMutationService(
             scanner,
             new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
             new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
-            new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance),
-            NullLogger<JobMutationService>.Instance);
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
         return (scanner, mutations);
     }
 

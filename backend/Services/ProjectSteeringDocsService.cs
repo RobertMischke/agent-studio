@@ -18,7 +18,7 @@ namespace OrchestratorApi.Services;
 /// </summary>
 public class ProjectSteeringDocsService
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<ProjectSteeringDocsService> _logger;
 
     /// <summary>
@@ -29,7 +29,7 @@ public class ProjectSteeringDocsService
     /// </summary>
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromDays(120);
 
-    public ProjectSteeringDocsService(JobScannerService scanner, ILogger<ProjectSteeringDocsService> logger)
+    public ProjectSteeringDocsService(TaskScannerService scanner, ILogger<ProjectSteeringDocsService> logger)
     {
         _scanner = scanner;
         _logger = logger;

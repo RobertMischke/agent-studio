@@ -45,7 +45,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
             Id = "task-1",
             Title = "Test",
             WatchPath = _watchPath,
-            TargetState = JobStates.Ready
+            TargetState = TaskStates.Ready
         });
 
         var info = scanner.FindJob("task-1", _watchPath);
@@ -67,7 +67,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
             WatchPath = _watchPath,
             CliType = "codex",
             Model = "o3",
-            TargetState = JobStates.Ready
+            TargetState = TaskStates.Ready
         });
 
         var info = scanner.FindJob("task-2", _watchPath);
@@ -88,7 +88,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
             Title = "Manual",
             WatchPath = _watchPath,
             Agent = "human",
-            TargetState = JobStates.Ready
+            TargetState = TaskStates.Ready
         });
 
         var info = scanner.FindJob("manual-task", _watchPath);
@@ -106,7 +106,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
             Id = "no-defaults",
             Title = "No defaults",
             WatchPath = _watchPath,
-            TargetState = JobStates.Ready
+            TargetState = TaskStates.Ready
         });
 
         var info = scanner.FindJob("no-defaults", _watchPath);
@@ -122,7 +122,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         var (machine, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
         machine.EnsureStateFoldersAndMigrate();
 
-        var jobDir = Path.Combine(_watchPath, JobStates.Ready, "legacy-job");
+        var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "legacy-job");
         Directory.CreateDirectory(jobDir);
         File.WriteAllText(Path.Combine(jobDir, "job.json"), """
             {
@@ -151,7 +151,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         var (machine, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
         machine.EnsureStateFoldersAndMigrate();
 
-        var jobDir = Path.Combine(_watchPath, JobStates.Ready, "idem-job");
+        var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "idem-job");
         Directory.CreateDirectory(jobDir);
         File.WriteAllText(Path.Combine(jobDir, "job.json"), """
             {
@@ -177,7 +177,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         var (machine, _, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7");
         machine.EnsureStateFoldersAndMigrate();
 
-        var jobDir = Path.Combine(_watchPath, JobStates.Ready, "explicit-job");
+        var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "explicit-job");
         Directory.CreateDirectory(jobDir);
         File.WriteAllText(Path.Combine(jobDir, "job.json"), """
             {
@@ -209,20 +209,20 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.True(AgentTypes.IsAutoPickupEligible(""));
     }
 
-    private (JobStateMachine machine, JobScannerService scanner, JobMutationService mutations) Build(
+    private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build(
         string? defaultCliType, string? defaultModel)
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var machine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var clients = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance);
         clients.EnsureLoaded();
 
         if (defaultCliType != null || defaultModel != null)
             clients.SetDefaults(DefaultClientIdentity.Id, defaultCliType, defaultModel);
 
-        var mutations = new JobMutationService(scanner, clients, new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new TaskMutationService(scanner, clients, new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         machine.EnsureStateFoldersAndMigrate();
         return (machine, scanner, mutations);
     }

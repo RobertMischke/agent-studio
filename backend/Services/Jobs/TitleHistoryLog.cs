@@ -24,7 +24,7 @@ internal static class TitleHistoryLog
         {
             var json = File.ReadAllText(path);
             if (string.IsNullOrWhiteSpace(json)) return [];
-            var entries = JsonSerializer.Deserialize<List<JobTitleHistoryEntry>>(json, JobJsonFile.ReadOpts);
+            var entries = JsonSerializer.Deserialize<List<JobTitleHistoryEntry>>(json, TaskJsonFile.ReadOpts);
             return entries ?? [];
         }
         catch

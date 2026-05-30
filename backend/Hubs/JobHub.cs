@@ -3,7 +3,7 @@ using OrchestratorApi.Services.Projection;
 
 namespace OrchestratorApi.Hubs;
 
-public class JobHub : Hub
+public class TaskHub : Hub
 {
     // Client methods:
     // - jobsChanged                                          → board refresh

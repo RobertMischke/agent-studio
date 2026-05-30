@@ -79,9 +79,9 @@ public sealed record AttributionResult
 ///
 /// <para>
 /// The class is intentionally pure so unit tests can pin every rule without
-/// a real repository. The thin <c>JobTransitionService</c> wiring builds the
+/// a real repository. The thin <c>TaskTransitionService</c> wiring builds the
 /// candidates from <see cref="GitService"/> and persists the result through
-/// <see cref="JobMutationService"/> (never a direct file write).
+/// <see cref="TaskMutationService"/> (never a direct file write).
 /// </para>
 /// </summary>
 public static class CommitAttributionService

@@ -42,10 +42,10 @@ public record FixtureMigrationReport
 /// </summary>
 public class FixtureMigrationService
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<FixtureMigrationService> _logger;
 
-    public FixtureMigrationService(JobScannerService scanner, ILogger<FixtureMigrationService> logger)
+    public FixtureMigrationService(TaskScannerService scanner, ILogger<FixtureMigrationService> logger)
     {
         _scanner = scanner;
         _logger = logger;
@@ -64,7 +64,7 @@ public class FixtureMigrationService
             var marked = false;
             if (apply && wouldMark)
             {
-                JobJsonFile.UpdateField(job.FolderPath, "fixture", true, _logger);
+                TaskJsonFile.UpdateField(job.FolderPath, "fixture", true, _logger);
                 marked = true;
                 applied++;
                 _logger.LogInformation(

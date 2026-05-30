@@ -26,7 +26,7 @@ public class SessionToJobIndexTests
         var index = new SessionToJobIndex();
         index.Rebuild(new[]
         {
-            MakeJob("job-a", JobStates.Progress, watchPath: "/w/p1", chain: new[] { "s-1" })
+            MakeJob("job-a", TaskStates.Progress, watchPath: "/w/p1", chain: new[] { "s-1" })
         });
 
         Assert.Null(index.Lookup("orphan-id"));
@@ -39,7 +39,7 @@ public class SessionToJobIndexTests
         var index = new SessionToJobIndex();
         index.Rebuild(new[]
         {
-            MakeJob("job-a", JobStates.Progress, watchPath: "/w/p1",
+            MakeJob("job-a", TaskStates.Progress, watchPath: "/w/p1",
                 chain: new[] { "before-id", SessionToJobIndex.RecoverySentinel, "after-id" })
         });
 
@@ -58,7 +58,7 @@ public class SessionToJobIndexTests
         var index = new SessionToJobIndex();
         index.Rebuild(new[]
         {
-            MakeJob("job-a", JobStates.Progress, watchPath: "/w/p1",
+            MakeJob("job-a", TaskStates.Progress, watchPath: "/w/p1",
                 chain: new[] { "", "   ", "real-id" })
         });
 
@@ -72,8 +72,8 @@ public class SessionToJobIndexTests
         // Two jobs in different checkouts share the same Claude session id
         // (the user has the same ~/.claude store visible to both).
         var index = new SessionToJobIndex();
-        var devJob = MakeJob("job-dev", JobStates.Ready,    watchPath: "/w/dev",    chain: new[] { "shared-uuid" });
-        var stbJob = MakeJob("job-stb", JobStates.Progress, watchPath: "/w/stable", chain: new[] { "shared-uuid" });
+        var devJob = MakeJob("job-dev", TaskStates.Ready,    watchPath: "/w/dev",    chain: new[] { "shared-uuid" });
+        var stbJob = MakeJob("job-stb", TaskStates.Progress, watchPath: "/w/stable", chain: new[] { "shared-uuid" });
         index.Rebuild(new[] { devJob, stbJob });
 
         var hitDev = index.Lookup("shared-uuid", sessionCwd: "/w/dev");
@@ -89,8 +89,8 @@ public class SessionToJobIndexTests
         var index = new SessionToJobIndex();
         index.Rebuild(new[]
         {
-            MakeJob("idle-job", JobStates.Ready,    watchPath: "/w/a", chain: new[] { "s-1" }),
-            MakeJob("hot-job",  JobStates.Progress, watchPath: "/w/b", chain: new[] { "s-1" }),
+            MakeJob("idle-job", TaskStates.Ready,    watchPath: "/w/a", chain: new[] { "s-1" }),
+            MakeJob("hot-job",  TaskStates.Progress, watchPath: "/w/b", chain: new[] { "s-1" }),
         });
 
         var hit = index.Lookup("s-1");
@@ -101,10 +101,10 @@ public class SessionToJobIndexTests
     public void Rebuild_Replaces_PreviousIndex()
     {
         var index = new SessionToJobIndex();
-        index.Rebuild(new[] { MakeJob("old", JobStates.Archive, watchPath: "/w", chain: new[] { "gone" }) });
+        index.Rebuild(new[] { MakeJob("old", TaskStates.Archive, watchPath: "/w", chain: new[] { "gone" }) });
         Assert.NotNull(index.Lookup("gone"));
 
-        index.Rebuild(new[] { MakeJob("new", JobStates.Progress, watchPath: "/w", chain: new[] { "fresh" }) });
+        index.Rebuild(new[] { MakeJob("new", TaskStates.Progress, watchPath: "/w", chain: new[] { "fresh" }) });
         Assert.Null(index.Lookup("gone"));
         Assert.Equal("new", index.Lookup("fresh")!.JobId);
     }
@@ -129,7 +129,7 @@ public class SessionToJobIndexTests
                 if (rng.Next(6) == 0) chain.Add(SessionToJobIndex.RecoverySentinel);
                 chain.Add($"sess-{i:D4}-{c}");
             }
-            jobs.Add(MakeJob($"job-{i:D4}", JobStates.Archive, watchPath: "/w/perf", chain: chain.ToArray()));
+            jobs.Add(MakeJob($"job-{i:D4}", TaskStates.Archive, watchPath: "/w/perf", chain: chain.ToArray()));
         }
 
         var index = new SessionToJobIndex();
@@ -154,7 +154,7 @@ public class SessionToJobIndexTests
     private static JobInfo MakeJob(string id, string lane, string watchPath, string[] chain) => new()
     {
         Id = id,
-        JobKey = JobIdentity.CreateKey(watchPath, id),
+        JobKey = TaskIdentity.CreateKey(watchPath, id),
         Title = id,
         State = lane,
         WatchPath = watchPath,

@@ -8,7 +8,7 @@ namespace OrchestratorApi.Services;
 /// <c>WatchPaths</c> and fans out a single <see cref="OnJobChanged"/>
 /// event whenever something inside a job folder appears, disappears, or
 /// changes on disk. Subscribers include
-/// <see cref="JobIndexCache.Invalidate"/> (Cycle 1 cache invalidation),
+/// <see cref="TaskIndexCache.Invalidate"/> (Cycle 1 cache invalidation),
 /// the SignalR hub (broadcasts <c>jobsChanged</c> to clients), and
 /// <see cref="TaskRunnerService.ReconcileAllRunners"/> (releases the
 /// runner's active-job latch when the folder leaves <c>3-progress</c>
@@ -21,20 +21,20 @@ namespace OrchestratorApi.Services;
 /// and <see cref="OnJobChanged"/> never fired. SignalR <c>jobsChanged</c>
 /// pushes and runner reconciliation were dead silent against external
 /// folder moves. Cycle 1 fixes the config read by delegating to
-/// <see cref="JobScannerService.GetWatchPaths"/> (which already honours
+/// <see cref="TaskScannerService.GetWatchPaths"/> (which already honours
 /// the <c>.orchestrator.yml</c> pointer flow) and watching the resolved
 /// <c>entry.Path</c>.</para>
 /// </summary>
-public class JobWatcherService : BackgroundService
+public class TaskWatcherService : BackgroundService
 {
-    private readonly JobScannerService _scanner;
-    private readonly ILogger<JobWatcherService> _logger;
+    private readonly TaskScannerService _scanner;
+    private readonly ILogger<TaskWatcherService> _logger;
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly TimeSpan _debounce;
 
     public event Action<string>? OnJobChanged;
 
-    public JobWatcherService(JobScannerService scanner, ILogger<JobWatcherService> logger, IConfiguration config)
+    public TaskWatcherService(TaskScannerService scanner, ILogger<TaskWatcherService> logger, IConfiguration config)
     {
         _scanner = scanner;
         _logger = logger;
@@ -132,7 +132,7 @@ public class JobWatcherService : BackgroundService
     /// <summary>
     /// Returns true when the path obviously doesn't represent a job lane
     /// change worth notifying about. Lives here so the noise filter is in
-    /// one place; downstream subscribers (JobIndexCache, runner
+    /// one place; downstream subscribers (TaskIndexCache, runner
     /// reconciliation, SignalR push) all benefit from the same gate.
     /// </summary>
     private static bool IsNoiseyPath(string path)

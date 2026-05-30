@@ -57,8 +57,8 @@ public class BacklogLaneAndTagsTests : IDisposable
         Assert.Equal("alpha", jobId);
         var info = scanner.FindJob("alpha", _watchPath);
         Assert.NotNull(info);
-        Assert.Equal(JobStates.Backlog, info!.State);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Backlog, "alpha")));
+        Assert.Equal(TaskStates.Backlog, info!.State);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Backlog, "alpha")));
         Assert.Equal(TaskTypes.Chore, info.TaskType);
     }
 
@@ -74,7 +74,7 @@ public class BacklogLaneAndTagsTests : IDisposable
             Title = "Beta task",
             WatchPath = _watchPath,
             Agent = "claude",
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             TaskType = "bug",
             Tags = new List<string> { "architecture", "performance" }
         });
@@ -82,7 +82,7 @@ public class BacklogLaneAndTagsTests : IDisposable
         Assert.Equal("beta", jobId);
         var info = scanner.FindJob("beta", _watchPath);
         Assert.NotNull(info);
-        Assert.Equal(JobStates.Ready, info!.State);
+        Assert.Equal(TaskStates.Ready, info!.State);
         Assert.Equal(TaskTypes.Bug, info.TaskType);
         Assert.Equal(new[] { "architecture", "performance" }, info.Tags.ToArray());
     }
@@ -94,8 +94,8 @@ public class BacklogLaneAndTagsTests : IDisposable
         // the canonical lane order so disk listings, kanban iteration, and
         // boot-time folder creation produce backlog at the leftmost
         // position.
-        Assert.Equal(JobStates.Backlog, JobStates.All[0]);
-        Assert.Equal(JobStates.Preparation, JobStates.All[1]);
+        Assert.Equal(TaskStates.Backlog, TaskStates.All[0]);
+        Assert.Equal(TaskStates.Preparation, TaskStates.All[1]);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class BacklogLaneAndTagsTests : IDisposable
     {
         var (machine, _, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Backlog)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Backlog)));
     }
 
     [Fact]
@@ -237,13 +237,13 @@ public class BacklogLaneAndTagsTests : IDisposable
         Assert.Equal(TaskTypes.Feature, TaskTypes.Normalize("User-Story"));
     }
 
-    private (JobStateMachine machine, JobScannerService scanner, JobMutationService mutations) Build()
+    private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var machine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         return (machine, scanner, mutations);
     }
 

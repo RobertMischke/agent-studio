@@ -5,7 +5,7 @@ namespace OrchestratorApi.Services;
 /// <c>logs/</c> or <c>cli-output.log</c> should go through here so the
 /// magic strings live in one place.
 /// </summary>
-internal static class JobPaths
+internal static class TaskPaths
 {
     public const string CliOutputLogFileName = "cli-output.log";
     public const string SessionEventsLogFileName = "session-events.jsonl";

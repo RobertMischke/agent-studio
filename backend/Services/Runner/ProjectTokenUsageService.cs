@@ -67,9 +67,9 @@ public class ProjectTokenUsageService
     public const int MaxExpensiveLimit = 50;
 
     private readonly OrchestratorLog _log;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
 
-    public ProjectTokenUsageService(OrchestratorLog log, JobScannerService scanner)
+    public ProjectTokenUsageService(OrchestratorLog log, TaskScannerService scanner)
     {
         _log = log;
         _scanner = scanner;

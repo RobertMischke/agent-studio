@@ -42,11 +42,11 @@ public sealed class MergeAuditLog
     };
 
     private readonly IConfiguration _config;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<MergeAuditLog> _logger;
     private readonly object _gate = new();
 
-    public MergeAuditLog(IConfiguration config, JobScannerService scanner, ILogger<MergeAuditLog> logger)
+    public MergeAuditLog(IConfiguration config, TaskScannerService scanner, ILogger<MergeAuditLog> logger)
     {
         _config = config;
         _scanner = scanner;

@@ -35,7 +35,7 @@ namespace OrchestratorApi.Services.Analysis;
 /// <para>
 /// Migration note: the Task Access Layer (ADR-0024) is in phase 1 (contract
 /// only) at the time of writing, so this store does not call
-/// <c>JobScannerService</c> or write to <c>job.json</c>. Follow-up task
+/// <c>TaskScannerService</c> or write to <c>job.json</c>. Follow-up task
 /// creation lives outside this store; this layer only carries the typed
 /// suggestion. When the Task Access Layer ships its mutation phase, the
 /// callers that turn a <see cref="AnalysisReportFollowUpTaskSuggestion"/>

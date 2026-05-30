@@ -26,7 +26,7 @@ public static class JobReviewEvidenceEndpoints
         // POST /api/jobs/{jobId}/review-evidence/{evidenceId}/acknowledge
         // Body: { "acknowledged": true|false } — defaults to true.
         group.MapPost("/{jobId}/review-evidence/{evidenceId}/acknowledge",
-            (string jobId, string evidenceId, string? watchPath, AcknowledgeEvidenceRequest? body, JobScannerService scanner) =>
+            (string jobId, string evidenceId, string? watchPath, AcknowledgeEvidenceRequest? body, TaskScannerService scanner) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
@@ -50,7 +50,7 @@ public static class JobReviewEvidenceEndpoints
         // the finding's title + body + linked artifacts/file refs. Default
         // landing lane is 1-preparation so the user reviews and promotes.
         group.MapPost("/{jobId}/review-evidence/{evidenceId}/follow-up",
-            (string jobId, string evidenceId, string? watchPath, CreateFollowupFromEvidenceRequest? body, JobScannerService scanner, JobMutationService mutations) =>
+            (string jobId, string evidenceId, string? watchPath, CreateFollowupFromEvidenceRequest? body, TaskScannerService scanner, TaskMutationService mutations) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
@@ -61,10 +61,10 @@ public static class JobReviewEvidenceEndpoints
 
             var targetState = body?.TargetState switch
             {
-                JobStates.Preparation => JobStates.Preparation,
-                JobStates.Ready => JobStates.Ready,
-                JobStates.Backlog => JobStates.Backlog,
-                _ => JobStates.Preparation
+                TaskStates.Preparation => TaskStates.Preparation,
+                TaskStates.Ready => TaskStates.Ready,
+                TaskStates.Backlog => TaskStates.Backlog,
+                _ => TaskStates.Preparation
             };
 
             var title = !string.IsNullOrWhiteSpace(body?.Title)

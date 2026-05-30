@@ -33,7 +33,7 @@ public class OrchestratorIntakeTests : IDisposable
     public OrchestratorIntakeTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "intake-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
@@ -72,7 +72,7 @@ public class OrchestratorIntakeTests : IDisposable
     {
         var peers = new List<JobInfo>
         {
-            new() { Id = "older-twin", Title = "add login button to header", State = JobStates.Ready }
+            new() { Id = "older-twin", Title = "add login button to header", State = TaskStates.Ready }
         };
         var verdict = IntakeRunner.Evaluate(
             new JobInfo { Id = "newer-twin", Title = "Add login button to header" },
@@ -119,7 +119,7 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void RunForJob_PassingPrompt_WritesIntakePassedPhase()
     {
-        WriteJob(JobStates.Ready, "good-card", "Add login button",
+        WriteJob(TaskStates.Ready, "good-card", "Add login button",
             "Add a login button to the header. Done when the button navigates to /login and a Playwright spec covers the click.");
         var (intake, scanner) = BuildIntake();
 
@@ -141,7 +141,7 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void RunForJob_NeedsClarification_WritesIntakeBlocked()
     {
-        WriteJob(JobStates.Ready, "thin-card", "fix", "fix it");
+        WriteJob(TaskStates.Ready, "thin-card", "fix", "fix it");
         var (intake, scanner) = BuildIntake();
 
         var verdict = intake.RunForJob("thin-card", _watchPath);
@@ -162,9 +162,9 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void RunForJob_DuplicateCandidate_WritesIntakeBlockedAndChatNote()
     {
-        WriteJob(JobStates.Ready, "older-twin", "add login button to header",
+        WriteJob(TaskStates.Ready, "older-twin", "add login button to header",
             "Add a login button to the header. Done when /login renders.");
-        WriteJob(JobStates.Ready, "newer-twin", "Add login button to header",
+        WriteJob(TaskStates.Ready, "newer-twin", "Add login button to header",
             "Add a login button to the header. Done when /login navigates correctly.");
         var (intake, scanner) = BuildIntake();
 
@@ -186,7 +186,7 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void RunForJob_OnlyAcceptsReadyState()
     {
-        WriteJob(JobStates.Progress, "in-flight", "anything",
+        WriteJob(TaskStates.Progress, "in-flight", "anything",
             "A perfectly normal prompt with a fully-formed acceptance line included.");
         var (intake, _) = BuildIntake();
 
@@ -199,8 +199,8 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void PickupGate_Disabled_AllowsPickupRegardlessOfPhase()
     {
-        var humanReady = new JobInfo { State = JobStates.Ready, Phase = LifecyclePhases.HumanReady };
-        var blocked = new JobInfo { State = JobStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
+        var humanReady = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady };
+        var blocked = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
 
         Assert.True(ProjectRunner.IsPickupAllowed(humanReady, intakeEnabled: false));
         Assert.True(ProjectRunner.IsPickupAllowed(blocked, intakeEnabled: false));
@@ -209,10 +209,10 @@ public class OrchestratorIntakeTests : IDisposable
     [Fact]
     public void PickupGate_Enabled_OnlyAllowsIntakePassed()
     {
-        var humanReady = new JobInfo { State = JobStates.Ready, Phase = LifecyclePhases.HumanReady };
-        var running = new JobInfo { State = JobStates.Ready, Phase = LifecyclePhases.IntakeRunning };
-        var blocked = new JobInfo { State = JobStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
-        var passed = new JobInfo { State = JobStates.Ready, Phase = LifecyclePhases.IntakePassed };
+        var humanReady = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady };
+        var running = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeRunning };
+        var blocked = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked };
+        var passed = new JobInfo { State = TaskStates.Ready, Phase = LifecyclePhases.IntakePassed };
 
         Assert.False(ProjectRunner.IsPickupAllowed(humanReady, intakeEnabled: true));
         Assert.False(ProjectRunner.IsPickupAllowed(running, intakeEnabled: true));
@@ -222,7 +222,7 @@ public class OrchestratorIntakeTests : IDisposable
 
     // ---- helpers -------------------------------------------------------------
 
-    private (IntakeRunner intake, JobScannerService scanner) BuildIntake()
+    private (IntakeRunner intake, TaskScannerService scanner) BuildIntake()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -232,8 +232,8 @@ public class OrchestratorIntakeTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var time = new FakeTimeProvider(new DateTime(2026, 5, 6, 12, 0, 0, DateTimeKind.Utc));
         var intake = new IntakeRunner(scanner, mutations, chatLog,

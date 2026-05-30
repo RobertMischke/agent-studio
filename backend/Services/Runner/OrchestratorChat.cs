@@ -30,7 +30,7 @@ public class OrchestratorChat
     private readonly ILogger<OrchestratorChat> _logger;
     private readonly ProjectChatStore? _projectStore;
     private readonly ProjectChatIndex? _projectIndex;
-    private readonly JobScannerService? _scanner;
+    private readonly TaskScannerService? _scanner;
 
     private static readonly JsonSerializerOptions WriteOpts = new()
     {
@@ -48,7 +48,7 @@ public class OrchestratorChat
         ILogger<OrchestratorChat> logger,
         ProjectChatStore? projectStore = null,
         ProjectChatIndex? projectIndex = null,
-        JobScannerService? scanner = null)
+        TaskScannerService? scanner = null)
     {
         _logger = logger;
         _projectStore = projectStore;
@@ -371,7 +371,7 @@ public class OrchestratorChatService
     private readonly OrchestratorRunner _runner;
     private readonly GlobalOrchestratorSessionStore _sessionStore;
     private readonly GlobalOrchestratorBootstrap _bootstrap;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorChatService> _logger;
     private readonly ClientIdentityStore? _identityStore;
@@ -401,7 +401,7 @@ public class OrchestratorChatService
         OrchestratorRunner runner,
         GlobalOrchestratorSessionStore sessionStore,
         GlobalOrchestratorBootstrap bootstrap,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         IConfiguration config,
         ILogger<OrchestratorChatService> logger,
         ClientIdentityStore? identityStore = null)

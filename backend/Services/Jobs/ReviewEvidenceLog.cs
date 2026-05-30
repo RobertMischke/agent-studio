@@ -34,7 +34,7 @@ internal static class ReviewEvidenceLog
     /// </summary>
     public static List<ReviewEvidenceEntry> ReadLatestPerId(string jobFolder, ILogger? logger = null)
     {
-        var path = JobPaths.ReviewEvidenceLog(jobFolder);
+        var path = TaskPaths.ReviewEvidenceLog(jobFolder);
         if (!File.Exists(path)) return [];
 
         var firstSeenOrder = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -88,7 +88,7 @@ internal static class ReviewEvidenceLog
     /// </summary>
     public static ReviewEvidenceEntry? ParseLine(string line)
     {
-        var doc = JsonSerializer.Deserialize<JsonElement>(line, JobJsonFile.ReadOpts);
+        var doc = JsonSerializer.Deserialize<JsonElement>(line, TaskJsonFile.ReadOpts);
         if (doc.ValueKind != JsonValueKind.Object) return null;
 
         var id = ReadString(doc, "id");
@@ -120,9 +120,9 @@ internal static class ReviewEvidenceLog
     /// </summary>
     public static void Append(string jobFolder, ReviewEvidenceEntry entry)
     {
-        var dir = JobPaths.ResultsDir(jobFolder);
+        var dir = TaskPaths.ResultsDir(jobFolder);
         Directory.CreateDirectory(dir);
-        var path = JobPaths.ReviewEvidenceLog(jobFolder);
+        var path = TaskPaths.ReviewEvidenceLog(jobFolder);
         var json = JsonSerializer.Serialize(entry, WriteOpts);
         File.AppendAllText(path, json + "\n", Encoding.UTF8);
     }

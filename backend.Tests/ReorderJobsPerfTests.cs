@@ -12,8 +12,8 @@ namespace OrchestratorApi.Tests;
 /// Regression for the second wave of "Sortieren ist buggy" reports: even
 /// after the frontend reorder went optimistic, clicking on a card right
 /// after a drag stalled noticeably. Root cause sat in
-/// <see cref="JobStateMachine.ReorderJobs"/>: it called
-/// <c>JobScannerService.FindJob</c> once per item, and FindJob does a full
+/// <see cref="TaskStateMachine.ReorderJobs"/>: it called
+/// <c>TaskScannerService.FindJob</c> once per item, and FindJob does a full
 /// disk-walking <c>ScanAllJobs</c> on every call. For an N-card lane on
 /// an M-job board that is O(N x M) folder reads. Subsequent
 /// <c>/api/jobs/{id}</c> requests then queue behind the loop, so the
@@ -31,7 +31,7 @@ public class ReorderJobsPerfTests : IDisposable
     public ReorderJobsPerfTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-reorder-perf-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
@@ -48,12 +48,12 @@ public class ReorderJobsPerfTests : IDisposable
         const int archiveCount = 150;
         const int laneCount = 50;
         for (var i = 0; i < archiveCount; i++)
-            WriteJob(JobStates.Archive, $"archive-{i:D4}");
+            WriteJob(TaskStates.Archive, $"archive-{i:D4}");
         var laneIds = new List<string>(laneCount);
         for (var i = 0; i < laneCount; i++)
         {
             var slug = $"ready-{i:D4}";
-            WriteJob(JobStates.Ready, slug);
+            WriteJob(TaskStates.Ready, slug);
             laneIds.Add(slug);
         }
 
@@ -76,7 +76,7 @@ public class ReorderJobsPerfTests : IDisposable
             sw.ElapsedMilliseconds < 1000,
             $"ReorderJobs over a {laneCount}-card lane on a {archiveCount + laneCount}-job board took " +
             $"{sw.ElapsedMilliseconds} ms; this path must be O(N+M) (one scan + dict lookup per item), " +
-            "not O(N x M). Look for per-item JobScannerService.FindJob calls in JobStateMachine.ReorderJobs.");
+            "not O(N x M). Look for per-item TaskScannerService.FindJob calls in TaskStateMachine.ReorderJobs.");
 
         // Verify persistence: every item received the new order index.
         var afterScan = scanner.ScanAllJobs().ToDictionary(j => j.Id);
@@ -94,7 +94,7 @@ public class ReorderJobsPerfTests : IDisposable
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
     }
 
-    private (JobScannerService, JobStateMachine) BuildMachine()
+    private (TaskScannerService, TaskStateMachine) BuildMachine()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -104,8 +104,8 @@ public class ReorderJobsPerfTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var machine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         return (scanner, machine);
     }
 }

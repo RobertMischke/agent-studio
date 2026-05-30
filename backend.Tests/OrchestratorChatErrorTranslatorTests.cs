@@ -173,7 +173,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         var summary = new OrchestratorApi.Services.SummaryGenerationService(
             NullLogger<OrchestratorApi.Services.SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var runner = new PipeClosedRunner("The pipe is being closed.");
         var bootstrap = new GlobalOrchestratorBootstrap(
             NullLogger<GlobalOrchestratorBootstrap>.Instance,
@@ -240,7 +240,7 @@ public class OrchestratorChatErrorTranslatorTests : IDisposable
 
         var summary = new OrchestratorApi.Services.SummaryGenerationService(
             NullLogger<OrchestratorApi.Services.SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var runner = new ThrowingRunner(new IOException("The pipe is being closed."));
         var bootstrap = new GlobalOrchestratorBootstrap(
             NullLogger<GlobalOrchestratorBootstrap>.Instance,

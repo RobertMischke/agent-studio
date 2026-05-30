@@ -112,7 +112,7 @@ public sealed class TokenAggregationService : ITokenAggregator
 
     /// <summary>
     /// Best-effort lookup of the project slug for a watch path. Reads the
-    /// <c>WatchedPaths</c> config the same way <see cref="JobScannerService"/>
+    /// <c>WatchedPaths</c> config the same way <see cref="TaskScannerService"/>
     /// does; falls back to the folder name if nothing matches.
     /// </summary>
     private string? ResolveProjectName(string watchPath)

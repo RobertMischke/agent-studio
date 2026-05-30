@@ -46,7 +46,7 @@ public static class JobCodeReviewEndpoints
         // newest-first. Each entry carries the parsed frontmatter so the
         // frontend can render verdict + summary without fetching each file.
         group.MapGet("/{jobId}/code-review/list",
-            (string jobId, string? watchPath, JobScannerService scanner) =>
+            (string jobId, string? watchPath, TaskScannerService scanner) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
@@ -96,7 +96,7 @@ public static class JobCodeReviewEndpoints
         // name that came from the list endpoint; we never accept arbitrary
         // paths.
         group.MapGet("/{jobId}/code-review/{fileName}",
-            (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+            (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
@@ -131,7 +131,7 @@ public static class JobCodeReviewEndpoints
             async (string jobId,
                    string? watchPath,
                    CodeReviewStepEndpointRequest? body,
-                   JobScannerService scanner,
+                   TaskScannerService scanner,
                    GitService git,
                    CodeReviewStepService service,
                    IConfiguration configuration,

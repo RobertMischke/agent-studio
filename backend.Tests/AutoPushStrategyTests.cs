@@ -27,7 +27,7 @@ public sealed class AutoPushStrategyTests : IDisposable
         _remoteRoot = Path.Combine(_tempDir, "origin.git");
         Directory.CreateDirectory(_watchPath);
         Directory.CreateDirectory(_repoRoot);
-        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
 
         RunGit(_tempDir, "init", "--bare", "-q", "--initial-branch=main", _remoteRoot);
         RunGit(_repoRoot, "init", "-q", "-b", "main");
@@ -57,10 +57,10 @@ public sealed class AutoPushStrategyTests : IDisposable
     public async Task MoveToCompleted_PushesStampedCommitToMain()
     {
         var sha = CommitLocalChange("reviewed change");
-        WriteJob(JobStates.HumanReview, "reviewed-task", sha);
+        WriteJob(TaskStates.HumanReview, "reviewed-task", sha);
         var deps = BuildDeps();
 
-        var outcome = await deps.Transitions.MoveAsync("reviewed-task", JobStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("reviewed-task", TaskStates.Completed, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
@@ -71,11 +71,11 @@ public sealed class AutoPushStrategyTests : IDisposable
     {
         var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
         var sha = CommitLocalChange("manual push later");
-        WriteJob(JobStates.HumanReview, "manual-task", sha);
+        WriteJob(TaskStates.HumanReview, "manual-task", sha);
         var deps = BuildDeps();
         deps.Settings.SetAutoPushStrategy(ProjectName, AutoPushStrategies.Never);
 
-        var outcome = await deps.Transitions.MoveAsync("manual-task", JobStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("manual-task", TaskStates.Completed, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
@@ -85,7 +85,7 @@ public sealed class AutoPushStrategyTests : IDisposable
     public async Task Backstop_PushesCompletedCommitMissedByTransition()
     {
         var sha = CommitLocalChange("missed trigger");
-        WriteJob(JobStates.Completed, "completed-task", sha);
+        WriteJob(TaskStates.Completed, "completed-task", sha);
         var deps = BuildDeps();
         var backstop = new CompletedPushBackstopHostedService(
             deps.Scanner,
@@ -105,10 +105,10 @@ public sealed class AutoPushStrategyTests : IDisposable
     {
         var localSha = CommitLocalChange("local reviewed change");
         var remoteSha = CommitFromSecondClone("remote operator change");
-        WriteJob(JobStates.HumanReview, "diverged-task", localSha);
+        WriteJob(TaskStates.HumanReview, "diverged-task", localSha);
         var deps = BuildDeps();
 
-        var outcome = await deps.Transitions.MoveAsync("diverged-task", JobStates.Completed, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("diverged-task", TaskStates.Completed, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(remoteSha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
@@ -127,13 +127,13 @@ public sealed class AutoPushStrategyTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         return new Deps(config, scanner, settings, transitions);
     }
 
@@ -218,7 +218,7 @@ public sealed class AutoPushStrategyTests : IDisposable
 
     private sealed record Deps(
         IConfiguration Config,
-        JobScannerService Scanner,
+        TaskScannerService Scanner,
         ProjectSettingsService Settings,
-        JobTransitionService Transitions);
+        TaskTransitionService Transitions);
 }

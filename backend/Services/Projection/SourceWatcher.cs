@@ -7,7 +7,7 @@ using OrchestratorApi.Services;
 namespace OrchestratorApi.Services.Projection;
 
 /// <summary>
-/// Bridges the existing per-watch-path <see cref="JobWatcherService"/> into
+/// Bridges the existing per-watch-path <see cref="TaskWatcherService"/> into
 /// the conversation projector. When a job's <c>logs/cli-output.log</c>
 /// changes on disk, this service debounces (300 ms per job) and asks the
 /// projector to re-render and broadcast a delta over the SignalR hub.
@@ -17,9 +17,9 @@ namespace OrchestratorApi.Services.Projection;
 /// </summary>
 public sealed class SourceWatcher : IHostedService, IDisposable
 {
-    private readonly JobWatcherService _watcher;
+    private readonly TaskWatcherService _watcher;
     private readonly ConversationProjector _projector;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<SourceWatcher> _logger;
     private readonly bool _enabled;
     private readonly TimeSpan _debounce = TimeSpan.FromMilliseconds(300);
@@ -27,9 +27,9 @@ public sealed class SourceWatcher : IHostedService, IDisposable
     private Action<string>? _subscription;
 
     public SourceWatcher(
-        JobWatcherService watcher,
+        TaskWatcherService watcher,
         ConversationProjector projector,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         ILogger<SourceWatcher> logger,
         Microsoft.Extensions.Configuration.IConfiguration config)
     {

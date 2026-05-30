@@ -48,7 +48,7 @@ public sealed class ParallelLanesPickupTests : IDisposable
         _workspaceRoot = Path.Combine(Path.GetTempPath(), "atp-parallel-lanes-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
         Directory.CreateDirectory(_workspaceRoot);
-        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
     public void Dispose()
@@ -65,15 +65,15 @@ public sealed class ParallelLanesPickupTests : IDisposable
     public void GetNextReadyJob_AllParallelLanesPopulated_StillReturnsReadyJob()
     {
         // Saturate every parallel lane.
-        WriteJob(JobStates.Preparation, "prep-A");
-        WriteJob(JobStates.OrchestratorPrep, "orch-prep-A");
-        WriteJob(JobStates.NeedsHumanReview, "needs-human-A");
-        WriteJob(JobStates.AutoReview, "auto-review-A");
-        WriteJob(JobStates.HumanReview, "human-review-A");
-        WriteJob(JobStates.Completed, "completed-A");
+        WriteJob(TaskStates.Preparation, "prep-A");
+        WriteJob(TaskStates.OrchestratorPrep, "orch-prep-A");
+        WriteJob(TaskStates.NeedsHumanReview, "needs-human-A");
+        WriteJob(TaskStates.AutoReview, "auto-review-A");
+        WriteJob(TaskStates.HumanReview, "human-review-A");
+        WriteJob(TaskStates.Completed, "completed-A");
 
         // The one job that should be pickup-eligible.
-        WriteJob(JobStates.Ready, "ready-eligible", order: 5);
+        WriteJob(TaskStates.Ready, "ready-eligible", order: 5);
 
         var runner = BuildRunner();
 
@@ -81,7 +81,7 @@ public sealed class ParallelLanesPickupTests : IDisposable
 
         Assert.NotNull(picked);
         Assert.Equal("ready-eligible", picked!.Id);
-        Assert.Equal(JobStates.Ready, picked.State);
+        Assert.Equal(TaskStates.Ready, picked.State);
     }
 
     /// <summary>
@@ -94,11 +94,11 @@ public sealed class ParallelLanesPickupTests : IDisposable
     [Fact]
     public void GetNextReadyJob_ReadyEmpty_PreparationAndReviewJobsAreIgnored()
     {
-        WriteJob(JobStates.Preparation, "prep-A");
-        WriteJob(JobStates.OrchestratorPrep, "orch-prep-A");
-        WriteJob(JobStates.NeedsHumanReview, "needs-human-A");
-        WriteJob(JobStates.AutoReview, "auto-review-A");
-        WriteJob(JobStates.HumanReview, "human-review-A");
+        WriteJob(TaskStates.Preparation, "prep-A");
+        WriteJob(TaskStates.OrchestratorPrep, "orch-prep-A");
+        WriteJob(TaskStates.NeedsHumanReview, "needs-human-A");
+        WriteJob(TaskStates.AutoReview, "auto-review-A");
+        WriteJob(TaskStates.HumanReview, "human-review-A");
 
         var runner = BuildRunner();
 
@@ -118,16 +118,16 @@ public sealed class ParallelLanesPickupTests : IDisposable
     public void Pipeline_ProgressEmpty_ReviewAndPreparationBusy_PullsReadyForward()
     {
         // Parallel lanes are busy (Review + Preparation).
-        WriteJob(JobStates.Preparation, "prep-1");
-        WriteJob(JobStates.OrchestratorPrep, "orch-prep-1");
-        WriteJob(JobStates.AutoReview, "auto-review-1");
-        WriteJob(JobStates.HumanReview, "human-review-1");
+        WriteJob(TaskStates.Preparation, "prep-1");
+        WriteJob(TaskStates.OrchestratorPrep, "orch-prep-1");
+        WriteJob(TaskStates.AutoReview, "auto-review-1");
+        WriteJob(TaskStates.HumanReview, "human-review-1");
 
         // 3-progress is empty.
-        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, JobStates.Progress)));
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.Progress)));
 
         // 2-ready has the next task.
-        WriteJob(JobStates.Ready, "next-task", order: 10);
+        WriteJob(TaskStates.Ready, "next-task", order: 10);
 
         var runner = BuildRunner();
 
@@ -149,15 +149,15 @@ public sealed class ParallelLanesPickupTests : IDisposable
     public void Pipeline_ProgressJobExists_ReviewAndPreparationBusy_PicksProgressFirst()
     {
         // Parallel lanes busy.
-        WriteJob(JobStates.Preparation, "prep-1");
-        WriteJob(JobStates.AutoReview, "auto-review-1");
-        WriteJob(JobStates.HumanReview, "human-review-1");
+        WriteJob(TaskStates.Preparation, "prep-1");
+        WriteJob(TaskStates.AutoReview, "auto-review-1");
+        WriteJob(TaskStates.HumanReview, "human-review-1");
 
         // 3-progress has a resumable folder.
-        WriteJob(JobStates.Progress, "resume-me");
+        WriteJob(TaskStates.Progress, "resume-me");
 
         // 2-ready has a fresh task; it must NOT be chosen first.
-        WriteJob(JobStates.Ready, "fresh-ready", order: 1);
+        WriteJob(TaskStates.Ready, "fresh-ready", order: 1);
 
         var runner = BuildRunner();
 
@@ -209,17 +209,17 @@ public sealed class ParallelLanesPickupTests : IDisposable
         };
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
-        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,

@@ -20,7 +20,7 @@ namespace OrchestratorApi.Services.Supervisor;
 /// <remarks>
 /// What this service is NOT:
 /// <list type="bullet">
-/// <item>It does not move jobs between lanes; <see cref="JobStateMachine"/> owns that.</item>
+/// <item>It does not move jobs between lanes; <see cref="TaskStateMachine"/> owns that.</item>
 /// <item>It does not edit source code; queued fix-tasks describe what needs fixing.</item>
 /// <item>It does not call <c>SetMode</c> directly; pause and resume go through the supervisor.</item>
 /// <item>It does not invoke <c>update-stable.sh</c> from the dev process unless explicitly opted in per project.</item>
@@ -36,7 +36,7 @@ public sealed class MetaCycleHostedService : BackgroundService
     };
 
     private readonly TaskRunnerService _taskRunner;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly SupervisorInterventionService _interventions;
     private readonly ProjectSettingsService _projectSettings;
     private readonly OrchestratorChatLog _chatLog;
@@ -55,7 +55,7 @@ public sealed class MetaCycleHostedService : BackgroundService
 
     public MetaCycleHostedService(
         TaskRunnerService taskRunner,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         SupervisorInterventionService interventions,
         ProjectSettingsService projectSettings,
         OrchestratorChatLog chatLog,
@@ -272,10 +272,10 @@ public sealed class MetaCycleHostedService : BackgroundService
     }
 
     private static bool IsClosedForCycle(string state)
-        => state == JobStates.AutoReview
-        || state == JobStates.HumanReview
-        || state == JobStates.Completed
-        || state == JobStates.Archive;
+        => state == TaskStates.AutoReview
+        || state == TaskStates.HumanReview
+        || state == TaskStates.Completed
+        || state == TaskStates.Archive;
 
     private static bool HasArtefacts(JobInfo job)
     {
@@ -323,7 +323,7 @@ public sealed class MetaCycleHostedService : BackgroundService
 
         // 3. Stuck-in-progress
         var stuckJobs = allProjectJobs
-            .Where(j => j.State == JobStates.Progress)
+            .Where(j => j.State == TaskStates.Progress)
             .Where(j => _time.GetUtcNow().UtcDateTime - j.LastActivity > config.StuckInProgressThreshold)
             .Select(j => j.Id)
             .ToList();
@@ -759,7 +759,7 @@ public sealed class MetaCycleHostedService : BackgroundService
         // ADR-0024: route the new 1-preparation folder through the
         // typed TaskAccess Create mutation. The watch-path lookup
         // still goes through the scanner (config), but the folder
-        // mint flows through JobMutationService inside the layer.
+        // mint flows through TaskMutationService inside the layer.
         try
         {
             var topic = ExtractTopic(report.Action);
@@ -776,7 +776,7 @@ public sealed class MetaCycleHostedService : BackgroundService
             // same wall-clock second would otherwise refuse to land.
             // Append a short random suffix until the slug is free.
             var slug = baseSlug;
-            if (_taskAccess.SlugExistsInLane(entry.Path, JobStates.Preparation, slug))
+            if (_taskAccess.SlugExistsInLane(entry.Path, TaskStates.Preparation, slug))
             {
                 slug = $"{baseSlug}-" + Guid.NewGuid().ToString("N")[..6];
             }
@@ -790,7 +790,7 @@ public sealed class MetaCycleHostedService : BackgroundService
                     Id = slug,
                     Title = $"Meta-cycle: review {topic} ({report.CycleId})",
                     Agent = "claude",
-                    TargetState = JobStates.Preparation,
+                    TargetState = TaskStates.Preparation,
                     Order = 999,
                     WatchPath = entry.Path,
                     PromptMarkdown = prompt,

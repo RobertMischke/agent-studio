@@ -53,7 +53,7 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
             WatchPath = _watchPath,
             Agent = startAgent,
             CliType = startAgent,
-            TargetState = JobStates.Ready
+            TargetState = TaskStates.Ready
         });
 
         Assert.True(mutations.SetJobCliType("drift", newCliType, _watchPath));
@@ -81,7 +81,7 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         var (machine, scanner, mutations) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        var jobDir = Path.Combine(_watchPath, JobStates.Ready, "legacy");
+        var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "legacy");
         Directory.CreateDirectory(jobDir);
         File.WriteAllText(Path.Combine(jobDir, "job.json"), """
             {
@@ -102,13 +102,13 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         Assert.Equal("codex", info.Agent);
     }
 
-    private (JobStateMachine machine, JobScannerService scanner, JobMutationService mutations) Build()
+    private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var machine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         return (machine, scanner, mutations);
     }
 

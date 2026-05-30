@@ -55,11 +55,11 @@ public sealed class RecurringOutputPatternService
     /// <c>7-archive</c> are excluded by design.</summary>
     public static readonly IReadOnlyList<string> InspectedLanes = new[]
     {
-        JobStates.Progress,
-        JobStates.AutoReview,
-        JobStates.HumanReview,
-        JobStates.NeedsHumanReview,
-        JobStates.Completed,
+        TaskStates.Progress,
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+        TaskStates.NeedsHumanReview,
+        TaskStates.Completed,
     };
 
     /// <summary>Tail bytes of <c>cli-output.log</c> read per job so the prompt
@@ -528,8 +528,8 @@ public sealed class RecurringOutputPatternService
             // 4) Missing evidence: a job that landed in human-review or
             //    completed without a status.md is a documentation gap.
             if (!j.HasStatus
-                && (string.Equals(j.Lane, JobStates.HumanReview, StringComparison.Ordinal)
-                    || string.Equals(j.Lane, JobStates.Completed, StringComparison.Ordinal)))
+                && (string.Equals(j.Lane, TaskStates.HumanReview, StringComparison.Ordinal)
+                    || string.Equals(j.Lane, TaskStates.Completed, StringComparison.Ordinal)))
             {
                 AddTo(groups, new RecurringPatternKind(
                     Kind: "missing-status",

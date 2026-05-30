@@ -27,7 +27,7 @@ public class SkillReadinessServiceTests : IDisposable
     public SkillReadinessServiceTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "rdo-skill-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -177,7 +177,7 @@ public class SkillReadinessServiceTests : IDisposable
 
         Assert.NotNull(preview);
         Assert.Equal(_watchPath, preview!.WatchPath);
-        Assert.Equal(JobStates.Ready, preview.TargetState);
+        Assert.Equal(TaskStates.Ready, preview.TargetState);
         Assert.Equal(TaskTypes.Chore, preview.TaskType);
         Assert.Contains("Add", preview.Title);
         // Prompt should embed the canonical lookup snippet so the agent
@@ -209,11 +209,11 @@ public class SkillReadinessServiceTests : IDisposable
         var result = svc.CreateFixTask(_projectName, ownerClientId: null);
 
         Assert.NotNull(result);
-        Assert.Equal(JobStates.Ready, result!.TargetState);
+        Assert.Equal(TaskStates.Ready, result!.TargetState);
         Assert.False(string.IsNullOrEmpty(result.JobId));
 
         // Folder + prompt landed on disk.
-        var jobDir = Path.Combine(_watchPath, JobStates.Ready, result.JobId);
+        var jobDir = Path.Combine(_watchPath, TaskStates.Ready, result.JobId);
         Assert.True(Directory.Exists(jobDir));
         Assert.True(File.Exists(Path.Combine(jobDir, "job.json")));
         var prompt = File.ReadAllText(Path.Combine(jobDir, "prompt.md"));
@@ -268,8 +268,8 @@ public class SkillReadinessServiceTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         return new SkillReadinessService(scanner, mutations, NullLogger<SkillReadinessService>.Instance);
     }
 }

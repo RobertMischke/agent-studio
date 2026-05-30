@@ -18,7 +18,7 @@ public static class ReviewDecisionsEndpoints
     public static void MapReviewDecisionsEndpoints(this WebApplication app)
     {
         app.MapGet("/api/projects/{projectName}/review-decisions-pending",
-            (string projectName, ITaskAccess taskAccess, JobScannerService scanner) =>
+            (string projectName, ITaskAccess taskAccess, TaskScannerService scanner) =>
         {
             // ADR-0024: enumerate the 4-auto-review lane through the
             // typed TaskAccess layer instead of building a raw lane path.
@@ -31,9 +31,9 @@ public static class ReviewDecisionsEndpoints
             if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             var pending = new List<PendingDecisionDto>();
-            foreach (var info in taskAccess.ListByLane(projectName, JobStates.AutoReview))
+            foreach (var info in taskAccess.ListByLane(projectName, TaskStates.AutoReview))
             {
-                var logPath = JobPaths.CliOutputLog(info.FolderPath);
+                var logPath = TaskPaths.CliOutputLog(info.FolderPath);
                 if (!File.Exists(logPath)) continue;
 
                 string log;

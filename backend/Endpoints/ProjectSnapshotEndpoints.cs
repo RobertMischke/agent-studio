@@ -14,7 +14,7 @@ namespace OrchestratorApi.Endpoints;
 /// pending, live runner pending decisions). The pre-Cycle-5 panel
 /// fan-out was 6+ HTTP requests every 5 s; with the snapshot it is one
 /// request, and the per-project call shape stays cache-friendly inside
-/// the backend (every read goes through the JobIndexCache from Cycle 1).
+/// the backend (every read goes through the TaskIndexCache from Cycle 1).
 ///
 /// <para>The standalone endpoints stay live so existing consumers keep
 /// working - the snapshot is purely additive. project-detail is the only
@@ -43,7 +43,7 @@ public static class ProjectSnapshotEndpoints
     {
         app.MapGet("/api/projects/{projectName}/snapshot", (
             string projectName,
-            JobScannerService scanner,
+            TaskScannerService scanner,
             TaskRunnerService runner,
             ProjectSettingsService settingsSvc,
             OrchestratorLog log,
@@ -53,7 +53,7 @@ public static class ProjectSnapshotEndpoints
             // Resolve the watch path once. Every per-project field below
             // either filters from cached state or reads a single
             // workspace file; none of them re-scan disk for the job
-            // catalogue (JobIndexCache from Cycle 1 covers that).
+            // catalogue (TaskIndexCache from Cycle 1 covers that).
             var entries = scanner.GetWatchPaths();
             var entry = entries.FirstOrDefault(e =>
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
@@ -124,7 +124,7 @@ public static class ProjectSnapshotEndpoints
                     // F35: every lane resolved to its effective strategy.
                     // The kanban renders the lane-header icon and the
                     // drag-disabled hint from this map.
-                    laneSortStrategies = JobStates.All.ToDictionary(
+                    laneSortStrategies = TaskStates.All.ToDictionary(
                         lane => lane,
                         lane => LaneSortStrategies.Resolve(settings, lane),
                         StringComparer.OrdinalIgnoreCase)
@@ -148,7 +148,7 @@ public static class ProjectSnapshotEndpoints
 
         app.MapPost("/api/projects/{projectName}/queue-health/repair", (
             string projectName,
-            JobScannerService scanner,
+            TaskScannerService scanner,
             ITaskAccess taskAccess) =>
         {
             var entry = scanner.GetWatchPaths().FirstOrDefault(e =>
@@ -202,7 +202,7 @@ public static class ProjectSnapshotEndpoints
         var baseSlug = $"orphan-{safeLane}-{slug}-{DateTime.UtcNow:yyyy-MM-dd}";
         var candidate = baseSlug;
         var i = 2;
-        while (taskAccess.SlugExistsInLane(watchPath, JobStates.FailedPickup, candidate))
+        while (taskAccess.SlugExistsInLane(watchPath, TaskStates.FailedPickup, candidate))
         {
             candidate = $"{baseSlug}-{i++}";
         }
@@ -280,7 +280,7 @@ public static class ProjectSnapshotEndpoints
         // precise as the directory mtime but covers add / remove and
         // log-write events because LastActivity is the max mtime across
         // all files in the job folder.
-        var jobs = taskAccess.ListByLaneInWorkspace(watchPath, JobStates.AutoReview);
+        var jobs = taskAccess.ListByLaneInWorkspace(watchPath, TaskStates.AutoReview);
         var laneSignature = jobs.Count == 0
             ? 0L
             : jobs.Aggregate(0L, (acc, j) => Math.Max(acc, j.LastActivity.Ticks));
@@ -299,7 +299,7 @@ public static class ProjectSnapshotEndpoints
         var items = new List<object>();
         foreach (var info in jobs)
         {
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath)) continue;
             string body;
             try { body = File.ReadAllText(logPath); } catch { continue; }

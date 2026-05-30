@@ -39,9 +39,9 @@ public record AuditRunStartOutcome(AuditRunStartStatus Status, string? RunId = n
 /// </summary>
 public sealed class CompletedLaneAuditService
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _states;
-    private readonly JobMutationService _mutations;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
+    private readonly TaskMutationService _mutations;
     private readonly TimelineLog _timeline;
     private readonly AcceptanceEvidenceDetector _detector;
     private readonly AuditRunStore _runStore;
@@ -49,9 +49,9 @@ public sealed class CompletedLaneAuditService
     private readonly ILogger<CompletedLaneAuditService> _logger;
 
     public CompletedLaneAuditService(
-        JobScannerService scanner,
-        JobStateMachine states,
-        JobMutationService mutations,
+        TaskScannerService scanner,
+        TaskStateMachine states,
+        TaskMutationService mutations,
         TimelineLog timeline,
         AcceptanceEvidenceDetector detector,
         AuditRunStore runStore,
@@ -72,20 +72,20 @@ public sealed class CompletedLaneAuditService
     {
         var job = _scanner.FindJob(jobId, watchPath);
         if (job == null) return new ReEvaluateOutcome(ReEvaluateStatus.JobNotFound);
-        if (job.State != JobStates.Completed && job.State != JobStates.Archive)
+        if (job.State != TaskStates.Completed && job.State != TaskStates.Archive)
         {
             return new ReEvaluateOutcome(ReEvaluateStatus.WrongLane,
-                Message: $"Job is in {job.State}; re-evaluate only applies to {JobStates.Completed} / {JobStates.Archive}.");
+                Message: $"Job is in {job.State}; re-evaluate only applies to {TaskStates.Completed} / {TaskStates.Archive}.");
         }
 
         var (verdict, diagnostics) = _detector.Evaluate(job);
         var newState = job.State;
         if (verdict == AuditVerdicts.NotReallyDone)
         {
-            var outcome = _states.MoveJob(jobId, JobStates.NeedsHumanReview, watchPath);
+            var outcome = _states.MoveJob(jobId, TaskStates.NeedsHumanReview, watchPath);
             if (outcome.Status == MoveJobStatus.Success)
             {
-                newState = JobStates.NeedsHumanReview;
+                newState = TaskStates.NeedsHumanReview;
                 var refreshed = _scanner.FindJob(jobId, watchPath);
                 var folder = refreshed?.FolderPath ?? job.FolderPath;
                 AppendQualityLoopReopened(folder, job, diagnostics, actorEmail);
@@ -143,7 +143,7 @@ public sealed class CompletedLaneAuditService
         // produce a confusing "processed > total" report.
         var candidates = _scanner.ScanAllJobs()
             .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
-            .Where(j => j.State == JobStates.Completed || j.State == JobStates.Archive)
+            .Where(j => j.State == TaskStates.Completed || j.State == TaskStates.Archive)
             .OrderBy(j => j.LastActivity)
             .Select(j => j.Id)
             .ToList();
@@ -162,7 +162,7 @@ public sealed class CompletedLaneAuditService
             foreach (var jobId in candidates)
             {
                 var current = _scanner.FindJob(jobId, watchPath);
-                if (current == null || (current.State != JobStates.Completed && current.State != JobStates.Archive))
+                if (current == null || (current.State != TaskStates.Completed && current.State != TaskStates.Archive))
                 {
                     // Moved out of scope between snapshot and processing;
                     // count it but skip the evaluation.
@@ -193,7 +193,7 @@ public sealed class CompletedLaneAuditService
 
                 if (verdict == AuditVerdicts.NotReallyDone)
                 {
-                    var outcome = _states.MoveJob(jobId, JobStates.NeedsHumanReview, watchPath);
+                    var outcome = _states.MoveJob(jobId, TaskStates.NeedsHumanReview, watchPath);
                     if (outcome.Status == MoveJobStatus.Success)
                     {
                         var refreshed = _scanner.FindJob(jobId, watchPath);
@@ -312,7 +312,7 @@ public sealed class CompletedLaneAuditService
         var details = new Dictionary<string, string>
         {
             ["fromState"] = job.State,
-            ["toState"] = JobStates.NeedsHumanReview,
+            ["toState"] = TaskStates.NeedsHumanReview,
             ["diagnosticCount"] = diagnostics.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
         var hardFails = diagnostics.Where(d => d.Level == AuditSignalLevels.Fail).ToList();

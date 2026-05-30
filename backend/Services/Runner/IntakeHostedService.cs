@@ -51,7 +51,7 @@ public sealed class IntakeHostedService : BackgroundService
             {
                 using var scope = _services.CreateScope();
                 var settings = scope.ServiceProvider.GetRequiredService<ProjectSettingsService>();
-                var scanner = scope.ServiceProvider.GetRequiredService<JobScannerService>();
+                var scanner = scope.ServiceProvider.GetRequiredService<TaskScannerService>();
                 var intake = scope.ServiceProvider.GetRequiredService<IntakeRunner>();
 
                 var allSettings = settings.GetAll();
@@ -83,7 +83,7 @@ public sealed class IntakeHostedService : BackgroundService
         }
     }
 
-    private void ProcessOneProject(JobScannerService scanner, IntakeRunner intake, WatchPathEntry entry)
+    private void ProcessOneProject(TaskScannerService scanner, IntakeRunner intake, WatchPathEntry entry)
     {
         // Pick the oldest 2-ready job that has not yet been intaked. A null
         // phase counts as human-ready under the compatibility contract; an
@@ -92,7 +92,7 @@ public sealed class IntakeHostedService : BackgroundService
         // the verdict already exists.
         var candidate = scanner.ScanAllJobs()
             .Where(j => string.Equals(j.WatchPath, entry.Path, StringComparison.OrdinalIgnoreCase)
-                        && j.State == JobStates.Ready
+                        && j.State == TaskStates.Ready
                         && IsAwaitingIntake(j.Phase))
             .OrderBy(j => j.Order)
             .ThenBy(j => j.CreatedAt)

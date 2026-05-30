@@ -8,15 +8,15 @@ namespace OrchestratorApi.Services.Jobs;
 /// raw folder move. Manual API moves and automatic runner completion both use
 /// this service so lifecycle policy stays in code, not in agent prompts.
 /// </summary>
-public sealed class JobTransitionService
+public sealed class TaskTransitionService
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _states;
-    private readonly JobMutationService _mutations;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
+    private readonly TaskMutationService _mutations;
     private readonly GitService _git;
     private readonly ProjectSettingsService _settings;
-    private readonly ILogger<JobTransitionService> _logger;
-    private readonly JobSessionLog? _sessions;
+    private readonly ILogger<TaskTransitionService> _logger;
+    private readonly TaskSessionLog? _sessions;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -30,14 +30,14 @@ public sealed class JobTransitionService
     /// </summary>
     public event Action<string, string, string, string>? OnJobMoved;
 
-    public JobTransitionService(
-        JobScannerService scanner,
-        JobStateMachine states,
-        JobMutationService mutations,
+    public TaskTransitionService(
+        TaskScannerService scanner,
+        TaskStateMachine states,
+        TaskMutationService mutations,
         GitService git,
         ProjectSettingsService settings,
-        ILogger<JobTransitionService> logger,
-        JobSessionLog? sessions = null)
+        ILogger<TaskTransitionService> logger,
+        TaskSessionLog? sessions = null)
     {
         _scanner = scanner;
         _states = states;
@@ -70,8 +70,8 @@ public sealed class JobTransitionService
         var autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy);
 
         var shouldAutoCommit =
-            info.State == JobStates.Progress &&
-            targetState == JobStates.AutoReview &&
+            info.State == TaskStates.Progress &&
+            targetState == TaskStates.AutoReview &&
             settings.AutoCommit;
 
         JobCommitInfo? commitToStamp = null;
@@ -105,7 +105,7 @@ public sealed class JobTransitionService
         // review lane renders it. No LLM, no tokens; same git + windows in,
         // same result out, so re-running is a no-op.
         if (outcome.Status == MoveJobStatus.Success
-            && info.State == JobStates.Progress && targetState == JobStates.AutoReview)
+            && info.State == TaskStates.Progress && targetState == TaskStates.AutoReview)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
             if (attributed != null) RunCommitAttribution(attributed, watchPath);
@@ -124,7 +124,7 @@ public sealed class JobTransitionService
 
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
         {
-            if (targetState == JobStates.Completed && autoPushStrategy != AutoPushStrategies.Never)
+            if (targetState == TaskStates.Completed && autoPushStrategy != AutoPushStrategies.Never)
             {
                 var moved = _scanner.FindJob(jobId, watchPath);
                 if (moved != null)
@@ -174,11 +174,11 @@ public sealed class JobTransitionService
                 continue;
             }
 
-            if (!JobStates.All.Contains(item.TargetState))
+            if (!TaskStates.All.Contains(item.TargetState))
             {
-                var msg = JobStates.NumberedLegacyMap.TryGetValue(item.TargetState, out var renamed)
+                var msg = TaskStates.NumberedLegacyMap.TryGetValue(item.TargetState, out var renamed)
                     ? $"Lane '{item.TargetState}' was renamed in ADR-0025. Use '{renamed}' instead."
-                    : $"Invalid state. Allowed: {string.Join(", ", JobStates.All)}";
+                    : $"Invalid state. Allowed: {string.Join(", ", TaskStates.All)}";
                 results.Add(new BatchMoveItemResult
                 {
                     JobId = item.JobId,
@@ -224,7 +224,7 @@ public sealed class JobTransitionService
     /// Deterministic commit-attribution post-step. Gathers the commits in the
     /// task's run SHA-windows (plus the platform auto-commit), runs the pure
     /// <see cref="CommitAttributionService"/> rule engine, and persists the
-    /// attributed chain + exclusions via <see cref="JobMutationService"/>
+    /// attributed chain + exclusions via <see cref="TaskMutationService"/>
     /// (never a direct file write). Best-effort: any failure is logged and
     /// swallowed so attribution never blocks the lane transition.
     /// </summary>
@@ -235,7 +235,7 @@ public sealed class JobTransitionService
             if (_sessions == null) return;
 
             var events = _sessions.ReadSessionEvents(moved.Id, watchPath);
-            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(moved.FolderPath));
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(moved.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
 
             // Pre-attribution candidate set: at this point moved.ExcludedCommits
@@ -301,7 +301,7 @@ public sealed class JobTransitionService
             // changes did not originate from this task's agent. Bundling them into
             // an auto-commit would stamp an unrelated SHA onto the job (see the
             // 2026-05-26 markdown task that ended up owning an AGENTS.md commit).
-            // The guard is gated on JobSessionLog so unit-test fixtures that
+            // The guard is gated on TaskSessionLog so unit-test fixtures that
             // construct the service without it keep the legacy behavior.
             if (!IsWorkingTreeAttributableToTask(jobId, watchPath))
             {
@@ -339,7 +339,7 @@ public sealed class JobTransitionService
     public async Task<int> PushCompletedJobCommitsAsync(JobInfo job, string strategy, CancellationToken ct = default)
     {
         if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
-        if (job.State != JobStates.Completed) return 0;
+        if (job.State != TaskStates.Completed) return 0;
 
         var commits = job.Commits.Count > 0
             ? job.Commits
@@ -362,7 +362,7 @@ public sealed class JobTransitionService
     /// than authored by this task's agent. Returns true (allow the auto-commit
     /// to proceed) in any of these cases:
     /// <list type="bullet">
-    /// <item>No <see cref="JobSessionLog"/> is wired (legacy fixtures).</item>
+    /// <item>No <see cref="TaskSessionLog"/> is wired (legacy fixtures).</item>
     /// <item>The task has no recorded session events yet (first-ever pickup,
     ///   no run history to compare against).</item>
     /// <item>The working tree is clean - <see cref="GitService.AutoCommitAsync"/>

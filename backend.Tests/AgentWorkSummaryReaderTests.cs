@@ -11,7 +11,7 @@ namespace OrchestratorApi.Tests;
 /// block (the row that replaced the inert SESSION row). The reader folds
 /// <c>logs/session-events.jsonl</c> + <c>logs/tool-calls.jsonl</c> into a
 /// small typed view; the underlying log shape comes from two writers
-/// (<see cref="JobSessionLog"/> and <c>ProjectRunner.AppendToolCallLog</c>)
+/// (<see cref="TaskSessionLog"/> and <c>ProjectRunner.AppendToolCallLog</c>)
 /// that use *different* JSON key casings. A regression in either file's
 /// shape silently empties the Overview block without these tests.
 /// </summary>
@@ -19,7 +19,7 @@ public class AgentWorkSummaryReaderTests
 {
     private static JobInfo MakeJob(string folder)
     {
-        Directory.CreateDirectory(Path.Combine(folder, JobPaths.LogsDirName));
+        Directory.CreateDirectory(Path.Combine(folder, TaskPaths.LogsDirName));
         return new JobInfo
         {
             Id = "test-job",
@@ -54,16 +54,16 @@ public class AgentWorkSummaryReaderTests
         try
         {
             var info = MakeJob(folder);
-            var logsDir = JobPaths.LogsDir(folder);
+            var logsDir = TaskPaths.LogsDir(folder);
 
-            // Session events (PascalCase, matches the JobSessionLog writer).
+            // Session events (PascalCase, matches the TaskSessionLog writer).
             var sessionLines = new[]
             {
                 "{\"Ts\":\"2026-05-28T19:00:00Z\",\"Kind\":\"start\",\"Cli\":\"claude\",\"InputSessionId\":null,\"CapturedSessionId\":\"sess-1\",\"Resumed\":false,\"Reason\":null,\"HeadShaBefore\":null,\"HeadShaAfter\":null}",
                 "{\"Ts\":\"2026-05-28T19:30:00Z\",\"Kind\":\"continue\",\"Cli\":\"claude\",\"InputSessionId\":\"sess-1\",\"CapturedSessionId\":\"sess-1\",\"Resumed\":true,\"Reason\":null,\"HeadShaBefore\":null,\"HeadShaAfter\":null}",
                 "{\"Ts\":\"2026-05-28T20:00:00Z\",\"Kind\":\"recovery\",\"Cli\":\"claude\",\"InputSessionId\":null,\"CapturedSessionId\":null,\"Resumed\":false,\"Reason\":\"session lost\",\"HeadShaBefore\":null,\"HeadShaAfter\":null}",
             };
-            File.WriteAllLines(Path.Combine(logsDir, JobPaths.SessionEventsLogFileName), sessionLines, Encoding.UTF8);
+            File.WriteAllLines(Path.Combine(logsDir, TaskPaths.SessionEventsLogFileName), sessionLines, Encoding.UTF8);
 
             // Tool calls (camelCase, matches ProjectRunner.AppendToolCallLog).
             // Two Read starts + their completed pairs, one Edit start + completed,
@@ -106,13 +106,13 @@ public class AgentWorkSummaryReaderTests
         try
         {
             var info = MakeJob(folder);
-            var logsDir = JobPaths.LogsDir(folder);
+            var logsDir = TaskPaths.LogsDir(folder);
             // BOM-prefixed first line, then a torn line, then a valid line.
             var content =
                 "﻿{\"Ts\":\"2026-05-28T19:00:00Z\",\"Kind\":\"start\",\"Cli\":\"claude\"}\n" +
                 "this is not json\n" +
                 "{\"Ts\":\"2026-05-28T19:10:00Z\",\"Kind\":\"continue\",\"Cli\":\"claude\"}\n";
-            File.WriteAllText(Path.Combine(logsDir, JobPaths.SessionEventsLogFileName), content, Encoding.UTF8);
+            File.WriteAllText(Path.Combine(logsDir, TaskPaths.SessionEventsLogFileName), content, Encoding.UTF8);
 
             // Tool log with a torn line in the middle.
             var toolContent =

@@ -62,16 +62,16 @@ public sealed class IntakeRunner
 {
     public const string IntakeParticipantPrefix = "intake:";
 
-    private readonly JobScannerService _scanner;
-    private readonly JobMutationService _mutations;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskMutationService _mutations;
     private readonly OrchestratorChatLog _chatLog;
     private readonly AgentMessageBusBridge? _bus;
     private readonly ILogger<IntakeRunner> _logger;
     private readonly TimeProvider _time;
 
     public IntakeRunner(
-        JobScannerService scanner,
-        JobMutationService mutations,
+        TaskScannerService scanner,
+        TaskMutationService mutations,
         OrchestratorChatLog chatLog,
         ILogger<IntakeRunner> logger,
         AgentMessageBusBridge? bus = null,
@@ -126,9 +126,9 @@ public sealed class IntakeRunner
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null)
             throw new InvalidOperationException($"Job '{jobId}' not found");
-        if (!string.Equals(info.State, JobStates.Ready, StringComparison.Ordinal))
+        if (!string.Equals(info.State, TaskStates.Ready, StringComparison.Ordinal))
             throw new InvalidOperationException(
-                $"Intake only runs on jobs in '{JobStates.Ready}'; '{jobId}' is in '{info.State}'");
+                $"Intake only runs on jobs in '{TaskStates.Ready}'; '{jobId}' is in '{info.State}'");
 
         var promptPath = Path.Combine(info.FolderPath, "prompt.md");
         var prompt = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
@@ -136,9 +136,9 @@ public sealed class IntakeRunner
         var peers = _scanner.ScanAllJobs()
             .Where(j => string.Equals(j.WatchPath, info.WatchPath, StringComparison.OrdinalIgnoreCase)
                         && !string.Equals(j.Id, info.Id, StringComparison.Ordinal)
-                        && (j.State == JobStates.Ready
-                            || j.State == JobStates.HumanReview
-                            || j.State == JobStates.Completed))
+                        && (j.State == TaskStates.Ready
+                            || j.State == TaskStates.HumanReview
+                            || j.State == TaskStates.Completed))
             .ToList();
 
         // Stamp intake-running first so observers see the in-flight state. A

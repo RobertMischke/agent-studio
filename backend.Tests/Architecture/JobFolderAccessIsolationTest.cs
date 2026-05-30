@@ -13,8 +13,8 @@ namespace OrchestratorApi.Tests.Architecture;
 /// <para>
 /// Motivation: in 2026-05 a class of bugs (zombie folders, 409 on move,
 /// state-field-out-of-lane) was traced back to direct filesystem
-/// manipulation of job folders that bypassed <c>JobMutationService</c>
-/// and <c>JobStateMachine</c>. Once <c>ITaskAccess</c> implements
+/// manipulation of job folders that bypassed <c>TaskMutationService</c>
+/// and <c>TaskStateMachine</c>. Once <c>ITaskAccess</c> implements
 /// phases 2-4, the whitelist below shrinks to <c>Services/TaskAccess/</c>
 /// plus <c>Services/Jobs/</c>; everything else is forced through the
 /// typed API. Today the whitelist is the migration ledger.
@@ -30,7 +30,7 @@ namespace OrchestratorApi.Tests.Architecture;
 /// Two layers of rule:
 /// <list type="number">
 /// <item><description>
-/// <b>Lane-path construction.</b> <c>Path.Combine(.., JobStates.X, ..)</c>
+/// <b>Lane-path construction.</b> <c>Path.Combine(.., TaskStates.X, ..)</c>
 /// or a hardcoded lane folder literal (e.g. <c>"3-progress"</c>) inside
 /// a <c>Path.Combine</c> call means the caller is building a path into
 /// the lane-folder structure. That is a job-folder-tree operation by
@@ -41,7 +41,7 @@ namespace OrchestratorApi.Tests.Architecture;
 /// <b>Structural directory mutations.</b> <c>Directory.Move</c> and
 /// <c>Directory.Delete</c> are the calls that produce zombie folders
 /// and 409 conflicts when used against the job-folder tree from
-/// anywhere except <c>JobStateMachine</c>. Forbid them outright outside
+/// anywhere except <c>TaskStateMachine</c>. Forbid them outright outside
 /// the storage services; non-job-folder uses (writing to
 /// <c>workspace/logs/</c>, dropping temp scratch) do not need
 /// <c>Directory.Move</c> / <c>Directory.Delete</c> in practice.
@@ -55,7 +55,7 @@ public class JobFolderAccessIsolationTest
     /// Files that may construct lane folder paths or perform structural
     /// directory mutations against the job-folder tree. Anything not on
     /// this list goes through <c>ITaskAccess</c> (today: through
-    /// <c>JobMutationService</c> / <c>JobStateMachine</c>; after phase 4
+    /// <c>TaskMutationService</c> / <c>TaskStateMachine</c>; after phase 4
     /// of <c>task-access-api-layer-extraction</c>, through the typed
     /// API in <c>Services/TaskAccess/</c>).
     ///
@@ -82,20 +82,20 @@ public class JobFolderAccessIsolationTest
             ["backend/Services/TaskAccess/TaskAccessService.cs"] =
                 "TaskAccess implementation: the one place that constructs lane folder paths.",
 
-            // Tier 2: current storage authority. JobStateMachine is the
-            // single owner of folder moves and deletes; JobMutationService
-            // owns folder creates and field edits; JobScannerService owns
-            // reads; JobTransitionService combines a move with its side
+            // Tier 2: current storage authority. TaskStateMachine is the
+            // single owner of folder moves and deletes; TaskMutationService
+            // owns folder creates and field edits; TaskScannerService owns
+            // reads; TaskTransitionService combines a move with its side
             // effects (auto-commit, runner-active-state clear).
-            ["backend/Services/Jobs/JobStateMachine.cs"] =
+            ["backend/Services/Jobs/TaskStateMachine.cs"] =
                 "Single-state-machine authority for folder moves and deletes.",
-            ["backend/Services/Jobs/JobMutationService.cs"] =
+            ["backend/Services/Jobs/TaskMutationService.cs"] =
                 "Owns folder creates and per-job field edits.",
-            ["backend/Services/Jobs/JobScannerService.cs"] =
+            ["backend/Services/Jobs/TaskScannerService.cs"] =
                 "Owns reads against the job-folder tree.",
-            ["backend/Services/Jobs/JobTransitionService.cs"] =
+            ["backend/Services/Jobs/TaskTransitionService.cs"] =
                 "Combines folder moves with auto-commit and runner-active-state side effects.",
-            ["backend/Services/JobWatcherService.cs"] =
+            ["backend/Services/TaskWatcherService.cs"] =
                 "FileSystemWatcher feeding the scanner; needs raw lane paths.",
 
             // Tier 2 (boot): the crash-recovery sweep walks 3-progress
@@ -126,7 +126,7 @@ public class JobFolderAccessIsolationTest
     /// </summary>
     internal static readonly Regex LanePathConstruction = new(
         @"Path\.Combine\([^;]*?(?:" +
-        @"JobStates\.(?:Backlog|Preparation|OrchestratorPrep|NeedsHumanReview|Ready|Progress|FailedPickup|AutoReview|HumanReview|Completed|Archive)\b" +
+        @"TaskStates\.(?:Backlog|Preparation|OrchestratorPrep|NeedsHumanReview|Ready|Progress|FailedPickup|AutoReview|HumanReview|Completed|Archive)\b" +
         @"|""(?:0-backlog|1-preparation|1a-orchestrator-prep|1b-needs-human-review|2-ready|3-progress|3a-failed-pickup|4-auto-review|5-human-review|6-completed|7-archive)""" +
         @")",
         RegexOptions.Compiled);
@@ -135,7 +135,7 @@ public class JobFolderAccessIsolationTest
     /// Detects structural directory mutations: <c>Directory.Move</c> and
     /// <c>Directory.Delete</c>. These are the two calls that produce
     /// zombie folders and 409s when used against the job-folder tree
-    /// from outside <c>JobStateMachine</c>; everywhere else can manage
+    /// from outside <c>TaskStateMachine</c>; everywhere else can manage
     /// with <c>Directory.CreateDirectory</c>, file APIs, or
     /// <c>ITaskAccess</c>.
     /// </summary>
@@ -153,7 +153,7 @@ public class JobFolderAccessIsolationTest
             violations.Count == 0,
             BuildFailureMessage(
                 "lane-folder path construction",
-                "Use ITaskAccess (or, until phase 4 ships, JobMutationService / JobStateMachine) to address jobs by id and lane name without building raw filesystem paths.",
+                "Use ITaskAccess (or, until phase 4 ships, TaskMutationService / TaskStateMachine) to address jobs by id and lane name without building raw filesystem paths.",
                 violations));
     }
 
@@ -167,7 +167,7 @@ public class JobFolderAccessIsolationTest
             violations.Count == 0,
             BuildFailureMessage(
                 "Directory.Move / Directory.Delete",
-                "Folder structural changes against the job-folder tree must flow through JobStateMachine (and, after phase 4, ITaskAccess.TransitionLaneAsync). Non-job-folder uses of Directory.Move/Delete are rare; whitelist the file with a one-line reason if there is a legitimate case.",
+                "Folder structural changes against the job-folder tree must flow through TaskStateMachine (and, after phase 4, ITaskAccess.TransitionLaneAsync). Non-job-folder uses of Directory.Move/Delete are rare; whitelist the file with a one-line reason if there is a legitimate case.",
                 violations));
     }
 
@@ -194,13 +194,13 @@ public class JobFolderAccessIsolationTest
     [Fact]
     public void LanePathConstructionRegex_MatchesKnownViolations_AndIgnoresStateComparisons()
     {
-        Assert.Matches(LanePathConstruction, "var x = Path.Combine(watchPath, JobStates.Progress);");
-        Assert.Matches(LanePathConstruction, "var y = Path.Combine(root, JobStates.HumanReview, slug);");
+        Assert.Matches(LanePathConstruction, "var x = Path.Combine(watchPath, TaskStates.Progress);");
+        Assert.Matches(LanePathConstruction, "var y = Path.Combine(root, TaskStates.HumanReview, slug);");
         Assert.Matches(LanePathConstruction, "var z = Path.Combine(workspace, \"projects\", project, \"3-progress\", slug);");
 
-        Assert.DoesNotMatch(LanePathConstruction, "if (info.State == JobStates.Progress) {}");
-        Assert.DoesNotMatch(LanePathConstruction, "return JobStates.Ready;");
-        Assert.DoesNotMatch(LanePathConstruction, "var lane = JobStates.Progress;");
+        Assert.DoesNotMatch(LanePathConstruction, "if (info.State == TaskStates.Progress) {}");
+        Assert.DoesNotMatch(LanePathConstruction, "return TaskStates.Ready;");
+        Assert.DoesNotMatch(LanePathConstruction, "var lane = TaskStates.Progress;");
     }
 
     [Fact]

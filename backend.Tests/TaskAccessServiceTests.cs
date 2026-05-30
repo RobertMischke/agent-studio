@@ -48,20 +48,20 @@ public class TaskAccessServiceTests : IDisposable
             Title = "Alpha task",
             Agent = "claude",
             CliType = "claude",
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             WatchPath = _watchPath,
         });
         Assert.Equal("alpha", jobId);
 
         var found = taskAccess.FindJob("alpha", _watchPath);
         Assert.NotNull(found);
-        Assert.Equal(JobStates.Ready, found!.State);
+        Assert.Equal(TaskStates.Ready, found!.State);
 
-        var inLane = taskAccess.ListByLane(Project, JobStates.Ready);
+        var inLane = taskAccess.ListByLane(Project, TaskStates.Ready);
         Assert.Single(inLane);
         Assert.Equal("alpha", inLane[0].Id);
 
-        var inWorkspace = taskAccess.ListByLaneInWorkspace(_watchPath, JobStates.Ready);
+        var inWorkspace = taskAccess.ListByLaneInWorkspace(_watchPath, TaskStates.Ready);
         Assert.Single(inWorkspace);
 
         var inProject = taskAccess.ListByProject(Project);
@@ -85,18 +85,18 @@ public class TaskAccessServiceTests : IDisposable
                 Id = "beta",
                 Title = "Beta task",
                 Agent = "claude",
-                TargetState = JobStates.Preparation,
+                TargetState = TaskStates.Preparation,
                 WatchPath = _watchPath,
             },
         });
 
         Assert.Equal(TaskMutationStatus.Applied, result.Status);
         Assert.Equal("beta", result.Job!.Id);
-        Assert.Equal(JobStates.Preparation, result.Job.State);
+        Assert.Equal(TaskStates.Preparation, result.Job.State);
         Assert.Single(received);
         Assert.Equal(TaskChangeKind.Created, received[0].Kind);
         Assert.Equal("beta", received[0].JobId);
-        Assert.Equal(JobStates.Preparation, received[0].ToLane);
+        Assert.Equal(TaskStates.Preparation, received[0].ToLane);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class TaskAccessServiceTests : IDisposable
             Title = "Gamma task",
             Agent = "claude",
             CliType = "claude",
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             WatchPath = _watchPath,
         });
 
@@ -144,7 +144,7 @@ public class TaskAccessServiceTests : IDisposable
             Title = "Delta",
             Agent = "claude",
             CliType = "claude",
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             WatchPath = _watchPath,
         });
 
@@ -185,7 +185,7 @@ public class TaskAccessServiceTests : IDisposable
             Title = "Epsilon",
             Agent = "claude",
             CliType = "claude",
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             WatchPath = _watchPath,
         });
 
@@ -196,11 +196,11 @@ public class TaskAccessServiceTests : IDisposable
         {
             JobId = "epsilon",
             WatchPath = _watchPath,
-            TargetLane = JobStates.Progress,
+            TargetLane = TaskStates.Progress,
         });
         Assert.Equal(TaskMutationStatus.Applied, result.Status);
-        Assert.Equal(JobStates.Progress, taskAccess.FindJob("epsilon", _watchPath)!.State);
-        Assert.Contains(received, c => c.Kind == TaskChangeKind.Transitioned && c.ToLane == JobStates.Progress);
+        Assert.Equal(TaskStates.Progress, taskAccess.FindJob("epsilon", _watchPath)!.State);
+        Assert.Contains(received, c => c.Kind == TaskChangeKind.Transitioned && c.ToLane == TaskStates.Progress);
     }
 
     [Fact]
@@ -213,12 +213,12 @@ public class TaskAccessServiceTests : IDisposable
             Id = "zeta",
             Title = "Zeta",
             Agent = "claude",
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             WatchPath = _watchPath,
         });
 
-        Assert.True(taskAccess.SlugExistsInLane(_watchPath, JobStates.Ready, "zeta"));
-        Assert.False(taskAccess.SlugExistsInLane(_watchPath, JobStates.Progress, "zeta"));
+        Assert.True(taskAccess.SlugExistsInLane(_watchPath, TaskStates.Ready, "zeta"));
+        Assert.False(taskAccess.SlugExistsInLane(_watchPath, TaskStates.Progress, "zeta"));
         Assert.False(taskAccess.SlugExistsInLane(_watchPath, "not-a-lane", "zeta"));
     }
 
@@ -231,10 +231,10 @@ public class TaskAccessServiceTests : IDisposable
         // Synthesize a folder with no job.json under 3-progress. This
         // simulates the orphan case the migration-target consumers rely
         // on the layer to enumerate.
-        var orphanPath = Path.Combine(_watchPath, JobStates.Progress, "orphan-folder");
+        var orphanPath = Path.Combine(_watchPath, TaskStates.Progress, "orphan-folder");
         Directory.CreateDirectory(orphanPath);
 
-        var names = taskAccess.ListLaneFolderNames(_watchPath, JobStates.Progress);
+        var names = taskAccess.ListLaneFolderNames(_watchPath, TaskStates.Progress);
         Assert.Contains("orphan-folder", names);
     }
 
@@ -244,20 +244,20 @@ public class TaskAccessServiceTests : IDisposable
         var (taskAccess, machine, _, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        var orphanPath = Path.Combine(_watchPath, JobStates.Progress, "stale-folder");
+        var orphanPath = Path.Combine(_watchPath, TaskStates.Progress, "stale-folder");
         Directory.CreateDirectory(orphanPath);
         File.WriteAllText(Path.Combine(orphanPath, "logs.txt"), "some log");
 
         var result = taskAccess.MoveOrphanToFailedPickup(
             _watchPath,
-            JobStates.Progress,
+            TaskStates.Progress,
             "stale-folder",
             "stale-folder-orphan-2026-05-15",
             "# Test reason\n");
 
         Assert.Equal(TaskMutationStatus.Applied, result.Status);
         Assert.False(Directory.Exists(orphanPath));
-        var destination = Path.Combine(_watchPath, JobStates.FailedPickup, "stale-folder-orphan-2026-05-15");
+        var destination = Path.Combine(_watchPath, TaskStates.FailedPickup, "stale-folder-orphan-2026-05-15");
         Assert.True(Directory.Exists(destination));
         Assert.Contains("Test reason", File.ReadAllText(Path.Combine(destination, "failed-pickup-reason.md")));
     }
@@ -268,10 +268,10 @@ public class TaskAccessServiceTests : IDisposable
         var (taskAccess, machine, _, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "skeleton");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "skeleton");
         Directory.CreateDirectory(folder);
 
-        var result = taskAccess.DeleteLaneFolder(_watchPath, JobStates.Progress, "skeleton");
+        var result = taskAccess.DeleteLaneFolder(_watchPath, TaskStates.Progress, "skeleton");
         Assert.Equal(TaskMutationStatus.Applied, result.Status);
         Assert.False(Directory.Exists(folder));
     }
@@ -288,7 +288,7 @@ public class TaskAccessServiceTests : IDisposable
                 Id = $"job-{i}",
                 Title = $"Job {i}",
                 Agent = "claude",
-                TargetState = JobStates.Ready,
+                TargetState = TaskStates.Ready,
                 WatchPath = _watchPath,
             });
         }
@@ -301,7 +301,7 @@ public class TaskAccessServiceTests : IDisposable
     {
         // Phase 2 performance gate from the task prompt: index can serve
         // FindJob in well under a second across a 200-job board. Reads
-        // already bottom out in JobIndexCache, so this is mostly a
+        // already bottom out in TaskIndexCache, so this is mostly a
         // regression guard against a regression that would re-route
         // through a disk walk.
         var (taskAccess, machine, mutations, _) = Build();
@@ -313,7 +313,7 @@ public class TaskAccessServiceTests : IDisposable
                 Id = $"job-{i:000}",
                 Title = $"Job {i}",
                 Agent = "claude",
-                TargetState = JobStates.Ready,
+                TargetState = TaskStates.Ready,
                 WatchPath = _watchPath,
             });
         }
@@ -331,18 +331,18 @@ public class TaskAccessServiceTests : IDisposable
         Assert.True(sw.ElapsedMilliseconds < 1000, $"200 FindJob calls took {sw.ElapsedMilliseconds} ms");
     }
 
-    private (TaskAccessService taskAccess, JobStateMachine machine, JobMutationService mutations, JobIndexCache cache) Build()
+    private (TaskAccessService taskAccess, TaskStateMachine machine, TaskMutationService mutations, TaskIndexCache cache) Build()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
-        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var machine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        var transitions = new JobTransitionService(scanner, machine, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, machine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var taskAccess = new TaskAccessService(scanner, mutations, machine, transitions, indexCache, NullLogger<TaskAccessService>.Instance);
         return (taskAccess, machine, mutations, indexCache);
     }

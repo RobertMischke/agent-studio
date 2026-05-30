@@ -21,8 +21,8 @@ namespace OrchestratorApi.Services;
 /// </summary>
 public class SkillReadinessService
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobMutationService _mutations;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskMutationService _mutations;
     private readonly ILogger<SkillReadinessService> _logger;
 
     /// <summary>
@@ -73,8 +73,8 @@ public class SkillReadinessService
     ];
 
     public SkillReadinessService(
-        JobScannerService scanner,
-        JobMutationService mutations,
+        TaskScannerService scanner,
+        TaskMutationService mutations,
         ILogger<SkillReadinessService> logger)
     {
         _scanner = scanner;
@@ -212,7 +212,7 @@ public class SkillReadinessService
             WatchPath = entry.Path,
             Title = title,
             PromptMarkdown = prompt,
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             TaskType = TaskTypes.Chore,
             Report = report,
         };

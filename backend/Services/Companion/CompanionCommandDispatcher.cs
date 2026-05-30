@@ -12,14 +12,14 @@ namespace OrchestratorApi.Services.Companion;
 public sealed class CompanionCommandDispatcher
 {
     private readonly TaskRunnerService _runner;
-    private readonly JobMutationService _mutations;
+    private readonly TaskMutationService _mutations;
     private readonly ILogger<CompanionCommandDispatcher> _log;
 
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
     public CompanionCommandDispatcher(
         TaskRunnerService runner,
-        JobMutationService mutations,
+        TaskMutationService mutations,
         ILogger<CompanionCommandDispatcher> log)
     {
         _runner = runner;
@@ -75,7 +75,7 @@ public sealed class CompanionCommandDispatcher
             Model = p.Model,
             WatchPath = p.WatchPath,
             PromptMarkdown = p.Prompt,
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
         };
         var id = _mutations.CreateJob(req);
         return id is null

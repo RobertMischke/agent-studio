@@ -26,7 +26,7 @@ public class FixtureFilterTests : IDisposable
     public FixtureFilterTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "agent-taskboard-fixture-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -37,7 +37,7 @@ public class FixtureFilterTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private (JobScannerService scanner, FixtureMigrationService migration) BuildServices()
+    private (TaskScannerService scanner, FixtureMigrationService migration) BuildServices()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -47,7 +47,7 @@ public class FixtureFilterTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var migration = new FixtureMigrationService(scanner, NullLogger<FixtureMigrationService>.Instance);
         return (scanner, migration);
     }
@@ -104,8 +104,8 @@ public class FixtureFilterTests : IDisposable
     [Fact]
     public void Scanner_ReadsFixtureFlag()
     {
-        WriteJob(JobStates.Ready, "real-task", "Real Task");
-        WriteJob(JobStates.Ready, "e2e-fix-1", "e2e fixture", fixture: true);
+        WriteJob(TaskStates.Ready, "real-task", "Real Task");
+        WriteJob(TaskStates.Ready, "e2e-fix-1", "e2e fixture", fixture: true);
 
         var (scanner, _) = BuildServices();
         var jobs = scanner.ScanAllJobs();
@@ -122,8 +122,8 @@ public class FixtureFilterTests : IDisposable
     [Fact]
     public void DefaultListExcludesFixtures_IncludeFlagSurfacesThem()
     {
-        WriteJob(JobStates.Ready, "real-task", "Real Task");
-        WriteJob(JobStates.Ready, "e2e-fix-1", "e2e fixture", fixture: true);
+        WriteJob(TaskStates.Ready, "real-task", "Real Task");
+        WriteJob(TaskStates.Ready, "e2e-fix-1", "e2e fixture", fixture: true);
 
         var (scanner, _) = BuildServices();
         var raw = scanner.ScanAllJobs();
@@ -144,9 +144,9 @@ public class FixtureFilterTests : IDisposable
     [Fact]
     public void Migration_DryRun_DoesNotWrite()
     {
-        WriteJob(JobStates.Ready, "real-task", "Real Task");
-        WriteJob(JobStates.Ready, "e2e-fix-1", "e2e fixture");
-        WriteJob(JobStates.Archive, "e2e-fix-2", "e2e fixture two");
+        WriteJob(TaskStates.Ready, "real-task", "Real Task");
+        WriteJob(TaskStates.Ready, "e2e-fix-1", "e2e fixture");
+        WriteJob(TaskStates.Archive, "e2e-fix-2", "e2e fixture two");
 
         var (scanner, migration) = BuildServices();
         var report = migration.Scan(apply: false);
@@ -166,8 +166,8 @@ public class FixtureFilterTests : IDisposable
     [Fact]
     public void Migration_Apply_WritesFixtureFlag_AndIsIdempotent()
     {
-        WriteJob(JobStates.Ready, "real-task", "Real Task");
-        WriteJob(JobStates.Ready, "e2e-fix-1", "e2e fixture");
+        WriteJob(TaskStates.Ready, "real-task", "Real Task");
+        WriteJob(TaskStates.Ready, "e2e-fix-1", "e2e fixture");
 
         var (scanner, migration) = BuildServices();
         var first = migration.Scan(apply: true);

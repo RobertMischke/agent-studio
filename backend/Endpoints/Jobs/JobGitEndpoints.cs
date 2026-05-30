@@ -41,7 +41,7 @@ public static class JobGitEndpoints
         // Per-job commit details: returns the cached snapshot from job.json plus
         // a live re-derivation of the file list from `git show --name-status`,
         // so the detail view stays accurate even after history rewrites.
-        group.MapGet("/{jobId}/commit", (string jobId, string? watchPath, JobScannerService scanner, GitService git) =>
+        group.MapGet("/{jobId}/commit", (string jobId, string? watchPath, TaskScannerService scanner, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound();
@@ -55,7 +55,7 @@ public static class JobGitEndpoints
         // Diff for the recorded commit, optionally scoped to one path. Lets
         // the detail view show the exact changes the task produced even long
         // after the working tree has moved on.
-        group.MapGet("/{jobId}/commit/diff", (string jobId, string? watchPath, string? path, JobScannerService scanner, GitService git) =>
+        group.MapGet("/{jobId}/commit/diff", (string jobId, string? watchPath, string? path, TaskScannerService scanner, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info?.Commit == null) return Results.Text("", "text/plain");
@@ -69,12 +69,12 @@ public static class JobGitEndpoints
         // landed without having to drill into individual runs first.
         group.MapGet("/{jobId}/commits", (
             string jobId, string? watchPath,
-            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             var events = sessions.ReadSessionEvents(jobId, watchPath);
-            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
 
             var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
@@ -87,7 +87,7 @@ public static class JobGitEndpoints
         // operator override (ADR "Commit-Attribution-Regel"). Read-only.
         group.MapGet("/{jobId}/git/recent-commits", (
             string jobId, string? watchPath, int? limit,
-            JobScannerService scanner, GitService git) =>
+            TaskScannerService scanner, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -100,7 +100,7 @@ public static class JobGitEndpoints
         // endpoint can't be coaxed into showing arbitrary repo history.
         group.MapGet("/{jobId}/commits/{sha}/files", (
             string jobId, string sha, string? watchPath,
-            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -112,7 +112,7 @@ public static class JobGitEndpoints
 
         group.MapGet("/{jobId}/commits/{sha}/diff", (
             string jobId, string sha, string? path, string? watchPath,
-            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -136,7 +136,7 @@ public static class JobGitEndpoints
         // not just hidden in the UI.
         group.MapGet("/{jobId}/git/hygiene", (
             string jobId, string? watchPath,
-            GitService git, JobScannerService scanner, TaskRunnerService runner) =>
+            GitService git, TaskScannerService scanner, TaskRunnerService runner) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             var status = runner.GetStatus();
@@ -159,7 +159,7 @@ public static class JobGitEndpoints
         // log so the action is visible in the protocol pane.
         group.MapPost("/{jobId}/git/commit-accepted-evidence",
             async (string jobId, string? watchPath,
-                   GitService git, JobScannerService scanner, JobMutationService mutations,
+                   GitService git, TaskScannerService scanner, TaskMutationService mutations,
                    OrchestratorChatLog chat, CancellationToken ct) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
@@ -201,11 +201,11 @@ public static class JobGitEndpoints
         // Operator override: exclude a commit the rule engine attributed to
         // this task (e.g. the operator recognizes it belongs to a sibling
         // task). Moves it into excludedCommits with a manual marker. ADR
-        // "Commit-Attribution-Regel". Mutation goes through JobMutationService
+        // "Commit-Attribution-Regel". Mutation goes through TaskMutationService
         // so the API-only job-folder rule holds.
         group.MapPost("/{jobId}/commits/{sha}/exclude", (
             string jobId, string sha, string? watchPath,
-            JobScannerService scanner, JobMutationService mutations) =>
+            TaskScannerService scanner, TaskMutationService mutations) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -220,7 +220,7 @@ public static class JobGitEndpoints
         // optional body carries commit metadata for the add-from-recent case.
         group.MapPost("/{jobId}/commits/{sha}/include", (
             string jobId, string sha, string? watchPath, IncludeCommitRequest? req,
-            JobScannerService scanner, JobMutationService mutations, GitService git) =>
+            TaskScannerService scanner, TaskMutationService mutations, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
@@ -255,14 +255,14 @@ public static class JobGitEndpoints
     }
 
     private static bool IsKnownJobCommit(
-        JobInfo info, JobSessionLog sessions,
+        JobInfo info, TaskSessionLog sessions,
         string jobId, string? watchPath, GitService git, string sha)
     {
         if (string.IsNullOrWhiteSpace(sha)) return false;
         if (info.Commit != null && string.Equals(info.Commit.Sha, sha, StringComparison.OrdinalIgnoreCase))
             return true;
         var events = sessions.ReadSessionEvents(jobId, watchPath);
-        var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
         var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
         var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
             (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));

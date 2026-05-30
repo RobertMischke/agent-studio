@@ -35,7 +35,7 @@ public class RegistryBootstrapTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* best-effort */ }
     }
 
-    private (WorkspaceRegistry workspaces, ProjectRegistry projects, JobScannerService scanner) Build(params (string name, string path)[] watchPaths)
+    private (WorkspaceRegistry workspaces, ProjectRegistry projects, TaskScannerService scanner) Build(params (string name, string path)[] watchPaths)
     {
         var dict = new Dictionary<string, string?> { ["TaskRepository"] = _root };
         for (var i = 0; i < watchPaths.Length; i++)
@@ -47,7 +47,7 @@ public class RegistryBootstrapTests : IDisposable
         var workspaces = new WorkspaceRegistry(config, NullLogger<WorkspaceRegistry>.Instance);
         var projects = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return (workspaces, projects, scanner);
     }
 
@@ -181,7 +181,7 @@ public class RegistryBootstrapTests : IDisposable
         var workspaces = new WorkspaceRegistry(config, NullLogger<WorkspaceRegistry>.Instance);
         var projects = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
 
         var exception = Record.Exception(() =>
             RegistryBootstrap.Run(workspaces, projects, scanner, NullLogger<RegistryBootstrapTests>.Instance));

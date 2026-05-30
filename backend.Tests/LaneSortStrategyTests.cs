@@ -30,13 +30,13 @@ public sealed class LaneSortStrategyTests : IDisposable
     }
 
     [Theory]
-    [InlineData(JobStates.Backlog, LaneSortStrategies.NewestFirst)]
-    [InlineData(JobStates.Preparation, LaneSortStrategies.NewestFirst)]
-    [InlineData(JobStates.Ready, LaneSortStrategies.NewestFirst)]
-    [InlineData(JobStates.Progress, LaneSortStrategies.LastActivity)]
-    [InlineData(JobStates.AutoReview, LaneSortStrategies.LastActivity)]
-    [InlineData(JobStates.HumanReview, LaneSortStrategies.OldestFirst)]
-    [InlineData(JobStates.Completed, LaneSortStrategies.LastActivity)]
+    [InlineData(TaskStates.Backlog, LaneSortStrategies.NewestFirst)]
+    [InlineData(TaskStates.Preparation, LaneSortStrategies.NewestFirst)]
+    [InlineData(TaskStates.Ready, LaneSortStrategies.NewestFirst)]
+    [InlineData(TaskStates.Progress, LaneSortStrategies.LastActivity)]
+    [InlineData(TaskStates.AutoReview, LaneSortStrategies.LastActivity)]
+    [InlineData(TaskStates.HumanReview, LaneSortStrategies.OldestFirst)]
+    [InlineData(TaskStates.Completed, LaneSortStrategies.LastActivity)]
     public void DefaultStrategyMatchesPromptTable(string lane, string expected)
     {
         Assert.Equal(expected, LaneSortStrategies.GetDefaultForLane(lane));
@@ -49,11 +49,11 @@ public sealed class LaneSortStrategyTests : IDisposable
         {
             LaneSortStrategyOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                [JobStates.Ready] = LaneSortStrategies.Manual,
+                [TaskStates.Ready] = LaneSortStrategies.Manual,
             },
         };
         Assert.Equal(LaneSortStrategies.Manual,
-            LaneSortStrategies.Resolve(settings, JobStates.Ready));
+            LaneSortStrategies.Resolve(settings, TaskStates.Ready));
     }
 
     [Fact]
@@ -63,11 +63,11 @@ public sealed class LaneSortStrategyTests : IDisposable
         {
             LaneSortStrategyOverrides = new Dictionary<string, string>
             {
-                [JobStates.Ready] = "bogus-strategy",
+                [TaskStates.Ready] = "bogus-strategy",
             },
         };
         Assert.Equal(LaneSortStrategies.NewestFirst,
-            LaneSortStrategies.Resolve(settings, JobStates.Ready));
+            LaneSortStrategies.Resolve(settings, TaskStates.Ready));
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public sealed class LaneSortStrategyTests : IDisposable
                 {
                     LaneSortStrategyOverrides = new Dictionary<string, string>
                     {
-                        [JobStates.Ready] = LaneSortStrategies.Manual,
+                        [TaskStates.Ready] = LaneSortStrategies.Manual,
                     },
                 };
             }
@@ -184,7 +184,7 @@ public sealed class LaneSortStrategyTests : IDisposable
         }
 
         var sorted = LaneSortApplier
-            .Sort(jobs, JobStates.Ready, Resolver)
+            .Sort(jobs, TaskStates.Ready, Resolver)
             .Select(j => j.Id)
             .ToArray();
 
@@ -197,28 +197,28 @@ public sealed class LaneSortStrategyTests : IDisposable
     public void ProjectSettingsService_SetLaneSortStrategyPersistsAcrossReload()
     {
         var svc = BuildSettings();
-        svc.SetLaneSortStrategy("acme", JobStates.Ready, LaneSortStrategies.Manual);
+        svc.SetLaneSortStrategy("acme", TaskStates.Ready, LaneSortStrategies.Manual);
 
         var reloaded = BuildSettings();
         var s = reloaded.Get("acme");
 
         Assert.NotNull(s.LaneSortStrategyOverrides);
-        Assert.Equal(LaneSortStrategies.Manual, s.LaneSortStrategyOverrides![JobStates.Ready]);
-        Assert.Equal(LaneSortStrategies.Manual, LaneSortStrategies.Resolve(s, JobStates.Ready));
+        Assert.Equal(LaneSortStrategies.Manual, s.LaneSortStrategyOverrides![TaskStates.Ready]);
+        Assert.Equal(LaneSortStrategies.Manual, LaneSortStrategies.Resolve(s, TaskStates.Ready));
         // Lanes without an override still resolve via defaults.
-        Assert.Equal(LaneSortStrategies.NewestFirst, LaneSortStrategies.Resolve(s, JobStates.Backlog));
+        Assert.Equal(LaneSortStrategies.NewestFirst, LaneSortStrategies.Resolve(s, TaskStates.Backlog));
     }
 
     [Fact]
     public void ProjectSettingsService_NullStrategyClearsOverride()
     {
         var svc = BuildSettings();
-        svc.SetLaneSortStrategy("acme", JobStates.Ready, LaneSortStrategies.Manual);
-        svc.SetLaneSortStrategy("acme", JobStates.Ready, null);
+        svc.SetLaneSortStrategy("acme", TaskStates.Ready, LaneSortStrategies.Manual);
+        svc.SetLaneSortStrategy("acme", TaskStates.Ready, null);
 
         var s = svc.Get("acme");
         Assert.Null(s.LaneSortStrategyOverrides);
-        Assert.Equal(LaneSortStrategies.NewestFirst, LaneSortStrategies.Resolve(s, JobStates.Ready));
+        Assert.Equal(LaneSortStrategies.NewestFirst, LaneSortStrategies.Resolve(s, TaskStates.Ready));
     }
 
     private ProjectSettingsService BuildSettings()
@@ -249,7 +249,7 @@ public sealed class LaneSortStrategyTests : IDisposable
             Key = key,
             Title = id,
             Order = order,
-            State = JobStates.Ready,
+            State = TaskStates.Ready,
             ProjectName = project ?? "TestProject",
             WatchPath = "/tmp/" + (project ?? "TestProject"),
             CreatedAt = createdAt ?? T(0),

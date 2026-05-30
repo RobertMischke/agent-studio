@@ -68,8 +68,8 @@ public sealed class TagRegistryService
             throw new ArgumentException("Label is required");
 
         var resolvedId = string.IsNullOrWhiteSpace(id)
-            ? JobMutationService.NormalizeTagId(label)
-            : JobMutationService.NormalizeTagId(id);
+            ? TaskMutationService.NormalizeTagId(label)
+            : TaskMutationService.NormalizeTagId(id);
 
         if (!IdPattern.IsMatch(resolvedId))
             throw new ArgumentException($"Invalid tag id '{resolvedId}'. Allowed: [a-z0-9-]{{1,32}}.");

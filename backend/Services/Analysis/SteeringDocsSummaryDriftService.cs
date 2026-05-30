@@ -60,11 +60,11 @@ public sealed class SteeringDocsSummaryDriftService
     /// are excluded by design.</summary>
     public static readonly IReadOnlyList<string> InspectedLanes = new[]
     {
-        JobStates.Ready,
-        JobStates.Progress,
-        JobStates.AutoReview,
-        JobStates.HumanReview,
-        JobStates.Completed,
+        TaskStates.Ready,
+        TaskStates.Progress,
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+        TaskStates.Completed,
     };
 
     private static readonly Regex JsonFenceRegex = new(

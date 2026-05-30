@@ -44,7 +44,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         _repoRoot = Path.Combine(_tempDir, "repo");
         _logDir = Path.Combine(_tempDir, "logs");
         Directory.CreateDirectory(_tempDir);
-        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
         Directory.CreateDirectory(_repoRoot);
         Directory.CreateDirectory(_logDir);
 
@@ -72,14 +72,14 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     [Fact]
     public async Task RecoverAsync_SurvivingCompletionMarker_FinishesProgressToReviewTransition()
     {
-        WriteJob(JobStates.Progress, "demo-task");
-        var jobFolder = Path.Combine(_watchPath, JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "demo-task");
 
         // Drop a marker as if the runner had matched [[TASK_DONE]] but
         // crashed before MoveAsync ran.
         CompletionMarker.Write(jobFolder, new CompletionMarker
         {
-            TargetState = JobStates.AutoReview,
+            TargetState = TaskStates.AutoReview,
             ExecutionStatus = "completed",
             AgentOutcome = "Done"
         });
@@ -88,7 +88,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var decisions = await recovery.RecoverAsync();
 
         Assert.False(Directory.Exists(jobFolder), "job folder must move out of 3-progress");
-        var newFolder = Path.Combine(_watchPath, JobStates.AutoReview, "demo-task");
+        var newFolder = Path.Combine(_watchPath, TaskStates.AutoReview, "demo-task");
         Assert.True(Directory.Exists(newFolder), "job folder must land in 4-review");
         Assert.False(File.Exists(CompletionMarker.PathFor(newFolder)),
             "completion-marker.json must be cleared after a successful recovery move");
@@ -96,7 +96,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var transition = Assert.Single(decisions);
         Assert.Equal(RecoveryDecisionKinds.TransitionCompleted, transition.Kind);
         Assert.Equal("demo-task", transition.JobId);
-        Assert.Equal(JobStates.AutoReview, transition.TargetState);
+        Assert.Equal(TaskStates.AutoReview, transition.TargetState);
 
         // recovery.jsonl: one structured row per decision so an external
         // operator (or Layer 3 review) can parse it without tailing logs.
@@ -108,8 +108,8 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     [Fact]
     public async Task RecoverAsync_OrphanWorkingTreeChanges_AreCommittedWithCrashRecoveryAuthor()
     {
-        WriteJob(JobStates.Progress, "active-task");
-        var jobFolder = Path.Combine(_watchPath, JobStates.Progress, "active-task");
+        WriteJob(TaskStates.Progress, "active-task");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "active-task");
         // lastProgressAt makes "active-task" the attribution target.
         StampLastProgressAt(jobFolder, DateTime.UtcNow);
 
@@ -173,18 +173,88 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoverAsync_InterruptedRun_RequeuesToReadyAndClearsStaleLock()
+    {
+        // Simulate a run that crashed after the runner stamped the pickup
+        // lock but before its finally-block released it: a 3-progress job with
+        // a .pickup-lock.json whose owning pid is dead on this host.
+        WriteJob(TaskStates.Progress, "interrupted-task");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "interrupted-task");
+        WriteRawLock(jobFolder, new PickupLockInfo
+        {
+            Pid = 0x7FFFFFFE, // obviously-dead pid (same convention as PickupLockFileTests)
+            Hostname = Environment.MachineName,
+            Role = RunnerRoles.Orchestrator,
+            BackendName = "stable",
+            AcquiredAt = DateTime.UtcNow.AddMinutes(-5)
+        });
+
+        var (recovery, _) = BuildRecovery();
+        var decisions = await recovery.RecoverAsync();
+
+        // Job must move back to 2-ready so the next pickup tick starts it clean.
+        Assert.False(Directory.Exists(jobFolder), "job must leave 3-progress");
+        var readyFolder = Path.Combine(_watchPath, TaskStates.Ready, "interrupted-task");
+        Assert.True(Directory.Exists(readyFolder), "job must land in 2-ready");
+
+        // No stale .pickup-lock.json after recovery by any path.
+        Assert.False(File.Exists(Path.Combine(readyFolder, PickupLockFile.LockFileName)),
+            "stale pickup lock must be cleared");
+
+        // Mandatory diagnostic: the requeue is never silent. The 2026-05-30
+        // incident had an empty logs/ dir and no cli-output.log at all.
+        var cliLog = Path.Combine(readyFolder, TaskPaths.LogsDirName, TaskPaths.CliOutputLogFileName);
+        Assert.True(File.Exists(cliLog), "interrupted-run diagnostic must be written to cli-output.log");
+        Assert.Contains("Run interrupted", File.ReadAllText(cliLog));
+
+        var decision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.RunInterruptedRequeued);
+        Assert.Equal("interrupted-task", decision.JobId);
+        Assert.Equal(TaskStates.Ready, decision.TargetState);
+
+        var jsonl = File.ReadAllText(Path.Combine(_logDir, "recovery.jsonl"));
+        Assert.Contains("run-interrupted-requeued", jsonl);
+    }
+
+    [Fact]
+    public async Task RecoverAsync_LiveForeignLock_LeavesRunInProgress()
+    {
+        // A live foreign owner (e.g. the other backend on the same workspace)
+        // still holds the lock. That run is not ours to requeue - leave the
+        // job and its lock exactly where they are.
+        WriteJob(TaskStates.Progress, "foreign-active");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "foreign-active");
+        WriteRawLock(jobFolder, new PickupLockInfo
+        {
+            Pid = Environment.ProcessId, // guaranteed-alive pid
+            Hostname = Environment.MachineName,
+            Role = RunnerRoles.TestSubject,
+            BackendName = "dev",
+            AcquiredAt = DateTime.UtcNow
+        });
+
+        var (recovery, _) = BuildRecovery();
+        var decisions = await recovery.RecoverAsync();
+
+        Assert.True(Directory.Exists(jobFolder), "job must stay in 3-progress while a live owner holds the lock");
+        Assert.True(File.Exists(Path.Combine(jobFolder, PickupLockFile.LockFileName)),
+            "a live foreign lock must be left untouched");
+        Assert.DoesNotContain(decisions, d => d.Kind == RecoveryDecisionKinds.RunInterruptedRequeued);
+        Assert.DoesNotContain(decisions, d => d.Kind == RecoveryDecisionKinds.StalePickupLockCleared);
+    }
+
+    [Fact]
     public async Task RecoverAsync_NoMarkersAndCleanTree_IsANoOp()
     {
-        WriteJob(JobStates.Progress, "untouched");
+        WriteJob(TaskStates.Progress, "untouched");
 
         var (recovery, _) = BuildRecovery();
         var decisions = await recovery.RecoverAsync();
 
         Assert.Empty(decisions);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "untouched")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "untouched")));
     }
 
-    private (CrashRecoveryService Recovery, JobScannerService Scanner) BuildRecovery()
+    private (CrashRecoveryService Recovery, TaskScannerService Scanner) BuildRecovery()
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -196,13 +266,13 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         }).Build();
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
 
         var logOptions = new BackendFileLoggerOptions { LogDirectory = _logDir, RetentionDays = 14 };
         var sink = new BackendFileLogSink(logOptions);
@@ -219,6 +289,16 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
+    }
+
+    private static void WriteRawLock(string jobFolder, PickupLockInfo info)
+    {
+        var json = JsonSerializer.Serialize(info, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+        File.WriteAllText(Path.Combine(jobFolder, PickupLockFile.LockFileName), json);
     }
 
     private static void StampLastProgressAt(string jobFolder, DateTime utc)

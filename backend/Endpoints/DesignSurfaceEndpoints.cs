@@ -106,8 +106,8 @@ public static class DesignSurfaceEndpoints
         app.MapPost("/api/projects/{projectName}/design/actions/screenshot-critique", (
             string projectName,
             HttpContext ctx,
-            JobScannerService scanner,
-            JobMutationService mutations,
+            TaskScannerService scanner,
+            TaskMutationService mutations,
             DesignEvidenceService design) =>
             QueueDesignActionJob(projectName, ctx, scanner, mutations, design,
                 ScreenshotCritiqueTitlePrefix, BuildScreenshotCritiquePrompt));
@@ -115,8 +115,8 @@ public static class DesignSurfaceEndpoints
         app.MapPost("/api/projects/{projectName}/design/actions/council-review", (
             string projectName,
             HttpContext ctx,
-            JobScannerService scanner,
-            JobMutationService mutations,
+            TaskScannerService scanner,
+            TaskMutationService mutations,
             DesignEvidenceService design) =>
             QueueDesignActionJob(projectName, ctx, scanner, mutations, design,
                 CouncilReviewTitlePrefix, BuildCouncilReviewPrompt));
@@ -124,8 +124,8 @@ public static class DesignSurfaceEndpoints
         app.MapPost("/api/projects/{projectName}/design/actions/request-next-version", (
             string projectName,
             HttpContext ctx,
-            JobScannerService scanner,
-            JobMutationService mutations,
+            TaskScannerService scanner,
+            TaskMutationService mutations,
             DesignEvidenceService design) =>
             QueueDesignActionJob(projectName, ctx, scanner, mutations, design,
                 NextVersionTitlePrefix, BuildNextVersionPrompt));
@@ -141,8 +141,8 @@ public static class DesignSurfaceEndpoints
     private static IResult QueueDesignActionJob(
         string projectName,
         HttpContext ctx,
-        JobScannerService scanner,
-        JobMutationService mutations,
+        TaskScannerService scanner,
+        TaskMutationService mutations,
         DesignEvidenceService design,
         string titlePrefix,
         Func<string, string> promptBuilder)

@@ -96,7 +96,7 @@ public sealed class SummaryGenerationService
 
         try
         {
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
             {
                 Fail(key, "No CLI output to summarise yet. The task has not been run (logs/cli-output.log is missing). Start it once, then try again.");
@@ -156,7 +156,7 @@ public sealed class SummaryGenerationService
     /// </summary>
     public async Task<InterimSummaryResult> GenerateInterimAsync(JobInfo info, CancellationToken ct = default)
     {
-        var logPath = JobPaths.CliOutputLog(info.FolderPath);
+        var logPath = TaskPaths.CliOutputLog(info.FolderPath);
         if (!File.Exists(logPath))
         {
             return InterimSummaryResult.Failure("No CLI output to summarise yet. Start the task once, then try again.");

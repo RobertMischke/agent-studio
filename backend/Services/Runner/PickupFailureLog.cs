@@ -104,7 +104,7 @@ public sealed class PickupFailureLog
     /// Disambiguating destination slug for the dead-letter move. Format:
     /// <c>&lt;original&gt;-pickup-failed-&lt;yyyy-mm-dd&gt;</c>, with a numeric
     /// suffix on collisions. ADR-0028: destination is
-    /// <see cref="OrchestratorApi.Models.JobStates.FailedPickup"/>; the
+    /// <see cref="OrchestratorApi.Models.TaskStates.FailedPickup"/>; the
     /// existence-check callback is parameterised so the runner can inject the
     /// FailedPickup-folder check. Pure helper so tests can pin the format.
     /// </summary>

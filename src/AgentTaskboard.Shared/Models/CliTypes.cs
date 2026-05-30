@@ -99,10 +99,10 @@ public record LinkedJobRef
     public string Title { get; init; } = "";
     public string WatchPath { get; init; } = "";
     public string ProjectName { get; init; } = "";
-    /// <summary>One of <see cref="JobStates"/>. Drives the chip colour rule.</summary>
+    /// <summary>One of <see cref="TaskStates"/>. Drives the chip colour rule.</summary>
     public string Lane { get; init; } = "";
     /// <summary>
-    /// True when the owning job is in <see cref="JobStates.Progress"/> AND
+    /// True when the owning job is in <see cref="TaskStates.Progress"/> AND
     /// the project's runner reports it as the active job. The chip renders
     /// green in this state and neutral in every other state.
     /// </summary>

@@ -35,10 +35,10 @@ public class ScreenshotIndexService
 {
     private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<ScreenshotIndexService> _logger;
 
-    public ScreenshotIndexService(JobScannerService scanner, ILogger<ScreenshotIndexService> logger)
+    public ScreenshotIndexService(TaskScannerService scanner, ILogger<ScreenshotIndexService> logger)
     {
         _scanner = scanner;
         _logger = logger;
@@ -140,7 +140,7 @@ public class ScreenshotIndexService
     /// <summary>
     /// Resolves an inline screenshot path (relative to <c>&lt;job&gt;/results</c>)
     /// to an absolute file path, with traversal guards that match
-    /// <see cref="JobScannerService.ResolveResult"/>: the resolved file must
+    /// <see cref="TaskScannerService.ResolveResult"/>: the resolved file must
     /// stay inside the results folder, and only the known image
     /// extensions are served. Returns null when the path is invalid or
     /// the file is missing.

@@ -111,7 +111,7 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) =>
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
-builder.Services.AddSingleton<JobScannerService>();
+builder.Services.AddSingleton<TaskScannerService>();
 // F45a: workspace / project registries + jobKey resolver. Additive layer;
 // not yet load-bearing for the existing lane-folder code paths (F45c).
 builder.Services.AddSingleton<OrchestratorApi.Services.Registry.WorkspaceRegistry>();
@@ -119,17 +119,17 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Registry.ProjectRegistry>
 builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.JobKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
-// before JobStateMachine / JobMutationService / TaskAccessService so
+// before TaskStateMachine / TaskMutationService / TaskAccessService so
 // every lane-mutating service can take it as a dependency. See
 // docs/architecture-3-progress-lane-writers.md.
 builder.Services.AddSingleton<LaneMutexRegistry>();
 // SignalR fanout for fine-grained job mutation events (jobCreated /
 // jobUpdated / jobMoved / jobDeleted / jobsReordered). Registered before
 // the mutation services so each takes it as a constructor dependency.
-// See backend/Services/Jobs/JobChangeNotifier.cs.
-builder.Services.AddSingleton<JobChangeNotifier>();
-builder.Services.AddSingleton<JobStateMachine>();
-builder.Services.AddSingleton<JobMutationService>();
+// See backend/Services/Jobs/TaskChangeNotifier.cs.
+builder.Services.AddSingleton<TaskChangeNotifier>();
+builder.Services.AddSingleton<TaskStateMachine>();
+builder.Services.AddSingleton<TaskMutationService>();
 // Consolidation/merge API + completed-lane audit (Part 1+2 of the
 // api-consolidationmerge-api task). All mutations route through
 // MergeService / CompletedLaneAuditService; the audit log lives at
@@ -143,7 +143,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.AcceptanceEvid
 builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.AuditRunStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.CompletedLaneAuditService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
-builder.Services.AddSingleton<JobSessionLog>();
+builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
@@ -162,16 +162,16 @@ builder.Services.AddSingleton<TokenSummaryService>();
 builder.Services.AddSingleton<ProjectTokenUsageService>();
 builder.Services.AddSingleton<WorkspaceTokensTimelineService>();
 builder.Services.AddSingleton<WorkspaceSummaryService>();
-builder.Services.AddSingleton<JobTransitionService>();
-builder.Services.AddSingleton<JobWatcherService>();
+builder.Services.AddSingleton<TaskTransitionService>();
+builder.Services.AddSingleton<TaskWatcherService>();
 // Cycle 1: in-memory snapshot of all jobs across watch paths. Reads from
-// JobScannerService.ScanAllJobsRaw on miss, invalidated by JobWatcherService
-// events and by mutation services. Wired into JobScannerService below via
+// TaskScannerService.ScanAllJobsRaw on miss, invalidated by TaskWatcherService
+// events and by mutation services. Wired into TaskScannerService below via
 // SetIndexCache so existing ScanAllJobs callers transparently benefit.
-builder.Services.AddSingleton<JobIndexCache>();
+builder.Services.AddSingleton<TaskIndexCache>();
 // TaskAccess layer (ADR-0024 phase 2-4): the typed façade in front of
-// JobScannerService / JobMutationService / JobStateMachine /
-// JobTransitionService. Outside callers (endpoints, runner, supervisor)
+// TaskScannerService / TaskMutationService / TaskStateMachine /
+// TaskTransitionService. Outside callers (endpoints, runner, supervisor)
 // resolve ITaskAccess so the lane-folder shape stays inside this layer.
 builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.TaskAccessService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.ITaskAccess>(sp =>
@@ -271,11 +271,11 @@ builder.Services.AddSingleton<IQuotaProbe, GeminiQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // F22: server-rendered conversation projection. The projector serves the
 // GET /api/jobs/{id}/conversation endpoint and (when the feature flag is
-// on) broadcasts deltas over JobHub. Sources are registered so the
+// on) broadcasts deltas over TaskHub. Sources are registered so the
 // IEnumerable<IConversationEventSource> ctor gets a deterministic order.
 builder.Services.AddSingleton<IMarkdownRenderer, MarkdigRenderer>();
 var projectionCacheSize = int.TryParse(builder.Configuration["ConversationProjection:CacheSize"], out var pcs) ? pcs : 50;
@@ -303,11 +303,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
         new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
 });
 builder.Services.AddSignalR();
-// Bridges JobChangeNotifier + JobTransitionService move events onto JobHub
+// Bridges TaskChangeNotifier + TaskTransitionService move events onto TaskHub
 // (jobCreated / jobUpdated / jobMoved / jobDeleted / jobsReordered /
 // jobsBulkChanged). Resolved + move-source-attached during startup wiring
 // below so the notifier subscriptions are live before the first mutation.
-builder.Services.AddSingleton<OrchestratorApi.Hubs.JobHubBroadcaster>();
+builder.Services.AddSingleton<OrchestratorApi.Hubs.TaskHubBroadcaster>();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -363,12 +363,12 @@ app.UseClientIdentity();
 app.Services.GetRequiredService<ClientIdentityStore>().EnsureLoaded();
 
 // Ensure state folders exist and migrate legacy flat jobs
-app.Services.GetRequiredService<JobStateMachine>().EnsureStateFoldersAndMigrate();
+app.Services.GetRequiredService<TaskStateMachine>().EnsureStateFoldersAndMigrate();
 
 // Backfill jobs that carry agent:"human" + cliType:null + model:null with owner
 // client defaults. Idempotent; no-op once all jobs are already migrated.
 {
-    var backfillCount = app.Services.GetRequiredService<JobMutationService>().BackfillAgentDefaults();
+    var backfillCount = app.Services.GetRequiredService<TaskMutationService>().BackfillAgentDefaults();
     if (backfillCount > 0)
         app.Services.GetRequiredService<ILogger<Program>>()
             .LogInformation("Backfilled agent defaults on {Count} job(s)", backfillCount);
@@ -382,7 +382,7 @@ try
     OrchestratorApi.Services.Registry.RegistryBootstrap.Run(
         app.Services.GetRequiredService<OrchestratorApi.Services.Registry.WorkspaceRegistry>(),
         app.Services.GetRequiredService<OrchestratorApi.Services.Registry.ProjectRegistry>(),
-        app.Services.GetRequiredService<JobScannerService>(),
+        app.Services.GetRequiredService<TaskScannerService>(),
         app.Services.GetRequiredService<ILogger<Program>>());
 }
 catch (Exception ex)
@@ -394,7 +394,7 @@ catch (Exception ex)
 // into CreateJob. Runs after RegistryBootstrap so project short codes exist.
 // Idempotent; no-op once all jobs carry a key.
 {
-    var keyCount = app.Services.GetRequiredService<JobMutationService>().BackfillTaskKeys();
+    var keyCount = app.Services.GetRequiredService<TaskMutationService>().BackfillTaskKeys();
     if (keyCount > 0)
         app.Services.GetRequiredService<ILogger<Program>>()
             .LogInformation("Backfilled task keys on {Count} job(s)", keyCount);
@@ -458,7 +458,7 @@ try
 {
     var store = app.Services.GetRequiredService<AgentMessageBusStore>();
     var cache = app.Services.GetRequiredService<BusAggregationCache>();
-    var pushHub = app.Services.GetRequiredService<IHubContext<JobHub>>();
+    var pushHub = app.Services.GetRequiredService<IHubContext<TaskHub>>();
     store.OnAppended = (workspace, msg) =>
     {
         try { cache.OnAppended(workspace, msg); } catch { /* best-effort */ }
@@ -479,7 +479,7 @@ _ = Task.Run(() =>
         var migration = app.Services.GetRequiredService<ProjectChatMigration>();
         migration.MigrateAll();
 
-        var scanner = app.Services.GetRequiredService<JobScannerService>();
+        var scanner = app.Services.GetRequiredService<TaskScannerService>();
         var index = app.Services.GetRequiredService<ProjectChatIndex>();
         foreach (var entry in scanner.GetWatchPaths())
         {
@@ -494,25 +494,25 @@ _ = Task.Run(() =>
 });
 
 // Wire up FileSystemWatcher → SignalR push
-var watcher = app.Services.GetRequiredService<JobWatcherService>();
-var hubContext = app.Services.GetRequiredService<IHubContext<JobHub>>();
+var watcher = app.Services.GetRequiredService<TaskWatcherService>();
+var hubContext = app.Services.GetRequiredService<IHubContext<TaskHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 
 // Fine-grained job-mutation push (jobCreated / jobUpdated / jobMoved /
 // jobDeleted / jobsReordered / jobsBulkChanged). Resolving the singleton
-// attaches its JobChangeNotifier subscriptions; AttachMoveSource hooks the
-// transition service's move event. See backend/Hubs/JobHubBroadcaster.cs.
-var jobHubBroadcaster = app.Services.GetRequiredService<OrchestratorApi.Hubs.JobHubBroadcaster>();
-jobHubBroadcaster.AttachMoveSource(app.Services.GetRequiredService<JobTransitionService>());
+// attaches its TaskChangeNotifier subscriptions; AttachMoveSource hooks the
+// transition service's move event. See backend/Hubs/TaskHubBroadcaster.cs.
+var jobHubBroadcaster = app.Services.GetRequiredService<OrchestratorApi.Hubs.TaskHubBroadcaster>();
+jobHubBroadcaster.AttachMoveSource(app.Services.GetRequiredService<TaskTransitionService>());
 
-// Cycle 1: bind the in-memory snapshot cache. JobScannerService.ScanAllJobs
-// now serves from cache; JobWatcherService.OnJobChanged invalidates it on
+// Cycle 1: bind the in-memory snapshot cache. TaskScannerService.ScanAllJobs
+// now serves from cache; TaskWatcherService.OnJobChanged invalidates it on
 // external file changes, mutation services invalidate it on API writes.
 // Without this two-line bridge the cache exists but nothing fills or
 // invalidates it, and ScanAllJobs falls back to per-call disk walks.
-var jobIndexCache = app.Services.GetRequiredService<JobIndexCache>();
-app.Services.GetRequiredService<JobScannerService>().SetIndexCache(jobIndexCache);
-watcher.OnJobChanged += _ => jobIndexCache.Invalidate(JobIndexCache.InvalidationSource.External);
+var jobIndexCache = app.Services.GetRequiredService<TaskIndexCache>();
+app.Services.GetRequiredService<TaskScannerService>().SetIndexCache(jobIndexCache);
+watcher.OnJobChanged += _ => jobIndexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
 
 // TaskAccess layer (ADR-0024): force a synchronous first index read so
 // boot-time disk problems surface here rather than on the first HTTP
@@ -522,16 +522,16 @@ watcher.OnJobChanged += _ => jobIndexCache.Invalidate(JobIndexCache.Invalidation
 _ = app.Services.GetRequiredService<OrchestratorApi.Services.TaskAccess.ITaskAccessHost>()
     .BootAsync();
 
-// Wire JobTransitionService move events to atomically clear the per-project
+// Wire TaskTransitionService move events to atomically clear the per-project
 // runner's _activeJobId when the active job is moved out of 3-progress.
 // Without this, an external move (API or otherwise) leaves the runner pinned
 // to a slug whose folder has left the lane, every pickup tick short-circuits
 // on `active != null`, and the project wedges until backend restart.
-var transitionsForRunner = app.Services.GetRequiredService<JobTransitionService>();
+var transitionsForRunner = app.Services.GetRequiredService<TaskTransitionService>();
 var runnerForTransitions = app.Services.GetRequiredService<TaskRunnerService>();
 transitionsForRunner.OnJobMoved += (projectName, jobId, fromState, toState) =>
 {
-    if (fromState != JobStates.Progress) return;
+    if (fromState != TaskStates.Progress) return;
     runnerForTransitions.ClearActiveJobForProject(
         projectName, jobId,
         $"job moved out of 3-progress externally ({fromState} -> {toState})");
@@ -564,6 +564,6 @@ taskRunner.OnRunnerStatusChanged += (projectName, status) =>
 
 app.MapAllEndpoints();
 app.MapConversationEndpoints();
-app.MapHub<JobHub>("/hubs/jobs");
+app.MapHub<TaskHub>("/hubs/jobs");
 
 app.Run();

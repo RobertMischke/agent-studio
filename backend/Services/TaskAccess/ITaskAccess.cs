@@ -20,8 +20,8 @@ namespace OrchestratorApi.Services.TaskAccess;
 /// Disk remains the source of truth on cold start. The in-memory index
 /// is a view that can always be rebuilt by re-reading the watched
 /// project folders. The implementation delegates to
-/// <c>JobScannerService</c> / <c>JobMutationService</c> /
-/// <c>JobStateMachine</c> / <c>JobTransitionService</c>; the
+/// <c>TaskScannerService</c> / <c>TaskMutationService</c> /
+/// <c>TaskStateMachine</c> / <c>TaskTransitionService</c>; the
 /// single-state-machine authority stays inside the layer.
 /// </para>
 /// </remarks>
@@ -110,7 +110,7 @@ public interface ITaskAccess
     /// <c>job.json</c>) to <c>3a-failed-pickup</c> under
     /// <paramref name="destinationSlug"/>, optionally writing a
     /// <c>failed-pickup-reason.md</c> placard alongside it. The move
-    /// goes through <see cref="OrchestratorApi.Services.Jobs.JobStateMachine"/>
+    /// goes through <see cref="OrchestratorApi.Services.Jobs.TaskStateMachine"/>
     /// inside the layer.
     /// </summary>
     TaskMutationResult MoveOrphanToFailedPickup(

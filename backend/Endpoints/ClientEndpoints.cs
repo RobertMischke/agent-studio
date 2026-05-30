@@ -38,7 +38,7 @@ public static class ClientEndpoints
             return Results.Ok(summaries);
         });
 
-        clients.MapGet("/{id}", (string id, ClientIdentityStore store, JobScannerService scanner) =>
+        clients.MapGet("/{id}", (string id, ClientIdentityStore store, TaskScannerService scanner) =>
         {
             var record = store.Find(id);
             if (record is null) return Results.NotFound(new { error = "client-not-found" });

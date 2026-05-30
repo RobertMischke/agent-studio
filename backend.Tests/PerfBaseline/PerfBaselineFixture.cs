@@ -25,32 +25,32 @@ internal sealed class PerfBaselineFixture : IDisposable
     public string WatchPath { get; }
     public string ProjectName { get; }
     public IConfiguration Config { get; }
-    public JobScannerService Scanner { get; }
+    public TaskScannerService Scanner { get; }
     public TaskRunnerService Runners { get; }
     public CliRouter Router { get; }
     public SummaryGenerationService Summary { get; }
-    public JobStateMachine States { get; }
+    public TaskStateMachine States { get; }
     public ProjectTokenUsageService TokenUsage { get; }
 
-    public JobIndexCache? IndexCache { get; }
+    public TaskIndexCache? IndexCache { get; }
 
     public PerfBaselineFixture(int jobCount, string scenarioTag = "perf", bool withCache = false)
     {
         ProjectName = $"perf-{scenarioTag}-{jobCount}";
         WatchPath = Path.Combine(Path.GetTempPath(), $"atp-{scenarioTag}-{Guid.NewGuid():N}");
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(WatchPath, state));
 
         // Distribute jobs across realistic lanes: bulk in archive, a few
         // ready, a couple in progress, some completed.
         var laneMix = new[]
         {
-            (JobStates.Archive,  0.80),
-            (JobStates.Completed, 0.10),
-            (JobStates.Ready,     0.05),
-            (JobStates.AutoReview, 0.03),
-            (JobStates.HumanReview,0.015),
-            (JobStates.Progress,   0.005),
+            (TaskStates.Archive,  0.80),
+            (TaskStates.Completed, 0.10),
+            (TaskStates.Ready,     0.05),
+            (TaskStates.AutoReview, 0.03),
+            (TaskStates.HumanReview,0.015),
+            (TaskStates.Progress,   0.005),
         };
         var written = 0;
         foreach (var (lane, share) in laneMix)
@@ -64,7 +64,7 @@ internal sealed class PerfBaselineFixture : IDisposable
         // Pad out any remainder into archive.
         while (written < jobCount)
         {
-            WriteJob(JobStates.Archive, $"job-{written:D5}", $"Job {written}");
+            WriteJob(TaskStates.Archive, $"job-{written:D5}", $"Job {written}");
             written++;
         }
 
@@ -77,15 +77,15 @@ internal sealed class PerfBaselineFixture : IDisposable
             .Build();
 
         Summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, Config);
-        Scanner = new JobScannerService(Config, NullLogger<JobScannerService>.Instance, Summary);
+        Scanner = new TaskScannerService(Config, NullLogger<TaskScannerService>.Instance, Summary);
         if (withCache)
         {
-            IndexCache = new JobIndexCache(Scanner, NullLogger<JobIndexCache>.Instance, Config);
+            IndexCache = new TaskIndexCache(Scanner, NullLogger<TaskIndexCache>.Instance, Config);
             Scanner.SetIndexCache(IndexCache);
         }
-        States = new JobStateMachine(Scanner, NullLogger<JobStateMachine>.Instance);
-        var sessions = new JobSessionLog(Scanner, NullLogger<JobSessionLog>.Instance);
-        var mutations = new JobMutationService(Scanner, new ClientIdentityStore(Config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(Config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        States = new TaskStateMachine(Scanner, NullLogger<TaskStateMachine>.Instance);
+        var sessions = new TaskSessionLog(Scanner, NullLogger<TaskSessionLog>.Instance);
+        var mutations = new TaskMutationService(Scanner, new ClientIdentityStore(Config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(Config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
 
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(
@@ -104,7 +104,7 @@ internal sealed class PerfBaselineFixture : IDisposable
         var prompts = new RuntimePromptService(Config, NullLogger<RuntimePromptService>.Instance);
         var projectSettings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, Config);
         var git = new GitService(NullLogger<GitService>.Instance, Scanner, Config, prompts);
-        var transitions = new JobTransitionService(Scanner, States, mutations, git, projectSettings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(Scanner, States, mutations, git, projectSettings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
@@ -118,7 +118,7 @@ internal sealed class PerfBaselineFixture : IDisposable
         var pickupFailures = new PickupFailureLog(Config, NullLogger<PickupFailureLog>.Instance);
         var infraHaltLog = new InfraHaltLog(Config, NullLogger<InfraHaltLog>.Instance);
         var infraBreaker = new CrossSlugInfraCircuitBreaker(Config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
-        var indexCache = new JobIndexCache(Scanner, NullLogger<JobIndexCache>.Instance, Config);
+        var indexCache = new TaskIndexCache(Scanner, NullLogger<TaskIndexCache>.Instance, Config);
         Scanner.SetIndexCache(indexCache);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             Scanner, mutations, States, transitions, indexCache,

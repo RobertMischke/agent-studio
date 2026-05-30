@@ -9,7 +9,7 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Correctness tests for the Cycle-1 JobIndexCache. The perf claim of the
+/// Correctness tests for the Cycle-1 TaskIndexCache. The perf claim of the
 /// cache is "polled hot paths see O(1) reads instead of O(N) disk walks";
 /// the correctness claim is "an explicit Invalidate() makes the next read
 /// see what was just written, and the safety TTL eventually picks up
@@ -19,13 +19,13 @@ public class JobIndexCacheTests : IDisposable
 {
     private readonly string _watchPath;
     private readonly IConfiguration _config;
-    private readonly JobScannerService _scanner;
-    private readonly JobIndexCache _cache;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskIndexCache _cache;
 
     public JobIndexCacheTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-cache-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
 
         _config = new ConfigurationBuilder()
@@ -33,13 +33,13 @@ public class JobIndexCacheTests : IDisposable
             {
                 ["WatchPaths:0:Name"] = "cache-test",
                 ["WatchPaths:0:Path"] = _watchPath,
-                ["JobIndexCache:SafetyTtlSeconds"] = "1", // tight TTL for the safety test
+                ["TaskIndexCache:SafetyTtlSeconds"] = "1", // tight TTL for the safety test
             })
             .Build();
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, _config);
-        _scanner = new JobScannerService(_config, NullLogger<JobScannerService>.Instance, summary);
-        _cache = new JobIndexCache(_scanner, NullLogger<JobIndexCache>.Instance, _config);
+        _scanner = new TaskScannerService(_config, NullLogger<TaskScannerService>.Instance, summary);
+        _cache = new TaskIndexCache(_scanner, NullLogger<TaskIndexCache>.Instance, _config);
         _scanner.SetIndexCache(_cache);
     }
 
@@ -127,7 +127,7 @@ public class JobIndexCacheTests : IDisposable
         // Build a scanner without a cache (mimics test fixtures that don't
         // wire one). Each call must read from disk.
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, _config);
-        var bareScanner = new JobScannerService(_config, NullLogger<JobScannerService>.Instance, summary);
+        var bareScanner = new TaskScannerService(_config, NullLogger<TaskScannerService>.Instance, summary);
 
         WriteJob("2-ready", "job-1", "First");
         Assert.Single(bareScanner.ScanAllJobs());

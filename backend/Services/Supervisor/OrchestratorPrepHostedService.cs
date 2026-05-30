@@ -34,8 +34,8 @@ namespace OrchestratorApi.Services.Supervisor;
 /// </summary>
 public sealed class OrchestratorPrepHostedService : BackgroundService
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _states;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
     private readonly ProjectSettingsService _settings;
     private readonly OrchestratorChatLog _chatLog;
     private readonly IConfiguration _configuration;
@@ -44,8 +44,8 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
     private readonly Queue<DateTime> _callTimestamps = new();
 
     public OrchestratorPrepHostedService(
-        JobScannerService scanner,
-        JobStateMachine states,
+        TaskScannerService scanner,
+        TaskStateMachine states,
         ProjectSettingsService settings,
         OrchestratorChatLog chatLog,
         IConfiguration configuration,
@@ -112,9 +112,9 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         if (level == 0) return; // manual: never moves a task forward
 
         var allJobs = _scanner.ScanAllJobs().Where(j => j.WatchPath == watchPath).ToList();
-        var prep = allJobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList();
-        var orchPrep = allJobs.Where(j => j.State == JobStates.OrchestratorPrep).OrderBy(j => j.Order).ToList();
-        var ready = allJobs.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList();
+        var prep = allJobs.Where(j => j.State == TaskStates.Preparation).OrderBy(j => j.Order).ToList();
+        var orchPrep = allJobs.Where(j => j.State == TaskStates.OrchestratorPrep).OrderBy(j => j.Order).ToList();
+        var ready = allJobs.Where(j => j.State == TaskStates.Ready).OrderBy(j => j.Order).ToList();
 
         // 1) Refill: when 2-ready is below the floor, pull the next eligible
         //    1-preparation job into 1a-orchestrator-prep so the prep loop has
@@ -122,14 +122,14 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         if (ready.Count < queueFloor && orchPrep.Count == 0 && prep.Count > 0)
         {
             var head = prep.First();
-            var moved = _states.MoveJob(head.Id, JobStates.OrchestratorPrep, head.WatchPath);
+            var moved = _states.MoveJob(head.Id, TaskStates.OrchestratorPrep, head.WatchPath);
             if (moved.Status == MoveJobStatus.Success)
             {
                 _logger.LogInformation(
                     "OrchestratorPrep pulled {JobId} into {Lane} for project {Project} (queue floor {Floor})",
-                    head.Id, JobStates.OrchestratorPrep, projectName, queueFloor);
+                    head.Id, TaskStates.OrchestratorPrep, projectName, queueFloor);
                 _chatLog.Append(head, OrchestratorMessageKind.Decision,
-                    $"orchestrator-prep: refill (queue at {ready.Count}, floor {queueFloor}); pulled into {JobStates.OrchestratorPrep}");
+                    $"orchestrator-prep: refill (queue at {ready.Count}, floor {queueFloor}); pulled into {TaskStates.OrchestratorPrep}");
             }
         }
 
@@ -180,16 +180,16 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         switch (decision.Verdict)
         {
             case OrchestratorPrepRules.Verdict.Accept:
-                _states.MoveJob(job.Id, JobStates.Ready, job.WatchPath);
+                _states.MoveJob(job.Id, TaskStates.Ready, job.WatchPath);
                 _chatLog.Append(job, OrchestratorMessageKind.Decision,
-                    decision.Note ?? $"orchestrator-prep: accept (clarity {decision.Clarity:F2}); -> {JobStates.Ready}");
+                    decision.Note ?? $"orchestrator-prep: accept (clarity {decision.Clarity:F2}); -> {TaskStates.Ready}");
                 break;
 
             case OrchestratorPrepRules.Verdict.Bounce:
                 WriteBounceMetadata(job, decision);
-                _states.MoveJob(job.Id, JobStates.NeedsHumanReview, job.WatchPath);
+                _states.MoveJob(job.Id, TaskStates.NeedsHumanReview, job.WatchPath);
                 _chatLog.Append(job, OrchestratorMessageKind.GiveUp,
-                    $"orchestrator-prep: bounce ({decision.BounceReason}); clarity {decision.Clarity:F2}; -> {JobStates.NeedsHumanReview}");
+                    $"orchestrator-prep: bounce ({decision.BounceReason}); clarity {decision.Clarity:F2}; -> {TaskStates.NeedsHumanReview}");
                 break;
 
             case OrchestratorPrepRules.Verdict.Iterate:

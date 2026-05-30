@@ -15,14 +15,14 @@ namespace OrchestratorApi.Services;
 /// </summary>
 public class ProjectDocsService
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<ProjectDocsService> _logger;
 
     private const string SecurityRel = "docs/security";
     private const string SecurityStateFile = "state.json";
     private const string AdrRel = "docs/architecture-decisions.md";
 
-    public ProjectDocsService(JobScannerService scanner, ILogger<ProjectDocsService> logger)
+    public ProjectDocsService(TaskScannerService scanner, ILogger<ProjectDocsService> logger)
     {
         _scanner = scanner;
         _logger = logger;

@@ -25,7 +25,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     public LifecyclePhaseCompatibilityTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "rdo-phase-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -42,21 +42,21 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     public void DefaultFor_Ready_IsHumanReady()
     {
         Assert.Equal(LifecyclePhases.HumanReady,
-            LifecyclePhases.DefaultFor(JobStates.Ready, executionStatus: null, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(TaskStates.Ready, executionStatus: null, JobSummaryStatus.None));
     }
 
     [Fact]
     public void DefaultFor_ProgressWithRunningExecution_IsExecutionRunning()
     {
         Assert.Equal(LifecyclePhases.ExecutionRunning,
-            LifecyclePhases.DefaultFor(JobStates.Progress, "running", JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(TaskStates.Progress, "running", JobSummaryStatus.None));
     }
 
     [Fact]
     public void DefaultFor_ProgressWithGeneratingSummary_IsPostProcessingRunning()
     {
         Assert.Equal(LifecyclePhases.PostProcessingRunning,
-            LifecyclePhases.DefaultFor(JobStates.Progress, executionStatus: null, JobSummaryStatus.Generating));
+            LifecyclePhases.DefaultFor(TaskStates.Progress, executionStatus: null, JobSummaryStatus.Generating));
     }
 
     [Fact]
@@ -65,17 +65,17 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         // Today's UI treats a stopped / failed card in 3-progress as the
         // execution lane. The lane projection preserves that.
         Assert.Equal(LifecyclePhases.ExecutionRunning,
-            LifecyclePhases.DefaultFor(JobStates.Progress, executionStatus: null, JobSummaryStatus.None));
+            LifecyclePhases.DefaultFor(TaskStates.Progress, executionStatus: null, JobSummaryStatus.None));
     }
 
     [Theory]
-    [InlineData(JobStates.Preparation)]
-    [InlineData(JobStates.OrchestratorPrep)]
-    [InlineData(JobStates.NeedsHumanReview)]
-    [InlineData(JobStates.AutoReview)]
-    [InlineData(JobStates.HumanReview)]
-    [InlineData(JobStates.Completed)]
-    [InlineData(JobStates.Archive)]
+    [InlineData(TaskStates.Preparation)]
+    [InlineData(TaskStates.OrchestratorPrep)]
+    [InlineData(TaskStates.NeedsHumanReview)]
+    [InlineData(TaskStates.AutoReview)]
+    [InlineData(TaskStates.HumanReview)]
+    [InlineData(TaskStates.Completed)]
+    [InlineData(TaskStates.Archive)]
     public void DefaultFor_StatesWithoutSubstates_ReturnNull(string state)
     {
         Assert.Null(LifecyclePhases.DefaultFor(state, executionStatus: null, JobSummaryStatus.None));
@@ -86,15 +86,15 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Fact]
     public void IsAllowed_NullPhase_AlwaysOk()
     {
-        Assert.True(LifecyclePhases.IsAllowed(JobStates.Ready, null));
-        Assert.True(LifecyclePhases.IsAllowed(JobStates.AutoReview, null));
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.Ready, null));
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.AutoReview, null));
     }
 
     [Fact]
     public void IsAllowed_StateMismatch_RejectsPhase()
     {
-        Assert.False(LifecyclePhases.IsAllowed(JobStates.Ready, LifecyclePhases.ExecutionRunning));
-        Assert.False(LifecyclePhases.IsAllowed(JobStates.Progress, LifecyclePhases.IntakeBlocked));
+        Assert.False(LifecyclePhases.IsAllowed(TaskStates.Ready, LifecyclePhases.ExecutionRunning));
+        Assert.False(LifecyclePhases.IsAllowed(TaskStates.Progress, LifecyclePhases.IntakeBlocked));
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         // Preparation and review lanes have no entry in AllowedByState; a
         // sidecar that stamps a phase there should be tolerated rather than
         // wedge the board, mirroring the wire field's lazy-defaulting model.
-        Assert.True(LifecyclePhases.IsAllowed(JobStates.Preparation, LifecyclePhases.HumanReady));
+        Assert.True(LifecyclePhases.IsAllowed(TaskStates.Preparation, LifecyclePhases.HumanReady));
     }
 
     // ---- Scanner: existing jobs without phase --------------------------------
@@ -111,7 +111,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Fact]
     public void Scanner_LegacyJob_NoPhaseField_ParsesWithNullPhase()
     {
-        WriteJob(JobStates.Ready, "alpha", phase: null);
+        WriteJob(TaskStates.Ready, "alpha", phase: null);
 
         var info = BuildScanner().FindJob("alpha");
 
@@ -125,7 +125,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Fact]
     public void Scanner_LegacyJobInProgress_NoPhase_DefaultsToExecutionLane()
     {
-        WriteJob(JobStates.Progress, "stopped-run", phase: null);
+        WriteJob(TaskStates.Progress, "stopped-run", phase: null);
 
         var info = BuildScanner().FindJob("stopped-run");
 
@@ -140,7 +140,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Fact]
     public void Scanner_JobWithIntakePhase_RoundTrips()
     {
-        WriteJob(JobStates.Ready, "intake-card", phase: LifecyclePhases.IntakeRunning);
+        WriteJob(TaskStates.Ready, "intake-card", phase: LifecyclePhases.IntakeRunning);
 
         var info = BuildScanner().FindJob("intake-card");
 
@@ -151,7 +151,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Fact]
     public void Scanner_JobWithPostProcessingPhase_RoundTrips()
     {
-        WriteJob(JobStates.Progress, "post-card", phase: LifecyclePhases.PostProcessingRunning);
+        WriteJob(TaskStates.Progress, "post-card", phase: LifecyclePhases.PostProcessingRunning);
 
         var info = BuildScanner().FindJob("post-card");
 
@@ -165,7 +165,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         // Hand-edited job.json puts an execution phase on a 2-ready card.
         // The scanner must drop it (logging a warning) rather than wedge the
         // board or echo nonsense back to the UI.
-        WriteJob(JobStates.Ready, "bad-phase", phase: LifecyclePhases.ExecutionRunning);
+        WriteJob(TaskStates.Ready, "bad-phase", phase: LifecyclePhases.ExecutionRunning);
 
         var info = BuildScanner().FindJob("bad-phase");
 
@@ -176,7 +176,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Fact]
     public void Scanner_UnknownPhaseString_IsDroppedNotFatal()
     {
-        WriteJob(JobStates.Ready, "garbled", phase: "totally-made-up");
+        WriteJob(TaskStates.Ready, "garbled", phase: "totally-made-up");
 
         var info = BuildScanner().FindJob("garbled");
 
@@ -193,13 +193,13 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         // states. The scan must surface every one with its expected phase
         // value, and every legacy card must default-resolve to the right
         // lane via DefaultFor.
-        WriteJob(JobStates.Preparation, "draft-1",  phase: null);
-        WriteJob(JobStates.Ready,       "ready-legacy", phase: null);
-        WriteJob(JobStates.Ready,       "ready-intake", phase: LifecyclePhases.IntakeRunning);
-        WriteJob(JobStates.Progress,    "exec-legacy",  phase: null);
-        WriteJob(JobStates.Progress,    "exec-post",    phase: LifecyclePhases.PostProcessingRunning);
-        WriteJob(JobStates.AutoReview,  "review-card",  phase: null);
-        WriteJob(JobStates.Completed,   "done-card",    phase: null);
+        WriteJob(TaskStates.Preparation, "draft-1",  phase: null);
+        WriteJob(TaskStates.Ready,       "ready-legacy", phase: null);
+        WriteJob(TaskStates.Ready,       "ready-intake", phase: LifecyclePhases.IntakeRunning);
+        WriteJob(TaskStates.Progress,    "exec-legacy",  phase: null);
+        WriteJob(TaskStates.Progress,    "exec-post",    phase: LifecyclePhases.PostProcessingRunning);
+        WriteJob(TaskStates.AutoReview,  "review-card",  phase: null);
+        WriteJob(TaskStates.Completed,   "done-card",    phase: null);
 
         var jobs = BuildScanner().ScanAllJobs().ToDictionary(j => j.Id);
 
@@ -228,8 +228,8 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         // every job folder just to add default metadata. The scan path must
         // leave a phase-less job.json alone so an idle backend boot does not
         // touch every card on the board.
-        WriteJob(JobStates.Ready, "untouched", phase: null);
-        var path = Path.Combine(_watchPath, JobStates.Ready, "untouched", "job.json");
+        WriteJob(TaskStates.Ready, "untouched", phase: null);
+        var path = Path.Combine(_watchPath, TaskStates.Ready, "untouched", "job.json");
         var before = File.ReadAllText(path);
         var beforeMtime = File.GetLastWriteTimeUtc(path);
 
@@ -253,7 +253,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"ownerClientId\":\"default\"{phaseField}}}");
     }
 
-    private JobScannerService BuildScanner()
+    private TaskScannerService BuildScanner()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -263,6 +263,6 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
     }
 }

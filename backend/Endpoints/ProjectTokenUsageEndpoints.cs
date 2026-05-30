@@ -28,7 +28,7 @@ public static class ProjectTokenUsageEndpoints
     {
         app.MapGet("/api/projects/{projectName}/token-usage/summary", (
             string projectName,
-            JobScannerService scanner,
+            TaskScannerService scanner,
             ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
@@ -43,7 +43,7 @@ public static class ProjectTokenUsageEndpoints
         app.MapGet("/api/projects/{projectName}/token-usage/heatmap", (
             string projectName,
             int? days,
-            JobScannerService scanner,
+            TaskScannerService scanner,
             ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
@@ -59,7 +59,7 @@ public static class ProjectTokenUsageEndpoints
         app.MapGet("/api/projects/{projectName}/token-usage/expensive", (
             string projectName,
             int? limit,
-            JobScannerService scanner,
+            TaskScannerService scanner,
             ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
@@ -76,7 +76,7 @@ public static class ProjectTokenUsageEndpoints
         app.MapGet("/api/projects/{projectName}/token-usage/job/{jobId}", (
             string projectName,
             string jobId,
-            JobScannerService scanner,
+            TaskScannerService scanner,
             ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))

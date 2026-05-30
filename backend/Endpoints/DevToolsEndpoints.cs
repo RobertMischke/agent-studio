@@ -57,7 +57,7 @@ public static class DevToolsEndpoints
             await StreamProcessAsync(http, scriptPath, logger, ct);
         });
 
-        group.MapGet("/e2e-jobs", (IConfiguration config, JobScannerService scanner) =>
+        group.MapGet("/e2e-jobs", (IConfiguration config, TaskScannerService scanner) =>
         {
             if (!config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled"))
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
@@ -99,8 +99,8 @@ public static class DevToolsEndpoints
 
         group.MapPost("/e2e-jobs/delete", (
             IConfiguration config,
-            JobScannerService scanner,
-            JobStateMachine states,
+            TaskScannerService scanner,
+            TaskStateMachine states,
             DeleteE2EJobsRequest req) =>
         {
             if (!config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled"))

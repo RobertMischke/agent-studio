@@ -26,7 +26,7 @@ public static class JobPipelineEndpoints
         group.MapGet("/{jobId}/pipeline", (
             string jobId,
             string? watchPath,
-            JobScannerService scanner,
+            TaskScannerService scanner,
             PipelineExecutionLog pipelineLog) =>
         {
             var info = scanner.FindJob(jobId, watchPath);

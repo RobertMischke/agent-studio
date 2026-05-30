@@ -109,7 +109,7 @@ public class GitServiceToplevelTests : IDisposable
         }
         var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return new GitService(NullLogger<GitService>.Instance, scanner, config);
     }
 

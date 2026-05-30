@@ -35,7 +35,7 @@ public class CompletedLaneAuditServiceTests : IDisposable
         _workspace = Path.Combine(Path.GetTempPath(), "atp-audit-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
         Directory.CreateDirectory(_watchPath);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -51,7 +51,7 @@ public class CompletedLaneAuditServiceTests : IDisposable
     {
         var (audit, scanner, store, _) = Build();
         // Code change asked + commit attached + status mentions tests.
-        WriteJob(JobStates.Completed, "good-card", "Good Card",
+        WriteJob(TaskStates.Completed, "good-card", "Good Card",
             promptBody: "Implement the foo helper and add tests for it.",
             statusBody: "Done. Added foo.cs with tests. All checks green.",
             commitSha: "abc1234");
@@ -60,16 +60,16 @@ public class CompletedLaneAuditServiceTests : IDisposable
 
         Assert.Equal(ReEvaluateStatus.Success, outcome.Status);
         Assert.Equal(AuditVerdicts.Ok, outcome.Response!.Verdict);
-        Assert.Equal(JobStates.Completed, outcome.Response.NewState);
+        Assert.Equal(TaskStates.Completed, outcome.Response.NewState);
         Assert.NotNull(scanner.FindJob("good-card", _watchPath));
-        Assert.Equal(JobStates.Completed, scanner.FindJob("good-card", _watchPath)!.State);
+        Assert.Equal(TaskStates.Completed, scanner.FindJob("good-card", _watchPath)!.State);
     }
 
     [Fact]
     public void ReEvaluate_PromptAsksForCodeButNoCommit_FlipsToNeedsHumanReview()
     {
         var (audit, scanner, _, _) = Build();
-        WriteJob(JobStates.Completed, "shaky-card", "Shaky Card",
+        WriteJob(TaskStates.Completed, "shaky-card", "Shaky Card",
             promptBody: "Fix the bug in OrderService where the total calculation is off.",
             statusBody: "All done.",
             commitSha: null);
@@ -78,14 +78,14 @@ public class CompletedLaneAuditServiceTests : IDisposable
 
         Assert.Equal(ReEvaluateStatus.Success, outcome.Status);
         Assert.Equal(AuditVerdicts.NotReallyDone, outcome.Response!.Verdict);
-        Assert.Equal(JobStates.NeedsHumanReview, outcome.Response.NewState);
+        Assert.Equal(TaskStates.NeedsHumanReview, outcome.Response.NewState);
 
         var moved = scanner.FindJob("shaky-card", _watchPath);
         Assert.NotNull(moved);
-        Assert.Equal(JobStates.NeedsHumanReview, moved!.State);
+        Assert.Equal(TaskStates.NeedsHumanReview, moved!.State);
 
         // Quality-loop event landed on the moved folder's timeline.
-        var timelinePath = JobPaths.TimelineLog(moved.FolderPath);
+        var timelinePath = TaskPaths.TimelineLog(moved.FolderPath);
         Assert.True(File.Exists(timelinePath));
         var contents = File.ReadAllText(timelinePath);
         Assert.Contains("quality_loop_reopened", contents);
@@ -95,7 +95,7 @@ public class CompletedLaneAuditServiceTests : IDisposable
     public void ReEvaluate_OutsideCompletedOrArchive_ReturnsWrongLane()
     {
         var (audit, _, _, _) = Build();
-        WriteJob(JobStates.Ready, "ready-card", "Ready Card", "x", "y", commitSha: null);
+        WriteJob(TaskStates.Ready, "ready-card", "Ready Card", "x", "y", commitSha: null);
 
         var outcome = audit.ReEvaluate("ready-card", _watchPath, "tester");
 
@@ -106,11 +106,11 @@ public class CompletedLaneAuditServiceTests : IDisposable
     public async Task StartAudit_ProcessesAllCompletedCards()
     {
         var (audit, _, store, _) = Build();
-        WriteJob(JobStates.Completed, "good-1", "Good 1",
+        WriteJob(TaskStates.Completed, "good-1", "Good 1",
             "Implement helper and add tests.", "Done; helper.cs added with tests.", "aaa1");
-        WriteJob(JobStates.Completed, "shaky-1", "Shaky 1",
+        WriteJob(TaskStates.Completed, "shaky-1", "Shaky 1",
             "Fix the parser bug.", "Done.", null);
-        WriteJob(JobStates.Archive, "good-2", "Good 2",
+        WriteJob(TaskStates.Archive, "good-2", "Good 2",
             "Document the API.", "Done; docs updated.", "bbb2");
 
         var startOutcome = audit.StartAudit(_watchPath, "tester");
@@ -142,7 +142,7 @@ public class CompletedLaneAuditServiceTests : IDisposable
 
     // ---- Helpers --------------------------------------------------------
 
-    private (CompletedLaneAuditService audit, JobScannerService scanner, AuditRunStore store, JobStateMachine states) Build()
+    private (CompletedLaneAuditService audit, TaskScannerService scanner, AuditRunStore store, TaskStateMachine states) Build()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -153,12 +153,12 @@ public class CompletedLaneAuditServiceTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var notifier = new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var notifier = new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance);
         var clients = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance);
         var registry = new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance);
-        var mutations = new JobMutationService(scanner, clients, registry, notifier, NullLogger<JobMutationService>.Instance);
+        var mutations = new TaskMutationService(scanner, clients, registry, notifier, NullLogger<TaskMutationService>.Instance);
         var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
         var detector = new AcceptanceEvidenceDetector();
         var store = new AuditRunStore();

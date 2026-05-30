@@ -22,7 +22,7 @@ namespace OrchestratorApi.Tests;
 /// short-circuited; the project was wedged until a backend restart.
 ///
 /// <list type="number">
-///   <item><see cref="JobTransitionService.MoveAsync"/> raises
+///   <item><see cref="TaskTransitionService.MoveAsync"/> raises
 ///   <c>OnJobMoved</c> with the resolved project, job id, source state,
 ///   and target state. Wired in <c>Program.cs</c> to call
 ///   <see cref="TaskRunnerService.ClearActiveJobForProject"/>, which
@@ -42,7 +42,7 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     public RunnerActiveStateClearedOnExternalMoveTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-runner-clear-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
     public void Dispose()
@@ -53,48 +53,48 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     [Fact]
     public async Task MoveAsync_FromProgressToReady_FiresOnJobMovedWithResolvedStates()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var captured = new List<(string Project, string JobId, string From, string To)>();
         deps.Transitions.OnJobMoved += (project, jobId, from, to) =>
             captured.Add((project, jobId, from, to));
 
-        var outcome = await deps.Transitions.MoveAsync("demo-task", JobStates.Ready, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("demo-task", TaskStates.Ready, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         var evt = Assert.Single(captured);
         Assert.Equal(ProjectName, evt.Project);
         Assert.Equal("demo-task", evt.JobId);
-        Assert.Equal(JobStates.Progress, evt.From);
-        Assert.Equal(JobStates.Ready, evt.To);
+        Assert.Equal(TaskStates.Progress, evt.From);
+        Assert.Equal(TaskStates.Ready, evt.To);
     }
 
     [Fact]
     public async Task MoveAsync_FromProgressToArchive_FiresOnJobMoved()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var captured = new List<(string Project, string JobId, string From, string To)>();
         deps.Transitions.OnJobMoved += (project, jobId, from, to) =>
             captured.Add((project, jobId, from, to));
 
-        var outcome = await deps.Transitions.MoveAsync("demo-task", JobStates.Archive, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("demo-task", TaskStates.Archive, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         var evt = Assert.Single(captured);
-        Assert.Equal(JobStates.Progress, evt.From);
-        Assert.Equal(JobStates.Archive, evt.To);
+        Assert.Equal(TaskStates.Progress, evt.From);
+        Assert.Equal(TaskStates.Archive, evt.To);
     }
 
     [Fact]
     public async Task MoveAsync_NoStateChange_DoesNotFireEvent()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var fired = 0;
         deps.Transitions.OnJobMoved += (_, _, _, _) => fired++;
 
-        var outcome = await deps.Transitions.MoveAsync("demo-task", JobStates.Progress, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("demo-task", TaskStates.Progress, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(0, fired);
@@ -103,7 +103,7 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     [Fact]
     public void ClearActiveJobIfMatches_OnMatchingId_ClearsLatchAndIsIdempotent()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var runner = BuildRunner(deps);
         runner.SetActiveJobForTest("demo-task");
@@ -119,7 +119,7 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     [Fact]
     public void ClearActiveJobIfMatches_OnNonMatchingId_NoOp()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var runner = BuildRunner(deps);
         runner.SetActiveJobForTest("demo-task");
@@ -133,18 +133,18 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     [Fact]
     public void Reconcile_ActiveJobMovedToReady_ClearsLatch()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var runner = BuildRunner(deps);
         runner.SetActiveJobForTest("demo-task");
 
         // Simulate an external (non-API) move: rename the folder out of
-        // 3-progress without going through JobTransitionService. This is the
+        // 3-progress without going through TaskTransitionService. This is the
         // exact code path the boot-time stuck-folder sweep and any hand
         // edit take, neither of which would fire OnJobMoved.
         Directory.Move(
-            Path.Combine(_watchPath, JobStates.Progress, "demo-task"),
-            Path.Combine(_watchPath, JobStates.Ready, "demo-task"));
+            Path.Combine(_watchPath, TaskStates.Progress, "demo-task"),
+            Path.Combine(_watchPath, TaskStates.Ready, "demo-task"));
 
         // First reconcile call must clear the latch; a second is a no-op.
         var firstCleared = runner.ReconcileActiveJobAgainstDisk();
@@ -158,12 +158,12 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     [Fact]
     public void Reconcile_ActiveJobFolderDeleted_ClearsLatch()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var runner = BuildRunner(deps);
         runner.SetActiveJobForTest("demo-task");
 
-        Directory.Delete(Path.Combine(_watchPath, JobStates.Progress, "demo-task"), recursive: true);
+        Directory.Delete(Path.Combine(_watchPath, TaskStates.Progress, "demo-task"), recursive: true);
 
         var cleared = runner.ReconcileActiveJobAgainstDisk();
 
@@ -174,7 +174,7 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
     [Fact]
     public void Reconcile_ActiveJobStillInProgress_NoOp()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var runner = BuildRunner(deps);
         runner.SetActiveJobForTest("demo-task");
@@ -192,19 +192,19 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         // move out of 3-progress fires OnJobMoved, which the handler turns
         // into runner.ClearActiveJobIfMatches. After this, the runner
         // reports active=null and the next pickup tick is unblocked.
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var deps = BuildDeps();
         var runner = BuildRunner(deps);
         runner.SetActiveJobForTest("demo-task");
 
         deps.Transitions.OnJobMoved += (project, jobId, from, _) =>
         {
-            if (from != JobStates.Progress) return;
+            if (from != TaskStates.Progress) return;
             if (project != ProjectName) return;
             runner.ClearActiveJobIfMatches(jobId, "job moved out of 3-progress externally");
         };
 
-        var outcome = await deps.Transitions.MoveAsync("demo-task", JobStates.Ready, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("demo-task", TaskStates.Ready, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Null(runner.GetStatus().ActiveJobId);
@@ -220,15 +220,15 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
 
     private sealed record Deps(
         IConfiguration Config,
-        JobScannerService Scanner,
-        JobStateMachine States,
-        JobMutationService Mutations,
-        JobSessionLog Sessions,
+        TaskScannerService Scanner,
+        TaskStateMachine States,
+        TaskMutationService Mutations,
+        TaskSessionLog Sessions,
         SummaryGenerationService Summary,
         RuntimePromptService Prompts,
         ProjectSettingsService Settings,
         GitService Git,
-        JobTransitionService Transitions,
+        TaskTransitionService Transitions,
         OrchestratorChatLog ChatLog,
         OrchestratorLog OrchestratorLog,
         OrchestratorRunner OrchestratorRunner,
@@ -250,17 +250,17 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
             .Build();
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
-        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,

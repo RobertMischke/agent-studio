@@ -49,11 +49,11 @@ public sealed class RoadmapAlignmentReviewService
     /// asks "are we on track?" against the active queue.</summary>
     public static readonly IReadOnlyList<string> InspectedLanes = new[]
     {
-        JobStates.Preparation,
-        JobStates.Ready,
-        JobStates.Progress,
-        JobStates.AutoReview,
-        JobStates.HumanReview,
+        TaskStates.Preparation,
+        TaskStates.Ready,
+        TaskStates.Progress,
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
     };
 
     /// <summary>Canonical topic slug the UI uses for this producer.</summary>
@@ -332,7 +332,7 @@ public sealed class RoadmapAlignmentReviewService
                 // backend writes job.json with. JsonDocument.Parse(byte[])
                 // does NOT skip the BOM so byte-level reads need a manual
                 // strip; staying on string is simpler and matches
-                // JobScannerService.
+                // TaskScannerService.
                 var text = File.ReadAllText(jobJson);
                 using var doc = JsonDocument.Parse(text);
                 var root = doc.RootElement;

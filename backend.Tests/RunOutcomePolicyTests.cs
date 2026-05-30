@@ -20,7 +20,7 @@ namespace OrchestratorApi.Tests;
 /// </summary>
 public class RunOutcomePolicyTests
 {
-    private static RunPlan RecoveryPlan(string state = JobStates.Progress) =>
+    private static RunPlan RecoveryPlan(string state = TaskStates.Progress) =>
         new(
             PromptTemplate: RuntimePromptService.RunnerRecoveryContinuation,
             PromptVariables: new Dictionary<string, string?> { ["user_followup"] = "do the work please" },
@@ -30,7 +30,7 @@ public class RunOutcomePolicyTests
             EventKind: "recovery",
             EventReason: "no session recorded",
             EventInputSessionId: null,
-            MoveJobToProgress: state != JobStates.Progress,
+            MoveJobToProgress: state != TaskStates.Progress,
             MarkSessionChainRecovery: true,
             WriteCutMarker: true,
             CutMarkerReason: "session lost",

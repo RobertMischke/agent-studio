@@ -35,7 +35,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         _workspaceRoot = Path.Combine(_tempDir, "workspace");
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
         Directory.CreateDirectory(_workspaceRoot);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
@@ -54,10 +54,10 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         // so we can confirm logs survive the restore.
         const string original = "foo";
         const string deadLetterSlug = "foo-pickup-failed-2026-05-08";
-        var deadLetterFolder = Path.Combine(_watchPath, JobStates.FailedPickup, deadLetterSlug);
+        var deadLetterFolder = Path.Combine(_watchPath, TaskStates.FailedPickup, deadLetterSlug);
         Directory.CreateDirectory(deadLetterFolder);
         File.WriteAllText(Path.Combine(deadLetterFolder, "job.json"),
-            $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"{original}\",\"state\":\"{JobStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"{original}\",\"state\":\"{TaskStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
         var logsDir = Path.Combine(deadLetterFolder, "logs");
         Directory.CreateDirectory(logsDir);
         File.WriteAllText(Path.Combine(logsDir, "cli-output.log"),
@@ -76,7 +76,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
 
         // Folder structure: source gone, target present, archive empty.
         Assert.False(Directory.Exists(deadLetterFolder), "dead-letter source folder must be moved, not copied");
-        var restored = Path.Combine(_watchPath, JobStates.Ready, original);
+        var restored = Path.Combine(_watchPath, TaskStates.Ready, original);
         Assert.True(Directory.Exists(restored), "folder must land in 2-ready under the original slug");
 
         // The cli-output log (and its supervisor note) survived the move
@@ -86,9 +86,9 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
 
         // job.json state is now 2-ready. The id field is left to the
         // scanner's self-heal pass: a fresh scan rewrites it to match
-        // the new folder name (line 201-208 of JobScannerService).
+        // the new folder name (line 201-208 of TaskScannerService).
         var jobJsonRaw = File.ReadAllText(Path.Combine(restored, "job.json"));
-        Assert.Contains($"\"state\": \"{JobStates.Ready}\"", jobJsonRaw);
+        Assert.Contains($"\"state\": \"{TaskStates.Ready}\"", jobJsonRaw);
 
         // Forensics: the endpoint appends a pickup-restored row. The
         // service method does not append on its own (the endpoint layer
@@ -101,7 +101,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
             Slug = outcome.OriginalSlug!,
             SourceSlug = outcome.SourceSlug!,
             RestoredAs = outcome.RestoredSlug!,
-            TargetState = JobStates.Ready,
+            TargetState = TaskStates.Ready,
             Reason = "Operator restore via API; original slug recovered."
         });
 
@@ -116,7 +116,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         // Self-heal of the divergent id field happens on the next scan.
         var rescannedId = scanner.FindJob(original, _watchPath);
         Assert.NotNull(rescannedId);
-        Assert.Equal(JobStates.Ready, rescannedId!.State);
+        Assert.Equal(TaskStates.Ready, rescannedId!.State);
         Assert.Equal(original, rescannedId.Id);
     }
 
@@ -124,10 +124,10 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
     public void Restore_WithKeepDeadLetterSlug_RetainsTheSuffix()
     {
         const string deadLetterSlug = "foo-pickup-failed-2026-05-08";
-        var deadLetterFolder = Path.Combine(_watchPath, JobStates.FailedPickup, deadLetterSlug);
+        var deadLetterFolder = Path.Combine(_watchPath, TaskStates.FailedPickup, deadLetterSlug);
         Directory.CreateDirectory(deadLetterFolder);
         File.WriteAllText(Path.Combine(deadLetterFolder, "job.json"),
-            $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"foo\",\"state\":\"{JobStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"foo\",\"state\":\"{TaskStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
 
         var (states, _, _) = Build();
 
@@ -136,8 +136,8 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         Assert.Equal(RestoreFromFailedPickupStatus.Success, outcome.Status);
         Assert.Equal(deadLetterSlug, outcome.RestoredSlug);
         Assert.Equal("foo", outcome.OriginalSlug);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, deadLetterSlug)));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "foo")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, deadLetterSlug)));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "foo")));
     }
 
     [Fact]
@@ -161,10 +161,10 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         const string deadLetterSlug = "foo-pickup-failed-2026-05-08";
 
         // Seed 2-ready with the restored folder.
-        var restored = Path.Combine(_watchPath, JobStates.Ready, original);
+        var restored = Path.Combine(_watchPath, TaskStates.Ready, original);
         Directory.CreateDirectory(restored);
         File.WriteAllText(Path.Combine(restored, "job.json"),
-            $"{{\"id\":\"{original}\",\"title\":\"{original}\",\"state\":\"{JobStates.Ready}\",\"order\":1,\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{original}\",\"title\":\"{original}\",\"state\":\"{TaskStates.Ready}\",\"order\":1,\"agent\":\"copilot\"}}");
         // 3a-failed-pickup is empty: nothing to restore.
 
         var (states, _, _) = Build();
@@ -187,15 +187,15 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         const string original = "foo";
         const string deadLetterSlug = "foo-pickup-failed-2026-05-08";
 
-        var stale = Path.Combine(_watchPath, JobStates.Ready, original);
+        var stale = Path.Combine(_watchPath, TaskStates.Ready, original);
         Directory.CreateDirectory(stale);
         File.WriteAllText(Path.Combine(stale, "job.json"),
-            $"{{\"id\":\"{original}\",\"title\":\"stale\",\"state\":\"{JobStates.Ready}\",\"order\":1,\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{original}\",\"title\":\"stale\",\"state\":\"{TaskStates.Ready}\",\"order\":1,\"agent\":\"copilot\"}}");
 
-        var deadLetterFolder = Path.Combine(_watchPath, JobStates.FailedPickup, deadLetterSlug);
+        var deadLetterFolder = Path.Combine(_watchPath, TaskStates.FailedPickup, deadLetterSlug);
         Directory.CreateDirectory(deadLetterFolder);
         File.WriteAllText(Path.Combine(deadLetterFolder, "job.json"),
-            $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"{original}\",\"state\":\"{JobStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"{original}\",\"state\":\"{TaskStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
 
         var (states, _, _) = Build();
 
@@ -222,7 +222,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         Assert.False(PickupFailureLog.TryParseFailedPickupSlug("", out _));
     }
 
-    private (JobStateMachine States, JobScannerService Scanner, PickupFailureLog PickupLog) Build()
+    private (TaskStateMachine States, TaskScannerService Scanner, PickupFailureLog PickupLog) Build()
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -233,8 +233,8 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         }).Build();
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var pickupLog = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
         return (states, scanner, pickupLog);
     }

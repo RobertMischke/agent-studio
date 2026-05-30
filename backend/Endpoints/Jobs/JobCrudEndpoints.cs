@@ -18,7 +18,7 @@ public static class JobCrudEndpoints
 {
     public static void MapJobCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
+        group.MapGet("/", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -28,7 +28,7 @@ public static class JobCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings) =>
+        group.MapGet("/grouped", (bool? includeFixtures, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, ProjectSettingsService projectSettings) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -58,36 +58,36 @@ public static class JobCrudEndpoints
             // "Review" key is kept (auto-review only) so older clients that
             // only know the four pre-ADR-0025 lane names keep getting a
             // populated bucket and don't crash on a missing field.
-            var autoReview = SortLane(JobStates.AutoReview);
-            var humanReview = SortLane(JobStates.HumanReview);
+            var autoReview = SortLane(TaskStates.AutoReview);
+            var humanReview = SortLane(TaskStates.HumanReview);
             var grouped = new
             {
                 // Backlog: triage staging area, the leftmost lane and the
                 // default landing for new jobs.
-                Backlog = SortLane(JobStates.Backlog),
-                Preparation = SortLane(JobStates.Preparation),
+                Backlog = SortLane(TaskStates.Backlog),
+                Preparation = SortLane(TaskStates.Preparation),
                 // ADR-0026: orchestrator-prep + needs-human-review lanes.
                 // Empty by default; clients render NeedsHumanReview only when
                 // it has at least one job (hide-when-empty rule).
-                OrchestratorPrep = SortLane(JobStates.OrchestratorPrep),
-                NeedsHumanReview = SortLane(JobStates.NeedsHumanReview),
-                Ready = SortLane(JobStates.Ready),
-                Progress = SortLane(JobStates.Progress),
+                OrchestratorPrep = SortLane(TaskStates.OrchestratorPrep),
+                NeedsHumanReview = SortLane(TaskStates.NeedsHumanReview),
+                Ready = SortLane(TaskStates.Ready),
+                Progress = SortLane(TaskStates.Progress),
                 // ADR-0028: 3a-failed-pickup is a hide-when-empty lane that
                 // surfaces orphan boot-sweep verdicts the runner used to hide
                 // in 7-archive. Empty by default; clients render it only when
                 // it has at least one job.
-                FailedPickup = SortLane(JobStates.FailedPickup),
+                FailedPickup = SortLane(TaskStates.FailedPickup),
                 AutoReview = autoReview,
                 HumanReview = humanReview,
                 Review = autoReview, // legacy alias for pre-ADR-0025 clients
-                Completed = SortLane(JobStates.Completed),
-                Archive = SortLane(JobStates.Archive)
+                Completed = SortLane(TaskStates.Completed),
+                Archive = SortLane(TaskStates.Archive)
             };
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
             if (detail is null) return Results.NotFound();
@@ -97,7 +97,7 @@ public static class JobCrudEndpoints
         });
 
         group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,
-            JobTransitionService transitions,
+            TaskTransitionService transitions,
             CancellationToken ct) =>
         {
             var validation = ValidateTargetState(req.TargetState);
@@ -107,7 +107,7 @@ public static class JobCrudEndpoints
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? watchPath, MoveJobRequest req,
-            JobTransitionService transitions,
+            TaskTransitionService transitions,
             CancellationToken ct) =>
         {
             var validation = ValidateTargetState(req.TargetState);
@@ -118,12 +118,12 @@ public static class JobCrudEndpoints
 
         // Batch move / restore. Per-item atomic: a failure on item N must
         // not roll back items already applied; each item is independently
-        // routed through JobTransitionService.MoveAsync, which is the same
+        // routed through TaskTransitionService.MoveAsync, which is the same
         // path the single-item endpoint above uses. The whole batch returns
         // 200 OK with a per-item status array so the caller can retry just
         // the failures. See AGENTS.md "Job organization rule: API first".
         group.MapPost("/batch-move", async (BatchMoveRequest req,
-            JobTransitionService transitions,
+            TaskTransitionService transitions,
             CancellationToken ct) =>
         {
             if (req?.Items is null || req.Items.Count == 0)
@@ -143,8 +143,8 @@ public static class JobCrudEndpoints
         // dead-letter -> restore lifecycle is reviewable per-slug.
         group.MapPost("/{jobId}/restore-from-failed-pickup",
             (string jobId, string? watchPath, RestoreFromFailedPickupRequest? req,
-                JobScannerService scanner,
-                JobStateMachine states,
+                TaskScannerService scanner,
+                TaskStateMachine states,
                 PickupFailureLog pickupFailures) =>
         {
             var keepDeadLetterSlug = req?.KeepDeadLetterSlug ?? false;
@@ -168,7 +168,7 @@ public static class JobCrudEndpoints
                         Slug = outcome.OriginalSlug ?? "",
                         SourceSlug = outcome.SourceSlug ?? jobId,
                         RestoredAs = outcome.RestoredSlug ?? "",
-                        TargetState = JobStates.Ready,
+                        TargetState = TaskStates.Ready,
                         Reason = keepDeadLetterSlug
                             ? "Operator restore via API; dead-letter slug suffix preserved."
                             : "Operator restore via API; original slug recovered."
@@ -179,7 +179,7 @@ public static class JobCrudEndpoints
                         restoredSlug = outcome.RestoredSlug,
                         originalSlug = outcome.OriginalSlug,
                         sourceSlug = outcome.SourceSlug,
-                        targetState = JobStates.Ready
+                        targetState = TaskStates.Ready
                     });
                 case RestoreFromFailedPickupStatus.NoOp:
                     return Results.Ok(new
@@ -201,13 +201,13 @@ public static class JobCrudEndpoints
             }
         });
 
-        group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobStateMachine states) =>
+        group.MapDelete("/{jobId}", (string jobId, string? watchPath, TaskStateMachine states) =>
         {
             var success = states.DeleteJob(jobId, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateJobRequest req, HttpContext ctx, JobMutationService mutations) =>
+        group.MapPost("/", (CreateJobRequest req, HttpContext ctx, TaskMutationService mutations) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
@@ -228,7 +228,7 @@ public static class JobCrudEndpoints
             return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
         });
 
-        group.MapPost("/reorder", (ReorderRequest req, JobStateMachine states) =>
+        group.MapPost("/reorder", (ReorderRequest req, TaskStateMachine states) =>
         {
             var jobs = req.Jobs.Count > 0
                 ? req.Jobs
@@ -237,30 +237,30 @@ public static class JobCrudEndpoints
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });
 
-        // "Do Next" from the detail view: surface JobStateMachine.PromoteToReadyTop
+        // "Do Next" from the detail view: surface TaskStateMachine.PromoteToReadyTop
         // so the user can push a queued task to the head of the project's ready
         // queue with one click. The state machine handles the reorder atomically
         // on disk and preserves the relative position of any other queued
         // jobs that already carry a PendingIntent.
-        group.MapPost("/{jobId}/move-to-top", (string jobId, string? watchPath, JobStateMachine states) =>
+        group.MapPost("/{jobId}/move-to-top", (string jobId, string? watchPath, TaskStateMachine states) =>
         {
             var position = states.PromoteToReadyTop(jobId, watchPath);
             return position == 0 ? Results.NotFound() : Results.Ok(new { position });
         });
 
-        group.MapPost("/{jobId}/change-project", (string jobId, string? watchPath, ChangeProjectRequest req, JobStateMachine states) =>
+        group.MapPost("/{jobId}/change-project", (string jobId, string? watchPath, ChangeProjectRequest req, TaskStateMachine states) =>
         {
             var success = states.ChangeProject(jobId, req.TargetWatchPath, watchPath);
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
 
-        group.MapPut("/{jobId}/model", (string jobId, string? watchPath, SetJobModelRequest req, JobMutationService mutations) =>
+        group.MapPut("/{jobId}/model", (string jobId, string? watchPath, SetJobModelRequest req, TaskMutationService mutations) =>
         {
             var success = mutations.SetJobModel(jobId, req?.Model, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPut("/{jobId}/cli-type", (string jobId, string? watchPath, SetJobCliTypeRequest req, JobMutationService mutations) =>
+        group.MapPut("/{jobId}/cli-type", (string jobId, string? watchPath, SetJobCliTypeRequest req, TaskMutationService mutations) =>
         {
             if (req is null || !CliTypes.IsValid(req.CliType))
                 return Results.BadRequest(new { error = $"cliType must be one of {string.Join(", ", CliTypes.All)}" });
@@ -271,7 +271,7 @@ public static class JobCrudEndpoints
             return Results.Ok();
         });
 
-        group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, JobMutationService mutations) =>
+        group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, TaskMutationService mutations) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest(new { error = "Title is required" });
@@ -280,7 +280,7 @@ public static class JobCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPut("/{jobId}/task-type", (string jobId, string? watchPath, SetJobTaskTypeRequest req, JobMutationService mutations) =>
+        group.MapPut("/{jobId}/task-type", (string jobId, string? watchPath, SetJobTaskTypeRequest req, TaskMutationService mutations) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.TaskType))
                 return Results.BadRequest(new { error = "taskType is required" });
@@ -292,7 +292,7 @@ public static class JobCrudEndpoints
         // the job. Empty list clears tags. Unknown ids are accepted (the
         // registry may evolve out from under a job); ghost rendering is the
         // FE's responsibility.
-        group.MapPut("/{jobId}/tags", (string jobId, string? watchPath, SetJobTagsRequest req, JobMutationService mutations) =>
+        group.MapPut("/{jobId}/tags", (string jobId, string? watchPath, SetJobTagsRequest req, TaskMutationService mutations) =>
         {
             var success = mutations.SetJobTags(jobId, req?.Tags ?? new List<string>(), watchPath);
             return success ? Results.Ok() : Results.NotFound();
@@ -307,15 +307,15 @@ public static class JobCrudEndpoints
     /// </summary>
     private static IResult? ValidateTargetState(string targetState)
     {
-        if (JobStates.All.Contains(targetState)) return null;
+        if (TaskStates.All.Contains(targetState)) return null;
 
-        if (JobStates.NumberedLegacyMap.TryGetValue(targetState, out var newName))
+        if (TaskStates.NumberedLegacyMap.TryGetValue(targetState, out var newName))
         {
             return Results.BadRequest(
                 $"Lane '{targetState}' was renamed in ADR-0025. " +
-                $"Use '{newName}' instead. Full lane order: {string.Join(", ", JobStates.All)}.");
+                $"Use '{newName}' instead. Full lane order: {string.Join(", ", TaskStates.All)}.");
         }
 
-        return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
+        return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", TaskStates.All)}");
     }
 }

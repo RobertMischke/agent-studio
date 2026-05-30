@@ -5,7 +5,7 @@ namespace OrchestratorApi.Services.Cli;
 
 /// <summary>
 /// In-memory inverse index <c>sessionId -> owning JobInfo summary</c>. Built
-/// from <see cref="JobScannerService.ScanAllJobs"/> by walking each job's
+/// from <see cref="TaskScannerService.ScanAllJobs"/> by walking each job's
 /// <see cref="JobInfo.SessionChain"/>. Lets the right-hand session list show
 /// a chip pointing back to the kanban task that originated the session.
 ///
@@ -102,7 +102,7 @@ public sealed class SessionToJobIndex
         // in folder order, which is fine for tie-break determinism.
         foreach (var entry in bucket)
         {
-            if (string.Equals(entry.Lane, JobStates.Progress, StringComparison.Ordinal))
+            if (string.Equals(entry.Lane, TaskStates.Progress, StringComparison.Ordinal))
                 return entry;
         }
         return bucket[0];

@@ -12,7 +12,7 @@ namespace OrchestratorApi.Services.Jobs;
 ///
 /// <para>
 /// The session-events file uses PascalCase keys (it is written through
-/// <see cref="JobSessionLog"/> with the default
+/// <see cref="TaskSessionLog"/> with the default
 /// <see cref="JsonSerializerOptions"/>); the tool-calls file uses
 /// camelCase keys (written from anonymous objects). The reader handles
 /// both by setting <see cref="JsonSerializerOptions.PropertyNameCaseInsensitive"/>
@@ -30,7 +30,7 @@ internal static class AgentWorkSummaryReader
 
     public static AgentWorkSummary Read(JobInfo info)
     {
-        var sessionPath = JobPaths.SessionEventsLog(info.FolderPath);
+        var sessionPath = TaskPaths.SessionEventsLog(info.FolderPath);
         var toolPath = ToolCallsLogPath(info.FolderPath);
 
         var (callCount, recovered, sessionStartedAt, sessionLastAt) = FoldSessionEvents(sessionPath);
@@ -53,7 +53,7 @@ internal static class AgentWorkSummaryReader
     }
 
     private static string ToolCallsLogPath(string jobFolder)
-        => Path.Combine(JobPaths.LogsDir(jobFolder), "tool-calls.jsonl");
+        => Path.Combine(TaskPaths.LogsDir(jobFolder), "tool-calls.jsonl");
 
     private static (int calls, bool recovered, DateTime? startedAt, DateTime? lastAt) FoldSessionEvents(string path)
     {

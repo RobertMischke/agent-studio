@@ -33,7 +33,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -58,25 +58,25 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "fix-layout")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "fix-layout")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "fix-layout")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "fix-layout")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "fix-layout")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "fix-layout")));
 
         // Order 0 puts the reissue ahead of any fresh ready jobs that
         // typically use order >= 10.
-        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "fix-layout"));
+        Assert.Equal(0, ReadJobOrder(TaskStates.Ready, "fix-layout"));
 
         // UI hint: reissue tag is stamped so the kanban can render the
         // card distinctly from a plain queued task.
-        var tags = ReadJobTags(JobStates.Ready, "fix-layout");
+        var tags = ReadJobTags(TaskStates.Ready, "fix-layout");
         Assert.Contains(ReviewDecisionOrchestrator.ReissueTagId, tags);
 
-        var log = ReadCliLog(JobStates.Ready, "fix-layout");
+        var log = ReadCliLog(TaskStates.Ready, "fix-layout");
         Assert.Contains("[orchestrator]", log);
         Assert.Contains("[reissue]", log);
         Assert.Contains("Roadmap names option A.", log);
 
-        var followUp = Path.Combine(_watchPath, JobStates.Ready, "fix-layout", "orchestrator-follow-up.md");
+        var followUp = Path.Combine(_watchPath, TaskStates.Ready, "fix-layout", "orchestrator-follow-up.md");
         Assert.True(File.Exists(followUp));
 
         var record = ReadOnlyDecisionRecord();
@@ -106,13 +106,13 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // Active job stays where it was; reissue lands in ready, not progress.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "currently-running")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "reissued-task")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "reissued-task")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "currently-running")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "reissued-task")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "reissued-task")));
 
         // Order 0 means the runner picks the reissue as the very next
         // task once 'currently-running' finishes.
-        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "reissued-task"));
+        Assert.Equal(0, ReadJobOrder(TaskStates.Ready, "reissued-task"));
     }
 
     [Fact]
@@ -127,16 +127,16 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // ADR-0025: escalate moves the task to 5-human-review (the user
         // sees one lane that means "needs me"); the legacy auto-review
         // folder must no longer hold the job.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "auth-rewrite")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "auth-rewrite")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "auth-rewrite")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "auth-rewrite")));
 
-        var log = ReadCliLog(JobStates.HumanReview, "auth-rewrite");
+        var log = ReadCliLog(TaskStates.HumanReview, "auth-rewrite");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("strategic call", log);
         Assert.Contains("5-human-review", log);
 
-        var intake = Path.Combine(_watchPath, JobStates.Preparation, "human-decision-needed-auth-rewrite");
+        var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-auth-rewrite");
         Assert.True(Directory.Exists(intake));
         Assert.True(File.Exists(Path.Combine(intake, "job.json")));
         Assert.True(File.Exists(Path.Combine(intake, "prompt.md")));
@@ -168,8 +168,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.NotEmpty(decisionWrites);
         foreach (var call in decisionWrites)
         {
-            Assert.Contains(JobStates.HumanReview, call.FolderPath);
-            Assert.DoesNotContain(JobStates.AutoReview, call.FolderPath);
+            Assert.Contains(TaskStates.HumanReview, call.FolderPath);
+            Assert.DoesNotContain(TaskStates.AutoReview, call.FolderPath);
         }
     }
 
@@ -183,10 +183,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // review" when the folder is still in 4-auto-review.
         SeedReviewJobWithNeedsInput("blocked-move", "anything?");
         // Pre-create the destination so MoveJob returns Conflict.
-        Directory.CreateDirectory(Path.Combine(_watchPath, JobStates.HumanReview, "blocked-move"));
+        Directory.CreateDirectory(Path.Combine(_watchPath, TaskStates.HumanReview, "blocked-move"));
         File.WriteAllText(
-            Path.Combine(_watchPath, JobStates.HumanReview, "blocked-move", "job.json"),
-            $"{{\"id\":\"blocked-move\",\"title\":\"x\",\"state\":\"{JobStates.HumanReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            Path.Combine(_watchPath, TaskStates.HumanReview, "blocked-move", "job.json"),
+            $"{{\"id\":\"blocked-move\",\"title\":\"x\",\"state\":\"{TaskStates.HumanReview}\",\"order\":1,\"agent\":\"claude\"}}");
 
         var spy = new RecordingChatLog();
         var orchestrator = BuildOrchestrator(
@@ -196,7 +196,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // Source folder must still be in 4-auto-review (move was blocked).
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "blocked-move")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "blocked-move")));
 
         // No banner-worthy chat-log line went out.
         Assert.DoesNotContain(spy.Calls, c => c.Kind == OrchestratorMessageKind.Decision);
@@ -218,11 +218,11 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         // ADR-0025 contract: accept-as-done routes to 5-human-review,
         // never directly to 6-completed. The user always confirms.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "doc-edit")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Completed, "doc-edit")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "doc-edit")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "doc-edit")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "doc-edit")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "doc-edit")));
 
-        var log = ReadCliLog(JobStates.HumanReview, "doc-edit");
+        var log = ReadCliLog(TaskStates.HumanReview, "doc-edit");
         Assert.Contains("[orchestrator]", log);
         Assert.Contains("[decision]", log);
         // Operator-friendly copy includes the task title and the destination
@@ -241,7 +241,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         SeedReviewJobWithNeedsInput("already-answered", "anything?");
         // Append an orchestrator follow-up so the parser treats the chain as resolved.
-        var logPath = JobPathLog(JobStates.AutoReview, "already-answered");
+        var logPath = JobPathLog(TaskStates.AutoReview, "already-answered");
         File.AppendAllText(logPath,
             $"\n[12:00:30.000] [orchestrator] [reissue] previously answered{Environment.NewLine}");
 
@@ -252,7 +252,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "already-answered")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "already-answered")));
         Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
     }
 
@@ -270,17 +270,17 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // No fast-model call should have been made.
         Assert.Equal(0, calls);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "flesh-out-readme")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "flesh-out-readme")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "flesh-out-readme")));
-        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "flesh-out-readme"));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "flesh-out-readme")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "flesh-out-readme")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "flesh-out-readme")));
+        Assert.Equal(0, ReadJobOrder(TaskStates.Ready, "flesh-out-readme"));
 
-        var log = ReadCliLog(JobStates.Ready, "flesh-out-readme");
+        var log = ReadCliLog(TaskStates.Ready, "flesh-out-readme");
         Assert.Contains("[orchestrator]", log);
         Assert.Contains("[reissue]", log);
         Assert.Contains("NOOP recovery", log);
 
-        var followUpPath = Path.Combine(_watchPath, JobStates.Ready, "flesh-out-readme", "orchestrator-follow-up.md");
+        var followUpPath = Path.Combine(_watchPath, TaskStates.Ready, "flesh-out-readme", "orchestrator-follow-up.md");
         Assert.True(File.Exists(followUpPath));
         var followUp = File.ReadAllText(followUpPath);
         Assert.Contains("Do not reply 'task done'", followUp);
@@ -313,13 +313,13 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.NeedsHumanReview, "double-noop")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "double-noop")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "double-noop")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "double-noop")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "double-noop")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "double-noop")));
 
-        var log = ReadCliLog(JobStates.NeedsHumanReview, "double-noop");
+        var log = ReadCliLog(TaskStates.NeedsHumanReview, "double-noop");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("Escalated: 2 consecutive NOOPs without progress", log);
@@ -344,16 +344,16 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal(0, calls);
 
         // ADR-0025: NOOP escalations also move to 5-human-review.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "placeholder-task")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "placeholder-task")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "placeholder-task")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "placeholder-task")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "placeholder-task")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "placeholder-task")));
 
-        var log = ReadCliLog(JobStates.HumanReview, "placeholder-task");
+        var log = ReadCliLog(TaskStates.HumanReview, "placeholder-task");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("empty or placeholder", log);
 
-        var intake = Path.Combine(_watchPath, JobStates.Preparation, "human-decision-needed-placeholder-task");
+        var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-placeholder-task");
         Assert.True(Directory.Exists(intake));
         Assert.True(File.Exists(Path.Combine(intake, "job.json")));
         var intakePrompt = File.ReadAllText(Path.Combine(intake, "prompt.md"));
@@ -368,7 +368,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         SeedReviewJobWithNoOp("repeated-noop",
             title: "Implement caching layer",
-            promptBody: "# Implement caching\n\nAdd an LRU cache in front of the JobScannerService.GetJobs call to avoid the O(N) disk scan on every poll.\n");
+            promptBody: "# Implement caching\n\nAdd an LRU cache in front of the TaskScannerService.GetJobs call to avoid the O(N) disk scan on every poll.\n");
 
         // Pre-populate the journal with two prior reissues for this job
         // (default budget = 2). Any further reissue should escalate.
@@ -392,14 +392,14 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         Assert.Equal(0, calls);
         // Budget-exhausted NOOP must escalate to 5-human-review (ADR-0025).
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "repeated-noop")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "repeated-noop")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "repeated-noop")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "repeated-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "repeated-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "repeated-noop")));
 
-        var intake = Path.Combine(_watchPath, JobStates.Preparation, "human-decision-needed-repeated-noop");
+        var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-repeated-noop");
         Assert.True(Directory.Exists(intake));
 
-        var log = ReadCliLog(JobStates.HumanReview, "repeated-noop");
+        var log = ReadCliLog(TaskStates.HumanReview, "repeated-noop");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("prior orchestrator reissue", log);
@@ -423,14 +423,14 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal(0, calls);
 
         // ADR-0025: BLOCKED escalations move the task to 5-human-review.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "bug-commit-hangs")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "bug-commit-hangs")));
-        var intake = Path.Combine(_watchPath, JobStates.Preparation, "human-decision-needed-bug-commit-hangs");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "bug-commit-hangs")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "bug-commit-hangs")));
+        var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-bug-commit-hangs");
         Assert.True(Directory.Exists(intake));
         var intakePrompt = File.ReadAllText(Path.Combine(intake, "prompt.md"));
         Assert.Contains("[[TASK_BLOCKED]]", intakePrompt);
 
-        var log = ReadCliLog(JobStates.HumanReview, "bug-commit-hangs");
+        var log = ReadCliLog(TaskStates.HumanReview, "bug-commit-hangs");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("BLOCKED", log);
@@ -445,7 +445,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         SeedReviewJobWithBlocked("already-escalated", "needs human");
         // Append a supervisor escalate so the parser treats the chain as resolved.
-        var logPath = JobPathLog(JobStates.AutoReview, "already-escalated");
+        var logPath = JobPathLog(TaskStates.AutoReview, "already-escalated");
         File.AppendAllText(logPath,
             $"[12:00:30.000] [supervisor] [escalate] previously escalated{Environment.NewLine}");
 
@@ -500,9 +500,9 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         var jobs = new[]
         {
-            new JobInfo { Id = "job-a", JobKey = $"{_watchPath}::job-a", ProjectName = Project, WatchPath = _watchPath, State = JobStates.HumanReview },
-            new JobInfo { Id = "job-b", JobKey = $"{_watchPath}::job-b", ProjectName = Project, WatchPath = _watchPath, State = JobStates.HumanReview },
-            new JobInfo { Id = "job-c", JobKey = $"{_watchPath}::job-c", ProjectName = Project, WatchPath = _watchPath, State = JobStates.AutoReview },
+            new JobInfo { Id = "job-a", JobKey = $"{_watchPath}::job-a", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.HumanReview },
+            new JobInfo { Id = "job-b", JobKey = $"{_watchPath}::job-b", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.HumanReview },
+            new JobInfo { Id = "job-c", JobKey = $"{_watchPath}::job-c", ProjectName = Project, WatchPath = _watchPath, State = TaskStates.AutoReview },
         };
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _workspace })
@@ -633,19 +633,19 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // Lane: 4-auto-review -> 5-human-review (accept-as-done).
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "clean-job")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "clean-job")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "clean-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "clean-job")));
 
         // All four aspect MDs must exist with frontmatter status=pass.
         foreach (var aspect in new[] { "requirement-fit", "code-quality", "documentation-impact", "tests-and-evidence" })
         {
-            var path = Path.Combine(_watchPath, JobStates.HumanReview, "clean-job", $"aspect-{aspect}.md");
+            var path = Path.Combine(_watchPath, TaskStates.HumanReview, "clean-job", $"aspect-{aspect}.md");
             Assert.True(File.Exists(path), $"missing aspect MD: {aspect}");
             Assert.Equal(AspectStatus.Pass, AspectVerdictParsing.ReadStatusFromReport(File.ReadAllText(path)));
         }
 
         // Job tags must NOT contain any *:concerns chips.
-        var tags = ReadJobTags(JobStates.HumanReview, "clean-job");
+        var tags = ReadJobTags(TaskStates.HumanReview, "clean-job");
         Assert.DoesNotContain(tags, t => t.EndsWith(":concerns", StringComparison.OrdinalIgnoreCase));
 
         // Decision-journal records the accept-as-done with a multi-aspect reason.
@@ -666,13 +666,13 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "concerns-job")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "concerns-job")));
 
-        var tags = ReadJobTags(JobStates.HumanReview, "concerns-job");
+        var tags = ReadJobTags(TaskStates.HumanReview, "concerns-job");
         Assert.Contains("quality:concerns", tags);
 
         // The aspect MD itself records the concern.
-        var qualityMd = File.ReadAllText(Path.Combine(_watchPath, JobStates.HumanReview, "concerns-job", "aspect-code-quality.md"));
+        var qualityMd = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "concerns-job", "aspect-code-quality.md"));
         Assert.Equal(AspectStatus.Concerns, AspectVerdictParsing.ReadStatusFromReport(qualityMd));
         Assert.Contains("Helper duplicated.", qualityMd);
 
@@ -696,19 +696,19 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // A blocking aspect parks the job in 2-ready at order 0 (never
         // straight to 3-progress - that's the race the lane-write rule
         // forbids).
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "blocked-job")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "blocked-job")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "blocked-job")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "blocked-job")));
-        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "blocked-job"));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "blocked-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "blocked-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "blocked-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "blocked-job")));
+        Assert.Equal(0, ReadJobOrder(TaskStates.Ready, "blocked-job"));
 
         // Follow-up file lists the per-aspect findings.
-        var followUp = File.ReadAllText(Path.Combine(_watchPath, JobStates.Ready, "blocked-job", "orchestrator-follow-up.md"));
+        var followUp = File.ReadAllText(Path.Combine(_watchPath, TaskStates.Ready, "blocked-job", "orchestrator-follow-up.md"));
         Assert.Contains("requirement-fit", followUp);
         Assert.Contains("Acceptance criterion 2 missing.", followUp);
 
         // Aspect MDs travel with the folder to 2-ready.
-        Assert.True(File.Exists(Path.Combine(_watchPath, JobStates.Ready, "blocked-job", "aspect-requirement-fit.md")));
+        Assert.True(File.Exists(Path.Combine(_watchPath, TaskStates.Ready, "blocked-job", "aspect-requirement-fit.md")));
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
@@ -729,8 +729,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(4, calls);
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "marker-job")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "marker-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "marker-job")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "marker-job")));
     }
 
     [Fact]
@@ -764,7 +764,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "pipeline-off")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "pipeline-off")));
         Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
     }
 
@@ -792,10 +792,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private void SeedReviewJobWithDone(string slug, bool includeRunnerActiveClearedMarker = false)
     {
-        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         var suffix = includeRunnerActiveClearedMarker
             ? $"[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review){Environment.NewLine}"
@@ -872,8 +872,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             .AddInMemoryCollection(dict)
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var stateMachine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var stateMachine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
@@ -886,16 +886,16 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     private static OrchestratorApi.Services.TaskAccess.TaskAccessService BuildTaskAccess(
-        JobScannerService scanner,
-        JobStateMachine stateMachine,
+        TaskScannerService scanner,
+        TaskStateMachine stateMachine,
         IConfiguration config)
     {
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
-        var transitions = new JobTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         return new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, stateMachine, transitions, indexCache,
             NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
@@ -903,19 +903,19 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private void SeedProgressJob(string slug)
     {
-        var dir = Path.Combine(_watchPath, JobStates.Progress, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.Progress, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.Progress}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.Progress}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
     }
 
     private void SeedReviewJobWithBlocked(string slug, string reason)
     {
-        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
@@ -924,10 +924,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private void SeedReviewJobWithNoOp(string slug, string title, string promptBody)
     {
-        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
@@ -936,10 +936,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private void SeedReviewJobWithDoubleNoProgressNoOp(string slug, string title, string promptBody)
     {
-        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"codex\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"codex\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] {{\"type\":\"thread.started\",\"thread_id\":\"test-session\"}}{Environment.NewLine}" +
@@ -960,10 +960,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private void SeedReviewJobWithNeedsInput(string slug, string reason)
     {
-        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
@@ -994,8 +994,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var stateMachine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var stateMachine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         var chatLog = chatLogOverride ?? new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);

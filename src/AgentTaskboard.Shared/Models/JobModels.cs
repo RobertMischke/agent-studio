@@ -289,8 +289,8 @@ public static class LifecyclePhases
     /// </summary>
     public static readonly Dictionary<string, string[]> AllowedByState = new()
     {
-        [JobStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
-        [JobStates.Progress] = [ExecutionRunning, ExecutionStalled, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
+        [TaskStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
+        [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
     };
 
     /// <summary>
@@ -306,13 +306,13 @@ public static class LifecyclePhases
     {
         return state switch
         {
-            JobStates.Ready => HumanReady,
-            JobStates.Progress when string.Equals(executionStatus, "running", StringComparison.OrdinalIgnoreCase) => ExecutionRunning,
-            JobStates.Progress when summaryStatus == JobSummaryStatus.Generating => PostProcessingRunning,
+            TaskStates.Ready => HumanReady,
+            TaskStates.Progress when string.Equals(executionStatus, "running", StringComparison.OrdinalIgnoreCase) => ExecutionRunning,
+            TaskStates.Progress when summaryStatus == JobSummaryStatus.Generating => PostProcessingRunning,
             // Stopped / failed / unfinished runs still live in 3-progress;
             // the existing UI treats them as the execution lane today, so
             // the lane projection keeps that behavior under the new model.
-            JobStates.Progress => ExecutionRunning,
+            TaskStates.Progress => ExecutionRunning,
             _ => null,
         };
     }
@@ -655,7 +655,7 @@ public record JobPromptHistoryEntry
 
 /// <summary>
 /// One entry in the task's title-revision timeline. Written by
-/// <see cref="OrchestratorApi.Services.Jobs.JobMutationService.SetJobTitle"/>
+/// <see cref="OrchestratorApi.Services.Jobs.TaskMutationService.SetJobTitle"/>
 /// to <c>title-history.json</c> in the job folder whenever the title
 /// actually changes (no-op renames are not recorded). The current title
 /// stays on <see cref="JobInfo.Title"/>; this is the audit trail of what
@@ -747,7 +747,7 @@ public enum MoveJobStatus
 }
 
 /// <summary>
-/// Result of a <see cref="OrchestratorApi.Services.Jobs.JobStateMachine.MoveJob"/>
+/// Result of a <see cref="OrchestratorApi.Services.Jobs.TaskStateMachine.MoveJob"/>
 /// call. <paramref name="NewFolderPath"/> is populated only on
 /// <see cref="MoveJobStatus.Success"/> and carries the absolute path of the
 /// post-move job folder. Callers that want to write into the moved folder
@@ -1073,7 +1073,7 @@ public record ProjectSettings
 
     /// <summary>
     /// F35: per-lane sort strategy override. Map of lane key
-    /// (<see cref="JobStates.Backlog"/> .. <see cref="JobStates.Archive"/>)
+    /// (<see cref="TaskStates.Backlog"/> .. <see cref="TaskStates.Archive"/>)
     /// to a strategy id from <see cref="LaneSortStrategies"/>. Null or a
     /// missing lane key falls back to <see cref="LaneSortStrategies.GetDefaultForLane"/>.
     /// Used by the kanban grouped endpoint when ordering jobs inside a lane;
@@ -1126,17 +1126,17 @@ public static class LaneSortStrategies
     {
         return lane switch
         {
-            JobStates.Backlog => NewestFirst,
-            JobStates.Preparation => NewestFirst,
-            JobStates.OrchestratorPrep => NewestFirst,
-            JobStates.NeedsHumanReview => NewestFirst,
-            JobStates.Ready => NewestFirst,
-            JobStates.Progress => LastActivity,
-            JobStates.FailedPickup => NewestFirst,
-            JobStates.AutoReview => LastActivity,
-            JobStates.HumanReview => OldestFirst,
-            JobStates.Completed => LastActivity,
-            JobStates.Archive => LastActivity,
+            TaskStates.Backlog => NewestFirst,
+            TaskStates.Preparation => NewestFirst,
+            TaskStates.OrchestratorPrep => NewestFirst,
+            TaskStates.NeedsHumanReview => NewestFirst,
+            TaskStates.Ready => NewestFirst,
+            TaskStates.Progress => LastActivity,
+            TaskStates.FailedPickup => NewestFirst,
+            TaskStates.AutoReview => LastActivity,
+            TaskStates.HumanReview => OldestFirst,
+            TaskStates.Completed => LastActivity,
+            TaskStates.Archive => LastActivity,
             _ => Manual,
         };
     }
@@ -1503,7 +1503,7 @@ public record CliExecution
     public string? RunOutcome { get; init; }
 }
 
-public static class JobIdentity
+public static class TaskIdentity
 {
     public static string CreateKey(string watchPath, string jobId) => $"{watchPath}::{jobId}";
 }
@@ -1741,7 +1741,7 @@ public record CliOutputLine
     public string Text { get; init; } = "";
 }
 
-public static class JobStates
+public static class TaskStates
 {
     /// <summary>
     /// Triage staging area for new tasks. Sits before <see cref="Preparation"/>
@@ -1786,7 +1786,7 @@ public static class JobStates
     // the "ready for the user" line lives in 5-human-review instead, so
     // the kanban can split "machine still chewing" from "waiting on you".
     // The legacy single 4-review lane is migrated on backend boot via
-    // JobStateMachine.EnsureStateFoldersAndMigrate. See ADR-0025.
+    // TaskStateMachine.EnsureStateFoldersAndMigrate. See ADR-0025.
     public const string AutoReview = "4-auto-review";
     public const string HumanReview = "5-human-review";
     public const string Completed = "6-completed";
@@ -1811,7 +1811,7 @@ public static class JobStates
     /// <summary>
     /// Numbered legacy lane names that pre-date ADR-0025 (three-stage review
     /// pipeline). The boot-time migration in
-    /// <see cref="OrchestratorApi.Services.Jobs.JobStateMachine.EnsureStateFoldersAndMigrate"/>
+    /// <see cref="OrchestratorApi.Services.Jobs.TaskStateMachine.EnsureStateFoldersAndMigrate"/>
     /// uses this to rename folders and rewrite job.json state fields.
     /// </summary>
     public static readonly Dictionary<string, string> NumberedLegacyMap = new()

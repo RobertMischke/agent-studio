@@ -42,10 +42,10 @@ public sealed record RunRejection(
 /// busy-project-queue case (which becomes a 202). Carries an HTTP status
 /// hint for the endpoint layer.
 /// </summary>
-public sealed class JobOperationException : Exception
+public sealed class TaskOperationException : Exception
 {
     public int Status { get; }
-    public JobOperationException(string message, int status = 400) : base(message)
+    public TaskOperationException(string message, int status = 400) : base(message)
     {
         Status = status;
     }

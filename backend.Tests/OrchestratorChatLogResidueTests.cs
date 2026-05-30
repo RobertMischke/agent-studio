@@ -44,7 +44,7 @@ public class OrchestratorChatLogResidueTests : IDisposable
         {
             Id = "moved-elsewhere",
             Title = "Moved Elsewhere",
-            State = JobStates.AutoReview,
+            State = TaskStates.AutoReview,
             FolderPath = ghostFolder,
             WatchPath = _root,
         };
@@ -69,7 +69,7 @@ public class OrchestratorChatLogResidueTests : IDisposable
         {
             Id = "escalated-elsewhere",
             Title = "Escalated Elsewhere",
-            State = JobStates.AutoReview,
+            State = TaskStates.AutoReview,
             FolderPath = ghostFolder,
             WatchPath = _root,
         };
@@ -93,7 +93,7 @@ public class OrchestratorChatLogResidueTests : IDisposable
         {
             Id = "still-here",
             Title = "Still Here",
-            State = JobStates.HumanReview,
+            State = TaskStates.HumanReview,
             FolderPath = liveFolder,
             WatchPath = _root,
         };

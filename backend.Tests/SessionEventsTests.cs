@@ -27,7 +27,7 @@ public class SessionEventsTests : IDisposable
     public SessionEventsTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "agent-taskboard-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -38,7 +38,7 @@ public class SessionEventsTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private (JobScannerService Scanner, JobSessionLog Sessions) BuildServices()
+    private (TaskScannerService Scanner, TaskSessionLog Sessions) BuildServices()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -48,8 +48,8 @@ public class SessionEventsTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         return (scanner, sessions);
     }
 
@@ -74,7 +74,7 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void AppendSessionEvent_WritesJsonlRow()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var (_, sessions) = BuildServices();
 
         var ok = sessions.AppendSessionEvent("demo-task", new SessionEvent
@@ -100,12 +100,12 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void ReadSessionEvents_TolerantToTornLines()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var (_, sessions) = BuildServices();
         sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "start" }, _watchPath);
 
         // Inject a malformed trailing line — simulates a torn write.
-        var path = Path.Combine(_watchPath, JobStates.Progress, "demo-task", "logs", "session-events.jsonl");
+        var path = Path.Combine(_watchPath, TaskStates.Progress, "demo-task", "logs", "session-events.jsonl");
         File.AppendAllText(path, "{not-valid-json" + Environment.NewLine);
 
         sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "continue" }, _watchPath);
@@ -119,7 +119,7 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void BackfillLatestSessionEventCapturedId_RewritesLastRow()
     {
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var (_, sessions) = BuildServices();
         sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "start", Cli = "claude" }, _watchPath);
         sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "continue", Cli = "claude", InputSessionId = "abc-123", Resumed = true }, _watchPath);
@@ -137,7 +137,7 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void AppendSessionToChain_ExtendsChainAndUpdatesSessionName()
     {
-        WriteJob(JobStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
+        WriteJob(TaskStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
         var (scanner, sessions) = BuildServices();
 
         sessions.AppendSessionToChain("demo-task", "def-456", _watchPath);
@@ -150,7 +150,7 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void AppendSessionToChain_IsIdempotentForSameTail()
     {
-        WriteJob(JobStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
+        WriteJob(TaskStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
         var (scanner, sessions) = BuildServices();
 
         sessions.AppendSessionToChain("demo-task", "abc-123", _watchPath);
@@ -168,7 +168,7 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void MarkSessionChainRecovery_AppendsMarkerAndClearsCurrent()
     {
-        WriteJob(JobStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
+        WriteJob(TaskStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
         var (scanner, sessions) = BuildServices();
 
         sessions.MarkSessionChainRecovery("demo-task", _watchPath);
@@ -184,7 +184,7 @@ public class SessionEventsTests : IDisposable
     public void MarkSessionChainRecovery_NoOpOnEmptyChain()
     {
         // Brand-new job that's never started — there's nothing to mark a break on.
-        WriteJob(JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
         var (scanner, sessions) = BuildServices();
 
         sessions.MarkSessionChainRecovery("demo-task", _watchPath);
@@ -202,7 +202,7 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void SessionChain_ReadsLegacySessionNameAsSingleElement()
     {
-        WriteJob(JobStates.Progress, "legacy-task", sessionName: "legacy-uuid");
+        WriteJob(TaskStates.Progress, "legacy-task", sessionName: "legacy-uuid");
         var (scanner, _) = BuildServices();
 
         var info = scanner.FindJob("legacy-task", _watchPath)!;
@@ -212,7 +212,7 @@ public class SessionEventsTests : IDisposable
     [Fact]
     public void SessionChain_EmptyForBrandNewJob()
     {
-        WriteJob(JobStates.Progress, "fresh-task");
+        WriteJob(TaskStates.Progress, "fresh-task");
         var (scanner, _) = BuildServices();
 
         var info = scanner.FindJob("fresh-task", _watchPath)!;

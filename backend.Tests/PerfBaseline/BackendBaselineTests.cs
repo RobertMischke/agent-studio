@@ -56,7 +56,7 @@ public class BackendBaselineTests
         }
 
         var scenario = Environment.GetEnvironmentVariable("PERF_SCENARIO") ?? "baseline";
-        // Cycle 1+: PERF_USE_CACHE=1 wires the JobIndexCache so the test
+        // Cycle 1+: PERF_USE_CACHE=1 wires the TaskIndexCache so the test
         // measures cached hot paths. Default false keeps the baseline runs
         // (Cycle 0) honest — they reflect ScanAllJobs going through disk.
         var withCache = Environment.GetEnvironmentVariable("PERF_USE_CACHE") == "1";
@@ -91,7 +91,7 @@ public class BackendBaselineTests
                 () =>
                 {
                     var queued = fx.Scanner.ScanAllJobs()
-                        .Where(j => j.ProjectName == fx.ProjectName && j.State == JobStates.Ready)
+                        .Where(j => j.ProjectName == fx.ProjectName && j.State == TaskStates.Ready)
                         .OrderBy(j => j.Order)
                         .Select(j => j.Id)
                         .ToList();
@@ -121,14 +121,14 @@ public class BackendBaselineTests
                         .ToList();
                     var grouped = new
                     {
-                        Backlog = enriched.Where(j => j.State == JobStates.Backlog).OrderBy(j => j.Order).ToList(),
-                        Preparation = enriched.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
-                        Ready = enriched.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList(),
-                        Progress = enriched.Where(j => j.State == JobStates.Progress).OrderBy(j => j.Order).ToList(),
-                        AutoReview = enriched.Where(j => j.State == JobStates.AutoReview).OrderBy(j => j.Order).ToList(),
-                        HumanReview = enriched.Where(j => j.State == JobStates.HumanReview).OrderBy(j => j.Order).ToList(),
-                        Completed = enriched.Where(j => j.State == JobStates.Completed).OrderBy(j => j.Order).ToList(),
-                        Archive = enriched.Where(j => j.State == JobStates.Archive).OrderBy(j => j.Order).ToList(),
+                        Backlog = enriched.Where(j => j.State == TaskStates.Backlog).OrderBy(j => j.Order).ToList(),
+                        Preparation = enriched.Where(j => j.State == TaskStates.Preparation).OrderBy(j => j.Order).ToList(),
+                        Ready = enriched.Where(j => j.State == TaskStates.Ready).OrderBy(j => j.Order).ToList(),
+                        Progress = enriched.Where(j => j.State == TaskStates.Progress).OrderBy(j => j.Order).ToList(),
+                        AutoReview = enriched.Where(j => j.State == TaskStates.AutoReview).OrderBy(j => j.Order).ToList(),
+                        HumanReview = enriched.Where(j => j.State == TaskStates.HumanReview).OrderBy(j => j.Order).ToList(),
+                        Completed = enriched.Where(j => j.State == TaskStates.Completed).OrderBy(j => j.Order).ToList(),
+                        Archive = enriched.Where(j => j.State == TaskStates.Archive).OrderBy(j => j.Order).ToList(),
                     };
                     _ = grouped;
                 }));

@@ -23,7 +23,7 @@ namespace OrchestratorApi.Tests;
 ///
 /// <para>
 /// The fix - the per-file mtime guard in
-/// <see cref="JobTransitionService.IsWorkingTreeAttributableToTask"/> -
+/// <see cref="TaskTransitionService.IsWorkingTreeAttributableToTask"/> -
 /// refuses to bundle dirty paths whose last-write times all predate the
 /// task's first session event. This file pins both branches: the unrelated
 /// dirty change is skipped, the agent-authored dirty change is committed
@@ -43,7 +43,7 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
         _watchPath = Path.Combine(_tempDir, "jobs");
         _repoRoot = Path.Combine(_tempDir, "repo");
         Directory.CreateDirectory(_tempDir);
-        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
         Directory.CreateDirectory(_repoRoot);
 
         RunGit(_repoRoot, "init", "-q", "-b", "main");
@@ -77,21 +77,21 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
         File.SetLastWriteTimeUtc(preExisting, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
         // 2) Two adjacent progress jobs A and B; A is about to transition.
-        WriteJob(JobStates.Progress, "task-a");
-        WriteJob(JobStates.Progress, "task-b");
+        WriteJob(TaskStates.Progress, "task-a");
+        WriteJob(TaskStates.Progress, "task-b");
 
         // 3) Task A's CLI run starts AFTER the dirty change already exists.
         AppendSessionEvent("task-a", DateTime.UtcNow);
 
         var deps = BuildDeps();
-        var outcome = await deps.Transitions.MoveAsync("task-a", JobStates.AutoReview, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("task-a", TaskStates.AutoReview, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
 
         // Working tree changes predate the run -> guard refuses the auto-commit.
         // No SHA stamped on A. No SHA stamped on B (it never transitioned).
-        var movedA = ReadJob(JobStates.AutoReview, "task-a");
-        var movedB = ReadJob(JobStates.Progress, "task-b");
+        var movedA = ReadJob(TaskStates.AutoReview, "task-a");
+        var movedB = ReadJob(TaskStates.Progress, "task-b");
         Assert.Null(movedA?.Commit);
         Assert.Empty(movedA?.Commits ?? new List<JobCommitInfo>());
         Assert.Null(movedB?.Commit);
@@ -102,8 +102,8 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
     public async Task MoveProgressToAutoReview_AgentEditDuringRun_StampsCommit()
     {
         // 1) Task A's CLI starts cleanly (no prior dirty state).
-        WriteJob(JobStates.Progress, "task-a");
-        WriteJob(JobStates.Progress, "task-b");
+        WriteJob(TaskStates.Progress, "task-a");
+        WriteJob(TaskStates.Progress, "task-b");
         var firstActivity = DateTime.UtcNow;
         AppendSessionEvent("task-a", firstActivity);
 
@@ -114,14 +114,14 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
 
         // 3) Transition to auto-review.
         var deps = BuildDeps();
-        var outcome = await deps.Transitions.MoveAsync("task-a", JobStates.AutoReview, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("task-a", TaskStates.AutoReview, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
 
         // The agent edit DOES qualify for attribution -> auto-commit fires
         // and stamps a real SHA on A. B is still untouched.
-        var movedA = ReadJob(JobStates.AutoReview, "task-a");
-        var movedB = ReadJob(JobStates.Progress, "task-b");
+        var movedA = ReadJob(TaskStates.AutoReview, "task-a");
+        var movedB = ReadJob(TaskStates.Progress, "task-b");
         Assert.NotNull(movedA?.Commit);
         Assert.False(string.IsNullOrWhiteSpace(movedA!.Commit!.Sha));
         Assert.Null(movedB?.Commit);
@@ -134,15 +134,15 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
         // auto-commit to fire. The guard only kicks in when we have a first-
         // activity timestamp to compare mtimes against; without one we defer
         // to AutoCommitAsync's own clean-tree short-circuit.
-        WriteJob(JobStates.Progress, "legacy-task");
+        WriteJob(TaskStates.Progress, "legacy-task");
         var dirty = Path.Combine(_repoRoot, "legacy-change.txt");
         File.WriteAllText(dirty, "legacy edit\n");
 
         var deps = BuildDeps();
-        var outcome = await deps.Transitions.MoveAsync("legacy-task", JobStates.AutoReview, _watchPath);
+        var outcome = await deps.Transitions.MoveAsync("legacy-task", TaskStates.AutoReview, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
-        var moved = ReadJob(JobStates.AutoReview, "legacy-task");
+        var moved = ReadJob(TaskStates.AutoReview, "legacy-task");
         Assert.NotNull(moved?.Commit);
     }
 
@@ -159,21 +159,21 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(
             scanner,
             new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
             new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance),
-            new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance),
-            NullLogger<JobMutationService>.Instance);
+            new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+            NullLogger<TaskMutationService>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
-        var transitions = new JobTransitionService(
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
+        var transitions = new TaskTransitionService(
             scanner, states, mutations, git, settings,
-            NullLogger<JobTransitionService>.Instance,
+            NullLogger<TaskTransitionService>.Instance,
             sessions);
         return new Deps(scanner, transitions);
     }
@@ -188,7 +188,7 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
 
     private void AppendSessionEvent(string slug, DateTime ts)
     {
-        var logsDir = Path.Combine(_watchPath, JobStates.Progress, slug, "logs");
+        var logsDir = Path.Combine(_watchPath, TaskStates.Progress, slug, "logs");
         Directory.CreateDirectory(logsDir);
         var line = JsonSerializer.Serialize(new SessionEvent
         {
@@ -226,5 +226,5 @@ public sealed class JobTransitionAutoCommitAttributionTests : IDisposable
         p.WaitForExit(15_000);
     }
 
-    private sealed record Deps(JobScannerService Scanner, JobTransitionService Transitions);
+    private sealed record Deps(TaskScannerService Scanner, TaskTransitionService Transitions);
 }

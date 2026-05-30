@@ -8,7 +8,7 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// <see cref="JobStateMachine.MoveJob"/> must return the absolute path of the
+/// <see cref="TaskStateMachine.MoveJob"/> must return the absolute path of the
 /// post-move folder in <see cref="MoveJobOutcome.NewFolderPath"/> so callers
 /// (chat-log writes, follow-up file emission) can target the moved folder
 /// without round-tripping through the scanner cache. The cache may not yet
@@ -25,7 +25,7 @@ public class JobStateMachineOutcomeTests : IDisposable
     {
         _workspace = Path.Combine(Path.GetTempPath(), "rdo-outcome-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -39,33 +39,33 @@ public class JobStateMachineOutcomeTests : IDisposable
     [Fact]
     public void MoveJob_Success_ReturnsAuthoritativeNewFolderPath()
     {
-        SeedJob(JobStates.AutoReview, "promote-me");
+        SeedJob(TaskStates.AutoReview, "promote-me");
 
         var (machine, _) = BuildMachine();
-        var outcome = machine.MoveJob("promote-me", JobStates.HumanReview, _watchPath);
+        var outcome = machine.MoveJob("promote-me", TaskStates.HumanReview, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.NotNull(outcome.NewFolderPath);
         Assert.Equal(
-            Path.Combine(_watchPath, JobStates.HumanReview, "promote-me"),
+            Path.Combine(_watchPath, TaskStates.HumanReview, "promote-me"),
             outcome.NewFolderPath);
 
         // The path the outcome reports actually exists on disk; the source path is gone.
         Assert.True(Directory.Exists(outcome.NewFolderPath));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "promote-me")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "promote-me")));
     }
 
     [Fact]
     public void MoveJob_NoOpWhenAlreadyInTargetState_ReturnsCurrentFolderPath()
     {
-        SeedJob(JobStates.HumanReview, "already-here");
+        SeedJob(TaskStates.HumanReview, "already-here");
 
         var (machine, _) = BuildMachine();
-        var outcome = machine.MoveJob("already-here", JobStates.HumanReview, _watchPath);
+        var outcome = machine.MoveJob("already-here", TaskStates.HumanReview, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.Equal(
-            Path.Combine(_watchPath, JobStates.HumanReview, "already-here"),
+            Path.Combine(_watchPath, TaskStates.HumanReview, "already-here"),
             outcome.NewFolderPath);
     }
 
@@ -73,7 +73,7 @@ public class JobStateMachineOutcomeTests : IDisposable
     public void MoveJob_NotFound_NewFolderPathIsNull()
     {
         var (machine, _) = BuildMachine();
-        var outcome = machine.MoveJob("does-not-exist", JobStates.HumanReview, _watchPath);
+        var outcome = machine.MoveJob("does-not-exist", TaskStates.HumanReview, _watchPath);
 
         Assert.Equal(MoveJobStatus.NotFound, outcome.Status);
         Assert.Null(outcome.NewFolderPath);
@@ -82,11 +82,11 @@ public class JobStateMachineOutcomeTests : IDisposable
     [Fact]
     public void MoveJob_TargetFolderExists_NewFolderPathIsNull()
     {
-        SeedJob(JobStates.AutoReview, "collide");
-        SeedJob(JobStates.HumanReview, "collide");
+        SeedJob(TaskStates.AutoReview, "collide");
+        SeedJob(TaskStates.HumanReview, "collide");
 
         var (machine, _) = BuildMachine();
-        var outcome = machine.MoveJob("collide", JobStates.HumanReview, _watchPath);
+        var outcome = machine.MoveJob("collide", TaskStates.HumanReview, _watchPath);
 
         Assert.Equal(MoveJobStatus.TargetFolderExists, outcome.Status);
         Assert.Null(outcome.NewFolderPath);
@@ -100,7 +100,7 @@ public class JobStateMachineOutcomeTests : IDisposable
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}");
     }
 
-    private (JobStateMachine, JobScannerService) BuildMachine()
+    private (TaskStateMachine, TaskScannerService) BuildMachine()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -112,8 +112,8 @@ public class JobStateMachineOutcomeTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var machine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         return (machine, scanner);
     }
 }

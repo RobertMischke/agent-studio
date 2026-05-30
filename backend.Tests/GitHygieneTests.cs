@@ -124,14 +124,14 @@ public class GitHygieneTests : IDisposable
     {
         var repo = SeedRepo("with-job");
         // Seed a watched-target-style job folder under .orchestrator/jobs/4-auto-review.
-        var jobsRoot = Path.Combine(repo, ".orchestrator", "jobs", JobStates.AutoReview);
+        var jobsRoot = Path.Combine(repo, ".orchestrator", "jobs", TaskStates.AutoReview);
         var jobFolder = Path.Combine(jobsRoot, "demo-task");
         Directory.CreateDirectory(jobFolder);
         var jobJson = $$"""
             {
               "id": "demo-task",
               "title": "Demo task",
-              "state": "{{JobStates.AutoReview}}",
+              "state": "{{TaskStates.AutoReview}}",
               "agent": "claude",
               "createdAt": "2026-05-06T10:00:00Z",
               "commit": {
@@ -158,7 +158,7 @@ public class GitHygieneTests : IDisposable
 
         Assert.NotNull(hygiene.Job);
         Assert.True(hygiene.Job!.JobInfoCommitPresent);
-        Assert.Equal(JobStates.AutoReview, hygiene.Job.State);
+        Assert.Equal(TaskStates.AutoReview, hygiene.Job.State);
         // Repo is clean, so accepted-uncommitted is false even though the
         // job sits in a post-progress lane.
         Assert.False(hygiene.Job.AcceptedTaskUncommitted);
@@ -168,11 +168,11 @@ public class GitHygieneTests : IDisposable
     public void JobHygiene_AcceptedLaneWithDirtyTree_FlagsAcceptedUncommitted()
     {
         var repo = SeedRepo("dirty-after-accept");
-        var jobsRoot = Path.Combine(repo, ".orchestrator", "jobs", JobStates.HumanReview);
+        var jobsRoot = Path.Combine(repo, ".orchestrator", "jobs", TaskStates.HumanReview);
         var jobFolder = Path.Combine(jobsRoot, "leaky-task");
         Directory.CreateDirectory(jobFolder);
         File.WriteAllText(Path.Combine(jobFolder, "job.json"), $$"""
-            { "id": "leaky-task", "title": "Leaky", "state": "{{JobStates.HumanReview}}",
+            { "id": "leaky-task", "title": "Leaky", "state": "{{TaskStates.HumanReview}}",
               "agent": "claude", "createdAt": "2026-05-06T10:00:00Z" }
             """);
         File.WriteAllText(Path.Combine(jobFolder, "prompt.md"), "leaky");
@@ -237,7 +237,7 @@ public class GitHygieneTests : IDisposable
         }
         var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return new GitService(NullLogger<GitService>.Instance, scanner, config);
     }
 

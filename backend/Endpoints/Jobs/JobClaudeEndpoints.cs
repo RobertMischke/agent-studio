@@ -19,7 +19,7 @@ public static class JobClaudeEndpoints
         // Claude-specific live session telemetry: reads the CLI's JSONL file
         // directly so we can show live tokens / model without spawning a PTY
         // or interrupting the running process.
-        group.MapGet("/{jobId}/claude/session-info", (string jobId, string? watchPath, JobScannerService scanner, ClaudeSessionInspector inspector, ClaudeCliService claude) =>
+        group.MapGet("/{jobId}/claude/session-info", (string jobId, string? watchPath, TaskScannerService scanner, ClaudeSessionInspector inspector, ClaudeCliService claude) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });

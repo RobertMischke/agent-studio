@@ -25,7 +25,7 @@ namespace OrchestratorApi.Tests;
 ///   <item>Iteration order is deterministic: oldest-first by mtime
 ///   (cli-output.log when present, else job.json, else folder).</item>
 ///   <item>A 3-progress folder past the retry budget is dead-lettered
-///   into <c>3a-failed-pickup</c> via <see cref="JobStateMachine.MoveFolderToFailedPickup"/>
+///   into <c>3a-failed-pickup</c> via <see cref="TaskStateMachine.MoveFolderToFailedPickup"/>
 ///   (single-state-machine authority), a row is appended to
 ///   <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>, and the picker
 ///   moves on to the next 3-progress folder, then to 2-ready.</item>
@@ -42,7 +42,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         _workspaceRoot = Path.Combine(Path.GetTempPath(), "atp-pickup-strict-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
         Directory.CreateDirectory(_workspaceRoot);
-        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
     public void Dispose()
@@ -69,7 +69,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     [Fact]
     public void MeasureProgressFolderMtime_PrefersCliLog_FallsBackToJobJson_FallsBackToFolder()
     {
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "demo-task");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "demo-task");
         Directory.CreateDirectory(folder);
 
         // Just folder: returns folder mtime (well after epoch).
@@ -93,7 +93,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     [Fact]
     public void MeasureProgressFolderMtime_EmptyFolderWithoutFiles_ReturnsFolderMtime()
     {
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "empty");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "empty");
         Directory.CreateDirectory(folder);
         var stamp = new DateTime(2024, 12, 1, 8, 0, 0, DateTimeKind.Utc);
         Directory.SetLastWriteTimeUtc(folder, stamp);
@@ -128,9 +128,9 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     [Fact]
     public void ListProgressFoldersOldestFirst_WithOneNoLogProgressAndOneReady_PicksProgress()
     {
-        WriteJob(JobStates.Progress, "silent-progress");
+        WriteJob(TaskStates.Progress, "silent-progress");
         // Deliberately no cli-output.log and no session id.
-        WriteJob(JobStates.Ready, "fresh-ready");
+        WriteJob(TaskStates.Ready, "fresh-ready");
 
         var runner = BuildRunner();
 
@@ -142,8 +142,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // progress slug without taking the ready job by exercising the same
         // method shape via the public iteration helper above. The 2-ready
         // folder is on disk and would be picked only after 3-progress drains.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "fresh-ready")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "silent-progress")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "fresh-ready")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "silent-progress")));
     }
 
     // ===== Scenario 2: oldest 3-progress runs first =====
@@ -152,17 +152,17 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     public void ListProgressFoldersOldestFirst_WithThreeProgressFolders_OrdersByMtime()
     {
         // Three progress folders in non-mtime order, plus several ready jobs.
-        WriteJob(JobStates.Progress, "newest");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "newest", "job.json"), TimeSpan.FromMinutes(-5));
+        WriteJob(TaskStates.Progress, "newest");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "newest", "job.json"), TimeSpan.FromMinutes(-5));
 
-        WriteJob(JobStates.Progress, "oldest");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "oldest", "job.json"), TimeSpan.FromMinutes(-90));
+        WriteJob(TaskStates.Progress, "oldest");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "oldest", "job.json"), TimeSpan.FromMinutes(-90));
 
-        WriteJob(JobStates.Progress, "middle");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "middle", "job.json"), TimeSpan.FromMinutes(-30));
+        WriteJob(TaskStates.Progress, "middle");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "middle", "job.json"), TimeSpan.FromMinutes(-30));
 
-        WriteJob(JobStates.Ready, "ready-1");
-        WriteJob(JobStates.Ready, "ready-2");
+        WriteJob(TaskStates.Ready, "ready-1");
+        WriteJob(TaskStates.Ready, "ready-2");
 
         var runner = BuildRunner();
 
@@ -182,13 +182,13 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     public void StrictIteration_AllProgressFoldersExhausted_DeadLettersAllAndFallsThrough()
     {
         // Three folders that never produced a CLI output line on prior pickups.
-        WriteJob(JobStates.Progress, "stuck-a");
-        WriteJob(JobStates.Progress, "stuck-b");
-        WriteJob(JobStates.Progress, "stuck-c");
+        WriteJob(TaskStates.Progress, "stuck-a");
+        WriteJob(TaskStates.Progress, "stuck-b");
+        WriteJob(TaskStates.Progress, "stuck-c");
 
         // The "next pickup" semantics: a fresh ready job stays untouched until
         // 3-progress drains.
-        WriteJob(JobStates.Ready, "ready-after-drain");
+        WriteJob(TaskStates.Ready, "ready-after-drain");
 
         var runner = BuildRunner();
         runner.SetPickupAttemptsForTest("stuck-a", ProjectRunner.PickupFailureThreshold);
@@ -204,10 +204,10 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // Each folder is now under 3a-failed-pickup with the dead-letter slug.
         foreach (var slug in new[] { "stuck-a", "stuck-b", "stuck-c" })
         {
-            Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, slug)),
+            Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, slug)),
                 $"{slug} must have been moved out of 3-progress");
 
-            var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
+            var failedPickupRoot = Path.Combine(_watchPath, TaskStates.FailedPickup);
             var matches = Directory.EnumerateDirectories(failedPickupRoot)
                 .Where(d => Path.GetFileName(d).StartsWith($"{slug}-pickup-failed-", StringComparison.Ordinal))
                 .ToList();
@@ -230,7 +230,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         // 2-ready folder is untouched - the runner reaches it only on the
         // next pickup tick now that 3-progress has drained.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "ready-after-drain")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ready-after-drain")));
     }
 
     /// <summary>
@@ -241,12 +241,12 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     [Fact]
     public void StrictIteration_OneExhaustedTwoFresh_DeadLettersExhaustedAndPicksNext()
     {
-        WriteJob(JobStates.Progress, "exhausted");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "exhausted", "job.json"), TimeSpan.FromMinutes(-90));
-        WriteJob(JobStates.Progress, "second-oldest");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "second-oldest", "job.json"), TimeSpan.FromMinutes(-30));
-        WriteJob(JobStates.Progress, "newest");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "newest", "job.json"), TimeSpan.FromMinutes(-5));
+        WriteJob(TaskStates.Progress, "exhausted");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "exhausted", "job.json"), TimeSpan.FromMinutes(-90));
+        WriteJob(TaskStates.Progress, "second-oldest");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "second-oldest", "job.json"), TimeSpan.FromMinutes(-30));
+        WriteJob(TaskStates.Progress, "newest");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "newest", "job.json"), TimeSpan.FromMinutes(-5));
 
         var runner = BuildRunner();
         runner.SetPickupAttemptsForTest("exhausted", ProjectRunner.PickupFailureThreshold);
@@ -255,9 +255,9 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         // 'exhausted' moved out; 'second-oldest' and 'newest' remain because
         // a single TickAsync only starts ONE job per project (ADR-0001).
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "exhausted")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "second-oldest")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "newest")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "exhausted")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "second-oldest")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "newest")));
 
         var jsonlPath = Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl");
         Assert.True(File.Exists(jsonlPath));
@@ -276,8 +276,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // behind in 3-progress while the canonical folder (with job.json)
         // lives in the downstream lane.
         WriteOrphanProgressFolder("duplicate-later-lane");
-        WriteJob(JobStates.HumanReview, "duplicate-later-lane");
-        WriteJob(JobStates.Ready, "ready-after-orphan");
+        WriteJob(TaskStates.HumanReview, "duplicate-later-lane");
+        WriteJob(TaskStates.Ready, "ready-after-orphan");
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -292,13 +292,13 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         // The shell folder is gone, the downstream twin is untouched, and
         // the ready job is still in line.
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "duplicate-later-lane")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "duplicate-later-lane")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "ready-after-orphan")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "duplicate-later-lane")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "duplicate-later-lane")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ready-after-orphan")));
 
         // No orphan entry is written: this was cleanup debris, not a
         // pickup failure. 3a-failed-pickup stays clean.
-        var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
+        var failedPickupRoot = Path.Combine(_watchPath, TaskStates.FailedPickup);
         var entries = Directory.Exists(failedPickupRoot)
             ? Directory.EnumerateDirectories(failedPickupRoot)
                 .Where(d => Path.GetFileName(d).Contains("duplicate-later-lane", StringComparison.Ordinal))
@@ -320,8 +320,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     public void StrictIteration_PostMoveSkeleton_TwinInAutoReview_IsSilentlyDeleted()
     {
         WriteOrphanProgressFolder("canonical-in-auto-review");
-        WriteJob(JobStates.AutoReview, "canonical-in-auto-review");
-        WriteJob(JobStates.Ready, "ready-after-orphan");
+        WriteJob(TaskStates.AutoReview, "canonical-in-auto-review");
+        WriteJob(TaskStates.Ready, "ready-after-orphan");
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -330,11 +330,11 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         Assert.Null(picked);
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "canonical-in-auto-review")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "canonical-in-auto-review")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "ready-after-orphan")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "canonical-in-auto-review")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "canonical-in-auto-review")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ready-after-orphan")));
 
-        var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
+        var failedPickupRoot = Path.Combine(_watchPath, TaskStates.FailedPickup);
         var entries = Directory.Exists(failedPickupRoot)
             ? Directory.EnumerateDirectories(failedPickupRoot)
                 .Where(d => Path.GetFileName(d).Contains("canonical-in-auto-review", StringComparison.Ordinal))
@@ -357,7 +357,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     public void StrictIteration_GenuineOrphan_NoTwin_IsMovedToFailedPickup()
     {
         WriteOrphanProgressFolder("genuine-orphan-no-twin");
-        WriteJob(JobStates.Ready, "ready-after-orphan");
+        WriteJob(TaskStates.Ready, "ready-after-orphan");
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -366,9 +366,9 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         Assert.Null(picked);
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "genuine-orphan-no-twin")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "genuine-orphan-no-twin")));
 
-        var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
+        var failedPickupRoot = Path.Combine(_watchPath, TaskStates.FailedPickup);
         var moved = Directory.EnumerateDirectories(failedPickupRoot)
             .Where(d => Path.GetFileName(d).StartsWith("orphan-genuine-orphan-no-twin-", StringComparison.Ordinal))
             .ToList();
@@ -384,7 +384,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     [Fact]
     public void DeadLetterRow_IncludesAttemptHistoryWhenAvailable()
     {
-        WriteJob(JobStates.Progress, "history-task");
+        WriteJob(TaskStates.Progress, "history-task");
         var runner = BuildRunner();
         runner.SetPickupAttemptsForTest("history-task", ProjectRunner.PickupFailureThreshold);
 
@@ -434,12 +434,12 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     [Fact]
     public void CrossSlug_TwoSpawnFailedDeadLetters_TripsBreakerAndHaltsThirdPickup()
     {
-        WriteJob(JobStates.Progress, "stuck-a");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "stuck-a", "job.json"), TimeSpan.FromMinutes(-90));
-        WriteJob(JobStates.Progress, "stuck-b");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "stuck-b", "job.json"), TimeSpan.FromMinutes(-60));
-        WriteJob(JobStates.Progress, "stuck-c");
-        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "stuck-c", "job.json"), TimeSpan.FromMinutes(-30));
+        WriteJob(TaskStates.Progress, "stuck-a");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a", "job.json"), TimeSpan.FromMinutes(-90));
+        WriteJob(TaskStates.Progress, "stuck-b");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-b", "job.json"), TimeSpan.FromMinutes(-60));
+        WriteJob(TaskStates.Progress, "stuck-c");
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-c", "job.json"), TimeSpan.FromMinutes(-30));
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -453,9 +453,9 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Equal("manual", runner.GetStatus().Mode);
 
         // First two dead-lettered, third stays in 3-progress.
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-a")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-b")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-c")),
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-b")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-c")),
             "third folder must NOT have been dead-lettered after the cross-slug breaker tripped");
 
         // pickup-failures.jsonl carries exactly two rows (one per dead-letter).
@@ -481,8 +481,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     [Fact]
     public void CrossSlug_OneSpawnFailedDeadLetter_DoesNotTripBreakerOrFlipMode()
     {
-        WriteJob(JobStates.Progress, "stuck-a");
-        WriteJob(JobStates.Progress, "stuck-b");
+        WriteJob(TaskStates.Progress, "stuck-a");
+        WriteJob(TaskStates.Progress, "stuck-b");
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -492,8 +492,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         InvokePickerLoop(runner);
 
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-a")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-b")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-b")));
 
         var infraJsonl = Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl");
         Assert.False(File.Exists(infraJsonl));
@@ -540,7 +540,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
     private void WriteOrphanProgressFolder(string slug)
     {
-        var dir = Path.Combine(_watchPath, JobStates.Progress, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.Progress, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"), "orphan log");
         File.WriteAllText(Path.Combine(dir, "status.md"), "orphan status");
@@ -574,17 +574,17 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         };
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
-        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,

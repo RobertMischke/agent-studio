@@ -35,7 +35,7 @@ public sealed class AcceptanceEvidenceDetector
 
     /// <summary>
     /// Run the heuristic suite against one job. The job must be in
-    /// <see cref="JobStates.Completed"/> or <see cref="JobStates.Archive"/>;
+    /// <see cref="TaskStates.Completed"/> or <see cref="TaskStates.Archive"/>;
     /// the caller is responsible for filtering.
     /// </summary>
     public (string verdict, List<EvidenceDiagnostic> diagnostics) Evaluate(JobInfo job)
@@ -45,7 +45,7 @@ public sealed class AcceptanceEvidenceDetector
 
         var promptText = SafeRead(Path.Combine(job.FolderPath, "prompt.md"));
         var statusText = SafeRead(Path.Combine(job.FolderPath, "status.md"));
-        var cliOutput = SafeRead(JobPaths.CliOutputLog(job.FolderPath));
+        var cliOutput = SafeRead(TaskPaths.CliOutputLog(job.FolderPath));
 
         var promptLower = promptText.ToLowerInvariant();
         var asksForCode = CodeChangeKeywords.Any(k => promptLower.Contains(k));

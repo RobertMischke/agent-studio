@@ -38,13 +38,13 @@ public sealed class WorkspaceSummaryService
     public static readonly int[] AllowedWindowHours = [1, 6, 24, 168];
     public const int DefaultWindowHours = 24;
 
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly SupervisorAdvisoryStore _advisories;
     private readonly IConfiguration _config;
     private readonly ILogger<WorkspaceSummaryService> _logger;
 
     public WorkspaceSummaryService(
-        JobScannerService scanner,
+        TaskScannerService scanner,
         SupervisorAdvisoryStore advisories,
         IConfiguration config,
         ILogger<WorkspaceSummaryService> logger)

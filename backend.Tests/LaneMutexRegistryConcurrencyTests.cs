@@ -23,7 +23,7 @@ namespace OrchestratorApi.Tests;
 /// </list>
 ///
 /// The test is deliberately filesystem-level: hammering the actual
-/// <see cref="JobStateMachine.MoveJob"/> entry point catches both the
+/// <see cref="TaskStateMachine.MoveJob"/> entry point catches both the
 /// mutex wiring and any future regression that re-introduces a direct
 /// <see cref="Directory.Move"/> call inside the move path.
 /// </summary>
@@ -37,7 +37,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
     {
         _workspace = Path.Combine(Path.GetTempPath(), "lane-mutex-tests-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspace, "projects", Project);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -100,7 +100,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
         const int N = 100;
         for (int i = 0; i < N; i++)
         {
-            SeedJob(JobStates.Progress, $"slug-{i:000}");
+            SeedJob(TaskStates.Progress, $"slug-{i:000}");
         }
 
         var states = BuildStateMachine();
@@ -108,7 +108,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
         // Round-robin every move to one of the legal targets so the
         // serialisation also has to handle multiple distinct targets,
         // not just the trivial single-target case.
-        var targets = new[] { JobStates.AutoReview, JobStates.HumanReview, JobStates.Completed };
+        var targets = new[] { TaskStates.AutoReview, TaskStates.HumanReview, TaskStates.Completed };
 
         var outcomes = new MoveJobStatus[N];
         Parallel.For(0, N, i =>
@@ -125,7 +125,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
         Assert.All(outcomes, status => Assert.Equal(MoveJobStatus.Success, status));
 
         // Source lane is empty.
-        var leftoverInProgress = Directory.GetDirectories(Path.Combine(_watchPath, JobStates.Progress));
+        var leftoverInProgress = Directory.GetDirectories(Path.Combine(_watchPath, TaskStates.Progress));
         Assert.Empty(leftoverInProgress);
 
         // Each slug appears exactly once across the destination lanes,
@@ -159,7 +159,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
         // 4-auto-review, the other deletes the folder outright. The
         // mutex guarantees a single winner; the loser either fails
         // cleanly (NotFound) or is a no-op.
-        SeedJob(JobStates.Progress, "race-target");
+        SeedJob(TaskStates.Progress, "race-target");
 
         var states = BuildStateMachine();
 
@@ -167,15 +167,15 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
         var deleted = false;
 
         Parallel.Invoke(
-            () => { moved = states.MoveJob("race-target", JobStates.AutoReview, _watchPath).Status == MoveJobStatus.Success; },
+            () => { moved = states.MoveJob("race-target", TaskStates.AutoReview, _watchPath).Status == MoveJobStatus.Success; },
             () => { deleted = states.DeleteJob("race-target", _watchPath); });
 
         // Exactly one of the two operations succeeded.
         Assert.True(moved ^ deleted,
             $"Expected exactly one of move/delete to succeed; moved={moved}, deleted={deleted}.");
 
-        var progressFolders = Directory.GetDirectories(Path.Combine(_watchPath, JobStates.Progress));
-        var autoReviewFolders = Directory.GetDirectories(Path.Combine(_watchPath, JobStates.AutoReview));
+        var progressFolders = Directory.GetDirectories(Path.Combine(_watchPath, TaskStates.Progress));
+        var autoReviewFolders = Directory.GetDirectories(Path.Combine(_watchPath, TaskStates.AutoReview));
 
         Assert.Empty(progressFolders);
         if (moved)
@@ -197,7 +197,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}");
     }
 
-    private JobStateMachine BuildStateMachine()
+    private TaskStateMachine BuildStateMachine()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -209,8 +209,8 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var registry = new LaneMutexRegistry(NullLogger<LaneMutexRegistry>.Instance);
-        return new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance, registry);
+        return new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance, registry);
     }
 }

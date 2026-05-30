@@ -11,14 +11,14 @@ namespace OrchestratorApi.Services.Jobs;
 /// <para>
 /// One row per event, JSONL so a torn write costs at most one event
 /// rather than a corrupted document - same shape contract as
-/// <see cref="JobSessionLog"/>. Writes are best-effort: persistence is
+/// <see cref="TaskSessionLog"/>. Writes are best-effort: persistence is
 /// observability, not a state-machine input, so a write failure logs and
 /// returns false rather than throwing.
 /// </para>
 ///
 /// <para>
 /// Callers pass the job folder path directly. The class deliberately does
-/// not route through <see cref="JobScannerService.FindJob"/> - many of the
+/// not route through <see cref="TaskScannerService.FindJob"/> - many of the
 /// producers (the runner, the review-decision orchestrator, the pipeline
 /// step recorder) already hold the <see cref="JobInfo"/> for the row they
 /// are about to emit, and threading a scanner lookup through every call
@@ -77,8 +77,8 @@ public sealed class TimelineLog
         if (string.IsNullOrWhiteSpace(jobFolderPath) || evt == null) return false;
         try
         {
-            Directory.CreateDirectory(JobPaths.LogsDir(jobFolderPath));
-            var path = JobPaths.TimelineLog(jobFolderPath);
+            Directory.CreateDirectory(TaskPaths.LogsDir(jobFolderPath));
+            var path = TaskPaths.TimelineLog(jobFolderPath);
             var line = JsonSerializer.Serialize(evt, WriteOpts) + Environment.NewLine;
             File.AppendAllText(path, line, Encoding.UTF8);
             return true;
@@ -93,12 +93,12 @@ public sealed class TimelineLog
     /// <summary>
     /// Read the full timeline for one job. Tolerant to torn / malformed
     /// trailing lines (skipped silently) - same contract as
-    /// <see cref="JobSessionLog.ReadSessionEvents"/>.
+    /// <see cref="TaskSessionLog.ReadSessionEvents"/>.
     /// </summary>
     public List<TimelineEvent> ReadAll(string jobFolderPath)
     {
         if (string.IsNullOrWhiteSpace(jobFolderPath)) return [];
-        var path = JobPaths.TimelineLog(jobFolderPath);
+        var path = TaskPaths.TimelineLog(jobFolderPath);
         if (!File.Exists(path)) return [];
         var result = new List<TimelineEvent>();
         foreach (var line in File.ReadAllLines(path))

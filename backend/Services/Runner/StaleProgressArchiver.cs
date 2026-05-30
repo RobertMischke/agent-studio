@@ -55,7 +55,7 @@ namespace OrchestratorApi.Services.Runner;
 /// </list>
 ///
 /// <para>Single-state-machine authority: every move goes through
-/// <see cref="JobStateMachine"/> or <see cref="JobTransitionService"/>; the
+/// <see cref="TaskStateMachine"/> or <see cref="TaskTransitionService"/>; the
 /// sweep never moves folders directly.</para>
 ///
 /// <para>Idempotent: a second run on the same lane is a no-op (the candidates
@@ -68,9 +68,9 @@ namespace OrchestratorApi.Services.Runner;
 /// </summary>
 public sealed class StaleProgressArchiver
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _states;
-    private readonly JobTransitionService _transitions;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
+    private readonly TaskTransitionService _transitions;
     private readonly OrchestratorChatLog _chatLog;
     private readonly IServiceProvider _services;
     private readonly IConfiguration _configuration;
@@ -86,9 +86,9 @@ public sealed class StaleProgressArchiver
     internal Func<RunnerStatus?>? StatusProviderOverride { get; set; }
 
     public StaleProgressArchiver(
-        JobScannerService scanner,
-        JobStateMachine states,
-        JobTransitionService transitions,
+        TaskScannerService scanner,
+        TaskStateMachine states,
+        TaskTransitionService transitions,
         OrchestratorChatLog chatLog,
         IServiceProvider services,
         IConfiguration configuration,
@@ -140,7 +140,7 @@ public sealed class StaleProgressArchiver
             // ADR-0024: enumerate 3-progress through the typed layer.
             // ListLaneFolders includes orphan folders (no job.json),
             // which is the case this sweep was designed to catch.
-            foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, JobStates.Progress))
+            foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
                 var slug = laneFolder.Slug;
@@ -296,7 +296,7 @@ public sealed class StaleProgressArchiver
     private static bool TryFindSentinel(string jobFolder, out string? keyword)
     {
         keyword = null;
-        var path = JobPaths.CliOutputLog(jobFolder);
+        var path = TaskPaths.CliOutputLog(jobFolder);
         if (!File.Exists(path)) return false;
 
         try
@@ -338,7 +338,7 @@ public sealed class StaleProgressArchiver
         var jobId = TryReadJobId(jobFolder) ?? slug;
         try
         {
-            var outcome = await _transitions.MoveAsync(jobId, JobStates.AutoReview, entry.Path, ct);
+            var outcome = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, entry.Path, ct);
             if (outcome.Status != MoveJobStatus.Success)
             {
                 return new StaleProgressDecision
@@ -349,7 +349,7 @@ public sealed class StaleProgressArchiver
                     Slug = slug,
                     JobId = jobId,
                     SentinelKeyword = keyword,
-                    Reason = $"transition to {JobStates.AutoReview} refused: {outcome.Status} {outcome.Message}"
+                    Reason = $"transition to {TaskStates.AutoReview} refused: {outcome.Status} {outcome.Message}"
                 };
             }
 
@@ -373,7 +373,7 @@ public sealed class StaleProgressArchiver
                 Slug = slug,
                 JobId = jobId,
                 SentinelKeyword = keyword,
-                TargetState = JobStates.AutoReview,
+                TargetState = TaskStates.AutoReview,
                 Reason = $"sentinel TASK_{keyword} survived; finished missed transition"
             };
         }
@@ -409,8 +409,8 @@ public sealed class StaleProgressArchiver
         var newSlug = $"{slug}-{suffix}-{datePart}";
         var attempt = newSlug;
         // ADR-0024: collision avoidance via the typed layer instead of
-        // Path.Combine(..., JobStates.FailedPickup, ...).
-        for (int i = 2; _taskAccess.SlugExistsInLane(entry.Path, JobStates.FailedPickup, attempt) && i < 1000; i++)
+        // Path.Combine(..., TaskStates.FailedPickup, ...).
+        for (int i = 2; _taskAccess.SlugExistsInLane(entry.Path, TaskStates.FailedPickup, attempt) && i < 1000; i++)
         {
             attempt = $"{newSlug}-{i}";
         }
@@ -418,7 +418,7 @@ public sealed class StaleProgressArchiver
         var placard = BuildReasonPlacard(kind, lastActivity, now);
         var moveResult = _taskAccess.MoveOrphanToFailedPickup(
             entry.Path,
-            JobStates.Progress,
+            TaskStates.Progress,
             slug,
             attempt,
             placard);
@@ -431,7 +431,7 @@ public sealed class StaleProgressArchiver
                 ProjectName = entry.Name,
                 Slug = slug,
                 FailedPickupSlug = attempt,
-                Reason = $"move to {JobStates.FailedPickup} refused: {moveResult.Status} {moveResult.Message}"
+                Reason = $"move to {TaskStates.FailedPickup} refused: {moveResult.Status} {moveResult.Message}"
             };
         }
 
@@ -443,7 +443,7 @@ public sealed class StaleProgressArchiver
             Slug = slug,
             FailedPickupSlug = attempt,
             FailureKind = suffix,
-            TargetState = JobStates.FailedPickup,
+            TargetState = TaskStates.FailedPickup,
             Reason = kind == FailureKind.Empty
                 ? "stale folder with no job.json or cli-output.log; surfaced in 3a-failed-pickup"
                 : "stale folder past resume window with no completion sentinel; surfaced in 3a-failed-pickup"

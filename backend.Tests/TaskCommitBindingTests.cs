@@ -14,7 +14,7 @@ namespace OrchestratorApi.Tests;
 /// more than one commit across iterations (continue-mode follow-up,
 /// crash-recovery commit + repair, operator-driven steers); each new
 /// commit lands on the task's <c>commits</c> chain via
-/// <see cref="JobMutationService.AppendJobCommitOnFolder"/>.
+/// <see cref="TaskMutationService.AppendJobCommitOnFolder"/>.
 ///
 /// <para>
 /// The rules these tests pin:
@@ -202,12 +202,12 @@ public class TaskCommitBindingTests : IDisposable
 
     private static string Pad(string s) => s.Length >= 40 ? s : s + new string('0', 40 - s.Length);
 
-    private (JobScannerService scanner, JobMutationService mutations) Build()
+    private (TaskScannerService scanner, TaskMutationService mutations) Build()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         return (scanner, mutations);
     }
 

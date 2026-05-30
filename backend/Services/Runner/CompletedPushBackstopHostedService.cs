@@ -10,16 +10,16 @@ namespace OrchestratorApi.Services.Runner;
 /// </summary>
 public sealed class CompletedPushBackstopHostedService : BackgroundService
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ProjectSettingsService _settings;
-    private readonly JobTransitionService _transitions;
+    private readonly TaskTransitionService _transitions;
     private readonly IConfiguration _config;
     private readonly ILogger<CompletedPushBackstopHostedService> _logger;
 
     public CompletedPushBackstopHostedService(
-        JobScannerService scanner,
+        TaskScannerService scanner,
         ProjectSettingsService settings,
-        JobTransitionService transitions,
+        TaskTransitionService transitions,
         IConfiguration config,
         ILogger<CompletedPushBackstopHostedService> logger)
     {
@@ -34,7 +34,7 @@ public sealed class CompletedPushBackstopHostedService : BackgroundService
     {
         var pushed = 0;
         var completed = _scanner.ScanAllJobs()
-            .Where(j => j.State == JobStates.Completed)
+            .Where(j => j.State == TaskStates.Completed)
             .OrderBy(j => j.LastActivity)
             .ThenBy(j => j.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();

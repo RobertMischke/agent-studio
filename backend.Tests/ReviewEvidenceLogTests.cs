@@ -33,9 +33,9 @@ public class ReviewEvidenceLogTests : IDisposable
 
     private void WriteEvidenceLines(params string[] lines)
     {
-        var dir = JobPaths.ResultsDir(_jobFolder);
+        var dir = TaskPaths.ResultsDir(_jobFolder);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(JobPaths.ReviewEvidenceLog(_jobFolder),
+        File.WriteAllText(TaskPaths.ReviewEvidenceLog(_jobFolder),
             string.Join("\n", lines) + "\n",
             Encoding.UTF8);
     }
@@ -50,9 +50,9 @@ public class ReviewEvidenceLogTests : IDisposable
     [Fact]
     public void ReadLatestPerId_EmptyFile_ReturnsEmpty()
     {
-        var dir = JobPaths.ResultsDir(_jobFolder);
+        var dir = TaskPaths.ResultsDir(_jobFolder);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(JobPaths.ReviewEvidenceLog(_jobFolder), "");
+        File.WriteAllText(TaskPaths.ReviewEvidenceLog(_jobFolder), "");
 
         var result = ReviewEvidenceLog.ReadLatestPerId(_jobFolder);
         Assert.Empty(result);
@@ -164,7 +164,7 @@ public class ReviewEvidenceLogTests : IDisposable
 
         ReviewEvidenceLog.Append(_jobFolder, entry);
 
-        Assert.True(File.Exists(JobPaths.ReviewEvidenceLog(_jobFolder)));
+        Assert.True(File.Exists(TaskPaths.ReviewEvidenceLog(_jobFolder)));
         var roundTrip = Assert.Single(ReviewEvidenceLog.ReadLatestPerId(_jobFolder));
         Assert.Equal("e1", roundTrip.Id);
         Assert.Equal("appended", roundTrip.Title);
@@ -172,7 +172,7 @@ public class ReviewEvidenceLogTests : IDisposable
 }
 
 /// <summary>
-/// Integration test for <see cref="JobScannerService.GetJobDetail"/>. Builds
+/// Integration test for <see cref="TaskScannerService.GetJobDetail"/>. Builds
 /// a job folder on disk, drops a review-evidence file next to it, then asserts
 /// that the field surfaces on <see cref="JobDetail.ReviewEvidence"/>.
 /// </summary>
@@ -183,7 +183,7 @@ public class JobDetailReviewEvidenceTests : IDisposable
     public JobDetailReviewEvidenceTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "jobdetail-evidence-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -194,7 +194,7 @@ public class JobDetailReviewEvidenceTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private JobScannerService BuildScanner()
+    private TaskScannerService BuildScanner()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -204,13 +204,13 @@ public class JobDetailReviewEvidenceTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
     }
 
     [Fact]
     public void GetJobDetail_NoEvidenceFile_ReturnsEmptyList()
     {
-        var dir = Path.Combine(_watchPath, JobStates.AutoReview, "demo-task");
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, "demo-task");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
             """{"id":"demo-task","title":"demo","state":"4-auto-review","order":1,"agent":"claude"}""");
@@ -224,12 +224,12 @@ public class JobDetailReviewEvidenceTests : IDisposable
     [Fact]
     public void GetJobDetail_WithEvidence_SurfacesEntries()
     {
-        var dir = Path.Combine(_watchPath, JobStates.HumanReview, "with-evidence");
+        var dir = Path.Combine(_watchPath, TaskStates.HumanReview, "with-evidence");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
             """{"id":"with-evidence","title":"with","state":"5-human-review","order":1,"agent":"claude"}""");
 
-        var resultsDir = JobPaths.ResultsDir(dir);
+        var resultsDir = TaskPaths.ResultsDir(dir);
         Directory.CreateDirectory(resultsDir);
         var lines = new[]
         {
@@ -237,7 +237,7 @@ public class JobDetailReviewEvidenceTests : IDisposable
             "// junk that is not a json line",
             """{"id":"warn-1","source":"code-review","severity":"warn","title":"Missing null guard","createdAt":"2026-05-08T12:35:00Z"}"""
         };
-        File.WriteAllText(JobPaths.ReviewEvidenceLog(dir), string.Join("\n", lines) + "\n", Encoding.UTF8);
+        File.WriteAllText(TaskPaths.ReviewEvidenceLog(dir), string.Join("\n", lines) + "\n", Encoding.UTF8);
 
         var detail = BuildScanner().GetJobDetail("with-evidence", _watchPath);
 
@@ -269,7 +269,7 @@ public class JobOutcomeIssueScannerTests : IDisposable
     public JobOutcomeIssueScannerTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "job-outcome-issue-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -280,7 +280,7 @@ public class JobOutcomeIssueScannerTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private JobScannerService BuildScanner()
+    private TaskScannerService BuildScanner()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -290,18 +290,18 @@ public class JobOutcomeIssueScannerTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
     }
 
     [Fact]
     public void ScanAllJobs_PermissionBlockedLog_SurfacesOutcomeIssue()
     {
-        var dir = Path.Combine(_watchPath, JobStates.Progress, "permission-task");
+        var dir = Path.Combine(_watchPath, TaskStates.Progress, "permission-task");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
             """{"id":"permission-task","title":"permission","state":"3-progress","order":1,"agent":"codex"}""");
-        Directory.CreateDirectory(JobPaths.LogsDir(dir));
-        File.WriteAllText(JobPaths.CliOutputLog(dir),
+        Directory.CreateDirectory(TaskPaths.LogsDir(dir));
+        File.WriteAllText(TaskPaths.CliOutputLog(dir),
             "[orchestrator] Permission denied and could not request permission from user.\n" +
             "[intervention] Try to continue with available permissions. (category: permission-blocked; run summary: sandbox denied)\n",
             Encoding.UTF8);
@@ -317,12 +317,12 @@ public class JobOutcomeIssueScannerTests : IDisposable
     [Fact]
     public void ScanAllJobs_LegacyHeuristicFallbackLog_SurfacesClassifierUnknown()
     {
-        var dir = Path.Combine(_watchPath, JobStates.HumanReview, "legacy-heuristic-task");
+        var dir = Path.Combine(_watchPath, TaskStates.HumanReview, "legacy-heuristic-task");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
             """{"id":"legacy-heuristic-task","title":"legacy","state":"5-human-review","order":1,"agent":"claude"}""");
-        Directory.CreateDirectory(JobPaths.LogsDir(dir));
-        File.WriteAllText(JobPaths.CliOutputLog(dir),
+        Directory.CreateDirectory(TaskPaths.LogsDir(dir));
+        File.WriteAllText(TaskPaths.CliOutputLog(dir),
             "[heuristic] Could not classify the agent's reply. (run summary: Agent text did not match any known shape.)\n",
             Encoding.UTF8);
 

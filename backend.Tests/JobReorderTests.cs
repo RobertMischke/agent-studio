@@ -11,7 +11,7 @@ namespace OrchestratorApi.Tests;
 /// Acceptance contract for the recurring "kanban lane reorder drop-on-top
 /// must set order=1" bug. The frontend computes a new in-lane sequence
 /// from a drag gesture and POSTs the ordered slug list to
-/// <see cref="JobStateMachine.ReorderJobs"/>; the backend rewrites every
+/// <see cref="TaskStateMachine.ReorderJobs"/>; the backend rewrites every
 /// job.json's <c>order</c> field to its 1-based position in the list.
 ///
 /// The bug surfaced as "dragged card landed at order 2 instead of order
@@ -28,7 +28,7 @@ public class JobReorderTests : IDisposable
     public JobReorderTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-reorder-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
@@ -119,28 +119,28 @@ public class JobReorderTests : IDisposable
 
     private void WriteReadyJob(string slug, int order)
     {
-        var dir = Path.Combine(_watchPath, JobStates.Ready, slug);
+        var dir = Path.Combine(_watchPath, TaskStates.Ready, slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{JobStates.Ready}\",\"order\":{order},\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{TaskStates.Ready}\",\"order\":{order},\"agent\":\"copilot\"}}");
     }
 
     private Dictionary<string, int> ReadOrders()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return scanner.ScanAllJobs()
-            .Where(j => j.State == JobStates.Ready)
+            .Where(j => j.State == TaskStates.Ready)
             .ToDictionary(j => j.Id, j => j.Order);
     }
 
-    private JobStateMachine BuildMachine()
+    private TaskStateMachine BuildMachine()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        return new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        return new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
     }
 
     private IConfiguration BuildConfig() => new ConfigurationBuilder()

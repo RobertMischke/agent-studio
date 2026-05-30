@@ -70,8 +70,8 @@ public static class SecurityReviewEndpoints
         app.MapPost("/api/projects/{projectName}/security/audit", (
             string projectName,
             HttpContext ctx,
-            JobScannerService scanner,
-            JobMutationService mutations) =>
+            TaskScannerService scanner,
+            TaskMutationService mutations) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
                 return Results.BadRequest(new { error = "project required" });

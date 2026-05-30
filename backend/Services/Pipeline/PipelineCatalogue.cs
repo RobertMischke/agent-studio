@@ -125,7 +125,7 @@ public static class PipelineCatalogue
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
                     // The deterministic attribution behaviour IS implemented
-                    // (CommitAttributionService, run from JobTransitionService on
+                    // (CommitAttributionService, run from TaskTransitionService on
                     // the 3-progress -> 4-auto-review transition). It runs ahead
                     // of this executor bracket, so within the executor the slot
                     // stays a reserved record that surfaces as "planned".

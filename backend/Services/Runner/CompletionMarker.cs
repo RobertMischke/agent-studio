@@ -7,7 +7,7 @@ namespace OrchestratorApi.Services.Runner;
 /// <summary>
 /// Crash-recovery marker dropped into a job folder once the runner has
 /// decided the job's CLI run is complete (sentinel matched, status terminal)
-/// and is about to call <see cref="OrchestratorApi.Services.Jobs.JobTransitionService.MoveAsync"/>.
+/// and is about to call <see cref="OrchestratorApi.Services.Jobs.TaskTransitionService.MoveAsync"/>.
 /// The marker survives a backend crash so the next boot can finish the
 /// transition without losing the agent's evidence. See
 /// <see cref="CrashRecoveryService"/> for the boot-time scan and ADR-0020
@@ -23,7 +23,7 @@ public sealed record CompletionMarker
 {
     [JsonPropertyName("kind")] public string Kind { get; init; } = "ready-to-transition";
     [JsonPropertyName("writtenAt")] public DateTime WrittenAt { get; init; } = DateTime.UtcNow;
-    [JsonPropertyName("targetState")] public string TargetState { get; init; } = JobStates.AutoReview;
+    [JsonPropertyName("targetState")] public string TargetState { get; init; } = TaskStates.AutoReview;
     [JsonPropertyName("executionStatus")] public string? ExecutionStatus { get; init; }
     [JsonPropertyName("agentOutcome")] public string? AgentOutcome { get; init; }
 

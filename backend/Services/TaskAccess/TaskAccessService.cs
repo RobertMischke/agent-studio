@@ -10,9 +10,9 @@ namespace OrchestratorApi.Services.TaskAccess;
 /// <see cref="ITaskAccessHost"/>. ADR-0024.
 ///
 /// <para>The service is a typed façade in front of the existing
-/// <see cref="JobScannerService"/>, <see cref="JobMutationService"/>,
-/// <see cref="JobStateMachine"/>, and <see cref="JobTransitionService"/>:
-/// reads bottom out in <see cref="JobIndexCache"/> (the in-memory index
+/// <see cref="TaskScannerService"/>, <see cref="TaskMutationService"/>,
+/// <see cref="TaskStateMachine"/>, and <see cref="TaskTransitionService"/>:
+/// reads bottom out in <see cref="TaskIndexCache"/> (the in-memory index
 /// from Cycle 1), writes route through the single-state-machine
 /// authority. Outside callers see only the typed surface; this class
 /// (and the rest of <c>Services/TaskAccess/</c>) is the one place
@@ -28,11 +28,11 @@ namespace OrchestratorApi.Services.TaskAccess;
 /// </summary>
 public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobMutationService _mutations;
-    private readonly JobStateMachine _states;
-    private readonly JobTransitionService _transitions;
-    private readonly JobIndexCache _indexCache;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskMutationService _mutations;
+    private readonly TaskStateMachine _states;
+    private readonly TaskTransitionService _transitions;
+    private readonly TaskIndexCache _indexCache;
     private readonly LaneMutexRegistry _laneMutex;
     private readonly ILogger<TaskAccessService> _logger;
 
@@ -51,11 +51,11 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         new(StringComparer.OrdinalIgnoreCase);
 
     public TaskAccessService(
-        JobScannerService scanner,
-        JobMutationService mutations,
-        JobStateMachine states,
-        JobTransitionService transitions,
-        JobIndexCache indexCache,
+        TaskScannerService scanner,
+        TaskMutationService mutations,
+        TaskStateMachine states,
+        TaskTransitionService transitions,
+        TaskIndexCache indexCache,
         ILogger<TaskAccessService> logger,
         LaneMutexRegistry? laneMutex = null)
     {
@@ -70,7 +70,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
 
         // Wire the transition event so lane moves performed via the
-        // existing JobTransitionService (e.g. through the /api/jobs/{id}/move
+        // existing TaskTransitionService (e.g. through the /api/jobs/{id}/move
         // endpoint) are visible to TaskAccess subscribers too. Without
         // this, callers that subscribe to the layer would only see
         // moves that came through TransitionLaneAsync; moves through
@@ -95,7 +95,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     // ---------- ITaskAccessHost ----------
 
     /// <summary>
-    /// Boot the index. The existing <see cref="JobIndexCache"/> hydrates
+    /// Boot the index. The existing <see cref="TaskIndexCache"/> hydrates
     /// lazily on first read, so the boot is a single forced refresh that
     /// surfaces config / disk problems early instead of on the first
     /// HTTP request.
@@ -122,7 +122,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     /// </summary>
     public Task ReloadProjectAsync(string projectName, CancellationToken ct = default)
     {
-        _indexCache.Invalidate(JobIndexCache.InvalidationSource.External);
+        _indexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
         return Task.CompletedTask;
     }
 
@@ -234,7 +234,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         if (outcome.Status != MoveJobStatus.Success)
             return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = outcome.Message };
 
-        // The transition event fired from JobTransitionService is wired
+        // The transition event fired from TaskTransitionService is wired
         // into our subscriber dispatch in the ctor, so no manual
         // DispatchChange here.
         var after = _scanner.FindJob(request.JobId, request.WatchPath);
@@ -300,7 +300,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             };
         }
 
-        // Route through the typed JobMutationService method that matches
+        // Route through the typed TaskMutationService method that matches
         // the requested field. Field names are intentionally narrow.
         bool applied;
         switch (request.FieldName)
@@ -466,7 +466,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     public bool SlugExistsInLane(string watchPath, string lane, string slug)
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane) || string.IsNullOrWhiteSpace(slug)) return false;
-        if (!JobStates.All.Contains(lane)) return false;
+        if (!TaskStates.All.Contains(lane)) return false;
         var path = Path.Combine(watchPath, lane, slug);
         return Directory.Exists(path);
     }
@@ -474,7 +474,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     public IReadOnlyList<string> ListLaneFolderNames(string watchPath, string lane)
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane)) return [];
-        if (!JobStates.All.Contains(lane)) return [];
+        if (!TaskStates.All.Contains(lane)) return [];
         var laneDir = Path.Combine(watchPath, lane);
         if (!Directory.Exists(laneDir)) return [];
         try
@@ -491,7 +491,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     public IReadOnlyList<LaneFolderRef> ListLaneFolders(string watchPath, string lane)
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane)) return [];
-        if (!JobStates.All.Contains(lane)) return [];
+        if (!TaskStates.All.Contains(lane)) return [];
         var laneDir = Path.Combine(watchPath, lane);
         if (!Directory.Exists(laneDir)) return [];
         try
@@ -518,7 +518,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     {
         if (string.IsNullOrWhiteSpace(watchPath)) return [];
         var results = new List<LaneFolderEntry>();
-        foreach (var lane in JobStates.All)
+        foreach (var lane in TaskStates.All)
         {
             var laneDir = Path.Combine(watchPath, lane);
             if (!Directory.Exists(laneDir)) continue;
@@ -577,7 +577,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(sourceLane) || string.IsNullOrWhiteSpace(sourceSlug) || string.IsNullOrWhiteSpace(destinationSlug))
             return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = "watchPath, sourceLane, sourceSlug, destinationSlug are required" };
-        if (!JobStates.All.Contains(sourceLane))
+        if (!TaskStates.All.Contains(sourceLane))
             return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = $"Unknown source lane '{sourceLane}'" };
 
         var sourceFolder = Path.Combine(watchPath, sourceLane, sourceSlug);
@@ -596,7 +596,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         {
             try
             {
-                var reasonPath = Path.Combine(watchPath, JobStates.FailedPickup, destinationSlug, "failed-pickup-reason.md");
+                var reasonPath = Path.Combine(watchPath, TaskStates.FailedPickup, destinationSlug, "failed-pickup-reason.md");
                 File.WriteAllText(reasonPath, reasonMarkdown);
             }
             catch (Exception ex)
@@ -608,7 +608,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         // Intentionally skip a post-move scanner.FindJob lookup here.
         // Forcing a fresh ScanAllJobsRaw on every orphan move has a
         // load-bearing side effect: ScanJobFolder runs the lazy
-        // ownerClientId migration, which calls JobJsonFile.UpdateField
+        // ownerClientId migration, which calls TaskJsonFile.UpdateField
         // on every legacy job.json it touches. That mtime bump on
         // unrelated sibling folders (e.g. another 3-progress folder
         // still queued for the same sweep) made them look freshly
@@ -632,7 +632,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
                 JobId = destinationSlug,
                 Kind = TaskChangeKind.Transitioned,
                 FromLane = sourceLane,
-                ToLane = JobStates.FailedPickup,
+                ToLane = TaskStates.FailedPickup,
                 Version = version,
             });
         }
@@ -648,10 +648,10 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
     {
         if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane) || string.IsNullOrWhiteSpace(slug))
             return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = "watchPath, lane, slug are required" };
-        if (!JobStates.All.Contains(lane))
+        if (!TaskStates.All.Contains(lane))
             return new TaskMutationResult { Status = TaskMutationStatus.Rejected, Message = $"Unknown lane '{lane}'" };
 
-        // F21: serialise with the lane-tree writer chain (JobStateMachine
+        // F21: serialise with the lane-tree writer chain (TaskStateMachine
         // and friends). The post-move skeleton cleanup in ProjectRunner is
         // the canonical caller; without the mutex, the runner could try to
         // delete a folder that StaleProgressArchiver or a manual API move

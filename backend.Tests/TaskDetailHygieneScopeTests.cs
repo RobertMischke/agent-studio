@@ -42,10 +42,10 @@ public class TaskDetailHygieneScopeTests : IDisposable
     }
 
     [Theory]
-    [InlineData(JobStates.AutoReview)]
-    [InlineData(JobStates.HumanReview)]
-    [InlineData(JobStates.Completed)]
-    [InlineData(JobStates.Archive)]
+    [InlineData(TaskStates.AutoReview)]
+    [InlineData(TaskStates.HumanReview)]
+    [InlineData(TaskStates.Completed)]
+    [InlineData(TaskStates.Archive)]
     public void JobHygiene_RepoAheadOfUpstream_TaskScopeStaysSilent(string lane)
     {
         var (repo, _) = SeedRepoAheadOfUpstream("ahead-" + lane.Replace("-", ""));
@@ -82,7 +82,7 @@ public class TaskDetailHygieneScopeTests : IDisposable
         // repo-level IsDirty stays true on the project layer for the
         // project surface to render.
         var repo = SeedRepo("dirty-no-active");
-        SeedJobFolder(repo, "sleeper-task", JobStates.HumanReview, withCommit: true);
+        SeedJobFolder(repo, "sleeper-task", TaskStates.HumanReview, withCommit: true);
         File.WriteAllText(Path.Combine(repo, "scratch.txt"), "wip from another task");
 
         var git = BuildGitService(("Dirty", repo));
@@ -203,7 +203,7 @@ public class TaskDetailHygieneScopeTests : IDisposable
         }
         var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return new GitService(NullLogger<GitService>.Instance, scanner, config);
     }
 

@@ -32,14 +32,14 @@ public class AutoPickupCascadeTests
     [Fact]
     public void HasResumableSession_NameAndChainEmpty_False()
     {
-        var info = new JobInfo { Id = "j", State = JobStates.Progress };
+        var info = new JobInfo { Id = "j", State = TaskStates.Progress };
         Assert.False(ProjectRunner.HasResumableSession(info));
     }
 
     [Fact]
     public void HasResumableSession_NameSet_True()
     {
-        var info = new JobInfo { Id = "j", State = JobStates.Progress, SessionName = ValidUuid };
+        var info = new JobInfo { Id = "j", State = TaskStates.Progress, SessionName = ValidUuid };
         Assert.True(ProjectRunner.HasResumableSession(info));
     }
 
@@ -49,7 +49,7 @@ public class AutoPickupCascadeTests
         var info = new JobInfo
         {
             Id = "j",
-            State = JobStates.Progress,
+            State = TaskStates.Progress,
             SessionChain = new List<string> { ValidUuid }
         };
         Assert.True(ProjectRunner.HasResumableSession(info));
@@ -61,7 +61,7 @@ public class AutoPickupCascadeTests
         var info = new JobInfo
         {
             Id = "j",
-            State = JobStates.Progress,
+            State = TaskStates.Progress,
             SessionChain = new List<string> { "", "   " }
         };
         Assert.False(ProjectRunner.HasResumableSession(info));
@@ -82,7 +82,7 @@ public class AutoPickupCascadeTests
     {
         var plan = RunPlanner.PlanRun(
             RunIntent.AutoPickup,
-            initialState: JobStates.Progress,
+            initialState: TaskStates.Progress,
             sessionName: ValidUuid,
             cliType: CliTypes.Claude,
             isCompatibleSessionName: ClaudeCompat,
@@ -110,7 +110,7 @@ public class AutoPickupCascadeTests
     {
         var plan = RunPlanner.PlanRun(
             RunIntent.AutoPickup,
-            initialState: JobStates.Progress,
+            initialState: TaskStates.Progress,
             sessionName: null,
             cliType: CliTypes.Claude,
             isCompatibleSessionName: ClaudeCompat,

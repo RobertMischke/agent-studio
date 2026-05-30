@@ -6,7 +6,7 @@ using OrchestratorApi.Services.Supervisor;
 
 namespace OrchestratorApi.Services.Bus;
 
-// JobPaths is internal in the OrchestratorApi.Services namespace; same assembly,
+// TaskPaths is internal in the OrchestratorApi.Services namespace; same assembly,
 // so the bridge can reference it without exposing it publicly.
 
 /// <summary>
@@ -549,7 +549,7 @@ public sealed class AgentMessageBusBridge
         return new AgentArtifactRef
         {
             Kind = "log-slice",
-            Uri = JobPaths.CliOutputLog(info.FolderPath),
+            Uri = TaskPaths.CliOutputLog(info.FolderPath),
             Label = "cli-output.log",
         };
     }

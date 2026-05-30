@@ -19,14 +19,14 @@ namespace OrchestratorApi.Services.Security;
 /// </summary>
 public sealed class SecurityReviewService
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<SecurityReviewService> _logger;
 
     private static readonly Regex DateInFileNameRegex = new(
         @"^(?<date>\d{4}-\d{2}-\d{2})\b",
         RegexOptions.Compiled);
 
-    public SecurityReviewService(JobScannerService scanner, ILogger<SecurityReviewService> logger)
+    public SecurityReviewService(TaskScannerService scanner, ILogger<SecurityReviewService> logger)
     {
         _scanner = scanner;
         _logger = logger;

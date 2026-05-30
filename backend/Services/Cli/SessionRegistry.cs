@@ -20,10 +20,10 @@ namespace OrchestratorApi.Services.Cli;
 public sealed class SessionRegistry
 {
     private readonly ILogger<SessionRegistry> _logger;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly SessionToJobIndex? _sessionIndex;
 
-    public SessionRegistry(ILogger<SessionRegistry> logger, JobScannerService scanner)
+    public SessionRegistry(ILogger<SessionRegistry> logger, TaskScannerService scanner)
         : this(logger, scanner, sessionIndex: null) { }
 
     /// <summary>
@@ -34,7 +34,7 @@ public sealed class SessionRegistry
     /// without the index keep working (the chip is just empty in that
     /// case, which matches today's behaviour).
     /// </summary>
-    public SessionRegistry(ILogger<SessionRegistry> logger, JobScannerService scanner, SessionToJobIndex? sessionIndex)
+    public SessionRegistry(ILogger<SessionRegistry> logger, TaskScannerService scanner, SessionToJobIndex? sessionIndex)
     {
         _logger = logger;
         _scanner = scanner;
@@ -97,7 +97,7 @@ public sealed class SessionRegistry
                     continue;
                 }
                 var isActive = false;
-                if (string.Equals(link.Lane, JobStates.Progress, StringComparison.Ordinal)
+                if (string.Equals(link.Lane, TaskStates.Progress, StringComparison.Ordinal)
                     && activeJobByProject != null
                     && activeJobByProject.TryGetValue(link.ProjectName, out var activeId)
                     && string.Equals(activeId, link.JobId, StringComparison.Ordinal))

@@ -58,7 +58,7 @@ public enum TaskMutationKind
 
 /// <summary>
 /// Lane transition request. Routed through the existing
-/// <c>JobStateMachine</c> from inside the layer so the
+/// <c>TaskStateMachine</c> from inside the layer so the
 /// "one running task per project" invariant stays in one place.
 /// </summary>
 public record TaskTransitionRequest

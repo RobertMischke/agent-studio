@@ -9,8 +9,8 @@ namespace OrchestratorApi.Services.Jobs;
 /// <para>The lane tree under a single watch path
 /// (<c>0-backlog/</c>, <c>1-preparation/</c>, ..., <c>3-progress/</c>,
 /// <c>3a-failed-pickup/</c>, ..., <c>7-archive/</c>) is touched by six
-/// independent writers: <c>JobTransitionService.MoveAsync</c>, the
-/// batch-move endpoint, <c>JobStateMachine</c> (move/delete/change-project),
+/// independent writers: <c>TaskTransitionService.MoveAsync</c>, the
+/// batch-move endpoint, <c>TaskStateMachine</c> (move/delete/change-project),
 /// the boot-time <c>CrashRecoveryService</c>, the boot-time
 /// <c>StaleProgressArchiver</c>, the per-tick <c>ProjectRunner</c>
 /// pickup/dead-letter path, and the drag-and-drop API. Without
@@ -25,7 +25,7 @@ namespace OrchestratorApi.Services.Jobs;
 /// at the leaf level (the <c>Directory.Move</c> / <c>Directory.Delete</c>
 /// call site itself), so higher-level wrappers compose without nesting -
 /// the call chain stays one-acquire-deep and never has to reason about
-/// re-entrancy. Readers go through <see cref="JobScannerService"/>'s
+/// re-entrancy. Readers go through <see cref="TaskScannerService"/>'s
 /// cache and do not take the mutex.</para>
 ///
 /// <para>The architecture document at
@@ -48,7 +48,7 @@ public sealed class LaneMutexRegistry
 
     /// <summary>
     /// Fallback singleton for code paths that don't have DI wired (unit
-    /// test fixtures that build <see cref="JobStateMachine"/> directly).
+    /// test fixtures that build <see cref="TaskStateMachine"/> directly).
     /// Production wiring resolves the configured singleton; this fallback
     /// has its own per-process semaphore map so tests still see actual
     /// serialisation if they exercise it.

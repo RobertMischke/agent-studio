@@ -42,7 +42,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         _workspaceRoot = Path.Combine(_tempDir, "workspace");
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
         Directory.CreateDirectory(_workspaceRoot);
-        foreach (var state in JobStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
     public void Dispose()
@@ -61,8 +61,8 @@ public sealed class StaleProgressArchiverTests : IDisposable
     [Fact]
     public async Task Sweep_StaleFolderWithDoneSentinel_RecoversToReviewAndAppendsChatNote()
     {
-        WriteJob(JobStates.Progress, "demo-task");
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "demo-task");
+        WriteJob(TaskStates.Progress, "demo-task");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "demo-task");
         WriteCliLogWithSentinel(folder, "[[TASK_DONE]]");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(folder, "job.json"));
@@ -70,14 +70,14 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var (archiver, _) = Build();
         var decisions = await archiver.SweepAsync();
 
-        var moved = Path.Combine(_watchPath, JobStates.AutoReview, "demo-task");
+        var moved = Path.Combine(_watchPath, TaskStates.AutoReview, "demo-task");
         Assert.False(Directory.Exists(folder), "source 3-progress folder must be moved");
         Assert.True(Directory.Exists(moved), "job folder must land in 4-review");
 
         var d = Assert.Single(decisions);
         Assert.Equal(StaleProgressDecisionKinds.RecoveredToReview, d.Kind);
         Assert.Equal("DONE", d.SentinelKeyword);
-        Assert.Equal(JobStates.AutoReview, d.TargetState);
+        Assert.Equal(TaskStates.AutoReview, d.TargetState);
 
         // Chat-log note lands on the moved folder so the protocol pane sees it.
         var log = File.ReadAllText(Path.Combine(moved, "logs", "cli-output.log"));
@@ -94,8 +94,8 @@ public sealed class StaleProgressArchiverTests : IDisposable
     public async Task Sweep_StaleFolderWithoutSentinel_IsMovedToFailedPickupNotSilentlyArchived()
     {
         // ADR-0028: orphan folders surface in 3a-failed-pickup, not 7-archive.
-        WriteJob(JobStates.Progress, "no-sentinel");
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "no-sentinel");
+        WriteJob(TaskStates.Progress, "no-sentinel");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "no-sentinel");
         WriteCliLog(folder, "agent talked but never finished");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(folder, "job.json"));
@@ -109,11 +109,11 @@ public sealed class StaleProgressArchiverTests : IDisposable
         Assert.Equal("orphan", d.FailureKind);
         Assert.NotNull(d.FailedPickupSlug);
         Assert.StartsWith("no-sentinel-orphan-", d.FailedPickupSlug);
-        Assert.Equal(JobStates.FailedPickup, d.TargetState);
+        Assert.Equal(TaskStates.FailedPickup, d.TargetState);
 
-        var moved = Path.Combine(_watchPath, JobStates.FailedPickup, d.FailedPickupSlug!);
+        var moved = Path.Combine(_watchPath, TaskStates.FailedPickup, d.FailedPickupSlug!);
         Assert.True(Directory.Exists(moved), "folder must land in 3a-failed-pickup, not 7-archive");
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Archive, d.FailedPickupSlug!)),
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, d.FailedPickupSlug!)),
             "loud-not-archived: nothing may land in 7-archive on this path");
 
         // Placard captures kind + timestamps so the operator sees what the
@@ -132,7 +132,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
     {
         // ADR-0028: even empty stale folders surface in 3a-failed-pickup so
         // the operator sees that the runner could not resume them.
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "empty-shell");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "empty-shell");
         Directory.CreateDirectory(folder);
         // No job.json, no logs. MeasureFolder treats this as epoch 0 so it
         // always crosses the threshold.
@@ -147,23 +147,23 @@ public sealed class StaleProgressArchiverTests : IDisposable
         Assert.NotNull(d.FailedPickupSlug);
         Assert.StartsWith("empty-shell-empty-", d.FailedPickupSlug);
 
-        var moved = Path.Combine(_watchPath, JobStates.FailedPickup, d.FailedPickupSlug!);
+        var moved = Path.Combine(_watchPath, TaskStates.FailedPickup, d.FailedPickupSlug!);
         Assert.True(Directory.Exists(moved));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Archive, d.FailedPickupSlug!)),
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, d.FailedPickupSlug!)),
             "loud-not-archived: nothing may land in 7-archive on this path");
 
         // Empty folders gain a synthetic job.json so the kanban can render the
         // card and the state-field invariant holds.
         var jobJson = Path.Combine(moved, "job.json");
         Assert.True(File.Exists(jobJson));
-        Assert.Contains(JobStates.FailedPickup, File.ReadAllText(jobJson));
+        Assert.Contains(TaskStates.FailedPickup, File.ReadAllText(jobJson));
     }
 
     [Fact]
     public async Task Sweep_FreshFolder_IsLeftAlone()
     {
-        WriteJob(JobStates.Progress, "fresh");
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "fresh");
+        WriteJob(TaskStates.Progress, "fresh");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "fresh");
         WriteCliLog(folder, "still working");
         // mtime stays "now" so the folder is well within the resume window.
 
@@ -188,8 +188,8 @@ public sealed class StaleProgressArchiverTests : IDisposable
         // folder as orphan and the sweep moved it. The activity signature now
         // spans every file in logs/, so a fresh tool-calls.jsonl keeps the
         // verdict at Fresh.
-        WriteJob(JobStates.Progress, "tool-calling");
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "tool-calling");
+        WriteJob(TaskStates.Progress, "tool-calling");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "tool-calling");
         WriteCliLog(folder, "long-quiet stdout");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(folder, "job.json"));
@@ -215,8 +215,8 @@ public sealed class StaleProgressArchiverTests : IDisposable
         // pickup attempt. A folder where session-events.jsonl was just
         // appended must count as fresh even when cli-output.log mtime is
         // stale (e.g. claude-code session emitted no stdout yet).
-        WriteJob(JobStates.Progress, "just-resumed");
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "just-resumed");
+        WriteJob(TaskStates.Progress, "just-resumed");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "just-resumed");
         WriteCliLog(folder, "old stdout from a previous attempt");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(folder, "job.json"));
@@ -234,14 +234,14 @@ public sealed class StaleProgressArchiverTests : IDisposable
     [Fact]
     public async Task Sweep_IsIdempotentAcrossRuns()
     {
-        WriteJob(JobStates.Progress, "first-orphan");
-        var f1 = Path.Combine(_watchPath, JobStates.Progress, "first-orphan");
+        WriteJob(TaskStates.Progress, "first-orphan");
+        var f1 = Path.Combine(_watchPath, TaskStates.Progress, "first-orphan");
         WriteCliLog(f1, "no sentinel here");
         SetMtimeOldEnough(Path.Combine(f1, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(f1, "job.json"));
 
-        WriteJob(JobStates.Progress, "second-recovered");
-        var f2 = Path.Combine(_watchPath, JobStates.Progress, "second-recovered");
+        WriteJob(TaskStates.Progress, "second-recovered");
+        var f2 = Path.Combine(_watchPath, TaskStates.Progress, "second-recovered");
         WriteCliLogWithSentinel(f2, "[[TASK_NEEDS_INPUT:waiting]]");
         SetMtimeOldEnough(Path.Combine(f2, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(f2, "job.json"));
@@ -262,8 +262,8 @@ public sealed class StaleProgressArchiverTests : IDisposable
     [Fact]
     public async Task Sweep_ActiveJobIsNeverTouchedEvenWhenStale()
     {
-        WriteJob(JobStates.Progress, "running-now");
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "running-now");
+        WriteJob(TaskStates.Progress, "running-now");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "running-now");
         WriteCliLog(folder, "agent mid-stream");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(folder, "job.json"));
@@ -292,8 +292,8 @@ public sealed class StaleProgressArchiverTests : IDisposable
     [Fact]
     public async Task Sweep_ZeroWindow_DisablesPass()
     {
-        WriteJob(JobStates.Progress, "would-be-orphan");
-        var folder = Path.Combine(_watchPath, JobStates.Progress, "would-be-orphan");
+        WriteJob(TaskStates.Progress, "would-be-orphan");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "would-be-orphan");
         WriteCliLog(folder, "no sentinel");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
         SetMtimeOldEnough(Path.Combine(folder, "job.json"));
@@ -305,7 +305,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         Assert.Empty(decisions);
     }
 
-    private (StaleProgressArchiver Archiver, JobScannerService Scanner) Build(int stuckResumeWindowMinutes = 60)
+    private (StaleProgressArchiver Archiver, TaskScannerService Scanner) Build(int stuckResumeWindowMinutes = 60)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -318,15 +318,15 @@ public sealed class StaleProgressArchiverTests : IDisposable
         }).Build();
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,

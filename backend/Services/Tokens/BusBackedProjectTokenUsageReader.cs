@@ -35,9 +35,9 @@ public sealed class BusBackedProjectTokenUsageReader
 {
     private readonly AgentMessageBusStore _store;
     private readonly IConfiguration _config;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
 
-    public BusBackedProjectTokenUsageReader(AgentMessageBusStore store, IConfiguration config, JobScannerService scanner)
+    public BusBackedProjectTokenUsageReader(AgentMessageBusStore store, IConfiguration config, TaskScannerService scanner)
     {
         _store = store;
         _config = config;

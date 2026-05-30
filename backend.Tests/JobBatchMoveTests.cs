@@ -24,7 +24,7 @@ public class JobBatchMoveTests : IDisposable
     public JobBatchMoveTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-batchmove-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
@@ -39,21 +39,21 @@ public class JobBatchMoveTests : IDisposable
         // Five archived jobs that we want to restore into three different
         // target lanes - the canonical "manual restore" gesture that used
         // to drop to shell mv.
-        WriteJob(JobStates.Archive, "alpha");
-        WriteJob(JobStates.Archive, "beta");
-        WriteJob(JobStates.Archive, "gamma");
-        WriteJob(JobStates.Archive, "delta");
-        WriteJob(JobStates.Archive, "epsilon");
+        WriteJob(TaskStates.Archive, "alpha");
+        WriteJob(TaskStates.Archive, "beta");
+        WriteJob(TaskStates.Archive, "gamma");
+        WriteJob(TaskStates.Archive, "delta");
+        WriteJob(TaskStates.Archive, "epsilon");
 
         var transitions = BuildTransitionService();
 
         var items = new List<BatchMoveItem>
         {
-            new() { JobId = "alpha",   WatchPath = _watchPath, TargetState = JobStates.Ready },
-            new() { JobId = "beta",    WatchPath = _watchPath, TargetState = JobStates.Ready },
-            new() { JobId = "gamma",   WatchPath = _watchPath, TargetState = JobStates.Backlog },
-            new() { JobId = "delta",   WatchPath = _watchPath, TargetState = JobStates.Backlog },
-            new() { JobId = "epsilon", WatchPath = _watchPath, TargetState = JobStates.Preparation },
+            new() { JobId = "alpha",   WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "beta",    WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "gamma",   WatchPath = _watchPath, TargetState = TaskStates.Backlog },
+            new() { JobId = "delta",   WatchPath = _watchPath, TargetState = TaskStates.Backlog },
+            new() { JobId = "epsilon", WatchPath = _watchPath, TargetState = TaskStates.Preparation },
         };
 
         var results = await transitions.BatchMoveAsync(items, CancellationToken.None);
@@ -62,11 +62,11 @@ public class JobBatchMoveTests : IDisposable
         Assert.All(results, r => Assert.Equal("moved", r.Status));
 
         var laneByJob = ReadLaneByJob();
-        Assert.Equal(JobStates.Ready,       laneByJob["alpha"]);
-        Assert.Equal(JobStates.Ready,       laneByJob["beta"]);
-        Assert.Equal(JobStates.Backlog,     laneByJob["gamma"]);
-        Assert.Equal(JobStates.Backlog,     laneByJob["delta"]);
-        Assert.Equal(JobStates.Preparation, laneByJob["epsilon"]);
+        Assert.Equal(TaskStates.Ready,       laneByJob["alpha"]);
+        Assert.Equal(TaskStates.Ready,       laneByJob["beta"]);
+        Assert.Equal(TaskStates.Backlog,     laneByJob["gamma"]);
+        Assert.Equal(TaskStates.Backlog,     laneByJob["delta"]);
+        Assert.Equal(TaskStates.Preparation, laneByJob["epsilon"]);
     }
 
     [Fact]
@@ -78,22 +78,22 @@ public class JobBatchMoveTests : IDisposable
         // TargetFolderExists case that surfaced the 409 conflict on the
         // single-item endpoint. The batch must keep going and report
         // conflict for gamma while items 1, 2, 4, 5 all land.
-        WriteJob(JobStates.Archive,     "alpha");
-        WriteJob(JobStates.Archive,     "beta");
-        WriteJob(JobStates.Preparation, "gamma");
-        WriteJob(JobStates.Ready,       "gamma");   // pre-existing stale duplicate
-        WriteJob(JobStates.Archive,     "delta");
-        WriteJob(JobStates.Archive,     "epsilon");
+        WriteJob(TaskStates.Archive,     "alpha");
+        WriteJob(TaskStates.Archive,     "beta");
+        WriteJob(TaskStates.Preparation, "gamma");
+        WriteJob(TaskStates.Ready,       "gamma");   // pre-existing stale duplicate
+        WriteJob(TaskStates.Archive,     "delta");
+        WriteJob(TaskStates.Archive,     "epsilon");
 
         var transitions = BuildTransitionService();
 
         var items = new List<BatchMoveItem>
         {
-            new() { JobId = "alpha",   WatchPath = _watchPath, TargetState = JobStates.Ready },
-            new() { JobId = "beta",    WatchPath = _watchPath, TargetState = JobStates.Ready },
-            new() { JobId = "gamma",   WatchPath = _watchPath, TargetState = JobStates.Ready },
-            new() { JobId = "delta",   WatchPath = _watchPath, TargetState = JobStates.Ready },
-            new() { JobId = "epsilon", WatchPath = _watchPath, TargetState = JobStates.Ready },
+            new() { JobId = "alpha",   WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "beta",    WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "gamma",   WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "delta",   WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "epsilon", WatchPath = _watchPath, TargetState = TaskStates.Ready },
         };
 
         var results = await transitions.BatchMoveAsync(items, CancellationToken.None);
@@ -111,25 +111,25 @@ public class JobBatchMoveTests : IDisposable
         // still be in 1-preparation - the conflict prevented the move,
         // not "moved + rolled back".
         var folders = ReadFoldersByLane();
-        Assert.Contains("alpha",   folders[JobStates.Ready]);
-        Assert.Contains("beta",    folders[JobStates.Ready]);
-        Assert.Contains("delta",   folders[JobStates.Ready]);
-        Assert.Contains("epsilon", folders[JobStates.Ready]);
-        Assert.Contains("gamma",   folders[JobStates.Preparation]);
+        Assert.Contains("alpha",   folders[TaskStates.Ready]);
+        Assert.Contains("beta",    folders[TaskStates.Ready]);
+        Assert.Contains("delta",   folders[TaskStates.Ready]);
+        Assert.Contains("epsilon", folders[TaskStates.Ready]);
+        Assert.Contains("gamma",   folders[TaskStates.Preparation]);
     }
 
     [Fact]
     public async Task BatchMoveAsync_InvalidLane_ReportsRejectedWithoutBlockingOtherItems()
     {
-        WriteJob(JobStates.Archive, "alpha");
-        WriteJob(JobStates.Archive, "beta");
+        WriteJob(TaskStates.Archive, "alpha");
+        WriteJob(TaskStates.Archive, "beta");
 
         var transitions = BuildTransitionService();
 
         var items = new List<BatchMoveItem>
         {
             new() { JobId = "alpha", WatchPath = _watchPath, TargetState = "not-a-real-lane" },
-            new() { JobId = "beta",  WatchPath = _watchPath, TargetState = JobStates.Ready },
+            new() { JobId = "beta",  WatchPath = _watchPath, TargetState = TaskStates.Ready },
         };
 
         var results = await transitions.BatchMoveAsync(items, CancellationToken.None);
@@ -141,14 +141,14 @@ public class JobBatchMoveTests : IDisposable
     [Fact]
     public async Task BatchMoveAsync_UnknownJob_ReportsNotFoundWithoutBlockingOtherItems()
     {
-        WriteJob(JobStates.Archive, "alpha");
+        WriteJob(TaskStates.Archive, "alpha");
 
         var transitions = BuildTransitionService();
 
         var items = new List<BatchMoveItem>
         {
-            new() { JobId = "ghost", WatchPath = _watchPath, TargetState = JobStates.Ready },
-            new() { JobId = "alpha", WatchPath = _watchPath, TargetState = JobStates.Ready },
+            new() { JobId = "ghost", WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "alpha", WatchPath = _watchPath, TargetState = TaskStates.Ready },
         };
 
         var results = await transitions.BatchMoveAsync(items, CancellationToken.None);
@@ -169,14 +169,14 @@ public class JobBatchMoveTests : IDisposable
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return scanner.ScanAllJobs().ToDictionary(j => j.Id, j => j.State);
     }
 
     private Dictionary<string, HashSet<string>> ReadFoldersByLane()
     {
         var byLane = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             var laneDir = Path.Combine(_watchPath, state);
             byLane[state] = new HashSet<string>(
@@ -186,18 +186,18 @@ public class JobBatchMoveTests : IDisposable
         return byLane;
     }
 
-    private JobTransitionService BuildTransitionService()
+    private TaskTransitionService BuildTransitionService()
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        return new JobTransitionService(scanner, states, mutations, git, settings,
-            NullLogger<JobTransitionService>.Instance);
+        return new TaskTransitionService(scanner, states, mutations, git, settings,
+            NullLogger<TaskTransitionService>.Instance);
     }
 
     private IConfiguration BuildConfig() => new ConfigurationBuilder()

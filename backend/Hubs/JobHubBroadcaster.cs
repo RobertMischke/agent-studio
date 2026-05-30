@@ -4,9 +4,9 @@ using OrchestratorApi.Services.Jobs;
 namespace OrchestratorApi.Hubs;
 
 /// <summary>
-/// Bridges the in-process <see cref="JobChangeNotifier"/> (and the
-/// <see cref="JobTransitionService.OnJobMoved"/> event) onto the
-/// <see cref="JobHub"/> SignalR fan-out so connected browser tabs react to
+/// Bridges the in-process <see cref="TaskChangeNotifier"/> (and the
+/// <see cref="TaskTransitionService.OnJobMoved"/> event) onto the
+/// <see cref="TaskHub"/> SignalR fan-out so connected browser tabs react to
 /// job mutations by push instead of waiting for the next board poll.
 ///
 /// <para>Event map (server → client method / payload):</para>
@@ -30,17 +30,17 @@ namespace OrchestratorApi.Hubs;
 /// Every broadcast is best-effort and swallows its own exceptions so a hub
 /// transport fault can never poison the mutation that produced the event.</para>
 /// </summary>
-public sealed class JobHubBroadcaster
+public sealed class TaskHubBroadcaster
 {
-    private readonly IHubContext<JobHub> _hub;
-    private readonly JobScannerService _scanner;
-    private readonly ILogger<JobHubBroadcaster> _logger;
+    private readonly IHubContext<TaskHub> _hub;
+    private readonly TaskScannerService _scanner;
+    private readonly ILogger<TaskHubBroadcaster> _logger;
 
-    public JobHubBroadcaster(
-        IHubContext<JobHub> hub,
-        JobScannerService scanner,
-        JobChangeNotifier notifier,
-        ILogger<JobHubBroadcaster> logger)
+    public TaskHubBroadcaster(
+        IHubContext<TaskHub> hub,
+        TaskScannerService scanner,
+        TaskChangeNotifier notifier,
+        ILogger<TaskHubBroadcaster> logger)
     {
         _hub = hub;
         _scanner = scanner;
@@ -54,12 +54,12 @@ public sealed class JobHubBroadcaster
     }
 
     /// <summary>
-    /// Wire the move signal from <see cref="JobTransitionService"/>. Kept off
+    /// Wire the move signal from <see cref="TaskTransitionService"/>. Kept off
     /// the constructor so the transition service is not a hard dependency of
     /// the broadcaster (avoids a DI cycle and keeps the unit test that drives
     /// the notifier directly free of the heavier move stack).
     /// </summary>
-    public void AttachMoveSource(JobTransitionService transitions)
+    public void AttachMoveSource(TaskTransitionService transitions)
     {
         transitions.OnJobMoved += OnMoved;
     }

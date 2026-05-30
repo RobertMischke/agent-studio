@@ -4,14 +4,14 @@ namespace OrchestratorApi.Services.Jobs;
 
 /// <summary>
 /// Shared low-level helper for the job services in this folder. All four
-/// (<see cref="JobScannerService"/>, <see cref="JobStateMachine"/>,
-/// <see cref="JobMutationService"/>, <see cref="JobSessionLog"/>) need to
+/// (<see cref="TaskScannerService"/>, <see cref="TaskStateMachine"/>,
+/// <see cref="TaskMutationService"/>, <see cref="TaskSessionLog"/>) need to
 /// rewrite a single field in a job's <c>job.json</c> while preserving the
 /// original key order; centralising that read-modify-write avoids each
 /// service growing its own near-identical copy and drifting on details
 /// like indent, encoding, or legacy-field handling.
 /// </summary>
-internal static class JobJsonFile
+internal static class TaskJsonFile
 {
     internal static readonly JsonSerializerOptions ReadOpts = new() { PropertyNameCaseInsensitive = true };
     private static readonly JsonSerializerOptions WriteOpts = new() { WriteIndented = true };
@@ -58,7 +58,7 @@ internal static class JobJsonFile
     /// <summary>
     /// Like <see cref="UpdateField"/> but also drops the legacy <c>priority</c>
     /// key and guarantees an <c>order</c> entry in the output. Used by
-    /// <see cref="JobStateMachine.ReorderJobs"/>.
+    /// <see cref="TaskStateMachine.ReorderJobs"/>.
     /// </summary>
     internal static void UpdateOrder(string jobDir, int order, ILogger logger)
     {

@@ -54,7 +54,7 @@ internal static class JobEndpointHelpers
         // the per-card pill then renders as a misleading "Running" badge.
         // Clearing at the wire-overlay layer keeps Lane > Execution-Status
         // > Default as the deterministic precedence for every consumer.
-        var exec = job.State == JobStates.Progress
+        var exec = job.State == TaskStates.Progress
             ? router.Get(job.CliType).GetExecution(job.JobKey)
             : null;
         // Look up auto-loop state by ProjectName (O(1) ConcurrentDictionary

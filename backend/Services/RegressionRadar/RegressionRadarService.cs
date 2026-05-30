@@ -19,8 +19,8 @@ namespace OrchestratorApi.Services.RegressionRadar;
 public sealed class RegressionRadarService
 {
     private readonly GitService _git;
-    private readonly JobSessionLog _sessions;
-    private readonly JobScannerService _scanner;
+    private readonly TaskSessionLog _sessions;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<RegressionRadarService> _logger;
 
     private static readonly Regex SpecFilePattern = new(
@@ -29,8 +29,8 @@ public sealed class RegressionRadarService
 
     public RegressionRadarService(
         GitService git,
-        JobSessionLog sessions,
-        JobScannerService scanner,
+        TaskSessionLog sessions,
+        TaskScannerService scanner,
         ILogger<RegressionRadarService> logger)
     {
         _git = git;
@@ -126,7 +126,7 @@ public sealed class RegressionRadarService
         Models.JobInfo info, string? watchPath)
     {
         var events = _sessions.ReadSessionEvents(info.Id, watchPath);
-        var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
         var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
         if (timeline.Runs.Count == 0) return (null, null);
 

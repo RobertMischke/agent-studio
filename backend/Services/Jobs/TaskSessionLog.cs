@@ -10,14 +10,14 @@ namespace OrchestratorApi.Services.Jobs;
 /// <c>job.json</c>, the JSONL event log under <c>logs/session-events.jsonl</c>
 /// that drives the "session continued / lost" chip, and the related
 /// usage snapshot writeback. Reads of the same data live in
-/// <see cref="JobScannerService"/> alongside the rest of the read
+/// <see cref="TaskScannerService"/> alongside the rest of the read
 /// surface; this service owns the writes plus the JSONL append-line
 /// reader that the protocol pane needs.
 /// </summary>
-public class JobSessionLog
+public class TaskSessionLog
 {
-    private readonly JobScannerService _scanner;
-    private readonly ILogger<JobSessionLog> _logger;
+    private readonly TaskScannerService _scanner;
+    private readonly ILogger<TaskSessionLog> _logger;
 
     private static readonly JsonSerializerOptions SessionEventJsonOpts = new()
     {
@@ -25,7 +25,7 @@ public class JobSessionLog
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never
     };
 
-    public JobSessionLog(JobScannerService scanner, ILogger<JobSessionLog> logger)
+    public TaskSessionLog(TaskScannerService scanner, ILogger<TaskSessionLog> logger)
     {
         _scanner = scanner;
         _logger = logger;
@@ -35,7 +35,7 @@ public class JobSessionLog
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "sessionName", sessionName ?? "", _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "sessionName", sessionName ?? "", _logger);
         return true;
     }
 
@@ -55,9 +55,9 @@ public class JobSessionLog
         if (chain.Count == 0 || !string.Equals(chain[^1], sessionId, StringComparison.Ordinal))
         {
             chain.Add(sessionId);
-            JobJsonFile.UpdateField(info.FolderPath, "sessionChain", chain, _logger);
+            TaskJsonFile.UpdateField(info.FolderPath, "sessionChain", chain, _logger);
         }
-        JobJsonFile.UpdateField(info.FolderPath, "sessionName", sessionId, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "sessionName", sessionId, _logger);
         return true;
     }
 
@@ -75,9 +75,9 @@ public class JobSessionLog
         if (chain.Count > 0 && chain[^1] != "(recovery)")
         {
             chain.Add("(recovery)");
-            JobJsonFile.UpdateField(info.FolderPath, "sessionChain", chain, _logger);
+            TaskJsonFile.UpdateField(info.FolderPath, "sessionChain", chain, _logger);
         }
-        JobJsonFile.UpdateField(info.FolderPath, "sessionName", "", _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "sessionName", "", _logger);
         return true;
     }
 
@@ -92,8 +92,8 @@ public class JobSessionLog
         if (info == null) return false;
         try
         {
-            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
-            var path = JobPaths.SessionEventsLog(info.FolderPath);
+            Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+            var path = TaskPaths.SessionEventsLog(info.FolderPath);
             var line = JsonSerializer.Serialize(evt, SessionEventJsonOpts) + Environment.NewLine;
             File.AppendAllText(path, line, Encoding.UTF8);
             return true;
@@ -135,7 +135,7 @@ public class JobSessionLog
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        var path = JobPaths.SessionEventsLog(info.FolderPath);
+        var path = TaskPaths.SessionEventsLog(info.FolderPath);
         if (!File.Exists(path)) return false;
         try
         {
@@ -143,7 +143,7 @@ public class JobSessionLog
             var idx = lines.FindLastIndex(l => !string.IsNullOrWhiteSpace(l));
             if (idx < 0) return false;
             SessionEvent? evt;
-            try { evt = JsonSerializer.Deserialize<SessionEvent>(lines[idx], JobJsonFile.ReadOpts); }
+            try { evt = JsonSerializer.Deserialize<SessionEvent>(lines[idx], TaskJsonFile.ReadOpts); }
             catch { return false; }
             if (evt == null) return false;
             lines[idx] = JsonSerializer.Serialize(mutate(evt), SessionEventJsonOpts);
@@ -167,7 +167,7 @@ public class JobSessionLog
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return [];
-        var path = JobPaths.SessionEventsLog(info.FolderPath);
+        var path = TaskPaths.SessionEventsLog(info.FolderPath);
         if (!File.Exists(path)) return [];
         var result = new List<SessionEvent>();
         foreach (var line in File.ReadAllLines(path))
@@ -175,7 +175,7 @@ public class JobSessionLog
             if (string.IsNullOrWhiteSpace(line)) continue;
             try
             {
-                var evt = JsonSerializer.Deserialize<SessionEvent>(line, JobJsonFile.ReadOpts);
+                var evt = JsonSerializer.Deserialize<SessionEvent>(line, TaskJsonFile.ReadOpts);
                 if (evt != null) result.Add(evt);
             }
             catch
@@ -190,7 +190,7 @@ public class JobSessionLog
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "lastUsage", usage, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "lastUsage", usage, _logger);
         return true;
     }
 }

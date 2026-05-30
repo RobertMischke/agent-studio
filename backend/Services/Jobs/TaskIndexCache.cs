@@ -5,17 +5,17 @@ namespace OrchestratorApi.Services.Jobs;
 
 /// <summary>
 /// In-memory snapshot cache of <see cref="JobInfo"/> across all watch paths,
-/// invalidated by <see cref="JobWatcherService"/> events and by direct
+/// invalidated by <see cref="TaskWatcherService"/> events and by direct
 /// notifications from mutation services. The polled hot paths
 /// (<c>/api/jobs</c>, <c>/api/jobs/grouped</c>, <c>/api/runner/status</c>,
 /// <c>FindJob</c>, <c>GetJobDetail</c>, supervisor observations) all bottom
-/// out in <see cref="JobScannerService.ScanAllJobs"/>; routing that call
+/// out in <see cref="TaskScannerService.ScanAllJobs"/>; routing that call
 /// through this cache turns each poll from an O(N) disk walk + JSON parse
 /// into an O(1) reference return when nothing changed.
 ///
 /// <para><b>Consistency model:</b> read-after-write is guaranteed for any
 /// mutation that calls <see cref="Invalidate"/>. The FileSystemWatcher
-/// signal (debounced 500 ms in <see cref="JobWatcherService"/>) covers
+/// signal (debounced 500 ms in <see cref="TaskWatcherService"/>) covers
 /// external changes - things touched outside the API. There is also a
 /// safety re-scan TTL (default 30 s) so a missed watcher event cannot
 /// produce an indefinitely stale view.</para>
@@ -29,10 +29,10 @@ namespace OrchestratorApi.Services.Jobs;
 /// is still guaranteed because <see cref="Invalidate"/> blocks the next
 /// read into the rescan path.</para>
 /// </summary>
-public sealed class JobIndexCache
+public sealed class TaskIndexCache
 {
-    private readonly JobScannerService _scanner;
-    private readonly ILogger<JobIndexCache> _logger;
+    private readonly TaskScannerService _scanner;
+    private readonly ILogger<TaskIndexCache> _logger;
     private readonly TimeSpan _safetyTtl;
 
     // Cache slot: snapshot + when it was taken + whether a mutation/watcher
@@ -68,18 +68,18 @@ public sealed class JobIndexCache
     public long ExternalInvalidations;
     public long MutationInvalidations;
 
-    public JobIndexCache(JobScannerService scanner, ILogger<JobIndexCache> logger, IConfiguration config)
+    public TaskIndexCache(TaskScannerService scanner, ILogger<TaskIndexCache> logger, IConfiguration config)
     {
         _scanner = scanner;
         _logger = logger;
-        var ttlSec = int.TryParse(config["JobIndexCache:SafetyTtlSeconds"], out var v) ? v : 30;
+        var ttlSec = int.TryParse(config["TaskIndexCache:SafetyTtlSeconds"], out var v) ? v : 30;
         _safetyTtl = TimeSpan.FromSeconds(Math.Max(1, ttlSec));
     }
 
     /// <summary>
     /// Returns the cached snapshot of all jobs. If the cache is dirty or has
     /// aged past the safety TTL, refreshes by calling
-    /// <see cref="JobScannerService.ScanAllJobsRaw"/> and replaces the
+    /// <see cref="TaskScannerService.ScanAllJobsRaw"/> and replaces the
     /// snapshot atomically before returning.
     /// </summary>
     public ImmutableList<JobInfo> GetSnapshot()
@@ -160,7 +160,7 @@ public sealed class JobIndexCache
 
     /// <summary>
     /// Marks the cache stale so the next <see cref="GetSnapshot"/> call
-    /// rescans from disk. Called from JobWatcherService (external changes)
+    /// rescans from disk. Called from TaskWatcherService (external changes)
     /// and from mutation services (API-driven changes) so a write is always
     /// visible on the next read.
     /// </summary>

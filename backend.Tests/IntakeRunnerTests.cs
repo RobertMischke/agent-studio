@@ -36,7 +36,7 @@ public class IntakeRunnerTests : IDisposable
     public IntakeRunnerTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "rdo-intake-tests-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -52,7 +52,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_HealthyPrompt_Passes()
     {
-        var target = new JobInfo { Id = "alpha", Title = "Add a daily token rollup card", State = JobStates.Ready };
+        var target = new JobInfo { Id = "alpha", Title = "Add a daily token rollup card", State = TaskStates.Ready };
         var prompt = "Add a daily token rollup section to the project header. " +
                      "Acceptance: chip shows total tokens for the last 24 hours.";
 
@@ -64,7 +64,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_TooShortPrompt_NeedsClarification()
     {
-        var target = new JobInfo { Id = "thin", Title = "fix it", State = JobStates.Ready };
+        var target = new JobInfo { Id = "thin", Title = "fix it", State = TaskStates.Ready };
 
         var v = IntakeRunner.Evaluate(target, "fix it", Array.Empty<JobInfo>());
 
@@ -79,13 +79,13 @@ public class IntakeRunnerTests : IDisposable
         {
             Id = "dup-new",
             Title = "Add daily token rollup card to project header",
-            State = JobStates.Ready
+            State = TaskStates.Ready
         };
         var peer = new JobInfo
         {
             Id = "dup-old",
             Title = "Add daily token rollup card project header",
-            State = JobStates.Ready
+            State = TaskStates.Ready
         };
 
         var v = IntakeRunner.Evaluate(target, "Add daily token rollup card to project header. Done when the chip is visible.", new[] { peer });
@@ -97,7 +97,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_OutOfScopePrompt_HardBlocks()
     {
-        var target = new JobInfo { Id = "blocked", Title = "Run parallel coding agents on the API", State = JobStates.Ready };
+        var target = new JobInfo { Id = "blocked", Title = "Run parallel coding agents on the API", State = TaskStates.Ready };
         var prompt = "Spawn parallel coding agents on the API and have them race to fix the bug.";
 
         var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<JobInfo>());
@@ -109,7 +109,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void Evaluate_PromptWithSixLevel2Headings_NeedsSplit()
     {
-        var target = new JobInfo { Id = "fan-out", Title = "Refactor the runner across many surfaces", State = JobStates.Ready };
+        var target = new JobInfo { Id = "fan-out", Title = "Refactor the runner across many surfaces", State = TaskStates.Ready };
         var prompt = string.Join('\n', new[]
         {
             "Top-level rewrite of the runner pickup loop with several independent deliverables.",
@@ -140,8 +140,8 @@ public class IntakeRunnerTests : IDisposable
         // the user must clear the non-goal before the duplicate question
         // is meaningful. Pinning this so a future check reorder cannot
         // silently swap the priority.
-        var target = new JobInfo { Id = "ordering", Title = "Add worktree support to runner", State = JobStates.Ready };
-        var peer = new JobInfo { Id = "ordering-peer", Title = "Add worktree support to runner pickup", State = JobStates.Ready };
+        var target = new JobInfo { Id = "ordering", Title = "Add worktree support to runner", State = TaskStates.Ready };
+        var peer = new JobInfo { Id = "ordering-peer", Title = "Add worktree support to runner pickup", State = TaskStates.Ready };
 
         var v = IntakeRunner.Evaluate(target, "Add worktree support to runner. Done when worktrees launch on pickup.", new[] { peer });
 
@@ -153,7 +153,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void RunForJob_PassingCard_StampsIntakePassedAndWritesSidecar()
     {
-        WriteJob(JobStates.Ready, "happy", phase: LifecyclePhases.HumanReady,
+        WriteJob(TaskStates.Ready, "happy", phase: LifecyclePhases.HumanReady,
             promptMd: "Add a daily token rollup card to the project header. Acceptance: chip shows totals.");
 
         var runner = BuildRunner();
@@ -178,7 +178,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void RunForJob_BlockedCard_StampsIntakeBlockedAndCarriesReason()
     {
-        WriteJob(JobStates.Ready, "blocky", phase: LifecyclePhases.HumanReady,
+        WriteJob(TaskStates.Ready, "blocky", phase: LifecyclePhases.HumanReady,
             promptMd: "Spawn parallel coding agents on the API and have them race to fix the bug. Acceptance: race condition resolved.");
 
         var runner = BuildRunner();
@@ -202,7 +202,7 @@ public class IntakeRunnerTests : IDisposable
         // level. The verdict still carries the typed outcome and reason so
         // the chat / sidecar can render a needs-clarification UI; the
         // pickup gate just needs a single "not approved" signal.
-        WriteJob(JobStates.Ready, "thin", phase: LifecyclePhases.HumanReady, promptMd: "fix it");
+        WriteJob(TaskStates.Ready, "thin", phase: LifecyclePhases.HumanReady, promptMd: "fix it");
 
         var runner = BuildRunner();
         var verdict = runner.RunForJob("thin");
@@ -215,9 +215,9 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void RunForJob_DuplicateCandidate_PinsPeerInDetails()
     {
-        WriteJob(JobStates.Ready, "dup-old", phase: LifecyclePhases.HumanReady,
+        WriteJob(TaskStates.Ready, "dup-old", phase: LifecyclePhases.HumanReady,
             promptMd: "Add daily token rollup card to project header. Acceptance: chip shows totals.");
-        WriteJob(JobStates.Ready, "dup-new", phase: LifecyclePhases.HumanReady,
+        WriteJob(TaskStates.Ready, "dup-new", phase: LifecyclePhases.HumanReady,
             promptMd: "Add daily token rollup card to project header. Done when chip is visible.");
 
         var runner = BuildRunner();
@@ -233,7 +233,7 @@ public class IntakeRunnerTests : IDisposable
     [Fact]
     public void RunForJob_RejectsNonReadyJobs()
     {
-        WriteJob(JobStates.Preparation, "draft", phase: null, promptMd: "Anything goes.");
+        WriteJob(TaskStates.Preparation, "draft", phase: null, promptMd: "Anything goes.");
 
         var runner = BuildRunner();
 
@@ -254,14 +254,14 @@ public class IntakeRunnerTests : IDisposable
 
     private LifecycleSnapshot? ReadLifecycleJson(string slug)
     {
-        var path = Path.Combine(_watchPath, JobStates.Ready, slug, "lifecycle.json");
+        var path = Path.Combine(_watchPath, TaskStates.Ready, slug, "lifecycle.json");
         if (!File.Exists(path)) return null;
         var raw = File.ReadAllText(path);
         return JsonSerializer.Deserialize<LifecycleSnapshot>(raw,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     }
 
-    private JobScannerService BuildScanner()
+    private TaskScannerService BuildScanner()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -271,7 +271,7 @@ public class IntakeRunnerTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
     }
 
     private IntakeRunner BuildRunner()
@@ -284,7 +284,7 @@ public class IntakeRunnerTests : IDisposable
                 ["WatchPaths:0:Path"] = _watchPath
             })
             .Build();
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(cfg, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(cfg, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(cfg, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(cfg, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         return new IntakeRunner(scanner, mutations, chatLog, NullLogger<IntakeRunner>.Instance);
     }

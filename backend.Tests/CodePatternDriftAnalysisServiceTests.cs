@@ -169,7 +169,7 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
             public class SomeOtherService {
               private readonly object _states = null!;
               public void Run(string jobId, string watchPath) {
-                ((dynamic)_states).MoveJob(jobId, JobStates.Progress, watchPath);
+                ((dynamic)_states).MoveJob(jobId, TaskStates.Progress, watchPath);
               }
             }
             """);
@@ -178,20 +178,20 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
             public class CleanReissue {
               private readonly object _states = null!;
               public void Run(string jobId, string watchPath) {
-                ((dynamic)_states).MoveJob(jobId, JobStates.Ready, watchPath);
+                ((dynamic)_states).MoveJob(jobId, TaskStates.Ready, watchPath);
               }
             }
             """);
 
         var rule = new CodePatternRule(
             Id: "lane-write-3-progress-forbidden",
-            Title: "MoveJob to JobStates.Progress is reserved for the runner pickup path",
+            Title: "MoveJob to TaskStates.Progress is reserved for the runner pickup path",
             CanonicalDescription: "Only ProjectRunner.TickAsync may move a job into 3-progress.",
             FilePattern: @"backend/.*\.cs$",
             ExcludeFilePattern: @"Services[/\\]Runner[/\\]ProjectRunner\.cs",
             CandidateMarker: new System.Text.RegularExpressions.Regex(@"\.MoveJob\s*\("),
             BadVariant: new System.Text.RegularExpressions.Regex(
-                @"\.MoveJob\s*\([^,]+,\s*(?:JobStates\.Progress\b|""3-progress"")"),
+                @"\.MoveJob\s*\([^,]+,\s*(?:TaskStates\.Progress\b|""3-progress"")"),
             GoodVariant: null,
             SeverityIfBad: DriftSeverity.High);
 

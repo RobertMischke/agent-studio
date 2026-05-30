@@ -122,14 +122,14 @@ public record JobHygieneContext(
 public class GitService
 {
     private readonly ILogger<GitService> _logger;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly IConfiguration _config;
     private readonly RuntimePromptService _prompts;
     private readonly AdHocUsageRecorder? _usage;
 
     public GitService(
         ILogger<GitService> logger,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         IConfiguration config,
         RuntimePromptService? prompts = null,
         AdHocUsageRecorder? usage = null)
@@ -323,10 +323,10 @@ public class GitService
         // the agent is currently leaving in the worktree.
         var lane = info.State;
         var isPostProgress =
-            lane == JobStates.AutoReview ||
-            lane == JobStates.HumanReview ||
-            lane == JobStates.Completed ||
-            lane == JobStates.Archive;
+            lane == TaskStates.AutoReview ||
+            lane == TaskStates.HumanReview ||
+            lane == TaskStates.Completed ||
+            lane == TaskStates.Archive;
         var acceptedUncommitted = isActiveJob && isPostProgress && project.IsRepo && project.IsDirty;
 
         return project with

@@ -40,7 +40,7 @@ public class OrchestratorPromptUserPreferencesTests : IDisposable
         _root = Path.Combine(Path.GetTempPath(), "ats-f17-prompt-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(_root);
         _watchPath = Path.Combine(_root, "agent-taskboard-dev");
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
         {
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
         }
@@ -64,13 +64,13 @@ public class OrchestratorPromptUserPreferencesTests : IDisposable
             .Build();
     }
 
-    private (ClientIdentityStore store, JobScannerService scanner, IConfiguration config) BuildEnv()
+    private (ClientIdentityStore store, TaskScannerService scanner, IConfiguration config) BuildEnv()
     {
         var config = BuildConfig();
         var store = new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance);
         store.EnsureLoaded();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         return (store, scanner, config);
     }
 

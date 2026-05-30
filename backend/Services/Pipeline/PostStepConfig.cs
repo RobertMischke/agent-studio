@@ -125,7 +125,7 @@ public static class PostStepConfigResolver
         try
         {
             var json = File.ReadAllText(path);
-            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JobJsonFile.ReadOpts);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts);
             if (doc == null) return null;
             if (!doc.TryGetValue("postSteps", out var postSteps)) return null;
             if (postSteps.ValueKind != JsonValueKind.Object) return null;

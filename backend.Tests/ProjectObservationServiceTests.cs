@@ -36,13 +36,13 @@ public class ProjectObservationServiceTests : IDisposable
     public ProjectObservationServiceTests()
     {
         _watchPath = Path.Combine(Path.GetTempPath(), "atp-obs-" + Guid.NewGuid().ToString("N"));
-        foreach (var state in JobStates.All)
+        foreach (var state in TaskStates.All)
             Directory.CreateDirectory(Path.Combine(_watchPath, state));
-        _jobFolder = Path.Combine(_watchPath, JobStates.Progress, "active-job");
+        _jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "active-job");
         Directory.CreateDirectory(_jobFolder);
         Directory.CreateDirectory(Path.Combine(_jobFolder, "logs"));
         File.WriteAllText(Path.Combine(_jobFolder, "job.json"),
-            JsonSerializer.Serialize(new { id = "active-job", title = "Active", state = JobStates.Progress, order = 1, agent = "claude", cliType = "claude" }));
+            JsonSerializer.Serialize(new { id = "active-job", title = "Active", state = TaskStates.Progress, order = 1, agent = "claude", cliType = "claude" }));
 
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -54,10 +54,10 @@ public class ProjectObservationServiceTests : IDisposable
             .Build();
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var states = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
-        var mutations = new JobMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new JobChangeNotifier(NullLogger<JobChangeNotifier>.Instance), NullLogger<JobMutationService>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
+        var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(NullLogger<CopilotCliService>.Instance, config,
             new CopilotModelDiscovery(NullLogger<CopilotModelDiscovery>.Instance, cliEnv, config), cliEnv);
@@ -71,7 +71,7 @@ public class ProjectObservationServiceTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var projectSettings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new JobTransitionService(scanner, states, mutations, git, projectSettings, NullLogger<JobTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, projectSettings, NullLogger<TaskTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
@@ -84,7 +84,7 @@ public class ProjectObservationServiceTests : IDisposable
         var pickup = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
         var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
         var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
-        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
         scanner.SetIndexCache(indexCache);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,

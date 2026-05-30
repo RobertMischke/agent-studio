@@ -13,29 +13,29 @@ namespace OrchestratorApi.Services.Jobs;
 /// reorder-within-state operation.
 ///
 /// All operations on disk; no callers should write to the state
-/// folders directly. Reads still go through <see cref="JobScannerService"/>.
+/// folders directly. Reads still go through <see cref="TaskScannerService"/>.
 /// </summary>
-public class JobStateMachine
+public class TaskStateMachine
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly LaneMutexRegistry _laneMutex;
-    private readonly ILogger<JobStateMachine> _logger;
-    // Optional so the many tests that construct JobStateMachine with the
+    private readonly ILogger<TaskStateMachine> _logger;
+    // Optional so the many tests that construct TaskStateMachine with the
     // original 2/3-arg signature keep compiling. Production DI always
     // supplies it; when null the SignalR push is simply skipped (the
     // coarse file-watcher jobsChanged event still covers the change).
-    private readonly JobChangeNotifier? _notifier;
+    private readonly TaskChangeNotifier? _notifier;
 
-    public JobStateMachine(
-        JobScannerService scanner,
-        ILogger<JobStateMachine> logger,
+    public TaskStateMachine(
+        TaskScannerService scanner,
+        ILogger<TaskStateMachine> logger,
         LaneMutexRegistry? laneMutex = null,
-        JobChangeNotifier? notifier = null)
+        TaskChangeNotifier? notifier = null)
     {
         _scanner = scanner;
         _logger = logger;
         // F21: tolerate a missing registry so existing tests that
-        // construct JobStateMachine with the original two-arg signature
+        // construct TaskStateMachine with the original two-arg signature
         // keep compiling. Production wiring always passes the singleton.
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
         _notifier = notifier;
@@ -43,7 +43,7 @@ public class JobStateMachine
 
     public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null)
     {
-        if (!JobStates.All.Contains(targetState))
+        if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
 
         var info = _scanner.FindJob(jobId, watchPath);
@@ -82,7 +82,7 @@ public class JobStateMachine
         try
         {
             Directory.Move(recheck.FolderPath, targetDir);
-            JobJsonFile.UpdateField(targetDir, "state", targetState, _logger);
+            TaskJsonFile.UpdateField(targetDir, "state", targetState, _logger);
             // Cycle 2: invalidate the cache synchronously so a POST-then-GET
             // sequence (e.g. drag a card, frontend re-polls) never sees the
             // pre-move snapshot. The 250 ms FileSystemWatcher debounce alone
@@ -117,9 +117,9 @@ public class JobStateMachine
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return 0;
 
-        if (info.State != JobStates.Ready)
+        if (info.State != TaskStates.Ready)
         {
-            var moved = MoveJob(jobId, JobStates.Ready, watchPath);
+            var moved = MoveJob(jobId, TaskStates.Ready, watchPath);
             if (moved.Status != MoveJobStatus.Success) return 0;
         }
 
@@ -127,7 +127,7 @@ public class JobStateMachine
         // the rule above. We only need to bump the moved job; everyone else
         // keeps relative order.
         var ready = _scanner.ScanAllJobs()
-            .Where(j => j.WatchPath == info.WatchPath && j.State == JobStates.Ready)
+            .Where(j => j.WatchPath == info.WatchPath && j.State == TaskStates.Ready)
             .OrderBy(j => j.Order)
             .ToList();
 
@@ -147,7 +147,7 @@ public class JobStateMachine
         var step = 10;
         for (int i = 0; i < ordered.Count; i++)
         {
-            JobJsonFile.UpdateOrder(ordered[i].FolderPath, (i + 1) * step, _logger);
+            TaskJsonFile.UpdateOrder(ordered[i].FolderPath, (i + 1) * step, _logger);
         }
         _scanner.InvalidateCache();
         _notifier?.PublishBulkChanged();
@@ -165,12 +165,12 @@ public class JobStateMachine
     /// </summary>
     /// <remarks>
     /// Takes a folder path rather than a jobId because empty stale folders have
-    /// no job.json and therefore are not visible to <see cref="JobScannerService"/>.
+    /// no job.json and therefore are not visible to <see cref="TaskScannerService"/>.
     /// Still routes the move + state-field update through this state machine so
     /// callers never write to the state folders directly.
     /// </remarks>
     public MoveJobOutcome ArchiveFolder(string sourceFolder, string newSlug)
-        => MoveFolderToState(sourceFolder, newSlug, JobStates.Archive);
+        => MoveFolderToState(sourceFolder, newSlug, TaskStates.Archive);
 
     /// <summary>
     /// Move a stale <c>3-progress</c> folder into <c>3a-failed-pickup</c> with
@@ -181,12 +181,12 @@ public class JobStateMachine
     /// </summary>
     /// <remarks>
     /// Same shape as <see cref="ArchiveFolder"/> but targets
-    /// <see cref="JobStates.FailedPickup"/>. Empty stale folders may not have
+    /// <see cref="TaskStates.FailedPickup"/>. Empty stale folders may not have
     /// a <c>job.json</c>; in that case a placeholder is written so the lane
     /// can render a card and the state-field invariant holds.
     /// </remarks>
     public MoveJobOutcome MoveFolderToFailedPickup(string sourceFolder, string newSlug)
-        => MoveFolderToState(sourceFolder, newSlug, JobStates.FailedPickup, writePlaceholderJobJson: true);
+        => MoveFolderToState(sourceFolder, newSlug, TaskStates.FailedPickup, writePlaceholderJobJson: true);
 
     /// <summary>
     /// Inverse of <see cref="MoveFolderToFailedPickup"/>: lift a folder
@@ -204,7 +204,7 @@ public class JobStateMachine
     /// call site, so the architecture test stays green.</para>
     ///
     /// <para>Idempotency: if the slug is not in
-    /// <see cref="JobStates.FailedPickup"/> the call returns
+    /// <see cref="TaskStates.FailedPickup"/> the call returns
     /// <see cref="RestoreFromFailedPickupStatus.NoOp"/> when the original
     /// slug already exists in <paramref name="targetState"/> (the
     /// expected "already restored" case) and
@@ -227,15 +227,15 @@ public class JobStateMachine
     /// Useful when the operator wants the trail visible in the slug
     /// itself.</param>
     /// <param name="targetState">Target lane. Defaults to
-    /// <see cref="JobStates.Ready"/>.</param>
+    /// <see cref="TaskStates.Ready"/>.</param>
     public RestoreFromFailedPickupOutcome RestoreFromFailedPickup(
         string jobId,
         string? watchPath,
         bool keepDeadLetterSlug,
         string? targetState = null)
     {
-        var resolvedTargetState = string.IsNullOrWhiteSpace(targetState) ? JobStates.Ready : targetState!;
-        if (!JobStates.All.Contains(resolvedTargetState))
+        var resolvedTargetState = string.IsNullOrWhiteSpace(targetState) ? TaskStates.Ready : targetState!;
+        if (!TaskStates.All.Contains(resolvedTargetState))
         {
             return new RestoreFromFailedPickupOutcome(
                 RestoreFromFailedPickupStatus.Failure,
@@ -255,7 +255,7 @@ public class JobStateMachine
 
         // Idempotency: nothing to restore in 3a-failed-pickup; check
         // whether the original slug is already in the target lane.
-        if (info == null || info.State != JobStates.FailedPickup)
+        if (info == null || info.State != TaskStates.FailedPickup)
         {
             var existing = _scanner.FindJob(restoredSlug, watchPath);
             if (existing != null && existing.State == resolvedTargetState)
@@ -272,7 +272,7 @@ public class JobStateMachine
                 RestoreFromFailedPickupStatus.NotFound,
                 OriginalSlug: originalSlug,
                 SourceSlug: jobId,
-                Message: $"No folder found in {JobStates.FailedPickup} with slug '{jobId}'.");
+                Message: $"No folder found in {TaskStates.FailedPickup} with slug '{jobId}'.");
         }
 
         if (!hasDeadLetterShape && !keepDeadLetterSlug)
@@ -320,7 +320,7 @@ public class JobStateMachine
     {
         if (string.IsNullOrWhiteSpace(newSlug))
             return new MoveJobOutcome(MoveJobStatus.Failure, "Slug must not be empty");
-        if (!JobStates.All.Contains(targetState))
+        if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
         if (!Directory.Exists(sourceFolder))
             return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -355,7 +355,7 @@ public class JobStateMachine
             var jobJsonPath = Path.Combine(targetDir, "job.json");
             if (File.Exists(jobJsonPath))
             {
-                JobJsonFile.UpdateField(targetDir, "state", targetState, _logger);
+                TaskJsonFile.UpdateField(targetDir, "state", targetState, _logger);
             }
             else if (writePlaceholderJobJson)
             {
@@ -488,7 +488,7 @@ public class JobStateMachine
                 Directory.Move(jobFolder, targetFolder);
                 if (File.Exists(Path.Combine(targetFolder, "job.json")))
                 {
-                    JobJsonFile.UpdateField(targetFolder, "state", newName, _logger);
+                    TaskJsonFile.UpdateField(targetFolder, "state", newName, _logger);
                 }
                 movedJobs++;
                 LastNumberedLaneMigrationCount++;
@@ -548,7 +548,7 @@ public class JobStateMachine
             }
 
             // Rename old unnumbered state folders to numbered ones
-            foreach (var (oldName, newName) in JobStates.LegacyFolderMap)
+            foreach (var (oldName, newName) in TaskStates.LegacyFolderMap)
             {
                 var oldDir = Path.Combine(watchPath, oldName);
                 var newDir = Path.Combine(watchPath, newName);
@@ -565,12 +565,12 @@ public class JobStateMachine
             // 5-human-review someone tried to seed by hand. The check is
             // idempotent - on the second boot the old names no longer
             // exist so each branch is a no-op.
-            MigrateNumberedLane(watchPath, "6-archive", JobStates.Archive);
-            MigrateNumberedLane(watchPath, "5-completed", JobStates.Completed);
-            MigrateNumberedLane(watchPath, "4-review", JobStates.AutoReview);
+            MigrateNumberedLane(watchPath, "6-archive", TaskStates.Archive);
+            MigrateNumberedLane(watchPath, "5-completed", TaskStates.Completed);
+            MigrateNumberedLane(watchPath, "4-review", TaskStates.AutoReview);
 
             // Create state folders
-            foreach (var state in JobStates.All)
+            foreach (var state in TaskStates.All)
             {
                 Directory.CreateDirectory(Path.Combine(watchPath, state));
             }
@@ -579,8 +579,8 @@ public class JobStateMachine
             foreach (var jobDir in Directory.GetDirectories(watchPath))
             {
                 var dirName = Path.GetFileName(jobDir);
-                if (JobStates.All.Contains(dirName)) continue; // skip state folders themselves
-                if (JobStates.LegacyFolderMap.ContainsKey(dirName)) continue; // skip old state folders
+                if (TaskStates.All.Contains(dirName)) continue; // skip state folders themselves
+                if (TaskStates.LegacyFolderMap.ContainsKey(dirName)) continue; // skip old state folders
                 if (dirName.StartsWith('_')) continue;
 
                 var jobJsonPath = Path.Combine(jobDir, "job.json");
@@ -589,13 +589,13 @@ public class JobStateMachine
                 try
                 {
                     var json = File.ReadAllText(jobJsonPath);
-                    var raw = JsonSerializer.Deserialize<JsonElement>(json, JobJsonFile.ReadOpts);
+                    var raw = JsonSerializer.Deserialize<JsonElement>(json, TaskJsonFile.ReadOpts);
                     var oldState = raw.TryGetProperty("state", out var s) ? s.GetString() ?? "draft" : "draft";
-                    var newState = JobStates.MapLegacyState(oldState);
+                    var newState = TaskStates.MapLegacyState(oldState);
 
                     var targetDir = Path.Combine(watchPath, newState, dirName);
                     Directory.Move(jobDir, targetDir);
-                    JobJsonFile.UpdateField(targetDir, "state", newState, _logger);
+                    TaskJsonFile.UpdateField(targetDir, "state", newState, _logger);
                     _logger.LogInformation("Migrated job {Job} from {Old} to {New}", dirName, oldState, newState);
                 }
                 catch (Exception ex)
@@ -640,7 +640,7 @@ public class JobStateMachine
 
         for (int i = 0; i < ordered.Count; i++)
         {
-            JobJsonFile.UpdateOrder(ordered[i].FolderPath, i + 1, _logger);
+            TaskJsonFile.UpdateOrder(ordered[i].FolderPath, i + 1, _logger);
         }
         _scanner.InvalidateCache();
         return true;
@@ -680,7 +680,7 @@ public class JobStateMachine
                     .FirstOrDefault();
                 if (folder == null) continue;
             }
-            JobJsonFile.UpdateOrder(folder, i + 1, _logger);
+            TaskJsonFile.UpdateOrder(folder, i + 1, _logger);
         }
         _scanner.InvalidateCache();
         // A bulk reorder rewrites many order fields, possibly across lanes;

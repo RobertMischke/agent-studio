@@ -37,14 +37,14 @@ public static class CompanionSnapshotBuilder
                 },
                 Pipeline = new CompanionPipeline
                 {
-                    Ready = ToCards(group.Where(j => j.State == JobStates.Ready)),
-                    Progress = ToCards(group.Where(j => j.State == JobStates.Progress)),
+                    Ready = ToCards(group.Where(j => j.State == TaskStates.Ready)),
+                    Progress = ToCards(group.Where(j => j.State == TaskStates.Progress)),
                     // ADR-0025: keep the companion's existing "review" field
                     // populated with both review lanes so downstream consumers
                     // (older relay clients) keep seeing one merged stream.
                     Review = ToCards(group.Where(j =>
-                        j.State == JobStates.AutoReview ||
-                        j.State == JobStates.HumanReview)),
+                        j.State == TaskStates.AutoReview ||
+                        j.State == TaskStates.HumanReview)),
                 },
             });
         }

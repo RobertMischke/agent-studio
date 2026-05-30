@@ -3,11 +3,11 @@ namespace OrchestratorApi.Models;
 /// <summary>
 /// "Agent claimed done but isn't" verdicts emitted by the completed-lane
 /// audit (Part 3 of the consolidation/audit task). The orchestrator
-/// reopens cards in <see cref="OrchestratorApi.Models.JobStates.Completed"/>
-/// + <see cref="OrchestratorApi.Models.JobStates.Archive"/>, runs cheap
+/// reopens cards in <see cref="OrchestratorApi.Models.TaskStates.Completed"/>
+/// + <see cref="OrchestratorApi.Models.TaskStates.Archive"/>, runs cheap
 /// heuristics against the prompt/status/commits, and flips
 /// <see cref="NotReallyDone"/> verdicts back into
-/// <see cref="OrchestratorApi.Models.JobStates.NeedsHumanReview"/> with a
+/// <see cref="OrchestratorApi.Models.TaskStates.NeedsHumanReview"/> with a
 /// <c>quality_loop_reopened</c> timeline event.
 /// </summary>
 public static class AuditVerdicts

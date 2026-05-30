@@ -15,21 +15,21 @@ namespace OrchestratorApi.Services.Jobs;
 /// continuation-note appender that records user follow-ups into
 /// <c>prompt.md</c>.
 ///
-/// Pattern: every public method does <see cref="JobScannerService.FindJob"/>
-/// → <see cref="JobJsonFile.UpdateField"/>. Splitting this out of the
+/// Pattern: every public method does <see cref="TaskScannerService.FindJob"/>
+/// → <see cref="TaskJsonFile.UpdateField"/>. Splitting this out of the
 /// scanner keeps the read surface focused on read and makes the write
 /// surface easy to grep when a "where do we touch this field" question
 /// comes up.
 /// </summary>
-public class JobMutationService
+public class TaskMutationService
 {
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ClientIdentityStore _clients;
     private readonly ProjectRegistry _projectRegistry;
-    private readonly JobChangeNotifier _notifier;
-    private readonly ILogger<JobMutationService> _logger;
+    private readonly TaskChangeNotifier _notifier;
+    private readonly ILogger<TaskMutationService> _logger;
     // ADR-0049: optional unified-timeline writer. Production DI supplies it;
-    // tests that construct JobMutationService directly may pass null and
+    // tests that construct TaskMutationService directly may pass null and
     // simply skip the timeline event.
     private readonly TimelineLog? _timeline;
     // Lane mutex: serialise the slug-uniqueness check + folder create in
@@ -39,7 +39,7 @@ public class JobMutationService
     // service directly keep compiling; the NullSingleton still serialises.
     private readonly LaneMutexRegistry _laneMutex;
 
-    public JobMutationService(JobScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, JobChangeNotifier notifier, ILogger<JobMutationService> logger, TimelineLog? timeline = null, LaneMutexRegistry? laneMutex = null)
+    public TaskMutationService(TaskScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, TaskChangeNotifier notifier, ILogger<TaskMutationService> logger, TimelineLog? timeline = null, LaneMutexRegistry? laneMutex = null)
     {
         _scanner = scanner;
         _clients = clients;
@@ -57,7 +57,7 @@ public class JobMutationService
     /// (e.g. SetJobTitle then refresh) could see the pre-write snapshot
     /// for up to 250 ms (the FileSystemWatcher debounce window).
     /// Also publishes a typed <c>jobUpdated</c> event to
-    /// <see cref="JobChangeNotifier"/> so the SignalR hub can push the
+    /// <see cref="TaskChangeNotifier"/> so the SignalR hub can push the
     /// change to connected clients without waiting for the next poll.
     /// </summary>
     private bool Updated(JobInfo info)
@@ -82,7 +82,7 @@ public class JobMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "model", model ?? "", _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "model", model ?? "", _logger);
         return Updated();
     }
 
@@ -91,7 +91,7 @@ public class JobMutationService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         var normalized = CliTypes.Normalize(cliType);
-        JobJsonFile.UpdateField(info.FolderPath, "cliType", normalized, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "cliType", normalized, _logger);
         // Keep the parallel `agent` field in lockstep with `cliType`. The two
         // were originally meant to address different layers (which CLI vs.
         // which logical agent) but every supported CLI maps 1:1 to one agent
@@ -99,11 +99,11 @@ public class JobMutationService
         // icon reads `cliType`. A mass-flip of cliType without syncing agent
         // produced cards showing "claude" with the Codex icon on 2026-05-12
         // (see job bug-clitype-and-agent-fields-drift-on-mass-flip).
-        JobJsonFile.UpdateField(info.FolderPath, "agent", normalized, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "agent", normalized, _logger);
         // Switching CLI invalidates the previous session - clear it so the next run mints a new one.
         if (!string.Equals(normalized, info.CliType, StringComparison.OrdinalIgnoreCase))
         {
-            JobJsonFile.UpdateField(info.FolderPath, "sessionName", "", _logger);
+            TaskJsonFile.UpdateField(info.FolderPath, "sessionName", "", _logger);
         }
         return Updated();
     }
@@ -112,7 +112,7 @@ public class JobMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "useOwnSession", useOwn, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "useOwnSession", useOwn, _logger);
         return Updated();
     }
 
@@ -156,7 +156,7 @@ public class JobMutationService
         try
         {
             var json = File.ReadAllText(jobJsonPath);
-            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JobJsonFile.ReadOpts)
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts)
                       ?? new Dictionary<string, JsonElement>();
 
             var chain = new List<JobCommitInfo>();
@@ -165,13 +165,13 @@ public class JobMutationService
                 foreach (var item in commitsEl.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                     if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
                 }
             }
             else if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
             {
-                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), JobJsonFile.ReadOpts);
+                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
                 if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
             }
 
@@ -179,8 +179,8 @@ public class JobMutationService
             if (existingIdx >= 0) chain[existingIdx] = commit;
             else chain.Add(commit);
 
-            JobJsonFile.UpdateField(folderPath, "commit", chain[^1], _logger);
-            JobJsonFile.UpdateField(folderPath, "commits", chain, _logger);
+            TaskJsonFile.UpdateField(folderPath, "commit", chain[^1], _logger);
+            TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
             return Updated();
         }
         catch (Exception ex)
@@ -299,20 +299,20 @@ public class JobMutationService
         try
         {
             var json = File.ReadAllText(jobJsonPath);
-            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JobJsonFile.ReadOpts)
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts)
                       ?? new Dictionary<string, JsonElement>();
             if (doc.TryGetValue("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in commitsEl.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                     if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
                 }
             }
             else if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
             {
-                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), JobJsonFile.ReadOpts);
+                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
                 if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
             }
             if (doc.TryGetValue("excludedCommits", out var exEl) && exEl.ValueKind == JsonValueKind.Array)
@@ -320,7 +320,7 @@ public class JobMutationService
                 foreach (var item in exEl.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                    var parsed = JsonSerializer.Deserialize<JobExcludedCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
                     if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) excluded.Add(parsed);
                 }
             }
@@ -336,9 +336,9 @@ public class JobMutationService
     {
         try
         {
-            JobJsonFile.UpdateField(folderPath, "commits", chain, _logger);
-            JobJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
-            JobJsonFile.UpdateField(folderPath, "excludedCommits", excluded, _logger);
+            TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
+            TaskJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
+            TaskJsonFile.UpdateField(folderPath, "excludedCommits", excluded, _logger);
             return Updated();
         }
         catch (Exception ex)
@@ -357,7 +357,7 @@ public class JobMutationService
     public bool SetJobLastProgressAt(string folderPath, DateTime utcNow)
     {
         if (!Directory.Exists(folderPath)) return false;
-        JobJsonFile.UpdateField(folderPath, "lastProgressAt",
+        TaskJsonFile.UpdateField(folderPath, "lastProgressAt",
             utcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture), _logger);
         // Intentionally NOT calling Updated(): this is the per-CLI-flush
         // heartbeat (called every few seconds during an active run), and
@@ -371,7 +371,7 @@ public class JobMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "taskType", TaskTypes.Normalize(taskType), _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "taskType", TaskTypes.Normalize(taskType), _logger);
         return Updated();
     }
 
@@ -393,7 +393,7 @@ public class JobMutationService
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        JobJsonFile.UpdateField(info.FolderPath, "tags", clean, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "tags", clean, _logger);
         return Updated();
     }
 
@@ -442,7 +442,7 @@ public class JobMutationService
                 "title-changed jobId={JobId} old={Old} new={New}",
                 jobId, previous, trimmed);
         }
-        JobJsonFile.UpdateField(info.FolderPath, "title", trimmed, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "title", trimmed, _logger);
         return Updated();
     }
 
@@ -450,7 +450,7 @@ public class JobMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "contextUsage", snapshot, _logger);
+        TaskJsonFile.UpdateField(info.FolderPath, "contextUsage", snapshot, _logger);
         // Skip Updated(): contextUsage is not surfaced on the kanban card and
         // updates fire on every CLI activity flush during an active run.
         return true;
@@ -468,7 +468,7 @@ public class JobMutationService
     public bool SetJobPhase(string folderPath, string? phase)
     {
         if (!Directory.Exists(folderPath)) return false;
-        JobJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
+        TaskJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
         return Updated();
     }
 
@@ -489,10 +489,10 @@ public class JobMutationService
         // prep, not raw intake.
         var targetState = req.TargetState switch
         {
-            JobStates.Backlog => JobStates.Backlog,
-            JobStates.Preparation => JobStates.Preparation,
-            JobStates.Ready => JobStates.Ready,
-            _ => JobStates.Backlog
+            TaskStates.Backlog => TaskStates.Backlog,
+            TaskStates.Preparation => TaskStates.Preparation,
+            TaskStates.Ready => TaskStates.Ready,
+            _ => TaskStates.Backlog
         };
 
         // Sanitize ID: transliterate umlauts, lowercase, replace spaces with dashes, only allow safe chars
@@ -803,7 +803,7 @@ public class JobMutationService
         try
         {
             var raw = File.ReadAllText(path);
-            var intent = JsonSerializer.Deserialize<PendingIntent>(raw, JobJsonFile.ReadOpts);
+            var intent = JsonSerializer.Deserialize<PendingIntent>(raw, TaskJsonFile.ReadOpts);
             if (intent == null) return null;
             var stash = Path.Combine(jobFolder, "pending-intent.consumed.json");
             if (File.Exists(stash)) File.Delete(stash);
@@ -929,11 +929,11 @@ public class JobMutationService
 
             if (cliType != null)
             {
-                JobJsonFile.UpdateField(job.FolderPath, "cliType", cliType, _logger);
-                JobJsonFile.UpdateField(job.FolderPath, "agent", cliType, _logger);
+                TaskJsonFile.UpdateField(job.FolderPath, "cliType", cliType, _logger);
+                TaskJsonFile.UpdateField(job.FolderPath, "agent", cliType, _logger);
             }
             if (model != null)
-                JobJsonFile.UpdateField(job.FolderPath, "model", model, _logger);
+                TaskJsonFile.UpdateField(job.FolderPath, "model", model, _logger);
 
             count++;
             _logger.LogInformation(
@@ -987,7 +987,7 @@ public class JobMutationService
 
             var seq = _projectRegistry.IssueNextTaskKey(project.Id);
             var key = $"{project.ShortCode}-{seq}";
-            JobJsonFile.UpdateField(job.FolderPath, "key", key, _logger);
+            TaskJsonFile.UpdateField(job.FolderPath, "key", key, _logger);
             stamped++;
 
             if (!maxByProject.TryGetValue(project.Id, out var prev) || seq > prev)
@@ -1013,7 +1013,7 @@ public class JobMutationService
     private string EnsureUniqueSlug(string watchPath, string baseSlug)
     {
         bool Taken(string slug) =>
-            JobStates.All.Any(state => Directory.Exists(Path.Combine(watchPath, state, slug)));
+            TaskStates.All.Any(state => Directory.Exists(Path.Combine(watchPath, state, slug)));
 
         if (!Taken(baseSlug)) return baseSlug;
         for (var n = 2; ; n++)

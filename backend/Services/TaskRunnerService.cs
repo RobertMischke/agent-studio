@@ -21,16 +21,16 @@ public class TaskRunnerService : BackgroundService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<TaskRunnerService> _logger;
-    private readonly JobScannerService _scanner;
-    private readonly JobStateMachine _states;
-    private readonly JobMutationService _mutations;
-    private readonly JobSessionLog _sessions;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
+    private readonly TaskMutationService _mutations;
+    private readonly TaskSessionLog _sessions;
     private readonly CopilotCliService _cli;
     private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
-    private readonly JobTransitionService _transitions;
+    private readonly TaskTransitionService _transitions;
     private readonly ProjectSettingsService _projectSettings;
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
@@ -68,16 +68,16 @@ public class TaskRunnerService : BackgroundService
     public TaskRunnerService(
         IConfiguration config,
         ILogger<TaskRunnerService> logger,
-        JobScannerService scanner,
-        JobStateMachine states,
-        JobMutationService mutations,
-        JobSessionLog sessions,
+        TaskScannerService scanner,
+        TaskStateMachine states,
+        TaskMutationService mutations,
+        TaskSessionLog sessions,
         CopilotCliService cli,
         CliRouter router,
         ContextUsageParser contextUsageParser,
         SummaryGenerationService summaryService,
         RuntimePromptService prompts,
-        JobTransitionService transitions,
+        TaskTransitionService transitions,
         ProjectSettingsService projectSettings,
         QuotaService quotaService,
         CliQuotaCapsService quotaCaps,
@@ -398,10 +398,10 @@ public class TaskRunnerService : BackgroundService
     public async Task<ContinueJobResponse> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) throw new JobOperationException("Job not found", 404);
+        if (info == null) throw new TaskOperationException("Job not found", 404);
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) throw new JobOperationException($"No runner configured for project '{info.ProjectName}' - check RootPath in WatchPaths config", 400);
+        if (runner == null) throw new TaskOperationException($"No runner configured for project '{info.ProjectName}' - check RootPath in WatchPaths config", 400);
 
         // Persist CLI type override before validity check so the next iteration picks it up.
         if (!string.IsNullOrWhiteSpace(cliTypeOverride) && cliTypeOverride != info.CliType)
@@ -411,7 +411,7 @@ public class TaskRunnerService : BackgroundService
         }
 
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) throw new JobOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
+        if (!cli.IsAvailable()) throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
 
         // Persist override on the job so subsequent runs reuse it
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
@@ -435,12 +435,12 @@ public class TaskRunnerService : BackgroundService
     public async Task<ContinueJobResponse> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? mode = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) throw new JobOperationException("Job not found", 404);
+        if (info == null) throw new TaskOperationException("Job not found", 404);
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) throw new JobOperationException($"No runner configured for project '{info.ProjectName}'", 400);
+        if (runner == null) throw new TaskOperationException($"No runner configured for project '{info.ProjectName}'", 400);
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) throw new JobOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
+        if (!cli.IsAvailable()) throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
 
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {
@@ -490,7 +490,7 @@ public class TaskRunnerService : BackgroundService
     /// <c>2-ready</c>, the chat receives an orchestrator <c>[queued]</c>
     /// meta line, and the response is shaped as <c>status: "queued"</c>
     /// (the endpoint returns 202). Other rejection reasons surface as
-    /// <see cref="JobOperationException"/>.
+    /// <see cref="TaskOperationException"/>.
     /// </summary>
     private ContinueJobResponse ShapeOutcome(
         RunOutcome outcome,
@@ -560,13 +560,13 @@ public class TaskRunnerService : BackgroundService
         }
 
         if (rej.Reason == RunRejectReason.JobNotFound)
-            throw new JobOperationException(rej.Message ?? "Job not found", 404);
+            throw new TaskOperationException(rej.Message ?? "Job not found", 404);
 
         if (rej.Reason == RunRejectReason.QuotaCapExceeded)
-            throw new JobOperationException(rej.Message ?? "Quota cap exceeded", 429);
+            throw new TaskOperationException(rej.Message ?? "Quota cap exceeded", 429);
 
         // CliUnavailable, None, or anything else: 400 with the message.
-        throw new JobOperationException(rej.Message ?? "Cannot start job", 400);
+        throw new TaskOperationException(rej.Message ?? "Cannot start job", 400);
     }
 
     /// <summary>
@@ -595,7 +595,7 @@ public class TaskRunnerService : BackgroundService
     /// Snapshot of the auto-loop state for one job (null when no loop is in
     /// flight). The caller passes the project name directly so the lookup
     /// is O(1) - the previous variant accepted only <c>watchPath</c> and
-    /// resolved the project via <see cref="JobScannerService.FindJob"/>,
+    /// resolved the project via <see cref="TaskScannerService.FindJob"/>,
     /// which performs a full disk rescan per call. With the runtime
     /// overlay applied to every JobInfo, that turned <c>/api/jobs</c> and
     /// <c>/api/jobs/grouped</c> into O(N^2) disk reads (~7-15 s on a
@@ -657,8 +657,8 @@ public class TaskRunnerService : BackgroundService
     {
         try
         {
-            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
+            var logPath = TaskPaths.CliOutputLog(info.FolderPath);
             var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff");
             var oneLine = prompt.Replace("\r", " ").Replace("\n", " ").TrimEnd();
             var line = $"[{ts}] [user] {oneLine}";
@@ -708,7 +708,7 @@ public class TaskRunnerService : BackgroundService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return [];
 
-        var logPath = JobPaths.CliOutputLog(info.FolderPath);
+        var logPath = TaskPaths.CliOutputLog(info.FolderPath);
         var liveOutput = _router.Get(info.CliType).GetOutput(info.JobKey);
 
         if (liveOutput.Count > 0)
@@ -766,7 +766,7 @@ public class TaskRunnerService : BackgroundService
     /// runner when an external mutation (the move endpoint, the boot-time
     /// stuck-folder sweep, a manual folder rearrangement) takes the active
     /// job out of <c>3-progress</c>. Wired off
-    /// <see cref="JobTransitionService.OnJobMoved"/> in <c>Program.cs</c> so
+    /// <see cref="TaskTransitionService.OnJobMoved"/> in <c>Program.cs</c> so
     /// the clear is atomic with the move from the API caller's perspective:
     /// a successful <c>POST /api/jobs/{id}/move</c> guarantees the next
     /// pickup tick sees <c>active=null</c>.
@@ -782,7 +782,7 @@ public class TaskRunnerService : BackgroundService
     /// Sweeps every project runner's defensive
     /// <see cref="ProjectRunner.ReconcileActiveJobAgainstDisk"/>. Cheap when
     /// no project has an active-job latch held; one disk scan per project
-    /// otherwise. Wired off <see cref="JobWatcherService.OnJobChanged"/> so
+    /// otherwise. Wired off <see cref="TaskWatcherService.OnJobChanged"/> so
     /// non-API folder changes (external scripts, hand edits, boot-time
     /// stuck-folder sweep) get reconciled within the watcher's debounce
     /// interval rather than waiting for the next 5 s pickup tick.

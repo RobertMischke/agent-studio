@@ -17,7 +17,7 @@ namespace OrchestratorApi.Tests;
 ///
 /// <para>
 /// The legacy reader categorises each entry as Job / Supporting /
-/// Orchestrator by walking <see cref="JobScannerService.ScanAllJobs"/>
+/// Orchestrator by walking <see cref="TaskScannerService.ScanAllJobs"/>
 /// and matching the job title prefix against
 /// <see cref="ProjectTokenUsageService.SupportingJobTitlePrefixes"/>.
 /// The Phase-4 bus-backed reader keeps the same categorisation rule by

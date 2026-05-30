@@ -20,7 +20,7 @@ namespace OrchestratorApi.Services.Runner;
 ///   <c>3-progress -&gt; 4-review</c> move. A marker that survives into
 ///   the next boot means the runner crashed between "decided" and
 ///   "moved"; we pick up where it left off via
-///   <see cref="JobTransitionService.MoveAsync"/>, then clear the
+///   <see cref="TaskTransitionService.MoveAsync"/>, then clear the
 ///   marker.</item>
 ///   <item><b>Orphan changes.</b> If the project's working tree contains
 ///   uncommitted changes that map to a known job folder
@@ -43,24 +43,26 @@ namespace OrchestratorApi.Services.Runner;
 /// </summary>
 public sealed class CrashRecoveryService
 {
-    private readonly JobScannerService _scanner;
-    private readonly JobTransitionService _transitions;
-    private readonly JobMutationService _mutations;
+    private readonly TaskScannerService _scanner;
+    private readonly TaskTransitionService _transitions;
+    private readonly TaskMutationService _mutations;
     private readonly GitService _git;
     private readonly BackendFileLogSink _logSink;
     private readonly BackendFileLoggerOptions _logOptions;
     private readonly ILogger<CrashRecoveryService> _logger;
     private readonly IJsonlAppender _appender;
+    private readonly PickupLockFile _pickupLock;
 
     public CrashRecoveryService(
-        JobScannerService scanner,
-        JobTransitionService transitions,
-        JobMutationService mutations,
+        TaskScannerService scanner,
+        TaskTransitionService transitions,
+        TaskMutationService mutations,
         GitService git,
         BackendFileLogSink logSink,
         IOptions<BackendFileLoggerOptions> logOptions,
         ILogger<CrashRecoveryService> logger,
-        IJsonlAppender? appender = null)
+        IJsonlAppender? appender = null,
+        PickupLockFile? pickupLock = null)
     {
         _scanner = scanner;
         _transitions = transitions;
@@ -70,6 +72,8 @@ public sealed class CrashRecoveryService
         _logOptions = logOptions.Value;
         _logger = logger;
         _appender = appender ?? new JsonlAppender();
+        _pickupLock = pickupLock ?? new PickupLockFile(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PickupLockFile>.Instance);
     }
 
     /// <summary>Path of the recovery audit log. Absolute, alongside daily backend logs.</summary>
@@ -94,8 +98,20 @@ public sealed class CrashRecoveryService
             await RecoverCompletionMarkersAsync(entry, decisions, ct);
 
             // Phase 2: rescue orphan working-tree changes onto the most
-            // recently active job in 3-progress (if any).
+            // recently active job in 3-progress (if any). MUST run before
+            // Phase 3, which requeues the interrupted job out of 3-progress;
+            // the orphan-attribution here needs that job still in the lane to
+            // pin the rescued commit to the right job.
             RecoverOrphanChanges(entry, decisions);
+
+            // Phase 3: requeue runs that were interrupted mid-flight (a backend
+            // restart / crash after the runner stamped the pickup lock but
+            // before it released it). Such a job is stranded in 3-progress with
+            // a stale .pickup-lock.json and (often) an empty logs/ dir. Clear
+            // the stale lock and move it back to 2-ready so the next pickup
+            // tick starts it cleanly, instead of letting a silent retry loop
+            // feed the auto-failure circuit-breaker.
+            await RecoverInterruptedRunsAsync(entry, decisions, ct);
         }
 
         // One INFO line per boot keeps the daily log scan-friendly even when
@@ -112,7 +128,7 @@ public sealed class CrashRecoveryService
         List<RecoveryDecision> decisions,
         CancellationToken ct)
     {
-        var progressDir = Path.Combine(entry.Path, JobStates.Progress);
+        var progressDir = Path.Combine(entry.Path, TaskStates.Progress);
         if (!Directory.Exists(progressDir)) return;
 
         foreach (var jobFolder in Directory.EnumerateDirectories(progressDir))
@@ -129,6 +145,14 @@ public sealed class CrashRecoveryService
             }
 
             var jobId = Path.GetFileName(jobFolder);
+
+            // A run that wrote a completion marker but crashed before its
+            // finally-block released the pickup lock leaves a stale lock that
+            // would otherwise ride along into 4-auto-review on the move below.
+            // Clear it here so "no stale .pickup-lock.json by any exit path"
+            // holds for the completion-marker recovery path too.
+            TryClearStaleLock(jobFolder, entry, jobId, decisions);
+
             try
             {
                 // The transition's auto-commit hook will pick up any
@@ -203,7 +227,7 @@ public sealed class CrashRecoveryService
 
         // Attribute orphan changes to the most-recently-active job in
         // 3-progress by lastProgressAt. We deliberately read job.json
-        // straight from disk: at boot time the JobScannerService's overlay
+        // straight from disk: at boot time the TaskScannerService's overlay
         // has not warmed up yet, and we need a single field.
         var (jobId, jobFolder) = FindMostRecentlyActiveProgressJob(entry);
 
@@ -302,9 +326,171 @@ public sealed class CrashRecoveryService
         }
     }
 
+    /// <summary>
+    /// Phase 3: requeue any 3-progress job whose run was interrupted mid-flight.
+    /// The signal is a <c>.pickup-lock.json</c> left in the folder whose owning
+    /// pid is no longer running on this host - the runner stamps that lock right
+    /// before it spawns the CLI and releases it in a finally block, so a stale
+    /// lock at boot means the backend died between those two points. We clear
+    /// the lock and move the job 3-progress -> 2-ready so the next pickup tick
+    /// starts it cleanly. A live foreign lock (another backend on the same
+    /// workspace) is left untouched - that run is not ours to requeue.
+    /// </summary>
+    private async Task RecoverInterruptedRunsAsync(
+        WatchPathEntry entry,
+        List<RecoveryDecision> decisions,
+        CancellationToken ct)
+    {
+        var progressDir = Path.Combine(entry.Path, TaskStates.Progress);
+        if (!Directory.Exists(progressDir)) return;
+
+        foreach (var jobFolder in Directory.EnumerateDirectories(progressDir))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // No job.json means this is a folder-shaped orphan, not a real
+            // interrupted run; leave it for the runner's own orphan sweep.
+            if (!File.Exists(Path.Combine(jobFolder, "job.json"))) continue;
+
+            // Only a present lock signals an interrupted run. A 3-progress job
+            // with no lock was never mid-spawn (or was already released); the
+            // strict-iteration picker resumes it in place. Don't disturb it.
+            var existing = _pickupLock.Peek(jobFolder);
+            if (existing == null) continue;
+
+            // ClearIfStale removes the lock only when its owner pid is dead on
+            // this host. A live foreign owner returns false and is left alone.
+            if (!_pickupLock.ClearIfStale(jobFolder))
+            {
+                _logger.LogInformation(
+                    "CrashRecoveryService: pickup lock on {Folder} is held by a live owner ({Backend} pid={Pid}); leaving the run in place",
+                    jobFolder, existing.BackendName, existing.Pid);
+                continue;
+            }
+
+            var jobId = Path.GetFileName(jobFolder);
+
+            // Leave a human-readable trace in the job folder so the requeue is
+            // never silent. This is the diagnostic the 2026-05-30 incident was
+            // missing entirely (empty logs/, no cli-output.log).
+            WriteInterruptedRunDiagnostic(jobFolder, existing);
+
+            try
+            {
+                var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
+                if (moveOutcome.Status == MoveJobStatus.Success)
+                {
+                    var decision = new RecoveryDecision
+                    {
+                        At = DateTime.UtcNow,
+                        Kind = RecoveryDecisionKinds.RunInterruptedRequeued,
+                        ProjectName = entry.Name,
+                        JobId = jobId,
+                        TargetState = TaskStates.Ready,
+                        Reason = $"run interrupted mid-flight (stale pickup lock from {existing.BackendName} pid={existing.Pid}); requeued to 2-ready and stale lock cleared"
+                    };
+                    decisions.Add(decision);
+                    AppendRecoveryEntry(decision);
+                    _logger.LogInformation(
+                        "CrashRecoveryService: requeued interrupted run {JobId} -> 2-ready (project {Project}); cleared stale lock from {Backend} pid={Pid}",
+                        jobId, entry.Name, existing.BackendName, existing.Pid);
+                }
+                else
+                {
+                    var decision = new RecoveryDecision
+                    {
+                        At = DateTime.UtcNow,
+                        Kind = RecoveryDecisionKinds.RunInterruptedRequeueFailed,
+                        ProjectName = entry.Name,
+                        JobId = jobId,
+                        TargetState = TaskStates.Ready,
+                        Reason = $"requeue refused: {moveOutcome.Status} {moveOutcome.Message}"
+                    };
+                    decisions.Add(decision);
+                    AppendRecoveryEntry(decision);
+                    _logger.LogWarning(
+                        "CrashRecoveryService: could not requeue interrupted run {JobId}: {Status} {Message}",
+                        jobId, moveOutcome.Status, moveOutcome.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                var decision = new RecoveryDecision
+                {
+                    At = DateTime.UtcNow,
+                    Kind = RecoveryDecisionKinds.RunInterruptedRequeueFailed,
+                    ProjectName = entry.Name,
+                    JobId = jobId,
+                    TargetState = TaskStates.Ready,
+                    Reason = $"exception: {ex.Message}"
+                };
+                decisions.Add(decision);
+                AppendRecoveryEntry(decision);
+                _logger.LogError(ex, "CrashRecoveryService: requeue for {JobId} threw", jobId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clear a stale pickup lock if one is present and its owner pid is dead.
+    /// Records a <see cref="RecoveryDecisionKinds.StalePickupLockCleared"/>
+    /// decision so the cleanup is auditable. Used by the completion-marker
+    /// path; the interrupted-run path clears inline because it also moves the
+    /// folder. Best-effort: a live foreign lock is left untouched.
+    /// </summary>
+    private void TryClearStaleLock(
+        string jobFolder,
+        WatchPathEntry entry,
+        string jobId,
+        List<RecoveryDecision> decisions)
+    {
+        var existing = _pickupLock.Peek(jobFolder);
+        if (existing == null) return;
+        if (!_pickupLock.ClearIfStale(jobFolder)) return;
+
+        var decision = new RecoveryDecision
+        {
+            At = DateTime.UtcNow,
+            Kind = RecoveryDecisionKinds.StalePickupLockCleared,
+            ProjectName = entry.Name,
+            JobId = jobId,
+            Reason = $"cleared stale pickup lock from {existing.BackendName} pid={existing.Pid}"
+        };
+        decisions.Add(decision);
+        AppendRecoveryEntry(decision);
+    }
+
+    /// <summary>
+    /// Append a one-line interrupted-run note to the job's cli-output.log so an
+    /// operator reading the Activity Log sees why the run stopped and was
+    /// requeued, instead of an empty logs/ dir. Best-effort.
+    /// </summary>
+    private void WriteInterruptedRunDiagnostic(string jobFolder, PickupLockInfo lockInfo)
+    {
+        try
+        {
+            var logsDir = Path.Combine(jobFolder, TaskPaths.LogsDirName);
+            Directory.CreateDirectory(logsDir);
+            var logPath = Path.Combine(logsDir, TaskPaths.CliOutputLogFileName);
+            var now = DateTime.UtcNow;
+            var line =
+                $"[{now:HH:mm:ss.fff}] [system] [taskboard] Run interrupted by a backend restart " +
+                $"(stale pickup lock from {lockInfo.BackendName} pid={lockInfo.Pid}, acquired {lockInfo.AcquiredAt:u}). " +
+                "Requeued to 2-ready; this interruption does not count as a task failure.";
+            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
+                File.AppendAllText(logPath, Environment.NewLine + line, Encoding.UTF8);
+            else
+                File.WriteAllText(logPath, line, Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "CrashRecoveryService: failed to write interrupted-run diagnostic for {Folder}", jobFolder);
+        }
+    }
+
     private static (string? JobId, string? JobFolder) FindMostRecentlyActiveProgressJob(WatchPathEntry entry)
     {
-        var progressDir = Path.Combine(entry.Path, JobStates.Progress);
+        var progressDir = Path.Combine(entry.Path, TaskStates.Progress);
         if (!Directory.Exists(progressDir)) return (null, null);
 
         string? bestId = null;
@@ -412,4 +598,10 @@ public static class RecoveryDecisionKinds
     /// ATP_CRASH_RECOVERY_AGGRESSIVE=1 to re-enable the old auto-commit.
     /// </summary>
     public const string OrphanSkipped = "orphan-skipped";
+    /// <summary>An interrupted mid-flight run was requeued from 3-progress back to 2-ready.</summary>
+    public const string RunInterruptedRequeued = "run-interrupted-requeued";
+    /// <summary>An interrupted run was detected but the requeue move failed.</summary>
+    public const string RunInterruptedRequeueFailed = "run-interrupted-requeue-failed";
+    /// <summary>A stale .pickup-lock.json (owner pid dead on this host) was removed at boot.</summary>
+    public const string StalePickupLockCleared = "stale-pickup-lock-cleared";
 }

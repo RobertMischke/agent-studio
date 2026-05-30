@@ -18,7 +18,7 @@ public sealed class GlobalOrchestratorBootstrap
     private readonly ILogger<GlobalOrchestratorBootstrap> _logger;
     private readonly GlobalOrchestratorSessionStore _store;
     private readonly OrchestratorRunner _runner;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly IConfiguration _config;
     private readonly ClientIdentityStore? _identityStore;
 
@@ -26,7 +26,7 @@ public sealed class GlobalOrchestratorBootstrap
         ILogger<GlobalOrchestratorBootstrap> logger,
         GlobalOrchestratorSessionStore store,
         OrchestratorRunner runner,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         IConfiguration config,
         ClientIdentityStore? identityStore = null)
     {

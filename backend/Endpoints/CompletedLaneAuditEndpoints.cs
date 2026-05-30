@@ -15,7 +15,7 @@ namespace OrchestratorApi.Endpoints;
 /// Project lookup accepts the canonical <c>PROJ-NNN</c> id, the display
 /// name, or a raw watch-path - the service normalises through
 /// <see cref="OrchestratorApi.Services.Registry.ProjectRegistry"/> first
-/// and falls back to <c>JobScannerService.GetWatchPaths</c> for legacy
+/// and falls back to <c>TaskScannerService.GetWatchPaths</c> for legacy
 /// callers.
 /// </summary>
 public static class CompletedLaneAuditEndpoints

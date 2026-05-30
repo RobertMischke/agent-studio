@@ -35,7 +35,7 @@ public sealed class SupervisorInterventionService
     };
 
     private readonly TaskRunnerService _taskRunner;
-    private readonly JobScannerService _jobScanner;
+    private readonly TaskScannerService _jobScanner;
     private readonly OrchestratorChatLog _chatLog;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SupervisorInterventionService> _logger;
@@ -44,7 +44,7 @@ public sealed class SupervisorInterventionService
 
     public SupervisorInterventionService(
         TaskRunnerService taskRunner,
-        JobScannerService jobScanner,
+        TaskScannerService jobScanner,
         OrchestratorChatLog chatLog,
         IConfiguration configuration,
         ILogger<SupervisorInterventionService> logger,

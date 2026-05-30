@@ -13,7 +13,7 @@ public static class SystemEndpoints
 {
     public static void MapSystemEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/watch-paths", (JobScannerService scanner) =>
+        app.MapGet("/api/watch-paths", (TaskScannerService scanner) =>
         {
             var entries = scanner.GetWatchPaths();
             return Results.Ok(entries);

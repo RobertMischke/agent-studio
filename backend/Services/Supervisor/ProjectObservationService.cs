@@ -17,13 +17,13 @@ namespace OrchestratorApi.Services.Supervisor;
 public sealed class ProjectObservationService
 {
     private readonly TaskRunnerService _taskRunner;
-    private readonly JobScannerService _jobScanner;
+    private readonly TaskScannerService _jobScanner;
     private readonly ILogger<ProjectObservationService> _logger;
     private readonly TimeProvider _time;
 
     public ProjectObservationService(
         TaskRunnerService taskRunner,
-        JobScannerService jobScanner,
+        TaskScannerService jobScanner,
         ILogger<ProjectObservationService> logger,
         TimeProvider? time = null)
     {
@@ -65,7 +65,7 @@ public sealed class ProjectObservationService
         }
 
         var info = SafeFindJob(activeJobId);
-        var logPath = info != null ? JobPaths.CliOutputLog(info.FolderPath) : null;
+        var logPath = info != null ? TaskPaths.CliOutputLog(info.FolderPath) : null;
 
         IReadOnlyList<CliOutputLine> lines = Array.Empty<CliOutputLine>();
         if (logPath != null && File.Exists(logPath))

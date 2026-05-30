@@ -73,9 +73,9 @@ public class WorkspaceManagementServiceTests : IDisposable
             .Build();
 
         var env = new TestHostEnvironment(_contentRoot);
-        var scanner = new JobScannerService(
+        var scanner = new TaskScannerService(
             config,
-            NullLogger<JobScannerService>.Instance,
+            NullLogger<TaskScannerService>.Instance,
             new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config));
         var svc = new WorkspaceManagementService(
             config, env, scanner,
@@ -127,7 +127,7 @@ public class WorkspaceManagementServiceTests : IDisposable
         var config = new ConfigurationBuilder()
             .AddJsonFile(Path.Combine(_contentRoot, "appsettings.Local.json"), optional: false, reloadOnChange: false)
             .Build();
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance,
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance,
             new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config));
         var svc = new WorkspaceManagementService(config, new TestHostEnvironment(_contentRoot), scanner,
             NullLogger<WorkspaceManagementService>.Instance);
@@ -201,7 +201,7 @@ public class WorkspaceManagementServiceTests : IDisposable
         var config = new ConfigurationBuilder()
             .AddJsonFile(Path.Combine(_contentRoot, "appsettings.Local.json"), optional: false, reloadOnChange: false)
             .Build();
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance,
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance,
             new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config));
         var svc = new WorkspaceManagementService(config, new TestHostEnvironment(_contentRoot), scanner,
             NullLogger<WorkspaceManagementService>.Instance);
@@ -257,7 +257,7 @@ public class WorkspaceManagementServiceTests : IDisposable
         Assert.Equal(WorkspaceManagementOutcome.Created, created.Outcome);
 
         // Drop a fake job folder under one of the lanes to simulate
-        // non-empty workspace (no JobMutationService needed for this
+        // non-empty workspace (no TaskMutationService needed for this
         // boundary check; the scanner-style walk only requires lane
         // dir + slug dir + job.json).
         var fakeJobDir = Path.Combine(created.Entry!.Path, "2-ready", "fake-job");

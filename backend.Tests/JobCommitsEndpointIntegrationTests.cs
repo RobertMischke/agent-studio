@@ -186,7 +186,7 @@ public class JobCommitsEndpointIntegrationTests : IDisposable
         return (repoRoot, jobFolder, jobId, watchPath);
     }
 
-    private static (GitService git, JobSessionLog sessions, JobInfo jobInfo) BuildServices(
+    private static (GitService git, TaskSessionLog sessions, JobInfo jobInfo) BuildServices(
         string repoRoot, string watchPath, string jobId)
     {
         var dict = new Dictionary<string, string?>
@@ -198,9 +198,9 @@ public class JobCommitsEndpointIntegrationTests : IDisposable
         };
         var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
-        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
+        var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
         var info = scanner.FindJob(jobId, watchPath)
             ?? throw new InvalidOperationException("Test setup: scanner did not pick up the job.");
         return (git, sessions, info);

@@ -38,12 +38,12 @@ public class CompanionSnapshotBuilderTests
     {
         var jobs = new List<JobInfo>
         {
-            Job("a", "alpha", "C:/alpha", JobStates.Ready, order: 2),
-            Job("b", "alpha", "C:/alpha", JobStates.Ready, order: 1),
-            Job("c", "alpha", "C:/alpha", JobStates.Progress),
-            Job("d", "alpha", "C:/alpha", JobStates.AutoReview),
-            Job("e", "alpha", "C:/alpha", JobStates.Preparation), // not in any lane
-            Job("f", "beta",  "C:/beta",  JobStates.Ready),
+            Job("a", "alpha", "C:/alpha", TaskStates.Ready, order: 2),
+            Job("b", "alpha", "C:/alpha", TaskStates.Ready, order: 1),
+            Job("c", "alpha", "C:/alpha", TaskStates.Progress),
+            Job("d", "alpha", "C:/alpha", TaskStates.AutoReview),
+            Job("e", "alpha", "C:/alpha", TaskStates.Preparation), // not in any lane
+            Job("f", "beta",  "C:/beta",  TaskStates.Ready),
         };
         var runner = new RunnerStatus
         {

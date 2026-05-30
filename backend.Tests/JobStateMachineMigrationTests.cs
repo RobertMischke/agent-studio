@@ -8,7 +8,7 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// ADR-0025 boot-time migration: <c>JobStateMachine.EnsureStateFoldersAndMigrate</c>
+/// ADR-0025 boot-time migration: <c>TaskStateMachine.EnsureStateFoldersAndMigrate</c>
 /// renames the pre-three-stage-review numbered lanes (<c>4-review</c>,
 /// <c>5-completed</c>, <c>6-archive</c>) to the new layout, rewrites each
 /// job.json's <c>state</c> field, and is idempotent on a second pass.
@@ -50,10 +50,10 @@ public class JobStateMachineMigrationTests : IDisposable
         // The new lanes hold the moved jobs and the canonical state name
         // is written back into each job.json so the in-memory view stays
         // aligned with disk.
-        AssertMovedAndStateMatches(JobStates.AutoReview, "alpha");
-        AssertMovedAndStateMatches(JobStates.AutoReview, "beta");
-        AssertMovedAndStateMatches(JobStates.Completed, "gamma");
-        AssertMovedAndStateMatches(JobStates.Archive,   "delta");
+        AssertMovedAndStateMatches(TaskStates.AutoReview, "alpha");
+        AssertMovedAndStateMatches(TaskStates.AutoReview, "beta");
+        AssertMovedAndStateMatches(TaskStates.Completed, "gamma");
+        AssertMovedAndStateMatches(TaskStates.Archive,   "delta");
 
         // The migration counter mirrors the "moved 4 jobs" log line.
         Assert.Equal(4, machine.LastNumberedLaneMigrationCount);
@@ -71,7 +71,7 @@ public class JobStateMachineMigrationTests : IDisposable
         // Second call sees no legacy lane and does not rewrite anything.
         machine.EnsureStateFoldersAndMigrate();
         Assert.Equal(0, machine.LastNumberedLaneMigrationCount);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "alpha")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "alpha")));
     }
 
     [Fact]
@@ -84,20 +84,20 @@ public class JobStateMachineMigrationTests : IDisposable
         var (machine, _) = BuildMachine();
         machine.EnsureStateFoldersAndMigrate();
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.OrchestratorPrep)),
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)),
             "expected 1a-orchestrator-prep folder to be created on boot");
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.NeedsHumanReview)),
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview)),
             "expected 1b-needs-human-review folder to be created on boot");
 
         // Existing lanes still present.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Preparation)));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready)));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Preparation)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview)));
 
         // Idempotent: calling again does not alter the workspace state.
         machine.EnsureStateFoldersAndMigrate();
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.OrchestratorPrep)));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.NeedsHumanReview)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview)));
     }
 
     [Fact]
@@ -107,10 +107,10 @@ public class JobStateMachineMigrationTests : IDisposable
         // before the legacy 4-review lane was migrated. The migration
         // must not overwrite the existing folder; it skips and leaves the
         // legacy folder for manual reconciliation.
-        Directory.CreateDirectory(Path.Combine(_watchPath, JobStates.AutoReview));
-        Directory.CreateDirectory(Path.Combine(_watchPath, JobStates.AutoReview, "shared-slug"));
+        Directory.CreateDirectory(Path.Combine(_watchPath, TaskStates.AutoReview));
+        Directory.CreateDirectory(Path.Combine(_watchPath, TaskStates.AutoReview, "shared-slug"));
         File.WriteAllText(
-            Path.Combine(_watchPath, JobStates.AutoReview, "shared-slug", "marker.txt"),
+            Path.Combine(_watchPath, TaskStates.AutoReview, "shared-slug", "marker.txt"),
             "new lane content");
 
         SeedLegacyJob("4-review", "shared-slug");
@@ -120,7 +120,7 @@ public class JobStateMachineMigrationTests : IDisposable
 
         // The new-lane content is intact; the legacy folder is left in
         // place because the rename collided.
-        Assert.True(File.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "shared-slug", "marker.txt")));
+        Assert.True(File.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "shared-slug", "marker.txt")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, "4-review", "shared-slug")));
     }
 
@@ -141,7 +141,7 @@ public class JobStateMachineMigrationTests : IDisposable
         Assert.Contains($"\"state\": \"{newLane}\"", json);
     }
 
-    private (JobStateMachine, JobScannerService) BuildMachine()
+    private (TaskStateMachine, TaskScannerService) BuildMachine()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -153,8 +153,8 @@ public class JobStateMachineMigrationTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
-        var machine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var machine = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         return (machine, scanner);
     }
 }

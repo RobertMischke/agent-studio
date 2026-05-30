@@ -18,13 +18,13 @@ public sealed class ProjectChatMigration
 {
     private readonly ProjectChatStore _store;
     private readonly ProjectChatIndex _index;
-    private readonly JobScannerService _scanner;
+    private readonly TaskScannerService _scanner;
     private readonly ILogger<ProjectChatMigration> _logger;
 
     public ProjectChatMigration(
         ProjectChatStore store,
         ProjectChatIndex index,
-        JobScannerService scanner,
+        TaskScannerService scanner,
         ILogger<ProjectChatMigration> logger)
     {
         _store = store;
