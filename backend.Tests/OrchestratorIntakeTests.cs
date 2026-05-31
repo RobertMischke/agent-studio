@@ -84,14 +84,17 @@ public class OrchestratorIntakeTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_OutOfScopePrompt_Blocks()
+    public void Evaluate_ParallelPrompt_NoLongerBlocked()
     {
+        // ADR-0052 reversed the intra-project-parallelism non-goal, so a prompt
+        // about running multiple agents / merging branches is no longer hard-
+        // blocked at intake. Regression guard for the reversal.
         var verdict = IntakeRunner.Evaluate(
             new TaskInfo { Id = "scope", Title = "spawn parallel agents" },
             "Please run multiple agents at once on this repo so we can finish faster. Done when all branches merge cleanly.",
             existingPeers: Array.Empty<TaskInfo>());
 
-        Assert.Equal(IntakeOutcome.Blocked, verdict.Outcome);
+        Assert.NotEqual(IntakeOutcome.Blocked, verdict.Outcome);
     }
 
     [Fact]

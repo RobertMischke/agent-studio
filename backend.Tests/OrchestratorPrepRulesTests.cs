@@ -143,19 +143,23 @@ public class OrchestratorPrepRulesTests
     }
 
     [Fact]
-    public void OutOfScopeToken_DepressesClarity_AcrossAllLevels()
+    public void WorktreeToken_NoLongerDepressesClarity()
     {
-        // ROADMAP non-goal token forces clarity below the sharpen threshold,
-        // which at level 1 is a bounce.
-        var prompt = ClearPrompt + "\n\nAlso add a worktree per task.";
-        var cautious = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput
+        // ADR-0052 lifted the intra-project-parallelism non-goal: "worktree" /
+        // "branch-per-task" / "intra-project parallel" are no longer out-of-scope
+        // tokens and must NOT depress the prep clarity score. The token is now
+        // neutral, so a clear prompt that mentions it decides the same as without.
+        var baseline = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput
         {
-            PromptText = prompt,
+            PromptText = ClearPrompt,
             AutonomyLevel = 1,
         });
-        // The penalty is 0.30, so clear (0.85ish) drops to the borderline band
-        // at worst; at level 1 every borderline still bounces.
-        Assert.Equal(OrchestratorPrepRules.Verdict.Bounce, cautious.Verdict);
+        var withToken = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput
+        {
+            PromptText = ClearPrompt + "\n\nAlso add a worktree per task.",
+            AutonomyLevel = 1,
+        });
+        Assert.Equal(baseline.Verdict, withToken.Verdict);
     }
 
     [Fact]

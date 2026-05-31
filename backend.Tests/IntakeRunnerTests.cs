@@ -95,15 +95,18 @@ public class IntakeRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_OutOfScopePrompt_HardBlocks()
+    public void Evaluate_ParallelCodingPrompt_NoLongerBlocked()
     {
-        var target = new TaskInfo { Id = "blocked", Title = "Run parallel coding agents on the API", State = TaskStates.Ready };
-        var prompt = "Spawn parallel coding agents on the API and have them race to fix the bug.";
+        // ADR-0052 reversed the intra-project-parallelism non-goal: bounded
+        // parallel execution via worktrees + per-task branches is now an opt-in
+        // capability, so prompts about it must NOT be hard-blocked at intake.
+        // Regression guard for the reversal.
+        var target = new TaskInfo { Id = "para", Title = "Add intra-project parallelism to the runner", State = TaskStates.Ready };
+        var prompt = "Add bounded intra-project parallel execution via git worktrees and per-task branches. Acceptance: maxParallelism is configurable per project and the orchestrator decides parallelizability.";
 
         var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<TaskInfo>());
 
-        Assert.Equal(IntakeOutcome.Blocked, v.Outcome);
-        Assert.Contains("non-goal", v.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(IntakeOutcome.Blocked, v.Outcome);
     }
 
     [Fact]
@@ -132,21 +135,10 @@ public class IntakeRunnerTests : IDisposable
         Assert.Equal(IntakeOutcome.NeedsSplit, v.Outcome);
     }
 
-    [Fact]
-    public void Evaluate_BlockedTakesPriorityOverDuplicate()
-    {
-        // Outcome ordering is part of the contract: hard non-goal language
-        // should surface even when a near-duplicate also exists, because
-        // the user must clear the non-goal before the duplicate question
-        // is meaningful. Pinning this so a future check reorder cannot
-        // silently swap the priority.
-        var target = new TaskInfo { Id = "ordering", Title = "Add worktree support to runner", State = TaskStates.Ready };
-        var peer = new TaskInfo { Id = "ordering-peer", Title = "Add worktree support to runner pickup", State = TaskStates.Ready };
-
-        var v = IntakeRunner.Evaluate(target, "Add worktree support to runner. Done when worktrees launch on pickup.", new[] { peer });
-
-        Assert.Equal(IntakeOutcome.Blocked, v.Outcome);
-    }
+    // (Removed Evaluate_BlockedTakesPriorityOverDuplicate: it tested the
+    //  priority of the hard non-goal block over duplicate detection. ADR-0052
+    //  removed the intra-project-parallelism block, so there is no longer a
+    //  hard-block outcome to prioritise here.)
 
     // ---- RunForJob integration: phase transitions + sidecar ------------------
 
@@ -175,25 +167,11 @@ public class IntakeRunnerTests : IDisposable
         Assert.Equal("passed", sidecar.IntakeChecks[0].Status);
     }
 
-    [Fact]
-    public void RunForJob_BlockedCard_StampsIntakeBlockedAndCarriesReason()
-    {
-        WriteJob(TaskStates.Ready, "blocky", phase: LifecyclePhases.HumanReady,
-            promptMd: "Spawn parallel coding agents on the API and have them race to fix the bug. Acceptance: race condition resolved.");
-
-        var runner = BuildRunner();
-        var verdict = runner.RunForJob("blocky");
-
-        Assert.Equal(IntakeOutcome.Blocked, verdict.Outcome);
-
-        var info = BuildScanner().FindJob("blocky");
-        Assert.Equal(LifecyclePhases.IntakeBlocked, info!.Phase);
-
-        var sidecar = ReadLifecycleJson("blocky");
-        Assert.NotNull(sidecar);
-        Assert.Equal(LifecyclePhases.IntakeBlocked, sidecar!.Phase);
-        Assert.False(string.IsNullOrWhiteSpace(sidecar.BlockingReason));
-    }
+    // (Removed RunForJob_BlockedCard_StampsIntakeBlockedAndCarriesReason: it
+    //  drove a parallel-coding card to IntakeBlocked via the hard non-goal
+    //  block that ADR-0052 removed. The passing-card path is covered by
+    //  RunForJob_PassingCard_StampsIntakePassedAndWritesSidecar; clarification-
+    //  driven IntakeBlocked is covered by RunForJob_NeedsClarification_*.)
 
     [Fact]
     public void RunForJob_NeedsClarification_StampsIntakeBlockedSoRunnerStaysOff()
