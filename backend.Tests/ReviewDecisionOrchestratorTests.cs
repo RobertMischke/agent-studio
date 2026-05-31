@@ -117,7 +117,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Escalate_PromotesToHumanReview_WritesSupervisorBanner_AndCreatesIntakeTask()
+    public async Task Escalate_FlipsOriginalToNeedsHumanReview_WritesSupervisorBanner_NoWrapperCard()
     {
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
         var orchestrator = BuildOrchestrator(
@@ -125,22 +125,22 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        // ADR-0025: escalate moves the task to 5-human-review (the user
-        // sees one lane that means "needs me"); the legacy auto-review
+        // ADR-0049: an orchestrator that cannot decide unattended flips the
+        // *original* card to 1b-needs-human-review; the legacy auto-review
         // folder must no longer hold the job.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "auth-rewrite")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview, "auth-rewrite")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "auth-rewrite")));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "auth-rewrite");
+        var log = ReadCliLog(TaskStates.NeedsHumanReview, "auth-rewrite");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("strategic call", log);
-        Assert.Contains("5-human-review", log);
+        Assert.Contains("1b-needs-human-review", log);
 
+        // ADR-0049: no sibling human-decision-needed-<slug> wrapper card is
+        // spawned - the wrapper-card pattern (ASS-30) is the bug this ADR ends.
         var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-auth-rewrite");
-        Assert.True(Directory.Exists(intake));
-        Assert.True(File.Exists(Path.Combine(intake, "job.json")));
-        Assert.True(File.Exists(Path.Combine(intake, "prompt.md")));
+        Assert.False(Directory.Exists(intake));
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
@@ -338,7 +338,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task NoOp_WithEmptyPrompt_PromotesToHumanReview_AndCreatesIntake()
+    public async Task NoOp_WithEmptyPrompt_PromotesToHumanReview_NoWrapperCard()
     {
         SeedReviewJobWithNoOp("placeholder-task",
             title: "TODO: fill in",
@@ -360,11 +360,9 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Contains("[escalate]", log);
         Assert.Contains("empty or placeholder", log);
 
+        // ADR-0049: escalation no longer spawns a human-decision-needed card.
         var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-placeholder-task");
-        Assert.True(Directory.Exists(intake));
-        Assert.True(File.Exists(Path.Combine(intake, "job.json")));
-        var intakePrompt = File.ReadAllText(Path.Combine(intake, "prompt.md"));
-        Assert.Contains("[[TASK_NOOP]]", intakePrompt);
+        Assert.False(Directory.Exists(intake));
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
@@ -403,8 +401,9 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "repeated-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "repeated-noop")));
 
+        // ADR-0049: no wrapper card is spawned for the escalation.
         var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-repeated-noop");
-        Assert.True(Directory.Exists(intake));
+        Assert.False(Directory.Exists(intake));
 
         var log = ReadCliLog(TaskStates.HumanReview, "repeated-noop");
         Assert.Contains("[supervisor]", log);
@@ -418,7 +417,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Blocked_PromotesToHumanReview_AndCreatesIntake_WithoutSpendingFastModel()
+    public async Task Blocked_PromotesToHumanReview_NoWrapperCard_WithoutSpendingFastModel()
     {
         SeedReviewJobWithBlocked("bug-commit-hangs", "awaiting user decision A/B/C");
         var calls = 0;
@@ -432,10 +431,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // ADR-0025: BLOCKED escalations move the task to 5-human-review.
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "bug-commit-hangs")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "bug-commit-hangs")));
+
+        // ADR-0049: no human-decision-needed wrapper card is spawned.
         var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-bug-commit-hangs");
-        Assert.True(Directory.Exists(intake));
-        var intakePrompt = File.ReadAllText(Path.Combine(intake, "prompt.md"));
-        Assert.Contains("[[TASK_BLOCKED]]", intakePrompt);
+        Assert.False(Directory.Exists(intake));
 
         var log = ReadCliLog(TaskStates.HumanReview, "bug-commit-hangs");
         Assert.Contains("[supervisor]", log);
@@ -791,7 +790,9 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var events = ReadTimeline(TaskStates.HumanReview, "escalate-timeline");
+        // ADR-0049: the escalate event travels with the original card, which
+        // is now in 1b-needs-human-review (not 5-human-review).
+        var events = ReadTimeline(TaskStates.NeedsHumanReview, "escalate-timeline");
         var escalate = Assert.Single(
             events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
         Assert.Equal(TimelineActors.Orchestrator, escalate.Actor);

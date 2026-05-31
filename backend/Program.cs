@@ -545,7 +545,7 @@ _ = app.Services.GetRequiredService<OrchestratorApi.Services.TaskAccess.ITaskAcc
 {
     var warmupSw = System.Diagnostics.Stopwatch.StartNew();
     var workspaceRoot = app.Configuration["TaskRepository"];
-    var scannerForWarmup = app.Services.GetRequiredService<JobScannerService>();
+    var scannerForWarmup = app.Services.GetRequiredService<TaskScannerService>();
     var busStore = app.Services.GetRequiredService<AgentMessageBusStore>();
     var warmupLogger = app.Services.GetRequiredService<ILogger<Program>>();
     if (string.IsNullOrWhiteSpace(workspaceRoot))

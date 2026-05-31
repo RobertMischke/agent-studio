@@ -484,8 +484,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 $"Escalated: {count} consecutive NOOPs without progress. " +
                 "The latest retry emitted only [[TASK_NOOP]] after NOOP recovery, with 0 tool calls and 0 file changes.";
             await EscalateNoOpAsync(workspace, entry, pending, reason, ct,
-                targetState: TaskStates.NeedsHumanReview,
-                createHumanDecisionIntake: false);
+                targetState: TaskStates.NeedsHumanReview);
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator escalated {Project}/{JobId} after {NoOpCount} consecutive NOOPs without progress: toolCalls={ToolCalls} fileChanges={FileChanges} agentSubstanceChars={AgentSubstanceChars}",
                 entry.Name, pending.Job.Id, count, noProgressEvidence.ToolCalls,
@@ -546,21 +545,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             FollowUp: followUp));
     }
 
-    private async Task EscalateNoOpAsync(
+    private Task EscalateNoOpAsync(
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
         string reason,
         CancellationToken ct,
-        string targetState = TaskStates.HumanReview,
-        bool createHumanDecisionIntake = true)
+        string targetState = TaskStates.HumanReview)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {targetState}.");
-
-        var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
 
         var move = _stateMachine.MoveJob(current.Id, targetState, entry.Path);
         if (move.Status != MoveJobStatus.Success)
@@ -570,15 +566,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 current.Id, targetState, move.Status, move.Message);
         }
 
+        // ADR-0049: escalation records the event on the original card's
+        // timeline and leaves it in the human-review lane - no wrapper card.
         EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
             BuildEscalateDetails("noop-escalate", reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
-
-        if (createHumanDecisionIntake)
-        {
-            await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
-        }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
@@ -589,9 +582,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Prompt: "(deterministic NOOP branch)",
             Response: "(no fast-model call)",
             FollowUp: string.Empty));
+
+        return Task.CompletedTask;
     }
 
-    private async Task ProcessBlockedAsync(
+    private Task ProcessBlockedAsync(
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
@@ -605,8 +600,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator escalated BLOCKED to human review. Reason: {reason}. Promoted to 5-human-review.");
 
-        var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
-
         // ADR-0025: BLOCKED escalations move the task to 5-human-review.
         var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
@@ -616,12 +609,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 current.Id, move.Status, move.Message);
         }
 
+        // ADR-0049: the lane move + this timeline event are the handover -
+        // no wrapper card.
         EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
             BuildEscalateDetails("agent-blocked", reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
-
-        await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
@@ -632,6 +625,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Prompt: "(deterministic BLOCKED branch)",
             Response: "(no fast-model call)",
             FollowUp: string.Empty));
+
+        return Task.CompletedTask;
     }
 
     private async Task ProcessDoneAsync(
@@ -985,7 +980,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (priorLintReissues >= 1)
         {
             var reason = $"lint-scss failed twice in a row (exit {result.ExitCode}); escalating per ASS-46 infinite-spin guard.";
-            var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
             var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
@@ -993,11 +987,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
                 _chatLog.AppendSupervisor(moved, "escalate",
                     $"Lint-scss post-step failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
+                // ADR-0049: timeline event on the original card, no wrapper card.
                 EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
                     TimelineActors.Orchestrator, reason,
                     BuildEscalateDetails("lint-scss-double-fail", reason,
                         CountPriorReissues(workspace, entry.Name, current.Id)));
-                await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
             }
             else
             {
@@ -1482,7 +1476,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             FollowUp: followUp));
     }
 
-    private async Task HandleEscalateAsync(
+    private Task HandleEscalateAsync(
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
@@ -1493,18 +1487,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
-        // ADR-0025: escalate moves the job from 4-auto-review to
-        // 5-human-review and writes a [supervisor] chat-note so the user
-        // sees one concise reason for the handover. The intake under
-        // 1-preparation is kept for now as an extra surface, but the
-        // primary signal is the lane move itself.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        // ADR-0049: the orchestrator could not decide this 4-auto-review
+        // task unattended. It flips the *original* card to
+        // 1b-needs-human-review and records one orchestrator_escalated
+        // event on that card's timeline - the timeline is the explanation.
+        // No sibling human-decision-needed-<slug> card is spawned: the
+        // wrapper-card pattern (ASS-30) is the bug this ADR ends.
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.NeedsHumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after escalate: {Status} {Message}",
+                "ReviewDecisionOrchestrator: failed to move {JobId} to needs-human-review after escalate: {Status} {Message}",
                 current.Id, move.Status, move.Message);
-            return;
+            return Task.CompletedTask;
         }
 
         // Pin the chat-log line to the post-move folder via MoveJob's
@@ -1513,17 +1508,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // the chat-log auto-creates its parent folder on write — so a
         // stale path resurrects the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.NeedsHumanReview };
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
-            $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
+            $"Auto-review escalated \"{title}\" to 1b-needs-human-review for human attention. Reason: {verdict.Reason}.");
 
         EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
             TimelineActors.Orchestrator, verdict.Reason,
             BuildEscalateDetails("needs-input-escalate", verdict.Reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
-
-        await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
@@ -1534,6 +1527,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Prompt: prompt,
             Response: response,
             FollowUp: string.Empty));
+
+        return Task.CompletedTask;
     }
 
     private void HandleAcceptAsDone(
@@ -1594,63 +1589,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Prompt: prompt,
             Response: response,
             FollowUp: string.Empty));
-    }
-
-    private async Task CreateHumanDecisionIntakeAsync(
-        WatchPathEntry entry,
-        PendingDecision pending,
-        OrchestratorDecisionVerdict verdict,
-        CancellationToken ct)
-    {
-        var slug = Slugify(pending.Job.Id);
-        var folderName = $"human-decision-needed-{slug}";
-
-        // ADR-0024: idempotency check + create both go through the
-        // typed TaskAccess layer instead of building the lane path
-        // locally. Same job already has an open intake -> don't
-        // multiply.
-        if (_taskAccess.SlugExistsInLane(entry.Path, TaskStates.Preparation, folderName))
-        {
-            return;
-        }
-
-        var promptBody = $"# Human decision needed for `{pending.Job.Id}`\n\n" +
-                         $"The orchestrator could not decide on this 4-review task unattended.\n\n" +
-                         $"**Reason from orchestrator:** {verdict.Reason}\n\n" +
-                         $"**Original signal:** {OriginalSignalLabel(pending.Kind)}\n\n" +
-                         $"**Original reason:** {pending.Reason ?? "(none provided)"}\n\n" +
-                         $"Please review the task in 4-review (`{pending.Job.FolderPath}`) and either answer the agent or change scope.\n";
-
-        try
-        {
-            var result = await _taskAccess.MutateAsync(new TaskMutationRequest
-            {
-                Kind = TaskMutationKind.Create,
-                CreateRequest = new CreateJobRequest
-                {
-                    Id = folderName,
-                    Title = $"Human decision needed: {pending.Job.Title}",
-                    Agent = "human",
-                    Order = 1,
-                    TargetState = TaskStates.Preparation,
-                    WatchPath = entry.Path,
-                    PromptMarkdown = promptBody,
-                },
-            }, ct);
-
-            if (result.Status != TaskMutationStatus.Applied)
-            {
-                _logger.LogWarning(
-                    "ReviewDecisionOrchestrator: human-decision intake refused for {JobId}: {Status} {Message}",
-                    pending.Job.Id, result.Status, result.Message);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "ReviewDecisionOrchestrator: failed to create human-decision intake for {JobId}",
-                pending.Job.Id);
-        }
     }
 
     private string BuildPrompt(WatchPathEntry entry, PendingDecision pending, string workspace)
@@ -1801,26 +1739,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private static string BuildReissueFollowUp(OrchestratorDecisionVerdict verdict) =>
         $"The orchestrator answered your NEEDS_INPUT request. Decision: {verdict.Reason}. " +
         "Apply this decision and continue the task. End with [[TASK_DONE]] when complete.";
-
-    private static string OriginalSignalLabel(ReviewSignalKind kind) => kind switch
-    {
-        ReviewSignalKind.NoOp     => "[[TASK_NOOP]]",
-        ReviewSignalKind.Blocked  => "[[TASK_BLOCKED]]",
-        _                         => "[[TASK_NEEDS_INPUT]]"
-    };
-
-    private static string Slugify(string id)
-    {
-        if (string.IsNullOrWhiteSpace(id)) return "unknown";
-        var sb = new StringBuilder(id.Length);
-        foreach (var ch in id.ToLowerInvariant())
-        {
-            if (char.IsLetterOrDigit(ch)) sb.Append(ch);
-            else if (ch is ' ' or '-' or '_' or '/') sb.Append('-');
-        }
-        var s = sb.ToString().Trim('-');
-        return string.IsNullOrEmpty(s) ? "unknown" : s;
-    }
 
     private static string TailLines(string text, int n)
     {
