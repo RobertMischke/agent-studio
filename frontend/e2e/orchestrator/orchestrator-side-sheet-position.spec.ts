@@ -116,31 +116,38 @@ test.describe('Orchestrator side sheet position', () => {
 
   /**
    * Push contract (not overlay). Opening the orchestrator chat must
-   * narrow the studio-shell by approximately the panel width; the inner
+   * narrow the editor area by approximately the panel width so the
+   * workspace stays visible alongside the chat; the inner
    * `<app-sidesheet>` chrome must fill the full open host width (no
    * transparent gap on the right); the panel host must stay in normal
-   * flex flow (position: static).
+   * flow (position: static / relative, never `fixed` or `absolute`).
    *
-   * Three earlier regressions are pinned here:
+   * Architecture note: the orchestrator rail is now projected INSIDE
+   * the studio-shell body grid (trailing `auto` track), so opening it
+   * leaves the studio-shell box at full viewport width and narrows the
+   * editor track instead. This keeps the titlebar + statusbar spanning
+   * the full width — VS-Code-style. The earlier "studio-shell narrows"
+   * test was written before that change.
+   *
+   * Three earlier regressions are still pinned here:
    *  - The host was `position: fixed` via a studio-mode workaround in
    *    styles.scss, which forced overlay behaviour and prevented any
-   *    push. Fixed by introducing the `.app-shell` flex parent and
-   *    deleting the `position: fixed` rule.
+   *    push. Fixed by moving the host into the grid track.
    *  - The inner `.sidesheet` div had `width: 360px` hard-coded in
    *    `components/sidesheet/sidesheet.component.scss`, leaving a
    *    transparent 280 px gap inside the open 640 px host.
-   *  - The studio-shell had to be ordered to the *left* of the side
-   *    sheets without reshuffling the DOM, which `.app-shell` does via
-   *    `flex-direction: row-reverse`.
+   *  - The editor and orchestrator must not overlap along x — the
+   *    orchestrator's left edge must be at or beyond the editor's
+   *    right edge.
    */
-  test('open pushes studio-shell + inner panel fills host', async ({ page, devBackend: _ }) => {
+  test('open narrows editor + inner panel fills host', async ({ page, devBackend: _ }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(400);
 
-    const studio = page.locator('app-studio-shell');
-    const widthClosed = (await studio.boundingBox())!.width;
+    const editor = page.locator('app-studio-shell .studio-editor');
+    const editorWidthClosed = (await editor.boundingBox())!.width;
 
     const toggle = page.getByTestId('orch-side-sheet-toggle');
     await expect(toggle).toBeVisible({ timeout: 10_000 });
@@ -148,12 +155,13 @@ test.describe('Orchestrator side sheet position', () => {
     await page.getByTestId('orch-side-sheet').waitFor({ state: 'visible' });
     await page.waitForTimeout(450);
 
-    const widthOpen = (await studio.boundingBox())!.width;
+    const editorWidthOpen = (await editor.boundingBox())!.width;
 
     const geometry = await page.evaluate(() => {
       const orchHost = document.querySelector('app-orchestrator-side-sheet') as HTMLElement | null;
       const inner = document.querySelector('[data-testid="orch-side-sheet"]') as HTMLElement | null;
       const studio = document.querySelector('app-studio-shell') as HTMLElement | null;
+      const editor = document.querySelector('app-studio-shell .studio-editor') as HTMLElement | null;
       function box(el: HTMLElement | null) {
         if (!el) return null;
         const r = el.getBoundingClientRect();
@@ -165,27 +173,36 @@ test.describe('Orchestrator side sheet position', () => {
           position: cs.position,
         };
       }
-      return { orchHost: box(orchHost), inner: box(inner), studio: box(studio), vw: window.innerWidth };
+      return {
+        orchHost: box(orchHost),
+        inner: box(inner),
+        studio: box(studio),
+        editor: box(editor),
+        vw: window.innerWidth
+      };
     });
 
     // Inner sidesheet fills its open host (no gap on the right).
     expect(geometry.inner!.width).toBe(geometry.orchHost!.width);
 
-    // Push, not overlay: studio-shell narrows by approximately the panel
-    // width on open, and grows back on close.
-    expect(widthClosed - widthOpen).toBeGreaterThan(400);
+    // Push, not overlay: the editor track narrows by approximately the
+    // panel width on open. Without this assertion the regression where
+    // the orchestrator visually overlays the workspace would slip
+    // through silently.
+    expect(editorWidthClosed - editorWidthOpen).toBeGreaterThan(400);
 
-    // Studio-shell sits to the LEFT of the orchestrator (i.e. the panel
-    // is on the right edge). Their boxes are non-overlapping along x.
-    expect(geometry.studio!.right).toBeLessThanOrEqual(geometry.orchHost!.x + 1);
+    // The editor's right edge must end where the orchestrator's left
+    // edge begins — no overlap along x.
+    expect(geometry.editor!.right).toBeLessThanOrEqual(geometry.orchHost!.x + 1);
+
+    // Orchestrator host sits on the right edge of the viewport.
     expect(geometry.orchHost!.right).toBeGreaterThanOrEqual(geometry.vw - 4);
 
     // Host stays in normal flow (not `position: fixed`, which was the
-    // overlay regression). The body's `.app-shell` flex parent does the
-    // push; nothing should pull the host out of flow. `static` or
-    // `relative` are both fine — `relative` is needed since the panel
-    // resize splitter anchors absolutely to the host's box. `fixed` /
-    // `absolute` would re-introduce the overlay bug.
+    // overlay regression). `static` or `relative` are both fine —
+    // `relative` is needed since the panel resize splitter anchors
+    // absolutely to the host's box. `fixed` / `absolute` would re-
+    // introduce the overlay bug.
     expect(['static', 'relative']).toContain(geometry.orchHost!.position);
   });
 
@@ -298,12 +315,16 @@ test.describe('Orchestrator side sheet position', () => {
       };
     });
 
-    // The orchestrator sits on the right edge.
+    // The orchestrator sits on the right edge of the viewport.
     expect(geometry.orchHost!.right).toBeGreaterThanOrEqual(geometry.vw - 4);
-    // The studio-shell ends where the orchestrator begins — no overlap.
-    expect(geometry.studio!.right).toBeLessThanOrEqual(geometry.orchHost!.x + 1);
-    // The editor stays inside the studio-shell box (this is what fails
-    // when the sidebar refuses to shrink and pushes the editor right).
-    expect(geometry.editor!.right).toBeLessThanOrEqual(geometry.studio!.right + 1);
+    // The editor ends where the orchestrator begins — no overlap. This
+    // is what fails when the sidebar refuses to shrink and pushes the
+    // editor right behind the chat panel.
+    expect(geometry.editor!.right).toBeLessThanOrEqual(geometry.orchHost!.x + 1);
+    // The orchestrator must stay inside the studio-shell box (it's a
+    // projected child of `.studio-body`, not a sibling), and studio
+    // itself must span the full viewport so the titlebar and statusbar
+    // remain end-to-end.
+    expect(geometry.orchHost!.right).toBeLessThanOrEqual(geometry.studio!.right + 1);
   });
 });
