@@ -11,7 +11,7 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
@@ -128,7 +128,7 @@ test.describe('Detail view - lane pager', () => {
       // the next job in the iteration).
       const moveResponse = page.waitForResponse(resp =>
         resp.request().method() === 'POST'
-        && resp.url().includes(`/api/jobs/${encodeURIComponent(ids[3])}/move`)
+        && resp.url().includes(`/api/tasks/${encodeURIComponent(ids[3])}/move`)
       );
       await page.getByTestId('detail-state-select').selectOption('4-auto-review');
       await moveResponse;
@@ -167,16 +167,16 @@ test.describe('Detail view - lane pager', () => {
       await page.getByTestId('lane-pager-next').click();
       await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[3])}`), { timeout: 10_000 });
 
-      // Delete via the detail-header menu. The view must land on the next
-      // slot (ids[4]) and the pager count must drop by one with the position
-      // preserved.
-      await page.getByTestId('detail-menu-btn').click();
-      await page.getByTestId('detail-menu-delete').click();
-      const confirmDialog = page.getByTestId('confirm-dialog-panel');
+      // Delete via the detail-header triage overflow menu. The view must
+      // land on the next slot (ids[4]) and the pager count must drop by one
+      // with the position preserved.
+      await page.getByTestId('triage-overflow-btn').click();
+      await page.getByTestId('triage-overflow-item-delete').click();
+      const confirmDialog = page.getByTestId('confirm-dialog');
       await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
       const deleteResponse = page.waitForResponse(resp =>
         resp.request().method() === 'DELETE'
-        && resp.url().includes(`/api/jobs/${encodeURIComponent(ids[3])}`)
+        && resp.url().includes(`/api/tasks/${encodeURIComponent(ids[3])}`)
       );
       await page.getByTestId('confirm-dialog-confirm').click();
       await deleteResponse;
@@ -216,7 +216,7 @@ test.describe('Detail view - lane pager', () => {
         await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(movingId)}`), { timeout: 10_000 });
         const moveResp = page.waitForResponse(resp =>
           resp.request().method() === 'POST'
-          && resp.url().includes(`/api/jobs/${encodeURIComponent(movingId)}/move`)
+          && resp.url().includes(`/api/tasks/${encodeURIComponent(movingId)}/move`)
         );
         await page.getByTestId('detail-state-select').selectOption('4-auto-review');
         await moveResp;
