@@ -32,7 +32,8 @@ The commit and push flow today lives in `JobTransitionService.MoveAsync` ([backe
    - `on-completed` (default): push only after a job reaches `6-completed`, meaning it has passed review.
    - `always-immediate`: push immediately after auto-commit and again on completed as an idempotent backstop. This is available for low-risk projects but carries review-rewrite risk.
 8. Completed pushes use `GitService.PushShaAsync`, which runs `git push origin <sha>:refs/heads/main`. It first checks whether the SHA is already an ancestor of `origin/main`, skips if so, and relies on normal git fast-forward rules. It never force-pushes.
-9. `CompletedPushBackstopHostedService` sweeps `6-completed` every 15 minutes and retries completed-job SHAs that are not on the remote. This covers missed transition triggers and backend restarts.
+9. The completed push runs off the request path. The move to `6-completed` enqueues a snapshot on `CompletedPushQueue` (instant, non-blocking) and returns; `CompletedPushWorker` drains the queue and performs the `git fetch` + `git push` on a background thread. The push was previously awaited inline, so a "move to complete" took 2-3 s on the network round-trip; the SHA is immutable, so the deferred push is always still correct.
+10. `CompletedPushBackstopHostedService` sweeps `6-completed` every 15 minutes and retries completed-job SHAs that are not on the remote. This covers missed transition triggers, backend restarts, and anything still queued when the worker shut down.
 
 The commit-message template is editable in [prompts/runtime/commit-message.md](../prompts/runtime/commit-message.md) and is the single source of voice for every commit the platform produces, regardless of which CLI did the work.
 

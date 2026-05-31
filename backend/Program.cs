@@ -257,6 +257,12 @@ builder.Services.AddSingleton<IntakeRunner>();
 builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
+// Completed-job auto-push runs off the request path: TaskTransitionService
+// enqueues here on the move to 6-completed (instant), CompletedPushWorker
+// drains and performs the git push, CompletedPushBackstopHostedService is the
+// periodic safety net for missed / shutdown-dropped pushes.
+builder.Services.AddSingleton<CompletedPushQueue>();
+builder.Services.AddHostedService<CompletedPushWorker>();
 builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();

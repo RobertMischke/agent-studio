@@ -17,6 +17,7 @@ public sealed class TaskTransitionService
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<TaskTransitionService> _logger;
     private readonly TaskSessionLog? _sessions;
+    private readonly CompletedPushQueue? _pushQueue;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -37,7 +38,8 @@ public sealed class TaskTransitionService
         GitService git,
         ProjectSettingsService settings,
         ILogger<TaskTransitionService> logger,
-        TaskSessionLog? sessions = null)
+        TaskSessionLog? sessions = null,
+        CompletedPushQueue? pushQueue = null)
     {
         _scanner = scanner;
         _states = states;
@@ -46,6 +48,7 @@ public sealed class TaskTransitionService
         _settings = settings;
         _logger = logger;
         _sessions = sessions;
+        _pushQueue = pushQueue;
     }
 
     /// <summary>
@@ -129,7 +132,17 @@ public sealed class TaskTransitionService
                 var moved = _scanner.FindJob(jobId, watchPath);
                 if (moved != null)
                 {
-                    await PushCompletedJobCommitsAsync(moved, autoPushStrategy, ct);
+                    // Offload the network push (git fetch + git push, ~2-3 s)
+                    // to the background worker so the move-to-complete request
+                    // returns immediately. The SHAs are immutable, so the
+                    // deferred push is always still correct; the periodic
+                    // backstop covers anything dropped on shutdown. When no
+                    // queue is wired (unit-test fixtures) we fall back to the
+                    // synchronous push so the behaviour is still exercised.
+                    if (_pushQueue != null)
+                        _pushQueue.Enqueue(new CompletedPushRequest(moved, autoPushStrategy));
+                    else
+                        await PushCompletedJobCommitsAsync(moved, autoPushStrategy, ct);
                 }
             }
 

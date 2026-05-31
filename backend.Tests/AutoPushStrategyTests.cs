@@ -53,6 +53,78 @@ public sealed class AutoPushStrategyTests : IDisposable
         catch { /* best-effort */ }
     }
 
+    // PERF regression guard: the move-to-6-completed request used to await the
+    // git fetch + git push inline, so a "move to complete" blocked for 2-3 s on
+    // the network round-trip. With a CompletedPushQueue wired, MoveAsync only
+    // enqueues a snapshot and returns; the push runs on CompletedPushWorker.
+    // A 3 s pre-push hook simulates a slow remote: on the broken (synchronous)
+    // code this test measured ~3700 ms; with the queue it returns in tens of ms.
+    [Fact]
+    public async Task MoveToCompleted_OffloadsSlowPushFromRequestPath()
+    {
+        InstallSlowPushHook(3);
+        var sha = CommitLocalChange("slow push change");
+        WriteJob(TaskStates.HumanReview, "slow-task", sha);
+        var queue = new CompletedPushQueue();
+        var deps = BuildDeps(queue);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var outcome = await deps.Transitions.MoveAsync("slow-task", TaskStates.Completed, _watchPath);
+        sw.Stop();
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.True(sw.ElapsedMilliseconds < 1000,
+            $"move-to-completed took {sw.ElapsedMilliseconds}ms; the git push must be off the request path");
+        // The push was queued, not performed inline.
+        Assert.True(queue.Reader.TryRead(out var queued));
+        Assert.Equal("slow-task", queued!.Job.Id);
+    }
+
+    // Companion to the latency guard: prove the queued push actually lands when
+    // the CompletedPushWorker drains the queue, so offloading did not silently
+    // drop the auto-push.
+    [Fact]
+    public async Task CompletedPushWorker_PushesQueuedCommitToMain()
+    {
+        var sha = CommitLocalChange("worker-pushed change");
+        WriteJob(TaskStates.HumanReview, "worker-task", sha);
+        var queue = new CompletedPushQueue();
+        var deps = BuildDeps(queue);
+
+        var outcome = await deps.Transitions.MoveAsync("worker-task", TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.NotEqual(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+
+        var worker = new CompletedPushWorker(queue, deps.Transitions, NullLogger<CompletedPushWorker>.Instance);
+        await worker.StartAsync(CancellationToken.None);
+        var pushed = await WaitUntilAsync(
+            () => RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main") == sha,
+            TimeSpan.FromSeconds(15));
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.True(pushed, "worker did not push the queued completed commit within the timeout");
+        Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+    }
+
+    private void InstallSlowPushHook(int seconds)
+    {
+        var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
+        Directory.CreateDirectory(hooksDir);
+        var hook = Path.Combine(hooksDir, "pre-push");
+        File.WriteAllText(hook, $"#!/bin/sh\nsleep {seconds}\nexit 0\n");
+    }
+
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition()) return true;
+            await Task.Delay(50);
+        }
+        return condition();
+    }
+
     [Fact]
     public async Task MoveToCompleted_PushesStampedCommitToMain()
     {
@@ -114,7 +186,7 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteSha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
-    private Deps BuildDeps()
+    private Deps BuildDeps(CompletedPushQueue? pushQueue = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -133,7 +205,7 @@ public sealed class AutoPushStrategyTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: null, pushQueue: pushQueue);
         return new Deps(config, scanner, settings, transitions);
     }
 
@@ -208,6 +280,11 @@ public sealed class AutoPushStrategyTests : IDisposable
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        // The fixture's "origin" is a bare repo; on hosts where git has
+        // safe.bareRepository=explicit, plain `git -C <bare> ...` is refused.
+        // Relax it per-invocation (subprocess-scoped, no config mutation).
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("safe.bareRepository=all");
         foreach (var arg in args) psi.ArgumentList.Add(arg);
         using var p = Process.Start(psi)!;
         var stdout = p.StandardOutput.ReadToEnd();
