@@ -233,6 +233,8 @@ public class TaskScannerService : ITaskScanner
                     : null,
                 Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null,
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
+                Kind = TaskKinds.Normalize(raw.TryGetProperty("kind", out var kd) ? kd.GetString() : null),
+                EpicId = raw.TryGetProperty("epicId", out var ep) && !string.IsNullOrWhiteSpace(ep.GetString()) ? ep.GetString() : null,
                 UseOwnSession = raw.TryGetProperty("useOwnSession", out var uos) && uos.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? uos.GetBoolean()
                     : null,

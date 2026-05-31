@@ -27,6 +27,7 @@ public static class EndpointMapping
         jobs.MapJobPipelineEndpoints();
         jobs.MapJobMergeEndpoints();
 
+        app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();
         app.MapRunnerEndpoints();
         app.MapLeaseEndpoints();

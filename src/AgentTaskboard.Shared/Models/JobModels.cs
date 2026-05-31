@@ -37,6 +37,18 @@ public record TaskInfo
     /// <summary>Which CLI backend executes this job: <c>copilot</c>, <c>claude</c>, or <c>codex</c>. Defaults to <c>copilot</c>.</summary>
     public string? CliType { get; init; }
     /// <summary>
+    /// Card kind: <c>task</c> (default, a runnable unit of work) or <c>epic</c>
+    /// (a container grouping sub-tasks under one overarching goal). An epic is
+    /// not code-executed itself; only its sub-tasks run through the pipeline.
+    /// </summary>
+    public string Kind { get; init; } = TaskKinds.Task;
+    /// <summary>
+    /// Parent epic id when this task is a sub-task of an epic, else null. Set at
+    /// create time, by the post-hoc assign endpoint, or by an epic's
+    /// decomposition run.
+    /// </summary>
+    public string? EpicId { get; init; }
+    /// <summary>
     /// When <c>true</c>, this job uses its own dedicated session even if the project runner is
     /// configured for <see cref="SessionModes.ReuseProject"/>. Lets a one-off task isolate its
     /// context from the long-running project session.
@@ -898,6 +910,10 @@ public record CreateJobRequest
     public string? TargetState { get; init; }
     /// <summary>Optional CLI backend (claude|codex|copilot|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
+    /// <summary>Card kind: <c>task</c> (default) or <c>epic</c>. See <see cref="TaskKinds"/>.</summary>
+    public string? Kind { get; init; }
+    /// <summary>Optional parent epic id (assignment way 1: at create time). The new card is created as a sub-task of this epic.</summary>
+    public string? EpicId { get; init; }
     /// <summary>
     /// Optional client identity that owns the new job. When omitted, the
     /// endpoint falls back to the X-Client-Id header on the incoming
@@ -1787,6 +1803,12 @@ public record SetJobCliTypeRequest
 public record SetJobTitleRequest
 {
     public string Title { get; init; } = "";
+}
+
+/// <summary>Body for <c>PUT /api/tasks/{id}/epic</c>: the parent epic id, or null/empty to detach.</summary>
+public record SetJobEpicRequest
+{
+    public string? EpicId { get; init; }
 }
 
 /// <summary>Curated entry in a CLI's model catalog returned by <c>GET /api/cli/{type}/models</c>.</summary>

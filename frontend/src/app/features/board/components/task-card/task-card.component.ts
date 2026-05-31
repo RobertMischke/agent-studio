@@ -559,6 +559,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 
+  /** Epic container card: drives the "EPIC" badge in the title row. */
+  readonly isEpic = computed(() => this.job().kind === 'epic');
+
+  /** Parent epic id when this card is a sub-task, else null (drives the "↳ epic" chip). */
+  readonly subTaskEpicId = computed(() => {
+    const id = this.job().epicId;
+    return id && id.trim().length > 0 ? id : null;
+  });
+
   readonly isRunning = computed(() =>
     this.job().state === '3-progress' && this.job().execution?.status === 'running'
   );

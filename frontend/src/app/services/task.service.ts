@@ -980,6 +980,49 @@ export class TaskService {
     );
   }
 
+  // --- Epics -------------------------------------------------------------
+  // An epic is a kind=epic card; its sub-tasks point at it via epicId. The
+  // rollup is derived live server-side so progress always matches the board.
+
+  /** Assignment way 2: attach (epicId) or detach (null/'') a task to an epic. */
+  setJobEpic(jobId: string, epicId: string | null, watchPath?: string) {
+    return this.http.put(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/epic`,
+      { epicId: epicId ?? '' },
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /** All epics with their live sub-task rollups. */
+  getEpics(includeFixtures = false) {
+    const params = includeFixtures ? new HttpParams().set('includeFixtures', 'true') : undefined;
+    return this.http.get<import('../models/task.model').EpicRollup[]>(
+      `${this.baseUrl}/epics`,
+      params ? { params } : {},
+    );
+  }
+
+  /** A single epic's rollup. */
+  getEpic(epicId: string, watchPath?: string) {
+    return this.http.get<import('../models/task.model').EpicRollup>(
+      `${this.baseUrl}/epics/${encodeURIComponent(epicId)}`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /** Assignment way 3 (deterministic half): batch-create sub-tasks under an epic. */
+  createEpicSubTasks(
+    epicId: string,
+    req: import('../models/task.model').CreateEpicSubTasksRequest,
+    watchPath?: string,
+  ) {
+    return this.http.post<{ epicId: string; created: string[] }>(
+      `${this.baseUrl}/epics/${encodeURIComponent(epicId)}/sub-tasks`,
+      req,
+      this.withWatchPath(watchPath),
+    );
+  }
+
   getModelCatalog() {
     return this.http.get<CopilotModelCatalog>(`${this.baseUrl}/settings/cli/models`);
   }

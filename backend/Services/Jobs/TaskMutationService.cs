@@ -86,6 +86,20 @@ public class TaskMutationService
         return Updated();
     }
 
+    /// <summary>
+    /// Epics assignment way 2 (post-hoc): attach this task to a parent epic, or
+    /// detach it (<paramref name="epicId"/> null/empty clears the link). Writes
+    /// the <c>epicId</c> field on job.json via the mutation layer (API-only
+    /// job-folder rule, ADR-0024). Returns false when the task is not found.
+    /// </summary>
+    public bool SetJobEpic(string jobId, string? epicId, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        TaskJsonFile.UpdateField(info.FolderPath, "epicId", epicId ?? "", _logger);
+        return Updated();
+    }
+
     public bool SetJobCliType(string jobId, string cliType, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
@@ -579,6 +593,11 @@ public class TaskMutationService
             jobJson["model"] = effectiveModel;
         if (!string.IsNullOrWhiteSpace(effectiveCliType))
             jobJson["cliType"] = effectiveCliType;
+        // Epics: card kind (task|epic) + optional parent epic (assignment way 1,
+        // at create time). kind is always written so a fresh job.json is explicit.
+        jobJson["kind"] = TaskKinds.Normalize(req.Kind);
+        if (!string.IsNullOrWhiteSpace(req.EpicId))
+            jobJson["epicId"] = req.EpicId;
         if (req.Fixture)
             jobJson["fixture"] = true;
 
