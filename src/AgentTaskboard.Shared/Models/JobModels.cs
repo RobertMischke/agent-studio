@@ -1141,6 +1141,33 @@ public record ProjectSettings
     /// Persisted in <c>project-settings.json</c>.
     /// </summary>
     public Dictionary<string, PipelineStepSetting>? PipelineSteps { get; init; }
+
+    /// <summary>
+    /// ADR-0052: maximum number of tasks the runner may execute concurrently
+    /// for this project. Default <c>1</c> keeps the runner strictly sequential
+    /// (one active slot, behaviour byte-for-byte identical to the pre-parallel
+    /// runner). Values &gt; 1 opt the project into worktree-isolated parallel
+    /// execution; the runner clamps to <c>&gt;= 1</c>. Persisted in
+    /// <c>project-settings.json</c>.
+    /// </summary>
+    public int MaxParallelism { get; init; } = 1;
+
+    /// <summary>
+    /// ADR-0052: branch that parallel task worktrees branch off and merge back
+    /// into (the project's integration line). Default <c>develop</c> so
+    /// <c>main</c> stays the released line. When parallelism is off
+    /// (<see cref="MaxParallelism"/> == 1) the sequential runner keeps pushing
+    /// to its configured target and this value is unused.
+    /// </summary>
+    public string IntegrationBranch { get; init; } = "develop";
+
+    /// <summary>
+    /// ADR-0052: how a finished task branch is folded back into
+    /// <see cref="IntegrationBranch"/>. One of <see cref="IntegrationStrategies"/>
+    /// (<c>direct-merge</c> default, or <c>pull-request</c>). Only consulted
+    /// when <see cref="MaxParallelism"/> &gt; 1.
+    /// </summary>
+    public string IntegrationStrategy { get; init; } = IntegrationStrategies.DirectMerge;
 }
 
 /// <summary>
@@ -1390,9 +1417,54 @@ public static class AutoPushStrategies
     }
 }
 
+public static class IntegrationStrategies
+{
+    public const string DirectMerge = "direct-merge";
+    public const string PullRequest = "pull-request";
+
+    public static readonly string[] All = [DirectMerge, PullRequest];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return DirectMerge;
+        var v = value.Trim();
+        foreach (var strategy in All)
+            if (string.Equals(strategy, v, StringComparison.OrdinalIgnoreCase))
+                return strategy;
+        return DirectMerge;
+    }
+}
+
 public record SetAutoCommitRequest
 {
     public bool Enabled { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/max-parallelism</c> (ADR-0052). The
+/// value is clamped to <c>&gt;= 1</c> server-side; <c>1</c> means sequential.
+/// </summary>
+public record SetMaxParallelismRequest
+{
+    public int MaxParallelism { get; init; } = 1;
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/integration-branch</c> (ADR-0052).
+/// Blank reverts to the default integration branch.
+/// </summary>
+public record SetIntegrationBranchRequest
+{
+    public string? Branch { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/integration-strategy</c> (ADR-0052).
+/// Unknown values normalize to <see cref="IntegrationStrategies.DirectMerge"/>.
+/// </summary>
+public record SetIntegrationStrategyRequest
+{
+    public string Strategy { get; init; } = IntegrationStrategies.DirectMerge;
 }
 
 public record SetAutoPushStrategyRequest

@@ -110,6 +110,87 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Equal(AutoPushStrategies.OnCompleted, svc.Get("runbook").AutoPushStrategy);
     }
 
+    [Fact]
+    public void Get_UnconfiguredProject_DefaultsParallelismKnobs()
+    {
+        var svc = Build();
+
+        var settings = svc.Get("new-project");
+
+        Assert.Equal(1, settings.MaxParallelism);
+        Assert.Equal("develop", settings.IntegrationBranch);
+        Assert.Equal(IntegrationStrategies.DirectMerge, settings.IntegrationStrategy);
+    }
+
+    [Fact]
+    public void SetMaxParallelism_PersistsAcrossReload()
+    {
+        var svc = Build();
+
+        svc.SetMaxParallelism("runbook", 4);
+
+        var reloaded = Build();
+        Assert.Equal(4, reloaded.Get("runbook").MaxParallelism);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    public void SetMaxParallelism_ClampsBelowOneToOne(int value)
+    {
+        var svc = Build();
+
+        svc.SetMaxParallelism("runbook", value);
+
+        Assert.Equal(1, svc.Get("runbook").MaxParallelism);
+    }
+
+    [Fact]
+    public void SetIntegrationBranch_PersistsAcrossReload()
+    {
+        var svc = Build();
+
+        svc.SetIntegrationBranch("runbook", "integration");
+
+        var reloaded = Build();
+        Assert.Equal("integration", reloaded.Get("runbook").IntegrationBranch);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void SetIntegrationBranch_BlankRevertsToDefault(string? value)
+    {
+        var svc = Build();
+        svc.SetIntegrationBranch("runbook", "integration");
+
+        svc.SetIntegrationBranch("runbook", value);
+
+        Assert.Equal("develop", svc.Get("runbook").IntegrationBranch);
+    }
+
+    [Fact]
+    public void SetIntegrationStrategy_NormalizesAndPersistsAcrossReload()
+    {
+        var svc = Build();
+
+        svc.SetIntegrationStrategy("runbook", "PULL-REQUEST");
+
+        var reloaded = Build();
+        Assert.Equal(IntegrationStrategies.PullRequest, reloaded.Get("runbook").IntegrationStrategy);
+    }
+
+    [Fact]
+    public void SetIntegrationStrategy_InvalidValueFallsBackToDefault()
+    {
+        var svc = Build();
+
+        svc.SetIntegrationStrategy("runbook", "rebase-and-pray");
+
+        Assert.Equal(IntegrationStrategies.DirectMerge, svc.Get("runbook").IntegrationStrategy);
+    }
+
     private ProjectSettingsService Build()
     {
         var config = new ConfigurationBuilder()

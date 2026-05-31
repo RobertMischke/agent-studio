@@ -65,6 +65,58 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// ADR-0052: sets the max number of tasks the runner may run concurrently
+    /// for this project. Clamped to <c>&gt;= 1</c>; <c>1</c> keeps the runner
+    /// sequential.
+    /// </summary>
+    public void SetMaxParallelism(string projectName, int maxParallelism)
+    {
+        EnsureLoaded();
+        var clamped = maxParallelism < 1 ? 1 : maxParallelism;
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { MaxParallelism = clamped };
+            Persist();
+        }
+        _logger.LogInformation("Max parallelism set to {Max} for project {Project}", clamped, projectName);
+    }
+
+    /// <summary>
+    /// ADR-0052: sets the integration branch parallel task worktrees branch off
+    /// and merge back into. Blank reverts to the default (<c>develop</c>).
+    /// </summary>
+    public void SetIntegrationBranch(string projectName, string? branch)
+    {
+        EnsureLoaded();
+        var value = string.IsNullOrWhiteSpace(branch) ? new ProjectSettings().IntegrationBranch : branch.Trim();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { IntegrationBranch = value };
+            Persist();
+        }
+        _logger.LogInformation("Integration branch set to {Branch} for project {Project}", value, projectName);
+    }
+
+    /// <summary>
+    /// ADR-0052: sets how a finished task branch is folded back into the
+    /// integration branch. Unknown values normalize to <c>direct-merge</c>.
+    /// </summary>
+    public void SetIntegrationStrategy(string projectName, string strategy)
+    {
+        EnsureLoaded();
+        var normalized = IntegrationStrategies.Normalize(strategy);
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { IntegrationStrategy = normalized };
+            Persist();
+        }
+        _logger.LogInformation("Integration strategy set to {Strategy} for project {Project}", normalized, projectName);
+    }
+
+    /// <summary>
     /// Persists the runner mode for a project so the auto-pickup toggle survives
     /// a backend restart. Null clears the persisted value (revert to default).
     /// </summary>

@@ -49,6 +49,12 @@ public static class ProjectSettingsEndpoints
                     orchestratorModel = kv.Value.OrchestratorModel,
                     intakeEnabled = kv.Value.IntakeEnabled,
                     autonomyLevel = kv.Value.AutonomyLevel,
+                    // ADR-0052: parallel-execution knobs. maxParallelism == 1
+                    // means the runner stays sequential; the branch/strategy
+                    // pair only matters once it is raised above 1.
+                    maxParallelism = kv.Value.MaxParallelism < 1 ? 1 : kv.Value.MaxParallelism,
+                    integrationBranch = kv.Value.IntegrationBranch,
+                    integrationStrategy = IntegrationStrategies.Normalize(kv.Value.IntegrationStrategy),
                     // F35: resolved per-lane strategy map (defaults filled in).
                     // The board uses this for the lane-header icon + the
                     // drag-disabled hint without a per-project round-trip.
@@ -142,6 +148,43 @@ public static class ProjectSettingsEndpoints
 
             var normalized = AutoPushStrategies.Normalize(req.Strategy);
             settings.SetAutoPushStrategy(projectName, normalized);
+            return Results.Ok(settings.Get(projectName));
+        });
+
+        // ADR-0052: max number of tasks the runner runs concurrently for this
+        // project. 1 (default) keeps it sequential; the value is clamped to
+        // >= 1 server-side so a 0/negative body cannot stall the runner.
+        app.MapPut("/api/projects/{projectName}/max-parallelism", (string projectName, SetMaxParallelismRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetMaxParallelism(projectName, req.MaxParallelism);
+            return Results.Ok(settings.Get(projectName));
+        });
+
+        // ADR-0052: integration branch parallel task worktrees branch off and
+        // merge back into. Blank reverts to the default (develop).
+        app.MapPut("/api/projects/{projectName}/integration-branch", (string projectName, SetIntegrationBranchRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetIntegrationBranch(projectName, req.Branch);
+            return Results.Ok(settings.Get(projectName));
+        });
+
+        // ADR-0052: how a finished task branch folds back into the integration
+        // branch (direct-merge default, or pull-request).
+        app.MapPut("/api/projects/{projectName}/integration-strategy", (string projectName, SetIntegrationStrategyRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            if (!IntegrationStrategies.All.Contains(req.Strategy, StringComparer.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = $"Unsupported integration strategy '{req.Strategy}'" });
+
+            settings.SetIntegrationStrategy(projectName, req.Strategy);
             return Results.Ok(settings.Get(projectName));
         });
 

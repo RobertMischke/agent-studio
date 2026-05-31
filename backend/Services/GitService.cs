@@ -22,6 +22,14 @@ public record GitCommitResult(bool Success, string? Sha, string? Error);
 public record GitPushResult(bool Success, string Sha, string Status, string? Error);
 
 /// <summary>
+/// ADR-0052: result of a worktree / integration primitive
+/// (<see cref="GitService.WorktreeAdd"/>, <see cref="GitService.WorktreeRemove"/>,
+/// <see cref="GitService.RebaseOnto"/>, <see cref="GitService.MergeFastForward"/>).
+/// <paramref name="Path"/> is the worktree path for add; null otherwise.
+/// </summary>
+public record GitWorktreeResult(bool Success, string? Path, string? Error);
+
+/// <summary>
 /// One commit in a per-run commit lookup. The numbers are derived from
 /// <c>git log --shortstat</c> so we never have to re-run a diff to render
 /// "12 files, +200 / -50". Returned by
@@ -865,13 +873,16 @@ public class GitService
         return (result, message);
     }
 
-    public Task<GitPushResult> PushShaAsync(string sha, string? watchPath, CancellationToken ct = default)
+    public Task<GitPushResult> PushShaAsync(string sha, string? watchPath, CancellationToken ct = default, string targetBranch = "main")
     {
         if (ct.IsCancellationRequested)
             return Task.FromResult(new GitPushResult(false, sha, "cancelled", "Push cancelled."));
 
         if (!IsLikelyShaOrRef(sha))
             return Task.FromResult(new GitPushResult(false, sha, "invalid-sha", "Invalid SHA."));
+
+        if (!IsLikelyBranchName(targetBranch))
+            return Task.FromResult(new GitPushResult(false, sha, "invalid-branch", $"Invalid target branch '{targetBranch}'."));
 
         var root = ResolveRepoRootForWatchPath(watchPath);
         if (root == null)
@@ -881,23 +892,23 @@ public class GitService
         if (existsCode != 0)
             return Task.FromResult(new GitPushResult(false, sha, "missing-sha", existsErr.Trim()));
 
-        RunGit(root, "fetch origin main");
+        RunGitArgs(root, "fetch", "origin", targetBranch);
 
-        var (_, remoteErr, remoteCode) = RunGit(root, "rev-parse --verify origin/main");
+        var (_, remoteErr, remoteCode) = RunGitArgs(root, "rev-parse", "--verify", $"origin/{targetBranch}");
         if (remoteCode == 0)
         {
-            var (_, ancestorErr, ancestorCode) = RunGit(root, $"merge-base --is-ancestor {sha} origin/main");
+            var (_, ancestorErr, ancestorCode) = RunGitArgs(root, "merge-base", "--is-ancestor", sha, $"origin/{targetBranch}");
             if (ancestorCode == 0)
                 return Task.FromResult(new GitPushResult(true, sha, "already-remote", null));
             if (ancestorCode != 1)
-                _logger.LogInformation("Auto-push ancestor check for {Sha} returned {Code}: {Error}", sha, ancestorCode, ancestorErr.Trim());
+                _logger.LogInformation("Auto-push ancestor check for {Sha} against {Branch} returned {Code}: {Error}", sha, targetBranch, ancestorCode, ancestorErr.Trim());
         }
         else
         {
-            _logger.LogInformation("Auto-push did not find origin/main before pushing {Sha}: {Error}", sha, remoteErr.Trim());
+            _logger.LogInformation("Auto-push did not find origin/{Branch} before pushing {Sha}: {Error}", targetBranch, sha, remoteErr.Trim());
         }
 
-        var (pushOut, pushErr, pushCode) = RunGit(root, $"push origin {sha}:refs/heads/main");
+        var (pushOut, pushErr, pushCode) = RunGitArgs(root, "push", "origin", $"{sha}:refs/heads/{targetBranch}");
         if (pushCode == 0)
             return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
 
@@ -908,6 +919,115 @@ public class GitService
                 ? "remote-rejected"
                 : "failed";
         return Task.FromResult(new GitPushResult(false, sha, status, err));
+    }
+
+    // ADR-0052 worktree + integration primitives. These are low-level git
+    // plumbing for the parallel-task model (worktree-per-task on task/<id>
+    // branches off the integration branch). They take an explicit repo or
+    // worktree root so the orchestrator can drive them directly and so they
+    // are unit-testable against a temp repo. None of them run while
+    // maxParallelism == 1, so the sequential runner is unaffected.
+
+    /// <summary>
+    /// Creates a new worktree at <paramref name="worktreePath"/> with a fresh
+    /// branch <paramref name="branch"/> based on <paramref name="fromRef"/>
+    /// (<c>git worktree add -b &lt;branch&gt; &lt;path&gt; &lt;fromRef&gt;</c>).
+    /// The shared <c>.git</c> is reused, so this is cheap compared to a clone.
+    /// Fails if the branch already exists or the path is occupied.
+    /// </summary>
+    public GitWorktreeResult WorktreeAdd(string repoRoot, string worktreePath, string branch, string fromRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (string.IsNullOrWhiteSpace(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path is required.");
+        if (!IsLikelyBranchName(branch))
+            return new GitWorktreeResult(false, null, $"Invalid branch name '{branch}'.");
+        if (!IsLikelyBranchName(fromRef))
+            return new GitWorktreeResult(false, null, $"Invalid base ref '{fromRef}'.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "worktree", "add", "-b", branch, worktreePath, fromRef);
+        if (code != 0)
+        {
+            _logger.LogWarning("Worktree add failed for branch {Branch} at {Path}: {Error}", branch, worktreePath, err.Trim());
+            return new GitWorktreeResult(false, null, err.Trim());
+        }
+        _logger.LogInformation("Worktree added: branch {Branch} from {FromRef} at {Path}", branch, fromRef, worktreePath);
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Removes the worktree at <paramref name="worktreePath"/>
+    /// (<c>git worktree remove --force</c>). Force is used so a worktree with
+    /// a dirty or locked working tree is still torn down at the end of a task;
+    /// the task branch ref survives the removal and is integrated separately.
+    /// </summary>
+    public GitWorktreeResult WorktreeRemove(string repoRoot, string worktreePath)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (string.IsNullOrWhiteSpace(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path is required.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "worktree", "remove", "--force", worktreePath);
+        if (code != 0)
+        {
+            _logger.LogWarning("Worktree remove failed for {Path}: {Error}", worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim());
+        }
+        _logger.LogInformation("Worktree removed: {Path}", worktreePath);
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Rebases the branch currently checked out at <paramref name="worktreePath"/>
+    /// onto <paramref name="ontoRef"/> (<c>git rebase &lt;ontoRef&gt;</c>),
+    /// replaying the task commits on top of the latest integration tip. On
+    /// conflict the rebase is aborted so the worktree is left clean and the
+    /// caller can fall back to the merge-queue / pull-request path.
+    /// </summary>
+    public GitWorktreeResult RebaseOnto(string worktreePath, string ontoRef)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path does not exist.");
+        if (!IsLikelyBranchName(ontoRef))
+            return new GitWorktreeResult(false, null, $"Invalid onto ref '{ontoRef}'.");
+
+        var (_, err, code) = RunGitArgs(worktreePath, "rebase", ontoRef);
+        if (code != 0)
+        {
+            RunGitArgs(worktreePath, "rebase", "--abort");
+            _logger.LogWarning("Rebase onto {OntoRef} failed at {Path}, aborted: {Error}", ontoRef, worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim());
+        }
+        _logger.LogInformation("Rebased worktree {Path} onto {OntoRef}", worktreePath, ontoRef);
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Fast-forwards the branch checked out at <paramref name="repoRoot"/> to
+    /// <paramref name="sourceRef"/> (<c>git merge --ff-only &lt;sourceRef&gt;</c>).
+    /// After a successful <see cref="RebaseOnto"/> the task branch is a linear
+    /// descendant of the integration branch, so this folds it back in with no
+    /// merge commit. Fails (without creating a merge commit) when the source
+    /// is not a fast-forward, which is the signal to route through the
+    /// merge-queue instead.
+    /// </summary>
+    public GitWorktreeResult MergeFastForward(string repoRoot, string sourceRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (!IsLikelyBranchName(sourceRef))
+            return new GitWorktreeResult(false, null, $"Invalid source ref '{sourceRef}'.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "merge", "--ff-only", sourceRef);
+        if (code != 0)
+        {
+            _logger.LogWarning("Fast-forward merge of {SourceRef} failed at {Path}: {Error}", sourceRef, repoRoot, err.Trim());
+            return new GitWorktreeResult(false, repoRoot, err.Trim());
+        }
+        _logger.LogInformation("Fast-forwarded {Path} to {SourceRef}", repoRoot, sourceRef);
+        return new GitWorktreeResult(true, repoRoot, null);
     }
 
     /// <summary>
@@ -1214,6 +1334,29 @@ public class GitService
     }
 
     /// <summary>
+    /// True when <paramref name="s"/> is a safe local branch name. Like
+    /// <see cref="IsLikelyShaOrRef"/> but additionally allows the slash that
+    /// namespaced branches need (e.g. <c>task/42</c>, <c>develop</c>). Still
+    /// rejects whitespace and shell metacharacters, a leading dash (so the
+    /// name can't be read as a flag), and git's invalid sequences
+    /// (<c>..</c>, leading/trailing slash, trailing <c>.lock</c>). The value
+    /// flows into a git argument list, not a shell, so this is defence in
+    /// depth rather than the only guard.
+    /// </summary>
+    private static bool IsLikelyBranchName(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        if (s[0] == '-' || s[0] == '/' || s[^1] == '/') return false;
+        if (s.Contains("..", StringComparison.Ordinal)) return false;
+        if (s.EndsWith(".lock", StringComparison.Ordinal)) return false;
+        foreach (var c in s)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '/')) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Lists commits whose author date falls in the half-open interval
     /// <c>[fromUtc, toUtc)</c>. Used by the per-run commit lookup so the
     /// protocol-pane run timeline can show the software-side change set
@@ -1474,6 +1617,36 @@ public class GitService
             CreateNoWindow = true
         };
 
+        return RunGitProcess(psi, stdin);
+    }
+
+    /// <summary>
+    /// Like <see cref="RunGit"/> but passes each argument verbatim via
+    /// <see cref="ProcessStartInfo.ArgumentList"/> instead of a single
+    /// pre-joined string. Use this whenever an argument can contain a space
+    /// or other character the string form would re-split (worktree paths,
+    /// branch names) - the OS receives the array unchanged, so there is no
+    /// quoting to get wrong and no shell to inject into.
+    /// </summary>
+    private static (string Out, string Err, int Code) RunGitArgs(string cwd, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = cwd,
+            RedirectStandardInput = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+
+        return RunGitProcess(psi, null);
+    }
+
+    private static (string Out, string Err, int Code) RunGitProcess(ProcessStartInfo psi, string? stdin)
+    {
         try
         {
             using var p = Process.Start(psi)!;
