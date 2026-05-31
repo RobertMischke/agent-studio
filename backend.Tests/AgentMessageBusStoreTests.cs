@@ -360,6 +360,87 @@ public class AgentMessageBusStoreTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Regression guard for the post-restart hang documented in
+    /// "Update-Service has had 0/20 successful runs since 2026-05-23": the
+    /// first <c>/api/jobs/grouped</c> call after a backend restart kicked off
+    /// a multi-megabyte JSONL replay on the request thread, the verifier
+    /// cancelled at 10s, and because <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}.GetOrAdd(TKey,Func{TKey,TValue})"/>
+    /// does not cache a throwing factory, each retry restarted the load from
+    /// scratch. <see cref="AgentMessageBusStore.WarmProject"/> is the boot-time
+    /// hook Program.cs uses to move the parse cost out of the request path;
+    /// this test pins that, after WarmProject runs, subsequent reads are
+    /// served from the in-memory projection with no further disk I/O.
+    /// </summary>
+    [Fact]
+    public void WarmProject_LoadsProjectionUpFront_SubsequentReadsAreFromMemory()
+    {
+        const int N = 2_000;
+        var project = "warmup-target";
+        var day = new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc);
+        var path = AgentMessageBusPaths.DayFile(_workspace, project, day);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16))
+        using (var writer = new StreamWriter(stream, Encoding.UTF8))
+        {
+            for (int i = 0; i < N; i++)
+            {
+                var id = "01HXYZ0000000000000000W" + i.ToString("D5");
+                var m = NewMessage(id, project,
+                    kind: i % 3 == 0 ? "token-usage" : "lifecycle",
+                    jobId: "job-" + (i % 20),
+                    createdAt: day.AddSeconds(i));
+                writer.WriteLine(JsonSerializer.Serialize(m, AgentMessageBusStore.SerializerOptions));
+            }
+        }
+
+        var store = new AgentMessageBusStore();
+        var warmSw = Stopwatch.StartNew();
+        var loaded = store.WarmProject(_workspace, project);
+        warmSw.Stop();
+        _out.WriteLine($"WarmProject: {warmSw.ElapsedMilliseconds} ms loaded={loaded}");
+        Assert.Equal(N, loaded);
+
+        // After warmup, a Recent / Query / Summarize must be served from
+        // memory in single-digit ms. Three orders of magnitude headroom over
+        // the cold load lets the assertion survive a slow CI box without
+        // letting a regression that re-introduces per-request disk I/O slip
+        // past.
+        var readSw = Stopwatch.StartNew();
+        var recent = store.Recent(_workspace, project, limit: 1);
+        var byKind = store.Query(_workspace, project, new AgentMessageQuery(Kind: "token-usage"));
+        var summary = store.Summarize(_workspace, project);
+        readSw.Stop();
+        _out.WriteLine($"post-warmup-reads: {readSw.ElapsedMilliseconds} ms");
+        Assert.Single(recent);
+        Assert.True(byKind.Count > 0);
+        Assert.Equal(N, summary.TotalMessages);
+        Assert.True(readSw.ElapsedMilliseconds < Math.Max(500, warmSw.ElapsedMilliseconds),
+            $"Post-warmup reads took {readSw.ElapsedMilliseconds} ms; the projection should be in memory now. "
+            + $"WarmProject took {warmSw.ElapsedMilliseconds} ms — a second comparable cost means the cache slot was lost.");
+    }
+
+    [Fact]
+    public void WarmProject_RejectsEmptyArguments()
+    {
+        var store = new AgentMessageBusStore();
+        Assert.Throws<ArgumentException>(() => store.WarmProject("", "p"));
+        Assert.Throws<ArgumentException>(() => store.WarmProject(_workspace, ""));
+    }
+
+    [Fact]
+    public void WarmProject_OnUnseenProject_ReturnsZeroAndCachesEmpty()
+    {
+        // A project with no on-disk bus folder must still cache an empty
+        // projection so the next Query returns instantly instead of redoing
+        // the (no-op) disk scan on every request.
+        var store = new AgentMessageBusStore();
+        var n = store.WarmProject(_workspace, "no-bus-here");
+        Assert.Equal(0, n);
+        var recent = store.Recent(_workspace, "no-bus-here", limit: 1);
+        Assert.Empty(recent);
+    }
+
     [Fact]
     public void Paths_AreCanonical()
     {

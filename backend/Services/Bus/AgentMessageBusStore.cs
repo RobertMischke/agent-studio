@@ -174,6 +174,24 @@ public sealed class AgentMessageBusStore
         return messages.Skip(messages.Count - limit).ToList();
     }
 
+    /// <summary>
+    /// Force-load the projection for (workspaceRoot, project) and return how
+    /// many messages it now holds. Cheap no-op on a project whose projection
+    /// is already in memory; on a cold projection it walks every day-file
+    /// and parses every line. Used by the boot-time warmup in Program.cs so
+    /// the first <c>/api/jobs/grouped</c> call after a backend restart does
+    /// not pay the lazy-load cost — on a workspace with a multi-megabyte
+    /// bus that lazy load wedges the verifier window and the operator sees
+    /// "no response (timed out or unreachable)" instead of a clean update.
+    /// </summary>
+    public int WarmProject(string workspaceRoot, string project, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(project);
+        var projection = GetOrLoad(workspaceRoot, project, ct);
+        return projection.Snapshot().Count;
+    }
+
     public AgentMessage? GetById(string workspaceRoot, string? project, string id, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(id)) return null;

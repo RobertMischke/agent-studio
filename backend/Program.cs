@@ -530,6 +530,68 @@ watcher.OnJobChanged += _ => jobIndexCache.Invalidate(TaskIndexCache.Invalidatio
 _ = app.Services.GetRequiredService<OrchestratorApi.Services.TaskAccess.ITaskAccessHost>()
     .BootAsync();
 
+// Pre-warm AgentMessageBusStore projections for every watched project
+// BEFORE the HTTP listener starts. The grouped-jobs endpoint folds in
+// per-project token totals (BuildTokenLookup -> SummarizePerJob ->
+// BusTokenEntryConverter.LoadOrchestratorEntries -> Store.Query ->
+// GetOrLoad), so a cold projection forces the first /api/jobs/grouped
+// caller to wait for tens of seconds while a multi-megabyte JSONL tree
+// is parsed. On real workspaces (Runbook ~ 100MB / >100k lines) that
+// lazy-load wedges the post-restart UpdateVerifier window — the verifier
+// sees /healthz=200 but /api/jobs/grouped never drains. Paying the
+// parse cost here moves the cost out of the first request. Per-project
+// warmups run in parallel so total boot time is bounded by the slowest
+// project rather than the sum.
+{
+    var warmupSw = System.Diagnostics.Stopwatch.StartNew();
+    var workspaceRoot = app.Configuration["TaskRepository"];
+    var scannerForWarmup = app.Services.GetRequiredService<JobScannerService>();
+    var busStore = app.Services.GetRequiredService<AgentMessageBusStore>();
+    var warmupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    if (string.IsNullOrWhiteSpace(workspaceRoot))
+    {
+        warmupLogger.LogInformation("bus-warmup-skipped reason=TaskRepository-unset");
+    }
+    else
+    {
+        var projects = scannerForWarmup.GetWatchPaths()
+            .Select(e => e.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var counts = new System.Collections.Concurrent.ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+        var failures = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+        try
+        {
+            Parallel.ForEach(projects, project =>
+            {
+                try
+                {
+                    var n = busStore.WarmProject(workspaceRoot!, project);
+                    counts[project] = n;
+                }
+                catch (Exception ex)
+                {
+                    failures[project] = ex.GetType().Name + ": " + ex.Message;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            crashRecorder.Record("BusProjectionWarmup", ex);
+        }
+        warmupSw.Stop();
+        var totalMessages = counts.Values.Sum();
+        warmupLogger.LogInformation(
+            "bus-warmup-complete projects={ProjectCount} messages={MessageCount} failures={FailureCount} elapsedMs={ElapsedMs}",
+            counts.Count, totalMessages, failures.Count, warmupSw.ElapsedMilliseconds);
+        foreach (var kv in failures)
+        {
+            warmupLogger.LogWarning("bus-warmup-failure project={Project} error={Error}", kv.Key, kv.Value);
+        }
+    }
+}
+
 // Wire TaskTransitionService move events to atomically clear the per-project
 // runner's _activeJobId when the active job is moved out of 3-progress.
 // Without this, an external move (API or otherwise) leaves the runner pinned
