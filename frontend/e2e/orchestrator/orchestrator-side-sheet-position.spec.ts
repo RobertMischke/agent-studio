@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 
 /**
  * Regression coverage for the right-side-sheet contract.
@@ -13,11 +13,16 @@ import { test, expect } from '@playwright/test';
  * The 2026-05-11 crash-recovery commit accidentally promoted the chat
  * into a centered "Project window" modal that covered the board; this
  * spec locks the position so it cannot regress without a red test.
+ *
+ * Uses the dev-backend fixture so dev's :5030 is brought up before the
+ * spec runs (and stopped after if the fixture started it). Without the
+ * fixture, the dev frontend renders the "backend unreachable" error
+ * dialog over the page and the toggle button cannot be clicked.
  */
 const SHOTS = 'screenshots/orch-side-sheet-position';
 
 test.describe('Orchestrator side sheet position', () => {
-  test('opens as a right-side panel that leaves the board visible', async ({ page }) => {
+  test('opens as a right-side panel that leaves the board visible', async ({ page, devBackend: _ }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.mouse.move(0, 0);
@@ -26,7 +31,12 @@ test.describe('Orchestrator side sheet position', () => {
     const toggle = page.getByTestId('orch-side-sheet-toggle');
     await expect(toggle).toBeVisible({ timeout: 10_000 });
 
-    const board = page.getByTestId('kanban-dashboard');
+    // Studio shell hosts the board (Cycle 9 redesign). The legacy
+    // `kanban-dashboard` testid still hangs on the board <main> when the
+    // active tab is the board, but the load-bearing assertion is the
+    // studio-shell box: a wide non-zero box behind the open chat panel
+    // proves the chat does not overlay the workspace.
+    const board = page.locator('app-studio-shell');
     await expect(board).toBeVisible();
     const boardBoxBefore = await board.boundingBox();
     expect(boardBoxBefore).not.toBeNull();
@@ -38,8 +48,9 @@ test.describe('Orchestrator side sheet position', () => {
 
     await page.screenshot({ path: `${SHOTS}/01-open.png`, fullPage: false });
 
-    // Title is no longer the misleading "Project window".
-    await expect(page.getByTestId('orch-side-sheet-title')).toHaveText(/^(Chat|Orchestrator)/i);
+    // Title is no longer the misleading "Project window" — sidesheet
+    // wrapper paints "Orchestrator" as the title.
+    await expect(sheet.locator('.sidesheet__title')).toHaveText(/^(Chat|Orchestrator)/i);
     await expect(sheet).not.toContainText('Project window');
 
     // Sheet sits on the right edge of the viewport: its right edge is at
@@ -87,12 +98,14 @@ test.describe('Orchestrator side sheet position', () => {
     });
     expect(fullCoverElements).toEqual([]);
 
-    // Tabs are still reachable inside the side sheet.
-    await expect(page.getByTestId('orch-side-sheet-tab-project')).toBeVisible();
+    // Composer is reachable inside the side sheet — proves the chat
+    // surface (not a placeholder) is what the side sheet hosts.
+    await expect(page.getByTestId('chat-input')).toBeVisible();
 
     // Close and re-open to confirm the flex-collapse pattern (host width
-    // returns to zero so the board reclaims its full width).
-    await page.getByTestId('orch-side-sheet-close').click();
+    // returns to zero so the board reclaims its full width). The close
+    // button lives on the shared `<app-sidesheet>` chrome.
+    await sheet.getByTestId('sidesheet-close').click();
     await page.waitForTimeout(400);
     const boardBoxClosed = await board.boundingBox();
     expect(boardBoxClosed).not.toBeNull();
@@ -120,7 +133,7 @@ test.describe('Orchestrator side sheet position', () => {
    *    sheets without reshuffling the DOM, which `.app-shell` does via
    *    `flex-direction: row-reverse`.
    */
-  test('open pushes studio-shell + inner panel fills host', async ({ page }) => {
+  test('open pushes studio-shell + inner panel fills host', async ({ page, devBackend: _ }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -181,7 +194,7 @@ test.describe('Orchestrator side sheet position', () => {
    * to widen / narrow the orchestrator, and the chosen width survives a
    * reload via localStorage (key `atp.studio.orchestratorWidth`).
    */
-  test('resize splitter widens the panel and persists across reloads', async ({ page }) => {
+  test('resize splitter widens the panel and persists across reloads', async ({ page, devBackend: _ }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -259,7 +272,7 @@ test.describe('Orchestrator side sheet position', () => {
    * pins it: the editor's right edge stays inside the studio-shell box
    * when the sheet opens on a 1280 px viewport.
    */
-  test('push contract holds on a 1280 px viewport (no editor clip)', async ({ page }) => {
+  test('push contract holds on a 1280 px viewport (no editor clip)', async ({ page, devBackend: _ }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
