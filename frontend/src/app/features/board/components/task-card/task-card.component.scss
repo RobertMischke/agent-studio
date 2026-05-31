@@ -377,6 +377,39 @@
       user-select: none;
       white-space: nowrap;
     }
+    // Epic container badge: a loud accent pill so an epic card is obvious in a
+    // lane mixed with ordinary tasks. Sub-task chip is the quiet inverse - a
+    // dashed, muted "↳ epic" marker that says "this belongs to an epic" without
+    // competing with the title.
+    .task-card__epic-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--studio-on-accent);
+      background: var(--studio-accent);
+      border: 1px solid var(--studio-accent);
+      vertical-align: middle;
+      margin-right: 4px;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .task-card__subtask-chip {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--studio-fg-muted);
+      background: transparent;
+      border: 1px dashed var(--studio-border);
+      vertical-align: middle;
+      margin-right: 4px;
+      user-select: none;
+      white-space: nowrap;
+    }
     .task-card__badges {
       display: flex;
       flex-wrap: wrap;

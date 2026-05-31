@@ -63,6 +63,15 @@
     @if (job().key; as taskKey) {
       <span class="task-card__key-chip" data-testid="task-card-key">{{ taskKey }}</span>
     }
+    @if (isEpic()) {
+      <span class="task-card__epic-badge"
+            data-testid="task-card-epic-badge"
+            [appTooltip]="'Epic — a container for sub-tasks. Open it to see sub-task progress.'">EPIC</span>
+    } @else if (subTaskEpicId(); as epicId) {
+      <span class="task-card__subtask-chip"
+            data-testid="task-card-subtask-chip"
+            [appTooltip]="'Sub-task of epic: ' + epicId">↳ epic</span>
+    }
     <span class="task-card__title-text" data-truncatable>{{ job().title || job().id }}</span>
     @if (compact()) {
       <span class="task-card__compact-time" [appTooltip]="'Last activity: ' + relativeActivity()">

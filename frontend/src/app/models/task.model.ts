@@ -26,6 +26,9 @@ import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orch
 
 // (GitProjectSummary, GitHygieneStatus, TaskHygieneContext now in features/git/models/git.model.ts; re-exported above)
 
+/** Card kind: `epic` is a container for sub-tasks; `task` is an ordinary card. */
+export type TaskKind = 'task' | 'epic';
+
 export interface TaskInfo {
   id: string;
   taskKey: string;
@@ -49,6 +52,17 @@ export interface TaskInfo {
   tokenSummary?: TaskTokenSummary | null;
   model: string | null;
   cliType: CliType | null;
+  /**
+   * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
+   * when omitted) is an ordinary card. See backend `TaskKinds`.
+   */
+  kind?: TaskKind;
+  /**
+   * Parent epic id when this card is a sub-task of an epic, else null/absent.
+   * Set at create time (way 1), post-hoc via PUT /api/tasks/{id}/epic (way 2),
+   * or by an epic's decomposition run (way 3).
+   */
+  epicId?: string | null;
   useOwnSession: boolean | null;
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
@@ -477,6 +491,47 @@ export interface CreateJobRequest {
   taskType?: string;
   /** Workspace tag ids to attach on create. */
   tags?: string[];
+  /** Card kind: `task` (default) or `epic`. */
+  kind?: TaskKind;
+  /** Parent epic id (assignment way 1: created as a sub-task of this epic). */
+  epicId?: string;
+}
+
+/**
+ * One epic + its live sub-task rollup, from GET /api/epics. Progress is derived
+ * from the sub-tasks' lanes server-side, so it always matches the board.
+ */
+export interface EpicRollup {
+  id: string;
+  title: string;
+  projectName: string;
+  watchPath: string;
+  state: string;
+  subTaskTotal: number;
+  completed: number;
+  inProgress: number;
+  open: number;
+  byState: Record<string, number>;
+  subTasks: EpicSubTaskRef[];
+}
+
+export interface EpicSubTaskRef {
+  id: string;
+  title: string;
+  state: string;
+  order: number;
+}
+
+/** Body for POST /api/epics/{id}/sub-tasks (assignment way 3, deterministic half). */
+export interface CreateEpicSubTasksRequest {
+  subTasks: EpicSubTaskSpec[];
+}
+
+export interface EpicSubTaskSpec {
+  title: string;
+  promptMarkdown?: string;
+  cliType?: CliType;
+  model?: string;
 }
 
 /**
