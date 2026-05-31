@@ -1,0 +1,143 @@
+@if (visible()) {
+  <section class="plan-strip" data-testid="plan-strip">
+    <header class="plan-strip__head">
+      <span class="plan-strip__title">Task plan</span>
+      <span
+        class="plan-strip__source"
+        [class.plan-strip__source--heuristic]="isHeuristic()"
+        data-testid="plan-strip-source"
+        >{{ sourceLabel() }}</span
+      >
+      <span class="plan-strip__count" data-testid="plan-strip-count"
+        >{{ doneCount() }}/{{ totalCount() }} done</span
+      >
+    </header>
+
+    <ol class="plan-strip__items">
+      @for (item of items(); track item.id) {
+        <li
+          class="plan-item"
+          [class.plan-item--active]="item.status === 'active'"
+          [class.plan-item--done]="item.status === 'done'"
+          [class.plan-item--pending]="item.status === 'pending'"
+          [attr.data-testid]="'plan-item'"
+          [attr.data-status]="item.status"
+        >
+          <div class="plan-item__row">
+            <span class="plan-item__glyph" [attr.data-status]="item.status" aria-hidden="true">{{
+              statusGlyph(item.status)
+            }}</span>
+
+            <span class="plan-item__title" data-testid="plan-item-title">{{ item.title }}</span>
+
+            <!-- Heartbeat pulse (cue 4): pulses while work is recent, dims when idle. -->
+            @if (heartbeat(item); as hb) {
+              @if (hb !== 'off') {
+                <span
+                  class="plan-item__heartbeat"
+                  [class.plan-item__heartbeat--pulsing]="hb === 'pulsing'"
+                  [class.plan-item__heartbeat--dim]="hb === 'dim'"
+                  data-testid="plan-item-heartbeat"
+                  [attr.data-state]="hb"
+                  [appTooltip]="
+                    hb === 'pulsing' ? 'Actively working' : 'Quiet for a while - thinking or stuck'
+                  "
+                  aria-hidden="true"
+                ></span>
+              }
+            }
+
+            <!-- Completed items expand to reveal their sub-actions. -->
+            @if (item.status === 'done' && item.subActionCount > 0) {
+              <button
+                type="button"
+                class="plan-item__expand"
+                data-testid="plan-item-expand"
+                [appTooltip]="isExpanded(item.id) ? 'Hide sub-actions' : 'Show sub-actions'"
+                (click)="toggle(item.id)"
+              >
+                {{ item.subActionCount }} {{ item.subActionCount === 1 ? 'action' : 'actions' }}
+                <span class="plan-item__chevron">{{ isExpanded(item.id) ? '▾' : '▸' }}</span>
+              </button>
+            }
+          </div>
+
+          <!-- Ticker (cue 1) + soft-estimate band (cue 3) for items with work. -->
+          @if (item.subActionCount > 0) {
+            <div
+              class="plan-item__ticker"
+              data-testid="plan-item-ticker"
+              [attr.data-count]="item.subActionCount"
+            >
+              @for (mark of ticker(item); track $index) {
+                <span
+                  class="tick"
+                  [class.tick--past]="mark.past"
+                  [attr.data-past]="mark.past"
+                ></span>
+              }
+              @if (tickerOverflow(item) > 0) {
+                <span class="plan-item__overflow">+{{ tickerOverflow(item) }}</span>
+              }
+              @if (softEstimate() !== null && item.status === 'active') {
+                <span
+                  class="plan-item__band"
+                  data-testid="plan-item-band"
+                  [appTooltip]="
+                    'Typical for this plan: ~' + softEstimate() + ' actions (median of finished items)'
+                  "
+                  >~{{ softEstimate() }}</span
+                >
+              }
+            </div>
+          }
+
+          <!-- Latest sub-action label (cue 2): live "what is it doing now". -->
+          @if (item.status === 'active' && latestLabel(item); as label) {
+            <div class="plan-item__latest" data-testid="plan-item-latest">
+              <span class="plan-item__latest-arrow">→</span>
+              <code>{{ label }}</code>
+            </div>
+          }
+
+          <!-- Expanded verbatim sub-action list for finished items. -->
+          @if (item.status === 'done' && isExpanded(item.id)) {
+            <ul class="plan-item__subs" data-testid="plan-item-subs">
+              @for (sub of item.subActions; track $index) {
+                <li class="plan-sub" [appTooltip]="subActionTooltip(sub)">
+                  <span class="plan-sub__tool">{{ sub.tool }}</span>
+                  <code class="plan-sub__label">{{ sub.label ?? sub.tool }}</code>
+                </li>
+              }
+            </ul>
+          }
+        </li>
+      }
+    </ol>
+
+    <!-- "Before plan" bucket: tool calls observed before the first plan frame. -->
+    @if (unassigned().length > 0) {
+      <div class="plan-strip__before" data-testid="plan-strip-before">
+        <button
+          type="button"
+          class="plan-strip__before-toggle"
+          (click)="toggle('::before-plan')"
+        >
+          Before plan: {{ unassigned().length }}
+          {{ unassigned().length === 1 ? 'action' : 'actions' }}
+          <span class="plan-item__chevron">{{ isExpanded('::before-plan') ? '▾' : '▸' }}</span>
+        </button>
+        @if (isExpanded('::before-plan')) {
+          <ul class="plan-item__subs">
+            @for (sub of unassigned(); track $index) {
+              <li class="plan-sub" [appTooltip]="subActionTooltip(sub)">
+                <span class="plan-sub__tool">{{ sub.tool }}</span>
+                <code class="plan-sub__label">{{ sub.label ?? sub.tool }}</code>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    }
+  </section>
+}

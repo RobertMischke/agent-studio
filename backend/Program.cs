@@ -620,6 +620,14 @@ cliRouter.OnStarted += (cliType, jobId, exec) =>
     hubContext.Clients.All.SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
 cliRouter.OnFinished += (cliType, jobId, exec) =>
     hubContext.Clients.All.SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
+// Plan strip live push: when the agent emits a TodoWrite / update_plan frame the
+// runner persists a snapshot; tell the open detail view to re-fetch /plan. Uses
+// the same job identifier as cliOutput so the frontend correlates identically.
+cliRouter.OnRunEvent += (cliType, jobId, evt) =>
+{
+    if (evt is OrchestratorApi.Services.Cli.CliRunEvent.PlanUpdated)
+        hubContext.Clients.All.SendAsync("planUpdated", jobId, cliType);
+};
 
 // Per-CLI startup hook. Copilot re-attaches to surviving processes (its own
 // implementation); Claude / Codex / Gemini reap orphans - see

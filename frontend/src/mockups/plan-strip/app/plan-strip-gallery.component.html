@@ -1,0 +1,13 @@
+<main class="gallery">
+  <h1>Plan strip - real component, fixture data</h1>
+
+  <section data-testid="gallery-active">
+    <h2>Live run (Claude) - active item with all four cues</h2>
+    <app-plan-strip [plan]="active" [isRunning]="true" />
+  </section>
+
+  <section data-testid="gallery-done">
+    <h2>Finished run (Codex) - every item expandable to its sub-actions</h2>
+    <app-plan-strip [plan]="done" [isRunning]="false" />
+  </section>
+</main>

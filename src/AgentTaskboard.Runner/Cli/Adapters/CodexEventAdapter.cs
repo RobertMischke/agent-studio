@@ -76,6 +76,8 @@ public static class CodexEventAdapter
             }
             case "item.started":
             {
+                if (TryExtractPlan(root, out var startItems))
+                    yield return new CliRunEvent.PlanUpdated("codex/update_plan", startItems) { TaskKey = jobKey };
                 var (kind, name, arg) = ClassifyItem(root);
                 if (kind == "tool")
                     yield return new CliRunEvent.ToolStarted(name, arg) { TaskKey = jobKey };
@@ -83,6 +85,8 @@ public static class CodexEventAdapter
             }
             case "item.completed":
             {
+                if (TryExtractPlan(root, out var doneItems))
+                    yield return new CliRunEvent.PlanUpdated("codex/update_plan", doneItems) { TaskKey = jobKey };
                 var (kind, name, arg) = ClassifyItem(root);
                 if (kind == "agent_message")
                 {
@@ -135,6 +139,36 @@ public static class CodexEventAdapter
             return ("tool", itemType!, arg);
         }
         return ("other", "item", null);
+    }
+
+    /// <summary>
+    /// Detect a Codex <c>update_plan</c> item and pull its plan steps. The item
+    /// shape is <c>{"item":{"type":"update_plan","plan":[{"step","status"}]}}</c>;
+    /// the runner persists each as a plan snapshot. Tolerant of <c>content</c> as
+    /// an alias for <c>step</c>. Returns false for any non-plan item so the
+    /// normal tool-call path is unaffected.
+    /// </summary>
+    private static bool TryExtractPlan(JsonElement root, out IReadOnlyList<PlanFrameItem> items)
+    {
+        items = System.Array.Empty<PlanFrameItem>();
+        if (!root.TryGetProperty("item", out var item) || item.ValueKind != JsonValueKind.Object) return false;
+        var itemType = item.TryGetProperty("type", out var ity) ? ity.GetString() : null;
+        if (!string.Equals(itemType, "update_plan", StringComparison.Ordinal)) return false;
+        if (!item.TryGetProperty("plan", out var plan) || plan.ValueKind != JsonValueKind.Array) return false;
+
+        var list = new List<PlanFrameItem>();
+        foreach (var entry in plan.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object) continue;
+            var title = entry.TryGetProperty("step", out var st) ? st.GetString() : null;
+            if (string.IsNullOrWhiteSpace(title) && entry.TryGetProperty("content", out var ct)) title = ct.GetString();
+            if (string.IsNullOrWhiteSpace(title)) continue;
+            var status = entry.TryGetProperty("status", out var ss) ? ss.GetString() : null;
+            list.Add(new PlanFrameItem(PlanItemId.From(title), title!.Trim(), PlanItemStatus.Normalize(status)));
+        }
+        if (list.Count == 0) return false;
+        items = list;
+        return true;
     }
 
     private static string FormatUsage(JsonElement usage)

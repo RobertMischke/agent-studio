@@ -38,6 +38,7 @@ import { SessionEventsPollService } from '../polling/services/session-events-pol
 import { RunTimelinePollService } from '../polling/services/run-timeline-poll.service';
 import { TaskTimelinePollService } from '../polling/services/task-timeline-poll.service';
 import { AgentWorkSummaryPollService } from '../polling/services/agent-work-summary-poll.service';
+import { PlanPollService } from '../polling/services/plan-poll.service';
 import { TaskPipelinePollService } from '../polling/services/task-pipeline-poll.service';
 import { ScreenshotsPollService } from '../polling/services/screenshots-poll.service';
 import { GitPaneService } from './services/git-pane.service';
@@ -82,6 +83,7 @@ import { TooltipDirective } from '../../components/tooltip';
     RunTimelinePollService,
     TaskTimelinePollService,
     AgentWorkSummaryPollService,
+    PlanPollService,
     TaskPipelinePollService,
     ScreenshotsPollService,
     GitPaneService,
@@ -628,6 +630,14 @@ export class TaskDetailComponent implements OnDestroy {
   private readonly agentWorkSummaryPoll = inject(AgentWorkSummaryPollService);
   private readonly agentWorkSummaryEffect = effect(() => {
     this.agentWorkSummaryPoll.syncTo(this.detail()?.info ?? null);
+  });
+
+  // ...and for the per-job plan poller (5 s cadence). Drives the plan
+  // strip above the activity log; the protocol pane injects the service
+  // directly for its signal.
+  private readonly planPoll = inject(PlanPollService);
+  private readonly planEffect = effect(() => {
+    this.planPoll.syncTo(this.detail()?.info ?? null);
   });
 
   // ...and for the per-job pipeline poller (10 s cadence). Drives the

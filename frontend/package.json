@@ -8,6 +8,8 @@
     "build": "ng build frontend",
     "mockup:chat": "ng serve next-gen-chat-mockup --port 4022 --host 127.0.0.1",
     "build:mockup:chat": "ng build next-gen-chat-mockup",
+    "mockup:plan": "ng serve plan-strip-mockup --port 4023 --host 127.0.0.1",
+    "build:mockup:plan": "ng build plan-strip-mockup",
     "test": "ng test",
     "watch": "ng build frontend --watch --configuration development",
     "e2e": "playwright test",

@@ -326,6 +326,8 @@
                 </div>
               </div>
 
+              <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
+
               <app-run-timeline
                 [job]="detail().info"
                 [runs]="runTimeline()?.runs ?? []"

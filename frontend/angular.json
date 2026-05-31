@@ -181,6 +181,72 @@
           "defaultConfiguration": "development"
         }
       }
+    },
+    "plan-strip-mockup": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "mockup",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/mockups/plan-strip/main.ts",
+            "index": "src/mockups/plan-strip/index.html",
+            "tsConfig": "tsconfig.mockup.json",
+            "inlineStyleLanguage": "scss",
+            "outputPath": "dist/plan-strip-mockup",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/mockups/plan-strip/styles.scss"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "600kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "40kB",
+                  "maximumError": "48kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4023,
+            "host": "127.0.0.1"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "plan-strip-mockup:build:production"
+            },
+            "development": {
+              "buildTarget": "plan-strip-mockup:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
     }
   }
 }

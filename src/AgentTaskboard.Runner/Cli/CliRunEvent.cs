@@ -98,6 +98,15 @@ public abstract record CliRunEvent
     /// <summary>A tool call returned. <see cref="IsError"/> reflects what the CLI reports for the call, not whether the result satisfies the user.</summary>
     public sealed record ToolCompleted(string ToolName, bool IsError, string? FirstLine) : CliRunEvent;
 
+    /// <summary>
+    /// The agent emitted its own internal task plan (Claude <c>TodoWrite</c>,
+    /// Codex <c>update_plan</c>). One event per plan frame; the runner persists
+    /// each as a snapshot line in <c>logs/plan-snapshots.jsonl</c>. Read-only
+    /// observability: parsing telemetry the CLI already streams, never a second
+    /// model call. See <c>docs/mockups/task-progress-tracking/</c>.
+    /// </summary>
+    public sealed record PlanUpdated(string Source, IReadOnlyList<PlanFrameItem> Items) : CliRunEvent;
+
     /// <summary>Liveness ping from a structured channel (e.g. Codex App Server's heartbeat). Pure adapter signal; the runner uses it to reset the silence clock without a real <see cref="OutputDelta"/>.</summary>
     public sealed record Heartbeat : CliRunEvent;
 
@@ -129,4 +138,52 @@ public abstract record CliRunEvent
 
     /// <summary>Adapter could not classify a chunk of output. <see cref="Sample"/> is a short prefix of the unclassified payload, capped to 200 chars.</summary>
     public sealed record Unknown(string Sample) : CliRunEvent;
+}
+
+/// <summary>
+/// One top-level item inside a <see cref="CliRunEvent.PlanUpdated"/> frame,
+/// normalized across CLIs. <see cref="Id"/> is stable across snapshots within
+/// the same run so a sub-action attributed while the item was active still maps
+/// back to it after it completes. <see cref="Status"/> is one of
+/// <c>pending</c> / <c>active</c> / <c>done</c> (the CLI's
+/// <c>in_progress</c> / <c>completed</c> are normalized at ingest).
+/// </summary>
+public sealed record PlanFrameItem(string Id, string Title, string Status);
+
+/// <summary>
+/// Derives a stable, snapshot-independent id for a plan item from its title.
+/// Claude's <c>TodoWrite</c> and Codex's <c>update_plan</c> items carry no id;
+/// the title (the imperative <c>content</c> / <c>step</c>) is the one field that
+/// stays constant as the item walks <c>pending -&gt; active -&gt; done</c>, so we
+/// hash a normalized form of it. Normalization (trim + lowercase + collapse
+/// internal whitespace) keeps trivial reformatting from minting a new id.
+/// </summary>
+public static class PlanItemId
+{
+    public static string From(string? title)
+    {
+        var normalized = string.Join(' ',
+            (title ?? string.Empty).Trim().ToLowerInvariant()
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        var bytes = System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes(normalized));
+        // 8 hex chars is plenty to disambiguate the handful of items in a plan.
+        return Convert.ToHexString(bytes, 0, 4).ToLowerInvariant();
+    }
+}
+
+/// <summary>
+/// Normalizes a CLI-native plan-item status string onto the
+/// <c>pending</c> / <c>active</c> / <c>done</c> vocabulary. Unknown values
+/// fall back to <c>pending</c> so an unexpected status never renders as an
+/// active item the user would read as "the agent is here right now".
+/// </summary>
+public static class PlanItemStatus
+{
+    public static string Normalize(string? raw) => (raw ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "in_progress" or "in-progress" or "active" or "running" => "active",
+        "completed" or "complete" or "done" => "done",
+        _ => "pending",
+    };
 }

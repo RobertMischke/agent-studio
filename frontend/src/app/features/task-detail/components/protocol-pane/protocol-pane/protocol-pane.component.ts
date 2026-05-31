@@ -29,6 +29,8 @@ import { CliOutputPollService } from '../../../../polling/services/cli-output-po
 import { SessionEventsPollService } from '../../../../polling/services/session-events-poll.service';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { ScreenshotsPollService } from '../../../../polling/services/screenshots-poll.service';
+import { PlanPollService } from '../../../../polling/services/plan-poll.service';
+import { PlanStripComponent } from '../../../../plan-strip/plan-strip.component';
 import { NowTickService } from '../../../../../services/now-tick.service';
 import { RunTimelineComponent } from '../run-timeline/run-timeline.component';
 import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.component';
@@ -87,6 +89,7 @@ interface InterimSummaryState {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ActivityLogViewComponent,
+    PlanStripComponent,
     ConversationViewComponent,
     RunTimelineComponent,
     RunGitViewerComponent,
@@ -146,6 +149,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly sessionEventsPoll = inject(SessionEventsPollService);
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly screenshotsPoll = inject(ScreenshotsPollService);
+  private readonly planPoll = inject(PlanPollService);
   private readonly nowTick = inject(NowTickService).now;
   private readonly jobs = inject(TaskService);
 
@@ -157,6 +161,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly cliOutput = this.cliPoll.output;
   readonly runTimeline = this.runTimelinePoll.timeline;
   readonly screenshots = this.screenshotsPoll.screenshots;
+  readonly plan = this.planPoll.plan;
 
   /** Feature-flagged VS Code-style chrome. The "i" header button is only
    *  rendered when the flag is on; otherwise legacy chrome stays visible. */

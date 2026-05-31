@@ -53,6 +53,7 @@ import type {
 } from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { AgentWorkSummary, SessionEventsResponse } from '../features/session-events';
+import type { TaskPlanView } from '../features/plan-strip/plan.model';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
 
@@ -798,6 +799,19 @@ export class TaskService {
   getAgentWorkSummary(jobId: string, watchPath?: string) {
     return this.http.get<AgentWorkSummary>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/agent-work-summary`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Per-job task plan that drives the plan strip above the activity log:
+   * the agent's own TodoWrite / update_plan items with sub-actions derived
+   * by replaying plan-snapshots.jsonl + tool-calls.jsonl. Read-only, no
+   * model call.
+   */
+  getPlan(jobId: string, watchPath?: string) {
+    return this.http.get<TaskPlanView>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/plan`,
       this.withWatchPath(watchPath),
     );
   }

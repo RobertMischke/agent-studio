@@ -506,6 +506,51 @@ public record AgentWorkToolCount
     public int Count { get; init; }
 }
 
+/// <summary>
+/// The per-job task plan the plan strip renders above the activity log. Folded
+/// by <c>PlanReader</c> from <c>logs/plan-snapshots.jsonl</c> (the agent's own
+/// TodoWrite / update_plan frames) and <c>logs/tool-calls.jsonl</c>. Read-only
+/// observability: no model call, no edits. When the agent never emitted a plan
+/// (or the CLI has no native plan frame), <see cref="HasPlan"/> is false and the
+/// strip is hidden. See <c>docs/mockups/task-progress-tracking/</c>.
+/// </summary>
+public record TaskPlanView
+{
+    /// <summary>False when no plan snapshot exists; the strip renders nothing.</summary>
+    public bool HasPlan { get; init; }
+    /// <summary>Frame kind that produced the latest snapshot: <c>claude/TodoWrite</c> or <c>codex/update_plan</c>.</summary>
+    public string? Source { get; init; }
+    /// <summary>Number of plan snapshots observed for this job.</summary>
+    public int SnapshotCount { get; init; }
+    /// <summary>Id of the single item currently <c>active</c>, or null when none is.</summary>
+    public string? ActiveItemId { get; init; }
+    /// <summary>Median sub-action count of already-<c>done</c> siblings; null below two samples (no estimate band drawn).</summary>
+    public int? SoftEstimateMedian { get; init; }
+    /// <summary>The latest snapshot's items, each with its derived sub-actions.</summary>
+    public List<TaskPlanItemView> Items { get; init; } = [];
+    /// <summary>Tool calls observed before any plan item was active ("before plan").</summary>
+    public List<TaskPlanSubAction> UnassignedSubActions { get; init; } = [];
+}
+
+/// <summary>One top-level plan item plus the sub-actions attributed to it.</summary>
+public record TaskPlanItemView
+{
+    public string Id { get; init; } = "";
+    public string Title { get; init; } = "";
+    /// <summary><c>pending</c> | <c>active</c> | <c>done</c>.</summary>
+    public string Status { get; init; } = "pending";
+    public int SubActionCount { get; init; }
+    public List<TaskPlanSubAction> SubActions { get; init; } = [];
+}
+
+/// <summary>One tool call attributed to a plan item; the "Sub-Tasks" the user wants to see after an item finishes.</summary>
+public record TaskPlanSubAction
+{
+    public DateTime Ts { get; init; }
+    public string Tool { get; init; } = "";
+    public string? Label { get; init; }
+}
+
 public record TaskDetail
 {
     public TaskInfo Info { get; init; } = new();

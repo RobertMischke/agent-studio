@@ -91,6 +91,50 @@ public class CodexEventAdapterTests
     }
 
     [Fact]
+    public void ItemCompletedUpdatePlan_EmitsPlanUpdated_WithNormalizedStatuses()
+    {
+        const string frame = """
+        {"type":"item.completed","item":{"type":"update_plan","plan":[
+          {"step":"Survey the repo","status":"completed"},
+          {"step":"Write the patch","status":"in_progress"},
+          {"step":"Run the suite","status":"pending"}
+        ]}}
+        """;
+        // update_plan also emits a tool event (symmetric with Claude's
+        // TodoWrite -> ToolStarted); PlanReader filters it from sub-actions.
+        var plan = Assert.Single(CodexEventAdapter.Map(frame, Jk).OfType<CliRunEvent.PlanUpdated>().ToList());
+        Assert.Equal("codex/update_plan", plan.Source);
+        Assert.Equal(3, plan.Items.Count);
+        Assert.Equal("done", plan.Items[0].Status);
+        Assert.Equal("active", plan.Items[1].Status);
+        Assert.Equal("pending", plan.Items[2].Status);
+        Assert.Equal("Survey the repo", plan.Items[0].Title);
+    }
+
+    [Fact]
+    public void ItemStartedUpdatePlan_AlsoEmitsPlanUpdated()
+    {
+        const string frame = """
+        {"type":"item.started","item":{"type":"update_plan","plan":[
+          {"step":"First","status":"in_progress"}]}}
+        """;
+        var plan = Assert.Single(CodexEventAdapter.Map(frame, Jk).OfType<CliRunEvent.PlanUpdated>().ToList());
+        Assert.Single(plan.Items);
+        Assert.Equal("active", plan.Items[0].Status);
+    }
+
+    [Fact]
+    public void UpdatePlanContentAlias_IsAcceptedAsStepTitle()
+    {
+        const string frame = """
+        {"type":"item.completed","item":{"type":"update_plan","plan":[
+          {"content":"Title via content alias","status":"completed"}]}}
+        """;
+        var plan = Assert.Single(CodexEventAdapter.Map(frame, Jk).OfType<CliRunEvent.PlanUpdated>().ToList());
+        Assert.Equal("Title via content alias", plan.Items[0].Title);
+    }
+
+    [Fact]
     public void UnknownType_EmitsUnknown()
     {
         const string frame = """{"type":"experimental.beta.thing","payload":1}""";

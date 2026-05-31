@@ -112,6 +112,17 @@ public static class ClaudeEventAdapter
                         var name = part.TryGetProperty("name", out var n) ? n.GetString() ?? "Tool" : "Tool";
                         var argument = ExtractToolArgument(part);
                         yield return new CliRunEvent.ToolStarted(name, argument) { TaskKey = jobKey };
+
+                        // TodoWrite is Claude's native task-plan frame. Surface
+                        // it as a typed PlanUpdated in addition to the tool call
+                        // so the runner can persist a plan snapshot. The
+                        // ToolStarted above keeps the activity log / tool-calls
+                        // log unchanged.
+                        if (string.Equals(name, "TodoWrite", StringComparison.Ordinal)
+                            && TryExtractTodoPlan(part, out var items))
+                        {
+                            yield return new CliRunEvent.PlanUpdated("claude/TodoWrite", items) { TaskKey = jobKey };
+                        }
                     }
                     else if (partType == "thinking")
                     {
@@ -164,6 +175,33 @@ public static class ClaudeEventAdapter
                 yield break;
             }
         }
+    }
+
+    /// <summary>
+    /// Pull the plan items out of a <c>TodoWrite</c> tool_use part. The input
+    /// shape is <c>{"todos":[{"content","status","activeForm"}]}</c>; we use the
+    /// imperative <c>content</c> as the stable title and normalize the status.
+    /// Returns false when the frame carries no usable todos so the caller emits
+    /// no PlanUpdated.
+    /// </summary>
+    private static bool TryExtractTodoPlan(JsonElement toolPart, out IReadOnlyList<PlanFrameItem> items)
+    {
+        items = System.Array.Empty<PlanFrameItem>();
+        if (!toolPart.TryGetProperty("input", out var input) || input.ValueKind != JsonValueKind.Object) return false;
+        if (!input.TryGetProperty("todos", out var todos) || todos.ValueKind != JsonValueKind.Array) return false;
+
+        var list = new List<PlanFrameItem>();
+        foreach (var todo in todos.EnumerateArray())
+        {
+            if (todo.ValueKind != JsonValueKind.Object) continue;
+            var content = todo.TryGetProperty("content", out var c) ? c.GetString() : null;
+            if (string.IsNullOrWhiteSpace(content)) continue;
+            var status = todo.TryGetProperty("status", out var s) ? s.GetString() : null;
+            list.Add(new PlanFrameItem(PlanItemId.From(content), content!.Trim(), PlanItemStatus.Normalize(status)));
+        }
+        if (list.Count == 0) return false;
+        items = list;
+        return true;
     }
 
     private static string? ExtractToolArgument(JsonElement toolPart)

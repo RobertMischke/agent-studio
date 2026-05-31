@@ -115,6 +115,19 @@ public static class TaskRunnerEndpoints
             return Results.Ok(AgentWorkSummaryReader.Read(info));
         });
 
+        // The per-job task plan that drives the plan strip above the activity
+        // log: the agent's own TodoWrite / update_plan items with derived
+        // sub-actions and a soft-estimate band. Folded from
+        // logs/plan-snapshots.jsonl + logs/tool-calls.jsonl by PlanReader -
+        // read-only, no model call. Live updates ride the SignalR planUpdated
+        // event; this endpoint is the initial fetch + refetch target.
+        group.MapGet("/{jobId}/plan", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            return Results.Ok(PlanReader.Read(info));
+        });
+
         // The condensed run timeline that drives the protocol-pane redesign.
         // One record per CLI invocation between user inputs, paired with the
         // [taskboard] Started/exited markers in cli-output.log so the frontend

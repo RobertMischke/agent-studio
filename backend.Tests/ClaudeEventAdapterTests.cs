@@ -103,6 +103,55 @@ public class ClaudeEventAdapterTests
     }
 
     [Fact]
+    public void TodoWriteFrame_EmitsToolStartedThenPlanUpdated_WithNormalizedStatuses()
+    {
+        const string frame = """
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[
+          {"content":"Read the spec","status":"completed","activeForm":"Reading the spec"},
+          {"content":"Wire the adapter","status":"in_progress","activeForm":"Wiring the adapter"},
+          {"content":"Add tests","status":"pending","activeForm":"Adding tests"}
+        ]}}]}}
+        """;
+        var events = ClaudeEventAdapter.Map(frame, Jk).ToList();
+        Assert.Equal(2, events.Count);
+        Assert.IsType<CliRunEvent.ToolStarted>(events[0]);
+        var plan = Assert.IsType<CliRunEvent.PlanUpdated>(events[1]);
+        Assert.Equal("claude/TodoWrite", plan.Source);
+        Assert.Equal(3, plan.Items.Count);
+        Assert.Equal("done", plan.Items[0].Status);
+        Assert.Equal("active", plan.Items[1].Status);
+        Assert.Equal("pending", plan.Items[2].Status);
+        Assert.Equal("Read the spec", plan.Items[0].Title);
+    }
+
+    [Fact]
+    public void TodoWritePlanItemId_IsStableAcrossWhitespaceAndCase()
+    {
+        const string a = """
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[
+          {"content":"Wire the adapter","status":"pending"}]}}]}}
+        """;
+        const string b = """
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[
+          {"content":"  wire   the   ADAPTER ","status":"in_progress"}]}}]}}
+        """;
+        var idA = Assert.IsType<CliRunEvent.PlanUpdated>(ClaudeEventAdapter.Map(a, Jk).ToList()[1]).Items[0].Id;
+        var idB = Assert.IsType<CliRunEvent.PlanUpdated>(ClaudeEventAdapter.Map(b, Jk).ToList()[1]).Items[0].Id;
+        Assert.Equal(idA, idB);
+    }
+
+    [Fact]
+    public void TodoWriteWithNoUsableTodos_EmitsOnlyToolStarted()
+    {
+        const string frame = """
+        {"type":"assistant","message":{"content":[{"type":"tool_use","name":"TodoWrite","input":{"todos":[
+          {"content":"   ","status":"pending"}]}}]}}
+        """;
+        var events = ClaudeEventAdapter.Map(frame, Jk).ToList();
+        Assert.IsType<CliRunEvent.ToolStarted>(Assert.Single(events));
+    }
+
+    [Fact]
     public void AssistantThinkingPart_DroppedFromTypedStream()
     {
         const string frame = """
