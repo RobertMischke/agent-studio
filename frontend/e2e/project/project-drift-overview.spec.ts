@@ -266,10 +266,10 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
 
   const before = await listPreparationSlugs();
 
-  const responsePromise = page.waitForResponse(r => r.url().includes('/api/jobs') && r.request().method() === 'POST');
+  const responsePromise = page.waitForResponse(r => r.url().includes('/api/tasks') && r.request().method() === 'POST');
   await page.getByTestId('project-drift-overview-finding-followup-finding-schema-001').click();
   const resp = await responsePromise;
-  expect(resp.status(), `POST /api/jobs returned ${resp.status()}`).toBeLessThan(400);
+  expect(resp.status(), `POST /api/tasks returned ${resp.status()}`).toBeLessThan(400);
 
   // Confirmation message rendered.
   await expect(page.getByTestId('project-drift-overview-action-msg')).toContainText('Queued', { timeout: 5_000 });
@@ -292,7 +292,7 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
 
   // Cleanup: delete the created jobs so other specs do not see them.
   for (const id of created) {
-    try { await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(projectPath)}`, { method: 'DELETE' }); }
+    try { await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(projectPath)}`, { method: 'DELETE' }); }
     catch { /* best-effort */ }
   }
 });
@@ -310,13 +310,24 @@ async function openProjectDetail(page: Page): Promise<void> {
     await session.send('Network.clearBrowserCache');
     await session.detach();
   } catch { /* best-effort */ }
-  await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  // Navigate the project shell rail to the dedicated Drift entry. The
-  // overlay defers each rail panel until selected; without this click the
-  // section would not be in the DOM at all.
-  await expect(page.getByTestId('project-shell-rail-drift')).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId('project-shell-rail-drift').click();
+  // Deep-link straight to the Drift rail via the public hash contract
+  // (`#/projects/<slug>/<rail>`, see project-overlays.service.ts). The
+  // studio-shell landing renders the combined "All projects" board, which
+  // no longer surfaces the per-project shell-open button, so the old
+  // open-button-then-click-rail path can't reach the shell. The hash route
+  // is a first-class, reload-safe entrypoint: app boot resolves the slug
+  // against the loaded watch-paths and mounts the shell on the drift rail,
+  // whose panel the overlay defers until the rail is active.
+  await page.goto(`/#/projects/${projectSlug(projectName)}/drift`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('project-shell-rail-drift'))
+    .toHaveAttribute('aria-current', 'page', { timeout: 10_000 });
+}
+
+/** Mirror of toProjectSlug() in project-shell.config.ts: the hash route
+ *  keys projects by this kebab-case slug. */
+function projectSlug(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 /**
@@ -490,7 +501,7 @@ interface GroupedJobs {
 
 async function listPreparationSlugs(): Promise<Set<string>> {
   try {
-    const grouped = await api<GroupedJobs>('/api/jobs/grouped');
+    const grouped = await api<GroupedJobs>('/api/tasks/grouped');
     const out = new Set<string>();
     for (const j of grouped.preparation ?? []) {
       if (!j.projectName || j.projectName === projectName) out.add(j.id);
