@@ -96,4 +96,26 @@ describe('deriveWatchdogPill', () => {
     });
     expect(pill.state).toBe('healthy');
   });
+
+  // The operator-friendly watchdog wording (2026-05-15 notifications
+  // overhaul) drops the `[watchdog]` literal prefix in favour of a
+  // typed tag plus a plain-English body. Both the orchestrator-stream
+  // identifier and the kill-pattern matcher must accept the new form
+  // so the protocol-pane chip continues to surface the kill verdict.
+  it('respects backend kill verdict written in the operator-friendly form', () => {
+    const pill = deriveWatchdogPill({
+      lines: [
+        line('system', '[taskboard] Started claude CLI', 0),
+        line(
+          'orchestrator',
+          '[watchdog-timeout] "Fix git diff container display" (claude): auto-cancelled after 180s of silence. The run will finalize as failed.',
+          180
+        )
+      ],
+      isRunning: true,
+      now: new Date('2026-05-02T12:03:00Z') // 180s after base
+    });
+    expect(pill.state).toBe('hung');
+    expect(pill.label).toBe('✕ Killed');
+  });
 });
