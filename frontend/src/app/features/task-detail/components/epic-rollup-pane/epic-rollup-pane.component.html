@@ -1,0 +1,36 @@
+<section class="epic-rollup" data-testid="epic-rollup-pane">
+  <header class="epic-rollup__header">
+    <span class="epic-rollup__title">Epic — sub-tasks</span>
+    @if (rollup(); as r) {
+      <span class="epic-rollup__count" data-testid="epic-rollup-count">{{ r.completed }} / {{ r.subTaskTotal }} done</span>
+    }
+  </header>
+
+  @if (loading() && !rollup()) {
+    <div class="epic-rollup__muted">Loading…</div>
+  } @else if (error()) {
+    <div class="epic-rollup__muted" data-testid="epic-rollup-error">Could not load epic rollup.</div>
+  } @else if (rollup(); as r) {
+    <div class="epic-rollup__bar" [attr.aria-label]="progressPct() + '% complete'">
+      <div class="epic-rollup__bar-fill" [style.width.%]="progressPct()"></div>
+    </div>
+    <div class="epic-rollup__stats">
+      <span class="epic-rollup__stat epic-rollup__stat--done">{{ r.completed }} done</span>
+      <span class="epic-rollup__stat epic-rollup__stat--prog">{{ r.inProgress }} in progress</span>
+      <span class="epic-rollup__stat epic-rollup__stat--open">{{ r.open }} open</span>
+    </div>
+
+    @if (r.subTasks.length === 0) {
+      <div class="epic-rollup__muted" data-testid="epic-rollup-empty">No sub-tasks yet.</div>
+    } @else {
+      <ul class="epic-rollup__list" data-testid="epic-rollup-list">
+        @for (sub of r.subTasks; track sub.id) {
+          <li class="epic-rollup__item">
+            <span class="epic-rollup__item-title" [attr.title]="sub.title">{{ sub.title || sub.id }}</span>
+            <span class="epic-rollup__item-state" [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
+          </li>
+        }
+      </ul>
+    }
+  }
+</section>

@@ -47,6 +47,7 @@ import { GitPaneComponent } from './components/git-pane/git-pane/git-pane.compon
 import { CliOutputPollService } from '../polling/services/cli-output-poll.service';
 import { CommandDeckComponent } from './components/command-deck/command-deck.component';
 import { PromptPaneComponent } from './components/prompt-pane/prompt-pane.component';
+import { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-rollup-pane.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
@@ -69,6 +70,7 @@ import { TooltipDirective } from '../../components/tooltip';
     GitPaneComponent,
     CommandDeckComponent,
     PromptPaneComponent,
+    EpicRollupPaneComponent,
     LogOverlayComponent,
     ProtocolPaneComponent,
     DetailHeaderComponent,

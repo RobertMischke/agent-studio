@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
-import type { AutoLoopSnapshot, TaskInfo, PendingIntent } from '../../../../models/task.model';
+import type { AutoLoopSnapshot, TaskInfo, PendingIntent, EpicRollup } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
+import { TaskService } from '../../../../services/task.service';
 import { ClientService } from '../../../../services/client.service';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { cliTypeIcon } from '../../../../services/format.util';
@@ -586,9 +587,16 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     return Math.floor(hrs / 24) + 'd ago';
   });
 
-  // Context menu for copy actions
+  // Context menu: copy actions + epic assignment (way 2).
   private readonly notifications = inject(NotificationService);
+  private readonly jobs = inject(TaskService);
   readonly cardContextMenu = signal<{ x: number; y: number } | null>(null);
+  /** Epics in this card's project, loaded on right-click for the assign submenu. */
+  private readonly epicsForMenu = signal<EpicRollup[]>([]);
+
+  private static readonly EPIC_ASSIGN_PREFIX = 'epic-assign:';
+  private static readonly EPIC_DETACH_ID = 'epic-detach';
+
   readonly cardCtxMenuItems = computed<readonly MenuItem[]>(() => {
     const job = this.job();
     const items: MenuItem[] = [
@@ -598,6 +606,30 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     if (job.key) {
       items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${job.key})` });
     }
+
+    // Epic assignment is only meaningful for ordinary task cards - an epic is
+    // not a sub-task of another epic.
+    if (!this.isEpic()) {
+      const epics = this.epicsForMenu();
+      const currentEpicId = this.subTaskEpicId();
+      items.push({ kind: 'separator' });
+      items.push({ kind: 'header', label: 'Epic' });
+      if (epics.length === 0 && !currentEpicId) {
+        items.push({ kind: 'row', id: 'epic-none', label: 'No epics in this project', disabled: true });
+      } else {
+        for (const epic of epics) {
+          items.push({
+            kind: 'row',
+            id: TaskCardComponent.EPIC_ASSIGN_PREFIX + epic.id,
+            label: epic.title || epic.id,
+            active: epic.id === currentEpicId,
+          });
+        }
+        if (currentEpicId) {
+          items.push({ kind: 'row', id: TaskCardComponent.EPIC_DETACH_ID, label: 'Detach from epic' });
+        }
+      }
+    }
     return items;
   });
 
@@ -605,6 +637,15 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     event.preventDefault();
     event.stopPropagation();
     this.cardContextMenu.set({ x: event.clientX, y: event.clientY });
+    // Refresh the assign list each open (only for task cards). Best-effort:
+    // the section just shows "No epics" on failure.
+    if (!this.isEpic()) {
+      const watchPath = this.job().watchPath;
+      this.jobs.getEpics().subscribe({
+        next: (list) => this.epicsForMenu.set((list ?? []).filter((e) => e.watchPath === watchPath)),
+        error: () => this.epicsForMenu.set([]),
+      });
+    }
   }
 
   closeCardContextMenu(): void {
@@ -613,6 +654,18 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   onCardCtxMenuItemClick(ev: MenuItemClickEvent): void {
     const job = this.job();
+
+    if (ev.id.startsWith(TaskCardComponent.EPIC_ASSIGN_PREFIX)) {
+      const epicId = ev.id.slice(TaskCardComponent.EPIC_ASSIGN_PREFIX.length);
+      if (epicId === this.subTaskEpicId()) return; // already in this epic
+      this.assignEpic(epicId);
+      return;
+    }
+    if (ev.id === TaskCardComponent.EPIC_DETACH_ID) {
+      this.assignEpic(null);
+      return;
+    }
+
     let text = '';
     let label = '';
     if (ev.id === 'copy-name') { text = job.title || job.id; label = 'Name'; }
@@ -623,5 +676,20 @@ export class TaskCardComponent implements OnInit, OnDestroy {
         if (ok) this.notifications.success(`${label} copied`);
       });
     }
+  }
+
+  /** Way 2: attach (epicId) or detach (null) this task, then refresh the board. */
+  private assignEpic(epicId: string | null): void {
+    const job = this.job();
+    this.jobs.setJobEpic(job.id, epicId, job.watchPath).subscribe({
+      next: () => {
+        const epic = this.epicsForMenu().find((e) => e.id === epicId);
+        this.notifications.success(
+          epicId ? `Assigned to epic: ${epic?.title ?? epicId}` : 'Detached from epic',
+        );
+        this.jobs.refresh(true);
+      },
+      error: () => this.notifications.error('Could not update epic assignment'),
+    });
   }
 }

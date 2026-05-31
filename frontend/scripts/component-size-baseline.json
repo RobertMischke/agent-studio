@@ -25,10 +25,10 @@
       "total": 746
     },
     "src/app/features/board/components/task-card/task-card.component.ts": {
-      "typeScript": 564,
-      "template": 254,
-      "styles": 935,
-      "total": 1753
+      "typeScript": 696,
+      "template": 275,
+      "styles": 1026,
+      "total": 1997
     },
     "src/app/features/board/components/task-column/task-column.ts": {
       "typeScript": 702,
