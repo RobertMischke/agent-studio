@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Endpoints;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Clients;
@@ -101,6 +102,69 @@ public class EpicAssignmentTests : IDisposable
     {
         var (_, _, mutations) = Build();
         Assert.False(mutations.SetJobEpic("does-not-exist", "the-epic", _watchPath));
+    }
+
+    // BuildRollup is pure (TaskInfo epic, all-tasks) -> rollup, so it is tested
+    // with hand-built TaskInfo lists rather than the create path: CreateJob only
+    // lands jobs in backlog/preparation/ready, which cannot exercise the
+    // completed/in-progress buckets.
+    private static TaskInfo Sub(string id, string epicId, string state, int order) =>
+        new() { Id = id, Title = id, Kind = TaskKinds.Task, EpicId = epicId, State = state, Order = order };
+
+    [Fact]
+    public void BuildRollup_EmptyEpic_HasZeroProgress()
+    {
+        var epic = new TaskInfo { Id = "epic-a", Title = "Epic A", Kind = TaskKinds.Epic, State = TaskStates.Ready };
+        var rollup = EpicEndpoints.BuildRollup(epic, new List<TaskInfo> { epic });
+
+        Assert.Equal("epic-a", rollup.Id);
+        Assert.Equal(0, rollup.SubTaskTotal);
+        Assert.Equal(0, rollup.Completed);
+        Assert.Equal(0, rollup.InProgress);
+        Assert.Equal(0, rollup.Open);
+        Assert.Empty(rollup.SubTasks);
+    }
+
+    [Fact]
+    public void BuildRollup_BucketsSubTasksByLane()
+    {
+        var epic = new TaskInfo { Id = "epic-b", Title = "Epic B", Kind = TaskKinds.Epic, State = TaskStates.Ready };
+        var all = new List<TaskInfo>
+        {
+            epic,
+            Sub("s-backlog", "epic-b", TaskStates.Backlog, 1),
+            Sub("s-ready", "epic-b", TaskStates.Ready, 2),
+            Sub("s-prog", "epic-b", TaskStates.Progress, 3),
+            Sub("s-done", "epic-b", TaskStates.Completed, 4),
+        };
+
+        var rollup = EpicEndpoints.BuildRollup(epic, all);
+
+        Assert.Equal(4, rollup.SubTaskTotal);
+        Assert.Equal(1, rollup.Completed);                       // s-done
+        Assert.Equal(2, rollup.Open);                            // s-backlog + s-ready
+        Assert.Equal(1, rollup.InProgress);                      // s-prog
+        Assert.Equal(4, rollup.SubTasks.Count);
+        Assert.Equal(1, rollup.ByState[TaskStates.Progress]);    // raw per-lane count preserved
+        Assert.Equal("s-backlog", rollup.SubTasks[0].Id);        // ordered by Order
+    }
+
+    [Fact]
+    public void BuildRollup_IgnoresOtherEpicsSubTasks()
+    {
+        var epicC = new TaskInfo { Id = "epic-c", Title = "Epic C", Kind = TaskKinds.Epic, State = TaskStates.Ready };
+        var all = new List<TaskInfo>
+        {
+            epicC,
+            new TaskInfo { Id = "epic-d", Title = "Epic D", Kind = TaskKinds.Epic, State = TaskStates.Ready },
+            Sub("owned", "epic-c", TaskStates.Ready, 1),
+            Sub("foreign", "epic-d", TaskStates.Ready, 1),
+        };
+
+        var rollupC = EpicEndpoints.BuildRollup(epicC, all);
+
+        Assert.Equal(1, rollupC.SubTaskTotal);
+        Assert.Equal("owned", rollupC.SubTasks[0].Id);
     }
 
     private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build()
