@@ -1,25 +1,32 @@
-# Planning and Research task kinds — design exploration (2026-05)
+# Planning and Research task kinds - design exploration (2026-05)
 
-Status: design decisions pinned (2026-05-14). No code change. Captures
-user intent from the `planning-task-task-differenzierung` brainstorm,
-proposes a path that reconciles it with the existing hard non-goals,
-and locks in the previously-open design choices as documented defaults.
-Follow-up tasks for the actual implementation are listed at the end.
+Status: reconciled with ADR-0052 (2026-05-31). No code change. Captures
+user intent from the `planning-task-task-differenzierung` brainstorm.
+The parallelism *mechanics* this note originally had to argue for now
+live in [ADR-0052](../architecture-decisions.md#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31)
+and the full design in [docs/concepts/parallel-task-execution.md](../concepts/parallel-task-execution.md).
+What remains genuinely this note's own is the **task-kind taxonomy**
+(planning / research / coding as a first-class `kind`), the **read-only
+pipeline** those kinds run, and the **promote-planning-result-to-coding-
+task** flow. Those are framed below as additive on ADR-0052. The
+previously-open design choices are pinned as documented defaults at the
+end, re-validated against the new model.
 
 ## What the user asked for
 
 Three task kinds, distinguished by what the agent is allowed to do and what
 the user does with the result:
 
-1. **Coding task** (today's default): mutates source. Subject to the existing
-   "one running task per project" rule.
+1. **Coding task** (today's default): mutates source. Its parallelism and
+   git isolation are governed by ADR-0052 (worktree + `task/<id>` branch,
+   orchestrator-gated, `maxParallelism`).
 2. **Planning task**: read-only. Analyzes the codebase and proposes the next
    concrete piece of work. Many should be runnable in parallel. No execution
    limit (no timebox, no token cap from the orchestrator). The result is the
    point. The user wants a one-click flow to take a finished planning result
    and turn it into a new coding task: the create-task modal opens
    pre-filled, attached images carry over, the user just hits Save.
-3. **Research task**: read-only. Broader than planning — finds things out,
+3. **Research task**: read-only. Broader than planning - finds things out,
    possibly via web search. Many parallel. No follow-up action implied; the
    deliverable is a clean report the user reads.
 
@@ -27,39 +34,58 @@ Planning and Research differ by *intent and tool surface*, not by execution
 mechanics: planning targets "what should we build next in this codebase,"
 research targets "what is true about a topic" and may want web search.
 
-## Conflict with existing non-goals
+## Premise correction (2026-05-31): the non-goal is already gone
 
-`AGENTS.md` calls out as a hard non-goal:
+The original version of this note spent its longest section arguing that
+the intra-project-parallelism non-goal needed a *carve-out* for read-only
+kinds, and that an ADR had to be written before any code change. **That is
+now obsolete.** ADR-0052 (Accepted, 2026-05-31) reversed the non-goal
+outright - not a carve-out, a full reversal - and the enforcing guards
+(`IntakeRunner.CheckBlocked`, `OrchestratorPrepRules.HasOutOfScopeToken`)
+are already removed. The full parallelism design lives in
+[docs/concepts/parallel-task-execution.md](../concepts/parallel-task-execution.md).
 
-> **Intra-project parallelism.** At most one task runs per project at any
-> time. No fan-out across agents, machines, or branches inside one project.
+So there is no policy battle left to fight here. What ADR-0052 does *not*
+cover, and what this note still owns:
 
-That rule exists to keep the product simple and to avoid source-code
-conflicts when multiple agents touch one tree. Planning and Research
-explicitly do not touch source, so the *cause* the non-goal protects against
-does not apply to them. But the rule as written has no carve-out, and
-`ProjectRunner._activeJobId` enforces a single-slot latch independent of
-task kind.
+- **Task kinds as a taxonomy.** ADR-0052 parallelises *coding* tasks. It
+  says nothing about a `kind` field or about planning / research as
+  distinct kinds with a different tool surface and a different pipeline.
+- **The read-only pipeline.** A planning or research run produces a
+  *report*, not a worktree diff. It should skip the git pre/post steps
+  (worktree-create, Commit+Push, Integration, teardown) entirely - there
+  is nothing to commit. ADR-0052's machinery is for tasks that mutate the
+  tree; read-only kinds opt out of it.
+- **Promote-planning-result-to-coding-task.** The headline interaction
+  (read the plan, hit a button, get a pre-filled create modal, save) is
+  unique to this note.
 
-Two ways to read the request:
+The rest of this document is therefore reframed as **additive on
+ADR-0052**: it defines the kinds and how the read-only ones dock onto (and
+mostly opt out of) the parallel-execution machinery.
 
-- **Carve-out**: keep the non-goal for mutating work, add an explicit
-  exception for read-only kinds. This is consistent with the spirit of the
-  rule and mostly low-risk because read-only kinds cannot collide on the
-  working tree.
-- **Reframe**: drop the non-goal entirely and add scheduling primitives.
-  This is too big a change for what the user is asking for and erodes the
-  product's main differentiator.
+### How read-only kinds dock onto ADR-0052
 
-The carve-out is the only sensible option, and it must be written down as
-an ADR before any code change so the next agent does not re-import the
-old rule blindly. Suggested wording for the non-goal section:
+ADR-0052 gives each running task a slot, a worktree, a `task/<id>` branch,
+and a git pre/post pipeline. Planning and Research reuse the *slot* concept
+(they consume a CLI process and quota) but **opt out of the git steps**:
 
-> Coding tasks (any task that may write to the working tree) run **strictly
-> serially per project**. Read-only task kinds — Planning and Research —
-> may run in parallel because they cannot collide on source. The
-> `one-task-per-project` invariant is a property of mutation, not of the
-> queue.
+- **No worktree, no branch.** A read-only run executes against a read-only
+  checkout of `integrationBranch`; it never creates `task/<id>`, never
+  commits, never integrates. The pre-step that would create a worktree and
+  the post-steps that commit / merge / tear down are skipped for these
+  kinds.
+- **Always `parallel-ok` in the gate.** ADR-0052 §5's parallelisability
+  gate compares predicted file scopes. A read-only kind touches no paths,
+  so it is unconditionally `parallel-ok` and never `exclusive`. The gate
+  can short-circuit on `kind ∈ {planning, research}` before it bothers
+  computing scope.
+- **Still slot- and quota-bounded.** They are not "free." They occupy a
+  worker slot and consume tokens, so they count against `maxParallelism`
+  and the per-project quota budget (ADR-0052 §9 D5). "No limit on what a
+  planning task may *do*" (the user's words) means no timebox and no
+  orchestrator-imposed scope cap on the run itself - not an unbounded
+  number of concurrent planning processes.
 
 ## Data model implications
 
@@ -78,49 +104,52 @@ without the field keep working unchanged. Boot-time migration sets the
 field on legacy folders; nothing else changes.
 
 The kind is a property of the task, not of the lane. All three kinds use
-the same lifecycle states. The runner branches on kind when picking up.
+the same lifecycle states. The pipeline and the parallelisability gate
+branch on kind.
+
+This `kind` field is the same minimal first step ADR-0052's slicing plan
+needs anyway; landing it as a behaviour-neutral default (`coding`) is the
+natural shared slice-1 between this note and the concept doc.
 
 ## Runner / scheduler implications
 
-The hard part. `ProjectRunner._activeJobId` is a single nullable string
-guarding the per-project pickup loop. It is checked on every pickup tick
-and on the manual start path. Two viable shapes:
+The original version of this note proposed a *separate* read-only
+execution lane to dodge the `_activeJobId` single-slot latch. ADR-0052
+has since generalised that latch into N worker slots
+(`ProjectRunner.cs:461`), so there is no separate lane to build - read-
+only kinds ride the same slot model and differ only by which pipeline
+steps run and how the gate treats them.
 
-**Option A — single-slot for coding, free-for-all for read-only.**
+Concretely, dock onto ADR-0052 like this:
 
-- `_activeCodingJobId` replaces `_activeJobId` for the mutation invariant.
-- Read-only kinds spin up CLI executions through a separate path that
-  does not touch `_activeCodingJobId` and does not care about it.
-- The pickup loop iterates `3-progress` once for coding (the existing
-  strict-iteration rule still applies, ADR-0028) and once for read-only
-  (no slot guard; every eligible folder starts).
-- Risk: real OS process count, real disk and CPU pressure, real CLI quota
-  consumed by N parallel agents. Add a soft cap (`ReadOnlyParallelism`,
-  default 4? configurable per project) so a queue spike does not fork
-  a hundred Claude processes.
-
-**Option B — two slots for any kind, but coding takes the priority slot.**
-
-Simpler invariant ("at most N concurrent CLI runs per project"), worse
-match for the user's "no limit on planning" request. Reject.
-
-Option A wins. The cap is a guardrail, not a queue: a planning job over
-the cap waits in `2-ready` and starts when a slot frees, no fanciness.
-
-Failure modes to think through before implementing:
-- A read-only agent that *does* write (planning task that "helpfully"
-  edits a file). Mitigation: pre-flight a `git stash --include-untracked`
-  and `git stash pop` or a sandboxed checkout, or simply detect the diff
-  on completion and surface it as a hard violation. Do not auto-revert;
-  the user decides.
-- Quota exhaustion. Read-only kinds share the same CLI quota as coding;
-  if the user kicks off 8 planning runs they may starve the next coding
-  task. The quota probe surface already exists; the picker should refuse
-  to start a planning job when quota is below a threshold and a coding
-  job is queued.
-- Log volume. N parallel runs writing to the same project log directory
-  is fine because each job has its own folder, but the activity-log
-  aggregator and SignalR broadcasts must not assume one-active.
+- **Slot admission.** A planning/research task takes a slot like any
+  other. The pick-gate (ADR-0052 §5.2) short-circuits to `parallel-ok`
+  for read-only kinds without computing scope, so they never block on a
+  running coding task and a running coding task never blocks them.
+- **Pipeline shape per kind.** ADR-0052 makes git a set of pre/post
+  pipeline steps (ADR-0045). Read-only kinds run a pipeline with those
+  git steps *omitted*: no worktree-create pre-step, no Commit+Push /
+  Integration / teardown post-steps. What remains is "render prompt →
+  run agent → produce report → render `status.md`." This is the cleanest
+  expression of "read-only": not a guard that forbids writing, but a
+  pipeline that has no commit step to begin with.
+- **Containment, not trust.** A planning agent that "helpfully" edits a
+  file would leave changes in the read-only checkout with no commit step
+  to capture them. Surface any non-empty diff at run end as a hard
+  violation on the timeline; do not auto-revert (the user decides). A
+  sandboxed/throwaway checkout is the stronger option if `maxParallelism`
+  ever lets a read-only run share a tree with a coding run - but with the
+  git steps omitted there is no `task/<id>` worktree for them, so they
+  read the integration checkout and must not be given a writable one they
+  could integrate from.
+- **Quota.** Read-only kinds consume the same CLI quota as coding and
+  count against the per-project budget (ADR-0052 §9 D5). The picker
+  refuses new read-only pickups when the budget is tight and a coding
+  task is queued - see decision 5 below, which is the kind-aware
+  specialisation of D5.
+- **Broadcast fan-out.** N concurrent runs are already ADR-0052's world;
+  the activity-log aggregator and SignalR broadcasts must not assume one
+  active job. That is ADR-0052's concern, inherited here unchanged.
 
 ## "Promote planning result to a coding task"
 
@@ -141,7 +170,9 @@ What "pre-filled" means concretely:
   remove individually. Copying (not linking) keeps the new task
   self-contained when the planning folder eventually archives.
 - **Kind**: defaults to `coding`, the user can change.
-- **State**: defaults to `2-ready` so the new task picks up next.
+- **State**: defaults to `1-preparation` so the user gets one review pass
+  on the auto-filled prompt before pickup (decision 3 below); editable in
+  the modal.
 
 The cleanest UI hook is a per-task action visible only when
 `kind = planning` and the latest run has finished successfully:
@@ -192,21 +223,26 @@ content and the protocol pane just renders it.
   projects still run independently. This change is scoped to "what
   happens inside one project."
 
-## Decisions (2026-05-14)
+## Decisions (pinned 2026-05-14, reconciled with ADR-0052 on 2026-05-31)
 
 The five open questions from the initial draft are resolved below. These
 are documented defaults, not consensus from a separate review round; any
 of them can be revisited by the implementation task that lands the
-runner change.
+runner change. Decisions 1 and 5 were re-expressed against ADR-0052's
+`maxParallelism` / quota model; their substance is unchanged.
 
-1. **Soft parallelism cap default: 4, configurable per project.**
-   The setting key is `ReadOnlyParallelism` on the project config.
-   Default 4 protects against an accidental fork bomb when the user
-   queues many planning runs in a hurry, while staying well above the
-   normal working set of "a couple of parallel investigations." Users
-   who want "no cap" set a high value (e.g. 32); we do not introduce a
-   separate unlimited mode because the OS/quota backpressure is a fuzzy
-   signal and a soft cap is easier to reason about.
+1. **Read-only parallelism is bounded by ADR-0052's `maxParallelism`,
+   not a second knob.** The original draft proposed a standalone
+   `ReadOnlyParallelism = 4`. With ADR-0052 that would be a confusing
+   second cap. Decision: read-only kinds occupy the same worker slots as
+   coding and are bounded by the project's `maxParallelism`. A project
+   that wants planning/research to fan out wider than its coding
+   concurrency may set an *optional* `readOnlyParallelism` override
+   (default: unset = use `maxParallelism`); when set it is an additional
+   pool of slots reserved for read-only kinds. The fork-bomb guard the
+   original "4" was protecting against is now `maxParallelism` itself
+   plus the quota budget (decision 5). Net: one cap by default, an
+   override only for the project that actually needs asymmetric fan-out.
 2. **Web search: per-task toggle, defaults differ by kind.** The create
    modal exposes a single "Allow web access" checkbox. Default *off*
    for Planning, default *on* for Research. The toggle is also present
@@ -229,42 +265,54 @@ runner change.
    privilege the dev box does not always have; copying makes the new
    task self-contained for archival, export, and future rehydration.
 5. **Quota gating: never preempt, refuse new read-only pickups instead.**
-   An in-flight planning or research run always runs to completion.
-   When the CLI quota probe is below the warn threshold *and* at least
-   one coding task is queued, the read-only picker pauses new pickups
-   until the coding slot frees. This is a one-way valve: read-only
-   yields to coding under pressure, coding never yields. The quota
-   threshold reuses the existing supervisor probe; no new probe path.
+   This is the kind-aware specialisation of ADR-0052 §9 D5 (cap effective
+   parallelism by the token/quota budget). An in-flight planning or
+   research run always runs to completion. When the quota budget is below
+   the warn threshold *and* at least one coding task is queued, the
+   read-only picker pauses new read-only pickups until the coding slot
+   frees. One-way valve: read-only yields to coding under pressure,
+   coding never yields. Reuses the existing quota probe
+   (`EnforceQuotaCapsOnActiveJob`); no new probe path.
 
 ## Suggested next steps
 
-Now that the decisions above are pinned, implementation can phase as:
+The parallelism mechanics are owned by ADR-0052's slicing plan
+(`docs/concepts/parallel-task-execution.md` §8). What follows is the
+*kind-specific* work that layers on top of it - not a competing plan.
+Reconcile against the concept doc's §8 before spinning these out so a
+slice is not built twice.
 
-1. **ADR for the carve-out.** Documents that the intra-project
-   parallelism non-goal applies to mutating work only, and that
-   read-only kinds (Planning, Research) are exempt because the cause
-   the non-goal protects against (working-tree collisions) does not
-   apply to them. Without this ADR, the next agent will revert the
-   carve-out on sight. AGENTS.md gets the wording change in the same
-   commit.
-2. **`kind` field landing, no behavioural change.** Add `kind` to
-   `JobInfo` and `CreateJobRequest`, default `"coding"`, ignored by the
-   runner for now. Boot-time migration tags legacy folders. UI shows
-   the kind icon on the kanban tile. Reversible if we change our mind.
+1. **`kind` field landing, no behavioural change.** Add `kind`
+   (`coding` | `planning` | `research`, default `coding`) to `JobInfo`
+   and `CreateJobRequest`; boot-time migration tags legacy folders; UI
+   shows a kind icon on the kanban tile. This is the same
+   behaviour-neutral first step ADR-0052's slice 1 already needs, so it
+   should be folded into that slice rather than created as a rival task.
+   *(The "write an ADR for the carve-out" step from the prior draft is
+   deleted: ADR-0052 already reversed the non-goal - there is nothing
+   left to carve out.)*
+2. **Read-only pipeline variant.** Define the planning/research pipeline
+   as the ADR-0045 pipeline with the git pre/post steps omitted (no
+   worktree-create, no Commit+Push, no Integration, no teardown) and the
+   parallelisability gate short-circuited to `parallel-ok`. Docks onto
+   the concept doc's slice 2 (slot model) and slice 4 (gate).
 3. **Create-task modal: kind selector + web-access toggle.** Mockup
-   first under `docs/mockups/`. Per-kind default prompt scaffolds live
-   in `prompts/runtime/`. Sentinel-driven unit tests cover the new
-   templates.
-4. **Runner change behind a config flag.** Replace `_activeJobId` with
-   `_activeCodingJobId` and a read-only execution lane gated by
-   `ReadOnlyParallelism`. Quota-gating logic per decision 5. Ship
-   behind a `enableReadOnlyParallelism` flag, default off, until shake-
-   out is done. Promote-to-coding endpoint lands in the same phase.
+   first under `docs/mockups/`. Per-kind default prompt scaffolds live in
+   `prompts/runtime/`, parameterised by kind. Sentinel-driven unit tests
+   cover the new templates. Web access (decision 2) is the one tool-
+   surface differentiator ADR-0052 does not touch.
+4. **Promote-planning-result-to-coding-task.** Backend endpoint takes the
+   source job key and returns a fully-populated `CreateJobRequest`
+   (title, prompt body from the `## Proposed task prompt` heading, copied
+   image attachments, `kind = coding`, `state = 1-preparation`); frontend
+   opens the existing create-task modal pre-filled. Visible only on a
+   finished `kind = planning` task; absent on research. This is wholly
+   this note's own scope - ADR-0052 has no equivalent.
 
-Each of those is a separate task. They are not blocked on further
-input from the user; they are blocked only on the user's go-ahead to
-start implementation.
+Each is a separate task (or a fold-in to an existing ADR-0052 slice as
+noted). They are not blocked on further input from the user; they are
+blocked only on the user's go-ahead to start implementation, and slices
+2+ inherit ADR-0052's gating on the crash-safe-pickup prerequisite.
 
 Coding work is intentionally out of scope of *this* task; the planning
-deliverable is this note. The follow-up tasks above are the concrete
-units that should be created when implementation starts.
+deliverable is this note.
