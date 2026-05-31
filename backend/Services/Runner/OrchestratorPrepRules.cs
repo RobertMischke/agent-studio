@@ -103,8 +103,12 @@ public static class OrchestratorPrepRules
 
     private static bool HasOutOfScopeToken(string lower)
     {
-        // Tokens listed as hard non-goals in ROADMAP.md.
-        return lower.Contains("worktree") || lower.Contains("branch-per-task") || lower.Contains("intra-project parallel");
+        // ADR-0052 lifted the intra-project-parallelism non-goal, so
+        // "worktree" / "branch-per-task" / "intra-project parallel" are no
+        // longer out-of-scope tokens and no longer penalise the prep score.
+        // No out-of-scope tokens remain; re-add here only for a future non-goal.
+        _ = lower;
+        return false;
     }
 
     private static bool PromptsConflict(string a, string b)

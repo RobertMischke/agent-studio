@@ -317,11 +317,6 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     return this.state() === '7-archive' || this.state() === '6-archive';
   }
 
-  /** ADR-0028: 3a-failed-pickup is the loud-not-archived lane. */
-  isFailedPickup(): boolean {
-    return this.state() === '3a-failed-pickup';
-  }
-
   /** ADR-0025: 4-auto-review carries the lane-level "machine pass" controls. */
   isAutoReview(): boolean {
     return this.state() === '4-auto-review';

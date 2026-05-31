@@ -158,7 +158,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `compact-cards-toggle.spec.ts` | Compact cards toggle |
 | `cross-lane-drop-position.spec.ts` | Cross-lane drop preserves drop position |
 | `dnd-no-flash.spec.ts` | Drag-and-drop motion CSS contract (static harness) |
-| `failed-pickup-lane.spec.ts` | ADR-0028 failed-pickup lane + banner |
+| `failed-pickup-lane.spec.ts` | ADR-0051 failed-pickup lane is eliminated (no lane, banner, or dot) |
 | `info-button-lane-headers.spec.ts` | Info button on lane headers (selective placement) |
 | `kanban-full-width.spec.ts` | Kanban full-width layout |
 | `kanban-lane-containers-screenshots.spec.ts` | Lane container visual evidence |

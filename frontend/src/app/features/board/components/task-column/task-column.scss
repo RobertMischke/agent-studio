@@ -69,23 +69,6 @@
       outline: 2px solid rgba(99, 102, 241, 0.6);
       outline-offset: -2px;
     }
-    /* ADR-0028: 3a-failed-pickup is the only lane that uses an outline tint
-       on the column itself. 1 px amber per the kanban-board-design taxonomy.
-       Pickup failures must remain visible; collapse is suppressed in the
-       template so a non-empty failed-pickup lane cannot be hidden. */
-    .column--failed-pickup {
-      border: 1px solid rgba(245, 158, 11, 0.55);
-    }
-    .column--failed-pickup .column__title { color: #fbbf24; }
-    .column__amber-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      background: #f59e0b;
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.20);
-      flex-shrink: 0;
-      display: inline-block;
-    }
     .column__header {
       display: flex;
       align-items: center;

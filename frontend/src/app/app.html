@@ -189,7 +189,6 @@
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
-              <!-- F56: failed-pickup notification moved to toast stack -->
               @if (hasActiveFiltersOrSearch() && filteredTaskCount() === 0) {
                 <div class="board-filter-empty-hint" data-testid="board-filter-empty-hint">
                   <span class="board-filter-empty-hint__text">
@@ -564,7 +563,6 @@
             </main>
           </div>
         } @else {
-          <!-- F56: failed-pickup notification moved to toast stack -->
           <main class="dashboard" data-testid="kanban-dashboard"
                 [class.dashboard--has-focus]="focusedContainer() !== null">
             @for (g of laneGroups(); track g.id) {

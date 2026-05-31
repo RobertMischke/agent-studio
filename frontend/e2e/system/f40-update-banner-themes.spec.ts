@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { contrastRatio, parseRgb } from '../helpers/contrast';
 
 /**
- * F40 — three banner / toast surfaces (update-banner, failed-pickup-banner,
+ * F40 — three banner / toast surfaces (update-banner, warning-banner,
  * triage-toast) now consume the unified <app-notification> primitive.
  *
  * This spec locks the theme contract for each:
@@ -19,7 +19,7 @@ import { contrastRatio, parseRgb } from '../helpers/contrast';
  *
  * Update-banner: driven by mocking the UpdateService `/update/status`
  * endpoint so a fake `phase: 'done'` snapshot enters the bridge into
- * `mode='done'`. Failed-pickup + triage-toast: rendered via inline
+ * `mode='done'`. Warning-banner + triage-toast: rendered via inline
  * markup harnesses that mirror the production templates, same pattern
  * as `workspace-banner-long-message.spec.ts`.
  */
@@ -194,7 +194,7 @@ async function assertButtonReadable(
 
 test.describe('F40 — banner / toast theme contracts (dark + light)', () => {
   for (const theme of ['dark', 'light'] as const) {
-    test(`failed-pickup banner stays readable (${theme})`, async ({ page }, testInfo) => {
+    test(`warning banner stays readable (${theme})`, async ({ page }, testInfo) => {
       await page.setContent(`<!doctype html>
 <html data-studio-theme="${theme}"><head><meta charset="utf-8"><style>${TOKENS_AND_CHROME}
 .board-banner { display: block; width: 100%; }
@@ -207,12 +207,12 @@ test.describe('F40 — banner / toast theme contracts (dark + light)', () => {
 </style></head><body>
   <div class="board-banner board-banner--clickable" role="button" tabindex="0">
     <div class="notification notification--warning notification--layout-banner"
-         role="status" aria-live="polite" data-testid="failed-pickup-banner">
+         role="status" aria-live="polite" data-testid="warning-banner">
       <span class="notification__icon" aria-hidden="true">⚠</span>
       <div class="notification__body">
         <div class="notification__message">
-          <strong data-testid="failed-pickup-banner-count">2</strong>
-          jobs failed to pick up. Open the failed-pickup lane.
+          <strong data-testid="warning-banner-count">2</strong>
+          items need attention. Open the affected lane.
         </div>
       </div>
       <span aria-hidden="true">›</span>
@@ -222,14 +222,14 @@ test.describe('F40 — banner / toast theme contracts (dark + light)', () => {
 
       await setTheme(page, theme);
 
-      await assertSurfaceContrast(page, 'failed-pickup-banner', theme);
-      await expect(page.getByTestId('failed-pickup-banner-count')).toHaveText('2');
+      await assertSurfaceContrast(page, 'warning-banner', theme);
+      await expect(page.getByTestId('warning-banner-count')).toHaveText('2');
 
-      await testInfo.attach(`f40-failed-pickup-banner-${theme}.png`, {
+      await testInfo.attach(`f40-warning-banner-${theme}.png`, {
         body: await page.screenshot({ fullPage: false }),
         contentType: 'image/png',
       });
-      await captureForReport(page, `f40-failed-pickup-banner-${theme}`);
+      await captureForReport(page, `f40-warning-banner-${theme}`);
     });
 
     test(`triage-toast stays readable (${theme})`, async ({ page }, testInfo) => {

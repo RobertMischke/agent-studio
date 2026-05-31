@@ -115,7 +115,6 @@ test.describe('Detail view — status dropdown (discoverability)', () => {
         '1a-orchestrator-prep',
         '2-ready',
         '3-progress',
-        '3a-failed-pickup',
         '4-auto-review',
         '5-human-review',
         '6-completed',
@@ -127,8 +126,8 @@ test.describe('Detail view — status dropdown (discoverability)', () => {
       // additional lanes (1b-needs-human-review) — the task list is the
       // floor, not the ceiling.
       for (const lane of expected) {
-        // Some lanes (0-backlog, 3a-failed-pickup) are not user-pickable in
-        // the current header — they are still part of the canonical board.
+        // Some lanes (0-backlog) are not user-pickable in the current
+        // header — they are still part of the canonical board.
         // Only fail when a lane the dropdown is meant to expose is missing.
         if (['1-preparation', '1a-orchestrator-prep', '2-ready', '3-progress',
              '4-auto-review', '5-human-review', '6-completed', '7-archive'].includes(lane)) {

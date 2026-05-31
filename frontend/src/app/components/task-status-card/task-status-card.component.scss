@@ -102,11 +102,6 @@ app-task-status-card {
     border-color: var(--studio-accent);
   }
 
-  &__lane[data-state='3a-failed-pickup'] {
-    color: var(--studio-accent-6);
-    border-color: var(--studio-accent-6);
-  }
-
   &__lane-dot {
     font-size: 10px;
     line-height: 1;

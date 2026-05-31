@@ -395,39 +395,6 @@ export class App implements OnInit, OnDestroy {
     return this.watchPaths().map((wp) => wp.name);
   });
 
-  /**
-   * ADR-0028: count of jobs in <c>3a-failed-pickup</c> across the visible
-   * (filtered) board. Drives the persistent failure banner above the
-   * dashboard. The lane itself is hide-when-empty; the banner is the
-   * always-on cross-board surface that survives a collapsed lane and a
-   * filtered owner view (counts respect the active project / client filter).
-   */
-  readonly failedPickupCount = computed(() => (this.filteredGrouped().failedPickup ?? []).length);
-
-  /**
-   * Banner click-through: scroll the failed-pickup lane into view and pulse
-   * its outline so the user's eye lands on it. The lane is rendered inside
-   * the same dashboard, so a smooth scroll plus a one-shot CSS class is
-   * cheaper than a routing change.
-   */
-  scrollToFailedPickupLane(): void {
-    // The failed-pickup lane lives inside the Active container. If the
-    // user has focus-expanded another container, the lane element is not
-    // in the DOM and a scroll target would be silently missing.
-    if (this.focusedContainer() !== null && this.focusedContainer() !== 'active') {
-      this.clearContainerFocus();
-    }
-    queueMicrotask(() => {
-      const el = document.querySelector(
-        '[data-testid="lane-3a-failed-pickup"]',
-      ) as HTMLElement | null;
-      if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      el.classList.add('column--failed-pickup-pulse');
-      setTimeout(() => el.classList.remove('column--failed-pickup-pulse'), 1400);
-    });
-  }
-
   // Cycle 9 / ADR-0034: filter signals + URL sync delegated to BoardFiltersService.
   // The shell re-exposes the same names so existing template bindings + call
   // sites keep working unchanged.
@@ -506,18 +473,6 @@ export class App implements OnInit, OnDestroy {
     lanes.push(
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
-    );
-    // ADR-0028: 3a-failed-pickup is hide-when-empty. The card style and the
-    // amber outline live on the column component when state === '3a-failed-pickup'.
-    if ((grouped.failedPickup ?? []).length > 0) {
-      lanes.push({
-        state: '3a-failed-pickup',
-        title: 'Failed Pickup',
-        icon: '⚠️',
-        jobs: grouped.failedPickup,
-      });
-    }
-    lanes.push(
       { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
       { state: '5-human-review', title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
@@ -531,14 +486,13 @@ export class App implements OnInit, OnDestroy {
    *
    *  - backlog: 0-backlog, 1-preparation, 1a-orchestrator-prep,
    *             1b-needs-human-review, 2-ready
-   *  - active:  3-progress, 3a-failed-pickup, 4-auto-review
+   *  - active:  3-progress, 4-auto-review
    *  - decide:  5-human-review, 6-completed, 7-archive ("Done & Decide" -
    *             the user-owned tail of the pipeline; sign-off plus the
    *             archive sit together because they all wait on the user.)
    *
    * The previous human/agent axis suffix was misleading (Backlog mixes
-   * agent prep with human triage; Active sometimes pauses on
-   * 3a-failed-pickup waiting for the user) and is removed.
+   * agent prep with human triage) and is removed.
    */
   readonly laneGroups = computed(() => {
     const grouped = this.displayGrouped();
@@ -600,22 +554,8 @@ export class App implements OnInit, OnDestroy {
     });
     const activeLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+      { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
     ];
-    // ADR-0028: 3a-failed-pickup is hide-when-empty.
-    if ((grouped.failedPickup ?? []).length > 0) {
-      activeLanes.push({
-        state: '3a-failed-pickup',
-        title: 'Failed Pickup',
-        icon: '⚠️',
-        jobs: grouped.failedPickup,
-      });
-    }
-    activeLanes.push({
-      state: '4-auto-review',
-      title: 'Auto Review',
-      icon: '🤖',
-      jobs: grouped.autoReview,
-    });
     return [
       {
         id: 'backlog',
@@ -928,40 +868,6 @@ export class App implements OnInit, OnDestroy {
       );
     });
 
-    // F56: failed-pickup count → toast notification instead of inline banner.
-    let failedPickupToastId: number | null = null;
-    let lastPickupCount = 0;
-    effect(() => {
-      const count = this.failedPickupCount();
-      if (count === lastPickupCount) return;
-      lastPickupCount = count;
-
-      untracked(() => {
-        if (failedPickupToastId !== null) {
-          this.notifications.dismiss(failedPickupToastId);
-          failedPickupToastId = null;
-        }
-        if (count > 0) {
-          failedPickupToastId = this.notifications.notify({
-            kind: 'warning',
-            title: 'Failed pickup',
-            message: `${count} ${count === 1 ? 'task' : 'tasks'} failed to pick up.`,
-            durationMs: 0,
-            actions: [
-              {
-                label: 'Open failed-pickup lane',
-                testId: 'toast-failed-pickup-open-lane',
-                primary: true,
-                callback: () => {
-                  this.scrollToFailedPickupLane();
-                  failedPickupToastId = null;
-                },
-              },
-            ],
-          });
-        }
-      });
-    });
   }
 
   ngOnInit() {

@@ -1,7 +1,15 @@
-# Failed Pickup
+# Failed Pickup (retired)
 
-The `3a-failed-pickup` lane is the dead-letter for tasks that the orchestrator tried to start but that never produced a real run. After a configured number of empty attempts (default 3) — a CLI that exited before streaming any output, a run wedged behind a quota or auth wall — the card is moved here so it cannot permanently jam `3-progress`.
+The `3a-failed-pickup` lane has been retired. It was a dead-letter lane for tasks that the orchestrator tried to start but that never produced a real run. ADR-0051 eliminated it: a task failing pickup is always a bug in the pickup path, not a state a user should have to triage.
 
-## What to do here
+There is no longer a `3a-failed-pickup` lane, banner, toast, or amber dot in the board. No live code path routes a folder into it.
 
-Investigate, then re-queue. A card here is usually the most restartable kind of failure: the work itself never began, so nothing is half-done. Check the activity log for why pickup failed (auth, quota, a bad prompt, a missing tool), fix the underlying cause, and send the card back to `2-ready` to try again. Cards do not retry themselves from this lane — that is the point. It exists so a repeatedly-failing task steps aside instead of blocking everything behind it.
+## Where those folders go now
+
+See [failed-pickup-elimination.md](failed-pickup-elimination.md) for the full cause-by-cause routing table. In short:
+
+- A folder with a `job.json` is a real task. An interrupted run is requeued to `2-ready`; a task that genuinely cannot be started after a bounded number of attempts is escalated to `5-human-review`. A real task is never dead-lettered.
+- A folder with no `job.json` is debris. It is deleted when the real job is provably elsewhere, otherwise archived to `7-archive` with its evidence intact.
+- A broken CLI (spawn failure) is infrastructure, not a task fault. The task waits in `2-ready` with a clear status and the runner pauses so it does not spin; it resumes when a human fixes the CLI.
+
+Historical `3a-failed-pickup` folders are drained on boot: real tasks to `2-ready`, debris to `7-archive`.

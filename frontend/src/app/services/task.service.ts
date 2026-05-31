@@ -84,9 +84,10 @@ export interface CodeReviewRunResponse {
 type LaneKey = keyof GroupedJobs;
 // ADR-0025: state strings use the new seven-lane order.
 // ADR-0026: 1a-orchestrator-prep + 1b-needs-human-review join the catalog.
-// ADR-0029: 3a-failed-pickup joins the catalog so optimistic reorders/moves
-// targeting the loud-not-archived lane keep the same fast-path treatment as
-// every other lane.
+// ADR-0051 drain-era plumbing: 3a-failed-pickup is retired (no live path
+// populates it, board no longer renders it). The mapping stays so a
+// historical folder still parses into its group while the boot drain empties
+// the lane.
 const STATE_TO_LANE: Record<string, LaneKey> = {
   '0-backlog': 'backlog',
   '1-preparation': 'preparation',

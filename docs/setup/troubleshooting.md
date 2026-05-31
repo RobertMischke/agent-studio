@@ -31,7 +31,7 @@ Cause: the cross-slug infra circuit breaker ([../../backend/Services/Runner/Cros
 
 What to check:
 
-1. Look at the most recent jobs in `3-progress` and `3a-failed-pickup`. Same failure category across them?
+1. Look at the most recent jobs in `3-progress`, plus any the pickup loop just returned to `2-ready` (spawn failure) or escalated to `5-human-review` (task-shaped failure). Same failure category across them?
 2. The bus event stream (`logs/bus/<project>/<date>.jsonl`) carries the circuit-breaker transitions and the reason it tripped.
 3. Fix the underlying cause (sandbox config, CLI install, network), then resume manually with the runner-mode pill.
 

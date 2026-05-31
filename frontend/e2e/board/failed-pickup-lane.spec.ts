@@ -1,20 +1,15 @@
 import { test, expect, Page } from '@playwright/test';
 
 /**
- * ADR-0028 (pickup failures: dedicated visible lane + persistent banner,
- * never silent archive) regression spec.
+ * ADR-0051 (eliminate the failed-pickup lane) regression spec. Supersedes the
+ * ADR-0028 doctrine of a visible dead-letter lane + persistent banner.
  *
- * The board renders a hide-when-empty `3a-failed-pickup` lane between
- * `3-progress` and `4-auto-review`, with a 1 px amber outline and a 12 px
- * amber dot in the header. The lane cannot be collapsed while non-empty.
- * A persistent banner above the dashboard counts failed pickups across
- * the visible (filtered) board and scrolls the lane into view on click.
- *
- * Two cases covered here:
- *   1. Empty failed-pickup -> lane and banner stay hidden.
- *   2. One failed-pickup card -> lane visible with amber outline + dot,
- *      collapse button suppressed, banner visible with the count, banner
- *      click scrolls the lane into view.
+ * The board no longer renders a `3a-failed-pickup` lane, banner, toast, or
+ * amber dot under any circumstances. No live path populates the lane, and the
+ * boot drain empties any historical folders. This spec pins the UI invariant:
+ * even if a grouped payload still carries `failedPickup` cards (a drain-era
+ * payload arriving before the backend has finished draining), the board shows
+ * no lane, no banner, and no dot for them.
  */
 
 const FIXTURE_WATCH = 'C:/fixtures/failed-pickup-demo';
@@ -94,10 +89,10 @@ async function installBoardMocks(page: Page, failedCount: number): Promise<void>
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify([{ name: FIXTURE_PROJECT, path: FIXTURE_WATCH, rootPath: FIXTURE_WATCH }]) });
   });
-  await page.route('**/api/jobs', async (route) => {
+  await page.route('**/api/tasks', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(allJobs) });
   });
-  await page.route('**/api/jobs/grouped', async (route) => {
+  await page.route('**/api/tasks/grouped', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(grouped) });
   });
   await page.route('**/api/runner/status', async (route) => {
@@ -138,51 +133,45 @@ async function installBoardMocks(page: Page, failedCount: number): Promise<void>
   });
 }
 
-test.describe('ADR-0028 failed-pickup lane + banner', () => {
+test.describe('ADR-0051 failed-pickup lane is eliminated', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('hide-when-empty: no failed pickups -> lane and banner are absent', async ({ page }) => {
+  test('empty failed-pickup group -> no lane, no banner, no dot', async ({ page }) => {
     await installBoardMocks(page, 0);
     await page.goto('/');
 
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('studio-board')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('failed-pickup-banner')).toHaveCount(0);
     await expect(page.getByTestId('lane-3a-failed-pickup')).toHaveCount(0);
+    await expect(page.getByTestId('failed-pickup-dot')).toHaveCount(0);
   });
 
-  test('non-empty: lane visible with amber outline + dot, collapse suppressed, banner shows count', async ({ page }) => {
+  test('drain-era payload with failed-pickup cards still renders no lane, banner, or dot', async ({ page }) => {
     await installBoardMocks(page, 2);
     await page.goto('/');
 
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('studio-board')).toBeVisible({ timeout: 10_000 });
 
-    // Banner is visible and counts the failures.
-    const banner = page.getByTestId('failed-pickup-banner');
-    await expect(banner).toBeVisible();
-    await expect(page.getByTestId('failed-pickup-banner-count')).toHaveText('2');
+    // The lane, the retired banner, and the amber dot must never render, even
+    // when the grouped payload still carries failed-pickup cards.
+    await expect(page.getByTestId('lane-3a-failed-pickup')).toHaveCount(0);
+    await expect(page.getByTestId('failed-pickup-banner')).toHaveCount(0);
+    await expect(page.getByTestId('failed-pickup-banner-count')).toHaveCount(0);
+    await expect(page.getByTestId('failed-pickup-dot')).toHaveCount(0);
 
-    // Lane is visible with the amber dot in its header.
-    const lane = page.getByTestId('lane-3a-failed-pickup');
-    await expect(lane).toBeVisible();
-    await expect(lane).toHaveAttribute('data-state', '3a-failed-pickup');
-    await expect(page.getByTestId('failed-pickup-dot')).toBeVisible();
+    // No toast offering to open the retired lane either.
+    await expect(page.getByTestId('toast-failed-pickup-open-lane')).toHaveCount(0);
 
-    // Collapse button is intentionally absent on this lane (not collapsible
-    // while non-empty per kanban-board-design taxonomy + ADR-0028).
-    await expect(page.getByTestId('lane-collapse-3a-failed-pickup')).toHaveCount(0);
+    // The lanes that flank the retired position still render, so the board is
+    // healthy - the failed-pickup lane simply does not exist between them. The
+    // Active container's lane vocabulary is exactly progress -> auto-review.
+    await expect(page.getByTestId('lane-3-progress')).toBeVisible();
+    await expect(page.getByTestId('lane-4-auto-review')).toBeVisible();
+    await expect(page.getByTestId('lane-group-active')).toHaveAttribute(
+      'data-states',
+      '3-progress,4-auto-review',
+    );
 
-    // Outline is amber per the taxonomy. The CSS rgb is rendered, so check
-    // the computed border-color is in the amber family.
-    const borderColor = await lane.evaluate((el) => getComputedStyle(el).borderColor);
-    // #f59e0b ≈ rgb(245, 158, 11). RGBA forms also accepted; the assertion
-    // accepts the rendered colour with any alpha so a future tweak to opacity
-    // does not flake the test.
-    expect(borderColor).toMatch(/(?:rgba?\(\s*245\s*,\s*158\s*,\s*11)|(?:#f59e0b)/i);
-
-    // Banner click scrolls the lane into view (the lane stays visible after).
-    await banner.click();
-    await expect(lane).toBeVisible();
-
-    await page.screenshot({ path: 'test-results/failed-pickup-lane-and-banner.png', fullPage: false });
+    await page.screenshot({ path: 'test-results/failed-pickup-lane-eliminated.png', fullPage: false });
   });
 });

@@ -447,12 +447,10 @@ export interface GroupedJobs {
   ready: TaskInfo[];
   progress: TaskInfo[];
   /**
-   * ADR-0028 lane: pickup failures (3a-failed-pickup). Hide-when-empty.
-   * Populated by StaleProgressArchiver and the per-project dead-letter path.
-   * Renders with the amber loud-not-archived treatment: orphan / empty
-   * boot-sweep verdicts and silent-pickup dead-letters used to vanish into
-   * 7-archive; they now stay visible here with a per-card placard
-   * (`failed-pickup-reason.md`).
+   * ADR-0051 drain-era plumbing: the retired 3a-failed-pickup lane. No live
+   * path populates it and the board no longer renders it; the field stays so
+   * the frontend keeps parsing the grouped payload while the backend boot
+   * drain empties any historical folders. Always empty after a clean boot.
    */
   failedPickup: TaskInfo[];
   /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */

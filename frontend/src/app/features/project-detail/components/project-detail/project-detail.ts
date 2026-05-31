@@ -182,7 +182,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       ['Preparation', grouped.preparation ?? []],
       ['Ready', grouped.ready ?? []],
       ['Progress', grouped.progress ?? []],
-      ['Failed Pickup', grouped.failedPickup ?? []],
       ['Auto Review', grouped.autoReview ?? grouped.review],
       ['Review', grouped.humanReview ?? []],
       ['Completed', grouped.completed],
@@ -337,7 +336,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.queueRepairBusy.set(false);
         this.queueHealth.set(res.queueHealth);
-        this.queueRepairMessage.set(`Moved ${res.moved.length} folder${res.moved.length === 1 ? '' : 's'} to Failed Pickup.`);
+        this.queueRepairMessage.set(`Archived ${res.moved.length} folder${res.moved.length === 1 ? '' : 's'}.`);
         this.refreshAll(true);
       },
       error: (err) => {

@@ -6,7 +6,7 @@ import { test, expect, Page } from '@playwright/test';
  * The board's lifecycle columns are wrapped in three contiguous
  * containers (Backlog / Active / Done & Decide) so the workflow reads
  * as phases. The Active container holds machine-driven lanes
- * (3-progress, 3a-failed-pickup, 4-auto-review); the Done & Decide
+ * (3-progress, 4-auto-review); the Done & Decide
  * container holds the user-owned tail (5-human-review, 6-completed,
  * 7-archive). Any individual lane can also be collapsed into a narrow
  * rail that still surfaces task count plus running / needs-input /

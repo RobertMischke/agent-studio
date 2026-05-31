@@ -263,7 +263,6 @@
   &.state--1b-needs-human-review  { color: var(--lane-human-review); }
   &.state--2-ready                { color: var(--lane-ready); }
   &.state--3-progress             { color: var(--lane-progress); }
-  &.state--3a-failed-pickup       { color: var(--lane-failed); }
   &.state--4-auto-review          { color: var(--lane-auto-review); }
   &.state--5-human-review         { color: var(--lane-human-review); }
   &.state--6-completed            { color: var(--lane-completed); }

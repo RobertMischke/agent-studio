@@ -19,7 +19,6 @@ const LANE_DOC_TOPIC: Record<string, string> = {
   '2-ready': 'lane-2-ready',
   '2-ready-intake': 'lane-2-ready',
   '3-progress': 'lane-3-progress',
-  '3a-failed-pickup': 'lane-3a-failed-pickup',
   '4-review': 'lane-4-auto-review',
   '4-auto-review': 'lane-4-auto-review',
   '5-human-review': 'lane-5-human-review',

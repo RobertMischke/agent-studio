@@ -1286,23 +1286,6 @@
       min-height: 0;
       align-items: stretch;
     }
-    /* F56: .board-banner styles removed; failed-pickup now renders as toast.
-     *
-     * Banner click-through pulse: highlights the failed-pickup lane briefly
-       so the user's eye lands on it after the smooth scroll completes.
-       The shadow colour uses the warning-icon-fg token so light + dark
-       themes both get a readable highlight (was a hardcoded amber rgba). */
-    .column--failed-pickup-pulse {
-      animation: failed-pickup-pulse 1.4s ease-out 1;
-    }
-    @keyframes failed-pickup-pulse {
-      0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--notify-warning-icon-fg) 0%, transparent); }
-      30%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--notify-warning-icon-fg) 40%, transparent); }
-      100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--notify-warning-icon-fg) 0%, transparent); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .column--failed-pickup-pulse { animation: none; }
-    }
     /*
      * Lane groups bundle the individual columns into visually distinct
      * phases of the workflow:
@@ -1881,7 +1864,7 @@
       display: grid;
       /* repeat(N, minmax(220px, 1fr)) - N is hard-coded at 7 for the
          current ADR-0025 lane vocabulary. Slice 4 reads N from the
-         visible-lane count when failed-pickup gains a body. */
+         visible-lane count. */
       grid-template-columns: repeat(7, minmax(220px, 1fr));
       gap: 4px;
       padding: 16px;

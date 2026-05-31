@@ -232,28 +232,14 @@ public sealed class IntakeRunner
 
     private static IntakeVerdict? CheckBlocked(string prompt)
     {
-        // Hard product-boundary keywords: parallel coding, branch management,
-        // cross-project work. These are intentionally narrow; the rule is
-        // "if a fresh card asks for a hard non-goal, surface it now".
-        var blockers = new (string Phrase, string Why)[]
-        {
-            ("parallel coding", "Requests intra-project parallel coding work, which is a hard product non-goal (AGENTS.md)."),
-            ("multiple agents at once", "Requests intra-project parallel coding work, which is a hard product non-goal (AGENTS.md)."),
-            ("create a new branch", "Asks the orchestrator to manage git branches, which is a hard product non-goal."),
-            ("worktree", "Asks the orchestrator to manage worktrees, which is a hard product non-goal."),
-        };
-        foreach (var (phrase, why) in blockers)
-        {
-            if (prompt.Contains(phrase, StringComparison.OrdinalIgnoreCase))
-            {
-                return new IntakeVerdict
-                {
-                    Outcome = IntakeOutcome.Blocked,
-                    Reason = why,
-                    Details = [phrase]
-                };
-            }
-        }
+        // ADR-0052 reversed the intra-project-parallelism non-goal: bounded
+        // intra-project parallel execution via git worktrees + per-task branches
+        // is now an opt-in, orchestrator-gated capability (configurable
+        // maxParallelism per project), not a hard non-goal. The phrase blockers
+        // that used to hard-stop such cards ("parallel coding", "worktree",
+        // "create a new branch", "multiple agents at once") are therefore gone.
+        // Re-add a blocker here only for a genuine future hard non-goal.
+        _ = prompt;
         return null;
     }
 

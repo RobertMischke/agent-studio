@@ -39,7 +39,7 @@ Each entry uses the same fields:
 - **Where:** [`backend/Services/Runner/ProjectRunner.cs`](../backend/Services/Runner/ProjectRunner.cs) `TryPickProgressJobOrDeadLetter` + `RecordPickupAttemptResult`
 - **Re-entry trigger:** Pickup tick attempts to spawn the CLI for the same slug after a previous attempt produced zero stdout lines.
 - **Budget:** `PickupFailureThreshold` (default 3 silent attempts per slug)
-- **Action when budget exhausted:** Move folder to `3a-failed-pickup/<slug>-pickup-failed-<utc-date>/`, append a row to `<workspace>/logs/pickup-failures.jsonl`, then proceed to `pickup.diagnose-once-per-dead-letter` (see below).
+- **Action when budget exhausted:** Reroute the over-budget folder via `ProjectRunner.RerouteOverBudgetFolder` and append a row to `<workspace>/logs/pickup-failures.jsonl`. Per ADR-0051 there is no `3a-failed-pickup` dead-letter: a spawn failure (CLI never started) returns the task to `2-ready` and pauses the runner; a task-shaped failure (CLI ran but stayed silent) escalates to `5-human-review` and the runner continues.
 - **Breaker test:** `backend.Tests/Architecture/PickupSilentRunsBreakerTest.cs` (to be added with the implementation task)
 - **Last fired:** 2026-05-06 — 22-job drain caused by a 500-byte `claude.exe` stub from a broken npm postinstall. Detection worked correctly; the gap was the missing diagnosis step (now `pickup.diagnose-once-per-dead-letter`) and the missing cross-slug circuit breaker (`pickup.cross-slug-infra-circuit-breaker`).
 - **Notes:** Silent run is defined as zero stdout lines, regardless of stderr or exit code. Stderr-only failures look identical to genuinely-quiet sessions; the diagnosis step disambiguates after the fact.

@@ -40,7 +40,6 @@
     <div class="column"
          [class.column--dragover]="isDragOver"
          [class.column--archive]="isArchive()"
-         [class.column--failed-pickup]="isFailedPickup()"
          [attr.data-testid]="'lane-' + state()"
          [attr.data-state]="state()"
          (dragover)="onDragOver($event)"
@@ -48,11 +47,6 @@
          (drop)="onDrop($event)">
       <div class="column__header">
         <span class="column__icon">{{ icon() }}</span>
-        @if (isFailedPickup()) {
-          <span class="column__amber-dot"
-                aria-hidden="true"
-                data-testid="failed-pickup-dot"></span>
-        }
         <h2 class="column__title">{{ title() }}</h2>
         <span class="column__count">{{ jobs().length }}</span>
         @if (infoTopic(); as topic) {
@@ -118,13 +112,11 @@
             }
           </button>
         }
-        @if (!isFailedPickup()) {
-          <button type="button"
-                  class="column__collapse"
-                  [attr.data-testid]="'lane-collapse-' + state()"
-                  [appTooltip]="'Collapse ' + title() + ' lane'"
-                  (click)="collapseToggle.emit()">‹</button>
-        }
+        <button type="button"
+                class="column__collapse"
+                [attr.data-testid]="'lane-collapse-' + state()"
+                [appTooltip]="'Collapse ' + title() + ' lane'"
+                (click)="collapseToggle.emit()">‹</button>
       </div>
       @if (isAutoReview()) {
         <div class="column__auto-review-status"

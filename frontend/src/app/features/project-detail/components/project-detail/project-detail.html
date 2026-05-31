@@ -121,7 +121,7 @@
                     class="proj-detail__repair"
                     [disabled]="queueRepairBusy()"
                     (click)="repairQueueHealth()">
-              {{ queueRepairBusy() ? 'Repairing...' : 'Move metadata orphans to Failed Pickup' }}
+              {{ queueRepairBusy() ? 'Repairing...' : 'Archive metadata orphans' }}
             </button>
             @if (queueRepairMessage(); as msg) {
               <span>{{ msg }}</span>

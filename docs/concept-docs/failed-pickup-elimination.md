@@ -1,6 +1,6 @@
 # Eliminating the failed-pickup lane
 
-Status: in progress (supersedes the loud-dead-letter doctrine of ADR-0028 / ADR-0029).
+Status: done (supersedes the loud-dead-letter doctrine of ADR-0028 / ADR-0029; see ADR-0051). The lane is never populated by any live path, the boot drain empties historical folders, and the board no longer renders a lane, banner, toast, or dot.
 
 The position that drove this work: a task failing pickup is always a bug in the
 pickup path, not a state the user should ever have to triage. `3a-failed-pickup`
