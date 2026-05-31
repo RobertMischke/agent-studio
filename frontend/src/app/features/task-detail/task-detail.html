@@ -71,6 +71,12 @@
     (toggleRequest)="togglePane($event)"
     (openInVsCode)="openInVsCode()" />
 
+  @if (detail().info.kind === 'epic') {
+    <app-epic-rollup-pane
+      [epicId]="detail().info.id"
+      [watchPath]="detail().info.watchPath" />
+  }
+
   <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
     @if (isPaneRendered('prompt')) {
       <app-prompt-pane
