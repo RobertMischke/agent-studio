@@ -271,6 +271,16 @@ public static class TaskCrudEndpoints
             return Results.Ok();
         });
 
+        // Epics assignment way 2 (post-hoc): attach/detach a task to a parent epic.
+        // Body { epicId }: null or empty detaches. (Way 1 is CreateJobRequest.EpicId
+        // at create time; way 3 is an epic's decomposition run creating sub-tasks
+        // with epicId via the create path.)
+        group.MapPut("/{jobId}/epic", (string jobId, string? watchPath, SetJobEpicRequest req, TaskMutationService mutations) =>
+        {
+            var ok = mutations.SetJobEpic(jobId, req?.EpicId, watchPath);
+            return ok ? Results.Ok() : Results.NotFound();
+        });
+
         group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, TaskMutationService mutations) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.Title))

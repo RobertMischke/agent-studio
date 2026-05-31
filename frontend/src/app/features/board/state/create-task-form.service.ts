@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { CliType, CLI_TYPES, WatchPathEntry } from '../../../models/task.model';
+import { CliType, CLI_TYPES, TaskKind, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
@@ -43,6 +43,8 @@ export class CreateTaskFormService {
   newTargetState = '1-preparation';
   newTaskType = 'chore';
   newTags: string[] = [];
+  /** Card kind: `task` (default) or `epic`. */
+  newKind: TaskKind = 'task';
   newCliType: CliType = readDefaultCliPref();
   newModel: string = readDefaultModelPref(readDefaultCliPref());
   newAttachments: PendingAttachment[] = [];
@@ -176,6 +178,7 @@ export class CreateTaskFormService {
     this.newTaskType = 'chore';
     this.newTags = [];
     this.newTargetState = '1-preparation';
+    this.newKind = 'task';
     this.newCliType = readDefaultCliPref();
     this.newModel = readDefaultModelPref(this.newCliType);
     this.availableModels.set([]);
@@ -209,6 +212,7 @@ export class CreateTaskFormService {
       model: this.newModel.trim() || undefined,
       taskType: this.newTaskType,
       tags: this.newTags.length > 0 ? [...this.newTags] : undefined,
+      kind: this.newKind,
     }).subscribe({
       next: (res) => {
         localStorage.setItem('lastCreateWatchPath', watchPath);

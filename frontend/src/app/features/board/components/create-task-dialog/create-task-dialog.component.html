@@ -104,6 +104,23 @@
       </div>
     </div>
 
+    <div class="field">
+      <span class="field__label">Kind</span>
+      <div class="create-type-picker" data-testid="create-kind">
+        <button type="button"
+                class="create-type-picker__btn"
+                [class.create-type-picker__btn--active]="!isEpic()"
+                data-testid="create-kind-task"
+                (click)="setKind('task')">Task</button>
+        <button type="button"
+                class="create-type-picker__btn"
+                [class.create-type-picker__btn--active]="isEpic()"
+                data-testid="create-kind-epic"
+                [appTooltip]="'An epic is a container for sub-tasks. The prompt is the overarching goal.'"
+                (click)="setKind('epic')">Epic</button>
+      </div>
+    </div>
+
     @if (availableTags().length > 0) {
       <div class="field">
         <span class="field__label">Tags</span>

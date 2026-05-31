@@ -3,7 +3,7 @@ import { ModalStackService } from '../../../../services/modal-stack.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
-import type { CliType, TagRegistryEntry, WatchPathEntry } from '../../../../models/task.model';
+import type { CliType, TagRegistryEntry, TaskKind, WatchPathEntry } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
@@ -75,6 +75,11 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   readonly newTags = model<string[]>([]);
   /** Lane the new task lands in. One of the entries in CREATE_LANE_OPTIONS. */
   readonly newTargetState = model<string>('1-preparation');
+  /** Card kind: `task` (default) or `epic` (a sub-task container). */
+  readonly newKind = model<TaskKind>('task');
+  readonly isEpic = computed(() => this.newKind() === 'epic');
+
+  setKind(kind: TaskKind): void { this.newKind.set(kind); }
 
   readonly tagRegistryStore = inject(TagRegistryStore);
   readonly availableTags = computed(() => this.tagRegistryStore.tags());
