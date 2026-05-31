@@ -691,9 +691,9 @@ Keep the app dense, fast, and pleasant to use:
 
 The core execution model stays intentionally narrow:
 
-- One coding task runs per project at a time.
-- Parallelism is allowed across projects, not inside one project.
-- The app does not create branches, switch branches, merge branches, or manage worktrees.
+- Sequential by default: one coding task runs per project at a time unless a project opts into parallelism.
+- **Intra-project parallelism is opt-in and orchestrator-gated (ADR-0052):** a per-project `maxParallelism` may run N tasks concurrently, each isolated in its own git worktree on a short-lived `task/<id>` branch off the integration branch (default `develop`); the orchestrator decides parallelisability (too-big tasks run `exclusive`). Parallelism also exists across projects.
+- Branch + worktree handling lives entirely in pre/post pipeline steps (create worktree/branch, commit, merge or open PR, cleanup) - never in the run agent. Reversed the former "no branches / no worktrees" non-goal (ADR-0052).
 - The app does not become a workflow engine.
 - The app does not implement its own API-backed coding-agent runtime while subscription CLI agents remain the primary value path.
 - Runtime job artifacts belong in watched task folders, not in this source repository.

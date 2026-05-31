@@ -145,18 +145,17 @@ User-facing application strings (UI labels, button text, banner copy, backend er
 
 ## Product Goal & Non-Goals
 
-The task processor drives a **sequential pipeline of tasks per project**. Parallelism exists across projects, never within one. Treat this as a hard product boundary when proposing or implementing changes.
+The task processor drives an automated pipeline of tasks per project. It is **sequential by default** (`maxParallelism = 1`); **bounded intra-project parallelism is an opt-in, orchestrator-gated capability** (ADR-0052), not a hard non-goal. Parallelism also exists across projects.
 
 In scope:
-- Sequential, automated task execution **within a single project**. Tasks queued on that project's board are picked up and processed one after another, automatically, without per-task human kick-off.
+- Sequential, automated task execution **within a single project**, by default. Tasks queued on that project's board are picked up and processed automatically, without per-task human kick-off.
 - **Parallelism across projects**. Different watched projects (different watch paths) run their own pipelines independently and may execute concurrently.
-- A single running target app per project on a single branch (typically `main`, occasionally a feature branch).
-- Minimum overhead. The product exists precisely to avoid intra-project parallel-execution bookkeeping.
+- **Opt-in intra-project parallelism (ADR-0052).** A per-project `maxParallelism` runs N tasks of one project concurrently, each isolated in its own **git worktree** on a short-lived `task/<id>` branch off the configurable integration branch (default `develop`). The **orchestrator decides** parallelisability (a too-big / cross-cutting task is flagged `exclusive` and runs alone); all git handling (worktree, commit, merge/PR) lives in pre/post pipeline steps, never in the run agent.
+- Minimum overhead. The default stays single-task; the bookkeeping only exists when a project opts into parallelism.
 
 Out of scope (do not add, even if asked offhandedly):
-- **Intra-project parallelism.** At most one task runs per project at any time. No fan-out across agents, machines, or branches inside one project.
 - **Workspaces / workflows.** No multi-step workflow engine, no per-task workspace creation.
-- **Branch orchestration.** The app does not create, switch, sync, or merge git branches. No worktrees. No branch-per-task.
+- **Unbounded / ungated parallelism.** Parallelism is always capped by `maxParallelism` and gated by the orchestrator's parallelisability decision; no fan-out that runs conflicting tasks concurrently or lets the run agent manage git itself.
 
 If a request implies any of the out-of-scope items, surface the conflict to the user before implementing.
 
