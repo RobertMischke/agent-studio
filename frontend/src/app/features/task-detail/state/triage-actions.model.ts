@@ -88,7 +88,7 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     { id: 'archive',          label: 'Archive',          variant: 'danger',    intent: { kind: 'move', targetState: '7-archive' } },
   ],
   '4-auto-review': [
-    { id: 'force-accept', label: 'Force-accept (→ Human Review)', variant: 'secondary', intent: { kind: 'move', targetState: '5-human-review' } },
+    { id: 'force-accept', label: 'Force-accept (→ Review)', variant: 'secondary', intent: { kind: 'move', targetState: '5-human-review' } },
     { id: 'reissue',      label: 'Reissue (→ Progress)',          variant: 'secondary', intent: { kind: 'move', targetState: '3-progress' } },
   ],
   '5-human-review': [
@@ -115,7 +115,7 @@ export const LANE_LABELS: Record<string, string> = {
   '3-progress':             'In Progress',
   '3a-failed-pickup':       'Failed Pickup',
   '4-auto-review':          'Auto Review',
-  '5-human-review':         'Human Review',
+  '5-human-review':         'Review',
   '6-completed':            'Completed',
   '7-archive':              'Archive',
 };

@@ -193,7 +193,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
 
       // Source card is in Ready.
       await expect.poll(async () => {
-        const titles = (await readColumnTitles(page, 'Human Ready')).filter(t => t.startsWith(PREFIX));
+        const titles = (await readColumnTitles(page, 'Ready')).filter(t => t.startsWith(PREFIX));
         return titles.join('|');
       }, { timeout: 10_000 }).toBe([titleSrc].join('|'));
 
@@ -209,7 +209,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
       const movePost = page.waitForResponse(
         r => r.url().includes(`/api/jobs/${encodeURIComponent(src.id)}/move`) && r.request().method() === 'POST'
       );
-      await dispatchCrossLaneDropBefore(page, 'Human Ready', titleSrc, 'Backlog', titleB3);
+      await dispatchCrossLaneDropBefore(page, 'Ready', titleSrc, 'Backlog', titleB3);
       const resp = await movePost;
       expect(resp.status()).toBe(200);
 
@@ -290,7 +290,7 @@ test.describe('Cross-lane drop preserves drop position', () => {
       const movePost = page.waitForResponse(
         r => r.url().includes(`/api/jobs/${encodeURIComponent(src.id)}/move`) && r.request().method() === 'POST'
       );
-      await dispatchCrossLaneDropBefore(page, 'Human Ready', titleSrc, 'Backlog', titleB1);
+      await dispatchCrossLaneDropBefore(page, 'Ready', titleSrc, 'Backlog', titleB1);
       await movePost;
 
       await expect.poll(async () => {

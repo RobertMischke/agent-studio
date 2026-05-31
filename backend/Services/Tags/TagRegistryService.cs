@@ -9,9 +9,10 @@ namespace OrchestratorApi.Services.Tags;
 /// Workspace-level tag registry. Tags are a flat namespace shared across the
 /// watched projects in one workspace and stored as a single JSON array at
 /// <c>&lt;TaskRepository&gt;/tags.json</c>. On boot the file is merged-by-id
-/// with a curated seed of seven default tags (ui-ux, performance, quality,
-/// architecture, security, docs, observability) so a fresh workspace already
-/// has the standard taxonomy. Existing rows are never overwritten: a user's
+/// with a curated seed of default tags (ui-ux, performance, quality,
+/// architecture, security, docs, observability) plus the system provenance
+/// tag <c>orchestrator-moved</c>, so a fresh workspace already has the
+/// standard taxonomy. Existing rows are never overwritten: a user's
 /// custom label / colour / description for a seed id wins over the seed.
 /// </summary>
 /// <remarks>
@@ -32,7 +33,8 @@ public sealed class TagRegistryService
         new() { Id = "architecture",  Label = "Architecture",  Color = "#89b4fa", Description = "Load-bearing structure decisions; ADR-worthy changes." },
         new() { Id = "security",      Label = "Security",      Color = "#f38ba8", Description = "Auth, secrets, data boundaries, sandboxing." },
         new() { Id = "docs",          Label = "Docs",          Color = "#94e2d5", Description = "README / AGENTS / ADR / skill files / lookup index updates." },
-        new() { Id = "observability", Label = "Observability", Color = "#f9e2af", Description = "Logs, metrics, drift reports, token aggregates, supervisor signals." }
+        new() { Id = "observability", Label = "Observability", Color = "#f9e2af", Description = "Logs, metrics, drift reports, token aggregates, supervisor signals." },
+        new() { Id = "orchestrator-moved", Label = "Orchestrator: moved", Color = "#b4befe", Description = "The orchestrator advanced this task toward Completed (accept-as-done), as opposed to a human accepting it." }
     ];
 
     private readonly ILogger<TagRegistryService> _logger;

@@ -55,7 +55,7 @@ export function formatResetIn(epoch: number, now: number): string {
 export function outcomeIssueExplanation(issue: TaskOutcomeIssue): string {
   switch (issue.kind) {
     case 'permission-blocked':
-      return 'The orchestrator detected a permission failure. It gets one soft intervention that asks the agent to continue with the permissions already available. If the same category appears again, the task is routed to Human Review.';
+      return 'The orchestrator detected a permission failure. It gets one soft intervention that asks the agent to continue with the permissions already available. If the same category appears again, the task is routed to Review.';
     case 'watchdog-timeout':
       return 'The watchdog stopped a run after it stopped producing progress. The task is surfaced for human review with the concrete timeout category instead of a generic heuristic fallback.';
     case 'missing-terminal-sentinel':

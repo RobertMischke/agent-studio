@@ -78,7 +78,7 @@ function laneLabelFor(state: string): string {
     case '3a-failed-pickup':       return 'Failed Pickup';
     case '4-review':               return 'Review';
     case '4-auto-review':          return 'Auto Review';
-    case '5-human-review':         return 'Human Review';
+    case '5-human-review':         return 'Review';
     case '6-completed':            return 'Completed';
     case '7-archive':              return 'Archive';
     default:                       return state || '';

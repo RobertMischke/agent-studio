@@ -181,12 +181,12 @@ test.describe('ADR-0025 seven-lane kanban', () => {
       ).toBeGreaterThan(0);
     }
 
-    // Auto Review and Human Review carry the distinct icons that
+    // Auto Review and Review carry the distinct icons that
     // identify their audience (machine vs you). Pin to the column
     // heading so we don't also match the lowercase state-pill on each
-    // job card.
+    // job card. `exact` on Review so it does not also match Auto Review.
     await expect(page.getByRole('heading', { name: 'Auto Review' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Human Review' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeVisible();
 
     // Container shape: Backlog / Active / Done & Decide. The
     // 5-human-review lane lives inside the Done & Decide container,

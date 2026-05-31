@@ -40,7 +40,7 @@ export const LANE_LABELS: Record<string, string> = {
   '3-progress':             'In Progress',
   '3a-failed-pickup':       'Failed Pickup',
   '4-auto-review':          'Auto Review',
-  '5-human-review':         'Human Review',
+  '5-human-review':         'Review',
   '6-completed':            'Completed',
   '7-archive':              'Archive',
 };

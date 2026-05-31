@@ -83,7 +83,7 @@ test.describe('F30 — Task-detail header + tabs redesign', () => {
       await expect(meta).toHaveCount(1);
       await expect(meta).toContainText(/#\d+/);
       await expect(meta).toContainText(/created/);
-      await expect(meta).toContainText(/Human Ready/);
+      await expect(meta).toContainText(/\bReady\b/);
 
       // The visible toolbar must no longer carry the old P / M segment
       // tabs — only icon-style action buttons (paperclip + save + mode

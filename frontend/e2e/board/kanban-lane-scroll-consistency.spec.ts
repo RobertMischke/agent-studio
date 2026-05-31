@@ -309,7 +309,7 @@ test.describe('Kanban lane scroll model is consistent across every lane', () => 
     await collapseBtn.click();
 
     const rail = page.getByTestId('lane-rail-5-human-review');
-    await expect(rail, 'Human Review collapses into a rail').toBeVisible({ timeout: 500 });
+    await expect(rail, 'Review collapses into a rail').toBeVisible({ timeout: 500 });
 
     // Re-expanding restores the column with all cards.
     await rail.click();

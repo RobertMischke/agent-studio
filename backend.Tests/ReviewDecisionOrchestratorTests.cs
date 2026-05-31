@@ -223,6 +223,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "doc-edit")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "doc-edit")));
 
+        // Provenance: the orchestrator advanced this task toward Completed
+        // (accept-as-done), so the orchestrator-moved tag must be stamped.
+        // A human accepting in the UI never stamps this tag.
+        var tags = ReadJobTags(TaskStates.HumanReview, "doc-edit");
+        Assert.Contains(ReviewDecisionOrchestrator.OrchestratorMovedTagId, tags);
+
         var log = ReadCliLog(TaskStates.HumanReview, "doc-edit");
         Assert.Contains("[orchestrator]", log);
         Assert.Contains("[decision]", log);
@@ -648,6 +654,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // Job tags must NOT contain any *:concerns chips.
         var tags = ReadJobTags(TaskStates.HumanReview, "clean-job");
         Assert.DoesNotContain(tags, t => t.EndsWith(":concerns", StringComparison.OrdinalIgnoreCase));
+
+        // Provenance: the orchestrator advanced this task toward Completed
+        // (accept-as-done), so the orchestrator-moved tag must be stamped.
+        Assert.Contains(ReviewDecisionOrchestrator.OrchestratorMovedTagId, tags);
 
         // Decision-journal records the accept-as-done with a multi-aspect reason.
         var record = ReadOnlyDecisionRecord();

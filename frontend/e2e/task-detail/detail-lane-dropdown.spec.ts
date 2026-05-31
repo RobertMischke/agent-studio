@@ -44,8 +44,8 @@ test.describe('Detail view — lane dropdown', () => {
       await expect(select).toBeVisible({ timeout: 10_000 });
       await expect(select).toHaveValue('2-ready');
 
-      // Pick "Human Review" — a non-adjacent lane to prove the move is not
-      // a simple "advance one step" shortcut.
+      // Pick "Review" (5-human-review) — a non-adjacent lane to prove the
+      // move is not a simple "advance one step" shortcut.
       await select.selectOption('5-human-review');
 
       // Backend reflects the new state.

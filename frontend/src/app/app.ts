@@ -519,7 +519,7 @@ export class App implements OnInit, OnDestroy {
     }
     lanes.push(
       { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
-      { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
+      { state: '5-human-review', title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
       { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
     );
@@ -551,7 +551,7 @@ export class App implements OnInit, OnDestroy {
     // ordering (0-backlog → 2-ready) buried the Ready lane under hundreds
     // of backlog items.
     //
-    //   1. 2-ready      "Human Ready"        — pick-up candidates
+    //   1. 2-ready      "Ready"              — pick-up candidates
     //   2. 1b-needs-human-review (if any)    — needs clarification
     //   3. 1a-orchestrator-prep              — agent is preparing
     //   4. 1-preparation                     — in human preparation
@@ -560,7 +560,7 @@ export class App implements OnInit, OnDestroy {
     const backlogLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [];
     backlogLanes.push({
       state: '2-ready',
-      title: 'Human Ready',
+      title: 'Ready',
       icon: '📦',
       jobs: readySplit.humanReady,
     });
@@ -633,7 +633,7 @@ export class App implements OnInit, OnDestroy {
         lanes: [
           // ADR-0025: human-review waits on the user; it sits alongside
           // completed and archive in the user-owned tail.
-          { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
+          { state: '5-human-review', title: 'Review', icon: '👁️', jobs: grouped.humanReview },
           { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
           { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
         ],

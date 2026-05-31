@@ -139,7 +139,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       await page.goto('/');
       await expect(page.locator('.column__title').first()).toBeVisible({ timeout: 10_000 });
       await expect.poll(async () => {
-        const titles = (await readColumnTitles(page, 'Human Ready')).filter(t => t.startsWith(PREFIX));
+        const titles = (await readColumnTitles(page, 'Ready')).filter(t => t.startsWith(PREFIX));
         return titles.join('|');
       }, { timeout: 10_000 }).toBe([a.title, b.title, c.title, d.title, e.title].join('|'));
 
@@ -150,7 +150,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       );
       await dispatchDropOnCard({
         page,
-        columnHeading: 'Human Ready',
+        columnHeading: 'Ready',
         sourceCardTitle: e.title,
         targetCardTitle: a.title,
         cursorFraction: 0.25
@@ -158,7 +158,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       await reorderResp;
 
       await expect.poll(async () => {
-        const titles = (await readColumnTitles(page, 'Human Ready')).filter(t => t.startsWith(PREFIX));
+        const titles = (await readColumnTitles(page, 'Ready')).filter(t => t.startsWith(PREFIX));
         return titles.join('|');
       }, { timeout: 5_000 }).toBe([e.title, a.title, b.title, c.title, d.title].join('|'));
 
@@ -187,7 +187,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       await page.goto('/');
       await expect(page.locator('.column__title').first()).toBeVisible({ timeout: 10_000 });
       await expect.poll(async () => {
-        const titles = (await readColumnTitles(page, 'Human Ready')).filter(t => t.startsWith(PREFIX));
+        const titles = (await readColumnTitles(page, 'Ready')).filter(t => t.startsWith(PREFIX));
         return titles.join('|');
       }, { timeout: 10_000 }).toBe([a.title, b.title, c.title, d.title, e.title].join('|'));
 
@@ -198,7 +198,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       );
       await dispatchDropOnCard({
         page,
-        columnHeading: 'Human Ready',
+        columnHeading: 'Ready',
         sourceCardTitle: a.title,
         targetCardTitle: e.title,
         cursorFraction: 0.75
@@ -206,7 +206,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       await reorderResp;
 
       await expect.poll(async () => {
-        const titles = (await readColumnTitles(page, 'Human Ready')).filter(t => t.startsWith(PREFIX));
+        const titles = (await readColumnTitles(page, 'Ready')).filter(t => t.startsWith(PREFIX));
         return titles.join('|');
       }, { timeout: 5_000 }).toBe([b.title, c.title, d.title, e.title, a.title].join('|'));
 
@@ -233,7 +233,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       await page.goto('/');
       await expect(page.locator('.column__title').first()).toBeVisible({ timeout: 10_000 });
       await expect.poll(async () => {
-        const titles = (await readColumnTitles(page, 'Human Ready')).filter(t => t.startsWith(PREFIX));
+        const titles = (await readColumnTitles(page, 'Ready')).filter(t => t.startsWith(PREFIX));
         return titles.join('|');
       }, { timeout: 10_000 }).toBe([a.title, b.title, c.title, d.title, seeded[4].title].join('|'));
 
@@ -244,7 +244,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       );
       await dispatchDropOnCard({
         page,
-        columnHeading: 'Human Ready',
+        columnHeading: 'Ready',
         sourceCardTitle: d.title,
         targetCardTitle: a.title,
         cursorFraction: 0.75
@@ -252,7 +252,7 @@ test.describe('Kanban lane reorder: drop-on-top must set order=1', () => {
       await reorderResp;
 
       await expect.poll(async () => {
-        const titles = (await readColumnTitles(page, 'Human Ready')).filter(t => t.startsWith(PREFIX));
+        const titles = (await readColumnTitles(page, 'Ready')).filter(t => t.startsWith(PREFIX));
         return titles.join('|');
       }, { timeout: 5_000 }).toBe([a.title, d.title, b.title, c.title, seeded[4].title].join('|'));
 

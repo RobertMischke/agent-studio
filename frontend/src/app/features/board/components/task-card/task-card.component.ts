@@ -311,7 +311,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     if (!phase) return null;
     switch (phase) {
       case 'human-ready':
-        return { label: 'Human Ready', tone: 'human-ready',
+        return { label: 'Ready', tone: 'human-ready',
                  tooltip: 'The user marked this task ready. Orchestrator intake will check it before the coding runner picks it up.' };
       case 'intake-running':
         return { label: 'Intake running', tone: 'intake-running',

@@ -424,11 +424,11 @@ export class OverviewPaneComponent {
       case '1-preparation':          return 'In Preparation';
       case '1a-orchestrator-prep':   return 'Orchestrator Prep';
       case '1b-needs-human-review':  return 'Needs Human Review';
-      case '2-ready':                return 'Human Ready';
+      case '2-ready':                return 'Ready';
       case '3-progress':             return 'In Progress';
       case '3a-failed-pickup':       return 'Failed Pickup';
       case '4-auto-review':          return 'Auto Review';
-      case '5-human-review':         return 'Human Review';
+      case '5-human-review':         return 'Review';
       case '6-completed':            return 'Completed';
       case '7-archive':              return 'Archive';
       default:                       return state ?? '';
@@ -505,7 +505,7 @@ export class OverviewPaneComponent {
   phaseLabel(phase: string | null | undefined): string | null {
     if (!phase) return null;
     switch (phase) {
-      case 'human-ready':              return 'Human Ready';
+      case 'human-ready':              return 'Ready';
       case 'intake-running':           return 'Intake Running';
       case 'intake-blocked':           return 'Intake Blocked';
       case 'intake-passed':            return 'Intake Passed';

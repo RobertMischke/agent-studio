@@ -65,7 +65,7 @@ export function splitReadyByPhase(jobs: readonly TaskInfo[]): ReadyLaneSplit {
  */
 export function readyPhaseLabel(phase: string | null | undefined): string | null {
   switch (phase) {
-    case READY_PHASES.humanReady: return 'Human Ready';
+    case READY_PHASES.humanReady: return 'Ready';
     case READY_PHASES.intakeRunning: return 'Intake running';
     case READY_PHASES.intakeBlocked: return 'Intake blocked';
     case READY_PHASES.intakePassed: return 'Intake passed';

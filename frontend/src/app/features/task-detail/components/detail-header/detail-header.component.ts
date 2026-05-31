@@ -109,7 +109,7 @@ export class DetailHeaderComponent {
     { state: '2-ready',               label: 'Ready' },
     { state: '3-progress',            label: 'In Progress' },
     { state: '4-auto-review',         label: 'Auto Review' },
-    { state: '5-human-review',        label: 'Human Review' },
+    { state: '5-human-review',        label: 'Review' },
     { state: '6-completed',           label: 'Completed' },
     { state: '7-archive',             label: 'Archive' },
   ];

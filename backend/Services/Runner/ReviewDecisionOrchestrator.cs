@@ -743,6 +743,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ConcernTagWriter.MergeConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
         }
 
+        // Provenance: the orchestrator (not a human) advanced this task
+        // toward Completed. Stamp on the authoritative post-move path.
+        ConcernTagWriter.MergeConcernTags(movedFolderPath, new[] { OrchestratorMovedTagId }, _logger);
+
         // Append the operator-facing chat-log line ONLY after the lane move
         // has succeeded, so the banner cannot fire while the task is still
         // in 4-auto-review. F29: keep the headline short (one sentence +
@@ -1564,6 +1568,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resurrect the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+
+        // Provenance: the orchestrator (not a human) advanced this task
+        // toward Completed. Stamp on the authoritative post-move path.
+        ConcernTagWriter.MergeConcernTags(movedFolderPath, new[] { OrchestratorMovedTagId }, _logger);
+
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Decision,
             $"Auto-review accepted \"{title}\" as done. Moved to 5-human-review for your approval. Reason: {verdict.Reason}");
@@ -1888,6 +1897,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// runtime priority is carried by order 0, not by this tag.
     /// </summary>
     internal const string ReissueTagId = "reissue:autoreview";
+
+    /// <summary>
+    /// Provenance tag stamped on a task when the orchestrator advances it
+    /// toward Completed via accept-as-done (both the multi-aspect and the
+    /// single-verdict paths route to <c>5-human-review</c> per ADR-0025).
+    /// Distinguishes an orchestrator-advanced task from one a human
+    /// accepted by hand: human acceptance happens in the UI and never
+    /// stamps this tag. Registered in the workspace tag registry (see
+    /// <c>TagRegistryService</c>) so the kanban renders it with a label
+    /// and colour. Unlike <see cref="ReissueTagId"/> this id uses the
+    /// plain registry grammar (no colon).
+    /// </summary>
+    internal const string OrchestratorMovedTagId = "orchestrator-moved";
 
     /// <summary>
     /// Lane-target for every auto-review reissue path (NEEDS_INPUT,
