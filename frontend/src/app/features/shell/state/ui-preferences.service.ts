@@ -31,6 +31,7 @@ import { Injectable, signal } from '@angular/core';
 const STORAGE_KEY_TASK_NAV = 'taskNavCollapsed';
 const STORAGE_KEY_COMPACT_CARDS = 'compactCards';
 const STORAGE_KEY_SIDE_SHEET_WIDTH = 'sideSheetWidth';
+const STORAGE_KEY_GROUP_BY_EPIC = 'boardGroupByEpic';
 
 @Injectable({ providedIn: 'root' })
 export class UiPreferencesService {
@@ -39,6 +40,13 @@ export class UiPreferencesService {
   readonly sideSheetWidth = signal<number>(
     parseInt(localStorage.getItem(STORAGE_KEY_SIDE_SHEET_WIDTH) ?? '280'),
   );
+
+  /**
+   * Board "Gruppieren nach Epic" toggle. When on, the board case renders the
+   * epic tree (`<app-epic-group-board>`) instead of the lane columns. Persisted
+   * so the operator's preferred board shape survives reloads.
+   */
+  readonly groupByEpic = signal<boolean>(localStorage.getItem(STORAGE_KEY_GROUP_BY_EPIC) === '1');
 
   /**
    * F43: per-tab override that beats the rail-open auto-compact rule
@@ -81,6 +89,9 @@ export class UiPreferencesService {
         this.sideSheetWidth.set(Number.isFinite(parsed) ? parsed : 280);
         return;
       }
+      case STORAGE_KEY_GROUP_BY_EPIC:
+        this.groupByEpic.set(e.newValue === '1');
+        return;
       default:
         return;
     }
@@ -104,6 +115,12 @@ export class UiPreferencesService {
   setCompactCards(value: boolean): void {
     this.compactCards.set(value);
     localStorage.setItem(STORAGE_KEY_COMPACT_CARDS, value ? '1' : '0');
+  }
+
+  toggleGroupByEpic(): void {
+    const value = !this.groupByEpic();
+    this.groupByEpic.set(value);
+    localStorage.setItem(STORAGE_KEY_GROUP_BY_EPIC, value ? '1' : '0');
   }
 
   /**

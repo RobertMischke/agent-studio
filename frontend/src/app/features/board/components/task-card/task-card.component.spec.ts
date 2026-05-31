@@ -462,6 +462,39 @@ describe('buildEffectiveModelChip', () => {
     expect(chip.tooltip.title).toContain('client default');
     expect(chip.tooltip.body).toContain('client default');
   });
+
+  // Orphan/system tasks persist cliType 'system', which is not a real CLI. The
+  // chip and tooltip must degrade gracefully instead of crashing in escapeHtml
+  // (cliTypeLabel returns undefined for unknown CLIs). Regression for the
+  // group-by-epic board surfacing these cards.
+  it('degrades to "unknown" for an unrecognized cliType instead of throwing', () => {
+    const job = makeJob({
+      agent: 'system',
+      cliType: 'system' as unknown as TaskInfo['cliType'],
+      model: null,
+      ownerClientId: 'svc',
+    });
+    const owner = makeOwner({ id: 'svc', kind: 'service', defaultCliType: null, defaultModel: null });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('unknown');
+    expect(chip.label).toBe('unknown');
+    expect(chip.cliLabel).toBeNull();
+    expect(chip.tooltip.body).toContain('<b>CLI:</b> none');
+  });
+
+  it('ignores an unrecognized cliType but still honors owner defaults', () => {
+    const job = makeJob({
+      agent: 'system',
+      cliType: 'system' as unknown as TaskInfo['cliType'],
+      model: null,
+      ownerClientId: 'local-default',
+    });
+    const owner = makeOwner({ defaultCliType: 'claude', defaultModel: 'claude-opus-4-7' });
+    const chip = buildEffectiveModelChip(job, owner);
+    expect(chip.source).toBe('default');
+    expect(chip.cliLabel).toBe('Claude Code');
+    expect(chip.tooltip.body).toContain('Claude Code');
+  });
 });
 
 function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {

@@ -140,6 +140,7 @@ function isCliType(v: string | null | undefined): v is CliType {
 
 export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): EffectiveModelChip {
   const execution = job.execution;
+  const jobCli = isCliType(job.cliType) ? job.cliType : null;
   const ownerCli = isCliType(owner.defaultCliType) ? owner.defaultCliType : null;
   const ownerModel = owner.defaultModel ?? null;
 
@@ -151,15 +152,15 @@ export function buildEffectiveModelChip(job: TaskInfo, owner: ClientSummary): Ef
   let isDefault: boolean;
 
   if (execution?.status === 'running' && execution.model) {
-    const cli = job.cliType ?? ownerCli;
+    const cli = jobCli ?? ownerCli;
     icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
     label = shortModelName(execution.model);
     fullModel = execution.model;
     cliLbl = cli ? cliTypeLabel(cli) : null;
     source = 'run';
     isDefault = false;
-  } else if (job.cliType || job.model) {
-    const cli = job.cliType ?? ownerCli;
+  } else if (jobCli || job.model) {
+    const cli = jobCli ?? ownerCli;
     icon = cli ? cliTypeIcon(cli) : '\u{1F916}';
     label = shortModelName(job.model ?? ownerModel);
     fullModel = job.model ?? ownerModel;
@@ -203,13 +204,14 @@ function buildModelTooltip(
 ): StructuredTooltip {
   const lines: string[] = [];
 
-  const effectiveCli = job.cliType ?? ownerCli;
+  const jobCli = isCliType(job.cliType) ? job.cliType : null;
+  const effectiveCli = jobCli ?? ownerCli;
   const effectiveModel = source === 'run'
     ? job.execution?.model ?? job.model ?? ownerModel
     : job.model ?? ownerModel;
 
   lines.push(`<b>Model:</b> ${escapeHtml(effectiveModel ?? 'none')}${source === 'default' ? ' <i>(client default)</i>' : source === 'run' ? ' <i>(running)</i>' : ''}`);
-  lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!job.cliType && ownerCli ? ' <i>(client default)</i>' : ''}`);
+  lines.push(`<b>CLI:</b> ${effectiveCli ? escapeHtml(cliTypeLabel(effectiveCli)) : 'none'}${!jobCli && ownerCli ? ' <i>(client default)</i>' : ''}`);
   lines.push(`<b>Agent:</b> ${escapeHtml(job.agent || 'none')} <i>(pickup permission)</i>`);
 
   const ownerLabel = owner.displayName || owner.id;

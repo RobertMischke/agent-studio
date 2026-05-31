@@ -17,6 +17,7 @@ import { FormsModule } from '@angular/forms';
 import {
   BoardFiltersService,
   CreateTaskDialogComponent,
+  EpicGroupBoardComponent,
   FiltersDropdownComponent,
   TaskColumnComponent,
   KanbanFilterSidesheetComponent,
@@ -26,6 +27,7 @@ import {
   BoardMutationsService,
   CreateTaskFormService,
   buildProjectTokenChip,
+  flattenGrouped,
   projectAutoInfo,
   projectRunnerIndicator,
   splitReadyByPhase,
@@ -127,6 +129,7 @@ interface VerboseDebugContext {
     StatusBarComponent,
     FormsModule,
     CreateTaskDialogComponent,
+    EpicGroupBoardComponent,
     ErrorDialogComponent,
     ConfirmDialogComponent,
     NotificationStackComponent,
@@ -316,6 +319,24 @@ export class App implements OnInit, OnDestroy {
    * task by name. Persisted across reloads.
    */
   readonly compactCards = this.uiPrefs.compactCards;
+
+  /**
+   * Board "Gruppieren nach Epic" toggle. When on, the board case renders the
+   * epic tree instead of the lane columns. The tree is built from the same
+   * `filteredGrouped` feed (via `epicBoardTasks`) so search + filters apply to
+   * both shapes identically. Persisted in UiPreferencesService.
+   */
+  readonly groupByEpic = this.uiPrefs.groupByEpic;
+  toggleGroupByEpic(): void {
+    this.uiPrefs.toggleGroupByEpic();
+  }
+  /**
+   * Flat, de-duplicated task list for the epic tree. Sourced from the filtered
+   * lane feed so the "Group by epic" view honours the active search + filters;
+   * `flattenGrouped` collapses the `review`/`autoReview` legacy alias so no card
+   * is counted twice.
+   */
+  readonly epicBoardTasks = computed(() => flattenGrouped(this.filteredGrouped()));
 
   /**
    * F4: effective compact mode for board cards. The user's persisted

@@ -17,6 +17,7 @@ export { FiltersDropdownComponent, type TypeFilterOption } from './components/fi
 export { KanbanFilterSidesheetComponent } from './components/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
 export { TaskCardComponent } from './components/task-card/task-card.component';
 export { TaskColumnComponent } from './components/task-column/task-column';
+export { EpicGroupBoardComponent } from './components/epic-group-board/epic-group-board.component';
 export {
   ProjectTabsComponent,
   type ProjectAutoInfo,
@@ -32,3 +33,4 @@ export {
 // utilities
 export { splitReadyByPhase } from './components/ready-lane-split.util';
 export { groupReviewJobs } from './components/review-grouping.util';
+export { buildEpicGroups, flattenGrouped, type EpicGroupView } from './components/epic-grouping.util';

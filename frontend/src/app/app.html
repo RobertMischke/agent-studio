@@ -88,6 +88,16 @@
           @if (studioTabState.activeTab()?.kind === 'board') {
             <button type="button"
                     class="studio-tab-action"
+                    [class.studio-tab-action--active]="groupByEpic()"
+                    [attr.aria-pressed]="groupByEpic()"
+                    data-testid="studio-board-epic-toggle"
+                    [appTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
+                    (click)="toggleGroupByEpic()">
+              <span aria-hidden="true">{{ groupByEpic() ? '🧩' : '▦' }}</span>
+              <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
+            </button>
+            <button type="button"
+                    class="studio-tab-action"
                     [class.studio-tab-action--active]="effectiveCompactCards()"
                     [attr.aria-pressed]="effectiveCompactCards()"
                     data-testid="studio-board-compact-toggle"
@@ -204,6 +214,16 @@
                           (click)="onSidesheetClearAll()">Clear filters</button>
                 </div>
               }
+              @if (groupByEpic()) {
+                <main class="dashboard dashboard--studio dashboard--epic-board"
+                      data-testid="studio-board">
+                  <app-epic-group-board
+                    [tasks]="epicBoardTasks()"
+                    [compact]="effectiveCompactCards()"
+                    [highlightJobId]="justCreatedJobId()"
+                    (jobClick)="openDetail($event)" />
+                </main>
+              } @else {
               <main class="dashboard dashboard--studio" data-testid="studio-board"
                     [class.dashboard--has-focus]="focusedContainer() !== null">
                 @for (g of laneGroups(); track g.id) {
@@ -245,6 +265,7 @@
                   </section>
                 }
               </main>
+              }
             }
             @case ('task') {
               @if (selectedJob(); as detail) {
