@@ -442,6 +442,61 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     };
   });
 
+  // Lanes that sit in the "Done & Decide" super-column and carry an
+  // orchestrator verdict the operator must act on. 4-auto-review is
+  // deliberately excluded — it lives in the "active" column and already
+  // surfaces its verdict via autoReviewProcessBadge.
+  private static readonly HUMAN_DECISION_LANES = new Set([
+    '5-human-review', '4-review',
+  ]);
+
+  /**
+   * Human-decision badge. An escalated / reissue card parked in
+   * 5-human-review used to render identically to a Completed card, hiding
+   * that a human still has to act ("Failed-Cards sehen aus wie Done").
+   * This pill makes the verdict explicit: a loud red "Escalated" / "Needs
+   * rework" marker for action-required verdicts, and a calm green "Ready to
+   * sign off" for an accepted card awaiting confirmation. Returns null for
+   * plain human review (no verdict yet) so undecided cards stay quiet.
+   */
+  readonly humanReviewBadge = computed<{ label: string; tone: 'attention' | 'accept'; tooltip: string } | null>(() => {
+    const job = this.job();
+    if (!TaskCardComponent.HUMAN_DECISION_LANES.has(job.state)) return null;
+    switch (job.orchestratorVerdict) {
+      case 'escalate':
+        return {
+          label: 'Escalated',
+          tone: 'attention',
+          tooltip: 'Auto-review escalated this task: the orchestrator could not accept the result and a human must decide what happens next. This is NOT a completed task.'
+        };
+      case 'reissue':
+        return {
+          label: 'Needs rework',
+          tone: 'attention',
+          tooltip: 'Auto-review asked for a reissue: the work needs changes before it can be accepted. Waiting on a human to act.'
+        };
+      case 'accept':
+        return {
+          label: 'Ready to sign off',
+          tone: 'accept',
+          tooltip: 'Auto-review accepted this task. A human just needs to confirm and move it to Completed.'
+        };
+      default:
+        return null;
+    }
+  });
+
+  /**
+   * Host-level "this card needs a human" flag. Drives the red left ribbon +
+   * faint tint that visually separates an escalated / reissue card from the
+   * Completed/Archive cards it shares the "Done & Decide" column with.
+   */
+  readonly needsAttention = computed(() => {
+    const job = this.job();
+    if (!TaskCardComponent.HUMAN_DECISION_LANES.has(job.state)) return false;
+    return job.orchestratorVerdict === 'escalate' || job.orchestratorVerdict === 'reissue';
+  });
+
   readonly outcomeIssueBadge = computed<{ label: string; tone: 'info' | 'warn' | 'high'; tooltip: string } | null>(() => {
     const issue = this.job().outcomeIssue;
     if (!issue) return null;

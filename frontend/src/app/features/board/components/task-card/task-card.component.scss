@@ -120,6 +120,33 @@
         0 14px 32px color-mix(in srgb, var(--studio-accent-3) 25%, transparent);
     }
 
+    /* "Failed-Cards sehen aus wie Done" fix (Option C): an escalated /
+       reissue card parked in 5-human-review shares the "Done & Decide"
+       column with Completed and Archive cards and used to read as just
+       another finished card. The attention treatment — red left ribbon +
+       faint red tint — visually pulls it out of the "done" cluster so the
+       operator sees at a glance that a human still has to act.
+
+       The compound selector .task-card.task-card--attention is deliberate,
+       same reasoning as .task-card--running above: the light-theme bridge
+       `html[data-studio-theme='light'] .task-card` resolves to (0,2,1).
+       Under emulated encapsulation this rule carries the [_ngcontent] attr,
+       lifting it to (0,3,0) so the failure tint wins on both themes without
+       !important and overrides the calm sky --state-color from the
+       5-human-review lane rule. */
+    .task-card.task-card--attention {
+      background: color-mix(in srgb, var(--studio-accent-6) 9%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
+      border-left-width: 6px;
+      border-left-color: var(--studio-accent-6);
+    }
+    .task-card.task-card--attention:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.10),
+        0 10px 24px color-mix(in srgb, var(--studio-accent-6) 22%, transparent);
+    }
+
     /* F39: indeterminate progress bar pinned to the top edge of a running
        card. A 40%-wide gradient stripe slides left -> right on a 1.6 s
        loop, providing constant "something is happening right now" motion
@@ -513,6 +540,37 @@
     .task-card__state-pill {
       background: rgba(255,255,255,0.06);
       color: var(--studio-fg-dim);
+    }
+    /* Human-decision pill (Done & Decide column). The attention variant
+       reuses the failure accent (--studio-accent-6) shared with the failed
+       execution pill and high-severity issue pill, so "this needs a human"
+       reads in the same red vocabulary across the board. The accept variant
+       is a calm green sign-off cue, distinct from the loud attention tone. */
+    .task-card__human-review-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      border: 1px solid transparent;
+      cursor: help;
+    }
+    .task-card__human-review-glyph {
+      font-size: 11px;
+      line-height: 1;
+    }
+    .task-card__human-review-pill--attention {
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 18%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
+    }
+    .task-card__human-review-pill--accept {
+      color: var(--studio-accent-success-strong);
+      background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
     .task-card__execution-pill {
       border: 1px solid transparent;

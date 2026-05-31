@@ -1,6 +1,7 @@
 <div class="task-card"
      [class]="'task-card--' + job().state"
      [class.task-card--running]="isRunning()"
+     [class.task-card--attention]="needsAttention()"
      [class.task-card--compact]="compact()"
      [class.task-card--just-created]="isJustCreated()"
      [style.--project-color]="identity().color"
@@ -78,6 +79,17 @@
             [appTooltip]="tt.tooltip">{{ tt.icon }} {{ tt.label }}</span>
     }
     <span class="task-card__state-pill">{{ stateLabel() }}</span>
+    @if (humanReviewBadge(); as hrb) {
+      <span class="task-card__human-review-pill"
+            [class]="'task-card__human-review-pill--' + hrb.tone"
+            [appTooltip]="hrb.tooltip"
+            data-testid="task-card-human-review">
+        @if (hrb.tone === 'attention') {
+          <span class="task-card__human-review-glyph" aria-hidden="true">⚠</span>
+        }
+        {{ hrb.label }}
+      </span>
+    }
     @if (phaseBadge(); as pb) {
       <span class="task-card__phase-pill"
             [class]="'task-card__phase-pill--' + pb.tone"

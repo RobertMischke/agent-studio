@@ -276,6 +276,91 @@ describe('TaskCardComponent (smoke)', () => {
     }
   });
 
+  it('flags an escalated human-review card as needing attention (Failed != Done)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '5-human-review',
+      orchestratorVerdict: 'escalate',
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.needsAttention()).toBe(true);
+    expect(fixture.componentInstance.humanReviewBadge()?.tone).toBe('attention');
+
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--attention')).toBe(true);
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]') as HTMLElement | null;
+    expect(pill?.textContent).toContain('Escalated');
+    expect(pill?.className).toContain('task-card__human-review-pill--attention');
+  });
+
+  it('shows a calm sign-off pill (not attention) for an accepted human-review card', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      state: '5-human-review',
+      orchestratorVerdict: 'accept',
+    }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.needsAttention()).toBe(false);
+    expect(fixture.componentInstance.humanReviewBadge()?.tone).toBe('accept');
+
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--attention')).toBe(false);
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]') as HTMLElement | null;
+    expect(pill?.textContent).toContain('Ready to sign off');
+    expect(pill?.className).toContain('task-card__human-review-pill--accept');
+  });
+
+  it('stays quiet for an undecided human-review card and for completed cards', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+
+    // Human review with no verdict yet → no pill, no attention.
+    fixture.componentRef.setInput('job', makeJob({ state: '5-human-review', orchestratorVerdict: null }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
+    expect(fixture.componentInstance.needsAttention()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]')).toBeNull();
+
+    // Completed lane is out of scope even if a stale verdict rides along.
+    fixture.componentRef.setInput('job', makeJob({ state: '6-completed', orchestratorVerdict: 'escalate' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.humanReviewBadge()).toBeNull();
+    expect(fixture.componentInstance.needsAttention()).toBe(false);
+  });
+
   it('renders a runner outcome issue pill', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
@@ -399,7 +484,6 @@ function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',
-    jobKey: 'test::task-1',
     title: 'Task 1',
     state: '3-progress',
     order: 1,
