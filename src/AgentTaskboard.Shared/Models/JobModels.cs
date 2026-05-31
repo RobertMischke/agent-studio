@@ -49,6 +49,18 @@ public record TaskInfo
     /// </summary>
     public string? EpicId { get; init; }
     /// <summary>
+    /// Execution mode (orthogonal to <see cref="Kind"/>): <c>coding</c> (default,
+    /// mutates source) | <c>planning</c> | <c>research</c> (read-only, produce a
+    /// report). See <see cref="TaskModes"/>.
+    /// </summary>
+    public string Mode { get; init; } = TaskModes.Coding;
+    /// <summary>
+    /// Whether the agent may use web search / fetch for this run. Default off for
+    /// coding/planning, on for research (set at create time). See decision 2 in
+    /// docs/research/planning-research-task-kinds-2026-05.md.
+    /// </summary>
+    public bool AllowWebAccess { get; init; }
+    /// <summary>
     /// When <c>true</c>, this job uses its own dedicated session even if the project runner is
     /// configured for <see cref="SessionModes.ReuseProject"/>. Lets a one-off task isolate its
     /// context from the long-running project session.
@@ -914,6 +926,10 @@ public record CreateJobRequest
     public string? Kind { get; init; }
     /// <summary>Optional parent epic id (assignment way 1: at create time). The new card is created as a sub-task of this epic.</summary>
     public string? EpicId { get; init; }
+    /// <summary>Execution mode: <c>coding</c> (default) | <c>planning</c> | <c>research</c>. See <see cref="TaskModes"/>.</summary>
+    public string? Mode { get; init; }
+    /// <summary>Allow web search/fetch for this run. When null, defaults by mode (research = on, else off).</summary>
+    public bool? AllowWebAccess { get; init; }
     /// <summary>
     /// Optional client identity that owns the new job. When omitted, the
     /// endpoint falls back to the X-Client-Id header on the incoming

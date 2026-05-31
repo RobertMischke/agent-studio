@@ -598,6 +598,12 @@ public class TaskMutationService
         jobJson["kind"] = TaskKinds.Normalize(req.Kind);
         if (!string.IsNullOrWhiteSpace(req.EpicId))
             jobJson["epicId"] = req.EpicId;
+        // Execution mode (coding|planning|research) + web-access. mode is always
+        // written; web access defaults by mode when the request omits it
+        // (research on, else off) - see planning-research-task-kinds note.
+        var effectiveMode = TaskModes.Normalize(req.Mode);
+        jobJson["mode"] = effectiveMode;
+        jobJson["allowWebAccess"] = req.AllowWebAccess ?? (effectiveMode == TaskModes.Research);
         if (req.Fixture)
             jobJson["fixture"] = true;
 
