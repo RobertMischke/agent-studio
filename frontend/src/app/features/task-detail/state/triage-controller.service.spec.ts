@@ -33,7 +33,7 @@ describe('TriageController · advanceToNextInLane', () => {
   const makeJob = (id: string, state: string): TaskInfo =>
     ({
       id,
-      jobKey: `wp::${id}`,
+      taskKey: `wp::${id}`,
       title: id,
       state,
       order: 1,
@@ -66,7 +66,7 @@ describe('TriageController · advanceToNextInLane', () => {
     const job = makeJob('task-a', '4-auto-review');
     selection.triageLaneState = '4-auto-review';
 
-    ctrl.advanceToNextInLane('4-auto-review', job.jobKey, [job], false);
+    ctrl.advanceToNextInLane('4-auto-review', job.taskKey, [job], false);
 
     expect(closedDetail).toBe(true);
   });
@@ -78,7 +78,7 @@ describe('TriageController · advanceToNextInLane', () => {
       info: job,
     } as unknown as TaskDetail);
 
-    ctrl.advanceToNextInLane('4-auto-review', job.jobKey, [job], true);
+    ctrl.advanceToNextInLane('4-auto-review', job.taskKey, [job], true);
 
     expect(closedDetail).toBe(false);
     expect(selection.triageLaneState).toBe('5-human-review');
@@ -110,7 +110,7 @@ describe('TriageController · optimistic navigation on Accept', () => {
   const makeJob = (id: string, state: string): TaskInfo =>
     ({
       id,
-      jobKey: `${wp}::${id}`,
+      taskKey: `${wp}::${id}`,
       title: id,
       state,
       order: 1,
@@ -159,7 +159,7 @@ describe('TriageController · optimistic navigation on Accept', () => {
     // service's effect prefetches B on snapshot change, so we mock the
     // GET to land deterministically before move() runs.
     const detailSpy = vi.spyOn(jobService, 'getDetail').mockReturnValue(of(taskBDetail));
-    TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.jobKey);
+    TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.taskKey);
     selection.triageLaneState = '5-human-review';
     (selection as unknown as { selected: ReturnType<typeof signal<TaskDetail | null>> }).selected
       = signal<TaskDetail | null>(makeDetail('task-a', '5-human-review'));
@@ -187,7 +187,7 @@ describe('TriageController · optimistic navigation on Accept', () => {
     vi.spyOn(jobService, 'getDetail').mockImplementation((id: string) => {
       return of(id === 'task-a' ? taskADetail : taskBDetail);
     });
-    TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.jobKey);
+    TestBed.inject(LanePagerService).capture('5-human-review', [taskA, taskB], taskA.taskKey);
     selection.triageLaneState = '5-human-review';
     (selection as unknown as { selected: ReturnType<typeof signal<TaskDetail | null>> }).selected
       = signal<TaskDetail | null>(taskADetail);
