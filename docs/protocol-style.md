@@ -138,6 +138,57 @@ The retention rule from §4.1 still applies: only files that already
 live under `<job>/results/` are surfaced. There is no separate index
 or upload path, and no CDN.
 
+### 4.1.6 Workspace executive summary
+
+The executive summary answers "what happened in the last N hours?"
+across every watched project. It never invents events: every row
+references a record the aggregator can prove on disk (an orphan-recovery
+line, a supervisor advisory, a merged commit, a decision-journal entry).
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/workspace/summary?windowHours=N` | Folds per-project job moves, decisions, advisories, commits, crash evidence, and open human decisions into one `ExecutiveSummary` payload. `windowHours` defaults to 24 and accepts 1 / 6 / 24 / 168. Drives the workspace "Executive summary" overlay (`#/workspace/summary`, deep-link alias `#/summary`). |
+
+The payload is validated by
+[`executive-summary.schema.json`](schemas/executive-summary.schema.json).
+The decisions block is folded from the per-project journal
+`logs/decisions/<project>.jsonl` (one row per
+[`orchestrator-decision.schema.json`](schemas/orchestrator-decision.schema.json)),
+ranked by severity (`High > Warn > Info`) then recency. The overlay
+exposes a 6 h / 24 h / 7 days toggle that re-queries the endpoint and
+persists the choice in `localStorage`.
+
+The per-task protocol header that the summary complements is described
+by [`protocol-header.schema.json`](schemas/protocol-header.schema.json):
+the structured front-matter a `status.md` carries so the protocol pane
+can render a header card and a multi-step history navigator.
+
+#### Deferred, with a proposed follow-up task
+
+This task shipped the workspace-level surface end to end (both schemas,
+the aggregator endpoint, the decisions fold, and the `#/workspace/summary`
+overlay). Three producers remain deferred because they depend on runner
+state-machine instrumentation that does not exist yet:
+
+1. **`RuntimePromptService` header writer** - inject the validated
+   `protocol-header.schema.json` block into each job's `status.md` as the
+   agent runs, rather than relying on hand-authored front-matter.
+2. **Multi-step history snapshots** - append-only copies of each phase
+   (analysis / plan / implement / review / decisions / fixes) under
+   `<job>/history/`, so the protocol pane can show a step navigator.
+3. **Protocol header card + step navigator (frontend)** - the per-task
+   render of (1) and (2); distinct from this task's workspace roll-up.
+
+These are intentionally one cohesive follow-up rather than four loose
+ends: all three hang off the same missing prerequisite (a writer that
+stamps protocol state during a run) and share one schema
+(`protocol-header.schema.json`). Proposed follow-up task:
+**"Protocol header writer and per-task step history"** - implement the
+`RuntimePromptService` header injection, the `<job>/history/` snapshot
+copies, and the protocol-pane header card + step navigator that consume
+them. The workspace summary already links each project to its decisions
+journal, so the per-task surface can reuse the same records.
+
 ### 4.2 Local rendering
 
 The protocol pane renders `status.md` through [`markdownToHtml`](../frontend/src/app/components/markdown-utils.ts) with a `resolveImageSrc` that maps:

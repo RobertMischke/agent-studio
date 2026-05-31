@@ -23,14 +23,13 @@ namespace OrchestratorApi.Services.Runner;
 /// </para>
 ///
 /// <para>
-/// Several deliverables in
-/// <c>protocol-summary-and-executive-summary-schema</c> are not yet
-/// implemented and surface here as zero-valued counters: there is no
-/// per-project decisions log
-/// (<c>logs/decisions/&lt;project&gt;.jsonl</c>) yet, so
-/// <c>decisionsMade</c> and <c>topDecisions</c> always read 0 / empty
-/// until that producer lands. The schema describes the target shape;
-/// the aggregator returns what the filesystem can prove today.
+/// <c>decisionsMade</c> and <c>topDecisions</c> are folded from the
+/// per-project decision journal
+/// (<c>logs/decisions/&lt;project&gt;.jsonl</c>) written by
+/// <see cref="ReviewDecisionLog"/>. Each <see cref="ReviewDecisionKind"/>
+/// maps to a severity used to rank the workspace-wide top decisions;
+/// when the journal does not exist for a project the counters read
+/// 0 / empty.
 /// </para>
 /// </summary>
 public sealed class WorkspaceSummaryService
@@ -66,6 +65,7 @@ public sealed class WorkspaceSummaryService
 
         var byProject = new List<ExecutiveSummaryProject>();
         var openHumanDecisions = new List<ExecutiveSummaryOpenDecision>();
+        var allDecisions = new List<ExecutiveSummaryDecision>();
 
         var allJobs = _scanner.ScanAllJobs();
         var jobsByProject = allJobs
@@ -93,6 +93,9 @@ public sealed class WorkspaceSummaryService
 
             var commits = ReadCommits(entry, start, end);
 
+            var decisionsInWindow = ReadDecisions(workspaceRoot, project, start, end);
+            allDecisions.AddRange(decisionsInWindow);
+
             // Open human-decision-needed-* tasks (independent of the window).
             if (jobsByProject.TryGetValue(project, out var projectJobs))
             {
@@ -108,18 +111,24 @@ public sealed class WorkspaceSummaryService
                 }
             }
 
-            var hasAnyActivity = advisoriesInWindow > 0 || jobsMoved.Count > 0 || commits.Count > 0;
+            var hasAnyActivity = advisoriesInWindow > 0 || jobsMoved.Count > 0
+                || commits.Count > 0 || decisionsInWindow.Count > 0;
             if (!hasAnyActivity) continue;
 
             byProject.Add(new ExecutiveSummaryProject(
                 Project: project,
                 JobsMoved: jobsMoved,
-                DecisionsMade: 0,
+                DecisionsMade: decisionsInWindow.Count,
                 AdvisoriesRaised: advisoriesInWindow,
                 Commits: commits));
         }
 
         var crashes = ReadCrashes(workspaceRoot, start, end);
+        var topDecisions = allDecisions
+            .OrderByDescending(d => SeverityRank(d.Severity))
+            .ThenByDescending(d => d.At)
+            .Take(TopDecisionsLimit)
+            .ToList();
         var headline = BuildHeadline(byProject, crashes, openHumanDecisions, w);
 
         return new ExecutiveSummary(
@@ -128,9 +137,15 @@ public sealed class WorkspaceSummaryService
             Headline: headline,
             ByProject: byProject,
             Crashes: crashes,
-            TopDecisions: Array.Empty<ExecutiveSummaryDecision>(),
+            TopDecisions: topDecisions,
             OpenHumanDecisions: openHumanDecisions);
     }
+
+    /// <summary>
+    /// Up to this many of the most load-bearing decisions are surfaced in
+    /// <c>topDecisions</c>, ranked by severity then recency.
+    /// </summary>
+    private const int TopDecisionsLimit = 10;
 
     private static int ResolveWindow(int requested)
         => Array.IndexOf(AllowedWindowHours, requested) >= 0 ? requested : DefaultWindowHours;
@@ -165,6 +180,78 @@ public sealed class WorkspaceSummaryService
 
         return $"In {window}: " + string.Join(", ", parts) + ".";
     }
+
+    /// <summary>
+    /// Reads the per-project decision journal
+    /// (<c>logs/decisions/&lt;project&gt;.jsonl</c>) and projects the
+    /// records whose <c>CreatedAt</c> falls inside the window into
+    /// <see cref="ExecutiveSummaryDecision"/> references. Lenient on read:
+    /// a missing file or IO failure yields an empty list rather than
+    /// failing the whole summary.
+    /// </summary>
+    private List<ExecutiveSummaryDecision> ReadDecisions(string? workspaceRoot, string project, DateTime start, DateTime end)
+    {
+        var list = new List<ExecutiveSummaryDecision>();
+        if (string.IsNullOrWhiteSpace(workspaceRoot)) return list;
+
+        IReadOnlyList<ReviewDecisionRecord> records;
+        try
+        {
+            records = ReviewDecisionLog.ReadAll(workspaceRoot, project);
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "Could not read decisions journal for {Project}", project);
+            return list;
+        }
+
+        foreach (var rec in records)
+        {
+            var at = rec.CreatedAt.ToUniversalTime();
+            if (at < start || at >= end) continue;
+
+            var title = string.IsNullOrWhiteSpace(rec.Reason)
+                ? $"{rec.Kind} {rec.JobId}".Trim()
+                : rec.Reason;
+
+            list.Add(new ExecutiveSummaryDecision(
+                Project: project,
+                // No explicit id in the journal; a (jobId @ ISO-instant)
+                // composite uniquely locates the source line on disk.
+                DecisionId: $"{rec.JobId}@{at:O}",
+                At: at,
+                Severity: SeverityFor(rec.Kind),
+                Title: Truncate(title, 240),
+                JobId: string.IsNullOrWhiteSpace(rec.JobId) ? null : rec.JobId));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Maps a <see cref="ReviewDecisionKind"/> to one of the
+    /// executive-summary severity tiers. Escalations are the highest
+    /// signal; accept-as-done and skipped (no parsable sentinel) are
+    /// informational.
+    /// </summary>
+    private static string SeverityFor(ReviewDecisionKind kind) => kind switch
+    {
+        ReviewDecisionKind.Escalate => "High",
+        ReviewDecisionKind.Reissue => "Warn",
+        ReviewDecisionKind.AcceptAsDone => "Info",
+        ReviewDecisionKind.Skipped => "Info",
+        _ => "Info",
+    };
+
+    private static int SeverityRank(string severity) => severity switch
+    {
+        "Critical" => 3,
+        "High" => 2,
+        "Warn" => 1,
+        _ => 0,
+    };
+
+    private static string Truncate(string input, int max) =>
+        string.IsNullOrEmpty(input) || input.Length <= max ? input : input.Substring(0, max);
 
     private record OrphanRecoveryRow(DateTime At, string Project, string Slug, string TargetState);
 

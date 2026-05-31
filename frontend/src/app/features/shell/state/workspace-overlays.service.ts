@@ -21,14 +21,19 @@ import { Injectable, computed, signal } from '@angular/core';
 export class WorkspaceOverlaysService {
   readonly tokensOpen = signal<boolean>(false);
   readonly screenshotsOpen = signal<boolean>(false);
+  readonly summaryOpen = signal<boolean>(false);
   readonly cliAdminOpen = signal<boolean>(false);
 
-  /** True iff any of the three overlays is currently visible. */
+  /** True iff any of the overlays is currently visible. */
   readonly anyOpen = computed(() =>
-    this.tokensOpen() || this.screenshotsOpen() || this.cliAdminOpen());
+    this.tokensOpen() || this.screenshotsOpen() || this.summaryOpen() || this.cliAdminOpen());
 
   private readonly tokensHash = '#/workspace/tokens';
   private readonly screenshotsHash = '#/workspace/screenshots';
+  private readonly summaryHash = '#/workspace/summary';
+  // The reissue note's deliverable named the page `#/summary`; accept it as
+  // a deep-link alias that resolves to the canonical workspace overlay hash.
+  private readonly summaryHashAlias = '#/summary';
 
   // ---------- tokens ----------
 
@@ -64,6 +69,24 @@ export class WorkspaceOverlaysService {
     else this.openScreenshots();
   }
 
+  // ---------- summary ----------
+
+  openSummary(): void {
+    this.summaryOpen.set(true);
+    this.writeHash(this.summaryHash);
+  }
+
+  closeSummary(): void {
+    this.summaryOpen.set(false);
+    this.clearHashIf(this.summaryHash);
+    this.clearHashIf(this.summaryHashAlias);
+  }
+
+  toggleSummary(): void {
+    if (this.summaryOpen()) this.closeSummary();
+    else this.openSummary();
+  }
+
   // ---------- cli-admin ----------
 
   openCliAdmin(): void { this.cliAdminOpen.set(true); }
@@ -84,6 +107,8 @@ export class WorkspaceOverlaysService {
     if (tokens !== this.tokensOpen()) this.tokensOpen.set(tokens);
     const screenshots = hash === this.screenshotsHash;
     if (screenshots !== this.screenshotsOpen()) this.screenshotsOpen.set(screenshots);
+    const summary = hash === this.summaryHash || hash === this.summaryHashAlias;
+    if (summary !== this.summaryOpen()) this.summaryOpen.set(summary);
   }
 
   private writeHash(target: string): void {

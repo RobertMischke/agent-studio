@@ -52,6 +52,7 @@ import type {
   PipelineStepSetting,
 } from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
+import type { ExecutiveSummaryResponse } from '../features/summary';
 import type { AgentWorkSummary, SessionEventsResponse } from '../features/session-events';
 import type { TaskPlanView } from '../features/plan-strip/plan.model';
 import type { RegressionRadarResult } from '../features/regression-radar';
@@ -1274,6 +1275,17 @@ export class TaskService {
     return this.http.get<WorkspaceScreenshotsResponse>(`${this.baseUrl}/workspace/screenshots`, {
       params,
     });
+  }
+
+  /**
+   * Workspace-level executive summary for the requested window
+   * (`GET /api/workspace/summary?windowHours=N`): per-project activity,
+   * severity-ranked top decisions, crash evidence, and open human
+   * decisions. Read-only; every row references a record on disk.
+   */
+  getWorkspaceSummary(windowHours: number) {
+    const params = new HttpParams().set('windowHours', String(windowHours));
+    return this.http.get<ExecutiveSummaryResponse>(`${this.baseUrl}/workspace/summary`, { params });
   }
 
   /**

@@ -265,6 +265,7 @@ export class App implements OnInit, OnDestroy {
   readonly workspaceManager = inject(WorkspaceManagerService);
   readonly workspaceTokensOpen = this.workspaceOverlays.tokensOpen;
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
+  readonly workspaceSummaryOpen = this.workspaceOverlays.summaryOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
   private hashListener: (() => void) | null = null;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
@@ -934,7 +935,7 @@ export class App implements OnInit, OnDestroy {
       if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey) return;
       if (this.selectedJob() !== null) return;
       if (this.showCreate()) return;
-      if (this.workspaceTokensOpen() || this.workspaceScreenshotsOpen()) return;
+      if (this.workspaceTokensOpen() || this.workspaceScreenshotsOpen() || this.workspaceSummaryOpen()) return;
       if (this.projectShellName() !== null) return;
       const target = ev.target as HTMLElement | null;
       if (target) {
@@ -1435,6 +1436,15 @@ export class App implements OnInit, OnDestroy {
   }
   toggleWorkspaceScreenshots(): void {
     this.workspaceOverlays.toggleScreenshots();
+  }
+  openWorkspaceSummary(): void {
+    this.workspaceOverlays.openSummary();
+  }
+  closeWorkspaceSummary(): void {
+    this.workspaceOverlays.closeSummary();
+  }
+  toggleWorkspaceSummary(): void {
+    this.workspaceOverlays.toggleSummary();
   }
   openCliAdmin(): void {
     this.workspaceOverlays.openCliAdmin();

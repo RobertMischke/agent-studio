@@ -39,6 +39,7 @@ export class StatusBarComponent implements OnInit {
   readonly toggleUsage = output<void>();
   readonly toggleOrchestrator = output<void>();
   readonly toggleFeed = output<void>();
+  readonly toggleSummary = output<void>();
   readonly toggleVisualEvidence = output<void>();
   readonly toggleCliAdmin = output<void>();
   readonly defaultCliChange = output<CliType>();

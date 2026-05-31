@@ -30,6 +30,9 @@
                         (activated)="toggleOrchestrator.emit()" />
     <app-statusbar-item icon="activity" label="Feed"              tooltip="Orchestrator feed"
                         (activated)="toggleFeed.emit()" />
+    <app-statusbar-item icon="book"     label="Summary"           tooltip="Executive summary (what happened in the last 6 / 24 / 168 hours)"
+                        testid="status-bar-summary"
+                        (activated)="toggleSummary.emit()" />
     <app-statusbar-item icon="eye"      label="Visual evidence"   tooltip="Workspace visual evidence (screenshots across projects)"
                         testid="status-bar-visual-evidence"
                         (activated)="toggleVisualEvidence.emit()" />

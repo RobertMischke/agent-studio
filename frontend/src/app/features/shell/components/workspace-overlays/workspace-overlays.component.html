@@ -16,6 +16,15 @@
   </div>
 }
 
+@if (overlays.summaryOpen()) {
+  <div class="overlay" data-testid="workspace-summary-overlay" (click)="overlays.closeSummary()" tabindex="0" (keydown.enter)="overlays.closeSummary()" (keydown.space)="overlays.closeSummary(); $event.preventDefault()">
+    <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
+      <button class="overlay__close" (click)="overlays.closeSummary()" [appTooltip]="'Close'">×</button>
+      <app-workspace-summary />
+    </div>
+  </div>
+}
+
 @if (overlays.cliAdminOpen()) {
   <div class="overlay" data-testid="cli-admin-overlay" (click)="overlays.closeCliAdmin()" tabindex="0" (keydown.enter)="overlays.closeCliAdmin()" (keydown.space)="overlays.closeCliAdmin(); $event.preventDefault()">
     <div class="overlay__panel" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">

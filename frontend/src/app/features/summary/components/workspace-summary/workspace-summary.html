@@ -1,0 +1,140 @@
+<section class="wsm" data-testid="workspace-summary">
+  <header class="wsm__head">
+    <div>
+      <h2 class="wsm__title">Executive summary</h2>
+      <p class="wsm__sub">
+        What happened across every watched project in the selected window.
+        @if (summary(); as s) {
+          <span class="wsm__sub-range">
+            · {{ s.windowStart | date: 'short' }} — {{ s.windowEnd | date: 'short' }}
+          </span>
+        }
+      </p>
+    </div>
+    <div class="wsm__controls">
+      <div class="wsm__win" role="radiogroup" aria-label="Window">
+        @for (opt of windowOptions; track opt.hours) {
+          <button type="button"
+                  class="wsm__win-btn"
+                  [class.wsm__win-btn--active]="windowHours() === opt.hours"
+                  [attr.data-testid]="'wsm-win-' + opt.testId"
+                  role="radio"
+                  [attr.aria-checked]="windowHours() === opt.hours"
+                  (click)="setWindow(opt.hours)">
+            {{ opt.label }}
+          </button>
+        }
+      </div>
+      <button type="button"
+              class="wsm__refresh"
+              data-testid="wsm-refresh"
+              [disabled]="loading()"
+              (click)="refresh()">
+        {{ loading() ? '⏳' : '↻' }}
+      </button>
+    </div>
+  </header>
+
+  @if (headline()) {
+    <p class="wsm__headline" data-testid="wsm-headline">{{ headline() }}</p>
+  }
+
+  @if (loading() && !loaded()) {
+    <div class="wsm__placeholder" data-testid="wsm-loading">Loading summary...</div>
+  } @else if (loaded() && !hasAnyActivity()) {
+    <div class="wsm__placeholder" data-testid="wsm-empty">
+      No activity recorded inside the selected window.
+    </div>
+  } @else {
+    <!-- Top decisions: severity-ranked, workspace-wide. -->
+    @if (topDecisions().length > 0) {
+      <section class="wsm__block" data-testid="wsm-top-decisions">
+        <h3 class="wsm__block-title">Top decisions</h3>
+        <ul class="wsm__decisions">
+          @for (d of topDecisions(); track d.decisionId) {
+            <li class="wsm__decision">
+              <span class="wsm__sev" [class]="severityClass(d.severity)">{{ d.severity }}</span>
+              <span class="wsm__decision-title">{{ d.title }}</span>
+              <span class="wsm__decision-meta">
+                {{ d.project }}@if (d.jobId) { · {{ d.jobId }} } · {{ d.at | date: 'short' }}
+              </span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    <!-- Per-project activity. -->
+    @if (byProject().length > 0) {
+      <section class="wsm__block" data-testid="wsm-by-project">
+        <h3 class="wsm__block-title">By project</h3>
+        @for (p of byProject(); track p.project) {
+          <article class="wsm__project" [attr.data-project]="p.project">
+            <header class="wsm__project-head">
+              <h4 class="wsm__project-name">{{ p.project }}</h4>
+              <span class="wsm__project-stats">
+                {{ p.decisionsMade }} decision{{ p.decisionsMade === 1 ? '' : 's' }} ·
+                {{ p.advisoriesRaised }} advisor{{ p.advisoriesRaised === 1 ? 'y' : 'ies' }} ·
+                {{ p.jobsMoved.length }} move{{ p.jobsMoved.length === 1 ? '' : 's' }} ·
+                {{ p.commits.length }} commit{{ p.commits.length === 1 ? '' : 's' }}
+              </span>
+            </header>
+            @if (p.jobsMoved.length > 0) {
+              <ul class="wsm__moves">
+                @for (m of p.jobsMoved; track m.jobId + m.at) {
+                  <li class="wsm__move">
+                    <span class="wsm__move-job">{{ m.jobId }}</span>
+                    <span class="wsm__move-arrow">{{ m.fromState }} → {{ m.toState }}</span>
+                    <span class="wsm__move-time">{{ m.at | date: 'short' }}</span>
+                  </li>
+                }
+              </ul>
+            }
+            @if (p.commits.length > 0) {
+              <ul class="wsm__commits">
+                @for (c of p.commits; track c.sha) {
+                  <li class="wsm__commit">
+                    <code class="wsm__commit-sha">{{ c.shortSha }}</code>
+                    <span class="wsm__commit-subject">{{ c.subject }}</span>
+                    <span class="wsm__commit-meta">{{ c.author }} · {{ c.at | date: 'short' }}</span>
+                  </li>
+                }
+              </ul>
+            }
+          </article>
+        }
+      </section>
+    }
+
+    <!-- Open human decisions: not window-bounded, always actionable. -->
+    @if (openHumanDecisions().length > 0) {
+      <section class="wsm__block" data-testid="wsm-open-decisions">
+        <h3 class="wsm__block-title">Open human decisions</h3>
+        <ul class="wsm__open">
+          @for (o of openHumanDecisions(); track o.jobId) {
+            <li class="wsm__open-item">
+              <span class="wsm__open-title">{{ o.title }}</span>
+              <span class="wsm__open-meta">{{ o.project }} · {{ o.jobId }} · {{ o.createdAt | date: 'short' }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    <!-- Crash evidence. -->
+    @if (crashes().length > 0) {
+      <section class="wsm__block" data-testid="wsm-crashes">
+        <h3 class="wsm__block-title">Crash evidence</h3>
+        <ul class="wsm__crashes">
+          @for (c of crashes(); track c.at + c.path) {
+            <li class="wsm__crash">
+              <span class="wsm__crash-kind">{{ c.kind }}</span>
+              <span class="wsm__crash-summary">{{ c.summary ?? c.path }}</span>
+              <span class="wsm__crash-time">{{ c.at | date: 'short' }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  }
+</section>

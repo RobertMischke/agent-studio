@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output 
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
 import { WorkspaceTokenTimelineComponent } from '../../../tokens';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
+import { WorkspaceSummaryComponent } from '../../../summary';
 import { CliAdminPanelComponent } from '../../../cli';
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
@@ -20,7 +21,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 @Component({
   selector: 'app-workspace-overlays',
   standalone: true,
-  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, CliAdminPanelComponent, TooltipDirective],
+  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-overlays.component.html',
 })
@@ -35,6 +36,7 @@ export class WorkspaceOverlaysComponent {
   constructor() {
     this.bind('workspace-tokens', this.overlays.tokensOpen, () => this.overlays.closeTokens());
     this.bind('workspace-screenshots', this.overlays.screenshotsOpen, () => this.overlays.closeScreenshots());
+    this.bind('workspace-summary', this.overlays.summaryOpen, () => this.overlays.closeSummary());
     this.bind('cli-admin', this.overlays.cliAdminOpen, () => this.overlays.closeCliAdmin());
     this.destroyRef.onDestroy(() => {
       for (const d of this.disposers.values()) d();

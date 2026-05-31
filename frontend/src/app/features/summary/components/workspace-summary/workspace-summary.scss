@@ -1,0 +1,216 @@
+:host { display: block; }
+
+.wsm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  color: #cdd6f4;
+}
+
+.wsm__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wsm__title {
+  margin: 0 0 4px 0;
+  font-size: 1.25rem;
+}
+
+.wsm__sub {
+  margin: 0;
+  color: #a6adc8;
+  font-size: 0.92rem;
+}
+
+.wsm__sub-range {
+  color: #cdd6f4;
+  font-variant-numeric: tabular-nums;
+}
+
+.wsm__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wsm__win {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid rgba(180, 190, 254, 0.3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.wsm__win-btn {
+  background: transparent;
+  border: 0;
+  color: #cdd6f4;
+  font: inherit;
+  font-size: 0.84rem;
+  padding: 6px 10px;
+  cursor: pointer;
+
+  &--active { background: rgba(137, 180, 250, 0.25); }
+  &:hover { background: rgba(137, 180, 250, 0.15); }
+}
+
+.wsm__refresh {
+  background: rgba(30, 30, 46, 0.6);
+  border: 1px solid rgba(180, 190, 254, 0.3);
+  color: #cdd6f4;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.wsm__headline {
+  margin: 0;
+  font-size: 1rem;
+  color: #f5e0dc;
+  background: rgba(137, 180, 250, 0.12);
+  border: 1px solid rgba(180, 190, 254, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.wsm__placeholder {
+  padding: 24px;
+  text-align: center;
+  color: #a6adc8;
+  border: 1px dashed rgba(180, 190, 254, 0.25);
+  border-radius: 8px;
+}
+
+.wsm__block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wsm__block-title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #bac2de;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- decisions ---------- */
+
+.wsm__decisions,
+.wsm__open,
+.wsm__crashes,
+.wsm__moves,
+.wsm__commits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wsm__decision {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 8px;
+  border: 1px solid rgba(180, 190, 254, 0.15);
+  border-radius: 6px;
+  background: rgba(17, 17, 27, 0.5);
+}
+
+.wsm__sev {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex: none;
+
+  &--info { background: rgba(137, 180, 250, 0.25); color: #89b4fa; }
+  &--warn { background: rgba(249, 226, 175, 0.2); color: #f9e2af; }
+  &--high { background: rgba(250, 179, 135, 0.22); color: #fab387; }
+  &--critical { background: rgba(243, 139, 168, 0.25); color: #f38ba8; }
+}
+
+.wsm__decision-title { flex: 1 1 auto; }
+
+.wsm__decision-meta,
+.wsm__open-meta,
+.wsm__crash-time,
+.wsm__move-time,
+.wsm__commit-meta {
+  color: #a6adc8;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- per-project ---------- */
+
+.wsm__project {
+  border: 1px solid rgba(180, 190, 254, 0.18);
+  border-radius: 8px;
+  background: rgba(17, 17, 27, 0.5);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wsm__project-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wsm__project-name {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.wsm__project-stats {
+  color: #a6adc8;
+  font-size: 0.82rem;
+}
+
+.wsm__move,
+.wsm__commit,
+.wsm__open-item,
+.wsm__crash {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.86rem;
+}
+
+.wsm__move-job,
+.wsm__open-title,
+.wsm__crash-summary { color: #cdd6f4; }
+
+.wsm__move-arrow { color: #a6adc8; }
+
+.wsm__commit-sha {
+  color: #94e2d5;
+  font-size: 0.8rem;
+}
+
+.wsm__commit-subject { flex: 1 1 auto; }
+
+.wsm__crash-kind {
+  color: #f38ba8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
