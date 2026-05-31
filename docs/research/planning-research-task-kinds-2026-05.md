@@ -89,27 +89,37 @@ and a git pre/post pipeline. Planning and Research reuse the *slot* concept
 
 ## Data model implications
 
-Today `job.json` has no `kind` field. Adding one is the minimum:
+**Reconciliation (2026-05-31):** the Epics feature shipped first and took the
+`kind` field for the *container* taxonomy (`task` | `epic`). The *execution*
+taxonomy this note needs is orthogonal (a leaf task has an execution mode; an
+epic is a container), so it lives in a **separate `mode` field** - not in
+`kind`. No migration of the Epics `kind` values. **Landed 2026-05-31** on
+`feature/task-modes` (behaviour-neutral foundation): `TaskModes`
+(coding|planning|research) + `TaskInfo.Mode` + `AllowWebAccess`,
+`CreateJobRequest.Mode`/`AllowWebAccess`, scanner + create persistence, unit
+tests.
 
 ```jsonc
 {
   "id": "...",
-  "kind": "coding" | "planning" | "research",   // new, default "coding"
+  "kind": "task" | "epic",                       // Epics (already shipped)
+  "mode": "coding" | "planning" | "research",    // default "coding"
+  "allowWebAccess": false,                        // default by mode (research = true)
   ...
 }
 ```
 
-Default to `"coding"` so existing jobs and `CreateJobRequest` payloads
-without the field keep working unchanged. Boot-time migration sets the
-field on legacy folders; nothing else changes.
+`mode` defaults to `"coding"` so existing jobs and `CreateJobRequest` payloads
+without the field keep working unchanged; the scanner normalises a
+missing/unknown value to `coding`, so no boot-time migration is needed
+(absence == coding). `TaskModes` mirrors `TaskKinds`.
 
-The kind is a property of the task, not of the lane. All three kinds use
-the same lifecycle states. The pipeline and the parallelisability gate
-branch on kind.
+The mode is a property of the task, not of the lane. All modes use the same
+lifecycle states. The pipeline and the parallelisability gate branch on mode
+(`TaskModes.IsReadOnly`).
 
-This `kind` field is the same minimal first step ADR-0052's slicing plan
-needs anyway; landing it as a behaviour-neutral default (`coding`) is the
-natural shared slice-1 between this note and the concept doc.
+This `mode` field is the behaviour-neutral first slice; it docks onto
+ADR-0052's slicing plan the same way the `kind` field did.
 
 ## Runner / scheduler implications
 
