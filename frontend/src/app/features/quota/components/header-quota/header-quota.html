@@ -8,36 +8,22 @@
          [attr.data-tone]="card.tone"
          [attr.data-state]="card.state"
          [appTooltip]="card.tooltip">
-      <div class="hquota__head">
-        <span class="hquota__icon" aria-hidden="true">{{ card.icon }}</span>
-        <span class="hquota__label">{{ card.label }}</span>
-        @if (card.stale) {
-          <span class="hquota__stale-dot" [appTooltip]="'Stale: snapshot is older than the cache TTL.'">●</span>
-        }
-      </div>
+      <span class="hquota__icon" aria-hidden="true">{{ card.icon }}</span>
+      <span class="hquota__label">{{ card.label }}</span>
 
-      <div class="hquota__windows">
-        @if (card.shortWindow; as w) {
-          <span class="hquota__window-cell"
-                [attr.data-testid]="'hquota-' + card.cliType + '-5h'"
-                [attr.data-tone]="w.tone"
-                [appTooltip]="w.tooltip">
-            <span class="hquota__window-value">{{ w.value }}</span>
-            <span class="hquota__window-label">5H</span>
-            <span class="hquota__window-bar"><span class="hquota__window-bar-fill" [style.width.%]="w.barPct"></span></span>
-          </span>
+      <span class="hquota__metric"
+            [attr.data-testid]="'hquota-' + card.cliType + '-primary'"
+            [attr.data-tone]="card.primary.tone">
+        <span class="hquota__value">{{ card.primary.value }}</span>
+        @if (card.primary.tag) {
+          <span class="hquota__tag">{{ card.primary.tag }}</span>
         }
-        @if (card.weekWindow; as w) {
-          <span class="hquota__window-cell"
-                [attr.data-testid]="'hquota-' + card.cliType + '-wk'"
-                [attr.data-tone]="w.tone"
-                [appTooltip]="w.tooltip">
-            <span class="hquota__window-value">{{ w.value }}</span>
-            <span class="hquota__window-label">WK</span>
-            <span class="hquota__window-bar"><span class="hquota__window-bar-fill" [style.width.%]="w.barPct"></span></span>
-          </span>
-        }
-      </div>
+        <span class="hquota__bar"><span class="hquota__bar-fill" [style.width.%]="card.primary.barPct"></span></span>
+      </span>
+
+      @if (card.stale) {
+        <span class="hquota__stale-dot" [appTooltip]="'Stale: snapshot is older than the cache TTL.'">●</span>
+      }
     </div>
   }
 </div>

@@ -17,6 +17,21 @@ interface QuotaWindowDisplay {
 }
 
 /**
+ * The single most-constraining window rendered in the strip. Every CLI
+ * card shows exactly one of these so the three pills line up with an
+ * identical icon + name + value + bar + tag shape (the full per-window
+ * breakdown stays one hover / click away in the detail modal).
+ */
+interface QuotaPrimaryDisplay {
+  value: string;
+  /** Short window tag: 5H / WK / MO / DY / ... — names what the % is for. */
+  tag: string;
+  barPct: number;
+  hasValue: boolean;
+  tone: 'ok' | 'warn' | 'hot' | 'unknown';
+}
+
+/**
  * Semantic state of a CLI quota card. Drives the highlight reading
  * for the operator: idle = quiet, warn = approaching threshold, hot =
  * over threshold, stale = snapshot older than TTL, unavailable = no
@@ -34,6 +49,7 @@ interface QuotaCardModel {
   plan: string | null;
   shortWindow?: QuotaWindowDisplay;
   weekWindow?: QuotaWindowDisplay;
+  primary: QuotaPrimaryDisplay;
   tone: 'ok' | 'warn' | 'hot' | 'unknown';
   state: QuotaCardState;
   tooltip: StructuredTooltip;
@@ -46,9 +62,17 @@ interface QuotaCardModel {
 }
 
 /**
- * Compact CLI-quota row for the app status bar. One item per primary
- * routing CLI with the same visual pattern: icon, label, current pressure,
- * trend marker, and a small usage bar.
+ * Compact CLI-quota row for the app status bar. One card per primary
+ * routing CLI, all built from an identical shape so the three pills sit
+ * on one clean line: icon, label, the single most-constraining window's
+ * used%, a short window tag (5H / WK / MO), and a small usage bar.
+ *
+ * Showing one primary value per CLI (instead of a per-CLI-variable set
+ * of window cells) is what keeps the strip uniform and readable - the
+ * full per-window breakdown lives one hover (tooltip) or click (detail
+ * modal) away. The primary is the highest-used window, mirroring the
+ * modal's "routing headroom" so the at-a-glance number and the drill-in
+ * agree.
  *
  * The header reads the quota report from the backend's filesystem-
  * cached store on app start (no spinner; data appears immediately).
@@ -117,19 +141,21 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const label = this.cliLabel(s.cliType);
     const shortWindow = this.buildWindowDisplay(s.windows, 'five_hour');
     const weekWindow = this.buildWindowDisplay(s.windows, 'weekly');
-    const tone = this.cardTone(shortWindow, weekWindow, !!s.error);
-    const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow);
+    const primary = this.buildPrimaryDisplay(s.windows);
+    const tone = this.cardTone(shortWindow, weekWindow, !!s.error, primary);
+    const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow, primary);
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, shortWindow, weekWindow),
+      ariaLabel: this.cardAriaLabel(label, primary),
       plan: s.plan,
       shortWindow,
       weekWindow,
+      primary,
       tone,
       state,
-      tooltip: this.cardTooltip(label, state, s.plan, freshness, shortWindow, weekWindow, s.error),
+      tooltip: this.cardTooltip(label, state, s.plan, freshness, shortWindow, weekWindow, s.error, primary),
       fetchedAt: s.fetchedAt,
       stale,
       freshness,
@@ -147,6 +173,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       label,
       ariaLabel: `${label} quota: no data yet`,
       plan: null,
+      primary: { value: '—', tag: '', barPct: 0, hasValue: false, tone: 'unknown' },
       tone: 'unknown',
       state: 'unavailable',
       tooltip: this.cardTooltip(label, 'unavailable', null, 'never refreshed', undefined, undefined, null),
@@ -184,23 +211,65 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     return null;
   }
 
-  private cardTone(sw?: QuotaWindowDisplay, ww?: QuotaWindowDisplay, hasError?: boolean): QuotaCardModel['tone'] {
-    if (hasError && !sw && !ww) return 'unknown';
+  private cardTone(
+    sw?: QuotaWindowDisplay,
+    ww?: QuotaWindowDisplay,
+    hasError?: boolean,
+    primary?: QuotaPrimaryDisplay,
+  ): QuotaCardModel['tone'] {
+    if (hasError && !sw && !ww && !primary?.hasValue) return 'unknown';
     const tones: QuotaCardModel['tone'][] = [];
     if (sw) tones.push(sw.tone);
     if (ww) tones.push(ww.tone);
+    // The primary covers windows the 5H / WK lookup misses (e.g.
+    // Copilot's monthly premium-request window) so the card highlight
+    // never goes quiet just because the constraining window isn't a
+    // session/weekly bucket.
+    if (primary?.hasValue) tones.push(primary.tone);
     if (tones.length === 0) return 'unknown';
     if (tones.includes('hot')) return 'hot';
     if (tones.includes('warn')) return 'warn';
     return 'ok';
   }
 
-  private cardAriaLabel(label: string, sw?: QuotaWindowDisplay, ww?: QuotaWindowDisplay): string {
-    const parts = [`${label} quota`];
-    if (sw) parts.push(`5h: ${sw.value}`);
-    if (ww) parts.push(`weekly: ${ww.value}`);
-    if (!sw && !ww) parts.push('no data yet');
-    return parts.join(', ');
+  /**
+   * The single window the strip renders: the most-constraining
+   * (highest used%) of all reported windows, with a short tag naming
+   * which window it is. Returns a muted placeholder when the CLI has no
+   * usable window so every card keeps the same shape on the line.
+   */
+  private buildPrimaryDisplay(windows: QuotaWindow[]): QuotaPrimaryDisplay {
+    const ranked = [...windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1));
+    const w = ranked[0];
+    if (!w || w.usedPct == null) {
+      return { value: '—', tag: w ? this.windowTag(w.label) : '', barPct: 0, hasValue: false, tone: 'unknown' };
+    }
+    const pct = Math.round(w.usedPct);
+    return {
+      value: `${pct}%`,
+      tag: this.windowTag(w.label),
+      barPct: Math.max(0, Math.min(100, pct)),
+      hasValue: true,
+      tone: this.toneFor(pct),
+    };
+  }
+
+  /** Short uppercase tag for a window label, e.g. "5H", "WK", "MO". */
+  private windowTag(label: string): string {
+    const l = (label ?? '').toLowerCase();
+    if (l.includes('5h') || l.includes('5-hour') || l.includes('session')) return '5H';
+    if (l.includes('week')) return 'WK';
+    if (l.includes('month')) return 'MO';
+    if (l.includes('dai') || l.includes('day')) return 'DY';
+    if (l.includes('hour')) return 'HR';
+    const word = (label ?? '').trim().split(/\s+/)[0] ?? '';
+    return word.slice(0, 2).toUpperCase();
+  }
+
+  private cardAriaLabel(label: string, primary: QuotaPrimaryDisplay): string {
+    if (!primary.hasValue) return `${label} quota: no data yet`;
+    const tag = primary.tag ? ` ${primary.tag} window` : '';
+    return `${label} quota: ${primary.value} used${tag}`;
   }
 
   private toneFor(pct: number | null): QuotaCardModel['tone'] {
@@ -216,9 +285,14 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     hasError: boolean,
     sw?: QuotaWindowDisplay,
     ww?: QuotaWindowDisplay,
+    primary?: QuotaPrimaryDisplay,
   ): QuotaCardState {
     if (hasError) return 'error';
-    if (!sw && !ww) return 'unavailable';
+    // A card is only "unavailable" when it has nothing to show. The
+    // primary covers CLIs whose constraining window isn't a 5H / WK
+    // bucket (e.g. Copilot's monthly), so the state stays consistent
+    // with the value the pill renders.
+    if (!sw && !ww && !primary?.hasValue) return 'unavailable';
     if (tone === 'hot') return 'hot';
     if (tone === 'warn') return 'warn';
     if (stale) return 'stale';
@@ -233,6 +307,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     sw?: QuotaWindowDisplay,
     ww?: QuotaWindowDisplay,
     error?: string | null,
+    primary?: QuotaPrimaryDisplay,
   ): StructuredTooltip {
     const stateLine = (() => {
       switch (state) {
@@ -248,6 +323,10 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const lines: string[] = [stateLine];
     if (sw) lines.push(`5H rolling: ${sw.value}`);
     if (ww) lines.push(`Weekly: ${ww.value}`);
+    // Surface the rendered primary when it isn't already one of the
+    // 5H / WK lines (e.g. Copilot's monthly window) so the tooltip
+    // explains the pill's number instead of going silent.
+    if (!sw && !ww && primary?.hasValue) lines.push(`${primary.tag || 'Usage'}: ${primary.value}`);
     if (plan) lines.push(`Plan: ${plan}`);
     lines.push(freshness);
     if (error) lines.push(`Error: ${error}`);

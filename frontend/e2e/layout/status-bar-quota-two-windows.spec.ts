@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * F50: Each CLI quota card shows both 5H and WK window cells when the
- * backend provides both windows. CLIs that only have one window type
- * show only that cell (no empty placeholder).
+ * F50 follow-up: each CLI quota card renders one uniform primary pill -
+ * the most-constraining (highest used%) window across all windows the
+ * backend reports - with an identical icon + name + value + tag + bar
+ * shape. The full per-window breakdown lives in the tooltip / detail
+ * modal, so the strip itself stays on a single clean, readable line.
  */
 
 function mockQuotaReport(opts?: { copilotWeeklyOnly?: boolean }) {
@@ -40,7 +42,7 @@ function mockQuotaReport(opts?: { copilotWeeklyOnly?: boolean }) {
         fetchedAt: new Date().toISOString(),
         plan: 'business',
         windows: opts?.copilotWeeklyOnly !== false
-          ? [{ label: 'Weekly premium', usedPct: 18, used: 90, limit: 500, unit: 'requests', resetAt: null, resetLabel: 'in 6d' }]
+          ? [{ label: 'Monthly premium', usedPct: 18, used: 90, limit: 500, unit: 'requests', resetAt: null, resetLabel: 'in 6d' }]
           : [
               { label: '5-hour rolling', usedPct: 10, used: 50, limit: 500, unit: 'requests', resetAt: null, resetLabel: 'in 3h' },
               { label: 'Weekly premium', usedPct: 18, used: 90, limit: 500, unit: 'requests', resetAt: null, resetLabel: 'in 6d' },
@@ -53,8 +55,8 @@ function mockQuotaReport(opts?: { copilotWeeklyOnly?: boolean }) {
   };
 }
 
-test.describe('Status bar quota: dual window cells (5H + WK)', () => {
-  test('Claude card shows both 5H and WK cells with values and bars', async ({ page }) => {
+test.describe('Status bar quota: uniform primary pill', () => {
+  test('Claude pill shows the most-constraining window (Weekly 55%)', async ({ page }) => {
     await page.route('**/api/cli/quota', async (route) => {
       await route.fulfill({
         status: 200,
@@ -68,30 +70,19 @@ test.describe('Status bar quota: dual window cells (5H + WK)', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1200);
 
-    const claude5h = page.getByTestId('hquota-claude-5h');
-    const claudeWk = page.getByTestId('hquota-claude-wk');
+    const claude = page.getByTestId('hquota-claude-primary');
+    await expect(claude).toBeVisible();
 
-    await expect(claude5h).toBeVisible();
-    await expect(claudeWk).toBeVisible();
+    // Highest used% across Claude's windows is the Weekly window (55%).
+    await expect(claude.locator('.hquota__value')).toContainText('55%');
+    await expect(claude.locator('.hquota__tag')).toContainText('WK');
+    await expect(claude.locator('.hquota__bar-fill')).toBeVisible();
 
-    // Value text is present.
-    await expect(claude5h.locator('.hquota__window-value')).toContainText('31%');
-    await expect(claudeWk.locator('.hquota__window-value')).toContainText('55%');
-
-    // Label text.
-    await expect(claude5h.locator('.hquota__window-label')).toContainText('5H');
-    await expect(claudeWk.locator('.hquota__window-label')).toContainText('WK');
-
-    // Both have a bar.
-    await expect(claude5h.locator('.hquota__window-bar-fill')).toBeVisible();
-    await expect(claudeWk.locator('.hquota__window-bar-fill')).toBeVisible();
-
-    // Screenshot of the Claude card detail.
     const claudeCard = page.getByTestId('hquota-card-claude');
     await claudeCard.screenshot({ path: 'test-results/f50-status-bar-quota-detail-claude.png' });
   });
 
-  test('Codex card shows both 5H and WK cells', async ({ page }) => {
+  test('Codex pill shows its 5H window (72%) as the primary', async ({ page }) => {
     await page.route('**/api/cli/quota', async (route) => {
       await route.fulfill({
         status: 200,
@@ -105,14 +96,13 @@ test.describe('Status bar quota: dual window cells (5H + WK)', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1200);
 
-    await expect(page.getByTestId('hquota-codex-5h')).toBeVisible();
-    await expect(page.getByTestId('hquota-codex-wk')).toBeVisible();
-
-    await expect(page.getByTestId('hquota-codex-5h').locator('.hquota__window-value')).toContainText('72%');
-    await expect(page.getByTestId('hquota-codex-wk').locator('.hquota__window-value')).toContainText('40%');
+    const codex = page.getByTestId('hquota-codex-primary');
+    await expect(codex).toBeVisible();
+    await expect(codex.locator('.hquota__value')).toContainText('72%');
+    await expect(codex.locator('.hquota__tag')).toContainText('5H');
   });
 
-  test('Copilot card shows only WK cell when backend provides only Weekly', async ({ page }) => {
+  test('Copilot pill renders even with a non-5H/WK window (Monthly)', async ({ page }) => {
     await page.route('**/api/cli/quota', async (route) => {
       await route.fulfill({
         status: 200,
@@ -126,14 +116,15 @@ test.describe('Status bar quota: dual window cells (5H + WK)', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1200);
 
-    // WK cell visible.
-    await expect(page.getByTestId('hquota-copilot-wk')).toBeVisible();
-
-    // 5H cell does NOT exist.
-    await expect(page.getByTestId('hquota-copilot-5h')).toHaveCount(0);
+    const copilot = page.getByTestId('hquota-copilot-primary');
+    await expect(copilot).toBeVisible();
+    // The single Monthly window becomes the primary; the strip never
+    // goes blank just because the window isn't a 5H / WK bucket.
+    await expect(copilot.locator('.hquota__value')).toContainText('18%');
+    await expect(copilot.locator('.hquota__tag')).toContainText('MO');
   });
 
-  test('tone coloring applies per window cell independently', async ({ page }) => {
+  test('all three CLIs render exactly one uniform pill each', async ({ page }) => {
     await page.route('**/api/cli/quota', async (route) => {
       await route.fulfill({
         status: 200,
@@ -147,10 +138,29 @@ test.describe('Status bar quota: dual window cells (5H + WK)', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1200);
 
-    // Codex 5h is 72% -> warn tone.
-    await expect(page.getByTestId('hquota-codex-5h')).toHaveAttribute('data-tone', 'warn');
-    // Codex WK is 40% -> ok tone.
-    await expect(page.getByTestId('hquota-codex-wk')).toHaveAttribute('data-tone', 'ok');
+    for (const cli of ['claude', 'codex', 'copilot']) {
+      await expect(page.getByTestId(`hquota-${cli}-primary`)).toHaveCount(1);
+    }
+  });
+
+  test('tone reflects the constraining window (Codex 72% -> warn)', async ({ page }) => {
+    await page.route('**/api/cli/quota', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockQuotaReport()),
+      });
+    });
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1200);
+
+    // Codex primary is the 72% session window -> warn tone.
+    await expect(page.getByTestId('hquota-codex-primary')).toHaveAttribute('data-tone', 'warn');
+    // Claude primary is the 55% weekly window -> ok tone.
+    await expect(page.getByTestId('hquota-claude-primary')).toHaveAttribute('data-tone', 'ok');
   });
 
   test('full status bar screenshot in both themes', async ({ page }) => {

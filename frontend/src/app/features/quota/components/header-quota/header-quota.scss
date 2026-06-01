@@ -1,14 +1,15 @@
-// F50 follow-up (2026-05-29) — CLI quota cards now share the status-
-// bar's sizing tokens so Claude / Codex / Copilot pills sit on the
-// same baseline as the surrounding chips. Previous min-height: 28 px
-// overflowed the 22 px bar and was the visual source of "Codex looks
-// inconsistent" + "left icons rutsch nach unten".
+// F50 follow-up (2026-06-01) — every CLI quota card now renders one
+// identical primary pill: icon + name + value + tag + bar. Showing a
+// single most-constraining window per CLI (instead of a per-CLI-
+// variable set of 5H / WK cells) is what makes Claude / Codex /
+// Copilot line up with the same height, padding, and shape. The full
+// per-window breakdown lives in the tooltip / detail modal.
 
 :host { display: inline-flex; }
 
 .hquota {
   display: inline-flex;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -16,16 +17,16 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  // Match the status-bar item height (defined on .statusbar). Falling
-  // back to 18 px keeps the card sane when rendered outside the bar.
-  height: var(--statusbar-item-height, 18px);
+  // Slightly taller than a bare status-bar chip so the larger value
+  // font and the usage bar both breathe without clipping; still snaps
+  // to the bar baseline via vertical centering on the row.
+  height: var(--statusbar-item-height, 20px);
   min-height: 0;
-  padding: 0 var(--statusbar-item-pad-x, 7px);
+  padding: 0 8px;
   border-radius: var(--statusbar-item-radius, 4px);
   border: 1px solid var(--studio-border);
   background: var(--studio-bg-hover);
   color: var(--studio-fg);
-  font-size: var(--statusbar-font-size, 11px);
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
@@ -44,25 +45,18 @@
 .hquota__card[data-tone="warn"] { border-color: color-mix(in srgb, var(--severity-warn) 45%, transparent); }
 .hquota__card[data-tone="hot"]  { border-color: color-mix(in srgb, var(--severity-high) 55%, transparent); }
 
-.hquota__head {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--statusbar-font-size, 11px);
-  line-height: 1;
-  color: var(--studio-fg);
-  letter-spacing: 0;
-}
 .hquota__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--statusbar-icon-size, 11px);
+  font-size: 13px;
   line-height: 1;
 }
 .hquota__label {
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
+  color: var(--studio-fg);
 }
 .hquota__stale-dot {
   color: var(--severity-warn);
@@ -70,48 +64,45 @@
   line-height: 1;
 }
 
-.hquota__windows {
+.hquota__metric {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-.hquota__window-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+  gap: 5px;
   line-height: 1;
 }
-.hquota__window-value {
+.hquota__value {
   color: var(--studio-fg-strong);
-  font-size: var(--statusbar-font-size, 11px);
+  font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  min-width: 26px;
+  min-width: 30px;
   text-align: right;
 }
-.hquota__window-cell[data-tone="warn"] .hquota__window-value { color: var(--severity-warn); }
-.hquota__window-cell[data-tone="hot"]  .hquota__window-value { color: var(--severity-high); }
-.hquota__window-label {
+.hquota__metric[data-tone="warn"] .hquota__value { color: var(--severity-warn); }
+.hquota__metric[data-tone="hot"]  .hquota__value { color: var(--severity-high); }
+.hquota__metric[data-tone="unknown"] .hquota__value { color: var(--studio-fg-dim); }
+.hquota__tag {
   color: var(--studio-fg-dim);
   font-size: 9px;
+  font-weight: 600;
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.hquota__window-bar {
-  width: 20px;
-  height: 3px;
+.hquota__bar {
+  width: 24px;
+  height: 4px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--studio-bg-elevated);
 }
-.hquota__window-bar-fill {
+.hquota__bar-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
   background: var(--severity-pass);
 }
-.hquota__window-cell[data-tone="warn"] .hquota__window-bar-fill { background: var(--severity-warn); }
-.hquota__window-cell[data-tone="hot"]  .hquota__window-bar-fill { background: var(--severity-high); }
-.hquota__window-cell[data-tone="unknown"] .hquota__window-bar-fill { background: var(--studio-fg-muted); }
+.hquota__metric[data-tone="warn"] .hquota__bar-fill { background: var(--severity-warn); }
+.hquota__metric[data-tone="hot"]  .hquota__bar-fill { background: var(--severity-high); }
+.hquota__metric[data-tone="unknown"] .hquota__bar-fill { background: var(--studio-fg-muted); }

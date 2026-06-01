@@ -289,10 +289,18 @@
 }
 
 .cli-usage-modal tr:last-child td { border-bottom: 0; }
+// The modal is always dark, but the app's global light-theme rule
+// (`code { background: #f3f3f3 }`) leaks in and renders the light-blue
+// model names invisibly on a near-white chip. Pin an explicit dark
+// background so model names stay legible regardless of the active app
+// theme.
 .cli-usage-modal code {
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
   font-size: 11px;
   color: #dbeafe;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 .cli-usage-modal__num {
