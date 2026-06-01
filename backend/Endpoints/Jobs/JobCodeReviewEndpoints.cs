@@ -39,8 +39,35 @@ public static class TaskCodeReviewEndpoints
     /// <summary>Default per-run wall-clock cap when configuration omits it.</summary>
     public const int DefaultTimeoutSecondsFallback = 600;
 
+    /// <summary>
+    /// Resolve the effective code-review default CLI + model from
+    /// configuration, falling back to the hard-coded defaults. Pure so the
+    /// resolution can be unit-tested without spinning an HTTP host.
+    /// </summary>
+    public static (string CliType, string Model) ResolveDefaults(IConfiguration configuration)
+    {
+        var cli = configuration[DefaultCliConfigKey];
+        var model = configuration[DefaultModelConfigKey];
+        return (
+            string.IsNullOrWhiteSpace(cli) ? DefaultCliFallback : cli!,
+            string.IsNullOrWhiteSpace(model) ? DefaultModelFallback : model!);
+    }
+
     public static void MapJobCodeReviewEndpoints(this RouteGroupBuilder group)
     {
+        // GET /api/tasks/code-review/defaults
+        // The configured default CLI + model for the user-triggered review
+        // step. The panel seeds its picker from this when the operator has
+        // no remembered last-used pair, so a deployment-level
+        // CodeReviewStep:DefaultModel actually shows up in the UI instead of
+        // a hard-coded guess. Both literal segments, so it never collides
+        // with the parameterised /{jobId}/code-review/... routes.
+        group.MapGet("/code-review/defaults", (IConfiguration configuration) =>
+        {
+            var (cli, model) = ResolveDefaults(configuration);
+            return Results.Ok(new CodeReviewDefaultsResponse { CliType = cli, Model = model });
+        });
+
         // GET /api/tasks/{jobId}/code-review/list
         // Returns the list of code-review-*.md artifacts in the job folder,
         // newest-first. Each entry carries the parsed frontmatter so the
@@ -198,6 +225,13 @@ public static class TaskCodeReviewEndpoints
             });
         });
     }
+}
+
+/// <summary>Response for <c>GET /api/tasks/code-review/defaults</c>.</summary>
+public sealed record CodeReviewDefaultsResponse
+{
+    public required string CliType { get; init; }
+    public required string Model { get; init; }
 }
 
 /// <summary>One row in the per-job code-review listing.</summary>

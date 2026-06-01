@@ -69,6 +69,12 @@ export interface CodeReviewListEntry {
   runAt: string;
 }
 
+/** Reply from `GET /api/tasks/code-review/defaults` (see backend `CodeReviewDefaultsResponse`). */
+export interface CodeReviewDefaults {
+  cliType: string;
+  model: string;
+}
+
 /** Reply from `POST /api/tasks/{id}/code-review` (see backend `CodeReviewStepEndpointResponse`). */
 export interface CodeReviewRunResponse {
   fileName: string;
@@ -520,6 +526,16 @@ export class TaskService {
       { tags },
       this.withWatchPath(watchPath),
     );
+  }
+
+  /**
+   * The deployment-configured default CLI + model for the code-review step.
+   * The panel seeds its picker from this when the operator has no remembered
+   * last-used pair, so a `CodeReviewStep:DefaultModel` set in appsettings
+   * actually surfaces in the UI instead of a hard-coded guess.
+   */
+  codeReviewDefaults() {
+    return this.http.get<CodeReviewDefaults>(`${this.baseUrl}/tasks/code-review/defaults`);
   }
 
   /**

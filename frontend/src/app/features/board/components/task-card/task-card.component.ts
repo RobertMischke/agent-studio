@@ -4,6 +4,7 @@ import { GitSummaryService } from '../../../../services/git-summary.service';
 import { TaskService } from '../../../../services/task.service';
 import { ClientService } from '../../../../services/client.service';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
+import { CodeReviewActivityStore } from '../../../../services/code-review-activity.store';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
@@ -87,6 +88,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private readonly clients = inject(ClientService);
   private readonly tagRegistry = inject(TagRegistryStore);
   private readonly autoReviewStatus = inject(AutoReviewStatusStore);
+  private readonly codeReviewActivity = inject(CodeReviewActivityStore);
   private stopPolling: (() => void) | null = null;
 
   /**
@@ -501,6 +503,21 @@ export class TaskCardComponent implements OnInit, OnDestroy {
       tone,
       tooltip: `Runner outcome issue: ${issue.kind}${seen}${summary}`
     };
+  });
+
+  /**
+   * Card-level "code review running" flag. Reads the shared
+   * {@link CodeReviewActivityStore} singleton the detail-pane panel marks
+   * while a user-triggered review is in flight, so the operator sees the
+   * pass progressing on the board even after navigating away from the task
+   * (the user's "Progress an die Karte" requirement). Ephemeral: clears when
+   * the synchronous review call resolves.
+   */
+  readonly codeReviewRunning = computed(() => {
+    const job = this.job();
+    return this.codeReviewActivity.isRunning(
+      CodeReviewActivityStore.key(job.watchPath, job.id),
+    );
   });
 
   /** Hot-state threshold: amber pill once the loop is at 80% of the iteration cap. */

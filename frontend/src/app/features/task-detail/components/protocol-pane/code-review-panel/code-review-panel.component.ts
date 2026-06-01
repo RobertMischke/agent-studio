@@ -11,8 +11,13 @@ import {
 import { FormsModule } from '@angular/forms';
 import type { CliType, TaskInfo } from '../../../../../models/task.model';
 import { CodeReviewListEntry, TaskService } from '../../../../../services/task.service';
+import { CodeReviewActivityStore } from '../../../../../services/code-review-activity.store';
 
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
+
+/** localStorage key holding the last CLI+model the operator ran a review with. */
+const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
+
 /**
  * User-triggered code-review panel that lives in the protocol pane.
  *
@@ -27,9 +32,11 @@ import { CliModelSelectorComponent } from '../../../../../components/cli-model-s
  *       button POSTs the chosen pair and shows a spinner until the
  *       response arrives.</li>
  *   <li>Cover the user's "Progress an die Karte, dass da gerade eine
- *       Code-Review läuft" by surfacing the running indicator inside the
- *       detail pane (the spinner stays visible for the whole CLI call).
- *       A card-level badge is a future follow-up.</li>
+ *       Code-Review läuft" two ways: the in-panel spinner stays visible for
+ *       the whole CLI call, and the run is registered in the shared
+ *       {@link CodeReviewActivityStore} so the kanban card renders a "code
+ *       review…" badge even when the operator navigates away from the
+ *       detail pane.</li>
  * </ul>
  *
  * <p>The CLI list is intentionally not filtered (see
@@ -63,14 +70,64 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly selectedCli = signal<CliType>('claude');
 
   private readonly jobs = inject(TaskService);
+  private readonly activity = inject(CodeReviewActivityStore);
 
   /** True when there is at least one MD listed and the user can drill in. */
   readonly hasEntries = computed(() => this.entries().length > 0);
 
   ngOnInit(): void {
-    this.selectedModel.set(this.defaultModel());
-    this.selectedCli.set(this.defaultCli());
+    // Seed precedence (directly serves the operator's "remember the last
+    // model" + "configurable default if there is no last one" asks):
+    //   1. last-used pair persisted in localStorage,
+    //   2. the deployment-configured default from the backend,
+    //   3. the hard-coded input fallbacks (claude / claude-opus-4-7).
+    const remembered = this.readLastAgent();
+    if (remembered) {
+      this.selectedCli.set(remembered.cliType);
+      this.selectedModel.set(remembered.model);
+    } else {
+      // Provisional fallback while the configured default loads.
+      this.selectedModel.set(this.defaultModel());
+      this.selectedCli.set(this.defaultCli());
+      this.jobs.codeReviewDefaults().subscribe({
+        next: (defaults) => {
+          // Only adopt server defaults if the operator hasn't picked since.
+          if (this.readLastAgent()) return;
+          if (defaults.cliType) this.selectedCli.set(defaults.cliType as CliType);
+          if (defaults.model) this.selectedModel.set(defaults.model);
+        },
+        error: () => {
+          // Keep the hard-coded fallbacks already set above.
+        },
+      });
+    }
     this.refresh();
+  }
+
+  /** Read the remembered last-used pair, tolerating absent/corrupt storage. */
+  private readLastAgent(): { cliType: CliType; model: string } | null {
+    try {
+      const raw = localStorage.getItem(LAST_AGENT_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { cliType?: string; model?: string };
+      if (!parsed?.cliType || !parsed?.model) return null;
+      return { cliType: parsed.cliType as CliType, model: parsed.model };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Persist the chosen pair so the next visit seeds from it. */
+  private rememberLastAgent(cliType: CliType, model: string): void {
+    if (!cliType || !model) return;
+    try {
+      localStorage.setItem(
+        LAST_AGENT_STORAGE_KEY,
+        JSON.stringify({ cliType, model }),
+      );
+    } catch {
+      // Private-mode / quota failures are non-fatal; the picker still works.
+    }
   }
 
   /** Re-pull the listing. Public so the parent can call it after a run. */
@@ -103,19 +160,33 @@ export class CodeReviewPanelComponent implements OnInit {
     if (this.running()) return;
     this.running.set(true);
     this.error.set(null);
+    // Register the run in the shared store so the kanban card shows a
+    // "code review…" badge for the whole synchronous call, even if the
+    // operator navigates away from this detail pane.
+    const activityKey = CodeReviewActivityStore.key(job.watchPath, job.id);
+    this.activity.markRunning(activityKey);
     const body: { model?: string; cliType?: string } = {
       cliType: this.selectedCli(),
     };
     const model = this.selectedModel().trim();
     if (model) body.model = model;
     this.jobs.runCodeReview(job.id, body, job.watchPath).subscribe({
-      next: () => {
+      next: (resp) => {
+        // Remember the pair the backend actually ran with, so the next
+        // visit seeds from a real run rather than a transient picker state.
+        const ranCli = (resp?.cliType as CliType) || this.selectedCli();
+        const ranModel = resp?.model || this.selectedModel();
+        this.selectedCli.set(ranCli);
+        this.selectedModel.set(ranModel);
+        this.rememberLastAgent(ranCli, ranModel);
         this.running.set(false);
+        this.activity.clear(activityKey);
         this.refresh();
       },
       error: (err) => {
         this.error.set(err?.message ?? 'Code review failed.');
         this.running.set(false);
+        this.activity.clear(activityKey);
       },
     });
   }
@@ -124,6 +195,7 @@ export class CodeReviewPanelComponent implements OnInit {
   onAgentCommit(change: { cliType: CliType; model: string }): void {
     this.selectedCli.set(change.cliType);
     this.selectedModel.set(change.model);
+    this.rememberLastAgent(change.cliType, change.model);
   }
 
   /** Toggle the inline body view for one row. */

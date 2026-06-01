@@ -154,6 +154,14 @@
         {{ oib.label }}
       </span>
     }
+    @if (codeReviewRunning()) {
+      <span class="task-card__code-review-pill"
+            data-testid="task-card-code-review-running"
+            [appTooltip]="'A user-triggered code review is running against this task\'s latest commit.'">
+        <span class="task-card__code-review-dot"></span>
+        code review…
+      </span>
+    }
   </div>
   <div class="task-card__meta">
     <span class="task-card__effective-model"
