@@ -1,6 +1,25 @@
 import { test, expect } from '@playwright/test';
 
 /**
+ * Isolate every spec in this file from the live backend's stored client
+ * defaults. `ClientDefaultsService.hydrate()` runs on app boot and pulls
+ * `/api/clients/{id}/defaults` into localStorage; if the dev backend has a
+ * saved profile (e.g. claude / claude-opus-4-8) it clobbers the localStorage
+ * values these tests seed and the default-CLI / default-model assertions go
+ * red for reasons unrelated to the picker. Returning an empty profile makes
+ * the seeded localStorage authoritative and keeps the suite deterministic.
+ */
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/clients/*/defaults', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ defaultCliType: null, defaultModel: null }),
+    });
+  });
+});
+
+/**
  * Visual & structural smoke for the slim header + bottom status bar shell.
  *
  * - The header should be short (well below the previous ~70px) so vertical
@@ -83,7 +102,9 @@ test.describe('Status bar and header size', () => {
     await page.waitForTimeout(500);
 
     const chip = page.getByTestId('status-bar-defaults');
-    await expect(chip).toContainText(/Copilot/i);
+    // The unified chip renders the CLI as an emoji + the model name as text,
+    // so the CLI label only appears in the aria-label, not the visible text.
+    await expect(chip).toHaveAttribute('aria-label', /Copilot/i);
 
     await chip.click();
     const picker = page.getByTestId('status-bar-defaults-picker');
@@ -94,7 +115,7 @@ test.describe('Status bar and header size', () => {
     await picker.getByTestId('status-bar-defaults-picker-done').click();
     await expect(picker).not.toBeVisible();
 
-    await expect(chip).toContainText(/Claude Code|Claude/i);
+    await expect(chip).toHaveAttribute('aria-label', /Claude Code/i);
     const stored = await page.evaluate(() => localStorage.getItem('defaultCliType'));
     expect(stored).toBe('claude');
 
