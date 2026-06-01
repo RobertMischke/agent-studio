@@ -18,9 +18,9 @@ test('commit-pill tooltip clips long file rows inside the box', async ({ page })
     document.querySelectorAll('vite-error-overlay').forEach(n => n.remove());
   });
 
-  // Pick the first commit pill whose tooltip will carry long file paths.
-  // We probe several visible pills to find one with a populated file list.
-  const pills = page.getByTestId('job-card-commit');
+  // Pick the first commit row whose tooltip will carry long file paths.
+  // We probe several visible rows to find one with a populated file list.
+  const pills = page.getByTestId('task-card-commit-row');
   await expect(pills.first()).toBeVisible({ timeout: 15_000 });
   const count = await pills.count();
 
