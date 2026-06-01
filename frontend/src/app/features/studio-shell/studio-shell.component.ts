@@ -19,7 +19,6 @@ import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
-import { TreeRowComponent } from '../../components/tree-row/tree-row.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
@@ -33,6 +32,7 @@ import { copyTextToClipboard } from '../../services/clipboard.util';
 import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
+import { ExplorerWorkspaceTreeComponent } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
@@ -84,7 +84,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -146,10 +146,6 @@ export class StudioShellComponent {
     new Set(this.readExpandedProjects()),
   );
   readonly expandedProjects = this._expandedProjects.asReadonly();
-
-  isProjectExpanded(name: string): boolean {
-    return this._expandedProjects().has(name);
-  }
 
   toggleProjectExpanded(name: string, event?: Event): void {
     event?.stopPropagation();
@@ -614,10 +610,6 @@ export class StudioShellComponent {
     return out;
   });
 
-  laneCount(name: string, key: keyof ProjectLaneCounts): number {
-    return this.projectLanes().get(name)?.[key] ?? 0;
-  }
-
   /**
    * Short label for the active tab, used as the leaf of the titlebar
    * breadcrumb (Workspace › Project › <leaf>). Returns `null` for the
@@ -840,48 +832,14 @@ export class StudioShellComponent {
   // its size budget.
 
   readonly projectDrag = inject(ProjectDragDropService);
-  readonly draggingProjectName = this.projectDrag.draggingProjectName;
-  readonly dragOverProjectName = this.projectDrag.dragOverProjectName;
-  readonly movingProjectName = this.projectDrag.movingProjectName;
   readonly moveErrorMessage = this.projectDrag.moveErrorMessage;
 
-  canDropProjectOn(source: string | null, target: string): boolean {
-    return this.projectDrag.canDropProjectOn(source, target);
-  }
-
-  onProjectDragStart(event: DragEvent, projectName: string): void {
-    this.projectDrag.onDragStart(event, projectName);
-  }
-
-  onProjectDragOver(event: DragEvent, overName: string): void {
-    this.projectDrag.onDragOver(event, overName);
-  }
-
-  onProjectDragLeave(overName: string): void {
-    this.projectDrag.onDragLeave(overName);
-  }
-
+  // The Explorer tree's drag state, drop-validity and row hover-title
+  // are owned by <app-explorer-workspace-tree>, which talks to
+  // ProjectDragDropService directly. The shell only handles the drop
+  // itself, because that needs the full job list to fan the move out.
   onProjectDrop(event: DragEvent, overName: string): void {
     this.projectDrag.onDrop(event, overName, this.allJobs());
-  }
-
-  onProjectDragEnd(): void {
-    this.projectDrag.onDragEnd();
-  }
-
-  /** Hover-title text for a project row. Mode A (idle): "drag me to
-   *  another workspace". Mode B (a project is being dragged AND this
-   *  row is a valid target): "drop here to move…". Mode C (drag in
-   *  progress but this row is not a valid target). */
-  projectRowTitle(rowName: string): string {
-    const source = this.draggingProjectName();
-    if (!source || source === rowName) {
-      return 'Drag to move this project to another workspace';
-    }
-    if (this.canDropProjectOn(source, rowName)) {
-      return `Drop here to move ${source} to workspace ${rowName}`;
-    }
-    return 'Not a valid drop target';
   }
 
   /** Flat list of every job across all lanes; consumed by

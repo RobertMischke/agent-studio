@@ -1,0 +1,11 @@
+.studio-explorer-tree {
+  display: block;
+}
+
+/* Workspace folder header sits between the panel section header and the
+   project rows; a small top gap separates one workspace group from the
+   next so the two-level hierarchy reads at a glance. */
+.studio-explorer-tree__ws-head {
+  display: block;
+  margin-top: var(--studio-spacing-1);
+}
