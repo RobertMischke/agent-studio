@@ -336,6 +336,84 @@ public class AgentMessageBusStoreTests : IDisposable
         return sw.ElapsedMilliseconds;
     }
 
+    /// <summary>
+    /// Boot-time warmup contract: <c>WarmProject</c> must move the cold-load
+    /// cost out of the first read so the post-restart UpdateVerifier window
+    /// finds a hot projection. A project that was explicitly warmed must
+    /// serve subsequent reads without touching disk again, and a second
+    /// warmup must be a hot dictionary lookup.
+    ///
+    /// <para>Regression context: with no warmup, the first
+    /// <c>/api/jobs/grouped</c> after a backend restart triggers the
+    /// disk replay of every per-day JSONL inside <c>GetOrLoad</c>. On a
+    /// real workspace (Runbook = ~100MB / >100k lines) that load runs
+    /// longer than the verifier's 10s per-attempt timeout, and because
+    /// <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}.GetOrAdd(TKey,System.Func{TKey,TValue})"/>
+    /// does not memoise a factory that threw under cancellation, every
+    /// retried HTTP call restarts the disk replay from scratch. The
+    /// projection therefore never finishes loading and the operator sees
+    /// "no response (timed out or unreachable)". Paying the parse cost
+    /// during <c>WarmProject</c> at boot eliminates that loop entirely.</para>
+    /// </summary>
+    [Fact]
+    public void WarmProject_LoadsProjection_AndSubsequentReadsAreHot()
+    {
+        var project = "warmup-target";
+        var day = new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc);
+        const int N = 5_000;
+        var path = AgentMessageBusPaths.DayFile(_workspace, project, day);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16))
+        using (var writer = new StreamWriter(stream, Encoding.UTF8))
+        {
+            for (int i = 0; i < N; i++)
+            {
+                var id = "01HXYZ0000000000000000W" + i.ToString("D5");
+                writer.WriteLine(JsonSerializer.Serialize(
+                    NewMessage(id, project, kind: "token-usage", jobId: "job-" + (i % 25), createdAt: day.AddSeconds(i)),
+                    AgentMessageBusStore.SerializerOptions));
+            }
+        }
+
+        var store = new AgentMessageBusStore();
+
+        var warmSw = Stopwatch.StartNew();
+        var warmedCount = store.WarmProject(_workspace, project);
+        warmSw.Stop();
+        Assert.Equal(N, warmedCount);
+        _out.WriteLine($"WarmProject: {warmSw.ElapsedMilliseconds} ms for {N} messages");
+
+        // First read after warmup must be cheap — no second disk walk.
+        // We allow a generous absolute ceiling and assert the warm read
+        // is much faster than the warmup itself. The Max-floor on the
+        // denominator keeps the ratio test honest on fast machines where
+        // the warmup itself completed in a handful of ms.
+        var hotSw = Stopwatch.StartNew();
+        var recent = store.Recent(_workspace, project, limit: 1);
+        hotSw.Stop();
+        Assert.Single(recent);
+        _out.WriteLine($"post-warm Recent(1): {hotSw.ElapsedMilliseconds} ms");
+        Assert.True(hotSw.ElapsedMilliseconds < Math.Max(50, warmSw.ElapsedMilliseconds / 5),
+            $"post-warm read took {hotSw.ElapsedMilliseconds} ms vs warmup {warmSw.ElapsedMilliseconds} ms — "
+            + "WarmProject must populate the projection cache so subsequent reads do not re-walk disk.");
+
+        var secondWarmSw = Stopwatch.StartNew();
+        var secondCount = store.WarmProject(_workspace, project);
+        secondWarmSw.Stop();
+        Assert.Equal(N, secondCount);
+        _out.WriteLine($"WarmProject (second call): {secondWarmSw.ElapsedMilliseconds} ms");
+        Assert.True(secondWarmSw.ElapsedMilliseconds < Math.Max(50, warmSw.ElapsedMilliseconds / 5),
+            $"second WarmProject took {secondWarmSw.ElapsedMilliseconds} ms — should be a hot dictionary lookup.");
+    }
+
+    [Fact]
+    public void WarmProject_RejectsBlankInputs()
+    {
+        var store = new AgentMessageBusStore();
+        Assert.Throws<ArgumentException>(() => store.WarmProject("", "p"));
+        Assert.Throws<ArgumentException>(() => store.WarmProject(_workspace, ""));
+    }
+
     [Fact]
     public async Task AppendAsync_SerialisesConcurrentAppendsToSameDayFile()
     {
