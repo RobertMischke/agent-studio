@@ -107,14 +107,27 @@ public record TaskInfo
     /// </summary>
     public string OwnerClientId { get; init; } = DefaultClientIdentity.Id;
     /// <summary>
-    /// Lower-bound count of commits attributed to this job, derived
-    /// cheaply by the scanner from session-events.jsonl SHA ranges plus
-    /// <see cref="Commit"/>. The kanban card surfaces a "+N commits"
-    /// hint when this is greater than 1 so reviewers can see at a
-    /// glance that more than the single auto-commit is waiting. The
-    /// precise list lives behind <c>/api/tasks/{id}/commits</c>.
+    /// Count of commits attributed to this job. Derived strictly from
+    /// <see cref="Commits"/> so it can never drift from the chain it is
+    /// meant to summarize (ADR "Commit-Attribution-Regel"; the historic
+    /// bug was a separately-computed session-events hint that read
+    /// <c>commitCount: 1</c> while <c>commits: []</c>). <see cref="Commits"/>
+    /// is the single source of truth; this is a convenience projection for
+    /// the kanban card. Never persisted to <c>job.json</c>.
     /// </summary>
-    public int CommitCount { get; init; }
+    public int CommitCount => Commits.Count;
+    /// <summary>
+    /// True when at least one run moved repo HEAD - a non-trivial
+    /// <c>before..after</c> SHA range in <c>session-events.jsonl</c> - or an
+    /// auto-commit was stamped. Derived cheaply by the scanner; never
+    /// persisted. Lets the UI distinguish an analysis-only task (no activity
+    /// -&gt; "no code changes") from a task where code landed but the
+    /// attribution chain is still empty (activity present yet
+    /// <see cref="Commits"/> and <see cref="ExcludedCommits"/> are both empty
+    /// -&gt; "commit discovery pending / failed"). Without this signal the two
+    /// cases are indistinguishable, which is exactly bug (3) from the task.
+    /// </summary>
+    public bool CodeActivityDetected { get; init; }
     /// <summary>
     /// Ordered history of CLI session ids used by this job (oldest → newest). Each
     /// successful resume of a forking CLI (Claude / Codex / Gemini) appends a new

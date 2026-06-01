@@ -69,10 +69,24 @@ public static class TaskGitEndpoints
         // landed without having to drill into individual runs first.
         group.MapGet("/{jobId}/commits", (
             string jobId, string? watchPath,
-            TaskScannerService scanner, TaskSessionLog sessions, GitService git) =>
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git,
+            TaskMutationService mutations) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
+
+            // Lazy attribution backfill for legacy folders. A job that left
+            // 3-progress before the commit-attribution step existed carries an
+            // empty commits[] / excludedCommits[] even though its runs moved
+            // HEAD; the kanban card's commit total (derived from commits[]) then
+            // reads 0 while the change set below clearly shows work. On first
+            // view we run the same deterministic rule engine the transition
+            // uses and persist the result, so the SSOT catches up. Idempotent:
+            // once either list is populated the guard skips, and an
+            // analysis-only job (no code activity) is skipped without touching
+            // git. See ADR "Commit-Attribution-Regel".
+            info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
+
             var events = sessions.ReadSessionEvents(jobId, watchPath);
             var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
@@ -252,6 +266,49 @@ public static class TaskGitEndpoints
                 ? Results.Ok()
                 : Results.BadRequest(new { error });
         });
+    }
+
+    // Lanes where commit attribution is considered final: the job has left
+    // 3-progress, so the transition post-step should already have stamped a
+    // chain. A legacy folder that predates the step lands here with empty
+    // lists and is the backfill target. (Includes the pre-ADR-0025 "4-review"
+    // alias for folders that never migrated.)
+    private static readonly HashSet<string> AttributionFinalLanes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        TaskStates.AutoReview, TaskStates.HumanReview, "4-review",
+        TaskStates.Completed, TaskStates.Archive,
+    };
+
+    /// <summary>
+    /// Repopulates <c>commits[]</c> / <c>excludedCommits[]</c> for a legacy
+    /// job whose attribution never ran, then returns the refreshed
+    /// <see cref="TaskInfo"/>. A no-op (returns <paramref name="info"/>
+    /// unchanged) unless the job is in an attribution-final lane, has both
+    /// lists empty, and shows code activity. Best-effort: any failure is
+    /// swallowed so a read never fails on a backfill hiccup.
+    /// </summary>
+    private static TaskInfo TryBackfillAttribution(
+        TaskInfo info, string? watchPath,
+        TaskScannerService scanner, TaskSessionLog sessions, GitService git,
+        TaskMutationService mutations)
+    {
+        if (!AttributionFinalLanes.Contains(info.State)) return info;
+        if (info.Commits.Count > 0 || info.ExcludedCommits.Count > 0) return info;
+        if (!info.CodeActivityDetected) return info;
+
+        try
+        {
+            var result = CommitAttributionRunner.Run(info, watchPath, sessions, git);
+            if (result == null) return info;
+            if (result.Attributed.Count == 0 && result.Excluded.Count == 0) return info;
+
+            mutations.SetCommitAttributionOnFolder(info.FolderPath, result.Attributed, result.Excluded);
+            return scanner.FindJob(info.Id, watchPath) ?? info;
+        }
+        catch
+        {
+            return info;
+        }
     }
 
     private static bool IsKnownJobCommit(

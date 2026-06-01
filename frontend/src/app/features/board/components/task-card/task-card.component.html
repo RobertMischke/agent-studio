@@ -246,17 +246,43 @@
       }
     </div>
   }
-  @if (commitPillView(); as cp) {
-    <div class="task-card__commit"
-         [class.task-card__commit--review-only]="cp.variant === 'review'"
-         [appTooltip]="commitTooltip()"
+  @if (commitChainView(); as cc) {
+    <div class="task-card__commits"
+         [class.task-card__commits--review-only]="cc.variant === 'review'"
          data-testid="task-card-commit"
-         [attr.data-variant]="cp.variant"
-         [attr.data-has-files]="cp.hasFiles ? 'true' : null">
-      @if (cp.variant === 'full') {
-        <span class="task-card__commit-sha">⏺ {{ cp.shortSha }}</span>
+         [attr.data-variant]="cc.variant"
+         [attr.data-commit-count]="cc.totalCount"
+         [attr.data-has-files]="cc.anyFiles ? 'true' : null">
+      @for (row of cc.rows; track row.shortSha) {
+        <div class="task-card__commit-row"
+             [appTooltip]="row.tooltip"
+             data-testid="task-card-commit-row"
+             [attr.data-has-files]="row.hasFiles ? 'true' : null">
+          <span class="task-card__commit-sha">@if (cc.variant === 'full') {⏺ }{{ row.shortSha }}</span>
+          <span class="task-card__commit-subject" data-truncatable>{{ row.subject }}</span>
+          <span class="task-card__commit-files">{{ row.filesChanged }} {{ row.filesChanged === 1 ? 'file' : 'files' }}</span>
+        </div>
       }
-      <span class="task-card__commit-files">{{ cp.filesChanged }} {{ cp.filesChanged === 1 ? 'file' : 'files' }}</span>
+      @if (cc.moreCount > 0) {
+        <div class="task-card__commit-more"
+             [appTooltip]="cc.moreTooltip"
+             data-testid="task-card-commit-more">
+          +{{ cc.moreCount }} more {{ cc.moreCount === 1 ? 'commit' : 'commits' }}
+        </div>
+      }
+    </div>
+  } @else if (commitEmptyBadge(); as nb) {
+    <div class="task-card__no-commits"
+         [class]="'task-card__no-commits--' + nb.tone"
+         [appTooltip]="nb.tooltip"
+         data-testid="task-card-no-commits"
+         [attr.data-tone]="nb.tone">
+      @if (nb.tone === 'discovery') {
+        <span class="task-card__no-commits-glyph" aria-hidden="true">⚠</span>
+      } @else {
+        <span class="task-card__no-commits-glyph" aria-hidden="true">∅</span>
+      }
+      {{ nb.label }}
     </div>
   }
   <div class="task-card__activity">

@@ -233,6 +233,86 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         Assert.Equal(0, finding.DriftSites);
     }
 
+    [Fact]
+    public void Analyze_FlagsCardSourcingCommitsFromRepoHead_NotJobCommits()
+    {
+        // card-commit-source-not-repo-head rule (added 2026-06-01 after review
+        // cards leaked the shared project's working-tree summary as if it were
+        // the task's own commits — "main: 20 files"). A board surface that pulls
+        // in GitSummaryService / gitSummary without the LANES_WITH_GIT
+        // (3-progress-only) guard is the drift. Inject the rule directly so the
+        // fixture does not depend on docs/code-patterns.md being loaded.
+        WriteFile("frontend/src/app/features/board/components/leaky-card/leaky-card.component.ts", """
+            export class LeakyCard {
+              private readonly gitSummary = inject(GitSummaryService);
+              readonly pill = computed(() => {
+                const s = this.gitSummary.value().find(x => x.projectName === this.job().projectName);
+                return s ? `${s.branch}: ${s.filesChanged} files` : null;
+              });
+            }
+            """);
+
+        WriteFile("frontend/src/app/features/board/components/clean-card/clean-card.component.ts", """
+            export class CleanCard {
+              private static readonly LANES_WITH_GIT = new Set(['3-progress']);
+              private readonly gitSummary = inject(GitSummaryService);
+              readonly pill = computed(() => {
+                if (!CleanCard.LANES_WITH_GIT.has(this.job().state)) return null;
+                return this.gitSummary.value().find(x => x.projectName === this.job().projectName) ?? null;
+              });
+            }
+            """);
+
+        var rule = new CodePatternRule(
+            Id: "card-commit-source-not-repo-head",
+            Title: "Card commit/file display sources from job.commits, not repo HEAD",
+            CanonicalDescription: "Per-task commit/file displays read job.commits, not the shared GitSummaryService.",
+            FilePattern: @"frontend/src/app/features/board/.*\.ts$",
+            ExcludeFilePattern: @"\.spec\.ts$",
+            CandidateMarker: new System.Text.RegularExpressions.Regex(@"GitSummaryService\b|\bgitSummary\b"),
+            BadVariant: null,
+            GoodVariant: new System.Text.RegularExpressions.Regex(@"LANES_WITH_GIT\b"),
+            SeverityIfBad: DriftSeverity.High);
+
+        var svc = new CodePatternDriftAnalysisService(
+            NullLogger<CodePatternDriftAnalysisService>.Instance,
+            rules: new[] { rule });
+        var report = svc.Analyze(_root);
+        var finding = report.Findings.Single(f => f.RuleId == "card-commit-source-not-repo-head");
+
+        Assert.Equal(1, finding.CanonicalSites);
+        Assert.Equal(1, finding.DriftSites);
+        Assert.Contains(finding.Hits, h => h.IsDrift && h.FilePath.EndsWith("leaky-card.component.ts") && h.Evidence == "missing-canonical");
+        Assert.Contains(finding.Hits, h => !h.IsDrift && h.FilePath.EndsWith("clean-card.component.ts"));
+        Assert.Equal(DriftSeverity.High, finding.OverallSeverity);
+    }
+
+    [Fact]
+    public void Analyze_AgainstLiveDevCheckout_ReportsZeroCommitSourceDriftAfterFix()
+    {
+        // Post-fix invariant: every board surface that touches GitSummaryService
+        // gates it behind LANES_WITH_GIT. The docs/code-patterns.md rule is
+        // merged into the default rule set by Analyze, so this also proves the
+        // docs block parses. Skipped when the repo marker is not reachable.
+        var repo = LocateRepoRoot();
+        if (repo is null)
+        {
+            _out.WriteLine("No AGENTS.md upstream; skipping live-repo smoke test");
+            return;
+        }
+
+        var svc = new CodePatternDriftAnalysisService(NullLogger<CodePatternDriftAnalysisService>.Instance);
+        var report = svc.Analyze(repo);
+        var finding = report.Findings.Single(f => f.RuleId == "card-commit-source-not-repo-head");
+
+        _out.WriteLine($"live-card-commit-source-not-repo-head: total={finding.TotalSites} canonical={finding.CanonicalSites} drift={finding.DriftSites}");
+        foreach (var drift in finding.Hits.Where(h => h.IsDrift))
+        {
+            _out.WriteLine($"  drift: {drift.FilePath}:{drift.LineNumber} ({drift.Evidence})");
+        }
+        Assert.Equal(0, finding.DriftSites);
+    }
+
     private void WriteFile(string relativePath, string contents)
     {
         var full = Path.Combine(_root, relativePath);

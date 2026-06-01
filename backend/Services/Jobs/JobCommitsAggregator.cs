@@ -179,42 +179,4 @@ public static class TaskCommitsAggregator
         };
     }
 
-    /// <summary>
-    /// Lower-bound count of commits a job has produced, derived without
-    /// running git per range. Reads only the captured SHA-range pairs in
-    /// session-events.jsonl plus the auto-commit on <see cref="TaskInfo.Commit"/>;
-    /// each non-trivial range counts as ≥ 1. Used by the kanban card to
-    /// surface a "more than one commit" hint without paying per-render
-    /// git costs.
-    ///
-    /// <para>
-    /// The number is intentionally conservative: a single run that
-    /// landed multiple commits is undercounted as 1 here. The endpoint
-    /// path that calls <see cref="Aggregate"/> returns the precise count.
-    /// The kanban card only uses this to decide whether more than one
-    /// commit exists ("&gt; 1"), which is robust under the undercount.
-    /// </para>
-    /// </summary>
-    public static int CountCommitRangesPlusAutoCommit(
-        TaskInfo info,
-        IReadOnlyList<SessionEvent> sessionEvents)
-    {
-        var seenRanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenShas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var count = 0;
-        foreach (var evt in sessionEvents)
-        {
-            if (string.IsNullOrWhiteSpace(evt.HeadShaBefore) || string.IsNullOrWhiteSpace(evt.HeadShaAfter)) continue;
-            if (string.Equals(evt.HeadShaBefore, evt.HeadShaAfter, StringComparison.OrdinalIgnoreCase)) continue;
-            var key = evt.HeadShaBefore + ".." + evt.HeadShaAfter;
-            if (!seenRanges.Add(key)) continue;
-            seenShas.Add(evt.HeadShaAfter!);
-            count++;
-        }
-        if (info.Commit != null && !string.IsNullOrWhiteSpace(info.Commit.Sha) && seenShas.Add(info.Commit.Sha))
-        {
-            count++;
-        }
-        return count;
-    }
 }

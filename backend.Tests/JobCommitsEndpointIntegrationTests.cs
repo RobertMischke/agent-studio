@@ -130,21 +130,20 @@ public class TaskCommitsEndpointIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void Scanner_PopulatesCommitCountFromSessionEvents()
+    public void Scanner_DerivesCommitCountFromChain_NotSessionEvents()
     {
         var (repoRoot, jobFolder, jobId, watchPath) = SetupRepoAndJob();
 
-        // Two non-trivial ranges should yield CommitCount = 2 even
-        // without ever calling git (cheap kanban path).
+        // Non-trivial ranges signal code activity but are NOT a commit count:
+        // commits[] is the single source of truth (ADR "Commit-Attribution-
+        // Regel"). With no persisted chain the count must read 0 - never the
+        // historic "1 from a session-events hint while commits[] is empty"
+        // drift - while CodeActivityDetected flips true so the UI can tell
+        // "work landed, attribution pending" apart from "no code changes".
         AppendSessionEvent(jobFolder, new SessionEvent
         {
             Ts = DateTime.UtcNow.AddMinutes(-10), Kind = "start",
             HeadShaBefore = "aaa", HeadShaAfter = "bbb"
-        });
-        AppendSessionEvent(jobFolder, new SessionEvent
-        {
-            Ts = DateTime.UtcNow.AddMinutes(-5), Kind = "continue",
-            HeadShaBefore = "bbb", HeadShaAfter = "ccc"
         });
         AppendSessionEvent(jobFolder, new SessionEvent
         {
@@ -153,7 +152,21 @@ public class TaskCommitsEndpointIntegrationTests : IDisposable
         });
 
         var (_, _, info) = BuildServices(repoRoot, watchPath, jobId);
-        Assert.Equal(2, info.CommitCount);
+        Assert.Equal(0, info.CommitCount);
+        Assert.Empty(info.Commits);
+        Assert.True(info.CodeActivityDetected);
+    }
+
+    [Fact]
+    public void Scanner_AnalysisOnlyJob_HasNoCodeActivity()
+    {
+        var (repoRoot, _, jobId, watchPath) = SetupRepoAndJob();
+
+        // No session events, no auto-commit: an analysis-only task. The UI
+        // renders an explicit "no code changes" badge off this signal.
+        var (_, _, info) = BuildServices(repoRoot, watchPath, jobId);
+        Assert.Equal(0, info.CommitCount);
+        Assert.False(info.CodeActivityDetected);
     }
 
     private (string repoRoot, string jobFolder, string jobId, string watchPath) SetupRepoAndJob()

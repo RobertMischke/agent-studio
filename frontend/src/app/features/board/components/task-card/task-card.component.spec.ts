@@ -205,7 +205,7 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.componentRef.setInput('job', makeJob({
       execution: {
         jobId: 'task-1',
-        jobKey: 'test::task-1',
+        taskKey: 'test::task-1',
         processId: 1234,
         startedAt: '2026-05-23T07:00:00Z',
         status: 'running',
@@ -248,7 +248,7 @@ describe('TaskCardComponent (smoke)', () => {
 
     const fixture = TestBed.createComponent(TaskCardComponent);
     const runningExecution = {
-      jobId: 'task-7', jobKey: 'test::task-7', processId: 4242,
+      jobId: 'task-7', taskKey: 'test::task-7', processId: 4242,
       startedAt: '2026-05-28T10:00:00Z', status: 'running',
       exitCode: null, durationSeconds: null, model: null, runOutcome: null,
     };
@@ -388,6 +388,178 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.textContent).toContain('Permission blocked');
     expect(pill?.className).toContain('task-card__issue-pill--high');
   });
+
+  // ── Commit-attribution surface (AC#3, AC#4, AC#6) ──────────────────────
+
+  async function renderCard(job: TaskInfo) {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', job);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function commit(overrides: Partial<NonNullable<TaskInfo['commits']>[number]> = {}): NonNullable<TaskInfo['commits']>[number] {
+    return {
+      sha: 'aaaaaaa0000',
+      shortSha: 'aaaaaaa',
+      message: 'feat: do a thing',
+      filesChanged: 2,
+      files: ['src/a.ts', 'src/b.ts'],
+      at: '2026-05-30T10:00:00Z',
+      ...overrides,
+    };
+  }
+
+  it('AC#6 0-commit analysis-only card shows a calm "no code changes" badge, no pill', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [],
+      codeActivityDetected: false,
+    }));
+
+    expect(fixture.componentInstance.commitChainView()).toBeNull();
+    const badge = fixture.componentInstance.commitEmptyBadge();
+    expect(badge?.tone).toBe('no-code');
+
+    const el = fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]') as HTMLElement | null;
+    expect(el?.getAttribute('data-tone')).toBe('no-code');
+    expect(el?.textContent).toContain('no code changes');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-commit"]')).toBeNull();
+  });
+
+  it('AC#3 0-commit card that moved HEAD shows an amber "commit discovery pending" diagnostic', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [],
+      codeActivityDetected: true,
+    }));
+
+    const badge = fixture.componentInstance.commitEmptyBadge();
+    expect(badge?.tone).toBe('discovery');
+
+    const el = fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]') as HTMLElement | null;
+    expect(el?.getAttribute('data-tone')).toBe('discovery');
+    expect(el?.className).toContain('task-card__no-commits--discovery');
+    expect(el?.textContent).toContain('commit discovery pending');
+  });
+
+  it('does not render a zero-commit badge outside review lanes (3-progress stays quiet)', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '3-progress',
+      commit: null,
+      commits: [],
+      codeActivityDetected: true,
+    }));
+    expect(fixture.componentInstance.commitEmptyBadge()).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]')).toBeNull();
+  });
+
+  it('AC#4 single-commit card renders exactly one row and no "+N more"', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [commit({ shortSha: 'abc1234', message: 'fix: one', filesChanged: 1, files: ['x.ts'] })],
+    }));
+
+    const cc = fixture.componentInstance.commitChainView();
+    expect(cc?.totalCount).toBe(1);
+    expect(cc?.rows.length).toBe(1);
+    expect(cc?.moreCount).toBe(0);
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="task-card-commit-row"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('abc1234');
+    expect(rows[0].textContent).toContain('fix: one');
+    expect(rows[0].textContent).toContain('1 file');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-commit-more"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]')).toBeNull();
+  });
+
+  it('AC#4 three-commit card renders all three rows (sha + subject + files), newest first', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      // stored oldest -> newest
+      commits: [
+        commit({ shortSha: 'old1111', message: 'feat: first', filesChanged: 1 }),
+        commit({ shortSha: 'mid2222', message: 'feat: second', filesChanged: 2 }),
+        commit({ shortSha: 'new3333', message: 'feat: third', filesChanged: 3 }),
+      ],
+    }));
+
+    const cc = fixture.componentInstance.commitChainView();
+    expect(cc?.totalCount).toBe(3);
+    expect(cc?.rows.length).toBe(3);
+    expect(cc?.moreCount).toBe(0);
+    // newest first
+    expect(cc?.rows[0].shortSha).toBe('new3333');
+    expect(cc?.rows[2].shortSha).toBe('old1111');
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="task-card-commit-row"]');
+    expect(rows.length).toBe(3);
+    expect(rows[0].textContent).toContain('feat: third');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-commit-more"]')).toBeNull();
+  });
+
+  it('AC#4 four-commit card shows top-3 plus a "+1 more commit" disclosure', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: null,
+      commits: [
+        commit({ shortSha: 'c1aaaaa', message: 'one' }),
+        commit({ shortSha: 'c2bbbbb', message: 'two' }),
+        commit({ shortSha: 'c3ccccc', message: 'three' }),
+        commit({ shortSha: 'c4ddddd', message: 'four' }),
+      ],
+    }));
+
+    const cc = fixture.componentInstance.commitChainView();
+    expect(cc?.totalCount).toBe(4);
+    expect(cc?.rows.length).toBe(3);
+    expect(cc?.moreCount).toBe(1);
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="task-card-commit-row"]');
+    expect(rows.length).toBe(3);
+    const more = fixture.nativeElement.querySelector('[data-testid="task-card-commit-more"]') as HTMLElement | null;
+    expect(more?.textContent).toContain('+1 more commit');
+  });
+
+  it('sources the chain from commits[] (SSOT), not the legacy singular commit', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: commit({ shortSha: 'legacyy', message: 'legacy singular' }),
+      commits: [commit({ shortSha: 'chain01', message: 'chain wins' })],
+    }));
+
+    const cc = fixture.componentInstance.commitChainView();
+    expect(cc?.totalCount).toBe(1);
+    expect(cc?.rows[0].shortSha).toBe('chain01');
+    expect(cc?.rows[0].subject).toBe('chain wins');
+  });
+
+  it('falls back to the legacy singular commit when commits[] is empty', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '5-human-review',
+      commit: commit({ shortSha: 'legacyy', message: 'legacy singular' }),
+      commits: [],
+    }));
+
+    const cc = fixture.componentInstance.commitChainView();
+    expect(cc?.totalCount).toBe(1);
+    expect(cc?.rows[0].shortSha).toBe('legacyy');
+    expect(fixture.componentInstance.commitEmptyBadge()).toBeNull();
+  });
 });
 
 describe('buildEffectiveModelChip', () => {
@@ -417,7 +589,7 @@ describe('buildEffectiveModelChip', () => {
       model: null,
       ownerClientId: 'local-default',
       execution: {
-        jobId: 'task-1', jobKey: 'test::task-1', processId: 1, startedAt: '',
+        jobId: 'task-1', taskKey: 'test::task-1', processId: 1, startedAt: '',
         status: 'running', exitCode: null, durationSeconds: null,
         model: 'claude-sonnet-4-6', runOutcome: null
       },
@@ -517,6 +689,7 @@ function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',
+    taskKey: 'test::task-1',
     title: 'Task 1',
     state: '3-progress',
     order: 1,

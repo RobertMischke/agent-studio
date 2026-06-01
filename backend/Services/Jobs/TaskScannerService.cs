@@ -243,7 +243,7 @@ public class TaskScannerService : ITaskScanner
                 Commit = legacyCommit,
                 Commits = commitChain,
                 ExcludedCommits = ReadExcludedCommits(raw),
-                CommitCount = ComputeCommitCountHint(raw, jobDir),
+                CodeActivityDetected = DetectCodeActivity(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
                 OutcomeIssue = ResolveOutcomeIssue(jobDir),
@@ -307,56 +307,42 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
-    /// Lower-bound count of commits attributed to a job, derived from
-    /// session-events.jsonl SHA ranges plus the auto-commit on
-    /// <c>job.json</c>. Drives the kanban "+N commits" hint without
-    /// paying per-render git costs. The exact list is computed lazily
-    /// behind <c>/api/tasks/{id}/commits</c>.
+    /// Whether this job shows any sign that code landed: a stamped
+    /// auto-commit, or at least one run that moved repo HEAD (a non-trivial
+    /// <c>before..after</c> SHA range in <c>session-events.jsonl</c>). Feeds
+    /// <see cref="TaskInfo.CodeActivityDetected"/> so the UI can tell an
+    /// analysis-only task (no activity) apart from one where work landed but
+    /// the attribution chain is still empty. Deliberately a boolean, not a
+    /// count: the commit total is owned by <see cref="TaskInfo.Commits"/>
+    /// (the single source of truth), and a count here would re-introduce the
+    /// drift this change removes.
     ///
-    /// Cheap by construction: skips the disk read entirely when the job
-    /// has no auto-commit AND no logs/ directory, which covers the
-    /// majority of jobs in <c>1-preparation</c> / <c>2-ready</c>.
+    /// Cheap by construction: skips the disk read entirely when the job has
+    /// no auto-commit AND no session log (the majority of <c>1-preparation</c>
+    /// / <c>2-ready</c> jobs), and short-circuits on the first range that
+    /// moved HEAD.
     /// </summary>
-    private static int ComputeCommitCountHint(JsonElement raw, string jobFolder)
+    private static bool DetectCodeActivity(JsonElement raw, string jobFolder)
     {
-        var hasAutoCommit = raw.TryGetProperty("commit", out var commit)
-            && commit.ValueKind == JsonValueKind.Object;
+        if (raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object)
+            return true;
+
         var sessionLog = TaskPaths.SessionEventsLog(jobFolder);
-        var hasSessionLog = File.Exists(sessionLog);
-        if (!hasAutoCommit && !hasSessionLog) return 0;
+        if (!File.Exists(sessionLog)) return false;
 
-        var seenRanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenShas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var count = 0;
-
-        if (hasSessionLog)
+        foreach (var line in File.ReadLines(sessionLog))
         {
-            foreach (var line in File.ReadLines(sessionLog))
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                SessionEvent? evt;
-                try { evt = JsonSerializer.Deserialize<SessionEvent>(line, TaskJsonFile.ReadOpts); }
-                catch { continue; }
-                if (evt == null) continue;
-                if (string.IsNullOrWhiteSpace(evt.HeadShaBefore) || string.IsNullOrWhiteSpace(evt.HeadShaAfter)) continue;
-                if (string.Equals(evt.HeadShaBefore, evt.HeadShaAfter, StringComparison.OrdinalIgnoreCase)) continue;
-                var key = evt.HeadShaBefore + ".." + evt.HeadShaAfter;
-                if (!seenRanges.Add(key)) continue;
-                seenShas.Add(evt.HeadShaAfter!);
-                count++;
-            }
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            SessionEvent? evt;
+            try { evt = JsonSerializer.Deserialize<SessionEvent>(line, TaskJsonFile.ReadOpts); }
+            catch { continue; }
+            if (evt == null) continue;
+            if (string.IsNullOrWhiteSpace(evt.HeadShaBefore) || string.IsNullOrWhiteSpace(evt.HeadShaAfter)) continue;
+            if (string.Equals(evt.HeadShaBefore, evt.HeadShaAfter, StringComparison.OrdinalIgnoreCase)) continue;
+            return true;
         }
 
-        if (hasAutoCommit
-            && commit.TryGetProperty("sha", out var shaProp)
-            && shaProp.ValueKind == JsonValueKind.String
-            && shaProp.GetString() is { Length: > 0 } sha
-            && seenShas.Add(sha))
-        {
-            count++;
-        }
-
-        return count;
+        return false;
     }
 
     /// <summary>

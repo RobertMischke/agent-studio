@@ -797,26 +797,66 @@
     .task-card__git-count { color: #fbbf24; font-weight: 600; }
     .task-card__git-count--clean { color: #86efac; }
     .task-card__git-stat { color: var(--studio-fg-dim); font-family: var(--font-mono, monospace); font-size: 10px; }
-    .task-card__commit {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 2px 8px;
+    // Commit chain: one row per attributed commit (newest first), up to
+    // three, then a "+N more" disclosure. Stacked rather than inline so 2-3
+    // commits each show their own SHA + subject + files line (AC#4).
+    .task-card__commits {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
       margin: 0 0 6px;
-      border-radius: 999px;
+      padding: 4px 8px;
+      border-radius: 10px;
       background: rgba(16, 185, 129, 0.10);
       border: 1px solid rgba(16, 185, 129, 0.25);
       font-size: 11px;
       color: #86efac;
     }
-    .task-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; }
-    .task-card__commit-files { color: var(--studio-fg-dim); }
-    // Review-lane variant: SHA is hidden, so the files count carries the
-    // pill on its own. Tighten the colour so it does not look like a
-    // muted secondary chip - this is the only indicator on the card.
-    .task-card__commit--review-only .task-card__commit-files {
+    .task-card__commit-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+    .task-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; white-space: nowrap; }
+    .task-card__commit-subject {
+      color: var(--studio-fg-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .task-card__commit-files { color: var(--studio-fg-dim); white-space: nowrap; }
+    .task-card__commit-more {
       color: #86efac;
       font-weight: 600;
+      cursor: default;
+    }
+
+    // Zero-commit diagnostics (AC#3). The no-code badge is calm and
+    // grey - a correct no-op, not a problem. The discovery badge is
+    // amber so a possibly-lost commit stands out from a genuine no-op.
+    .task-card__no-commits {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      margin: 0 0 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .task-card__no-commits-glyph { font-weight: 700; }
+    .task-card__no-commits--no-code {
+      background: rgba(148, 163, 184, 0.10);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: var(--studio-fg-dim);
+    }
+    .task-card__no-commits--discovery {
+      background: rgba(251, 191, 36, 0.12);
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      color: #fbbf24;
     }
 
     /* Token bubble: a small status indicator that shows total tokens spent
@@ -968,7 +1008,8 @@
     .task-card--compact .task-card__badges,
     .task-card--compact .task-card__meta,
     .task-card--compact .task-card__git,
-    .task-card--compact .task-card__commit,
+    .task-card--compact .task-card__commits,
+    .task-card--compact .task-card__no-commits,
     .task-card--compact .task-card__activity {
       display: none;
     }

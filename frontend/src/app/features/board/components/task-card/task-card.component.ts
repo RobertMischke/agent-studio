@@ -9,12 +9,17 @@ import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
 import {
-  buildCommitTooltip,
+  buildCommitChainTooltip,
+  buildCommitChainView,
+  buildCommitEmptyBadge,
   buildEffectiveModelChip,
   buildTaskTypeChip,
   buildTokenBubble,
+  commitChainVariant,
   formatShortTime,
   formatTokens,
+  type CommitChainView,
+  type CommitEmptyBadge,
 } from './task-card-view-model';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -228,18 +233,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     '3-progress',
   ]);
 
-  // Lanes where the per-task commit pill is shown. Review lanes render a
-  // simplified files-only variant (see commitPillView); 3-progress also
-  // shows the SHA so the working agent can correlate the pill with its
-  // own auto-commit. Other lanes hide the pill entirely.
-  private static readonly LANES_WITH_COMMIT_PILL = new Set([
-    '3-progress', '4-auto-review', '5-human-review', '4-review',
-  ]);
-
-  private static readonly REVIEW_LANES = new Set([
-    '4-auto-review', '5-human-review', '4-review',
-  ]);
-
   readonly gitPill = computed(() => {
     if (!TaskCardComponent.LANES_WITH_GIT.has(this.job().state)) return null;
     const projectName = this.job().projectName;
@@ -248,32 +241,32 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * Commit-pill view model. Returns null when no pill should render -
-   * either because the lane is outside `LANES_WITH_COMMIT_PILL` or
-   * because the job has no commit yet. The `variant` field tells the
-   * template which layout to use: `full` includes the short SHA next
-   * to the files count (3-progress); `review` shows only "N files" so
-   * review-lane cards stop carrying live-state derivatives the user
-   * does not care about.
+   * Commit-chain view model (AC#1/#4). Reads the attributed `commits[]`
+   * chain (single source of truth), falling back to the legacy singular
+   * `commit` only when `commits[]` is absent. Never sources commit data
+   * from repo HEAD / the working tree - that was bug (1) ("main: 20 files"
+   * leaking into review lanes). Renders newest-first, up to three rows,
+   * then a "+N more" disclosure. `full` (3-progress) prefixes each row with
+   * the ⏺ SHA so the working agent can correlate it with its own
+   * auto-commit; `review` keeps the SHA but drops the glyph. Returns null
+   * outside the commit-pill lanes or when the chain is empty (the 0-commit
+   * case is handled by {@link commitEmptyBadge} instead).
    */
-  readonly commitPillView = computed<{
-    variant: 'full' | 'review';
-    shortSha: string;
-    filesChanged: number;
-    hasFiles: boolean;
-  } | null>(() => {
-    const c = this.job().commit;
-    if (!c) return null;
-    const state = this.job().state;
-    if (!TaskCardComponent.LANES_WITH_COMMIT_PILL.has(state)) return null;
-    const variant = TaskCardComponent.REVIEW_LANES.has(state) ? 'review' : 'full';
-    return {
-      variant,
-      shortSha: c.shortSha,
-      filesChanged: c.filesChanged,
-      hasFiles: (c.files?.length ?? 0) > 0,
-    };
+  readonly commitChainView = computed<CommitChainView | null>(() => {
+    const variant = commitChainVariant(this.job().state);
+    if (!variant) return null;
+    return buildCommitChainView(this.job(), variant);
   });
+
+  /**
+   * Zero-commit diagnostic for review-lane cards (AC#3, bug (3)). See
+   * {@link buildCommitEmptyBadge}: only fires in review lanes when the
+   * attributed chain is empty, and uses the scanner's `codeActivityDetected`
+   * signal (never repo HEAD) to separate an analysis-only no-op ("no code
+   * changes") from a run that moved HEAD without an attributed commit
+   * ("commit discovery pending").
+   */
+  readonly commitEmptyBadge = computed<CommitEmptyBadge | null>(() => buildCommitEmptyBadge(this.job()));
 
   readonly gitTooltip = computed(() => {
     const g = this.gitPill();
@@ -282,16 +275,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   });
 
   /**
-   * Commit-pill tooltip. Lists the actual files touched by the commit so
-   * a card carrying auto-review concerns (`{ns}:concerns` tags) makes the
-   * affected file set visible at a glance — the count alone forced the
-   * user to open the job and read aspect-*.md to learn the scope. The
-   * file list is bounded so a sweeping diff (50+ files) does not blow
-   * the tooltip off-screen; we render the first FILE_LIST_MAX entries
-   * and append a "+N more" hint when needed. HTML escaping is handled
-   * by the tooltip controller's DOMPurify pass.
+   * Commit-chain tooltip. A single commit lists the files it touched; a
+   * multi-commit chain lists every SHA with its subject and rolled-up file
+   * total so a card carrying auto-review concerns makes the affected scope
+   * visible without opening the job. HTML escaping is handled by the tooltip
+   * controller's DOMPurify pass.
    */
-  readonly commitTooltip = computed(() => buildCommitTooltip(this.job().commit));
+  readonly commitTooltip = computed(() => buildCommitChainTooltip(this.job()));
 
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
@@ -573,8 +563,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly isRunning = computed(() =>
     this.job().state === '3-progress' && this.job().execution?.status === 'running'
   );
-
-  readonly hasCommitFiles = computed(() => (this.job().commit?.files?.length ?? 0) > 0);
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;

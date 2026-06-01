@@ -1,4 +1,5 @@
 import type { TaskInfo, ClientSummary, CliType } from '../../../../models/task.model';
+import type { TaskCommitInfo } from '../../../../features/git';
 import type { StructuredTooltip } from '../../../../components/tooltip';
 import { cliTypeIcon, cliTypeLabel, shortModelName } from '../../../../services/format.util';
 
@@ -57,6 +58,134 @@ export function buildCommitTooltip(commit: TaskInfo['commit']): StructuredToolti
     return { title, body: `${commit.filesChanged} file(s) changed` };
   }
   return { title, body: parts.join('') };
+}
+
+/** Newest-first commit chain for a task. SSOT: prefer `commits[]`; fall back
+ *  to the legacy singular `commit` only when `commits[]` is absent/empty, so
+ *  older payloads still render. Never sources from repo HEAD. */
+export function commitChainOf(job: TaskInfo): TaskCommitInfo[] {
+  const chain = job.commits && job.commits.length > 0
+    ? job.commits
+    : (job.commit ? [job.commit] : []);
+  // Stored oldest -> newest; the card shows the latest commit first.
+  return [...chain].reverse();
+}
+
+export interface CommitRowView {
+  shortSha: string;
+  subject: string;
+  filesChanged: number;
+  hasFiles: boolean;
+  tooltip: StructuredTooltip | string;
+}
+
+export interface CommitChainView {
+  variant: 'full' | 'review';
+  rows: CommitRowView[];
+  moreCount: number;
+  totalCount: number;
+  anyFiles: boolean;
+  moreTooltip: StructuredTooltip | string;
+}
+
+/** How many commit rows the card renders before collapsing to "+N more"
+ *  (AC#4: 2-3 commits show in full; >3 show top-3 plus a disclosure). */
+const COMMIT_ROWS_MAX = 3;
+
+function commitSubject(commit: TaskCommitInfo): string {
+  return (commit.message || '').split('\n')[0].trim();
+}
+
+export function buildCommitChainView(job: TaskInfo, variant: 'full' | 'review'): CommitChainView | null {
+  const chain = commitChainOf(job);
+  if (chain.length === 0) return null;
+  const shown = chain.slice(0, COMMIT_ROWS_MAX);
+  const rows: CommitRowView[] = shown.map((c) => ({
+    shortSha: c.shortSha,
+    subject: commitSubject(c),
+    filesChanged: c.filesChanged,
+    hasFiles: (c.files?.length ?? 0) > 0,
+    tooltip: buildCommitTooltip(c),
+  }));
+  const rest = chain.slice(COMMIT_ROWS_MAX);
+  return {
+    variant,
+    rows,
+    moreCount: rest.length,
+    totalCount: chain.length,
+    anyFiles: rows.some((r) => r.hasFiles),
+    moreTooltip: rest.length > 0 ? buildMoreCommitsTooltip(rest) : '',
+  };
+}
+
+function buildMoreCommitsTooltip(rest: TaskCommitInfo[]): StructuredTooltip {
+  const items = rest
+    .map((c) => `<li><code>${escapeHtml(c.shortSha)}</code> ${escapeHtml(commitSubject(c))} <small>(${c.filesChanged} file(s))</small></li>`)
+    .join('');
+  return { title: `${rest.length} more commit(s)`, body: `<ul>${items}</ul>` };
+}
+
+// Lanes where the per-task commit chain is shown. Review lanes render the
+// `review` variant; 3-progress shows the `full` variant that prefixes each row
+// with the ⏺ glyph so the working agent can correlate it with its own
+// auto-commit. Every other lane hides the chain entirely.
+const COMMIT_PILL_LANES = new Set(['3-progress', '4-auto-review', '5-human-review', '4-review']);
+const COMMIT_REVIEW_LANES = new Set(['4-auto-review', '5-human-review', '4-review']);
+
+/** Which commit-chain variant a lane renders, or null when the lane shows no
+ *  chain. Keeps the lane->variant policy in one testable place instead of as
+ *  component statics. */
+export function commitChainVariant(state: string): 'full' | 'review' | null {
+  if (!COMMIT_PILL_LANES.has(state)) return null;
+  return COMMIT_REVIEW_LANES.has(state) ? 'review' : 'full';
+}
+
+/** Chain-aware commit tooltip. A single commit reuses the per-commit file
+ *  list; a multi-commit chain lists every SHA with its subject and the rolled
+ *  up file-change total. Empty chain -> no tooltip. Never sources repo HEAD. */
+export function buildCommitChainTooltip(job: TaskInfo): StructuredTooltip | string {
+  const chain = commitChainOf(job);
+  if (chain.length === 0) return '';
+  if (chain.length === 1) return buildCommitTooltip(chain[0]);
+  const totalFiles = chain.reduce((sum, c) => sum + (c.filesChanged ?? 0), 0);
+  const items = chain
+    .map((c) => `<li><code>${escapeHtml(c.shortSha)}</code> ${escapeHtml(commitSubject(c))} <small>(${c.filesChanged} file(s))</small></li>`)
+    .join('');
+  return {
+    title: `${chain.length} commits - ${totalFiles} file(s) changed`,
+    body: `<ul>${items}</ul>`,
+  };
+}
+
+export interface CommitEmptyBadge {
+  tone: 'no-code' | 'discovery';
+  label: string;
+  tooltip: string;
+}
+
+/** Zero-commit diagnostic for review-lane cards (AC#3, bug (3)). Only fires in
+ *  review lanes and only when the attributed chain is genuinely empty.
+ *  `codeActivityDetected` (scanner signal, never repo HEAD) disambiguates the
+ *  two cases the operator could not tell apart before:
+ *   - `false` -> analysis-only task: a calm "no code changes" badge.
+ *   - `true`  -> a run moved HEAD but no commit is attributed: an amber
+ *     "commit discovery pending" diagnostic so a lost/undiscovered commit is
+ *     visibly different from a correct no-op. */
+export function buildCommitEmptyBadge(job: TaskInfo): CommitEmptyBadge | null {
+  if (!COMMIT_REVIEW_LANES.has(job.state)) return null;
+  if (commitChainOf(job).length > 0) return null;
+  if (job.codeActivityDetected) {
+    return {
+      tone: 'discovery',
+      label: 'commit discovery pending',
+      tooltip: 'This task moved repository HEAD during a run, but no commit is attributed to it yet. Open the task and check the Git view: the attribution backfill may still be pending, or a commit landed that the rule could not associate. This is NOT an analysis-only task.',
+    };
+  }
+  return {
+    tone: 'no-code',
+    label: 'no code changes',
+    tooltip: 'No commit is attributed to this task and no run moved repository HEAD. This is an analysis-only / no-op task by design, not a lost commit.',
+  };
 }
 
 export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTokenBubble | null {

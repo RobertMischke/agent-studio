@@ -212,47 +212,4 @@ public class TaskCommitsAggregatorTests
         Assert.Equal(CommitAttributionKinds.Legacy, Assert.Single(result.Commits).Attribution);
     }
 
-    [Fact]
-    public void CountCommitRangesPlusAutoCommit_CountsNonTrivialRanges()
-    {
-        var info = new TaskInfo();
-        var events = new List<SessionEvent>
-        {
-            new() { HeadShaBefore = "a", HeadShaAfter = "b" },
-            new() { HeadShaBefore = "b", HeadShaAfter = "c" },
-            new() { HeadShaBefore = "c", HeadShaAfter = "c" }, // trivial
-            new() { HeadShaBefore = null, HeadShaAfter = "x" } // missing
-        };
-        Assert.Equal(2, TaskCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
-    }
-
-    [Fact]
-    public void CountCommitRangesPlusAutoCommit_AddsAutoCommitWhenDistinct()
-    {
-        var info = new TaskInfo
-        {
-            Commit = new TaskCommitInfo { Sha = "z", ShortSha = "z", Message = "auto", At = DateTime.UtcNow }
-        };
-        var events = new List<SessionEvent>
-        {
-            new() { HeadShaBefore = "a", HeadShaAfter = "b" }
-        };
-        // 1 range + 1 auto-commit (auto-commit's sha "z" not in any range tail).
-        Assert.Equal(2, TaskCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
-    }
-
-    [Fact]
-    public void CountCommitRangesPlusAutoCommit_DoesNotDoubleCountAutoCommitInsideRange()
-    {
-        var info = new TaskInfo
-        {
-            Commit = new TaskCommitInfo { Sha = "b", ShortSha = "b", Message = "auto", At = DateTime.UtcNow }
-        };
-        var events = new List<SessionEvent>
-        {
-            new() { HeadShaBefore = "a", HeadShaAfter = "b" }
-        };
-        // Range tail equals auto-commit sha → counted once.
-        Assert.Equal(1, TaskCommitsAggregator.CountCommitRangesPlusAutoCommit(info, events));
-    }
 }

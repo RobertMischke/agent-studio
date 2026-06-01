@@ -239,6 +239,40 @@ badVariant: \.MoveJob\s*\([^,]+,\s*(?:JobStates\.Progress\b|"3-progress")
 severityIfBad: High
 ```
 
+```yaml
+# ---------------------------------------------------------------------------
+# A task's commit set is rendered from job.commits, never from repo HEAD.
+# Bug (reported 2026-06-01): cards in 4-auto-review / 5-human-review showed
+# "main: 20 files" and a commit count sourced from the shared project's
+# working-tree / branch HEAD (GitSummaryService) instead of the task's own
+# attributed commits[]. Because the project git summary is shared across every
+# card, a task frozen in a review lane advertised whatever branch state another
+# job had just produced. The single source of truth for per-task commit/file
+# attribution is job.commits (the attributed chain persisted by
+# TaskMutationService.SetCommitAttributionOnFolder); on the frontend that is
+# read through commitChainOf(job) / buildCommitChainView. GitSummaryService
+# reflects live repo HEAD and is only legitimate for the 3-progress working-tree
+# pill, which the card gates behind the LANES_WITH_GIT (3-progress-only) set.
+# Any board render surface that pulls in GitSummaryService / gitSummary without
+# that lane guard is re-introducing the repo-HEAD leak.
+# ---------------------------------------------------------------------------
+id: card-commit-source-not-repo-head
+title: Card commit/file display sources from job.commits, not repo HEAD (GitSummaryService)
+description: >
+  Per-task commit and files-changed displays on board cards must read the
+  attributed job.commits chain (commitChainOf / buildCommitChainView), never the
+  shared project GitSummaryService, which reflects live repo HEAD / the working
+  tree. The only legitimate GitSummaryService use is the 3-progress working-tree
+  pill, gated behind the LANES_WITH_GIT set. A board component that references
+  GitSummaryService / gitSummary without that lane guard leaks repo HEAD into
+  review lanes (the "main: 20 files" regression of 2026-06-01).
+filePattern: frontend/src/app/features/board/.*\.ts$
+excludeFilePattern: \.spec\.ts$
+candidateMarker: GitSummaryService\b|\bgitSummary\b
+goodVariant: LANES_WITH_GIT\b
+severityIfBad: High
+```
+
 ## Adding a rule — checklist
 
 1. **Catch a real incident.** Don't add a rule for a hypothetical drift; add

@@ -82,6 +82,15 @@ export interface TaskInfo {
    * exclusion. Surfaced under the git pane's "(N excluded)" expander.
    */
   excludedCommits?: TaskExcludedCommitInfo[];
+  /**
+   * Cheap "did any run move HEAD / was an auto-commit stamped" signal from
+   * the scanner. Lets the card disambiguate a card with zero `commits[]`:
+   * `false` -> analysis-only task, render the explicit "no code changes"
+   * badge; `true` -> work landed but the attributed chain is still empty,
+   * render the "commit discovery pending" diagnostic instead. Never a
+   * count - the commit total derives strictly from `commits[]` (SSOT).
+   */
+  codeActivityDetected?: boolean;
   /** Saved user intent waiting for the auto-pickup loop. Surfaces in the UI as a ⏳ badge. */
   pendingIntent?: PendingIntent | null;
   /**

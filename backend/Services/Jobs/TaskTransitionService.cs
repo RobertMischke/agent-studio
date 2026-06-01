@@ -247,53 +247,13 @@ public sealed class TaskTransitionService
         {
             if (_sessions == null) return;
 
-            var events = _sessions.ReadSessionEvents(moved.Id, watchPath);
-            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(moved.FolderPath));
-            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-
             // Pre-attribution candidate set: at this point moved.ExcludedCommits
-            // is empty, so the aggregate is the raw union of run-range commits
-            // and the just-stamped auto-commit - exactly the noisy input the
-            // rule engine is meant to clean up.
-            var aggregate = TaskCommitsAggregator.Aggregate(moved, timeline.Runs,
-                (before, after) => _git.GetCommitsInShaRange(moved.Id, watchPath, before, after));
+            // is empty, so the aggregate the runner builds is the raw union of
+            // run-range commits and the just-stamped auto-commit - exactly the
+            // noisy input the rule engine is meant to clean up.
+            var result = CommitAttributionRunner.Run(moved, watchPath, _sessions, _git);
+            if (result == null) return;
 
-            if (aggregate.Commits.Count == 0) return;
-
-            // Enrich with the full commit body (for Co-Authored-By detection)
-            // and the merge flag (parent count) in one git call, so the rule
-            // engine works off the real message body rather than the subject.
-            var meta = _git.GetCommitMeta(moved.Id, watchPath, aggregate.Commits.Select(c => c.Sha));
-
-            var candidates = aggregate.Commits.Select(c =>
-            {
-                meta.TryGetValue(c.Sha, out var m);
-                return new AttributionCandidate
-                {
-                    Sha = c.Sha,
-                    ShortSha = c.ShortSha,
-                    Author = c.Author,
-                    Subject = c.Subject,
-                    Message = string.IsNullOrEmpty(m?.Body) ? c.Subject : m!.Body,
-                    AuthorDateUtc = c.AuthorDateUtc,
-                    FilesChanged = c.FilesChanged,
-                    IsMerge = m?.IsMerge ?? false,
-                };
-            }).ToList();
-
-            var input = new AttributionInput
-            {
-                TaskId = moved.Id,
-                Candidates = candidates,
-                // The platform-stamped auto-commit(s) are the task's accepted
-                // work by construction - pin them to full confidence.
-                PlatformStampShas = moved.Commits
-                    .Where(c => !string.IsNullOrWhiteSpace(c.Sha))
-                    .Select(c => c.Sha)
-                    .ToList(),
-            };
-
-            var result = CommitAttributionService.Attribute(input);
             _mutations.SetCommitAttributionOnFolder(moved.FolderPath, result.Attributed, result.Excluded);
             _logger.LogInformation(
                 "commit-attribution jobId={JobId} attributed={Attributed} excluded={Excluded}",
