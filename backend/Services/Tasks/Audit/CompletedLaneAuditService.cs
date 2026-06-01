@@ -1,0 +1,341 @@
+using System.Text;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Registry;
+
+namespace OrchestratorApi.Services.Tasks.Audit;
+
+public enum ReEvaluateStatus
+{
+    Success,
+    TaskNotFound,
+    WrongLane,
+    Failure,
+}
+
+public record ReEvaluateOutcome(ReEvaluateStatus Status, ReEvaluateResponse? Response = null, string? Message = null);
+
+public enum AuditRunStartStatus
+{
+    Success,
+    ProjectNotFound,
+    Failure,
+}
+
+public record AuditRunStartOutcome(AuditRunStartStatus Status, string? RunId = null, string? Message = null);
+
+/// <summary>
+/// Owns the completed-lane audit flow described in Part 2 of the
+/// consolidation/audit task. Three entry points:
+///
+/// <list type="bullet">
+/// <item><see cref="ReEvaluate"/> - one card, synchronous.</item>
+/// <item><see cref="StartAudit"/> - whole project, async; returns a runId.</item>
+/// <item><see cref="BuildReport"/> - markdown for the latest run.</item>
+/// </list>
+///
+/// The detector lives in <see cref="AcceptanceEvidenceDetector"/>; this
+/// class is the orchestration layer that walks the lane, persists the
+/// verdicts, and triggers the lane flip on <see cref="AuditVerdicts.NotReallyDone"/>.
+/// </summary>
+public sealed class CompletedLaneAuditService
+{
+    private readonly TaskScannerService _scanner;
+    private readonly TaskStateMachine _states;
+    private readonly TaskMutationService _mutations;
+    private readonly TimelineLog _timeline;
+    private readonly AcceptanceEvidenceDetector _detector;
+    private readonly AuditRunStore _runStore;
+    private readonly ProjectRegistry _projects;
+    private readonly ILogger<CompletedLaneAuditService> _logger;
+
+    public CompletedLaneAuditService(
+        TaskScannerService scanner,
+        TaskStateMachine states,
+        TaskMutationService mutations,
+        TimelineLog timeline,
+        AcceptanceEvidenceDetector detector,
+        AuditRunStore runStore,
+        ProjectRegistry projects,
+        ILogger<CompletedLaneAuditService> logger)
+    {
+        _scanner = scanner;
+        _states = states;
+        _mutations = mutations;
+        _timeline = timeline;
+        _detector = detector;
+        _runStore = runStore;
+        _projects = projects;
+        _logger = logger;
+    }
+
+    public ReEvaluateOutcome ReEvaluate(string jobId, string? watchPath, string actorEmail)
+    {
+        var job = _scanner.FindJob(jobId, watchPath);
+        if (job == null) return new ReEvaluateOutcome(ReEvaluateStatus.TaskNotFound);
+        if (job.State != TaskStates.Completed && job.State != TaskStates.Archive)
+        {
+            return new ReEvaluateOutcome(ReEvaluateStatus.WrongLane,
+                Message: $"Job is in {job.State}; re-evaluate only applies to {TaskStates.Completed} / {TaskStates.Archive}.");
+        }
+
+        var (verdict, diagnostics) = _detector.Evaluate(job);
+        var newState = job.State;
+        if (verdict == AuditVerdicts.NotReallyDone)
+        {
+            var outcome = _states.MoveJob(jobId, TaskStates.NeedsHumanReview, watchPath);
+            if (outcome.Status == MoveJobStatus.Success)
+            {
+                newState = TaskStates.NeedsHumanReview;
+                var refreshed = _scanner.FindJob(jobId, watchPath);
+                var folder = refreshed?.FolderPath ?? job.FolderPath;
+                AppendQualityLoopReopened(folder, job, diagnostics, actorEmail);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Re-evaluate verdict was NotReallyDone but move failed for {Job}: {Status}",
+                    jobId, outcome.Status);
+            }
+        }
+        else if (verdict == AuditVerdicts.Inconclusive)
+        {
+            var tags = (job.Tags ?? []).ToList();
+            if (!tags.Any(t => string.Equals(t, "needs-fresh-look", StringComparison.OrdinalIgnoreCase)))
+            {
+                tags.Add("needs-fresh-look");
+                _mutations.SetJobTags(jobId, tags, watchPath);
+            }
+        }
+
+        return new ReEvaluateOutcome(ReEvaluateStatus.Success, new ReEvaluateResponse
+        {
+            JobId = jobId,
+            Verdict = verdict,
+            NewState = newState,
+            Diagnostics = diagnostics,
+        });
+    }
+
+    public AuditRunStartOutcome StartAudit(string projectIdOrName, string actorEmail)
+    {
+        // Accept either the canonical PROJ-NNN id, the display name, or
+        // the project's WatchPath. ProjectRegistry handles the first two;
+        // a raw watch path falls through to a scanner-driven match.
+        var project = _projects.FindByIdOrDisplayName(projectIdOrName)
+                      ?? _projects.FindByStorageLocation(projectIdOrName);
+        var watchPath = project?.StorageLocation
+                        ?? _scanner.GetWatchPaths()
+                            .FirstOrDefault(w => string.Equals(w.Name, projectIdOrName, StringComparison.OrdinalIgnoreCase)
+                                                 || string.Equals(w.Path, projectIdOrName, StringComparison.OrdinalIgnoreCase))?.Path;
+        if (string.IsNullOrWhiteSpace(watchPath))
+        {
+            return new AuditRunStartOutcome(AuditRunStartStatus.ProjectNotFound,
+                Message: $"No project found for '{projectIdOrName}'.");
+        }
+        var projectName = project?.DisplayName
+                          ?? _scanner.GetWatchPaths().FirstOrDefault(w =>
+                              string.Equals(w.Path, watchPath, StringComparison.OrdinalIgnoreCase))?.Name
+                          ?? projectIdOrName;
+
+        var runId = _runStore.Create(project?.Id ?? projectIdOrName, projectName, watchPath);
+
+        // Snapshot the candidate set now so a card moving mid-run does not
+        // produce a confusing "processed > total" report.
+        var candidates = _scanner.ScanAllJobs()
+            .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
+            .Where(j => j.State == TaskStates.Completed || j.State == TaskStates.Archive)
+            .OrderBy(j => j.LastActivity)
+            .Select(j => j.Id)
+            .ToList();
+
+        _runStore.Update(runId, s => s with { Total = candidates.Count });
+
+        _ = Task.Run(() => RunAuditAsync(runId, watchPath, candidates, actorEmail));
+
+        return new AuditRunStartOutcome(AuditRunStartStatus.Success, RunId: runId);
+    }
+
+    private async Task RunAuditAsync(string runId, string watchPath, List<string> candidates, string actorEmail)
+    {
+        try
+        {
+            foreach (var jobId in candidates)
+            {
+                var current = _scanner.FindJob(jobId, watchPath);
+                if (current == null || (current.State != TaskStates.Completed && current.State != TaskStates.Archive))
+                {
+                    // Moved out of scope between snapshot and processing;
+                    // count it but skip the evaluation.
+                    _runStore.Update(runId, s => s with
+                    {
+                        Processed = s.Processed + 1,
+                        Inconclusive = s.Inconclusive + 1,
+                        Entries = s.Entries.Concat(new[]
+                        {
+                            new CompletedLaneAuditEntry
+                            {
+                                JobId = jobId,
+                                Title = current?.Title ?? "",
+                                Key = current?.Key,
+                                Verdict = AuditVerdicts.Inconclusive,
+                                Reason = "Card moved out of completed/archive mid-run.",
+                                EvaluatedAt = DateTime.UtcNow,
+                            }
+                        }).ToList(),
+                    });
+                    continue;
+                }
+
+                var (verdict, diagnostics) = _detector.Evaluate(current);
+                var reason = diagnostics.Count == 0
+                    ? "No issues found."
+                    : string.Join("; ", diagnostics.Select(d => d.Detail));
+
+                if (verdict == AuditVerdicts.NotReallyDone)
+                {
+                    var outcome = _states.MoveJob(jobId, TaskStates.NeedsHumanReview, watchPath);
+                    if (outcome.Status == MoveJobStatus.Success)
+                    {
+                        var refreshed = _scanner.FindJob(jobId, watchPath);
+                        var folder = refreshed?.FolderPath ?? current.FolderPath;
+                        AppendQualityLoopReopened(folder, current, diagnostics, actorEmail);
+                    }
+                }
+                else if (verdict == AuditVerdicts.Inconclusive)
+                {
+                    var tags = (current.Tags ?? []).ToList();
+                    if (!tags.Any(t => string.Equals(t, "needs-fresh-look", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        tags.Add("needs-fresh-look");
+                        _mutations.SetJobTags(jobId, tags, watchPath);
+                    }
+                }
+
+                _runStore.Update(runId, s => s with
+                {
+                    Processed = s.Processed + 1,
+                    TrulyDone = s.TrulyDone + (verdict == AuditVerdicts.Ok ? 1 : 0),
+                    NotReallyDone = s.NotReallyDone + (verdict == AuditVerdicts.NotReallyDone ? 1 : 0),
+                    Inconclusive = s.Inconclusive + (verdict == AuditVerdicts.Inconclusive ? 1 : 0),
+                    Entries = s.Entries.Concat(new[]
+                    {
+                        new CompletedLaneAuditEntry
+                        {
+                            JobId = jobId,
+                            Key = current.Key,
+                            Title = current.Title,
+                            Verdict = verdict,
+                            Reason = reason,
+                            EvaluatedAt = DateTime.UtcNow,
+                        }
+                    }).ToList(),
+                });
+
+                // Cooperative yield so a large run does not starve other
+                // requests on the same thread pool.
+                await Task.Yield();
+            }
+
+            _runStore.Update(runId, s => s with
+            {
+                FinishedAt = DateTime.UtcNow,
+                Status = "finished",
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Completed-lane audit run {RunId} failed", runId);
+            _runStore.Update(runId, s => s with
+            {
+                FinishedAt = DateTime.UtcNow,
+                Status = "failed",
+                Error = ex.Message,
+            });
+        }
+    }
+
+    public CompletedLaneAuditReport? BuildReport(string projectIdOrName)
+    {
+        var project = _projects.FindByIdOrDisplayName(projectIdOrName)
+                      ?? _projects.FindByStorageLocation(projectIdOrName);
+        var projectKey = project?.Id ?? projectIdOrName;
+        var latest = _runStore.GetLatestForProject(projectKey);
+        if (latest == null) return null;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# Completed-lane audit ({project?.DisplayName ?? projectIdOrName}, run {latest.RunId}, {latest.StartedAt:yyyy-MM-dd HH:mm} UTC)");
+        sb.AppendLine();
+        sb.AppendLine("## Verdict counts");
+        sb.AppendLine($"- truly done: {latest.TrulyDone}");
+        sb.AppendLine($"- not really done: {latest.NotReallyDone}");
+        sb.AppendLine($"- inconclusive: {latest.Inconclusive}");
+        sb.AppendLine($"- processed: {latest.Processed}/{latest.Total}");
+        sb.AppendLine($"- status: {latest.Status}");
+        sb.AppendLine();
+
+        var notDone = latest.Entries.Where(e => e.Verdict == AuditVerdicts.NotReallyDone).ToList();
+        if (notDone.Count > 0)
+        {
+            sb.AppendLine("## Not really done (action required)");
+            foreach (var e in notDone)
+            {
+                var keyOrId = string.IsNullOrEmpty(e.Key) ? e.JobId : $"{e.Key} ({e.JobId})";
+                sb.AppendLine($"- [{keyOrId}] {Truncate(e.Title, 80)} - {Truncate(e.Reason, 200)}");
+            }
+            sb.AppendLine();
+        }
+
+        var inconclusive = latest.Entries.Where(e => e.Verdict == AuditVerdicts.Inconclusive).ToList();
+        if (inconclusive.Count > 0)
+        {
+            sb.AppendLine("## Inconclusive (tagged needs-fresh-look)");
+            foreach (var e in inconclusive)
+            {
+                var keyOrId = string.IsNullOrEmpty(e.Key) ? e.JobId : $"{e.Key} ({e.JobId})";
+                sb.AppendLine($"- [{keyOrId}] {Truncate(e.Title, 80)} - {Truncate(e.Reason, 200)}");
+            }
+            sb.AppendLine();
+        }
+
+        return new CompletedLaneAuditReport
+        {
+            ProjectId = projectKey,
+            ProjectName = project?.DisplayName ?? projectIdOrName,
+            RunId = latest.RunId,
+            GeneratedAt = DateTime.UtcNow,
+            Markdown = sb.ToString(),
+        };
+    }
+
+    private void AppendQualityLoopReopened(string folderPath, TaskInfo job, List<EvidenceDiagnostic> diagnostics, string actorEmail)
+    {
+        var details = new Dictionary<string, string>
+        {
+            ["fromState"] = job.State,
+            ["toState"] = TaskStates.NeedsHumanReview,
+            ["diagnosticCount"] = diagnostics.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+        var hardFails = diagnostics.Where(d => d.Level == AuditSignalLevels.Fail).ToList();
+        if (hardFails.Count > 0)
+        {
+            details["failKinds"] = string.Join(",", hardFails.Select(d => d.Kind));
+        }
+
+        _timeline.Append(folderPath, new TimelineEvent
+        {
+            Ts = DateTime.UtcNow,
+            Kind = TimelineEventKinds.QualityLoopReopened,
+            Actor = TimelineActors.QualityLoop,
+            Summary = hardFails.Count > 0
+                ? $"Reopened by completed-lane audit: {hardFails[0].Detail}"
+                : "Reopened by completed-lane audit.",
+            Details = details,
+        });
+    }
+
+    private static string Truncate(string text, int max)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        return text.Length <= max ? text : text[..max] + "...";
+    }
+}

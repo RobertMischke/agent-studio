@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Endpoints.Jobs;
+using OrchestratorApi.Endpoints.Tasks;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Registry;
 using OrchestratorApi.Services.Runner;

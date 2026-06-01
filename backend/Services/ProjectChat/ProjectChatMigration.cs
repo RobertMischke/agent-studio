@@ -1,6 +1,6 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 
 namespace OrchestratorApi.Services.ProjectChat;
 

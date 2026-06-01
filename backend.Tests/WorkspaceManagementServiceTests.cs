@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Configuration;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using Xunit;
 
 namespace OrchestratorApi.Tests;

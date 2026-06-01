@@ -2,7 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Quota;
 
 namespace OrchestratorApi.Services.Runner;
@@ -22,7 +22,7 @@ public class ProjectRunner
     private readonly TaskSessionLog _sessions;
     // ADR-0049: per-job timeline.jsonl ledger. Optional so existing test
     // fixtures keep working; production DI always supplies an instance.
-    private readonly OrchestratorApi.Services.Jobs.TimelineLog? _timeline;
+    private readonly OrchestratorApi.Services.Tasks.TimelineLog? _timeline;
     // Records the core agent run into pipeline-execution.json so the Overview
     // pipeline table shows the CORE "Agent execution" step live (Running at
     // spawn) and completed (Passed/Failed + duration/times) at exit, instead
@@ -188,7 +188,7 @@ public class ProjectRunner
         RunnerRole role = RunnerRole.Orchestrator,
         PickupLockFile? pickupLock = null,
         PickupLockOwner? pickupLockOwner = null,
-        OrchestratorApi.Services.Jobs.TimelineLog? timeline = null,
+        OrchestratorApi.Services.Tasks.TimelineLog? timeline = null,
         OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null)
     {
         ProjectName = projectName;

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 
 namespace OrchestratorApi.Services;
 

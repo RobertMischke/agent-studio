@@ -1,4 +1,4 @@
-using OrchestratorApi.Services.Jobs.Audit;
+using OrchestratorApi.Services.Tasks.Audit;
 
 namespace OrchestratorApi.Endpoints;
 

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using OrchestratorApi.Hubs;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 
 namespace OrchestratorApi.Services.Projection;
 

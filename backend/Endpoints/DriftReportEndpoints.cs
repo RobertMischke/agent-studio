@@ -322,7 +322,7 @@ public static class DriftReportEndpoints
             DriftReportStore driftStore,
             AnalysisReportStore analysisStore,
             RuntimePromptService prompts,
-            SpecTaskJobDriftAnalysisService action) =>
+            SpecTaskDriftAnalysisService action) =>
         {
             if (string.IsNullOrWhiteSpace(project))
                 return Results.BadRequest(new { error = "project required" });
@@ -361,7 +361,7 @@ public static class DriftReportEndpoints
             DriftReportStore driftStore,
             AnalysisReportStore analysisStore,
             RuntimePromptService prompts,
-            SpecTaskJobDriftAnalysisService action,
+            SpecTaskDriftAnalysisService action,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(project))

@@ -3,7 +3,7 @@ using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli.OneShot;
 using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.ProjectChat;
 
 namespace OrchestratorApi.Services.Runner;

@@ -1,6 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Pipeline;
 using OrchestratorApi.Services.Runner;
 

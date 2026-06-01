@@ -14,7 +14,7 @@ public sealed record CompletedPushRequest(TaskInfo Job, string Strategy);
 /// Hand-off point that lifts the completed-job <c>git fetch</c> + <c>git push</c>
 /// off the move-to-<c>6-completed</c> request path. The network round-trip was
 /// being awaited inside the HTTP request, so a "move to complete" took 2-3 s
-/// (PERF regression). <see cref="OrchestratorApi.Services.Jobs.TaskTransitionService"/>
+/// (PERF regression). <see cref="OrchestratorApi.Services.Tasks.TaskTransitionService"/>
 /// drops a snapshot here - an instant, non-blocking channel write - and returns;
 /// <see cref="CompletedPushWorker"/> drains it and performs the push on a
 /// background thread. The periodic <see cref="CompletedPushBackstopHostedService"/>

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OrchestratorApi.Models;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 
 namespace OrchestratorApi.Services.Configuration;
 

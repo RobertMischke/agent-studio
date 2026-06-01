@@ -1,5 +1,5 @@
 using OrchestratorApi.Models;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Supervisor;

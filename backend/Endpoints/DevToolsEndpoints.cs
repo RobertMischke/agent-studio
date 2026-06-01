@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using OrchestratorApi.Models;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 
 namespace OrchestratorApi.Endpoints;
 

@@ -7,7 +7,7 @@ namespace OrchestratorApi.Services.Runner;
 /// <summary>
 /// Crash-recovery marker dropped into a job folder once the runner has
 /// decided the job's CLI run is complete (sentinel matched, status terminal)
-/// and is about to call <see cref="OrchestratorApi.Services.Jobs.TaskTransitionService.MoveAsync"/>.
+/// and is about to call <see cref="OrchestratorApi.Services.Tasks.TaskTransitionService.MoveAsync"/>.
 /// The marker survives a backend crash so the next boot can finish the
 /// transition without losing the agent's evidence. See
 /// <see cref="CrashRecoveryService"/> for the boot-time scan and ADR-0020

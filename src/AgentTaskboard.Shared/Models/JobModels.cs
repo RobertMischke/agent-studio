@@ -748,7 +748,7 @@ public record TaskPromptHistoryEntry
 
 /// <summary>
 /// One entry in the task's title-revision timeline. Written by
-/// <see cref="OrchestratorApi.Services.Jobs.TaskMutationService.SetJobTitle"/>
+/// <see cref="OrchestratorApi.Services.Tasks.TaskMutationService.SetJobTitle"/>
 /// to <c>title-history.json</c> in the job folder whenever the title
 /// actually changes (no-op renames are not recorded). The current title
 /// stays on <see cref="TaskInfo.Title"/>; this is the audit trail of what
@@ -840,7 +840,7 @@ public enum MoveJobStatus
 }
 
 /// <summary>
-/// Result of a <see cref="OrchestratorApi.Services.Jobs.TaskStateMachine.MoveJob"/>
+/// Result of a <see cref="OrchestratorApi.Services.Tasks.TaskStateMachine.MoveJob"/>
 /// call. <paramref name="NewFolderPath"/> is populated only on
 /// <see cref="MoveJobStatus.Success"/> and carries the absolute path of the
 /// post-move job folder. Callers that want to write into the moved folder
@@ -2052,7 +2052,7 @@ public static class TaskStates
     /// <summary>
     /// Numbered legacy lane names that pre-date ADR-0025 (three-stage review
     /// pipeline). The boot-time migration in
-    /// <see cref="OrchestratorApi.Services.Jobs.TaskStateMachine.EnsureStateFoldersAndMigrate"/>
+    /// <see cref="OrchestratorApi.Services.Tasks.TaskStateMachine.EnsureStateFoldersAndMigrate"/>
     /// uses this to rename folders and rewrite job.json state fields.
     /// </summary>
     public static readonly Dictionary<string, string> NumberedLegacyMap = new()

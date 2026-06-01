@@ -1,0 +1,90 @@
+using System.Text.Json;
+
+namespace OrchestratorApi.Services.Tasks;
+
+/// <summary>
+/// Shared low-level helper for the job services in this folder. All four
+/// (<see cref="TaskScannerService"/>, <see cref="TaskStateMachine"/>,
+/// <see cref="TaskMutationService"/>, <see cref="TaskSessionLog"/>) need to
+/// rewrite a single field in a job's <c>job.json</c> while preserving the
+/// original key order; centralising that read-modify-write avoids each
+/// service growing its own near-identical copy and drifting on details
+/// like indent, encoding, or legacy-field handling.
+/// </summary>
+internal static class TaskJsonFile
+{
+    internal static readonly JsonSerializerOptions ReadOpts = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions WriteOpts = new() { WriteIndented = true };
+
+    /// <summary>
+    /// Reads <c>job.json</c>, replaces or adds a single top-level field, writes
+    /// back preserving the existing field order.
+    /// </summary>
+    internal static void UpdateField(string jobDir, string fieldName, object value, ILogger logger)
+    {
+        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        if (!File.Exists(jobJsonPath)) return;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+
+            var updated = new Dictionary<string, object>();
+            var inserted = false;
+            foreach (var kv in doc)
+            {
+                if (kv.Key == fieldName)
+                {
+                    updated[fieldName] = value;
+                    inserted = true;
+                }
+                else
+                {
+                    updated[kv.Key] = kv.Value;
+                }
+            }
+            if (!inserted) updated[fieldName] = value;
+
+            File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, WriteOpts));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update field {Field} in job.json at {Dir}", fieldName, jobDir);
+        }
+    }
+
+    /// <summary>
+    /// Like <see cref="UpdateField"/> but also drops the legacy <c>priority</c>
+    /// key and guarantees an <c>order</c> entry in the output. Used by
+    /// <see cref="TaskStateMachine.ReorderJobs"/>.
+    /// </summary>
+    internal static void UpdateOrder(string jobDir, int order, ILogger logger)
+    {
+        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        if (!File.Exists(jobJsonPath)) return;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+
+            var updated = new Dictionary<string, object>();
+            foreach (var kv in doc)
+            {
+                if (kv.Key == "order") updated["order"] = order;
+                else if (kv.Key == "priority") continue; // drop legacy priority
+                else updated[kv.Key] = kv.Value;
+            }
+            if (!updated.ContainsKey("order")) updated["order"] = order;
+
+            File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, WriteOpts));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update order in job.json at {Dir}", jobDir);
+        }
+    }
+}

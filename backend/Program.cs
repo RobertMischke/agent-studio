@@ -9,7 +9,7 @@ using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Companion;
 using OrchestratorApi.Services.Configuration;
 using OrchestratorApi.Services.Diagnostics;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.ProjectChat;
 using OrchestratorApi.Services.Projection;
 using OrchestratorApi.Services.Projection.Sources;
@@ -112,12 +112,12 @@ builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();
 builder.Services.AddSingleton<TaskScannerService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.ITaskScanner>(sp => sp.GetRequiredService<TaskScannerService>());
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.ITaskScanner>(sp => sp.GetRequiredService<TaskScannerService>());
 // F45a: workspace / project registries + jobKey resolver. Additive layer;
 // not yet load-bearing for the existing lane-folder code paths (F45c).
 builder.Services.AddSingleton<OrchestratorApi.Services.Registry.WorkspaceRegistry>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Registry.ProjectRegistry>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.TaskKeyResolver>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.TaskKeyResolver>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 // F21: per-project write mutex for the lane tree. Must be registered
 // before TaskStateMachine / TaskMutationService / TaskAccessService so
@@ -137,12 +137,12 @@ builder.Services.AddSingleton<TaskMutationService>();
 // <TaskRepository>/.audit/merges.jsonl. AuditRunStore is in-memory so
 // in-flight audit runs are lost on restart (the persistent trail is the
 // per-card quality_loop_reopened events in each timeline.jsonl).
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Merge.MergeAuditLog>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Merge.MergeCandidateFinder>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Merge.MergeService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.AcceptanceEvidenceDetector>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.AuditRunStore>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Jobs.Audit.CompletedLaneAuditService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Merge.MergeAuditLog>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Merge.MergeCandidateFinder>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Merge.MergeService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Audit.AcceptanceEvidenceDetector>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Audit.AuditRunStore>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tasks.Audit.CompletedLaneAuditService>();
 builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<TaskSessionLog>();
 builder.Services.AddSingleton<TimelineLog>();
@@ -230,7 +230,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.RegressionRadar.Regressio
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DriftReportStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.AdrCodeDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DocsMarketingDriftAnalysisService>();
-builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SpecTaskJobDriftAnalysisService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SpecTaskDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SoftwareArchitectureDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.ArchitectureElementStateStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Tags.TagRegistryService>();

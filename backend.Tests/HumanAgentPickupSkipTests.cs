@@ -5,7 +5,7 @@ using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Clients;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Registry;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;

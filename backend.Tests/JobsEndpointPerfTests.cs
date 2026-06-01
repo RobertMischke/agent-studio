@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using OrchestratorApi.Endpoints.Jobs;
+using OrchestratorApi.Endpoints.Tasks;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Registry;
 using OrchestratorApi.Services.Pty;
@@ -267,8 +267,8 @@ internal static class TaskEndpointHelpersAccessor
     {
         // Reflection over the internal helper. Keeps the production access
         // modifier honest while still letting the test call into it.
-        var t = typeof(OrchestratorApi.Endpoints.Jobs.TaskCrudEndpoints).Assembly
-            .GetType("OrchestratorApi.Endpoints.Jobs.TaskEndpointHelpers")!;
+        var t = typeof(OrchestratorApi.Endpoints.Tasks.TaskCrudEndpoints).Assembly
+            .GetType("OrchestratorApi.Endpoints.Tasks.TaskEndpointHelpers")!;
         var m = t.GetMethod("WithRuntime",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
             new[] { typeof(TaskInfo), typeof(CliRouter), typeof(TaskRunnerService) })!;
@@ -277,8 +277,8 @@ internal static class TaskEndpointHelpersAccessor
 
     public static Dictionary<string, TaskTokenSummary> BuildTokenLookup(IEnumerable<TaskInfo> jobs, ITokenAggregator tokens)
     {
-        var t = typeof(OrchestratorApi.Endpoints.Jobs.TaskCrudEndpoints).Assembly
-            .GetType("OrchestratorApi.Endpoints.Jobs.TaskEndpointHelpers")!;
+        var t = typeof(OrchestratorApi.Endpoints.Tasks.TaskCrudEndpoints).Assembly
+            .GetType("OrchestratorApi.Endpoints.Tasks.TaskEndpointHelpers")!;
         var m = t.GetMethod("BuildTokenLookup",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
             new[] { typeof(IEnumerable<TaskInfo>), typeof(ITokenAggregator) })!;

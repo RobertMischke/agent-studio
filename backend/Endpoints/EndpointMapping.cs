@@ -1,4 +1,4 @@
-using OrchestratorApi.Endpoints.Jobs;
+using OrchestratorApi.Endpoints.Tasks;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -6,7 +6,7 @@ namespace OrchestratorApi.Endpoints;
 /// Composition root for all HTTP routes. <see cref="Program"/> calls
 /// <see cref="MapAllEndpoints"/> once at startup; this method does
 /// nothing on its own beyond delegating to the per-feature mappers
-/// in <see cref="OrchestratorApi.Endpoints.Jobs"/> and the sibling
+/// in <see cref="OrchestratorApi.Endpoints.Tasks"/> and the sibling
 /// classes in this namespace. Splitting the routes by feature keeps
 /// each file under ~150 lines and makes "where is the handler for
 /// X" answerable in one grep.
@@ -16,16 +16,16 @@ public static class EndpointMapping
     public static void MapAllEndpoints(this WebApplication app)
     {
         var jobs = app.MapGroup("/api/tasks");
-        jobs.MapJobCrudEndpoints();
-        jobs.MapJobFilesEndpoints();
-        jobs.MapJobRunnerEndpoints();
-        jobs.MapJobGitEndpoints();
-        jobs.MapJobClaudeEndpoints();
-        jobs.MapJobReviewEvidenceEndpoints();
-        jobs.MapJobCodeReviewEndpoints();
-        jobs.MapJobRegressionRadarEndpoints();
-        jobs.MapJobPipelineEndpoints();
-        jobs.MapJobMergeEndpoints();
+        jobs.MapTaskCrudEndpoints();
+        jobs.MapTaskFilesEndpoints();
+        jobs.MapTaskRunnerEndpoints();
+        jobs.MapTaskGitEndpoints();
+        jobs.MapTaskClaudeEndpoints();
+        jobs.MapTaskReviewEvidenceEndpoints();
+        jobs.MapTaskCodeReviewEndpoints();
+        jobs.MapTaskRegressionRadarEndpoints();
+        jobs.MapTaskPipelineEndpoints();
+        jobs.MapTaskMergeEndpoints();
 
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();

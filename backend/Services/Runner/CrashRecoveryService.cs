@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Diagnostics;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Persistence;
 
 namespace OrchestratorApi.Services.Runner;

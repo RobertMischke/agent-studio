@@ -14,7 +14,7 @@ namespace OrchestratorApi.Services.Pipeline;
 /// (the load-bearing behavioural change in this phase), the
 /// git-commit-attribution slot (ADR "Commit-Attribution-Regel";
 /// behaviour implemented in
-/// <see cref="OrchestratorApi.Services.Jobs.CommitAttributionService"/>
+/// <see cref="OrchestratorApi.Services.Tasks.CommitAttributionService"/>
 /// and run from the transition service, so the executor records it as
 /// planned), a <see cref="StepKind.Tool"/> lint-scss step, and an
 /// <see cref="StepKind.Orchestrator"/> decision step that reads the

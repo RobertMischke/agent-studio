@@ -1,6 +1,6 @@
 using OrchestratorApi.Models;
 
-namespace OrchestratorApi.Services.Jobs;
+namespace OrchestratorApi.Services.Tasks;
 
 /// <summary>
 /// Abstraction over the task scanner that the executor (Runner) side depends

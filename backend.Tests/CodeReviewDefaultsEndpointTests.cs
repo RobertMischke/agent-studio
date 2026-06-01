@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Configuration;
-using OrchestratorApi.Endpoints.Jobs;
+using OrchestratorApi.Endpoints.Tasks;
 using Xunit;
 
 namespace OrchestratorApi.Tests;

@@ -1,7 +1,7 @@
 using System.Text;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
-using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Tasks;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
