@@ -130,6 +130,68 @@ public class JobsEndpointPerfTests : IDisposable
         Assert.Equal(30, lookup[jobs[2].TaskKey].TotalTokens);
     }
 
+    [Fact]
+    public void WithRuntime_OutsideProgress_ClearsExecutionOverlay()
+    {
+        // Single-source-of-truth contract (Lane > Execution-Status >
+        // Default): the wire overlay may only surface a CLI Execution
+        // snapshot for a task that is actually in 3-progress. A task that
+        // has moved on to 4-auto-review / 5-human-review / 6-completed /
+        // 7-archive must come back with Execution == null even when the CLI
+        // driver still holds a live "running" snapshot for that TaskKey —
+        // the driver retains a ProcInfo ~30 min post-exit, and a foreign
+        // backend can keep one alive across a move. Without the lane gate
+        // the per-card pill renders that stale snapshot as a misleading
+        // "Running" badge on a card that is not executing in this lane.
+        const string projectName = "lane-gate";
+        var (router, runners) = BuildRuntime(projectName);
+
+        // Swap the Claude driver (the router's default route) for a fake
+        // that always reports a live "running" execution, so the assertion
+        // exercises the state gate rather than an empty _processes dict that
+        // would return null for every lane anyway.
+        var sentinel = new CliExecution
+        {
+            JobId = "task-7",
+            TaskKey = $"{_watchPath}::task-7",
+            ProcessId = 4242,
+            StartedAt = DateTime.UtcNow,
+            Status = "running",
+        };
+        InjectExecutionDriver(router, sentinel);
+
+        TaskInfo At(string state) => MakeJob("task-7", projectName, _watchPath) with
+        {
+            State = state,
+            CliType = CliTypes.Claude,
+        };
+
+        // 3-progress → overlay surfaces the live running snapshot.
+        var progress = TaskEndpointHelpersAccessor.WithRuntime(At(TaskStates.Progress), router, runners);
+        Assert.NotNull(progress.Execution);
+        Assert.Equal("running", progress.Execution!.Status);
+
+        // Every lane past 3-progress → overlay clears it to null.
+        foreach (var state in new[] { TaskStates.AutoReview, TaskStates.HumanReview, TaskStates.Completed, TaskStates.Archive })
+        {
+            var enriched = TaskEndpointHelpersAccessor.WithRuntime(At(state), router, runners);
+            Assert.True(
+                enriched.Execution is null,
+                $"Execution must be null for state '{state}', but the overlay surfaced status '{enriched.Execution?.Status}'.");
+        }
+    }
+
+    private static void InjectExecutionDriver(CliRouter router, CliExecution execution)
+    {
+        // CliRouter._byType is the private cli-type → driver map consulted by
+        // Get(). Replace the Claude entry (matches CliType = "claude" jobs)
+        // with a fake so GetExecution returns a known live snapshot.
+        var field = typeof(CliRouter).GetField("_byType",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var byType = (System.Collections.IDictionary)field.GetValue(router)!;
+        byType[CliTypes.Claude] = new FakeRunningCliService(execution);
+    }
+
     private void WriteJob(string state, string slug)
     {
         var dir = Path.Combine(_watchPath, state, slug);
@@ -254,6 +316,44 @@ internal sealed class FakeTokenAggregator : ITokenAggregator
             ? perJob
             : new Dictionary<string, TaskTokenSummary>(StringComparer.Ordinal);
     }
+}
+
+/// <summary>
+/// Minimal <see cref="ICliExecutionService"/> stub that reports a fixed live
+/// execution for any key. Only <see cref="CliType"/> and
+/// <see cref="GetExecution"/> are exercised by the wire overlay; every other
+/// member throws so an accidental call shows up loudly rather than silently
+/// returning a default.
+/// </summary>
+internal sealed class FakeRunningCliService : ICliExecutionService
+{
+    private readonly CliExecution _execution;
+    public FakeRunningCliService(CliExecution execution) => _execution = execution;
+
+    public string CliType => CliTypes.Claude;
+    public CliExecution? GetExecution(string jobKey) => _execution;
+
+    public string GetCliPath() => throw new NotImplementedException();
+    public bool IsAvailable() => throw new NotImplementedException();
+    public (bool Available, string? Version, string Path) TestCliPath(string? path = null) => throw new NotImplementedException();
+    public Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? jobFolderPath = null, CancellationToken ct = default) => throw new NotImplementedException();
+    public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop) => throw new NotImplementedException();
+    public bool SendInput(string jobKey, string input) => throw new NotImplementedException();
+    public List<CliOutputLine> GetOutput(string jobKey) => throw new NotImplementedException();
+    public void DiscardPersistedOutput(string jobKey) => throw new NotImplementedException();
+    public SessionUsage? GetLastUsage(string jobKey) => throw new NotImplementedException();
+    public bool IsRunningForProject(string rootPath) => throw new NotImplementedException();
+    public DateTime? GetLastStreamedAt(string jobKey) => throw new NotImplementedException();
+    public WatchdogState GetWatchdogState(string jobKey) => throw new NotImplementedException();
+    public void SetWatchdogState(string jobKey, WatchdogState state) => throw new NotImplementedException();
+    public void ReattachOnStartup() { }
+    public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default) => throw new NotImplementedException();
+    public bool IsCompatibleSessionName(string? sessionName) => throw new NotImplementedException();
+
+    public event Action<string, CliOutputLine>? OnOutput;
+    public event Action<string, CliExecution>? OnStarted;
+    public event Action<string, CliExecution>? OnFinished;
+    public event Action<string, CliRunEvent>? OnRunEvent;
 }
 
 /// <summary>

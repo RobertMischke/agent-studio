@@ -326,7 +326,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     if (!execution) return null;
 
     // Lane wins over execution-status. The backend overlay already clears
-    // Execution for non-progress jobs (JobEndpointHelpers.WithRuntime), but
+    // Execution for non-progress tasks (TaskEndpointHelpers.WithRuntime), but
     // a stale poll snapshot or an optimistic move can briefly land on the
     // card before the next round-trip. Without this guard, a card in
     // 4-auto-review / 5-human-review can flash "Running live" while the
