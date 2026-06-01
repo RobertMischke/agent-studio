@@ -158,6 +158,79 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
+    public async Task Sweep_EmptyStaleFolderWithTwinInDownstreamLane_IsSilentlyRemovedNotArchived()
+    {
+        // Regression for the 2026-05-12 boot-race (01:34-01:36 UTC, stable
+        // restart at 01:27:42): six phantom folders appeared in 3a-failed-pickup
+        // after a backend restart while four jobs were finishing their
+        // 3-progress -> 4-auto-review -> 5-human-review moves. The boot sweep
+        // saw a 3-progress residue with no job.json and minted
+        // <slug>-debris-<date> markers for jobs already in 5-human-review.
+        // After the fix, the sweep cross-checks downstream lanes
+        // (4-auto-review / 5-human-review / 6-completed / 7-archive) and
+        // silently deletes the residue instead of minting a phantom card.
+        const string slug = "bug-card-delete-button-has-no-effect";
+
+        // The real twin already lives in 5-human-review.
+        WriteJob(TaskStates.HumanReview, slug);
+
+        // The mid-move residue in 3-progress has no job.json (mimicking the
+        // empty placard-only shape observed in the incident).
+        var residueFolder = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        Directory.CreateDirectory(residueFolder);
+
+        var (archiver, _) = Build();
+        var decisions = await archiver.SweepAsync();
+
+        // 1. The residue is gone (no phantom card under <slug>-debris-<date>).
+        Assert.False(Directory.Exists(residueFolder), "mid-move casualty residue must be deleted");
+        var archivedDebris = Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.Archive))
+            .Select(Path.GetFileName)
+            .Where(name => name != null && name.StartsWith(slug + "-debris-", StringComparison.Ordinal))
+            .ToList();
+        Assert.Empty(archivedDebris); // acceptance criterion #3: no phantom marker minted
+
+        // 2. The real twin in 5-human-review is untouched.
+        var twinFolder = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Assert.True(Directory.Exists(twinFolder), "real twin in 5-human-review must remain intact");
+        Assert.True(File.Exists(Path.Combine(twinFolder, "job.json")),
+            "real twin's job.json must remain intact");
+
+        // 3. One decision row: MidMoveCasualtyRemoved, pointing to the twin's lane.
+        var d = Assert.Single(decisions);
+        Assert.Equal(StaleProgressDecisionKinds.MidMoveCasualtyRemoved, d.Kind);
+        Assert.Equal(slug, d.Slug);
+        Assert.Equal(TaskStates.HumanReview, d.TargetState);
+
+        // 4. The JSONL audit log records the silent removal but no debris move.
+        var jsonl = File.ReadAllText(Path.Combine(_workspaceRoot, "logs", "orphan-recoveries.jsonl"));
+        Assert.Contains("mid-move-casualty-removed", jsonl);
+        Assert.DoesNotContain("archived-debris", jsonl);
+        Assert.DoesNotContain("moved-to-failed-pickup", jsonl);
+    }
+
+    [Fact]
+    public async Task Sweep_EmptyStaleFolderWithNoDownstreamTwin_StillArchivedAsDebris()
+    {
+        // Acceptance criterion #2: when the residue has no twin in a later
+        // lane, the previous behaviour (archive to 7-archive as debris) must
+        // remain unchanged. The cross-lane reconciliation is additive, not a
+        // wholesale rewrite of the debris path.
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "lonely-debris");
+        Directory.CreateDirectory(folder);
+        // No twin in any downstream lane.
+
+        var (archiver, _) = Build();
+        var decisions = await archiver.SweepAsync();
+
+        Assert.False(Directory.Exists(folder));
+        var d = Assert.Single(decisions);
+        Assert.Equal(StaleProgressDecisionKinds.ArchivedDebris, d.Kind);
+        Assert.Equal(TaskStates.Archive, d.TargetState);
+        Assert.StartsWith("lonely-debris-debris-", d.FailedPickupSlug);
+    }
+
+    [Fact]
     public async Task Sweep_FreshFolder_IsLeftAlone()
     {
         WriteJob(TaskStates.Progress, "fresh");
