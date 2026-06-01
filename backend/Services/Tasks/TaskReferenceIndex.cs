@@ -1,0 +1,124 @@
+using OrchestratorApi.Models;
+
+namespace OrchestratorApi.Services.Tasks;
+
+/// <summary>
+/// F34 reverse-index over the cross-reference graph. Built on demand from a
+/// scanner snapshot (itself cached) so there is no separate cache to
+/// invalidate: O(N) per build, answered queries are O(1) / O(deg).
+///
+/// <para>It answers two questions the endpoints need:</para>
+/// <list type="bullet">
+/// <item>forward — the inputs the <see cref="TaskReferenceValidator"/> needs:
+/// the set of known stable keys and the dependsOn adjacency for cycle
+/// detection;</item>
+/// <item>reverse — "who references X?" across all four relation kinds, which
+/// drives the detail-view dependents list and the "depends on X" board
+/// filter.</item>
+/// </list>
+///
+/// Keys are F33 stable keys (<c>ATP-19</c>); tasks without a key (pre-F33)
+/// are skipped as graph nodes but still scanned for outgoing edges so a
+/// keyless task can still depend on a keyed one.
+/// </summary>
+public sealed class TaskReferenceIndex
+{
+    private readonly Dictionary<string, TaskInfo> _byKey;
+    private readonly Dictionary<string, IReadOnlyCollection<string>> _dependsOn;
+    private readonly Dictionary<string, List<TaskReferenceLink>> _incoming;
+
+    private static readonly StringComparer KeyComparer = StringComparer.OrdinalIgnoreCase;
+
+    private TaskReferenceIndex(
+        Dictionary<string, TaskInfo> byKey,
+        Dictionary<string, IReadOnlyCollection<string>> dependsOn,
+        Dictionary<string, List<TaskReferenceLink>> incoming)
+    {
+        _byKey = byKey;
+        _dependsOn = dependsOn;
+        _incoming = incoming;
+        KnownKeys = new HashSet<string>(byKey.Keys, KeyComparer);
+    }
+
+    /// <summary>Every stable key present in the workspace.</summary>
+    public IReadOnlySet<string> KnownKeys { get; }
+
+    /// <summary>key → its dependsOn targets, for cycle detection.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyCollection<string>> DependsOnGraph => _dependsOn;
+
+    /// <summary>Resolve a stable key to its task, or null when unknown.</summary>
+    public TaskInfo? Resolve(string? key) =>
+        !string.IsNullOrWhiteSpace(key) && _byKey.TryGetValue(key.Trim(), out var t) ? t : null;
+
+    /// <summary>
+    /// Tasks that reference <paramref name="key"/>. Optionally filtered to a
+    /// single relation kind (<see cref="TaskReferenceKinds"/>); null returns
+    /// every incoming link. Empty when nothing points at the key.
+    /// </summary>
+    public IReadOnlyList<TaskReferenceLink> Dependents(string? key, string? kind = null)
+    {
+        if (string.IsNullOrWhiteSpace(key) || !_incoming.TryGetValue(key.Trim(), out var links))
+            return Array.Empty<TaskReferenceLink>();
+        if (string.IsNullOrWhiteSpace(kind))
+            return links;
+        return links.Where(l => KeyComparer.Equals(l.Kind, kind)).ToList();
+    }
+
+    public static TaskReferenceIndex Build(IEnumerable<TaskInfo> tasks)
+    {
+        var byKey = new Dictionary<string, TaskInfo>(KeyComparer);
+        var dependsOn = new Dictionary<string, IReadOnlyCollection<string>>(KeyComparer);
+        var incoming = new Dictionary<string, List<TaskReferenceLink>>(KeyComparer);
+
+        var all = tasks as IReadOnlyCollection<TaskInfo> ?? tasks.ToList();
+
+        // First pass: index every keyed task as a graph node. Duplicate keys
+        // (rare, e.g. a stale folder copy) keep the first occurrence.
+        foreach (var t in all)
+        {
+            var key = t.Key?.Trim();
+            if (string.IsNullOrEmpty(key)) continue;
+            byKey.TryAdd(key, t);
+        }
+
+        // Second pass: record outgoing edges + reverse links for every task,
+        // keyed or not (a keyless task can still reference a keyed one).
+        foreach (var t in all)
+        {
+            var refs = t.References ?? new TaskReferences();
+            var sourceKey = t.Key?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(sourceKey))
+                dependsOn[sourceKey] = refs.DependsOn;
+
+            foreach (var (kind, target) in refs.Enumerate())
+            {
+                if (string.IsNullOrWhiteSpace(target)) continue;
+                if (!incoming.TryGetValue(target, out var list))
+                    incoming[target] = list = new List<TaskReferenceLink>();
+                list.Add(new TaskReferenceLink(
+                    SourceKey: sourceKey.Length > 0 ? sourceKey : null,
+                    SourceJobId: t.Id,
+                    SourceTitle: t.Title,
+                    SourceState: t.State,
+                    SourceWatchPath: t.WatchPath,
+                    Kind: kind));
+            }
+        }
+
+        return new TaskReferenceIndex(byKey, dependsOn, incoming);
+    }
+}
+
+/// <summary>
+/// One incoming reference: a task (<see cref="SourceJobId"/> /
+/// <see cref="SourceKey"/>) points at the queried key via <see cref="Kind"/>.
+/// Carries enough of the source task for the UI to render a chip and route to
+/// it without a second lookup.
+/// </summary>
+public record TaskReferenceLink(
+    string? SourceKey,
+    string SourceJobId,
+    string SourceTitle,
+    string SourceState,
+    string SourceWatchPath,
+    string Kind);

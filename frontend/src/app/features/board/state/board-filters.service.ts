@@ -26,7 +26,7 @@ import { projectIdentity } from '../../../services/project-identity.util';
  */
 
 export interface ActiveFilterPill {
-  kind: 'owner' | 'project' | 'type' | 'tag';
+  kind: 'owner' | 'project' | 'type' | 'tag' | 'dependsOn';
   kindLabel: string;
   /** Identifier used by the remove handler. */
   value: string;
@@ -53,6 +53,13 @@ export class BoardFiltersService {
   /** null = no filter; otherwise show only jobs whose ownerClientId matches. */
   readonly activeClientFilter = signal<string | null>(null);
 
+  /**
+   * null = no filter; otherwise show only jobs that declare the given stable
+   * key in their `references.dependsOn`. Drives the "show tasks depending on X"
+   * board filter (F34). Compared case-insensitively against F33 stable keys.
+   */
+  readonly activeDependsOnFilter = signal<string | null>(null);
+
   readonly activeTypeFilter = signal<Set<string>>(new Set());
   readonly activeTagFilter = signal<Set<string>>(new Set());
 
@@ -71,11 +78,13 @@ export class BoardFiltersService {
     this.activeTypeFilter().size > 0
     || this.activeTagFilter().size > 0
     || !!this.activeClientFilter()
+    || !!this.activeDependsOnFilter()
     || this.activeProjects().size > 0);
 
   readonly hasActiveFiltersOrSearch = computed(() =>
     this.searchQuery().trim().length > 0
     || this.activeClientFilter() !== null
+    || this.activeDependsOnFilter() !== null
     || this.activeProjects().size > 0
     || this.activeType() !== null
     || this.activeTagFilter().size > 0);
@@ -83,6 +92,7 @@ export class BoardFiltersService {
   readonly activeFilterCount = computed(() => {
     let n = 0;
     if (this.activeClientFilter()) n += 1;
+    if (this.activeDependsOnFilter()) n += 1;
     n += this.activeProjects().size;
     if (this.activeType()) n += 1;
     n += this.activeTagFilter().size;
@@ -95,10 +105,11 @@ export class BoardFiltersService {
     const grouped = this.jobService.grouped();
     const active = this.activeProjects();
     const ownerId = this.activeClientFilter();
+    const dependsOnKey = (this.activeDependsOnFilter() ?? '').trim().toUpperCase();
     const types = this.activeTypeFilter();
     const tagIds = this.activeTagFilter();
     const query = this.searchQuery().trim().toLowerCase();
-    const noFilters = active.size === 0 && !ownerId && types.size === 0 && tagIds.size === 0 && !query;
+    const noFilters = active.size === 0 && !ownerId && !dependsOnKey && types.size === 0 && tagIds.size === 0 && !query;
     if (noFilters) return grouped;
     const matchesQuery = (j: TaskInfo) => {
       if (!query) return true;
@@ -113,6 +124,10 @@ export class BoardFiltersService {
     const filterJobs = (jobs: TaskInfo[]) => jobs.filter(j => {
       if (active.size > 0 && !active.has(j.projectName)) return false;
       if (ownerId && j.ownerClientId !== ownerId) return false;
+      if (dependsOnKey) {
+        const deps = j.references?.dependsOn ?? [];
+        if (!deps.some(d => d.trim().toUpperCase() === dependsOnKey)) return false;
+      }
       if (types.size > 0) {
         const t = j.taskType || 'chore';
         if (!types.has(t)) return false;
@@ -188,6 +203,14 @@ export class BoardFiltersService {
         swatch: c.colour || null,
       });
     }
+    const dependsOn = this.activeDependsOnFilter();
+    if (dependsOn) {
+      pills.push({
+        kind: 'dependsOn', kindLabel: 'Depends on', value: dependsOn,
+        label: dependsOn,
+        swatch: null,
+      });
+    }
     for (const name of this.activeProjects()) {
       const id = projectIdentity(name);
       pills.push({
@@ -220,6 +243,9 @@ export class BoardFiltersService {
       case 'owner':
         this.setClientFilter(null);
         break;
+      case 'dependsOn':
+        this.setDependsOnFilter(null);
+        break;
       case 'project':
         this.toggleProject(pill.value);
         break;
@@ -247,6 +273,21 @@ export class BoardFiltersService {
   setClientFilter(id: string | null): void {
     this.activeClientFilter.set(id || null);
     this.writeFilterHash();
+  }
+
+  /** Show only tasks that depend on `key` (F33 stable key), or clear with null. */
+  setDependsOnFilter(key: string | null): void {
+    this.activeDependsOnFilter.set(key ? key.trim() : null);
+    this.writeFilterHash();
+  }
+
+  /** Toggle the dependents filter for `key`: re-selecting the active key clears it. */
+  toggleDependsOnFilter(key: string): void {
+    const trimmed = key.trim();
+    const current = this.activeDependsOnFilter();
+    this.setDependsOnFilter(
+      current && current.toUpperCase() === trimmed.toUpperCase() ? null : trimmed,
+    );
   }
 
   /** Read the new value out of the (change) event so the template stays terse. */
@@ -329,6 +370,7 @@ export class BoardFiltersService {
     this.activeTypeFilter.set(new Set());
     this.activeTagFilter.set(new Set());
     this.activeClientFilter.set(null);
+    this.activeDependsOnFilter.set(null);
     this.activeProjects.set(new Set());
     localStorage.setItem('activeProjects', '[]');
     this.writeFilterHash();
@@ -380,6 +422,7 @@ export class BoardFiltersService {
       const decoded = decodeURIComponent(newM[1]);
       const parts = decoded.split(';').map(p => p.trim()).filter(Boolean);
       let owner: string | null = null;
+      let dependsOn: string | null = null;
       const projects = new Set<string>();
       const types = new Set<string>();
       const tags = new Set<string>();
@@ -390,11 +433,13 @@ export class BoardFiltersService {
         const v = p.slice(idx + 1).trim();
         if (!v) continue;
         if (k === 'owner') owner = v;
+        else if (k === 'dependsOn') dependsOn = v;
         else if (k === 'projects') v.split(',').filter(Boolean).forEach(x => projects.add(x));
         else if (k === 'type') types.add(v);
         else if (k === 'tags') v.split(',').filter(Boolean).forEach(x => tags.add(x));
       }
       this.activeClientFilter.set(owner);
+      this.activeDependsOnFilter.set(dependsOn);
       this.activeProjects.set(projects);
       localStorage.setItem('activeProjects', JSON.stringify([...projects]));
       const oneType = types.size > 0 ? new Set([types.values().next().value as string]) : new Set<string>();
@@ -423,6 +468,8 @@ export class BoardFiltersService {
     const segments: string[] = [];
     const owner = this.activeClientFilter();
     if (owner) segments.push(`owner:${owner}`);
+    const dependsOn = this.activeDependsOnFilter();
+    if (dependsOn) segments.push(`dependsOn:${dependsOn}`);
     const projects = [...this.activeProjects()];
     if (projects.length > 0) segments.push(`projects:${projects.join(',')}`);
     const t = this.activeType();
@@ -449,6 +496,8 @@ export class BoardFiltersService {
     if (q != null) this.searchQuery.set(q);
     const owner = params.get('owner');
     if (owner) this.activeClientFilter.set(owner);
+    const dependsOn = params.get('dependsOn');
+    if (dependsOn) this.activeDependsOnFilter.set(dependsOn);
     const tagsCsv = params.get('tag');
     if (tagsCsv) {
       const tags = new Set(tagsCsv.split(',').filter(Boolean));
@@ -465,6 +514,8 @@ export class BoardFiltersService {
     if (q) params.set('q', q); else params.delete('q');
     const owner = this.activeClientFilter();
     if (owner) params.set('owner', owner); else params.delete('owner');
+    const dependsOn = this.activeDependsOnFilter();
+    if (dependsOn) params.set('dependsOn', dependsOn); else params.delete('dependsOn');
     const tags = [...this.activeTagFilter()];
     if (tags.length > 0) params.set('tag', tags.join(',')); else params.delete('tag');
     const type = this.activeType();

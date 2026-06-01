@@ -307,6 +307,57 @@ public static class TaskCrudEndpoints
             var success = mutations.SetJobTags(jobId, req?.Tags ?? new List<string>(), watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
+
+        // F34: replace-all write of the structured cross-reference object.
+        // Validated against the whole workspace before persisting: every
+        // referenced key must exist, a task may not reference itself, and the
+        // dependsOn graph must stay a DAG (no cycles). A validation failure
+        // returns 400 with a per-edge error list so the FE can mark the
+        // offending chip. The 200 body echoes the normalised references.
+        group.MapPut("/{jobId}/references", (string jobId, string? watchPath, SetTaskReferencesRequest req,
+            TaskScannerService scanner, TaskMutationService mutations) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound();
+
+            var proposed = (req ?? new SetTaskReferencesRequest()).ToReferences();
+            var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
+            var validation = TaskReferenceValidator.Validate(
+                info.Key ?? "", proposed, index.KnownKeys, index.DependsOnGraph);
+
+            if (!validation.IsValid)
+                return Results.BadRequest(new
+                {
+                    error = "Invalid references",
+                    errors = validation.Errors.Select(e => new
+                    {
+                        code = e.Code.ToString(),
+                        kind = e.Kind,
+                        target = e.Target,
+                        message = e.Message
+                    })
+                });
+
+            var success = mutations.SetTaskReferences(jobId, proposed, watchPath);
+            return success ? Results.Ok(proposed) : Results.NotFound();
+        });
+
+        // F34 reverse-index: tasks that reference this one. Optional ?kind=
+        // narrows to a single relation (dependsOn / relatedTo / blockedBy /
+        // supersedes). Drives the detail-view "referenced by" list and the
+        // "show dependents of X" board filter. A keyless task (pre-F33) can
+        // never be referenced, so it returns an empty list.
+        group.MapGet("/{jobId}/dependents", (string jobId, string? watchPath, string? kind,
+            TaskScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound();
+            if (string.IsNullOrWhiteSpace(info.Key))
+                return Results.Ok(Array.Empty<TaskReferenceLink>());
+
+            var index = TaskReferenceIndex.Build(scanner.ScanAllJobs());
+            return Results.Ok(index.Dependents(info.Key, kind));
+        });
     }
 
     /// <summary>

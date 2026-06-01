@@ -88,6 +88,13 @@
             [appTooltip]="tt.tooltip">{{ tt.icon }} {{ tt.label }}</span>
     }
     <span class="task-card__state-pill">{{ stateLabel() }}</span>
+    @if (waitingOnLabel(); as wol) {
+      <span class="task-card__waiting-pill"
+            [appTooltip]="waitingOnTooltip()"
+            data-testid="task-card-waiting-on">
+        ⏳ waiting on {{ wol }}
+      </span>
+    }
     @if (humanReviewBadge(); as hrb) {
       <span class="task-card__human-review-pill"
             [class]="'task-card__human-review-pill--' + hrb.tone"

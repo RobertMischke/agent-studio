@@ -412,6 +412,27 @@ public class TaskMutationService
     }
 
     /// <summary>
+    /// F34: replace-all write of the structured <c>references</c> object
+    /// (dependsOn / relatedTo / blockedBy / supersedes). The supplied set is
+    /// normalised (trim, drop blanks, de-duplicate case-insensitively per kind)
+    /// and written atomically. Validation that referenced keys exist, that the
+    /// task does not reference itself, and that dependsOn stays a DAG is the
+    /// caller's job (the endpoint owns the cross-task graph); this writer is
+    /// deliberately thin so it can also persist a programmatically-built set.
+    /// </summary>
+    public bool SetTaskReferences(string jobId, TaskReferences references, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var clean = TaskReferenceValidator.Normalize(references ?? new TaskReferences());
+        TaskJsonFile.UpdateField(info.FolderPath, "references", clean, _logger);
+        _logger.LogInformation(
+            "task-references-set job={JobId} dependsOn={DependsOn} relatedTo={RelatedTo} blockedBy={BlockedBy} supersedes={Supersedes}",
+            jobId, clean.DependsOn.Count, clean.RelatedTo.Count, clean.BlockedBy.Count, clean.Supersedes.Count);
+        return Updated();
+    }
+
+    /// <summary>
     /// Coerce arbitrary user input into the tag-id grammar: lowercase ASCII
     /// letters, digits, and hyphens, length 1..32. Unknown characters are
     /// dropped (the spec calls for silent server-side stripping; an empty

@@ -29,6 +29,7 @@ import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../compone
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
+import { BoardFiltersService } from '../../state/board-filters.service';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -581,6 +582,42 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     this.job().state === '3-progress' && this.job().execution?.status === 'running'
   );
 
+  /**
+   * F34: dependsOn targets that are known and not yet complete. Drives the
+   * card's `waiting on KEY` badge. Cards with no dependsOn edges short-circuit
+   * before reading the board snapshot, so they never depend on `jobs()` and
+   * the O(N) state lookup is paid only by the few cards that have dependencies.
+   * Targets absent from the current board view are skipped (no false positive),
+   * and completed/archived targets are satisfied.
+   */
+  readonly waitingOn = computed<string[]>(() => {
+    const deps = this.job().references?.dependsOn ?? [];
+    if (deps.length === 0) return [];
+    const stateByKey = new Map<string, string>();
+    for (const t of this.jobs.jobs()) {
+      const k = (t.key ?? '').trim();
+      if (k) stateByKey.set(k.toUpperCase(), t.state);
+    }
+    return deps.filter((dep) => {
+      const st = stateByKey.get(dep.trim().toUpperCase());
+      if (st === undefined) return false;
+      return st !== '6-completed' && st !== '7-archive';
+    });
+  });
+
+  /** Compact badge label: first waiting key, with a "+N" suffix for the rest. */
+  readonly waitingOnLabel = computed<string | null>(() => {
+    const waiting = this.waitingOn();
+    if (waiting.length === 0) return null;
+    return waiting.length === 1 ? waiting[0] : `${waiting[0]} +${waiting.length - 1}`;
+  });
+
+  readonly waitingOnTooltip = computed(() => {
+    const waiting = this.waitingOn();
+    if (waiting.length === 0) return '';
+    return `Waiting on ${waiting.join(', ')} to complete before this task is workable.`;
+  });
+
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;
     if (!dateStr) return 'never';
@@ -596,12 +633,14 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   // Context menu: copy actions + epic assignment (way 2).
   private readonly notifications = inject(NotificationService);
   private readonly jobs = inject(TaskService);
+  private readonly boardFilters = inject(BoardFiltersService);
   readonly cardContextMenu = signal<{ x: number; y: number } | null>(null);
   /** Epics in this card's project, loaded on right-click for the assign submenu. */
   private readonly epicsForMenu = signal<EpicRollup[]>([]);
 
   private static readonly EPIC_ASSIGN_PREFIX = 'epic-assign:';
   private static readonly EPIC_DETACH_ID = 'epic-detach';
+  private static readonly FILTER_DEPENDENTS_ID = 'filter-dependents';
 
   readonly cardCtxMenuItems = computed<readonly MenuItem[]>(() => {
     const job = this.job();
@@ -611,6 +650,11 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     ];
     if (job.key) {
       items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${job.key})` });
+      items.push({
+        kind: 'row',
+        id: TaskCardComponent.FILTER_DEPENDENTS_ID,
+        label: `Filter: tasks depending on ${job.key}`,
+      });
     }
 
     // Epic assignment is only meaningful for ordinary task cards - an epic is
@@ -669,6 +713,11 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     }
     if (ev.id === TaskCardComponent.EPIC_DETACH_ID) {
       this.assignEpic(null);
+      return;
+    }
+    if (ev.id === TaskCardComponent.FILTER_DEPENDENTS_ID && job.key) {
+      this.boardFilters.setDependsOnFilter(job.key);
+      this.notifications.info(`Filtering to tasks that depend on ${job.key}`);
       return;
     }
 

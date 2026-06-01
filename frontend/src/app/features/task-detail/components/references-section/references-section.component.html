@@ -1,0 +1,65 @@
+<section class="refs" data-testid="references-section">
+  <button
+    type="button"
+    class="refs__head"
+    data-testid="references-toggle"
+    [attr.aria-expanded]="expanded()"
+    (click)="toggleExpanded()">
+    <span class="refs__caret" [class.refs__caret--open]="expanded()">▸</span>
+    <span class="refs__title">References</span>
+    @if (totalCount() > 0) {
+      <span class="refs__count" data-testid="references-count">{{ totalCount() }}</span>
+    }
+  </button>
+
+  @if (expanded()) {
+    <div class="refs__body">
+      @for (kind of kinds; track kind) {
+        <div class="refs__row" [attr.data-testid]="'references-row-' + kind">
+          <span class="refs__label">{{ kindLabels[kind] }}</span>
+          <div class="refs__chips">
+            @for (key of refsFor(kind); track key) {
+              <span
+                class="refs__chip"
+                [class.refs__chip--waiting]="isWaiting(kind, key)"
+                [attr.data-testid]="'reference-chip-' + key">
+                <button
+                  type="button"
+                  class="refs__chip-link"
+                  [appTooltip]="chipTooltip(key)"
+                  (click)="navigate(key)">
+                  {{ chipLabel(key) }}
+                </button>
+                <button
+                  type="button"
+                  class="refs__chip-remove"
+                  [appTooltip]="'Remove ' + key"
+                  [disabled]="busyKind() !== null"
+                  [attr.data-testid]="'reference-remove-' + key"
+                  (click)="remove(kind, key)">×</button>
+              </span>
+            }
+            <span class="refs__add">
+              <input
+                type="text"
+                class="refs__add-input"
+                [attr.list]="datalistId()"
+                [attr.data-testid]="'reference-add-' + kind"
+                [placeholder]="'＋ key'"
+                [disabled]="busyKind() !== null"
+                [ngModel]="draftFor(kind)"
+                (ngModelChange)="setDraft(kind, $event)"
+                (keydown.enter)="$event.preventDefault(); addFromDraft(kind)" />
+            </span>
+          </div>
+        </div>
+      }
+    </div>
+
+    <datalist [id]="datalistId()">
+      @for (key of candidateKeys(); track key) {
+        <option [value]="key">{{ titleFor(key) || key }}</option>
+      }
+    </datalist>
+  }
+</section>

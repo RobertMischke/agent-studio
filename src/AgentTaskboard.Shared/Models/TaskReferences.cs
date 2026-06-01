@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace OrchestratorApi.Models;
 
@@ -22,9 +23,13 @@ namespace OrchestratorApi.Models;
 /// </summary>
 public record TaskReferences
 {
+    [JsonPropertyName("dependsOn")]
     public List<string> DependsOn { get; init; } = [];
+    [JsonPropertyName("relatedTo")]
     public List<string> RelatedTo { get; init; } = [];
+    [JsonPropertyName("blockedBy")]
     public List<string> BlockedBy { get; init; } = [];
+    [JsonPropertyName("supersedes")]
     public List<string> Supersedes { get; init; } = [];
 
     /// <summary>True when every relation list is empty.</summary>

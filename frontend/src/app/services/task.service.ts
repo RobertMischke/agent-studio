@@ -529,6 +529,42 @@ export class TaskService {
   }
 
   /**
+   * F34: replace-all write of a task's cross-references. Each list becomes the
+   * full set for its relation kind; the backend validates (keys must exist, no
+   * self-reference, dependsOn stays a DAG) and returns 400 with a per-edge
+   * `errors[]` body on rejection. Returns the persisted references on success.
+   */
+  setTaskReferences(
+    jobId: string,
+    references: import('../models/task.model').TaskReferences,
+    watchPath?: string,
+  ) {
+    return this.http.put<import('../models/task.model').TaskReferences>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/references`,
+      references,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * F34 reverse-index: tasks that reference this one. Optional `kind` narrows
+   * to a single relation (e.g. `dependsOn` for the "who depends on X" filter).
+   * Empty array when nothing points at the task (or it has no stable key).
+   */
+  getTaskDependents(
+    jobId: string,
+    kind?: import('../models/task.model').TaskReferenceKind,
+    watchPath?: string,
+  ) {
+    const base = this.withWatchPath(watchPath);
+    const params = kind ? (base.params ?? new HttpParams()).set('kind', kind) : base.params;
+    return this.http.get<import('../models/task.model').TaskReferenceLink[]>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/dependents`,
+      params ? { params } : {},
+    );
+  }
+
+  /**
    * The deployment-configured default CLI + model for the code-review step.
    * The panel seeds its picker from this when the operator has no remembered
    * last-used pair, so a `CodeReviewStep:DefaultModel` set in appsettings

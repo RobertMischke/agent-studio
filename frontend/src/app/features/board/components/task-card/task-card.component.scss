@@ -419,6 +419,7 @@
     .task-card__state-pill,
     .task-card__execution-pill,
     .task-card__pending-pill,
+    .task-card__waiting-pill,
     .task-card__type-pill {
       display: inline-flex;
       align-items: center;
@@ -434,6 +435,15 @@
       background: rgba(249, 226, 175, 0.12);
       border: 1px solid rgba(249, 226, 175, 0.28);
       cursor: help;
+    }
+    /* F34: dependsOn target not yet complete. Amber-toned "blocked" cue so
+       the operator can see at a glance that a card is gated on another task. */
+    .task-card__waiting-pill {
+      color: var(--severity-warn);
+      background: rgba(249, 226, 175, 0.12);
+      border: 1px solid rgba(249, 226, 175, 0.28);
+      cursor: help;
+      white-space: nowrap;
     }
     /* Auto-loop pill: shown only while the orchestrator is actively
        answering NEEDS_INPUT for this job. Cyan when within budget;

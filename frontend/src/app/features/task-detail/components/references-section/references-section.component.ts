@@ -1,0 +1,263 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import {
+  TaskInfo,
+  TaskReferenceKind,
+  TaskReferences,
+  TASK_REFERENCE_KINDS,
+} from '../../../../models/task.model';
+import { TaskService } from '../../../../services/task.service';
+import { NotificationService } from '../../../../services/notification.service';
+import { TooltipDirective } from '../../../../components/tooltip';
+import { TaskSelectionService } from '../../state/task-selection.service';
+
+/**
+ * F34 detail-view reference editor. Renders the four cross-reference rows
+ * (depends on / related to / blocked by / supersedes) as chip lists with an
+ * inline add-input (autocomplete over every known stable key). Each chip is a
+ * `KEY — short-title` link that routes to the target task.
+ *
+ * Mutations follow ADR-0046 (Optimistic-UI): a local working copy of the
+ * references re-renders the chips instantly, the replace-all PUT fires in the
+ * background, and a rejection (unknown key / self-ref / cycle — surfaced by the
+ * backend's per-edge `errors[]`) reverts the chip and toasts the reason.
+ */
+@Component({
+  selector: 'app-references-section',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FormsModule, TooltipDirective],
+  templateUrl: './references-section.component.html',
+  styleUrl: './references-section.component.scss',
+})
+export class ReferencesSectionComponent {
+  private readonly tasks = inject(TaskService);
+  private readonly selection = inject(TaskSelectionService);
+  private readonly notifications = inject(NotificationService);
+
+  readonly info = input.required<TaskInfo>();
+
+  /** Emitted after a successful write so the parent can re-fetch the detail. */
+  readonly changed = output<void>();
+
+  readonly kinds = TASK_REFERENCE_KINDS;
+  readonly kindLabels: Record<TaskReferenceKind, string> = {
+    dependsOn: 'Depends on',
+    relatedTo: 'Related to',
+    blockedBy: 'Blocked by',
+    supersedes: 'Supersedes',
+  };
+
+  /** Local working copy of the references; re-seeded whenever the job changes. */
+  private readonly localRefs = signal<TaskReferences>(emptyRefs());
+  /** Relation kind whose write is currently in flight (null when idle). */
+  readonly busyKind = signal<TaskReferenceKind | null>(null);
+  /** Whether the section body is expanded. */
+  readonly expanded = signal(false);
+  /** Per-kind add-input drafts. */
+  readonly drafts = signal<Record<TaskReferenceKind, string>>({
+    dependsOn: '',
+    relatedTo: '',
+    blockedBy: '',
+    supersedes: '',
+  });
+
+  private lastSeededKey: string | null = null;
+  private readonly seed = effect(() => {
+    const info = this.info();
+    // Re-seed on job switch (taskKey changes) so an open editor follows the
+    // selected card; the parent's fileSaved → detail re-fetch also lands here.
+    const refs = info.references ?? emptyRefs();
+    if (this.lastSeededKey !== info.taskKey) {
+      this.lastSeededKey = info.taskKey;
+      this.expanded.set(!isEmptyRefs(refs));
+    }
+    if (this.busyKind() === null) {
+      this.localRefs.set(cloneRefs(refs));
+    }
+  });
+
+  /** Self key (uppercased for compare); empty when the task has no F33 key. */
+  private readonly selfKey = computed(() => (this.info().key ?? '').trim());
+
+  /** Every known stable key → its task, for title resolution + autocomplete. */
+  private readonly keyIndex = computed(() => {
+    const map = new Map<string, TaskInfo>();
+    for (const t of this.tasks.jobs()) {
+      const k = (t.key ?? '').trim();
+      if (k) map.set(k.toUpperCase(), t);
+    }
+    return map;
+  });
+
+  /** Total reference count across the four kinds (drives the collapsed badge). */
+  readonly totalCount = computed(() => {
+    const r = this.localRefs();
+    return r.dependsOn.length + r.relatedTo.length + r.blockedBy.length + r.supersedes.length;
+  });
+
+  /** Autocomplete candidates: every known key except this task's own. */
+  readonly candidateKeys = computed(() => {
+    const self = this.selfKey().toUpperCase();
+    return [...this.keyIndex().values()]
+      .map((t) => (t.key ?? '').trim())
+      .filter((k) => k && k.toUpperCase() !== self)
+      .sort((a, b) => a.localeCompare(b));
+  });
+
+  /** Stable id for the shared <datalist> the add-inputs reference. */
+  readonly datalistId = computed(() => `task-ref-keys-${this.info().id}`);
+
+  refsFor(kind: TaskReferenceKind): string[] {
+    return this.localRefs()[kind];
+  }
+
+  draftFor(kind: TaskReferenceKind): string {
+    return this.drafts()[kind];
+  }
+
+  setDraft(kind: TaskReferenceKind, value: string): void {
+    this.drafts.update((d) => ({ ...d, [kind]: value }));
+  }
+
+  /** Resolve a key to its short title, or null when the task isn't loaded. */
+  titleFor(key: string): string | null {
+    return this.keyIndex().get(key.trim().toUpperCase())?.title ?? null;
+  }
+
+  chipLabel(key: string): string {
+    const title = this.titleFor(key);
+    return title ? `${key} — ${truncate(title, 48)}` : key;
+  }
+
+  chipTooltip(key: string): string {
+    const title = this.titleFor(key);
+    return title ? `${key}: ${title}` : `${key} (not loaded in this workspace view)`;
+  }
+
+  /** A dependsOn target is satisfied once it reaches completed/archive. */
+  isWaiting(kind: TaskReferenceKind, key: string): boolean {
+    if (kind !== 'dependsOn') return false;
+    const target = this.keyIndex().get(key.trim().toUpperCase());
+    if (!target) return false;
+    return !isTerminalState(target.state);
+  }
+
+  navigate(key: string): void {
+    const target = this.keyIndex().get(key.trim().toUpperCase());
+    if (!target) {
+      this.notifications.info(`${key} is not loaded in the current workspace view.`);
+      return;
+    }
+    this.selection.openDetail(target);
+  }
+
+  addFromDraft(kind: TaskReferenceKind): void {
+    const raw = this.draftFor(kind).trim();
+    if (!raw) return;
+    this.add(kind, raw);
+  }
+
+  add(kind: TaskReferenceKind, keyRaw: string): void {
+    const key = keyRaw.trim();
+    if (!key) return;
+    const upper = key.toUpperCase();
+    if (upper === this.selfKey().toUpperCase()) {
+      this.notifications.warning('A task cannot reference itself.');
+      return;
+    }
+    const current = this.localRefs()[kind];
+    if (current.some((k) => k.toUpperCase() === upper)) {
+      this.setDraft(kind, '');
+      return;
+    }
+    const snapshot = this.localRefs();
+    const next = { ...cloneRefs(snapshot), [kind]: [...current, key] };
+    this.setDraft(kind, '');
+    this.persist(kind, next, snapshot);
+  }
+
+  remove(kind: TaskReferenceKind, key: string): void {
+    const snapshot = this.localRefs();
+    const upper = key.toUpperCase();
+    const next = {
+      ...cloneRefs(snapshot),
+      [kind]: snapshot[kind].filter((k) => k.toUpperCase() !== upper),
+    };
+    this.persist(kind, next, snapshot);
+  }
+
+  private persist(kind: TaskReferenceKind, next: TaskReferences, snapshot: TaskReferences): void {
+    const info = this.info();
+    this.localRefs.set(next);
+    this.busyKind.set(kind);
+    this.tasks.setTaskReferences(info.id, next, info.watchPath).subscribe({
+      next: () => {
+        this.busyKind.set(null);
+        this.changed.emit();
+      },
+      error: (err) => {
+        this.localRefs.set(snapshot);
+        this.busyKind.set(null);
+        this.notifications.error(extractReferenceError(err), 'Reference rejected');
+      },
+    });
+  }
+
+  toggleExpanded(): void {
+    this.expanded.update((v) => !v);
+  }
+}
+
+function emptyRefs(): TaskReferences {
+  return { dependsOn: [], relatedTo: [], blockedBy: [], supersedes: [] };
+}
+
+function cloneRefs(r: TaskReferences): TaskReferences {
+  return {
+    dependsOn: [...r.dependsOn],
+    relatedTo: [...r.relatedTo],
+    blockedBy: [...r.blockedBy],
+    supersedes: [...r.supersedes],
+  };
+}
+
+function isEmptyRefs(r: TaskReferences): boolean {
+  return (
+    r.dependsOn.length === 0 &&
+    r.relatedTo.length === 0 &&
+    r.blockedBy.length === 0 &&
+    r.supersedes.length === 0
+  );
+}
+
+function isTerminalState(state: string): boolean {
+  return state === '6-completed' || state === '7-archive';
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/** Pull the first per-edge validation message out of a 400 body, else a fallback. */
+function extractReferenceError(err: unknown): string {
+  const body = (err as { error?: unknown })?.error;
+  if (body && typeof body === 'object') {
+    const errors = (body as { errors?: { message?: string }[] }).errors;
+    if (Array.isArray(errors) && errors.length > 0 && errors[0]?.message) {
+      return errors[0].message;
+    }
+    const topLevel = (body as { error?: string }).error;
+    if (typeof topLevel === 'string') return topLevel;
+  }
+  return 'The reference could not be saved.';
+}

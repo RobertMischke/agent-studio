@@ -29,6 +29,44 @@ import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orch
 /** Card kind: `epic` is a container for sub-tasks; `task` is an ordinary card. */
 export type TaskKind = 'task' | 'epic';
 
+/**
+ * F34 — structured cross-references between tasks, keyed by F33 stable keys
+ * (e.g. `ATP-19`). Mirrors backend `TaskReferences`. Four relation kinds:
+ * `dependsOn` (target must be complete before this is workable — a DAG edge),
+ * `relatedTo` (thematic, non-blocking), `blockedBy` (currently blocked),
+ * `supersedes` (this task replaces an obsolete target).
+ */
+export interface TaskReferences {
+  dependsOn: string[];
+  relatedTo: string[];
+  blockedBy: string[];
+  supersedes: string[];
+}
+
+/** The four F34 relation kinds, in display order. */
+export type TaskReferenceKind = 'dependsOn' | 'relatedTo' | 'blockedBy' | 'supersedes';
+export const TASK_REFERENCE_KINDS: TaskReferenceKind[] = [
+  'dependsOn',
+  'relatedTo',
+  'blockedBy',
+  'supersedes',
+];
+
+/**
+ * One incoming reference returned by `GET /api/tasks/{id}/dependents`.
+ * Mirrors backend `TaskReferenceLink`: a task (`sourceJobId` / `sourceKey`)
+ * points at the queried key via `kind`. Carries enough of the source task to
+ * render a chip and route to it without a second lookup.
+ */
+export interface TaskReferenceLink {
+  sourceKey: string | null;
+  sourceJobId: string;
+  sourceTitle: string;
+  sourceState: string;
+  sourceWatchPath: string;
+  kind: TaskReferenceKind | string;
+}
+
 export interface TaskInfo {
   id: string;
   taskKey: string;
@@ -157,6 +195,12 @@ export interface TaskInfo {
    * that were soft-deleted from the registry) render as a faint ghost chip.
    */
   tags?: string[];
+  /**
+   * F34 cross-references to other tasks by F33 stable key. Always present
+   * (backend surfaces an empty instance when absent on disk). Drives the
+   * detail-view reference section and the card `waiting on KEY` badge.
+   */
+  references?: TaskReferences;
 }
 
 export interface TaskOutcomeIssue {

@@ -53,6 +53,7 @@ import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { CliConfigCardComponent } from './components/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
+import { ReferencesSectionComponent } from './components/references-section/references-section.component';
 import { TriageActionPayload, laneLabelFor } from './state/triage-actions.model';
 import { UndoController } from '../../services/undo.service';
 import {
@@ -76,6 +77,7 @@ import { TooltipDirective } from '../../components/tooltip';
     DetailHeaderComponent,
     CliConfigCardComponent,
     PaneToggleBarComponent,
+    ReferencesSectionComponent,
     TooltipDirective,
   ],
   providers: [
