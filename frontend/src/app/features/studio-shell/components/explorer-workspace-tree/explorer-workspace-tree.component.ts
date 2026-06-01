@@ -1,13 +1,19 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
+  ElementRef,
   ViewEncapsulation,
   computed,
+  effect,
   inject,
   input,
   output,
+  signal,
+  viewChild,
 } from '@angular/core';
 import type { RegistryWorkspaceListItem } from '../../../../models/task.model';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
@@ -95,8 +101,64 @@ export class ExplorerWorkspaceTreeComponent {
   readonly openHubRequest = output<string>();
   readonly projectDrop = output<{ event: DragEvent; name: string }>();
 
+  /**
+   * F46 — workspace-header inline rename. Double-clicking a (real) workspace
+   * header swaps it for a text input; committing emits this so the shell can
+   * PUT /api/workspaces/{id} and reload. The rename touches registry metadata
+   * only — no project folder is moved or renamed on disk.
+   *
+   * Project-row rename is intentionally NOT wired here: the rows are labelled
+   * and keyed by their job-derived name (not the registry displayName), so a
+   * registry rename would not change the visible label and would break the
+   * workspace→project grouping match. Renaming projects from the tree lands
+   * with the projectId-keyed display migration (F46 step 7).
+   */
+  readonly renameWorkspace = output<{ id: string; displayName: string }>();
+
   readonly projectDrag = inject(ProjectDragDropService);
   private readonly sections = inject(ExplorerSectionsService);
+  private readonly modalStack = inject(ModalStackService);
+
+  /** Id of the workspace header currently in inline-rename mode (null = none). */
+  readonly renamingWsId = signal<string | null>(null);
+  readonly renameDraft = signal('');
+
+  private readonly renameInputRef = viewChild<ElementRef<HTMLInputElement>>('wsRenameInput');
+  private readonly focusRenameFx = effect(() => {
+    if (this.renamingWsId() === null) return;
+    const el = this.renameInputRef()?.nativeElement;
+    if (el) queueMicrotask(() => { el.focus(); el.select(); });
+  });
+
+  /**
+   * Register the open rename input on the modal stack so Escape cancels it.
+   *
+   * Escape is arbitrated centrally by {@link ModalStackService}: a single
+   * capture-phase document listener invokes the topmost entry's close handler
+   * and then `stopImmediatePropagation()`. Always-mounted overlays (menu,
+   * info-button, concept-help, …) keep that stack non-empty even in the plain
+   * Explorer, so an inline input's own `(keydown)` Escape never fires — the
+   * stack top swallows the keystroke first. Pushing ourselves as the LIFO top
+   * while editing routes Escape to {@link cancelRename}; Enter is not arbitrated
+   * by the stack and still commits via the input's `(keydown)` binding.
+   */
+  private renameModalDispose: (() => void) | null = null;
+  private readonly renameModalFx = effect(() => {
+    const renaming = this.renamingWsId() !== null;
+    if (renaming && !this.renameModalDispose) {
+      this.renameModalDispose = this.modalStack.push('explorer-ws-rename', () => {
+        this.cancelRename();
+        return true;
+      });
+    } else if (!renaming && this.renameModalDispose) {
+      this.renameModalDispose();
+      this.renameModalDispose = null;
+    }
+  });
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.renameModalDispose?.());
+  }
 
   readonly totalProjectCount = computed(() => this.projectRows().length);
 
@@ -149,8 +211,63 @@ export class ExplorerWorkspaceTreeComponent {
     this.sections.setCollapsed(key, collapsed);
   }
 
+  /**
+   * Toggle a workspace folder's collapsed state from the live service value
+   * rather than the section-header's `[collapsed]` input. A double-click (used
+   * to open inline rename) fires two click events faster than the input
+   * re-renders, so both clicks would otherwise read the same stale value and
+   * collapse the folder instead of netting back to its prior state.
+   */
+  onWsHeaderToggle(g: ExplorerWorkspaceGroup): void {
+    const key = 'ws:' + g.id;
+    this.setCollapsed(key, !this.isCollapsed(key));
+  }
+
   isExpanded(name: string): boolean {
     return this.expandedProjects().has(name);
+  }
+
+  /**
+   * F46 — enter inline-rename for a workspace header. The synthetic groups
+   * (the empty-registry "__all__" fallback and the "__unassigned__" bucket)
+   * are not real registry workspaces, so double-clicking them is a no-op.
+   */
+  startRenameWorkspace(g: ExplorerWorkspaceGroup): void {
+    if (g.id === '__all__' || g.id === '__unassigned__') return;
+    this.renameDraft.set(g.displayName);
+    this.renamingWsId.set(g.id);
+  }
+
+  cancelRename(): void {
+    this.renamingWsId.set(null);
+  }
+
+  /** Enter commits, Escape cancels. Bound to the raw `keydown` rather than the
+   *  `keydown.enter` / `keydown.escape` pseudo-events because the latter's
+   *  Escape filter did not fire reliably for this input. */
+  onRenameKeydown(ev: KeyboardEvent): void {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      this.commitRename();
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      this.cancelRename();
+    }
+  }
+
+  /**
+   * Commit the draft name. No-op when blank or unchanged; otherwise emits
+   * {@link renameWorkspace} for the shell to persist. Closing edit mode first
+   * makes the blur that follows Enter/Escape a no-op (renamingWsId is null).
+   */
+  commitRename(): void {
+    const id = this.renamingWsId();
+    if (id === null) return;
+    this.renamingWsId.set(null);
+    const value = this.renameDraft().trim();
+    const original = this.groups().find(g => g.id === id)?.displayName ?? '';
+    if (!value || value === original) return;
+    this.renameWorkspace.emit({ id, displayName: value });
   }
 
   canDrop(source: string | null, target: string): boolean {

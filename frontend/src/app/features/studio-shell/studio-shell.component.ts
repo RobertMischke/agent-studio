@@ -315,14 +315,18 @@ export class StudioShellComponent {
   readonly registryWorkspaceBusyId = signal<string | null>(null);
 
   /**
-   * Lazy-load the registry workspaces the first time the Settings panel
-   * opens, then re-pull whenever it re-opens so a mutation from another
-   * tab is reflected without a full reload.
+   * Lazy-load the registry workspaces whenever a panel that renders them is
+   * visible, then re-pull on every re-open so a mutation from another tab is
+   * reflected without a full reload. Both the Settings panel (management) and
+   * the Explorer panel (F46 two-level workspace tree) need the registry; the
+   * Explorer is the default panel, so this also primes the tree on boot —
+   * without it the tree would fall back to the single legacy "Workspace"
+   * folder because `registryWorkspaces()` would stay empty.
    */
   private readonly loadRegistryWorkspacesFx = effect(() => {
     const panel = this.activePanel();
     const visible = this.sidebarVisible();
-    if (panel !== 'settings' || !visible) return;
+    if (!visible || (panel !== 'settings' && panel !== 'explorer')) return;
     this.reloadRegistryWorkspaces();
   });
 
@@ -840,6 +844,22 @@ export class StudioShellComponent {
   // itself, because that needs the full job list to fan the move out.
   onProjectDrop(event: DragEvent, overName: string): void {
     this.projectDrag.onDrop(event, overName, this.allJobs());
+  }
+
+  /**
+   * F46 — persist a workspace rename committed from the Explorer tree's inline
+   * editor. Registry-only mutation (ADR-0048): no project folder is moved or
+   * renamed on disk. Reload makes the new name visible in the tree header.
+   */
+  onTreeRenameWorkspace(e: { id: string; displayName: string }): void {
+    this.registryWorkspaceBusyId.set(e.id);
+    this.jobService.updateRegistryWorkspace(e.id, { displayName: e.displayName }).subscribe({
+      next: () => { this.registryWorkspaceBusyId.set(null); this.reloadRegistryWorkspaces(); },
+      error: (err: unknown) => {
+        this.registryWorkspaceBusyId.set(null);
+        this.registryWorkspacesError.set(this.errMsg(err));
+      },
+    });
   }
 
   /** Flat list of every job across all lanes; consumed by

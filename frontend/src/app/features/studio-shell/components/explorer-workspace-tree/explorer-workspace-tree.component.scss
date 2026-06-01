@@ -9,3 +9,23 @@
   display: block;
   margin-top: var(--studio-spacing-1);
 }
+
+/* Inline rename swaps the workspace header for a text input occupying the
+   same row, so the tree does not reflow while editing. */
+.studio-explorer-tree__ws-rename {
+  display: block;
+  margin-top: var(--studio-spacing-1);
+  padding: 2px var(--studio-spacing-2);
+}
+
+.studio-explorer-tree__ws-rename-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  font: inherit;
+  color: var(--studio-text-strong, inherit);
+  background: var(--studio-surface-inset, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--studio-accent, #6ea8fe);
+  border-radius: 4px;
+  outline: none;
+}

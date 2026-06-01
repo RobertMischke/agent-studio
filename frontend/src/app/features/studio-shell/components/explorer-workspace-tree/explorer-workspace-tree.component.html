@@ -23,15 +23,31 @@
   @if (!isCollapsed('workspace')) {
     @for (g of groups(); track g.id) {
       <!-- F46: workspace level — one collapsible folder per registry
-           workspace; the projects below it are the second tree level. -->
-      <app-section-header
-        class="studio-explorer-tree__ws-head"
-        [collapsible]="true"
-        [collapsed]="isCollapsed('ws:' + g.id)"
-        [title]="g.displayName"
-        [count]="g.projects.length"
-        [testid]="'studio-explorer-ws-group-' + g.id"
-        (collapsedChange)="setCollapsed('ws:' + g.id, $event)" />
+           workspace; the projects below it are the second tree level.
+           Double-clicking a real workspace header opens an inline rename. -->
+      @if (renamingWsId() === g.id) {
+        <div class="studio-explorer-tree__ws-rename">
+          <input #wsRenameInput
+                 type="text"
+                 class="studio-explorer-tree__ws-rename-input"
+                 [attr.data-testid]="'studio-explorer-ws-rename-input-' + g.id"
+                 [value]="renameDraft()"
+                 (input)="renameDraft.set($any($event.target).value)"
+                 (keydown)="onRenameKeydown($event)"
+                 (blur)="commitRename()" />
+        </div>
+      } @else {
+        <app-section-header
+          class="studio-explorer-tree__ws-head"
+          [collapsible]="true"
+          [collapsed]="isCollapsed('ws:' + g.id)"
+          [title]="g.displayName"
+          [count]="g.projects.length"
+          [testid]="'studio-explorer-ws-group-' + g.id"
+          appTooltip="Double-click to rename this workspace"
+          (collapsedChange)="onWsHeaderToggle(g)"
+          (dblclick)="startRenameWorkspace(g)" />
+      }
 
       @if (!isCollapsed('ws:' + g.id)) {
         @for (p of g.projects; track p.name) {
