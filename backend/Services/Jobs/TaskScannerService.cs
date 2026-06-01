@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
@@ -153,7 +154,12 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     public List<TaskInfo> ScanAllJobsRaw()
     {
-        var jobs = new List<TaskInfo>();
+        var sw = Stopwatch.StartNew();
+
+        // Phase 1 — cheap directory enumeration. Collect every candidate job
+        // folder across all (watchPath, state) pairs. This part is a handful
+        // of Directory.GetDirectories calls and stays sequential.
+        var candidates = new List<(string jobDir, WatchPathEntry entry, string state)>();
         foreach (var entry in GetWatchPaths())
         {
             if (!Directory.Exists(entry.Path))
@@ -171,11 +177,38 @@ public class TaskScannerService : ITaskScanner
                 {
                     var dirName = Path.GetFileName(jobDir);
                     if (dirName.StartsWith('_')) continue;
-
-                    var job = ScanJobFolder(jobDir, entry, state);
-                    if (job != null) jobs.Add(job);
+                    candidates.Add((jobDir, entry, state));
                 }
             }
+        }
+
+        // Phase 2 — parse each folder in parallel. ScanJobFolder is read-only
+        // (the only write is a rare divergent-id self-heal that targets that
+        // folder's own job.json, so distinct folders never contend) and returns
+        // an independent TaskInfo. The dominant per-folder cost is
+        // GetLastActivityTime's recursive file walk plus the JSON parse — both
+        // CPU/IO that overlap well across the dev host's cores. A full board
+        // (~1k folders, each with logs/ + results/ subtrees) walked
+        // sequentially was the "Neuladen ist langsam" cost the user reported:
+        // every cache miss (a reorder that dirtied the index, or the
+        // click-into-card FindJob right after a sort) paid the whole walk.
+        // Result order is irrelevant; every consumer sorts by State/Order.
+        var jobs = candidates
+            .AsParallel()
+            .WithDegreeOfParallelism(Math.Max(2, Environment.ProcessorCount))
+            .Select(c => ScanJobFolder(c.jobDir, c.entry, c.state))
+            .Where(j => j != null)
+            .Select(j => j!)
+            .ToList();
+
+        sw.Stop();
+        // Only log when the walk is slow enough to matter, so steady-state
+        // cache hits (which never reach here) and fast scans stay quiet.
+        if (sw.ElapsedMilliseconds >= 250)
+        {
+            _logger.LogInformation(
+                "ScanAllJobsRaw scanned {Count} task folders in {ElapsedMs}ms (parallel x{Dop})",
+                jobs.Count, sw.ElapsedMilliseconds, Math.Max(2, Environment.ProcessorCount));
         }
         return jobs;
     }
@@ -441,6 +474,27 @@ public class TaskScannerService : ITaskScanner
             if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
         }
         return list;
+    }
+
+    /// <summary>
+    /// Reads the F34 <c>"references"</c> object from <c>job.json</c>. Absent,
+    /// null, or non-object yields an empty <see cref="TaskReferences"/>; a
+    /// malformed object is tolerated the same way so a bad edge can never
+    /// fail the whole scan.
+    /// </summary>
+    private static TaskReferences ReadReferences(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("references", out var refs) || refs.ValueKind != JsonValueKind.Object)
+            return new TaskReferences();
+        try
+        {
+            return JsonSerializer.Deserialize<TaskReferences>(refs.GetRawText(), TaskJsonFile.ReadOpts)
+                ?? new TaskReferences();
+        }
+        catch
+        {
+            return new TaskReferences();
+        }
     }
 
     /// <summary>
