@@ -121,11 +121,28 @@ export class TaskTimelinePaneComponent {
       .map(([key, value]) => ({ key, value }));
   }
 
+  /**
+   * Inline timestamp shown next to each event. Today's events show the time
+   * only (unchanged); events on any other day prefix the date so the operator
+   * can tell at a glance that they aren't from the current day. The full
+   * date + time always remains available via the hover tooltip
+   * ({@link formatAbsoluteTime}).
+   */
   formatTime(iso: string): string {
     if (!iso) return '';
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleTimeString();
+    const time = d.toLocaleTimeString();
+    return this.isToday(d) ? time : `${d.toLocaleDateString()} ${time}`;
+  }
+
+  private isToday(d: Date): boolean {
+    const now = new Date();
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
   }
 
   formatAbsoluteTime(iso: string): string {

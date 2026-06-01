@@ -69,6 +69,31 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.kindLabel(TIMELINE_KIND.qualityLoopReopened)).toBe('Re-opened (go again)');
   });
 
+  it('formatTime shows time only for today and date + time for other days', async () => {
+    const fixture = await build([]);
+    const c = fixture.componentInstance;
+
+    const today = new Date();
+    const todayIso = today.toISOString();
+    const todayOut = c.formatTime(todayIso);
+    expect(todayOut).toBe(today.toLocaleTimeString());
+    expect(todayOut).not.toContain(today.toLocaleDateString());
+
+    const other = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const otherOut = c.formatTime(other.toISOString());
+    expect(otherOut).toContain(other.toLocaleDateString());
+    expect(otherOut).toContain(other.toLocaleTimeString());
+  });
+
+  it('formatAbsoluteTime (hover tooltip) always carries the full date + time', async () => {
+    const fixture = await build([]);
+    const c = fixture.componentInstance;
+    const d = new Date('2026-05-30T10:05:00Z');
+    const out = c.formatAbsoluteTime(d.toISOString());
+    expect(out).toBe(d.toLocaleString());
+    expect(out).toContain(d.toLocaleDateString());
+  });
+
   it('detailEntries hides gap/reason/attempt/maxAttempts (rendered separately)', async () => {
     const fixture = await build([]);
     const c = fixture.componentInstance;
