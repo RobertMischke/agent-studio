@@ -35,4 +35,63 @@ public class CliOutputLogParserTests
         Assert.Equal("stdout", parsed[0].Stream);
         Assert.Equal("raw row without persisted metadata", parsed[0].Text);
     }
+
+    // Regression: a runaway task can grow logs/cli-output.log without bound.
+    // ParseFile is called from the supervisor tick, the review-decision tick,
+    // the projection sources, the regression radar, and several frontend-polled
+    // endpoints - concurrently. Materialising the whole file at every call site
+    // multiplied peak memory until the host died with no managed exception
+    // (OOM / runtime FailFast). ParseFile must cap what it loads into memory.
+    [Fact]
+    public void ParseFile_CapsLineCount_OnPathologicallyLargeLog()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var total = CliOutputLogParser.MaxLinesCap + 5_000;
+            using (var w = new StreamWriter(path))
+            {
+                for (var i = 0; i < total; i++)
+                    w.WriteLine($"[12:00:00.000] [stdout] line {i}");
+            }
+
+            var parsed = CliOutputLogParser.ParseFile(path);
+
+            Assert.True(
+                parsed.Count <= CliOutputLogParser.MaxLinesCap,
+                $"ParseFile must cap materialised lines at {CliOutputLogParser.MaxLinesCap}; got {parsed.Count}");
+            // The tail (most recent activity) is what the UI and live ticks care
+            // about, so truncation drops the oldest bulk and keeps the end.
+            Assert.Contains($"line {total - 1}", parsed[^1].Text);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ParseFile_TruncatesPathologicalSingleLine()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            // One line, no trailing newline, far larger than the per-line cap.
+            // File.ReadLines would materialise the whole thing as one string and
+            // OOM on a multi-GB line; ParseFile must bound each line.
+            var giant = new string('x', CliOutputLogParser.MaxLineCharsCap * 4);
+            File.WriteAllText(path, "[12:00:00.000] [stdout] " + giant);
+
+            var parsed = CliOutputLogParser.ParseFile(path);
+
+            Assert.Single(parsed);
+            Assert.True(
+                parsed[0].Text.Length <= CliOutputLogParser.MaxLineCharsCap + 128,
+                $"ParseFile must truncate a single giant line; got {parsed[0].Text.Length} chars");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

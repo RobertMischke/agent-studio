@@ -23,6 +23,12 @@ public class ProjectRunner
     // ADR-0049: per-job timeline.jsonl ledger. Optional so existing test
     // fixtures keep working; production DI always supplies an instance.
     private readonly OrchestratorApi.Services.Jobs.TimelineLog? _timeline;
+    // Records the core agent run into pipeline-execution.json so the Overview
+    // pipeline table shows the CORE "Agent execution" step live (Running at
+    // spawn) and completed (Passed/Failed + duration/times) at exit, instead
+    // of a permanent "- -". Optional so test fixtures that build the runner
+    // directly keep working; production DI always supplies an instance.
+    private readonly OrchestratorApi.Services.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
@@ -173,7 +179,8 @@ public class ProjectRunner
         RunnerRole role = RunnerRole.Orchestrator,
         PickupLockFile? pickupLock = null,
         PickupLockOwner? pickupLockOwner = null,
-        OrchestratorApi.Services.Jobs.TimelineLog? timeline = null)
+        OrchestratorApi.Services.Jobs.TimelineLog? timeline = null,
+        OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -202,6 +209,7 @@ public class ProjectRunner
         _pickupLock = pickupLock;
         _pickupLockOwner = pickupLockOwner;
         _timeline = timeline;
+        _pipelineLog = pipelineLog;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -770,6 +778,13 @@ public class ProjectRunner
             // project screen does not need to scan log text for run boundaries.
             try { _ = _bus?.EmitRunStartedAsync(info, cli.CliType, execution.StartedAt, plan.SessionToResume, intent.ToString()); }
             catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of run-start failed for {JobId}", jobId); }
+
+            // Open / resume the pipeline-execution record and mark the CORE
+            // "Agent execution" step Running so the Overview pipeline table
+            // shows a live running indicator on the most important step from
+            // t=0 instead of "- -". EnsureRun starts a fresh record when the
+            // prior run already completed (re-issue), so a restart is visible.
+            RecordCoreRunStart(info, execution);
 
             return RunOutcome.Started(execution);
         }
@@ -1754,6 +1769,103 @@ public class ProjectRunner
         return s[..(max - 1)].TrimEnd() + "...";
     }
 
+    /// <summary>
+    /// Open (or resume) the job's pipeline-execution record and mark the CORE
+    /// "Agent execution" step <see cref="PipelineStepStatus.Running"/> at spawn,
+    /// stamping its start time. <see cref="OrchestratorApi.Services.Pipeline.PipelineExecutionLog.EnsureRun"/>
+    /// begins a fresh record only when the prior run already completed, so a
+    /// re-issue surfaces as a new record rather than overwriting silently.
+    /// Best-effort: the record is observability, never a state-machine input,
+    /// so any write failure is swallowed with a debug log.
+    /// </summary>
+    private void RecordCoreRunStart(TaskInfo info, CliExecution execution)
+    {
+        if (_pipelineLog == null) return;
+        try
+        {
+            _pipelineLog.EnsureRun(
+                info.FolderPath,
+                OrchestratorApi.Services.Pipeline.PipelineCatalogue.Standard,
+                ProjectName,
+                info.Id);
+            _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+            {
+                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
+                Kind = StepKind.Core,
+                Model = execution.Model ?? info.Model,
+                Status = PipelineStepStatus.Running,
+                StartedAt = execution.StartedAt,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to record CORE run-start for {JobId}", info.Id);
+        }
+    }
+
+    /// <summary>
+    /// Mark the CORE step terminal in pipeline-execution.json once the agent
+    /// process exits: <see cref="PipelineStepStatus.Passed"/> on a clean exit,
+    /// <see cref="PipelineStepStatus.Failed"/> otherwise, with the run's real
+    /// duration and start/end timestamps. The agent's own verdict
+    /// (DONE / BLOCKED / NEEDS_INPUT) drives the lane transition, not this
+    /// step: CORE answers "did the agent run execute", which is true
+    /// regardless of the verdict, so a clean exit is Passed even on BLOCKED.
+    /// </summary>
+    private void RecordCoreRunFinish(string jobId, CliExecution execution)
+    {
+        if (_pipelineLog == null) return;
+        try
+        {
+            var info = _scanner.FindJob(jobId, Entry.Path);
+            var folder = info?.FolderPath;
+            if (string.IsNullOrEmpty(folder)) return;
+
+            // Resume the record opened at spawn. EnsureRun only re-creates the
+            // file in the rare case the start write was lost, so the finished
+            // step still lands and the row is never left blank.
+            _pipelineLog.EnsureRun(
+                folder,
+                OrchestratorApi.Services.Pipeline.PipelineCatalogue.Standard,
+                ProjectName,
+                jobId);
+
+            var startedAt = execution.StartedAt;
+            var durationMs = execution.DurationSeconds is double secs && secs > 0
+                ? (long)Math.Round(secs * 1000)
+                : Math.Max(0, (long)(DateTime.UtcNow - startedAt).TotalMilliseconds);
+            var completedAt = startedAt.AddMilliseconds(durationMs);
+
+            var passed = string.Equals(execution.Status, "completed", StringComparison.OrdinalIgnoreCase)
+                && execution.ExitCode is null or 0;
+
+            _pipelineLog.RecordStep(folder, new PipelineStepExecution
+            {
+                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
+                Kind = StepKind.Core,
+                Model = execution.Model ?? info?.Model,
+                Status = passed ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+                StartedAt = startedAt,
+                CompletedAt = completedAt,
+                DurationMs = durationMs,
+                Verdict = execution.RunOutcome,
+                Reason = passed ? null : DescribeCoreFailure(execution),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to record CORE run-finish for {JobId}", jobId);
+        }
+    }
+
+    private static string DescribeCoreFailure(CliExecution execution)
+    {
+        var status = string.IsNullOrWhiteSpace(execution.Status) ? "unknown" : execution.Status;
+        return execution.ExitCode is int code
+            ? $"agent run {status} (exit {code})"
+            : $"agent run {status}";
+    }
+
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {
         var activeJobId = _activeJobId;
@@ -1792,6 +1904,13 @@ public class ProjectRunner
             {
                 _sessions.UpdateLastUsage(jobId, usage, Entry.Path);
             }
+
+            // Mark the CORE "Agent execution" step done in pipeline-execution.json
+            // with its real duration / start+end times. Without this the step
+            // stayed Running (or Pending) forever while the later aspect rows
+            // showed completed - the bug this addresses. Best-effort; the record
+            // is observability, never a state-machine input.
+            RecordCoreRunFinish(jobId, execution);
 
             // Mirror run-finish + agent-side token usage onto the bus. We emit
             // these even before the post-run policy and lane move so a crash

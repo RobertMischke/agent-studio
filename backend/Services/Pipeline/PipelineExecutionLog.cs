@@ -56,7 +56,61 @@ public sealed class PipelineExecutionLog
         string jobId,
         DateTime? nowUtc = null)
     {
-        var started = nowUtc ?? DateTime.UtcNow;
+        var record = BuildFresh(pipeline, project, jobId, nowUtc ?? DateTime.UtcNow);
+        WriteAtomic(jobFolderPath, record);
+        return record;
+    }
+
+    /// <summary>
+    /// Return the in-flight execution record for this job, or begin a fresh
+    /// one when none exists yet or the prior run already completed. Unlike
+    /// <see cref="Begin"/> (which always overwrites), this preserves an
+    /// in-progress record so a step recorded by an earlier stage of the SAME
+    /// run is not clobbered: the core agent run marks its step
+    /// <see cref="PipelineStepStatus.Running"/> at spawn and
+    /// <see cref="PipelineStepStatus.Passed"/> / <see cref="PipelineStepStatus.Failed"/>
+    /// at exit (in <c>ProjectRunner</c>), then the later aspect stage opens
+    /// the same file in <c>ReviewDecisionOrchestrator</c>; without this the
+    /// aspect stage's <see cref="Begin"/> reset the core step back to
+    /// <see cref="PipelineStepStatus.Pending"/> and it never showed as done.
+    ///
+    /// A prior record that is already
+    /// <see cref="PipelineExecutionRecord.IsComplete"/> (or that belongs to a
+    /// different pipeline / job) is treated as a finished run, so the next
+    /// call starts a new execution. That makes a pipeline re-run / re-issue
+    /// observable as a fresh record with a new <see cref="PipelineExecutionRecord.StartedAt"/>
+    /// rather than a silent overwrite of the previous run's values.
+    /// </summary>
+    public PipelineExecutionRecord EnsureRun(
+        string jobFolderPath,
+        TaskPipeline pipeline,
+        string project,
+        string jobId,
+        DateTime? nowUtc = null)
+    {
+        var lockObj = _locks.GetOrAdd(NormalizeKey(jobFolderPath), _ => new object());
+        lock (lockObj)
+        {
+            var current = TryRead(jobFolderPath);
+            if (current != null
+                && !current.IsComplete
+                && string.Equals(current.PipelineId, pipeline.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(current.JobId, jobId, StringComparison.Ordinal))
+            {
+                return current;
+            }
+            var record = BuildFresh(pipeline, project, jobId, nowUtc ?? DateTime.UtcNow);
+            WriteAtomic(jobFolderPath, record);
+            return record;
+        }
+    }
+
+    private static PipelineExecutionRecord BuildFresh(
+        TaskPipeline pipeline,
+        string project,
+        string jobId,
+        DateTime started)
+    {
         var steps = new List<PipelineStepExecution>();
         foreach (var step in pipeline.AllSteps)
         {
@@ -68,7 +122,7 @@ public sealed class PipelineExecutionLog
                 Status = step.Stub ? PipelineStepStatus.Planned : PipelineStepStatus.Pending,
             });
         }
-        var record = new PipelineExecutionRecord
+        return new PipelineExecutionRecord
         {
             PipelineId = pipeline.Id,
             PipelineVersion = pipeline.Version,
@@ -77,8 +131,6 @@ public sealed class PipelineExecutionLog
             StartedAt = started,
             Steps = steps,
         };
-        WriteAtomic(jobFolderPath, record);
-        return record;
     }
 
     /// <summary>

@@ -658,10 +658,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Overview pipeline view can show "ran 4 aspects in N ms, used X
         // tokens" without having to reconstruct it from cli-output.log.
         // The aspect runner records each step's outcome inside RunAsync;
-        // we own the start / complete marks. Stand-alone tests that wire
-        // the orchestrator without a PipelineExecutionLog skip this
-        // entirely (the recorder is fully optional).
-        _pipelineLog?.Begin(current.FolderPath, PipelineCatalogue.Standard, entry.Name, current.Id);
+        // we own the complete mark. Stand-alone tests that wire the
+        // orchestrator without a PipelineExecutionLog skip this entirely
+        // (the recorder is fully optional).
+        //
+        // EnsureRun (not Begin): the core agent run already opened this
+        // record in ProjectRunner and stamped the CORE "Agent execution"
+        // step with its real duration/outcome. Begin would overwrite the
+        // file and reset CORE to Pending - the bug where CORE showed "- -"
+        // forever while the aspect rows below it completed. EnsureRun
+        // resumes the in-flight record so CORE survives, and only begins a
+        // fresh one when no run record exists yet (legacy / hand-moved job).
+        _pipelineLog?.EnsureRun(current.FolderPath, PipelineCatalogue.Standard, entry.Name, current.Id);
 
         // Per-project pipeline config: drop aspects the project disabled and
         // route each remaining aspect's CLI call to its configured model
