@@ -41,21 +41,22 @@ import * as path from 'node:path';
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CARD_SCSS_PATH = path.join(
   REPO_ROOT,
-  'frontend/src/app/features/board/components/job-card/job-card.component.scss'
+  // job-card was renamed to task-card in the Job->Task rename.
+  'frontend/src/app/features/board/components/task-card/task-card.component.scss'
 );
 const COLUMN_SCSS_PATH = path.join(
   REPO_ROOT,
-  // job-column moved into its own folder during the folder-per-
-  // component refactor.
-  'frontend/src/app/features/board/components/job-column/job-column.scss'
+  // job-column was renamed to task-column (folder + class prefix on the
+  // card; the .column__drop-zone selector kept its name).
+  'frontend/src/app/features/board/components/task-column/task-column.scss'
 );
 
 function loadScss(p: string): string {
   return fs.readFileSync(p, 'utf8');
 }
 
-// The production SCSS uses :host(.drag-source) .job-card; for a plain
-// HTML harness we mirror that with .drag-source .job-card so the same
+// The production SCSS uses :host(.drag-source) .task-card; for a plain
+// HTML harness we mirror that with .drag-source .task-card so the same
 // rule list is computable on the test card. Other selectors are bare CSS.
 function adaptForHarness(scss: string): string {
   return scss.replace(/:host\((\.[a-zA-Z0-9_-]+)\)\s+/g, '$1 ');
@@ -71,8 +72,8 @@ const HARNESS_HTML = `<!doctype html>
     <div class="column__header"><h2 class="column__title">Ready</h2></div>
     <div class="column__body">
       <div class="column__drop-zone column__drop-zone--active" data-testid="dropzone"></div>
-      <div class="job-card job-card--2-ready" data-testid="card">
-        <div class="job-card__title">test card</div>
+      <div class="task-card task-card--2-ready" data-testid="card">
+        <div class="task-card__title">test card</div>
       </div>
       <div class="column__drop-zone" data-testid="dropzone-idle"></div>
     </div>
@@ -99,7 +100,7 @@ plainTest.describe('Drag-and-drop motion CSS contract (static harness)', () => {
     // the column__drop-zone::before glow underneath the card, but the
     // card's own transition list is still the cleanest spot to pin the
     // motion rule: a future refactor that adds `transition: all` or
-    // `background-color 0.x ease` to .job-card would re-introduce the
+    // `background-color 0.x ease` to .task-card would re-introduce the
     // exact symptom.
     expect(cardTransition, `card transitionProperty: ${cardTransition}`).not.toContain('background');
     expect(cardTransition, `card transitionProperty: ${cardTransition}`).not.toContain('filter');
