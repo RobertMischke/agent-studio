@@ -229,6 +229,17 @@ public record TaskInfo
     /// <c>"tags"</c>; absent or null on disk means an empty list.
     /// </summary>
     public List<string> Tags { get; init; } = [];
+
+    /// <summary>
+    /// F34: structured cross-references to other tasks, keyed by F33 stable
+    /// keys (<c>ATP-19</c>). Four relation kinds — dependsOn / relatedTo /
+    /// blockedBy / supersedes (see <see cref="TaskReferences"/>). Stored as the
+    /// <c>"references"</c> object in <c>job.json</c>; the scanner surfaces an
+    /// empty instance when the field is absent so consumers never see null.
+    /// Set atomically through <c>PUT /api/tasks/{id}/references</c> after
+    /// validation (keys must exist, no self-reference, dependsOn stays a DAG).
+    /// </summary>
+    public TaskReferences References { get; init; } = new();
 }
 
 public record TaskOutcomeIssue

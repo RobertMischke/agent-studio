@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
 import { api } from '../helpers/api';
-import { createJob } from '../helpers/jobs';
 
 /**
  * F32 — Raw-text (Markdown source) viewer must stay readable in both themes.
@@ -30,9 +29,39 @@ async function pickWatchPath(): Promise<string> {
   return paths[0].path;
 }
 
+interface CreateTaskInput {
+  title: string;
+  watchPath: string;
+  cliType?: string;
+  agent?: string;
+  promptMarkdown?: string;
+  targetState?: string;
+}
+
+// The shared helpers/jobs.ts createJob still POSTs the renamed `/api/jobs`
+// route (404 on the current backend); this spec talks to `/api/tasks`
+// directly so the regression guard stays green independent of that
+// repo-wide route migration.
+async function createTask(input: CreateTaskInput): Promise<{ id: string }> {
+  return api<{ id: string }>('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: '',
+      title: input.title,
+      watchPath: input.watchPath,
+      agent: input.agent ?? 'claude',
+      cliType: input.cliType ?? 'claude',
+      model: null,
+      promptMarkdown: input.promptMarkdown ?? null,
+      targetState: input.targetState ?? '2-ready',
+      fixture: true
+    })
+  });
+}
+
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch { /* best-effort cleanup */ }
@@ -86,7 +115,7 @@ test.describe('F32 — Raw-text viewer stays readable across themes', () => {
   for (const theme of ['dark', 'light'] as const) {
     test(`source-mode textarea has contrasting fg/bg (${theme})`, async ({ page }, testInfo) => {
       const watchPath = await pickWatchPath();
-      const job = await createJob({
+      const job = await createTask({
         title: `f32-raw-text-${theme}-${Date.now()}`,
         watchPath,
         cliType: 'claude',
@@ -102,7 +131,9 @@ test.describe('F32 — Raw-text viewer stays readable across themes', () => {
         await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
         await setTheme(page, theme);
 
-        // F48: open the prompt editor from the Files-tab card.
+        // F48: open the prompt editor from the Files-tab card. The detail
+        // pane opens on the Overview tab, so select the Files tab first.
+        await page.getByTestId('prompt-tab-description').click();
         await page.getByTestId('file-card-prompt-edit').click();
 
         const editor = page.getByTestId('prompt-editor');

@@ -251,7 +251,8 @@ public class TaskScannerService : ITaskScanner
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, state, jobDir),
                 TaskType = ReadTaskType(raw),
-                Tags = ReadTags(raw)
+                Tags = ReadTags(raw),
+                References = ReadReferences(raw)
             };
         }
         catch (Exception ex)
