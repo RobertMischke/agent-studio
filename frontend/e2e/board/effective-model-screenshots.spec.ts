@@ -47,7 +47,7 @@ test.describe('effective model screenshots', () => {
     await setDefaults(owner.id, null, null);
 
     const defaultTitle = `effective-model-DEFAULT-${Date.now()}`;
-    await api('/api/jobs/', {
+    await api('/api/tasks/', {
       method: 'POST',
       body: JSON.stringify({
         title: defaultTitle,
@@ -59,7 +59,7 @@ test.describe('effective model screenshots', () => {
     });
 
     const explicitTitle = `effective-model-EXPLICIT-${Date.now()}`;
-    await api('/api/jobs/', {
+    await api('/api/tasks/', {
       method: 'POST',
       body: JSON.stringify({
         title: explicitTitle,
@@ -75,8 +75,8 @@ test.describe('effective model screenshots', () => {
     await setDefaults(owner.id, 'claude', 'claude-opus-4-7');
 
     await page.goto('/');
-    const defaultCard = page.locator('[data-testid="job-card"]', { hasText: defaultTitle });
-    const explicitCard = page.locator('[data-testid="job-card"]', { hasText: explicitTitle });
+    const defaultCard = page.locator('[data-testid="task-card"]', { hasText: defaultTitle });
+    const explicitCard = page.locator('[data-testid="task-card"]', { hasText: explicitTitle });
     await expect(defaultCard).toBeVisible();
     await expect(explicitCard).toBeVisible();
 

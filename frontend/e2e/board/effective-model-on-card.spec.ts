@@ -58,7 +58,7 @@ test.describe('job-card effective model', () => {
     await setDefaults(owner.id, null, null);
 
     const title = `effective-default-${Date.now()}`;
-    await api('/api/jobs/', {
+    await api('/api/tasks/', {
       method: 'POST',
       body: JSON.stringify({
         title,
@@ -74,17 +74,17 @@ test.describe('job-card effective model', () => {
     await setDefaults(owner.id, 'claude', 'claude-opus-4-7');
 
     await page.goto('/');
-    const card = page.locator('[data-testid="job-card"]', { hasText: title });
+    const card = page.locator('[data-testid="task-card"]', { hasText: title });
     await expect(card).toBeVisible();
 
-    const chip = card.locator('[data-testid="job-card-effective-model"]');
+    const chip = card.locator('[data-testid="task-card-effective-model"]');
     await expect(chip).toBeVisible();
     await expect(chip).toHaveAttribute('data-model-source', 'default');
     await expect(chip).toContainText('opus 4.7');
     // The literal `agent` value ("human") must NOT leak into the chip.
     await expect(chip).not.toContainText('human');
     // Italics carries the "(default)" cue.
-    const fontStyle = await chip.locator('.job-card__effective-model-name').evaluate(
+    const fontStyle = await chip.locator('.task-card__effective-model-name').evaluate(
       (el) => getComputedStyle(el).fontStyle
     );
     expect(fontStyle).toBe('italic');
@@ -93,7 +93,7 @@ test.describe('job-card effective model', () => {
   test('renders the explicit model when cliType/model are set on the job', async ({ page }) => {
     const watch = await ensureWatchPath();
     const title = `effective-explicit-${Date.now()}`;
-    await api('/api/jobs/', {
+    await api('/api/tasks/', {
       method: 'POST',
       body: JSON.stringify({
         title,
@@ -107,15 +107,15 @@ test.describe('job-card effective model', () => {
     });
 
     await page.goto('/');
-    const card = page.locator('[data-testid="job-card"]', { hasText: title });
+    const card = page.locator('[data-testid="task-card"]', { hasText: title });
     await expect(card).toBeVisible();
 
-    const chip = card.locator('[data-testid="job-card-effective-model"]');
+    const chip = card.locator('[data-testid="task-card-effective-model"]');
     await expect(chip).toBeVisible();
     await expect(chip).toHaveAttribute('data-model-source', 'explicit');
     await expect(chip).toContainText('gpt-5-codex');
     // Explicit models render in upright type, not italic.
-    const fontStyle = await chip.locator('.job-card__effective-model-name').evaluate(
+    const fontStyle = await chip.locator('.task-card__effective-model-name').evaluate(
       (el) => getComputedStyle(el).fontStyle
     );
     expect(fontStyle).toBe('normal');
