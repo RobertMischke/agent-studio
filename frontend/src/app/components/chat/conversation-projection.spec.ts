@@ -545,5 +545,6 @@ describe('projectConversation', () => {
     expect(CONVERSATION_EVENT_KINDS).toContain('traceLink');
     expect(CONVERSATION_EVENT_KINDS).toContain('workbench.debug');
     expect(CONVERSATION_EVENT_KINDS).toContain('system.schemaDrift');
+    expect(CONVERSATION_EVENT_KINDS).toContain('feedback.queued');
   });
 });

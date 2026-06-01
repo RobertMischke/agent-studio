@@ -229,6 +229,29 @@
           </li>
         }
 
+        @case ('feedbackQueued') {
+          <li class="conv__row conv__row--feedback"
+              data-testid="conversation-feedback-queued"
+              [attr.data-mode]="row.event.mode"
+              [attr.data-parent-lane]="row.event.parentLane">
+            <span class="feedback__glyph" aria-hidden="true">{{ feedbackMeta[row.event.mode].glyph }}</span>
+            <span class="feedback__verb">{{ feedbackMeta[row.event.mode].verb }}</span>
+            <span class="feedback__label">{{ row.event.label }}</span>
+            @if (row.event.followUpJobId) {
+              <button type="button"
+                      class="feedback__open"
+                      data-testid="conversation-feedback-open-followup"
+                      [appTooltip]="'Open the queued follow-up task'"
+                      (click)="emitOpenFollowUp(row.event.followUpJobId)">open in queue</button>
+            }
+            <button type="button"
+                    class="feedback__trace"
+                    data-testid="conversation-feedback-open-trace"
+                    [appTooltip]="'Open the source range in Trace mode'"
+                    (click)="emitOpenTrace(row.event.rawRange)">trace</button>
+          </li>
+        }
+
         @case ('image') {
           <li class="conv__row conv__row--image"
               data-testid="conversation-artifact-image">

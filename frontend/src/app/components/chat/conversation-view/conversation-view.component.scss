@@ -373,6 +373,44 @@
   color: color-mix(in srgb, currentColor 65%, transparent);
 }
 
+/* Queued feedback marker (closed / under-review task) */
+.conv__row--feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px dashed color-mix(in srgb, currentColor 22%, transparent);
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  font-size: 12px;
+  color: color-mix(in srgb, currentColor 75%, transparent);
+}
+.conv__row--feedback[data-mode='promote'] {
+  border-style: solid;
+  border-color: color-mix(in srgb, #6366f1 35%, transparent);
+  background: color-mix(in srgb, #6366f1 8%, transparent);
+}
+.feedback__verb {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.feedback__label { color: color-mix(in srgb, currentColor 90%, transparent); margin-right: auto; }
+.feedback__open, .feedback__trace {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  color: inherit;
+}
+.feedback__open:hover, .feedback__trace:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+
 /* Image artefact */
 .conv__row--image .image {
   display: flex;

@@ -9,6 +9,7 @@ import type {
   ArtifactImageEvent,
   ConversationEvent,
   ConversationEventSeverity,
+  FeedbackQueuedEvent,
   MessageEvent,
   MetricTokenEvent,
   OrchestratorDecisionEvent,
@@ -66,9 +67,17 @@ type RenderRow =
   | { kind: 'captureFail'; id: string; event: SystemCaptureFailEvent }
   | { kind: 'parserWarning'; id: string; event: SystemParserWarningEvent }
   | { kind: 'schemaDrift'; id: string; event: SystemSchemaDriftEvent }
+  | { kind: 'feedbackQueued'; id: string; event: FeedbackQueuedEvent }
   | { kind: 'image'; id: string; event: ArtifactImageEvent }
   | { kind: 'tokenMetric'; id: string; event: MetricTokenEvent }
   | { kind: 'traceLink'; id: string; event: TraceLinkEvent };
+
+/** Glyph + leading verb for the compact `feedback.queued` marker, keyed by composer mode. */
+const FEEDBACK_MODE_META: Record<FeedbackQueuedEvent['mode'], { glyph: string; verb: string }> = {
+  ask: { glyph: '💬', verb: 'asked' },
+  defer: { glyph: '🕒', verb: 'deferred' },
+  promote: { glyph: '⤴', verb: 'promoted' },
+};
 
 const MESSAGE_KINDS = new Set<MessageEvent['kind']>([
   'message.user',
@@ -173,6 +182,8 @@ export class ConversationViewComponent {
 
   readonly openTrace = output<RawLineRange | null>();
   readonly openVerboseDebug = output<void>();
+  /** Raised when the user opens the queued / re-opened follow-up of a `feedback.queued` row. */
+  readonly openFollowUp = output<string>();
 
   // Sets stay small enough that copy-on-write is fine; they only mutate on
   // user clicks ("show more", "expand"), not on every signal pass.
@@ -345,6 +356,9 @@ export class ConversationViewComponent {
         case 'system.schemaDrift':
           out.push({ kind: 'schemaDrift', id: e.id, event: e });
           break;
+        case 'feedback.queued':
+          out.push({ kind: 'feedbackQueued', id: e.id, event: e });
+          break;
         case 'artifact.image':
           out.push({ kind: 'image', id: e.id, event: e });
           break;
@@ -407,6 +421,13 @@ export class ConversationViewComponent {
   emitOpenTrace(range?: RawLineRange | null): void {
     this.openTrace.emit(range ?? null);
   }
+
+  emitOpenFollowUp(jobId: string | null | undefined): void {
+    if (jobId) this.openFollowUp.emit(jobId);
+  }
+
+  /** Template-side handle for {@link FEEDBACK_MODE_META}. */
+  readonly feedbackMeta = FEEDBACK_MODE_META;
 
   emitOpenVerboseDebug(): void {
     this.openVerboseDebug.emit();

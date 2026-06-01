@@ -79,7 +79,10 @@ export type ConversationEventKind =
   | 'runMarker'
   | 'traceLink'
   // System / parser edge cases beyond the v6 baseline
-  | 'system.schemaDrift';
+  | 'system.schemaDrift'
+  // Queued feedback on a closed / under-review task
+  // (see feedback-queued-from-chat.md)
+  | 'feedback.queued';
 
 interface ConversationEventBase {
   /** Stable id, deterministic per source range so renderers can dedupe. */
@@ -355,6 +358,37 @@ export interface SystemSchemaDriftEvent extends ConversationEventBase {
   rawLink?: TraceLink;
 }
 
+/**
+ * A `feedback.queued` row is the compact marker the user sees after typing
+ * into the chat of a task that is no longer being actively worked
+ * (`4-auto-review`, `5-human-review`, `6-completed`, `7-archive`). It does
+ * not restart the task; it records what the composer decided to do with the
+ * comment. The grammar is specified in
+ * `docs/mockups/chat-window-next-gen/feedback-queued-from-chat.md`.
+ *
+ * `Ask` answered the comment read-only (no source mutation); `Defer` queued a
+ * follow-up task; `Promote` re-opened the closed task into `3-progress`. The
+ * row stays low-emphasis: raw queue routing metadata lives behind Trace, not
+ * in the compact body.
+ */
+export interface FeedbackQueuedEvent extends ConversationEventBase {
+  kind: 'feedback.queued';
+  /** Which composer mode produced this row. */
+  mode: 'ask' | 'defer' | 'promote';
+  /** Lane the parent task was in when the user pressed Send. */
+  parentLane: '4-auto-review' | '5-human-review' | '6-completed' | '7-archive';
+  /**
+   * Human-readable marker copy ("I'll get to this when there's bandwidth",
+   * "answered inline · no code changes", "merged into follow-up #98"). Plain
+   * English — not a sentinel the parser depends on.
+   */
+  label: string;
+  /** For Defer/Promote, the slug of the follow-up (or re-opened) task. */
+  followUpJobId?: string | null;
+  /** For Ask, true once an inline answer landed. */
+  answered?: boolean;
+}
+
 export interface TaskMarkerEvent extends ConversationEventBase {
   kind: 'taskMarker';
   /** `start`, `complete`, `review`, `archived`, `noop`, `blocked`, `needs-input`. */
@@ -402,6 +436,7 @@ export type ConversationEvent =
   | SystemCaptureFailEvent
   | SystemParserWarningEvent
   | SystemSchemaDriftEvent
+  | FeedbackQueuedEvent
   | ArtifactImageEvent
   | MetricTokenEvent
   | WorkbenchSummaryEvent
@@ -426,6 +461,7 @@ export const CONVERSATION_EVENT_KINDS: readonly ConversationEventKind[] = [
   'system.captureFail',
   'system.parserWarning',
   'system.schemaDrift',
+  'feedback.queued',
   'artifact.image',
   'metric.token',
   'workbench.summary',

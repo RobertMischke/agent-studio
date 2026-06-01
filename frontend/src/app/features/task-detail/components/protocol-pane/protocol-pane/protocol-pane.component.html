@@ -390,6 +390,7 @@
                                          [isRunning]="isRunning()"
                                          variant="embedded"
                                          (openTrace)="onConversationOpenTrace($event)"
+                                         (openFollowUp)="onOpenFollowup($event)"
                                          (openVerboseDebug)="onConversationOpenVerboseDebug()" />
                 } @else {
                   @if (featureFlags.nextGenChat() && nextGenChatTraceFallback()) {

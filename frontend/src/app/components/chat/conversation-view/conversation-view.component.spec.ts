@@ -7,6 +7,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ConversationViewComponent } from './conversation-view.component';
 import type {
   ConversationEvent,
+  FeedbackQueuedEvent,
   MessageEvent,
   RawLineRange,
   RunMarkerEvent,
@@ -364,5 +365,69 @@ describe('ConversationViewComponent', () => {
     expect(
       el.querySelector('[data-testid="conversation-message-item-expand"]')
     ).toBeFalsy();
+  });
+
+  function deferFeedback(): FeedbackQueuedEvent {
+    return {
+      id: 'fq-1',
+      kind: 'feedback.queued',
+      timestamp: '2026-05-05T14:02:00.000Z',
+      rawRange: range(40, 41),
+      mode: 'defer',
+      parentLane: '6-completed',
+      label: "I'll get to this when there's bandwidth",
+      followUpJobId: 'add-dark-theme-screenshots',
+    };
+  }
+
+  it('renders a compact feedback.queued marker for a deferred comment', async () => {
+    const fixture = await makeFixture([userMessage(), deferFeedback()]);
+    const el: HTMLElement = fixture.nativeElement;
+    const row = el.querySelector('[data-testid="conversation-feedback-queued"]');
+    expect(row).toBeTruthy();
+    expect(row?.getAttribute('data-mode')).toBe('defer');
+    expect(row?.getAttribute('data-parent-lane')).toBe('6-completed');
+    expect(row?.textContent).toContain('deferred');
+    expect(row?.textContent).toContain("bandwidth");
+    // Defer carries an "open in queue" affordance to the follow-up task.
+    expect(
+      el.querySelector('[data-testid="conversation-feedback-open-followup"]')
+    ).toBeTruthy();
+  });
+
+  it('emits openFollowUp with the follow-up job id when the queue link is clicked', async () => {
+    const fixture = await makeFixture([deferFeedback()]);
+    const emitted: string[] = [];
+    fixture.componentInstance.openFollowUp.subscribe((id) => emitted.push(id));
+    const btn = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      '[data-testid="conversation-feedback-open-followup"]'
+    );
+    btn?.click();
+    expect(emitted).toEqual(['add-dark-theme-screenshots']);
+  });
+
+  it('renders an answered Ask marker without a queue link', async () => {
+    const ask: FeedbackQueuedEvent = {
+      id: 'fq-2',
+      kind: 'feedback.queued',
+      timestamp: '2026-05-05T14:05:00.000Z',
+      rawRange: range(42, 43),
+      mode: 'ask',
+      parentLane: '7-archive',
+      label: 'answered inline · no code changes',
+      answered: true,
+    };
+    const fixture = await makeFixture([ask]);
+    const el: HTMLElement = fixture.nativeElement;
+    const row = el.querySelector('[data-testid="conversation-feedback-queued"]');
+    expect(row?.getAttribute('data-mode')).toBe('ask');
+    expect(row?.textContent).toContain('asked');
+    expect(
+      el.querySelector('[data-testid="conversation-feedback-open-followup"]')
+    ).toBeFalsy();
+    // Trace stays reachable on every marker.
+    expect(
+      el.querySelector('[data-testid="conversation-feedback-open-trace"]')
+    ).toBeTruthy();
   });
 });
