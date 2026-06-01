@@ -107,6 +107,19 @@
       font-size: 12px;
       color: var(--studio-fg-dim, #94a3b8);
     }
+    // F35: lane-header sort-strategy glyph. Dimmed so it reads as metadata,
+    // not an action; brighter on the 'mixed' marker to flag the ambiguity.
+    .column__sort-indicator {
+      flex-shrink: 0;
+      font-size: 13px;
+      line-height: 1;
+      color: var(--studio-fg-dim, #94a3b8);
+      cursor: default;
+      opacity: 0.85;
+
+      &[data-strategy='manual'] { color: var(--studio-accent, #60a5fa); opacity: 1; }
+      &[data-strategy='mixed'] { color: var(--studio-warn, #f59e0b); opacity: 1; }
+    }
     .column__body {
       display: flex;
       flex-direction: column;

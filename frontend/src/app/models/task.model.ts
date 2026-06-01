@@ -701,6 +701,8 @@ export interface ProjectSnapshot {
     autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
     runnerMode: string | null;
     orchestratorModel: string | null;
+    /** F35: every lane resolved to its effective sort strategy (defaults filled in). */
+    laneSortStrategies?: Record<string, string>;
   };
   runnerStatus: ProjectRunnerStatus | null;
   orchestratorLogTail: OrchestratorLogEntry[];

@@ -17,11 +17,17 @@ import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/p
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from '../../../../components/tooltip';
+import {
+  SORTABLE_LANES,
+  USER_VISIBLE_LANE_SORT_STRATEGIES,
+  laneSortStrategyMeta,
+} from '../../../../services/lane-sort.util';
 interface ProjectSettingsRow {
   autoCommit: boolean;
   autoPushStrategy: AutoPushStrategy;
   runnerMode: string | null;
   orchestratorModel: string | null;
+  laneSortStrategies: Record<string, string>;
 }
 
 type AutoPushStrategy = 'never' | 'on-completed' | 'always-immediate';
@@ -92,6 +98,14 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   autoCommitDraft = false;
   autoPushStrategyDraft: AutoPushStrategy = 'on-completed';
   orchModelDraft = '';
+
+  /** F35: per-lane sort-strategy selection, keyed by lane state. */
+  readonly laneSortDraft: Record<string, string> = {};
+  readonly sortableLanes = SORTABLE_LANES;
+  readonly laneSortOptions = USER_VISIBLE_LANE_SORT_STRATEGIES;
+  laneSortMeta(strategy: string | null | undefined) {
+    return laneSortStrategyMeta(strategy);
+  }
 
   /**
    * Mode buttons. The four runner modes are: manual (off), auto-single
@@ -237,13 +251,18 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
           autoCommit: snap.settings.autoCommit,
           autoPushStrategy: snap.settings.autoPushStrategy,
           runnerMode: snap.settings.runnerMode,
-          orchestratorModel: snap.settings.orchestratorModel
+          orchestratorModel: snap.settings.orchestratorModel,
+          laneSortStrategies: snap.settings.laneSortStrategies ?? {}
         };
         this.settings.set(row);
         if (this.autoCommitDraft !== row.autoCommit) this.autoCommitDraft = row.autoCommit;
         if (this.autoPushStrategyDraft !== row.autoPushStrategy) this.autoPushStrategyDraft = row.autoPushStrategy;
         const wantedModel = row.orchestratorModel ?? '';
         if (this.orchModelDraft !== wantedModel) this.orchModelDraft = wantedModel;
+        for (const lane of this.sortableLanes) {
+          const resolved = row.laneSortStrategies[lane.state] ?? 'manual';
+          if (this.laneSortDraft[lane.state] !== resolved) this.laneSortDraft[lane.state] = resolved;
+        }
 
         // RunnerStatus signal expects the full RunnerStatus shape; the
         // snapshot only ships this project's slot, so wrap it. Other
@@ -323,6 +342,15 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   onOrchModelChange(): void {
     const model = this.orchModelDraft.trim();
     this.jobService.setProjectOrchestratorModel(this.projectName(), model || null).subscribe({
+      next: () => this.refreshAll(true),
+      error: () => this.refreshAll(true)
+    });
+  }
+
+  /** F35: persist one lane's sort strategy, then refresh the resolved map. */
+  onLaneSortChange(lane: string): void {
+    const strategy = this.laneSortDraft[lane] ?? 'manual';
+    this.jobService.setLaneSortStrategy(this.projectName(), lane, strategy).subscribe({
       next: () => this.refreshAll(true),
       error: () => this.refreshAll(true)
     });

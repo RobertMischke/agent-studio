@@ -49,6 +49,13 @@
         <span class="column__icon">{{ icon() }}</span>
         <h2 class="column__title">{{ title() }}</h2>
         <span class="column__count">{{ jobs().length }}</span>
+        @if (sortIndicator(); as sort) {
+          <span class="column__sort-indicator"
+                [attr.data-testid]="'lane-sort-indicator-' + state()"
+                [attr.data-strategy]="sortStrategy()"
+                [appTooltip]="sort.tooltip"
+                aria-hidden="true">{{ sort.icon }}</span>
+        }
         @if (infoTopic(); as topic) {
           <app-info-button [topic]="topic" />
         }

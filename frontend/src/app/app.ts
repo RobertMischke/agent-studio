@@ -97,6 +97,7 @@ import { MediaLightboxComponent } from './components/media-lightbox/media-lightb
 import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
+import { displayStateToLaneKey } from './services/lane-sort.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
@@ -1637,6 +1638,46 @@ export class App implements OnInit, OnDestroy {
     const proj = this.laneAutoProject(state, jobs);
     if (!proj) return null;
     return this.jobService.runnerStatus().projects[proj] ?? null;
+  }
+
+  /**
+   * F35: resolve the sort strategy that governs a board lane, for the
+   * lane-header indicator + drag gate. The board can mix projects in one
+   * lane, so we consider the projects that actually have cards in the lane
+   * (falling back to the active project filter for an empty lane). When
+   * they agree we return that strategy; when they disagree we return
+   * `'mixed'`. Empty string means no strategy data is loaded yet.
+   */
+  laneSortStrategy(state: string, jobs: TaskInfo[]): string {
+    const byProject = this.jobService.laneSortStrategies();
+    const laneKey = displayStateToLaneKey(state);
+    const projects = new Set<string>();
+    for (const j of jobs) {
+      if (j.projectName) projects.add(j.projectName);
+    }
+    if (projects.size === 0) {
+      for (const p of this.activeProjects()) projects.add(p);
+    }
+    const strategies = new Set<string>();
+    for (const p of projects) {
+      const lane = byProject[p]?.[laneKey];
+      if (lane) strategies.add(lane);
+    }
+    if (strategies.size === 0) return '';
+    if (strategies.size === 1) return [...strategies][0];
+    return 'mixed';
+  }
+
+  /**
+   * F35: drag-reorder is permitted only on lanes whose resolved strategy is
+   * `manual`. While strategy data is still loading (empty string) we keep
+   * the historical behaviour and allow reorder so the board never flickers
+   * into a disabled state if the settings endpoint is briefly unavailable.
+   */
+  laneReorderDisabled(state: string, jobs: TaskInfo[]): boolean {
+    const strategy = this.laneSortStrategy(state, jobs);
+    if (!strategy) return false;
+    return strategy !== 'manual';
   }
 
   /**

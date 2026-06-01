@@ -8,6 +8,7 @@ import { groupReviewJobs } from '../review-grouping.util';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
+import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
@@ -33,6 +34,13 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   readonly state = input.required<string>();
   readonly jobs = input.required<TaskInfo[]>();
   readonly reorderDisabled = input<boolean>(false);
+  /**
+   * F35: resolved sort strategy governing this lane's card order. Drives
+   * the lane-header indicator icon + tooltip. `'mixed'` is a board-only
+   * marker meaning the active projects disagree on this lane's strategy.
+   * Empty string hides the indicator (e.g. board has no strategy data yet).
+   */
+  readonly sortStrategy = input<string>('');
   readonly collapsed = input<boolean>(false);
   readonly compact = input<boolean>(false);
   readonly archiving = input<boolean>(false);
@@ -78,6 +86,35 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   readonly collapseToggle = output<void>();
   /** Emits the project name when the user clicks the lane's auto chip. */
   readonly autoToggleRequest = output<string>();
+
+  /**
+   * F35: lane-header sort indicator. Returns the glyph + tooltip for the
+   * resolved strategy, or null when no strategy data is available. When the
+   * strategy is non-manual the tooltip explains why drag is disabled; when
+   * the active projects disagree it renders a neutral "mixed" marker.
+   */
+  readonly sortIndicator = computed<{ icon: string; label: string; tooltip: string } | null>(() => {
+    const strategy = this.sortStrategy();
+    if (!strategy) return null;
+    if (strategy === 'mixed') {
+      return {
+        icon: '⇅',
+        label: 'mixed',
+        tooltip:
+          'Auto-sorted — the projects shown in this lane use different sort orders. '
+          + 'Filter to a single project, or set that lane to Manual, to reorder by hand.',
+      };
+    }
+    const meta = laneSortStrategyMeta(strategy);
+    if (isManualStrategy(strategy)) {
+      return { icon: meta.icon, label: meta.label, tooltip: 'Manual order — drag cards to reorder.' };
+    }
+    return {
+      icon: meta.icon,
+      label: meta.label,
+      tooltip: `Auto-sorted by ${meta.label.toLowerCase()}; switch this lane to Manual to reorder.`,
+    };
+  });
 
   /**
    * Three-pill status cluster for the In-Progress lane:

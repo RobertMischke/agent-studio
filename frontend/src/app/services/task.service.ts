@@ -159,6 +159,32 @@ export class TaskService {
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
 
+  /**
+   * F35: resolved per-lane sort strategy for every project, keyed
+   * `projectName -> laneKey -> strategyId`. The board reads this to render
+   * the lane-header indicator and to gate drag-reorder (manual only).
+   * Refreshed on a slow cadence — sort strategy is a rarely-changed
+   * project setting, so polling it at the 2 s board cadence would be waste.
+   */
+  readonly laneSortStrategies = signal<Record<string, Record<string, string>>>({});
+  private laneSortStrategyTick = 0;
+
+  /** Re-read the per-project lane sort strategies into {@link laneSortStrategies}. */
+  refreshLaneSortStrategies(): void {
+    this.getAllProjectSettings().subscribe({
+      next: (all) => {
+        const map: Record<string, Record<string, string>> = {};
+        for (const [project, s] of Object.entries(all)) {
+          if (s.laneSortStrategies) map[project] = s.laneSortStrategies;
+        }
+        this.laneSortStrategies.set(map);
+      },
+      // A settings-fetch failure must not surface a dialog — the board still
+      // renders fine without strategy indicators; they just fall back.
+      error: () => {},
+    });
+  }
+
   refresh(silent = false): void {
     if (!silent) {
       this.loading.set(true);
@@ -1148,10 +1174,38 @@ export class TaskService {
           autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
           runnerMode: string | null;
           orchestratorModel: string | null;
+          // F35: resolved per-lane sort strategy map (every lane key present).
+          laneSortStrategies?: Record<string, string>;
           pipelineSteps?: Record<string, PipelineStepSetting>;
         }
       >
     >(`${this.baseUrl}/projects/settings`);
+  }
+
+  /**
+   * F35: read the resolved per-lane sort strategies for one project. The
+   * `resolved` map has every lane key (defaults filled in); `overrides`
+   * holds only the lanes the operator has explicitly set; `available` is
+   * the user-selectable strategy id list.
+   */
+  getLaneSortStrategies(projectName: string) {
+    return this.http.get<{
+      resolved: Record<string, string>;
+      overrides: Record<string, string>;
+      available: string[];
+    }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/lane-sort-strategies`);
+  }
+
+  /**
+   * F35: write one lane's sort strategy. Pass an empty string to clear the
+   * override (the lane reverts to its built-in default). Returns the
+   * resolved strategy after the write.
+   */
+  setLaneSortStrategy(projectName: string, lane: string, strategy: string) {
+    return this.http.put<{ lane: string; strategy: string; override: string | null }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/lane-sort-strategy`,
+      { lane, strategy },
+    );
   }
 
   /**
@@ -1506,12 +1560,23 @@ export class TaskService {
       return;
     }
 
+    // F35: prime the lane-strategy store immediately so the board shows the
+    // right indicator on first paint, then refresh it on a slow cadence.
+    this.refreshLaneSortStrategies();
+
     this.liveUpdateTimer = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) {
         return;
       }
 
       this.refresh(true);
+
+      // Sort strategy changes rarely; poll it every ~10 s (every 5th tick)
+      // rather than on every board refresh.
+      this.laneSortStrategyTick = (this.laneSortStrategyTick + 1) % 5;
+      if (this.laneSortStrategyTick === 0) {
+        this.refreshLaneSortStrategies();
+      }
     }, intervalMs);
   }
 

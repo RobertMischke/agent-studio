@@ -234,6 +234,38 @@
   font-size: 0.85rem;
 }
 
+// F35: per-lane sort-strategy rows.
+.proj-detail__lane-sort {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.proj-detail__lane-sort-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.proj-detail__lane-sort-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+.proj-detail__lane-sort-icon { font-size: 0.95rem; flex-shrink: 0; }
+.proj-detail__lane-sort-select {
+  flex: 0 0 auto;
+  min-width: 150px;
+  background: rgba(0,0,0,0.30);
+  color: #cdd6f4;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
 .proj-detail__toggle {
   display: inline-flex;
   align-items: center;
