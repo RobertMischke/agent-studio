@@ -229,6 +229,13 @@ public sealed class CrashRecoveryService
         // 3-progress by lastProgressAt. We deliberately read job.json
         // straight from disk: at boot time the TaskScannerService's overlay
         // has not warmed up yet, and we need a single field.
+        //
+        // Cross-lane lookup (drift rule `orphan-detection-checks-other-lanes`,
+        // 2026-05-12 boot-race): the candidate 3-progress folder is skipped
+        // when the same slug already lives in a later lane. That folder is a
+        // mid-move casualty whose real twin already completed; attributing a
+        // rescued commit to it would write the commit-info onto a folder that
+        // is about to be cleaned up.
         var (jobId, jobFolder) = FindMostRecentlyActiveProgressJob(entry);
 
         // C1 (2026-05-22): if there is NO active 3-progress job to
@@ -502,6 +509,12 @@ public sealed class CrashRecoveryService
             var jobJsonPath = Path.Combine(jobFolder, "job.json");
             if (!File.Exists(jobJsonPath)) continue;
 
+            var slug = Path.GetFileName(jobFolder);
+            // Mid-move casualty: same slug already lives in a later lane, so
+            // the real run already finished. Attributing the rescued commit
+            // here would tag a folder that is about to be reconciled away.
+            if (SlugExistsInDownstreamLane(entry.Path, slug)) continue;
+
             try
             {
                 var json = File.ReadAllText(jobJsonPath);
@@ -538,6 +551,30 @@ public sealed class CrashRecoveryService
         }
 
         return (bestId, bestFolder);
+    }
+
+    /// <summary>
+    /// Cross-lane lookup matched to the one in
+    /// <see cref="StaleProgressArchiver"/>: lanes where a finished twin of a
+    /// 3-progress slug can live. 3a-failed-pickup is deliberately excluded so
+    /// a pre-fix phantom marker can never mask a real attribution candidate.
+    /// Drift-watchlist rule <c>orphan-detection-checks-other-lanes</c>.
+    /// </summary>
+    private static readonly string[] DownstreamLanesForOrphanReconciliation =
+    {
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+        TaskStates.Completed,
+        TaskStates.Archive,
+    };
+
+    private static bool SlugExistsInDownstreamLane(string watchPath, string slug)
+    {
+        foreach (var lane in DownstreamLanesForOrphanReconciliation)
+        {
+            if (Directory.Exists(Path.Combine(watchPath, lane, slug))) return true;
+        }
+        return false;
     }
 
     private void AppendRecoveryEntry(RecoveryDecision decision)

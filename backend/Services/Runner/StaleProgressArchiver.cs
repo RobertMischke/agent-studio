@@ -188,6 +188,16 @@ public sealed class StaleProgressArchiver
                 }
 
                 // Routing (failed-pickup elimination, supersedes ADR-0028/0029):
+                //   * mid-move casualty (no job.json AND same slug already in
+                //     a later lane) -> silently delete the empty source folder.
+                //     This is the 2026-05-12 boot-race: a Lane-Move
+                //     3-progress -> 4-auto-review was already complete when the
+                //     backend stopped, but the source folder's residue (the
+                //     skeleton left after Directory.Move side effects, or a
+                //     half-populated re-use of the same slug) survived. The
+                //     real job lives in the later lane; archiving the residue
+                //     as debris would mint a phantom card under
+                //     <slug>-debris-<date>.
                 //   * has job.json + completion sentinel -> finish the missed
                 //     transition to 4-auto-review (unchanged).
                 //   * has job.json, no sentinel            -> the run was
@@ -198,9 +208,18 @@ public sealed class StaleProgressArchiver
                 //     Not a runnable task; archive it to 7-archive with its
                 //     evidence intact instead of parking a card in a dead-end
                 //     lane.
+                //
+                // Cross-lane lookup before orphan-marking (drift rule
+                // `orphan-detection-checks-other-lanes`): every code path that
+                // decides "this is an orphan" must first check whether the same
+                // slug already exists in a later lane.
                 var hasJobJson = File.Exists(Path.Combine(jobFolder, "job.json"));
                 StaleProgressDecision decision;
-                if (hasJobJson && TryFindSentinel(jobFolder, out var keyword))
+                if (!hasJobJson && TryFindSlugInLaterLane(entry.Path, slug, out var twinLane))
+                {
+                    decision = RemoveMidMoveCasualty(entry, slug, twinLane!, now);
+                }
+                else if (hasJobJson && TryFindSentinel(jobFolder, out var keyword))
                 {
                     decision = await RecoverViaTransitionAsync(entry, jobFolder, slug, keyword!, now, ct);
                 }
@@ -224,7 +243,9 @@ public sealed class StaleProgressArchiver
             d.Kind == StaleProgressDecisionKinds.ArchivedDebris ||
             d.Kind == StaleProgressDecisionKinds.ArchiveFailed ||
             d.Kind == StaleProgressDecisionKinds.RecoveredToReview ||
-            d.Kind == StaleProgressDecisionKinds.RecoveryFailed);
+            d.Kind == StaleProgressDecisionKinds.RecoveryFailed ||
+            d.Kind == StaleProgressDecisionKinds.MidMoveCasualtyRemoved ||
+            d.Kind == StaleProgressDecisionKinds.MidMoveCasualtyRemovalFailed);
         _logger.LogInformation(
             "StaleProgressArchiver: completed boot sweep with {Total} candidate(s), {Actionable} actionable.",
             decisions.Count, actionable);
@@ -698,6 +719,87 @@ public sealed class StaleProgressArchiver
         }
     }
 
+    /// <summary>
+    /// Lanes the boot sweep checks for a downstream twin of a no-<c>job.json</c>
+    /// 3-progress folder. A match means the real task already completed its
+    /// move and the source-side residue is a mid-move casualty, not an orphan.
+    /// 3a-failed-pickup is deliberately excluded so a previous phantom marker
+    /// cannot mask a new genuine orphan.
+    /// </summary>
+    private static readonly string[] DownstreamLanesForOrphanReconciliation =
+    {
+        TaskStates.AutoReview,
+        TaskStates.HumanReview,
+        TaskStates.Completed,
+        TaskStates.Archive,
+    };
+
+    /// <summary>
+    /// Cross-lane lookup that prevents the 2026-05-12 boot-race phantom: when
+    /// a 3-progress folder has no <c>job.json</c>, but the same slug already
+    /// lives in a later lane, the source folder is a mid-move casualty and
+    /// must be silently removed instead of being archived as debris (or, in
+    /// the pre-ADR-0051 world, dead-lettered into 3a-failed-pickup).
+    ///
+    /// Drift-watchlist rule <c>orphan-detection-checks-other-lanes</c> tracks
+    /// this contract: every code path that decides "this is an orphan" must
+    /// route through a cross-lane check before acting.
+    /// </summary>
+    private bool TryFindSlugInLaterLane(string watchPath, string slug, out string? foundLane)
+    {
+        foundLane = null;
+        foreach (var lane in DownstreamLanesForOrphanReconciliation)
+        {
+            if (_taskAccess.SlugExistsInLane(watchPath, lane, slug))
+            {
+                foundLane = lane;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Silently delete a mid-move casualty source folder. The real task lives
+    /// in <paramref name="twinLane"/>; the residue in 3-progress carries no
+    /// <c>job.json</c> and would otherwise be archived as debris and mint a
+    /// phantom card. The delete goes through the typed layer so the
+    /// architecture test stays green.
+    /// </summary>
+    private StaleProgressDecision RemoveMidMoveCasualty(
+        WatchPathEntry entry, string slug, string twinLane, DateTime now)
+    {
+        var outcome = _taskAccess.DeleteLaneFolder(entry.Path, TaskStates.Progress, slug);
+        if (outcome.Status != TaskMutationStatus.Applied)
+        {
+            _logger.LogWarning(
+                "StaleProgressArchiver: could not delete mid-move casualty {Slug} in {Project} (twin in {Twin}): {Status} {Message}",
+                slug, entry.Name, twinLane, outcome.Status, outcome.Message);
+            return new StaleProgressDecision
+            {
+                At = now,
+                Kind = StaleProgressDecisionKinds.MidMoveCasualtyRemovalFailed,
+                ProjectName = entry.Name,
+                Slug = slug,
+                TargetState = twinLane,
+                Reason = $"delete of mid-move casualty refused: {outcome.Status} {outcome.Message}"
+            };
+        }
+
+        _logger.LogInformation(
+            "StaleProgressArchiver: silently removed mid-move casualty 3-progress/{Slug} (twin lives in {Twin}) for project {Project}",
+            slug, twinLane, entry.Name);
+        return new StaleProgressDecision
+        {
+            At = now,
+            Kind = StaleProgressDecisionKinds.MidMoveCasualtyRemoved,
+            ProjectName = entry.Name,
+            Slug = slug,
+            TargetState = twinLane,
+            Reason = $"mid-move casualty: same slug already in {twinLane}; deleted residue instead of minting a phantom card"
+        };
+    }
+
     private static StaleProgressDecision Skip(string projectName, string slug, string reason, DateTime at)
         => new()
         {
@@ -791,4 +893,13 @@ public static class StaleProgressDecisionKinds
     public const string ArchivedDebris = "archived-debris";
     /// <summary>Archive of a no-<c>job.json</c> debris folder refused (e.g. target slug already exists).</summary>
     public const string ArchiveFailed = "archive-failed";
+    /// <summary>
+    /// Source folder in <c>3-progress</c> with no <c>job.json</c> was a leftover
+    /// from a Lane-Move that already completed (twin lives in a later lane).
+    /// The residue was silently deleted instead of being archived as debris
+    /// to avoid minting a phantom card. 2026-05-12 boot-race fix.
+    /// </summary>
+    public const string MidMoveCasualtyRemoved = "mid-move-casualty-removed";
+    /// <summary>Delete of a recognised mid-move casualty refused (e.g. Windows file-handle race).</summary>
+    public const string MidMoveCasualtyRemovalFailed = "mid-move-casualty-removal-failed";
 }

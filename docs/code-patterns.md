@@ -273,6 +273,38 @@ goodVariant: LANES_WITH_GIT\b
 severityIfBad: High
 ```
 
+```yaml
+# ---------------------------------------------------------------------------
+# Orphan detection must check whether the same slug already lives in a later
+# lane before marking a 3-progress folder as orphan. On 2026-05-12 a stable
+# restart that interrupted Lane-Moves left 6 phantom folders in
+# 3a-failed-pickup whose real twins were already in 5-human-review: the boot
+# sweep saw a 3-progress folder with no job.json, decided "orphan", and minted
+# <slug>-debris-<date> / <slug>-orphan-<date> markers for jobs that had
+# already completed. Every code path that flags a 3-progress folder as orphan
+# (StaleProgressArchiver's debris path; CrashRecoveryService's orphan-change
+# attribution) must first run a cross-lane lookup against
+# 4-auto-review / 5-human-review / 6-completed / 7-archive. If the slug
+# already exists downstream, the source folder is a mid-move casualty and
+# must be silently reconciled away, not dead-lettered.
+# ---------------------------------------------------------------------------
+id: orphan-detection-checks-other-lanes
+title: Orphan detection must run a cross-lane lookup before flagging
+description: >
+  Code that decides a 3-progress folder is an orphan (debris archive, failed
+  pickup, orphan-change attribution) must first check whether the same slug
+  already lives in a later lane (4-auto-review / 5-human-review / 6-completed /
+  7-archive). Without that check, a Lane-Move that completed seconds before a
+  backend restart leaves a residue in 3-progress that the boot sweep mints
+  into a phantom card. The canonical helpers are
+  `StaleProgressArchiver.TryFindSlugInLaterLane` and
+  `CrashRecoveryService.SlugExistsInDownstreamLane`.
+filePattern: backend/Services/Runner/(StaleProgressArchiver|CrashRecoveryService)\.cs$
+candidateMarker: \b(?:ArchiveAsDebris|ArchiveDebrisFolder|MoveOrphanToFailedPickup|FindMostRecentlyActiveProgressJob)\b
+goodVariant: SlugExistsIn(?:Lane|DownstreamLane)|TryFindSlugInLaterLane|DownstreamLanesForOrphanReconciliation
+severityIfBad: High
+```
+
 ## Adding a rule — checklist
 
 1. **Catch a real incident.** Don't add a rule for a hypothetical drift; add
