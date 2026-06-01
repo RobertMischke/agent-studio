@@ -34,3 +34,7 @@ Hard sentinel matches win over process exit code. This is load-bearing on Window
 | deliberate stop | `stopped` | `interrupted` | `Failed` | stays in `3-progress` | no |
 
 `Partial` is reserved for completed runs that reached review but could not be classified confidently.
+
+## Regression cover
+
+`backend.Tests/RunOutcomeContractTests.cs` locks the contract end to end: each terminal sentinel drives lane, `status.md` `ProtocolResult`, and the failure toast from one classification, and `CodexExitMinusOne_WithSentinel_ClassifiesIdenticallyAcrossAllConsumers` feeds a rendered `cli-output.log` whose exit line reports the Windows kill artifact (`status=failed, exitCode=-1`) and asserts the sentinel still wins for every consumer. This is the case the divergence bug was named after.
