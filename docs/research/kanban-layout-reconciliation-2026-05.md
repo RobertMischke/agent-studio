@@ -114,3 +114,32 @@ The body of this document is preserved as-is; the lane column in the per-task he
 ### Verdict on `fix-kanban-lane-layout-overflow`, refreshed
 
 The original verdict ("queued, not stuck; let the queue replay it once") played out as expected. The task is now in `7-archive`. No supervisor action needed; the recommendation is closed.
+
+## Re-run update, 2026-06-01
+
+The task fired again. Re-checked state and corrected the one weak spot from the 2026-05-14 pass.
+
+### Orphan folder: dedicated follow-up task created
+
+The 2026-05-14 note said "no new follow-up task is required" and leaned on `bug-stale-archiver-creates-phantoms-on-backend-restart-mid-move` to cover the orphan. That was not enough: that task prevents NEW orphans but explicitly scopes OUT backfill cleanup of folders that already exist, and it does not touch the deletion API. So the existing orphan had no tracked owner and no actionable path.
+
+Verified the gap still stands today:
+
+- The orphan `kanban-lane-grouping-collapse-empty-2026-05-05` is still on disk in `7-archive`.
+- `TaskStateMachine.DeleteJob` (`backend/Services/Jobs/TaskStateMachine.cs:378`, formerly `JobStateMachine.DeleteJob`) resolves the folder via `_scanner.FindJob`, which requires `job.json`. The orphan has none, so `DELETE /api/tasks/{id}` still returns 404. Implementing that extension is out of scope for this paperwork-only reconciliation task.
+
+Resolution: created a dedicated follow-up task via the API rather than leaving the item open:
+
+- `extend-deletejob-to-remove-jobjson-less-orphan-folders` (created in `0-backlog`, project agent-taskboard).
+
+It specifies extending the delete path to admit a `job.json`-less folder under terminal lanes only (hard-gated so it can never touch a real task or a non-terminal lane), exposing it on the API, using it to remove this specific orphan, and a test for both the allow and refuse cases. The phantom-prevention task remains the complement: it stops new orphans, this one removes existing residue.
+
+### State changes since the last pass
+
+- `bug-stale-archiver-creates-phantoms-on-backend-restart-mid-move` advanced from `0-backlog` to `2-ready` (the systemic prevention fix is now queued).
+- `lanes-with-explicit-human-review-step` moved from `2-ready` to `7-archive` (its reissue completed).
+- The API job routes were renamed from `/api/jobs` to `/api/tasks`; all mutations in this run used `/api/tasks`.
+
+### Footers
+
+All seven affected task prompts already carry the `Reconciled against spec on 2026-05-05` footer from the original pass; the reconciliation verdicts have not changed, so the footers were left as-is rather than re-dated.
