@@ -237,6 +237,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 _logger.LogInformation("ReviewDecisionOrchestrator boot sweep starting (one-shot full backfill).");
                 await TickOnceAsync(workspace!, stoppingToken);
+                // One-shot migration for the "concern tags bleiben kleben" bug:
+                // strip stale concern chips from already-parked accept cards in
+                // 4-auto-review / 5-human-review that the merge-only path left
+                // behind before the reconcile fix shipped. Idempotent.
+                BackfillStaleConcernTags(workspace!, stoppingToken);
                 _logger.LogInformation("ReviewDecisionOrchestrator boot sweep complete; entering recurring tick loop.");
             }
             catch (OperationCanceledException) { return; }
@@ -361,6 +366,72 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         finally
         {
             _statusSnapshot.EndTick();
+        }
+    }
+
+    /// <summary>
+    /// One-shot boot-sweep backfill for the "concern tags bleiben kleben" bug.
+    /// Scans <c>4-auto-review</c> and <c>5-human-review</c> and, for every card
+    /// whose latest verdict is <c>accept</c> with no active runner-outcome
+    /// issue, strips the aspect-concern tags the latest accept did not actually
+    /// raise (accept-with-concerns cards keep exactly the concerns recorded on
+    /// the decision). Deterministic, idempotent, and safe to run on every boot:
+    /// once cleaned a card has no drift, so subsequent sweeps are no-ops. Public
+    /// so tests can drive it against a temp workspace. See <see cref="TagDriftRule"/>.
+    /// </summary>
+    public void BackfillStaleConcernTags(string workspace, CancellationToken ct)
+    {
+        List<TaskInfo> jobs;
+        try { jobs = _scanner.ScanAllJobs(); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ReviewDecisionOrchestrator: concern-tag backfill scan failed");
+            return;
+        }
+
+        var decisionsByProject = new Dictionary<string, IReadOnlyList<ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
+        var cleaned = 0;
+
+        foreach (var job in jobs)
+        {
+            if (ct.IsCancellationRequested) return;
+            if (job.State != TaskStates.AutoReview && job.State != TaskStates.HumanReview) continue;
+            if (job.Tags.Count == 0 || !job.Tags.Any(TagDriftRule.IsAspectConcernTag)) continue;
+            if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
+
+            if (!decisionsByProject.TryGetValue(job.ProjectName, out var records))
+            {
+                try { records = ReviewDecisionLog.ReadAll(workspace, job.ProjectName); }
+                catch { records = Array.Empty<ReviewDecisionRecord>(); }
+                decisionsByProject[job.ProjectName] = records;
+            }
+
+            ReviewDecisionRecord? latest = null;
+            for (var i = records.Count - 1; i >= 0; i--)
+            {
+                if (records[i].JobId == job.Id) { latest = records[i]; break; }
+            }
+
+            // AC2 gate: only touch cards the orchestrator accepted, with no
+            // active outcome issue. accept-with-concerns is preserved because we
+            // reconcile against the concern set the accept actually recorded.
+            if (latest?.Kind != ReviewDecisionKind.AcceptAsDone) continue;
+            if (job.OutcomeIssue != null) continue;
+
+            var justified = TagDriftRule.ExtractConcernTagIds(latest.Reason);
+            var drift = TagDriftRule.FindDriftingConcernTags(job.Tags, justified, "accept", hasOutcomeIssue: false);
+            if (drift.Count == 0) continue;
+
+            ConcernTagWriter.ReconcileConcernTags(job.FolderPath, justified, _logger);
+            cleaned++;
+            _logger.LogInformation(
+                "ReviewDecisionOrchestrator: tag-drift backfill stripped {Count} stale concern tag(s) from {Project}/{JobId} in {State}: [{Drift}] (kept [{Kept}])",
+                drift.Count, job.ProjectName, job.Id, job.State, string.Join(", ", drift), string.Join(", ", justified));
+        }
+
+        if (cleaned > 0)
+        {
+            _logger.LogInformation("ReviewDecisionOrchestrator: tag-drift backfill cleaned {Cleaned} card(s).", cleaned);
         }
     }
 
@@ -710,10 +781,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        if (report.ConcernTagIds.Count > 0)
-        {
-            ConcernTagWriter.MergeConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
-        }
+        // Reconcile (not merge-only): set the concern tags to exactly this
+        // pass's set. A follow-up pass that now passes cleanly - or raises
+        // fewer concerns than before - must STRIP the stale concern chips an
+        // earlier pass left behind, not leave them stuck. Runs even when the
+        // current set is empty. See the "concern tags bleiben kleben" bug.
+        ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
 
         // Promote to 5-human-review with or without concern tags. ADR-0025:
         // accept-as-done routes to human-review, never directly to completed.
@@ -740,10 +813,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // and left orphan logs/cli-output.log skeletons in 4-auto-review.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
-        if (report.ConcernTagIds.Count > 0 &&
-            !string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
-            ConcernTagWriter.MergeConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
+            ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
         }
 
         // Provenance: the orchestrator (not a human) advanced this task

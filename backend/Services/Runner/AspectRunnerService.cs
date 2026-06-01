@@ -602,4 +602,60 @@ internal static class ConcernTagWriter
                 jobFolderPath);
         }
     }
+
+    /// <summary>
+    /// Authoritatively reconcile the job's aspect-concern tags against the
+    /// supplied current set. Unlike <see cref="MergeConcernTags"/> this is NOT
+    /// additive: it keeps every non-concern tag untouched, then sets the
+    /// aspect-concern tags (<c>{namespace}:concerns</c> / <c>review:unparseable</c>)
+    /// to exactly <paramref name="currentConcernTagIds"/> - which may be empty.
+    /// That is what strips stale concern chips an earlier auto-review pass left
+    /// behind once a later pass accepts cleanly (or with fewer concerns). Runs
+    /// even when the current set is empty - removing stale tags is the whole
+    /// point. A no-op when nothing changes, to avoid churning the folder mtime.
+    /// </summary>
+    public static void ReconcileConcernTags(string jobFolderPath, IReadOnlyList<string> currentConcernTagIds, ILogger logger)
+    {
+        var jobJsonPath = Path.Combine(jobFolderPath, "job.json");
+        if (!File.Exists(jobJsonPath)) return;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+            var existing = new List<string>();
+            if (doc.TryGetValue("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in tagsEl.EnumerateArray())
+                {
+                    if (t.ValueKind == JsonValueKind.String)
+                    {
+                        var s = t.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) existing.Add(s!);
+                    }
+                }
+            }
+
+            // Keep non-concern tags in place; replace the concern set with the
+            // current one (deduped, case-insensitive).
+            var reconciled = existing
+                .Where(t => !TagDriftRule.IsAspectConcernTag(t))
+                .Concat(currentConcernTagIds.Where(s => !string.IsNullOrWhiteSpace(s)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var before = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+            var after = new HashSet<string>(reconciled, StringComparer.OrdinalIgnoreCase);
+            if (before.SetEquals(after)) return;
+
+            TaskJsonFile.UpdateField(jobFolderPath, "tags", reconciled, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "ConcernTagWriter: failed to reconcile concern tags into {TaskFolder}",
+                jobFolderPath);
+        }
+    }
 }

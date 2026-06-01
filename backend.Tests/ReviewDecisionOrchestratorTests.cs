@@ -692,6 +692,104 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_FollowUpAllPass_RemovesStaleConcernTagsFromEarlierPass()
+    {
+        // Regression ("concern tags bleiben kleben"): an earlier auto-review
+        // pass left requirement:concerns + quality:concerns on the card. A
+        // later pass that now accepts cleanly must STRIP those stale concern
+        // tags - merge-only left them stuck even though nothing is open.
+        // Non-aspect tags (here a plain registry tag) must survive.
+        SeedReviewJobWithDone("stale-concerns-job",
+            initialTags: new[] { "requirement:concerns", "quality:concerns", "area-backend" });
+        var orchestrator = BuildOrchestratorWithAspects(
+            aspectStub: _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "stale-concerns-job")));
+
+        var tags = ReadJobTags(TaskStates.HumanReview, "stale-concerns-job");
+        Assert.DoesNotContain(tags, t => t.EndsWith(":concerns", StringComparison.OrdinalIgnoreCase));
+        // The unrelated registry tag and the orchestrator provenance tag stay.
+        Assert.Contains("area-backend", tags);
+        Assert.Contains(ReviewDecisionOrchestrator.OrchestratorMovedTagId, tags);
+    }
+
+    [Fact]
+    public async Task TaskDone_FollowUpReducedConcerns_KeepsCurrentDropsStale()
+    {
+        // A later pass narrows the open concerns from two namespaces to one:
+        // the now-clean requirement:concerns must drop while the still-open
+        // quality:concerns is kept (reconcile, not blanket-strip).
+        SeedReviewJobWithDone("reduced-concerns-job",
+            initialTags: new[] { "requirement:concerns", "quality:concerns" });
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: aspect => aspect switch
+        {
+            "code-quality" => "[[ASPECT_VERDICT: status=concerns; summary=Helper duplicated.]]\n[[TASK_DONE]]",
+            _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var tags = ReadJobTags(TaskStates.HumanReview, "reduced-concerns-job");
+        Assert.Contains("quality:concerns", tags);
+        Assert.DoesNotContain("requirement:concerns", tags);
+    }
+
+    [Fact]
+    public void Backfill_AcceptedCleanCard_StripsStaleConcernTags()
+    {
+        // AC2 migration: a card already parked in 5-human-review carries stale
+        // concern tags from before the reconcile fix. Its latest decision is a
+        // clean accept (no concerns recorded) and no outcome issue -> the boot
+        // sweep strips the concern chips but leaves the unrelated registry tag.
+        SeedHumanReviewCard("backfill-clean", new[] { "requirement:concerns", "quality:concerns", "area-backend" });
+        AppendAcceptDecision("backfill-clean", "Multi-aspect: all aspects pass");
+        var orchestrator = BuildOrchestratorWithAspects(_ => string.Empty);
+
+        orchestrator.BackfillStaleConcernTags(_workspace, CancellationToken.None);
+
+        var tags = ReadJobTags(TaskStates.HumanReview, "backfill-clean");
+        Assert.DoesNotContain(tags, t => t.EndsWith(":concerns", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("area-backend", tags);
+    }
+
+    [Fact]
+    public void Backfill_AcceptWithConcerns_KeepsRecordedConcernsDropsStale()
+    {
+        // accept-with-concerns is legitimate: the decision recorded exactly
+        // quality:concerns. The sweep must keep that and only strip the stale
+        // requirement:concerns left over from an earlier pass.
+        SeedHumanReviewCard("backfill-partial", new[] { "requirement:concerns", "quality:concerns" });
+        AppendAcceptDecision("backfill-partial", "Multi-aspect: accept with concerns (quality:concerns)");
+        var orchestrator = BuildOrchestratorWithAspects(_ => string.Empty);
+
+        orchestrator.BackfillStaleConcernTags(_workspace, CancellationToken.None);
+
+        var tags = ReadJobTags(TaskStates.HumanReview, "backfill-partial");
+        Assert.Contains("quality:concerns", tags);
+        Assert.DoesNotContain("requirement:concerns", tags);
+    }
+
+    [Fact]
+    public void Backfill_AcceptCardWithActiveOutcomeIssue_PreservesConcernTags()
+    {
+        // Negative gate: an active runner-outcome issue (missing sentinel) means
+        // something is still open, so the sweep must NOT touch the concern tags.
+        SeedHumanReviewCard("backfill-outcome", new[] { "quality:concerns" });
+        File.WriteAllText(
+            Path.Combine(_watchPath, TaskStates.HumanReview, "backfill-outcome", "logs", "cli-output.log"),
+            $"[12:00:00.000] [orchestrator] missing-terminal-sentinel{Environment.NewLine}");
+        AppendAcceptDecision("backfill-outcome", "Multi-aspect: all aspects pass");
+        var orchestrator = BuildOrchestratorWithAspects(_ => string.Empty);
+
+        orchestrator.BackfillStaleConcernTags(_workspace, CancellationToken.None);
+
+        var tags = ReadJobTags(TaskStates.HumanReview, "backfill-outcome");
+        Assert.Contains("quality:concerns", tags);
+    }
+
+    [Fact]
     public async Task TaskDone_OneAspectBlocks_ReissuesToReadyTop_WithFollowUpFile()
     {
         SeedReviewJobWithDone("blocked-job");
@@ -875,12 +973,40 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal(firstCalls, calls);
     }
 
-    private void SeedReviewJobWithDone(string slug, bool includeRunnerActiveClearedMarker = false)
+    private void SeedHumanReviewCard(string slug, IReadOnlyList<string> tags)
+    {
+        var dir = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        var tagsJson = "[" + string.Join(",", tags.Select(t => $"\"{t}\"")) + "]";
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.HumanReview}\",\"order\":1,\"agent\":\"claude\",\"tags\":{tagsJson}}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n");
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
+            $"[12:00:00.000] [stdout] done{Environment.NewLine}");
+    }
+
+    private void AppendAcceptDecision(string slug, string reason)
+    {
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: slug,
+            Project: Project,
+            Kind: ReviewDecisionKind.AcceptAsDone,
+            Reason: reason,
+            Prompt: string.Empty,
+            Response: string.Empty,
+            FollowUp: string.Empty));
+    }
+
+    private void SeedReviewJobWithDone(string slug, bool includeRunnerActiveClearedMarker = false, IReadOnlyList<string>? initialTags = null)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        var tagsJson = initialTags is { Count: > 0 }
+            ? ",\"tags\":[" + string.Join(",", initialTags.Select(t => $"\"{t}\"")) + "]"
+            : string.Empty;
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"{tagsJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         var suffix = includeRunnerActiveClearedMarker
             ? $"[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review){Environment.NewLine}"
