@@ -1,9 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { overflowActionsFor } from './triage-actions.model';
+import { overflowActionsFor, primaryActionFor } from './triage-actions.model';
 
 function overflowIds(state: string): string[] {
   return overflowActionsFor(state).map(b => b.id);
 }
+
+describe('primaryActionFor — Enter-bound primary per source lane', () => {
+  it('labels the Completed lane primary "Archive & Next" and moves to 7-archive', () => {
+    const primary = primaryActionFor('6-completed');
+    expect(primary).not.toBeNull();
+    expect(primary!.id).toBe('archive');
+    expect(primary!.label).toBe('Archive & Next');
+    expect(primary!.intent).toEqual({ kind: 'move', targetState: '7-archive' });
+  });
+
+  it('leaves the Review lane primary unchanged ("Send to Complete" → 6-completed)', () => {
+    const primary = primaryActionFor('5-human-review');
+    expect(primary).not.toBeNull();
+    expect(primary!.id).toBe('mark-done');
+    expect(primary!.label).toBe('Send to Complete');
+    expect(primary!.intent).toEqual({ kind: 'move', targetState: '6-completed' });
+  });
+
+  it('leaves the Auto-Review lane without a primary (Enter is a no-op)', () => {
+    expect(primaryActionFor('4-auto-review')).toBeNull();
+  });
+});
 
 describe('overflowActionsFor — Move to Completed / Move to Archive', () => {
   it('offers both moves from Ready, next to Send to Backlog and before Edit/Delete', () => {

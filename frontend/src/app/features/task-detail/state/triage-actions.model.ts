@@ -99,7 +99,11 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     { id: 'need-clarification', label: 'Need clarification (→ Needs Human Review)', variant: 'secondary', intent: { kind: 'move', targetState: '1b-needs-human-review' } },
   ],
   '6-completed': [
-    { id: 'archive', label: 'Archive',             variant: 'primary',   intent: { kind: 'move', targetState: '7-archive' } },
+    // "Archive & Next" mirrors the review lanes' Complete-and-advance primary:
+    // the move to 7-archive auto-advances the detail view to the next card in
+    // 6-completed (TriageController.move → advanceToNextInLane). The "& Next"
+    // wording makes the queue-sweep affordance explicit on the Completed lane.
+    { id: 'archive', label: 'Archive & Next',      variant: 'primary',   intent: { kind: 'move', targetState: '7-archive' } },
     { id: 'reopen',  label: 'Re-open (→ Backlog)', variant: 'secondary', intent: { kind: 'move', targetState: '0-backlog' } },
   ],
   '7-archive': [
