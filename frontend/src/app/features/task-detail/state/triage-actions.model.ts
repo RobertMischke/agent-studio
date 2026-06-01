@@ -42,6 +42,12 @@ const PROMOTE_TO_READY_SKIP_PREP: TriageButton = { id: 'promote-ready-skip', lab
 const FORCE_TO_READY: TriageButton           = { id: 'force-to-ready',     label: 'Force to Ready',                   variant: 'secondary', intent: { kind: 'move', targetState: '2-ready' } };
 const SEND_TO_BACKLOG: TriageButton          = { id: 'send-to-backlog',    label: 'Send to Backlog',                  variant: 'secondary', intent: { kind: 'move', targetState: '0-backlog' } };
 const SEND_TO_PREP: TriageButton             = { id: 'send-to-prep',       label: 'Send to Preparation',              variant: 'secondary', intent: { kind: 'move', targetState: '1-preparation' } };
+// "Move toward Completed / Archive" mirror "Send to Backlog": plain move
+// actions surfaced in the overflow menu from (almost) every lane so the
+// operator can park a card in 6-completed / 7-archive without opening the
+// lane dropdown. overflowActionsFor() handles dedup + current-lane skip.
+export const MOVE_TO_COMPLETED: TriageButton = { id: 'move-to-completed',   label: 'Move to Completed',                variant: 'secondary', intent: { kind: 'move', targetState: '6-completed' } };
+export const MOVE_TO_ARCHIVE: TriageButton   = { id: 'move-to-archive',     label: 'Move to Archive',                  variant: 'secondary', intent: { kind: 'move', targetState: '7-archive' } };
 export const EDIT_BUTTON: TriageButton       = { id: 'edit-prompt',        label: 'Edit prompt',                      variant: 'secondary', intent: { kind: 'editPrompt' } };
 export const DELETE_BUTTON: TriageButton     = { id: 'delete',             label: 'Delete task',                      variant: 'danger',    intent: { kind: 'delete' } };
 
@@ -135,7 +141,30 @@ export function primaryActionFor(state: string): TriageButton | null {
  */
 export function overflowActionsFor(state: string): TriageButton[] {
   const list = laneActionsFor(state);
-  const items = primaryActionFor(state) ? list.slice(1) : list.slice();
+  const rest = primaryActionFor(state) ? list.slice(1) : list.slice();
+
+  // Edit / Delete form the trailing "safety net" cluster. Hold any that the
+  // lane already lists aside so the Move entries land before them — otherwise
+  // a lane like 2-ready (which lists Edit in its catalogue) would render
+  // Edit *between* Send to Backlog and the Move entries.
+  const isTail = (b: TriageButton) => b.id === EDIT_BUTTON.id || b.id === DELETE_BUTTON.id;
+  const body = rest.filter(b => !isTail(b));
+  const tail = rest.filter(isTail);
+
+  // "Move to Completed" / "Move to Archive" are guaranteed move actions,
+  // added before the Edit/Delete cluster. Skip the target that equals the
+  // current lane (a no-op) and any target a lane-specific action already
+  // covers, so e.g. 5-human-review's "Send to Complete" primary or
+  // 6-completed's "Archive" primary is not duplicated.
+  const laneTargets = new Set(
+    list
+      .map(b => (b.intent.kind === 'move' ? b.intent.targetState : null))
+      .filter((s): s is string => s !== null),
+  );
+  if (state !== '6-completed' && !laneTargets.has('6-completed')) body.push(MOVE_TO_COMPLETED);
+  if (state !== '7-archive' && !laneTargets.has('7-archive')) body.push(MOVE_TO_ARCHIVE);
+
+  const items = [...body, ...tail];
   if (!items.some(i => i.id === EDIT_BUTTON.id)) items.push(EDIT_BUTTON);
   if (!items.some(i => i.id === DELETE_BUTTON.id)) items.push(DELETE_BUTTON);
   return items;

@@ -223,9 +223,37 @@ test.describe('Triage actions in detail header', () => {
       await expect(menu).toBeVisible({ timeout: 3_000 });
       await expect(page.getByTestId('studio-triage-overflow-item-move-to-top')).toBeVisible();
       await expect(page.getByTestId('studio-triage-overflow-item-send-to-backlog')).toBeVisible();
+      // Move toward Completed / Archive sit next to Send to Backlog.
+      await expect(page.getByTestId('studio-triage-overflow-item-move-to-completed')).toBeVisible();
+      await expect(page.getByTestId('studio-triage-overflow-item-move-to-archive')).toBeVisible();
       await expect(page.getByTestId('studio-triage-overflow-item-edit-prompt')).toBeVisible();
       await expect(page.getByTestId('studio-triage-overflow-item-delete')).toBeVisible();
       await page.keyboard.press('Escape');
+    } finally {
+      await deleteJob(job.id, wp.path).catch(() => {});
+    }
+  });
+
+  test('overflow "Move to Completed" moves a Ready job to 6-completed', async ({ page }) => {
+    // The new move entries route through the same TaskTransitionService
+    // move path as Send to Backlog. Plant a 2-ready job, pick "Move to
+    // Completed" from the overflow, and assert the card lands in
+    // 6-completed end-to-end (no 409 / zombie folder).
+    const wp = await getFirstWatchPath();
+    const job = await plantReadyJob(wp);
+    try {
+      await openJobInDetail(page, job.id, wp.path);
+
+      await page.getByTestId('studio-triage-overflow-btn').click();
+      const menu = page.getByTestId('studio-triage-overflow-panel');
+      await expect(menu).toBeVisible({ timeout: 3_000 });
+
+      await page.getByTestId('studio-triage-overflow-item-move-to-completed').click();
+
+      await expect.poll(
+        async () => (await getJob(job.id, wp.path)).state,
+        { timeout: 10_000 }
+      ).toBe('6-completed');
     } finally {
       await deleteJob(job.id, wp.path).catch(() => {});
     }
