@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-taskboard.local/schemas/orphan-recovery.schema.json",
   "title": "OrphanRecoveryDecision",
-  "description": "One row appended to <workspace>/logs/orphan-recoveries.jsonl by the boot-time StaleProgressArchiver. Records what happened to each candidate folder in 3-progress: surfaced loudly in 3a-failed-pickup as orphan or empty (ADR-0028), recovered into 4-auto-review via a missed transition, or skipped. Pairs with the crash-recovery doctrine (ADR-0020): crash-recovery rescues file changes, this sweep rescues the lane shape so the one-task-per-project promise holds visually.",
+  "description": "One row appended to <workspace>/logs/orphan-recoveries.jsonl by the boot-time StaleProgressArchiver. Records what happened to each candidate folder in 3-progress (and to historical 3a-failed-pickup folders the boot drain empties). ADR-0051 (failed-pickup elimination, supersedes ADR-0028/0029): a stale folder is no longer surfaced in 3a-failed-pickup. A folder that still has job.json is a real task and is requeued to 2-ready ('requeued-to-ready'); a folder with no job.json is debris and is archived to 7-archive ('archived-debris'); a folder whose tail carries a completion sentinel is recovered to 4-auto-review ('recovered-to-review'); a leftover from an already-completed lane move is silently removed ('mid-move-casualty-removed'). The legacy 'moved-to-failed-pickup' / 'move-to-failed-pickup-failed' kinds are retained only so old on-disk rows still validate. Pairs with the crash-recovery doctrine (ADR-0020): crash-recovery rescues file changes, this sweep rescues the lane shape so the one-task-per-project promise holds visually.",
   "type": "object",
   "additionalProperties": false,
   "required": ["at", "kind", "projectName", "slug", "reason"],
@@ -15,12 +15,18 @@
     "kind": {
       "type": "string",
       "enum": [
-        "moved-to-failed-pickup",
-        "move-to-failed-pickup-failed",
+        "requeued-to-ready",
+        "requeue-failed",
+        "archived-debris",
+        "archive-failed",
         "recovered-to-review",
-        "recovery-failed"
+        "recovery-failed",
+        "mid-move-casualty-removed",
+        "mid-move-casualty-removal-failed",
+        "moved-to-failed-pickup",
+        "move-to-failed-pickup-failed"
       ],
-      "description": "Outcome class. The 'fresh' and 'skipped' transient verdicts are not persisted; only actionable outcomes land in the JSONL. ADR-0028 replaced the pre-loud-not-archive 'archived-orphan' / 'archived-empty' / 'archive-failed' kinds with 'moved-to-failed-pickup' / 'move-to-failed-pickup-failed'."
+      "description": "Outcome class. The 'fresh' and 'skipped' transient verdicts are not persisted; only actionable outcomes land in the JSONL. ADR-0051 routings: 'requeued-to-ready' (real task back to 2-ready), 'archived-debris' (no-job.json folder to 7-archive), 'recovered-to-review' (completion sentinel found, to 4-auto-review), 'mid-move-casualty-removed' (already-moved-lane leftover deleted), plus their '*-failed' counterparts. 'moved-to-failed-pickup' / 'move-to-failed-pickup-failed' are the retired ADR-0028 dead-letter kinds, kept only so old on-disk rows still validate."
     },
     "projectName": {
       "type": "string",
@@ -38,17 +44,17 @@
     },
     "failedPickupSlug": {
       "type": ["string", "null"],
-      "description": "Slug under 3a-failed-pickup after the move (ADR-0028). Format: '<original>-orphan-<yyyy-mm-dd>' or '<original>-empty-<yyyy-mm-dd>', with a numeric suffix on collisions. Absent for recovered-to-review."
+      "description": "Legacy ADR-0028 field. Slug under 3a-failed-pickup after a dead-letter move. Only present on retired 'moved-to-failed-pickup' rows; null under the ADR-0051 routings (the folder keeps its slug as it moves to 2-ready / 7-archive)."
     },
     "failureKind": {
       "type": ["string", "null"],
       "enum": [null, "orphan", "empty"],
-      "description": "Which boot-sweep verdict produced the move. Set on moved-to-failed-pickup."
+      "description": "Legacy ADR-0028 field. Which boot-sweep verdict produced a dead-letter move. Set only on retired 'moved-to-failed-pickup' rows; null under ADR-0051."
     },
     "targetState": {
       "type": ["string", "null"],
-      "enum": [null, "4-auto-review", "3a-failed-pickup"],
-      "description": "Destination state folder. Only set on successful moves."
+      "enum": [null, "2-ready", "4-auto-review", "7-archive", "3a-failed-pickup"],
+      "description": "Destination state folder. Only set on successful moves: '2-ready' (requeued-to-ready), '4-auto-review' (recovered-to-review), '7-archive' (archived-debris). '3a-failed-pickup' appears only on retired ADR-0028 rows."
     },
     "sentinelKeyword": {
       "type": ["string", "null"],

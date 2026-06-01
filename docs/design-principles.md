@@ -233,7 +233,7 @@ The project Kanban board has a single visual specification. Every layout change 
 
 The non-negotiables that govern board work:
 
-- The lane row uses `grid-template-columns: repeat(N, minmax(220px, 1fr))`. `N` is the count of currently visible lanes. The optional `failed-pickup` lane increments `N` only when its task count is non-zero.
+- The lane row uses `grid-template-columns: repeat(N, minmax(220px, 1fr))`. `N` is the count of currently visible lanes.
 - Lane headers are 36 px tall, 13 px chrome text, never carry a background fill. Phase color shows as a 1 px outline tint.
 - Cards are 56-200 px, 6 px radius, 10 px padding, `--surface-2` background. Selection uses a 2 px `--accent` outline; the brightness never changes.
 - Spacing is on the 4 / 8 / 12 / 16 px scale. The single recorded amendment is the 10 px card padding (carry-over).

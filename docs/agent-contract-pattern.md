@@ -188,9 +188,11 @@ The discovery agent is itself bound by the contract pattern: input schema, outpu
 
 ## Worked example: pickup-failed
 
-This is the first instance in production. It re-uses the existing dead-letter mechanism from ADR-0028 and adds a diagnosis step on top.
+This is the first instance in production. It originally re-used the ADR-0028 dead-letter mechanism and added a diagnosis step on top.
 
-**Trigger.** `ProjectRunner.TryPickProgressJobOrDeadLetter` decides a slug has hit `PickupFailureThreshold` (default 3 silent runs) and moves the folder to `3a-failed-pickup/<slug>-pickup-failed-<utc-date>/`. Today this is where the loop ends; the new step kicks in here.
+> Note (ADR-0051): the `3a-failed-pickup` dead-letter lane has been retired. The trigger below still fires on `PickupFailureThreshold`, but the over-budget folder now routes via `ProjectRunner.RerouteOverBudgetFolder` to `2-ready` (spawn failure, runner pauses) or `5-human-review` (silent run / zombie) instead of a dead-letter lane. The diagnosis step described here is the unbuilt point where such a verdict would be analyzed; read the destinations below as the post-ADR-0051 reroute, not a dead-letter move.
+
+**Trigger.** `ProjectRunner.TryPickProgressJobOrDeadLetter` decides a slug has hit `PickupFailureThreshold` (default 3 silent runs) and reroutes the folder (per ADR-0051) to `2-ready` or `5-human-review`. This is where the loop ends; the diagnosis step would kick in here.
 
 **Pre-Guard.** Before invoking the diagnostic agent:
 
@@ -265,7 +267,7 @@ If any guard fires, the runner writes a `pickup-diagnosis-skipped` banner and st
 - Write a high-severity banner to `<workspace>/logs/banners/pickup-infra-halt-<utc>.json`.
 - Optionally invoke `check-cli-shims` self-heal once. If it succeeds and the next preflight passes, downgrade the banner to "halted, self-heal succeeded, manual resume required".
 
-**Post-Guard.** Future automation considering "okay, claude works again, requeue the 22 jobs" is gated by the Post-Guard counter on `(slug, category=infra-cli-broken)`. It is set to 0 requeues by policy: infrastructure halts are operator-resolved, not auto-recovered. The 22 jobs stay in `3a-failed-pickup` until a human bulk-restores them.
+**Post-Guard.** Future automation considering "okay, claude works again, requeue the 22 jobs" is gated by the Post-Guard counter on `(slug, category=infra-cli-broken)`. It is set to 0 requeues by policy: infrastructure halts are operator-resolved, not auto-recovered. Per ADR-0051 the jobs wait in `2-ready` (their tasks are unchanged) with the runner paused, until a human fixes the CLI and resumes; they are not parked in a dead-letter lane.
 
 **Why this is the right shape.** The agent's interpretation, "this looks like a broken CLI binary", is what we want from an LLM. It would have been almost impossible to encode every signature of "the CLI is silently broken" in deterministic code. But the *response* to that interpretation — halt the pipeline, do not auto-requeue, surface a banner — is policy that we want consistent across every diagnosis the LLM will ever produce. So the LLM does the part it is good at, and the code does the part the LLM is bad at.
 

@@ -12,9 +12,10 @@ Each line carries a participant: `you`, the agent name, or `[orchestrator]`. The
 
 ## What to do when the lane stalls
 
-A card that has been silent here for many minutes is usually one of three things: the CLI is genuinely thinking; the CLI is wedged behind a quota or auth wall; or the previous attempt died before it ever streamed output. The third case is the most restartable one and gets dead-lettered into `3a-failed-pickup` after the configured number of empty attempts (default 3) so the lane does not get permanently jammed. For the first two cases, the supervisor's pause / resume / cancel primitives are the right tool, not folder edits. Moving cards by hand here will fight the runner.
+A card that has been silent here for many minutes is usually one of three things: the CLI is genuinely thinking; the CLI is wedged behind a quota or auth wall; or the previous attempt died before it ever streamed output. The third case is the most restartable one: after the configured number of empty attempts (default 3) the pickup loop reroutes the task itself instead of jamming the lane. Per ADR-0051 there is no dead-letter lane — a CLI that never spawned sends the task back to `2-ready` and pauses the runner; a CLI that ran but stayed silent escalates the task to `5-human-review`. For the first two cases, the supervisor's pause / resume / cancel primitives are the right tool, not folder edits. Moving cards by hand here will fight the runner.
 
 ## Reference
 
-- ADR-0028 (strict-iteration progress-first pickup)
+- ADR-0028 (strict-iteration progress-first pickup; dead-letter destination superseded by ADR-0051)
 - ADR-0030 (CLI watchdog phases)
+- ADR-0051 (eliminate the failed-pickup lane)

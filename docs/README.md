@@ -123,7 +123,7 @@ JSON Schemas pinned by tests. If you change one, update the corresponding fixtur
 | [schemas/meta-cycle-report.schema.json](schemas/meta-cycle-report.schema.json) | Meta-cycle pause-inspect-resume report shape (ADR-0022). |
 | [schemas/executive-summary.schema.json](schemas/executive-summary.schema.json) | Cross-project executive summary contract. |
 | [schemas/client-identity.schema.json](schemas/client-identity.schema.json) | Registered client identity records. |
-| [schemas/orphan-recovery.schema.json](schemas/orphan-recovery.schema.json) | Stale-progress-archiver decision rows (now: `failedPickupSlug` / `failureKind`, ADR-0029). |
+| [schemas/orphan-recovery.schema.json](schemas/orphan-recovery.schema.json) | Stale-progress-archiver decision rows. Per ADR-0051 stale folders requeue to `2-ready` or archive to `7-archive`; the legacy `failedPickupSlug` / `failureKind` fields are kept only for old on-disk rows. |
 | [schemas/pipeline-definition.schema.json](schemas/pipeline-definition.schema.json) | One versioned project pipeline definition: ordered pre/post steps, common envelope, llm/script types (ADR-0051). |
 | [schemas/step-run.schema.json](schemas/step-run.schema.json) | One (task, step, attempt) telemetry row in `logs/step-runs.jsonl`; the source of truth the derived `pipeline-history.db` projects (ADR-0051). |
 | [schemas/pickup-failure.schema.json](schemas/pickup-failure.schema.json) | Live-pickup dead-letter rows (ADR-0028). |

@@ -864,9 +864,9 @@ public sealed record StaleProgressDecision
     [JsonPropertyName("projectName")] public string ProjectName { get; init; } = "";
     [JsonPropertyName("slug")] public string Slug { get; init; } = "";
     [JsonPropertyName("jobId")] public string? JobId { get; init; }
-    /// <summary>Renamed slug under <c>3a-failed-pickup</c> after a successful loud-not-archived move (ADR-0028).</summary>
+    /// <summary>Legacy ADR-0028 field: renamed slug under <c>3a-failed-pickup</c> after a dead-letter move. Null under the ADR-0051 routings (the folder keeps its slug as it moves to <c>2-ready</c> / <c>7-archive</c>).</summary>
     [JsonPropertyName("failedPickupSlug")] public string? FailedPickupSlug { get; init; }
-    /// <summary><c>orphan</c> or <c>empty</c>: which boot-sweep verdict produced the move.</summary>
+    /// <summary>Legacy ADR-0028 field (<c>orphan</c> or <c>empty</c>): which boot-sweep verdict produced a dead-letter move. Null under ADR-0051.</summary>
     [JsonPropertyName("failureKind")] public string? FailureKind { get; init; }
     [JsonPropertyName("targetState")] public string? TargetState { get; init; }
     [JsonPropertyName("sentinelKeyword")] public string? SentinelKeyword { get; init; }

@@ -26,9 +26,9 @@ bearing reference for the per-project `LaneMutexRegistry` (F21).
 | `JobTransitionService.BatchMoveAsync` | API `POST /api/jobs/batch-move` | Many jobs in one call (per-item atomic). Each item routes through `MoveAsync`. | same file |
 | `JobStateMachine.MoveJob` / `MoveFolderToState` / `DeleteJob` / `ChangeProject` | Called by every higher-level mover. The lowest-level lane mutator. | Direct `Directory.Move` / `Directory.Delete`. | `backend/Services/Jobs/JobStateMachine.cs` |
 | `CrashRecoveryService.RecoverAsync` | Boot (before first runner tick) | Finishes a transition whose `completion-marker.json` survived a backend crash. Calls `JobTransitionService.MoveAsync`. | `backend/Services/Runner/CrashRecoveryService.cs` |
-| `StaleProgressArchiver.SweepAsync` | Boot (after crash recovery), and could be invoked later by the supervisor | Moves over-budget `3-progress` folders to `3a-failed-pickup` (orphan / empty), or finishes a missed `3-progress -> 4-auto-review` transition when the sentinel survived. Calls `JobTransitionService.MoveAsync` and `ITaskAccess.MoveOrphanToFailedPickup`. | `backend/Services/Runner/StaleProgressArchiver.cs` |
-| `ProjectRunner` pickup / dead-letter | Per-project tick (~1 s) | Picks a job from `2-ready` into `3-progress`; dead-letters an over-attempt folder into `3a-failed-pickup`; cleans up post-move skeleton folders left behind by Windows file-handle races. Calls `JobStateMachine.MoveJob`, `ITaskAccess.MoveOrphanToFailedPickup`, and `ITaskAccess.DeleteLaneFolder`. | `backend/Services/Runner/ProjectRunner.cs` |
-| `ITaskAccess.MoveOrphanToFailedPickup` / `DeleteLaneFolder` | Typed escape hatches for orphan moves (called by the runner and the boot sweep). | Move into `3a-failed-pickup`; recursive directory delete. | `backend/Services/TaskAccess/TaskAccessService.cs` |
+| `StaleProgressArchiver.SweepAsync` | Boot (after crash recovery), and could be invoked later by the supervisor | Per ADR-0051: requeues a stale `3-progress` folder that still has `job.json` back to `2-ready` (`RequeueOrphanToReadyAsync`), archives an empty/no-`job.json` folder to `7-archive` (`ArchiveOrphanFolder`), or finishes a missed `3-progress -> 4-auto-review` transition when the sentinel survived. Never dead-letters. | `backend/Services/Runner/StaleProgressArchiver.cs` |
+| `ProjectRunner` pickup / reroute | Per-project tick (~1 s) | Picks a job from `2-ready` into `3-progress`; per ADR-0051 reroutes an over-budget folder via `RerouteOverBudgetFolder` (spawn failure -> `2-ready` + runner pause; silent run / zombie -> `5-human-review`); archives a no-`job.json` orphan to `7-archive` (`ITaskAccess.ArchiveOrphanFolder`); cleans up post-move skeleton folders left behind by Windows file-handle races (`ITaskAccess.DeleteLaneFolder`). Never dead-letters. | `backend/Services/Runner/ProjectRunner.cs` |
+| `ITaskAccess.ArchiveOrphanFolder` / `DeleteLaneFolder` | Typed escape hatches for orphan moves (called by the runner and the boot sweep). | Move debris into `7-archive` with a reason file; recursive directory delete. | `backend/Services/TaskAccess/TaskAccessService.cs` |
 
 ## Boot sequence
 
@@ -38,7 +38,7 @@ its first tick:
 ```text
 1. JobStateMachine.EnsureStateFoldersAndMigrate   (idempotent folder migration)
 2. CrashRecoveryService.RecoverAsync              (complete pending transitions, rescue orphan changes)
-3. StaleProgressArchiver.SweepAsync               (move stale 3-progress folders to 3a-failed-pickup)
+3. StaleProgressArchiver.SweepAsync               (requeue stale 3-progress folders to 2-ready, archive debris to 7-archive)
 4. TaskRunnerService starts; per-project ticks begin
 ```
 
