@@ -155,7 +155,11 @@ test.describe('Detail view - lane pager', () => {
   // spikes (the beforeEach purge re-runs, so a retry starts from a clean lane).
   test.describe.configure({ timeout: 180_000, retries: 1 });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    // describe.configure({ timeout }) is silently ignored by this Playwright
+    // build (verified: tests still trip the global 60s wall), so set the
+    // per-test budget imperatively here. The retries:1 from configure works.
+    testInfo.setTimeout(180_000);
     await page.addInitScript(() => {
       window.localStorage.setItem('atp.flag.vsCodeLayout', '0');
     });
@@ -171,8 +175,15 @@ test.describe('Detail view - lane pager', () => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4, 5].map(i => uid(`walk-${i}`));
     const created: { id: string }[] = [];
+    // Intake to 0-backlog, the manual triage lane the auto-runner never pulls
+    // (it only auto-picks 2-ready / auto-processes 4-auto-review). The pager
+    // captures a snapshot of this lane on entry; using the quiet lane keeps
+    // both the snapshot total and the live lane membership stable, so prev/next
+    // stepping is deterministic. The churned 2-ready lane was racing the
+    // auto-runner mid-walk and the position would stick. (See the state-change
+    // test for the full quiet-lane rationale.)
     for (const id of ids) {
-      created.push(await createTask({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false }));
+      created.push(await createTask({ id, title: id, watchPath: wp.path, targetState: '0-backlog', fixture: false }));
     }
 
     try {
@@ -208,13 +219,13 @@ test.describe('Detail view - lane pager', () => {
 
       // Next advances to the fourth job in the captured iteration.
       await page.getByTestId('lane-pager-next').click();
-      await expect(count).toHaveText(`${startPos + 1} / ${total}`, { timeout: 5_000 });
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[3])}`), { timeout: 10_000 });
+      await expect(count).toHaveText(`${startPos + 1} / ${total}`, { timeout: 15_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[3])}`), { timeout: 20_000 });
 
       // Prev rewinds.
       await page.getByTestId('lane-pager-prev').click();
-      await expect(count).toHaveText(`${startPos} / ${total}`, { timeout: 5_000 });
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[2])}`), { timeout: 10_000 });
+      await expect(count).toHaveText(`${startPos} / ${total}`, { timeout: 15_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[2])}`), { timeout: 20_000 });
     } finally {
       for (const id of ids) await deleteJob(id, wp.path).catch(() => {});
     }
@@ -261,15 +272,15 @@ test.describe('Detail view - lane pager', () => {
       const moveResponse = page.waitForResponse(resp =>
         resp.request().method() === 'POST'
         && resp.url().includes(`/api/tasks/${encodeURIComponent(order[3])}/move`)
-      );
+      , { timeout: 30_000 });
       await page.getByTestId('detail-state-select').selectOption('6-completed');
       await moveResponse;
 
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[4])}`), { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[4])}`), { timeout: 20_000 });
       // The new detail view is anchored on order[4], which is still in backlog.
-      await expect(page.getByTestId('detail-state-select')).toHaveValue('0-backlog', { timeout: 10_000 });
+      await expect(page.getByTestId('detail-state-select')).toHaveValue('0-backlog', { timeout: 20_000 });
       // Pager count shrunk by one and the position is preserved.
-      await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 5_000 });
+      await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 15_000 });
     } finally {
       // The fourth job was moved to completed; the rest stay in backlog.
       for (const id of ids) {
@@ -315,12 +326,12 @@ test.describe('Detail view - lane pager', () => {
       const deleteResponse = page.waitForResponse(resp =>
         resp.request().method() === 'DELETE'
         && resp.url().includes(`/api/tasks/${encodeURIComponent(order[3])}`)
-      );
+      , { timeout: 30_000 });
       await page.getByTestId('confirm-dialog-confirm').click();
       await deleteResponse;
 
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[4])}`), { timeout: 10_000 });
-      await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 5_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[4])}`), { timeout: 20_000 });
+      await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 15_000 });
     } finally {
       for (const id of ids) await deleteJob(id, wp.path).catch(() => {});
     }
@@ -356,19 +367,19 @@ test.describe('Detail view - lane pager', () => {
       // each time without the user touching prev/next.
       for (let i = 0; i < 3; i++) {
         const movingId = order[i];
-        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(movingId)}`), { timeout: 10_000 });
+        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(movingId)}`), { timeout: 20_000 });
         const moveResp = page.waitForResponse(resp =>
           resp.request().method() === 'POST'
           && resp.url().includes(`/api/tasks/${encodeURIComponent(movingId)}/move`)
-        );
+        , { timeout: 30_000 });
         await page.getByTestId('detail-state-select').selectOption('6-completed');
         await moveResp;
-        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[i + 1])}`), { timeout: 10_000 });
-        await expect(count).toHaveText(`${startPos} / ${startTotal - (i + 1)}`, { timeout: 5_000 });
+        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[i + 1])}`), { timeout: 20_000 });
+        await expect(count).toHaveText(`${startPos} / ${startTotal - (i + 1)}`, { timeout: 15_000 });
         // The lane the detail header shows must still be 0-backlog - the next
         // captured slug is anchored on the original lane, not on the lane the
         // user just moved the previous job to.
-        await expect(page.getByTestId('detail-state-select')).toHaveValue('0-backlog', { timeout: 10_000 });
+        await expect(page.getByTestId('detail-state-select')).toHaveValue('0-backlog', { timeout: 20_000 });
       }
     } finally {
       // Three of the fixtures landed in completed; the rest in backlog.
