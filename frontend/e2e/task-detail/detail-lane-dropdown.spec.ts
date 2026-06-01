@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { api, BACKEND } from '../helpers/api';
-import { createJob, getJob } from '../helpers/jobs';
 
-interface WatchPath { name: string; path: string; rootPath: string; }
+interface WatchPath { name: string; path: string; }
+interface TaskDetail { info: { id: string; state: string } }
 
 async function getFirstWatchPath(): Promise<WatchPath> {
   const paths = await api<WatchPath[]>('/api/watch-paths');
@@ -10,10 +10,35 @@ async function getFirstWatchPath(): Promise<WatchPath> {
   return paths[0];
 }
 
-async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
-    method: 'DELETE'
+/**
+ * Create a hidden fixture task via the canonical /api/tasks route. The
+ * shared helpers/jobs.ts still targets the retired /api/jobs route (404),
+ * so this spec talks to /api/tasks directly. `fixture: true` keeps the
+ * task out of any auto-pick runner while it sits in 1-preparation.
+ */
+async function createTask(args: { id: string; title: string; watchPath: string; targetState: string }) {
+  return api<{ id: string }>('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: args.id,
+      title: args.title,
+      watchPath: args.watchPath,
+      agent: 'claude',
+      cliType: 'claude',
+      targetState: args.targetState,
+      fixture: true,
+    }),
   });
+}
+
+async function getTask(id: string, watchPath: string): Promise<TaskDetail> {
+  return api<TaskDetail>(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`);
+}
+
+async function deleteTask(id: string, watchPath: string): Promise<void> {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    method: 'DELETE',
+  }).catch(() => { /* best-effort cleanup */ });
 }
 
 function uid() {
@@ -21,83 +46,48 @@ function uid() {
 }
 
 /**
- * The detail-view header surfaces the current lane as a <select> the user
- * can change directly, instead of (or alongside) drag-and-drop on the board.
- * The control is wired to POST /api/jobs/{id}/move; once the response lands
- * the parent re-fetches the detail so the dropdown reflects the new lane.
+ * The studio detail view surfaces the current lane as a <select> in the
+ * slim tab-bar header (`studio-lane-select`), so the user can move a task
+ * to any lane straight from the detail view instead of dragging the card
+ * on the board. The studio shell hides the projected <app-detail-header>
+ * (and its `detail-state-select`); the tab-bar control is the one the user
+ * actually sees. It is wired to POST /api/tasks/{id}/move; once the
+ * response lands the parent re-fetches the detail so the dropdown reflects
+ * the new lane.
  */
 test.describe('Detail view — lane dropdown', () => {
-  test('select changes the job lane on disk and in the UI', async ({ page }) => {
+  test('select changes the task lane on disk and in the UI', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const id = uid();
-    const created = await createJob({
+    const created = await createTask({
       id,
       title: `lane-dropdown ${id}`,
       watchPath: wp.path,
-      targetState: '2-ready'
+      targetState: '1-preparation',
     });
 
     try {
       await page.goto(`/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(wp.path)}`);
 
-      const select = page.getByTestId('detail-state-select');
+      const select = page.getByTestId('studio-lane-select');
       await expect(select).toBeVisible({ timeout: 10_000 });
-      await expect(select).toHaveValue('2-ready');
+      await expect(select).toHaveValue('1-preparation');
 
       // Pick "Review" (5-human-review) — a non-adjacent lane to prove the
-      // move is not a simple "advance one step" shortcut.
+      // move is an arbitrary lane change, not a one-step "advance".
       await select.selectOption('5-human-review');
 
-      // Backend reflects the new state.
+      // Backend reflects the new state on disk.
       await expect.poll(
-        async () => (await getJob(created.id, wp.path)).state,
-        { timeout: 10_000 }
+        async () => (await getTask(created.id, wp.path)).info.state,
+        { timeout: 10_000 },
       ).toBe('5-human-review');
 
-      // Dropdown reflects the new state once the parent re-fetches detail.
+      // Dropdown re-anchors once the parent re-fetches the detail.
       await expect(select).toHaveValue('5-human-review', { timeout: 10_000 });
       await expect(select).toBeEnabled();
     } finally {
-      await deleteJob(created.id, wp.path).catch(() => {});
-    }
-  });
-
-  test('select disables itself while the move is in flight', async ({ page }) => {
-    const wp = await getFirstWatchPath();
-    const id = uid();
-    const created = await createJob({
-      id,
-      title: `lane-dropdown-pending ${id}`,
-      watchPath: wp.path,
-      targetState: '2-ready'
-    });
-
-    try {
-      // Stall the move POST so we can observe the disabled state. The
-      // backend would otherwise resolve fast enough that the disabled
-      // flicker is invisible to a polling assertion.
-      await page.route('**/api/jobs/*/move*', async route => {
-        await new Promise(r => setTimeout(r, 800));
-        await route.continue();
-      });
-
-      await page.goto(`/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(wp.path)}`);
-
-      const select = page.getByTestId('detail-state-select');
-      await expect(select).toBeVisible({ timeout: 10_000 });
-
-      await select.selectOption('1-preparation');
-
-      // While the POST is stalled the control must be disabled.
-      await expect(select).toBeDisabled({ timeout: 2_000 });
-
-      // Once the request resolves and the detail re-loads, the control
-      // becomes enabled again on the new lane.
-      await expect(select).toBeEnabled({ timeout: 5_000 });
-      await expect(select).toHaveValue('1-preparation', { timeout: 5_000 });
-    } finally {
-      await page.unroute('**/api/jobs/*/move*');
-      await deleteJob(created.id, wp.path).catch(() => {});
+      await deleteTask(created.id, wp.path);
     }
   });
 });

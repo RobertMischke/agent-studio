@@ -87,6 +87,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
 import {
   cliTypeLabel as fmtCliTypeLabel,
   formatMultiplier as fmtMultiplier,
+  stateLabel as fmtStateLabel,
 } from './services/format.util';
 import { ErrorDialogComponent } from './components/error-dialog/error-dialog.component';
 import { ConfirmDialogComponent } from './components/app-dialog/confirm-dialog/confirm-dialog.component';
@@ -621,6 +622,41 @@ export class App implements OnInit, OnDestroy {
     return idx >= 0 ? idx + 1 : 0;
   });
   readonly slimPagerTotal = computed<number>(() => this.triageLanePeers().length);
+
+  /**
+   * Lane options for the slim studio header's lane dropdown. The studio
+   * shell hides the projected <app-detail-header> (which owns the kanban
+   * detail's own lane select), so this surfaces the same arbitrary-lane
+   * move in the tab-bar header the user actually sees. Order/labels mirror
+   * DetailHeaderComponent.laneOptions so both views read the same.
+   */
+  readonly studioLaneOptions: readonly { state: string; label: string }[] = [
+    { state: '1-preparation',         label: 'Preparation' },
+    { state: '1a-orchestrator-prep',  label: 'Orch Prep' },
+    { state: '1b-needs-human-review', label: 'Needs Clarification' },
+    { state: '2-ready',               label: 'Ready' },
+    { state: '3-progress',            label: 'In Progress' },
+    { state: '4-auto-review',         label: 'Auto Review' },
+    { state: '5-human-review',        label: 'Review' },
+    { state: '6-completed',           label: 'Completed' },
+    { state: '7-archive',             label: 'Archive' },
+  ];
+
+  isStandardLane(state: string): boolean {
+    return this.studioLaneOptions.some((o) => o.state === state);
+  }
+
+  stateLabel(state: string): string {
+    return fmtStateLabel(state);
+  }
+
+  /** Slim-header lane dropdown change → reuse the detail-view move flow. */
+  onStudioLaneChange(info: TaskInfo, event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const next = target.value;
+    if (!next || next === info.state) return;
+    this.onStateChangeFromDetail(info, next);
+  }
 
   // Cycle 10a: form state (newTitle/newPrompt/newCliType/etc.) lives in
   // CreateTaskFormService. Pass-through getters keep the existing

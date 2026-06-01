@@ -163,6 +163,22 @@
                     data-testid="studio-task-next"
                     [appTooltip]="'Next task in lane'"
                     (click)="onTriageNext(detail.info)">›</button>
+            <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+            <select class="studio-tab-action studio-tab-action--lane-select"
+                    [class]="'studio-tab-action studio-tab-action--lane-select state--' + detail.info.state"
+                    [value]="detail.info.state"
+                    [disabled]="updateClient.mutationsBlocked()"
+                    data-testid="studio-lane-select"
+                    aria-label="Change task lane"
+                    [appTooltip]="'Change lane'"
+                    (change)="onStudioLaneChange(detail.info, $event)">
+              @for (lane of studioLaneOptions; track lane.state) {
+                <option [value]="lane.state" [selected]="lane.state === detail.info.state">{{ lane.label }}</option>
+              }
+              @if (!isStandardLane(detail.info.state)) {
+                <option [value]="detail.info.state" [selected]="true">{{ stateLabel(detail.info.state) }}</option>
+              }
+            </select>
             @if (studioTriageHasActions()) {
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <div class="studio-tab-action__triage" data-testid="studio-triage-panel" data-triage-root>
