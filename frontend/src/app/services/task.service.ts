@@ -57,6 +57,7 @@ import type { AgentWorkSummary, SessionEventsResponse } from '../features/sessio
 import type { TaskPlanView } from '../features/plan-strip/plan.model';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
+import { JobsHubClient } from './jobs-hub-client.service';
 
 /** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
 export interface CodeReviewListEntry {
@@ -113,9 +114,24 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
 export class TaskService {
   private http = inject(HttpClient);
   private errorDialog = inject(ErrorDialogService);
+  private jobsHub = inject(JobsHubClient);
 
   private readonly baseUrl = '/api';
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
+  private pushRefreshHandle: ReturnType<typeof setTimeout> | null = null;
+
+  // Push (SignalR `/hubs/jobs`) is the primary update path. The poll is
+  // demoted to a slow heartbeat that reconciles drift and backs up the socket
+  // when it is down — 30 s keeps server load low while staying inside the
+  // documented 30-60 s fallback window.
+  private static readonly HEARTBEAT_MS = 30000;
+  // A single mutation can fan out a burst of pushes (a bulk reorder, or a
+  // move that also re-stamps siblings). Coalesce them into one silent re-pull,
+  // still far under the 1 s cross-tab budget.
+  private static readonly PUSH_DEBOUNCE_MS = 120;
+
+  /** True while the job-events socket is connected (diagnostics / e2e). */
+  readonly pushConnected = this.jobsHub.connected;
 
   // Eventual-consistency layer for drag/drop. The user-visible reorder
   // happens locally before the backend confirms (the previous round-trip
@@ -1616,6 +1632,14 @@ export class TaskService {
     // right indicator on first paint, then refresh it on a slow cadence.
     this.refreshLaneSortStrategies();
 
+    // Primary path: react to mutation pushes the instant they arrive.
+    this.startPushUpdates();
+
+    // Fallback heartbeat: reconciles any drift and keeps the board live if the
+    // socket is down. Callers can request a faster cadence, but never slower
+    // than the heartbeat — the point of push is that 2 s polling is no longer
+    // needed.
+    const heartbeatMs = Math.max(intervalMs, TaskService.HEARTBEAT_MS);
     this.liveUpdateTimer = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) {
         return;
@@ -1623,22 +1647,130 @@ export class TaskService {
 
       this.refresh(true);
 
-      // Sort strategy changes rarely; poll it every ~10 s (every 5th tick)
-      // rather than on every board refresh.
-      this.laneSortStrategyTick = (this.laneSortStrategyTick + 1) % 5;
+      // Sort strategy changes rarely; refresh it every other heartbeat.
+      this.laneSortStrategyTick = (this.laneSortStrategyTick + 1) % 2;
       if (this.laneSortStrategyTick === 0) {
         this.refreshLaneSortStrategies();
       }
-    }, intervalMs);
+    }, heartbeatMs);
   }
 
   stopLiveUpdates(): void {
-    if (!this.liveUpdateTimer) {
-      return;
+    if (this.liveUpdateTimer) {
+      clearInterval(this.liveUpdateTimer);
+      this.liveUpdateTimer = null;
+    }
+    if (this.pushRefreshHandle) {
+      clearTimeout(this.pushRefreshHandle);
+      this.pushRefreshHandle = null;
+    }
+    this.jobsHub.stop();
+  }
+
+  /**
+   * Wire the `/hubs/jobs` push events into the board signals.
+   *
+   * Two delivery shapes:
+   *  - Unambiguous, self-contained payloads (create / update carry the full
+   *    {@link TaskInfo}; delete carries id+watchPath) are applied to the local
+   *    signals directly — zero round-trip, sub-100 ms cross-tab updates.
+   *  - Events without enough payload to patch a single row (move carries no
+   *    watchPath; reorder/bulk are inherently "re-pull" signals) trigger one
+   *    debounced silent re-fetch, which still lands well under 1 s.
+   *
+   * Optimistic safety: the local-delta helpers are idempotent and keyed by
+   * `watchPath::id`, so a push that echoes the caller's own mutation is a
+   * no-op rather than a double-apply. The silent re-fetch path runs through
+   * {@link refresh}, which already rejects responses during the optimistic
+   * grace window, so an in-flight drag is never clobbered by its own echo.
+   *
+   * `runnerStatusChanged` and CLI start/finish are bridged too: with the board
+   * poll slowed to a heartbeat, these keep the per-card execution badge and
+   * the project running-cue as responsive as they were under 2 s polling.
+   */
+  private startPushUpdates(): void {
+    this.jobsHub.start({
+      jobCreated: (info) => this.upsertJobLocal(info),
+      jobUpdated: (info) => this.upsertJobLocal(info),
+      jobDeleted: (e) => this.removeJobLocal(e.id, e.watchPath),
+      jobMoved: () => this.scheduleSilentRefresh(),
+      jobsReordered: () => this.scheduleSilentRefresh(),
+      jobsBulkChanged: () => this.scheduleSilentRefresh(),
+      runnerStatusChanged: () => this.refreshRunnerStatus(true),
+      cliStarted: () => this.scheduleSilentRefresh(),
+      cliFinished: () => this.scheduleSilentRefresh(),
+      // Initial connect + every reconnect: re-pull the full board so anything
+      // emitted while the socket was down is reconciled.
+      reconnected: () => this.refresh(true),
+    });
+  }
+
+  /** Coalesce a burst of push events into a single silent board re-fetch. */
+  private scheduleSilentRefresh(): void {
+    if (this.pushRefreshHandle) return;
+    this.pushRefreshHandle = setTimeout(() => {
+      this.pushRefreshHandle = null;
+      this.refresh(true);
+    }, TaskService.PUSH_DEBOUNCE_MS);
+  }
+
+  /**
+   * Insert-or-update a single task in the local `jobs` + `grouped` signals,
+   * keyed by `watchPath::id`. Removes the row from whatever lane currently
+   * holds it and re-inserts it into the lane for its `state`, ordered by the
+   * card's `order` field so the position matches what the grouped endpoint
+   * would return. Idempotent.
+   */
+  private upsertJobLocal(info: TaskInfo): void {
+    if (!info || !info.id) return;
+    const key = `${info.watchPath}::${info.id}`;
+
+    const flat = this.jobs();
+    const idx = flat.findIndex((j) => `${j.watchPath}::${j.id}` === key);
+    if (idx >= 0) {
+      const next = flat.slice();
+      next[idx] = info;
+      this.jobs.set(next);
+    } else {
+      this.jobs.set([...flat, info]);
     }
 
-    clearInterval(this.liveUpdateTimer);
-    this.liveUpdateTimer = null;
+    const lane = STATE_TO_LANE[info.state];
+    const current = this.grouped();
+    const next: GroupedJobs = { ...current };
+    for (const k of Object.keys(next) as LaneKey[]) {
+      const list = next[k] ?? [];
+      const filtered = list.filter((j) => `${j.watchPath}::${j.id}` !== key);
+      if (filtered.length !== list.length) next[k] = filtered;
+    }
+    if (lane) {
+      next[lane] = [...(next[lane] ?? []), info].sort(
+        (a, b) => (a.order ?? 0) - (b.order ?? 0),
+      );
+    }
+    this.grouped.set(next);
+  }
+
+  /** Remove a task from the local `jobs` + `grouped` signals. Idempotent. */
+  private removeJobLocal(jobId: string, watchPath: string): void {
+    const key = `${watchPath}::${jobId}`;
+
+    const flat = this.jobs();
+    const nextFlat = flat.filter((j) => `${j.watchPath}::${j.id}` !== key);
+    if (nextFlat.length !== flat.length) this.jobs.set(nextFlat);
+
+    const current = this.grouped();
+    const next: GroupedJobs = { ...current };
+    let changed = false;
+    for (const k of Object.keys(next) as LaneKey[]) {
+      const list = next[k] ?? [];
+      const filtered = list.filter((j) => `${j.watchPath}::${j.id}` !== key);
+      if (filtered.length !== list.length) {
+        next[k] = filtered;
+        changed = true;
+      }
+    }
+    if (changed) this.grouped.set(next);
   }
 
   // CLI settings
