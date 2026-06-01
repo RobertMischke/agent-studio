@@ -195,6 +195,74 @@ public sealed class ProjectRunnerModeTests : IDisposable
             e.Contains("manual", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Park-and-continue: a single task that fails AutoFailureHaltThreshold
+    /// times in a row is parked (counted as one distinct parked task) but the
+    /// project must STAY in auto-continuous - one bad task no longer halts the
+    /// whole queue. (Replaces the old "same job 3x -> manual" behaviour.)
+    /// </summary>
+    [Fact]
+    public void AutoFailure_SingleTaskFailsOut_ParksButKeepsAuto()
+    {
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
+            runner.RecordAutoPickupFailureForTest("job-a");
+
+        Assert.Equal(1, runner.GetParkedFailedTaskCountForTest());
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+    }
+
+    /// <summary>
+    /// 3x3 systemic halt: only when AutoFailureDistinctTaskHaltThreshold
+    /// DISTINCT tasks have each failed out (3 retries each) does the project
+    /// flip to manual.
+    /// </summary>
+    [Fact]
+    public void AutoFailure_ThreeDistinctTasksFailOut_HaltsToManual()
+    {
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        foreach (var job in new[] { "job-a", "job-b" })
+        {
+            for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
+                runner.RecordAutoPickupFailureForTest(job);
+            // still auto after each of the first two distinct tasks parks
+            Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        }
+
+        // third distinct task failing out trips the systemic breaker
+        for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
+            runner.RecordAutoPickupFailureForTest("job-c");
+
+        Assert.Equal("manual", runner.GetStatus().Mode);
+    }
+
+    /// <summary>
+    /// Mixed transient failures across DIFFERENT jobs (none repeating to the
+    /// threshold) must not park a task and must not halt: the window resets and
+    /// auto-mode continues.
+    /// </summary>
+    [Fact]
+    public void AutoFailure_MixedDistinctFailures_DoNotHalt()
+    {
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        runner.RecordAutoPickupFailureForTest("job-a");
+        runner.RecordAutoPickupFailureForTest("job-b");
+        runner.RecordAutoPickupFailureForTest("job-c");
+
+        Assert.Equal(0, runner.GetParkedFailedTaskCountForTest());
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+    }
+
+    [Fact]
+    public void AutoFailureDistinctTaskHaltThreshold_Is3()
+        => Assert.Equal(3, ProjectRunner.AutoFailureDistinctTaskHaltThreshold);
+
     private ProjectRunner BuildRunner(ILogger? logger = null)
     {
         var config = new ConfigurationBuilder()
