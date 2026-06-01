@@ -168,7 +168,7 @@
       <span class="task-card__effective-model-name">{{ effectiveModelChip().label }}</span>
     </span>
     @if (tokenBubble(); as tb) {
-      <span class="task-card__token-wrap">
+      <span class="task-card__token-wrap" appTokenPopover>
         <button type="button"
                 class="task-card__token-bubble"
                 [class]="'task-card__token-bubble--' + tb.tier"
@@ -179,8 +179,8 @@
                 (click)="$event.stopPropagation()">
           {{ tb.label }}
         </button>
-        <span class="task-card__token-popover"
-              role="tooltip"
+        <span class="task-card__token-popover" popover="manual"
+              role="tooltip" data-token-popover
               data-testid="task-card-token-popover">
           <span class="task-card__token-popover-title">Token usage</span>
           <table class="task-card__token-table">

@@ -873,14 +873,20 @@
       border-color: rgba(251,146,60,0.45);
     }
 
+    /* Native [popover] element: TokenPopoverDirective calls showPopover() so
+       this renders in the browser top layer, escaping the card's
+       overflow:hidden + content-visibility paint containment and the lane
+       scroll container. The directive sets fixed top/left (UA default would
+       centre it); we only override inset/margin and keep the visuals. */
     .task-card__token-popover {
-      display: none;
-      position: absolute;
-      bottom: calc(100% + 8px);
-      right: 0;
-      z-index: 30;
+      position: fixed;
+      inset: auto;
+      margin: 0;
+      z-index: 60;
       min-width: 240px;
       max-width: 320px;
+      max-height: 60vh;
+      overflow: auto;
       padding: 10px 12px;
       border-radius: 8px;
       background: var(--studio-tooltip-bg);
@@ -890,13 +896,6 @@
       -webkit-backdrop-filter: blur(6px) saturate(120%);
       color: var(--studio-tooltip-fg);
       text-align: left;
-      pointer-events: none;
-    }
-    .task-card__token-wrap:hover .task-card__token-popover,
-    .task-card__token-bubble:focus-visible + .task-card__token-popover,
-    .task-card__token-wrap:focus-within .task-card__token-popover {
-      display: block;
-      pointer-events: auto;
     }
     .task-card__token-popover-title {
       display: block;

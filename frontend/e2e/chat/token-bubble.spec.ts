@@ -109,18 +109,24 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
-    if (p === '/api/jobs/grouped') {
+    if (p === '/api/tasks/grouped') {
       const body = {
+        backlog: [],
         preparation: jobs.filter((j) => j.state === '1-preparation'),
+        orchestratorPrep: [],
+        needsHumanReview: [],
         ready: jobs.filter((j) => j.state === '2-ready'),
         progress: jobs.filter((j) => j.state === '3-progress'),
+        failedPickup: [],
         review: jobs.filter((j) => j.state === '4-review'),
+        autoReview: [],
+        humanReview: [],
         completed: jobs.filter((j) => j.state === '5-completed'),
         archive: jobs.filter((j) => j.state === '6-archive')
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     }
-    if (p === '/api/jobs' || p === '/api/jobs/') {
+    if (p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
     }
     if (p.startsWith('/api/clients')) {
@@ -159,9 +165,9 @@ test.describe('Token bubble on job cards', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
-    const card = page.locator('[data-testid="job-card"]', { hasText: 'Quiet card no tokens' });
+    const card = page.locator('[data-testid="task-card"]', { hasText: 'Quiet card no tokens' });
     await expect(card).toBeVisible();
-    await expect(card.locator('[data-testid="job-card-token-bubble"]')).toHaveCount(0);
+    await expect(card.locator('[data-testid="task-card-token-bubble"]')).toHaveCount(0);
   });
 
   test('card with tokens shows a bubble; hover reveals the popover', async ({ page }) => {
@@ -189,23 +195,24 @@ test.describe('Token bubble on job cards', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
-    const card = page.locator('[data-testid="job-card"]', { hasText: 'Noisy card with tokens' });
+    const card = page.locator('[data-testid="task-card"]', { hasText: 'Noisy card with tokens' });
     await expect(card).toBeVisible();
     await dismissErrorDialogIfPresent(page);
 
-    const bubble = card.locator('[data-testid="job-card-token-bubble"]');
+    const bubble = card.locator('[data-testid="task-card-token-bubble"]');
     await expect(bubble).toBeVisible();
     // 400k total -> blue tier (50k <= total < 500k).
     await expect(bubble).toHaveAttribute('data-token-tier', 'blue');
     // Compact label.
     await expect(bubble).toHaveText('400k');
 
-    // Focus reveals the popover via the :focus-within rule. Equivalent
-    // to hover for the user-visible contract — the popover is keyboard
-    // reachable as well — and dodges pointer-events races with any
-    // overlay that might appear before the cards land.
+    // Focusing the bubble reveals the popover (focusin on the wrap drives
+    // TokenPopoverDirective). Equivalent to hover for the user-visible
+    // contract — the popover is keyboard reachable as well — and dodges
+    // pointer-events races with any overlay that might appear before the
+    // cards land.
     await bubble.focus();
-    const popover = card.locator('[data-testid="job-card-token-popover"]');
+    const popover = card.locator('[data-testid="task-card-token-popover"]');
     await expect(popover).toBeVisible();
     await expect(popover.getByTestId('token-row-input')).toContainText('120k');
     await expect(popover.getByTestId('token-row-output')).toContainText('18k');
@@ -214,6 +221,22 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
     await expect(popover.getByTestId('token-row-model')).toContainText('claude-sonnet-4-6');
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
+
+    // Anti-clipping contract: the popover must render in the browser top
+    // layer (native Popover API) so the card's overflow:hidden +
+    // content-visibility paint containment and the lane scroll container
+    // cannot cut it off. `:popover-open` only matches when showPopover()
+    // promoted it to the top layer; the bounding box must also sit fully
+    // inside the viewport (the directive clamps it at every edge).
+    await expect(popover).toHaveAttribute('popover', 'manual');
+    expect(await popover.evaluate((el: HTMLElement) => el.matches(':popover-open'))).toBe(true);
+    const popBox = await popover.boundingBox();
+    const vp = page.viewportSize()!;
+    expect(popBox).not.toBeNull();
+    expect(popBox!.x).toBeGreaterThanOrEqual(0);
+    expect(popBox!.y).toBeGreaterThanOrEqual(0);
+    expect(popBox!.x + popBox!.width).toBeLessThanOrEqual(vp.width + 1);
+    expect(popBox!.y + popBox!.height).toBeLessThanOrEqual(vp.height + 1);
 
     // Screenshot evidence: bubble + popover. We screenshot a tight crop so
     // the diff stays small.
@@ -273,13 +296,13 @@ test.describe('Token bubble on job cards', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
-    const smallBubble = page.locator('[data-testid="job-card"]', { hasText: 'Small spend card' })
-      .locator('[data-testid="job-card-token-bubble"]');
+    const smallBubble = page.locator('[data-testid="task-card"]', { hasText: 'Small spend card' })
+      .locator('[data-testid="task-card-token-bubble"]');
     await expect(smallBubble).toHaveAttribute('data-token-tier', 'neutral');
     await expect(smallBubble).toHaveText('1.5k');
 
-    const hugeBubble = page.locator('[data-testid="job-card"]', { hasText: 'Huge spend card' })
-      .locator('[data-testid="job-card-token-bubble"]');
+    const hugeBubble = page.locator('[data-testid="task-card"]', { hasText: 'Huge spend card' })
+      .locator('[data-testid="task-card-token-bubble"]');
     await expect(hugeBubble).toHaveAttribute('data-token-tier', 'peach');
     await expect(hugeBubble).toHaveText('6.3M');
   });
