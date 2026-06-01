@@ -310,6 +310,23 @@
               <div class="activity-panel__header activity-panel__header--compact">
                 <h3 class="section__title activity-panel__title">Activity log</h3>
                 <div class="activity-panel__actions">
+                  @if (runCount() > 0) {
+                    <span class="activity-runs" data-testid="activity-runs">
+                      <button type="button"
+                              class="activity-runs__count"
+                              data-testid="activity-runs-open"
+                              [appTooltip]="'Show the full run list'"
+                              (click)="runsModalOpen.set(true)">
+                        {{ runCount() }} Run{{ runCount() === 1 ? '' : 's' }}
+                      </button>
+                      <button type="button"
+                              class="btn-icon activity-runs__info"
+                              data-testid="activity-runs-info"
+                              aria-label="What is a run?"
+                              [appTooltip]="runInfoTooltip"
+                              tooltipPosition="bottom">i</button>
+                    </span>
+                  }
                   @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
                     <button class="btn-icon"
                             data-testid="protocol-maximize-log"
@@ -328,11 +345,38 @@
 
               <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
 
-              <app-run-timeline
-                [job]="detail().info"
-                [runs]="runTimeline()?.runs ?? []"
-                (runFilter)="onRunFilter($event)"
-                (openGitViewer)="openGitViewer($event)" />
+              @if (runsModalOpen()) {
+                <div class="runs-modal-backdrop"
+                     data-testid="runs-modal"
+                     (click)="runsModalOpen.set(false)" tabindex="0"
+                     (keydown.enter)="runsModalOpen.set(false)"
+                     (keydown.escape)="runsModalOpen.set(false)"
+                     (keydown.space)="runsModalOpen.set(false); $event.preventDefault()">
+                  <section class="runs-modal"
+                           role="dialog"
+                           aria-modal="true"
+                           aria-labelledby="runs-modal-title"
+                           (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation()">
+                    <header class="runs-modal__head">
+                      <h3 id="runs-modal-title" class="runs-modal__title">
+                        {{ runCount() }} Run{{ runCount() === 1 ? '' : 's' }}
+                      </h3>
+                      <button type="button"
+                              class="runs-modal__close"
+                              data-testid="runs-modal-close"
+                              aria-label="Close run list"
+                              (click)="runsModalOpen.set(false)">×</button>
+                    </header>
+                    <div class="runs-modal__body">
+                      <app-run-timeline
+                        [job]="detail().info"
+                        [runs]="runTimeline()?.runs ?? []"
+                        (runFilter)="onRunFilter($event)"
+                        (openGitViewer)="openGitViewer($event)" />
+                    </div>
+                  </section>
+                </div>
+              }
 
               <app-run-git-viewer
                 [job]="detail().info"

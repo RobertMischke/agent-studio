@@ -202,7 +202,32 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (r.lineStart == null) return;
     const end = r.lineEnd ?? this.cliOutput().length;
     this.runFilterRange.set({ index: r.index, lineStart: r.lineStart, lineEnd: end });
+    // Filtering targets the activity log behind the modal — close it so the
+    // user sees the filtered output instead of the run list.
+    this.runsModalOpen.set(false);
   }
+
+  /**
+   * The compact "N Runs" header element opens the full run list/picker in a
+   * modal instead of stacking the icon-bar above the activity log. The count
+   * mirrors the polled run timeline so the header stays in sync.
+   */
+  readonly runsModalOpen = signal(false);
+  readonly runCount = computed<number>(() => this.runTimeline()?.runs?.length ?? 0);
+
+  /**
+   * Definition surfaced by the "i" icon-button next to the run count. A run is
+   * one execution attempt of the task; the intents come from the ADR-0049 run
+   * model (start / continue / recovery / restart). HTML body is sanitized by
+   * the tooltip controller.
+   */
+  readonly runInfoTooltip = {
+    title: 'What is a run?',
+    body:
+      'A <strong>run</strong> is one execution attempt of this task — a single agent/CLI invocation between your inputs.<br><br>' +
+      'Runs are tagged by intent: <strong>start</strong> (first attempt), <strong>continue</strong> (a follow-up turn), and <strong>recovery</strong> / <strong>restart</strong> (a re-run after a problem).<br><br>' +
+      'See ADR-0049 for the task run model.',
+  };
 
   clearRunFilter(): void {
     this.runFilterRange.set(null);
@@ -218,6 +243,9 @@ export class ProtocolPaneComponent implements OnDestroy {
   openGitViewer(r: RunRecord): void {
     if (!r.headShaBefore || !r.headShaAfter) return;
     this.gitViewerRun.set(r);
+    // The diff overlay renders above the activity log, so close the run-list
+    // modal to avoid stacking two overlays.
+    this.runsModalOpen.set(false);
   }
 
   closeGitViewer(): void {

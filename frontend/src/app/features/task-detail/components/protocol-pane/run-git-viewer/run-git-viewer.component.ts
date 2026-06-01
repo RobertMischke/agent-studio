@@ -4,7 +4,6 @@ import {
   computed,
   inject,
   input,
-  OnDestroy,
   output,
   signal,
   DoCheck,
@@ -12,16 +11,9 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import type { TaskInfo } from '../../../../../models/task.model';
 import type { RunFileChange, RunRecord } from '../../../../../features/run-timeline';
-import type { GitStatus } from '../../../../git';
-import { TaskService } from '../../../../../services/task.service';
 import { RunGitCacheService } from '../../../services/run-git-cache.service';
 import { highlightBlock } from '../../beautiful-results/highlight-lazy';
 import { perfMark, perfMeasure } from '../../../../../utils/perf-tracker';
-import {
-  setVisibleInterval,
-  clearVisibleInterval,
-  VisibleIntervalHandle,
-} from '../../../../../utils/visible-interval';
 import {
   buildTree,
   findFirstLeaf,
@@ -41,7 +33,7 @@ import {
   templateUrl: './run-git-viewer.component.html',
   styleUrl: './run-git-viewer.component.scss',
 })
-export class RunGitViewerComponent implements DoCheck, OnDestroy {
+export class RunGitViewerComponent implements DoCheck {
   readonly job = input<TaskInfo | null>(null);
   readonly run = input<RunRecord | null>(null);
   readonly visible = input<boolean>(false);
@@ -67,26 +59,8 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
   readonly highlightedLines = signal<HighlightedLine[] | null>(null);
   readonly isNewFile = computed<boolean>(() => detectNewFile(this.diffText()));
 
-  // --- F55: state-aware inline display ---
-  // The 'committed' branch was retired (commit count now rides as a
-  // badge on the Git pane-toggle); only 'worktree' and 'idle' surface
-  // in the inline view today. The legacy review-lane states still map
-  // to a no-op so the worktree poll doesn't fire on them.
-  readonly displayMode = computed<'worktree' | 'idle'>(() => {
-    const j = this.job();
-    if (!j) return 'idle';
-    if (j.state === '3-progress') return 'worktree';
-    return 'idle';
-  });
-
-  readonly worktreeStatus = signal<GitStatus | null>(null);
-  readonly worktreeLoading = signal(false);
-
-  private readonly jobService = inject(TaskService);
   private readonly runGitCache = inject(RunGitCacheService);
   private currentLoadKey = '';
-  private worktreeTimer: VisibleIntervalHandle | null = null;
-  private lastWorktreeJobId: string | null = null;
 
   ngDoCheck(): void {
     const v = this.visible();
@@ -99,43 +73,6 @@ export class RunGitViewerComponent implements DoCheck, OnDestroy {
     } else if (!key) {
       this.currentLoadKey = '';
     }
-
-    if (this.displayMode() === 'worktree' && j) {
-      if (this.lastWorktreeJobId !== j.id) {
-        this.lastWorktreeJobId = j.id;
-        this.refreshWorktree();
-        this.startWorktreePoll();
-      }
-    } else {
-      this.stopWorktreePoll();
-      if (this.displayMode() !== 'worktree') this.lastWorktreeJobId = null;
-    }
-  }
-
-  ngOnDestroy(): void {
-    this.stopWorktreePoll();
-  }
-
-  private startWorktreePoll(): void {
-    if (this.worktreeTimer) return;
-    this.worktreeTimer = setVisibleInterval(() => this.refreshWorktree(), 5000);
-  }
-
-  private stopWorktreePoll(): void {
-    if (this.worktreeTimer) {
-      clearVisibleInterval(this.worktreeTimer);
-      this.worktreeTimer = null;
-    }
-  }
-
-  private refreshWorktree(): void {
-    const j = this.job();
-    if (!j) return;
-    this.worktreeLoading.set(true);
-    this.jobService.getGitStatus(j.id, j.watchPath).subscribe({
-      next: (s) => { this.worktreeStatus.set(s); this.worktreeLoading.set(false); },
-      error: () => this.worktreeLoading.set(false),
-    });
   }
 
   copyLabel(): string {

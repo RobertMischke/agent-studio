@@ -4,11 +4,15 @@ import * as path from 'path';
 /**
  * F55: State-aware Git View display modes.
  *
- * The run-git-viewer component renders an inline panel below the run
- * timeline that switches between two modes based on the job's state:
+ * The live working-tree view (branch, file count, diffstat, file list)
+ * lives in the Git pane (app-git-pane). It renders only for the runner's
+ * currently-active job, since the working tree is shared across the repo
+ * and its changes belong to whichever task the agent is editing.
  *
- * 1. **Worktree** (3-progress): live working-tree status with auto-poll.
- * 2. **Idle** (0-backlog, 1-*, 2-ready): empty state placeholder.
+ * The Activity tab no longer carries any inline git view: the old
+ * run-git-viewer inline worktree/idle panel was removed so the Activity
+ * log does not duplicate the Git pane. run-git-viewer is now purely the
+ * per-run diff overlay.
  *
  * Committed-mode used to render an inline "COMMITTED N commits" strip
  * with hash cards here too, but that duplicated the Git pane. It was
@@ -89,6 +93,7 @@ async function installRoutes(
   state: string,
   includeCommits: boolean,
   gitStatus?: object,
+  activeJobId: string | null = null,
 ) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state, includeCommits);
@@ -177,7 +182,7 @@ async function installRoutes(
           [PROJECT]: {
             projectName: PROJECT,
             mode: 'manual',
-            activeJobId: null,
+            activeJobId,
             activeExecution: null,
             queuedJobIds: [],
           },
@@ -361,7 +366,11 @@ test.describe('F55: Git View state-aware display', () => {
     await expect(page.getByTestId('studio-pane-toggle-git-badge')).toHaveCount(0);
   });
 
-  test('worktree mode shows live status with file list', async ({ page }) => {
+  test('Activity tab no longer renders the inline worktree git view', async ({ page }) => {
+    // Progress task with live changes — this is exactly the case that used
+    // to render the inline "LIVE WORKTREE" panel below the run timeline.
+    // The worktree view moved to the Git pane, so the Activity tab must
+    // carry neither the worktree nor the idle inline panel.
     const gitStatus = {
       isRepo: true,
       branch: 'main',
@@ -376,56 +385,92 @@ test.describe('F55: Git View state-aware display', () => {
       error: null,
     };
 
-    await installRoutes(page, '3-progress', false, gitStatus);
+    await installRoutes(page, '3-progress', false, gitStatus, JOB_ID);
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
     );
 
-    const inline = page.getByTestId('rgv-inline-worktree');
-    await expect(inline).toBeVisible({ timeout: 10_000 });
-    await expect(inline).toContainText('Live worktree');
-    await expect(inline).toContainText('main');
-    await expect(inline).toContainText('3 files');
-    await expect(inline).toContainText('+12');
-    await expect(inline).toContainText('-4');
-    await expect(inline).toContainText('src/component.ts');
-    await expect(inline).toContainText('src/component.spec.ts');
-    await expect(inline).toContainText('src/old-helper.ts');
+    await dismissErrorDialog(page);
+    // The Activity tab itself is up once its log section renders.
+    await expect(page.getByTestId('protocol-maximize-log').or(page.getByTestId('protocol-open-verbose-debug'))).toBeVisible({ timeout: 10_000 });
+
+    await expect(page.getByTestId('rgv-inline-worktree')).toHaveCount(0);
+    await expect(page.getByTestId('rgv-inline-idle')).toHaveCount(0);
+  });
+
+  test('Git pane shows the live worktree for the active job', async ({ page }) => {
+    const gitStatus = {
+      isRepo: true,
+      branch: 'main',
+      filesChanged: 3,
+      totalAdded: 12,
+      totalRemoved: 4,
+      files: [
+        { status: 'M', path: 'src/component.ts', added: 8, removed: 3 },
+        { status: 'A', path: 'src/component.spec.ts', added: 4, removed: 0 },
+        { status: 'D', path: 'src/old-helper.ts', added: 0, removed: 1 },
+      ],
+      error: null,
+    };
+
+    // activeJobId === JOB_ID so the worktree-isolation gate lets the pane
+    // render live `git status`.
+    await installRoutes(page, '3-progress', false, gitStatus, JOB_ID);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+
+    await dismissErrorDialog(page);
+    // Open the Git pane — first open lazy-loads `git status`.
+    await page.getByTestId('studio-pane-toggle-git').click();
+
+    const paneGit = page.getByTestId('pane-git');
+    await expect(paneGit).toBeVisible({ timeout: 10_000 });
+    await expect(paneGit).toHaveAttribute('data-active-job', 'true');
+
+    await expect(page.getByTestId('git-files-count')).toHaveText('3 files', { timeout: 10_000 });
+    await expect(paneGit).toContainText('main');
+    await expect(paneGit).toContainText('+12');
+    // The file tree collapses the shared `src/` prefix into a folder node,
+    // so leaves render as basenames under it rather than full paths.
+    await expect(paneGit).toContainText('src/');
+    await expect(paneGit).toContainText('component.ts');
+    await expect(paneGit).toContainText('component.spec.ts');
+    await expect(paneGit).toContainText('old-helper.ts');
 
     if (RESULTS_DIR) {
-      await dismissErrorDialog(page);
       await page.screenshot({
-        path: path.join(RESULTS_DIR, 'f55-git-view-worktree-mode-light.png'),
+        path: path.join(RESULTS_DIR, 'f55-git-pane-worktree-mode.png'),
       });
     }
   });
 
-  test('idle mode shows empty state for backlog task', async ({ page }) => {
-    await installRoutes(page, '2-ready', false);
+  test('Git pane suppresses the worktree for a non-active task', async ({ page }) => {
+    const gitStatus = {
+      isRepo: true,
+      branch: 'main',
+      filesChanged: 2,
+      totalAdded: 5,
+      totalRemoved: 1,
+      files: [{ status: 'M', path: 'src/other.ts', added: 5, removed: 1 }],
+      error: null,
+    };
+
+    // No active job (activeJobId stays null) — the working tree belongs to
+    // whichever task the agent is editing, so a non-active task must not
+    // render live status even though the route would return some.
+    await installRoutes(page, '3-progress', false, gitStatus, null);
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
     );
 
-    const inline = page.getByTestId('rgv-inline-idle');
-    await expect(inline).toBeVisible({ timeout: 10_000 });
-    await expect(inline).toContainText("No commits yet");
+    await dismissErrorDialog(page);
+    await page.getByTestId('studio-pane-toggle-git').click();
 
-    if (RESULTS_DIR) {
-      await dismissErrorDialog(page);
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'f55-git-view-idle-light.png'),
-      });
-    }
-  });
-
-  test('worktree mode shows clean state when no changes', async ({ page }) => {
-    await installRoutes(page, '3-progress', false);
-    await page.goto(
-      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
-    );
-
-    const inline = page.getByTestId('rgv-inline-worktree');
-    await expect(inline).toBeVisible({ timeout: 10_000 });
-    await expect(inline).toContainText('Working tree clean');
+    const paneGit = page.getByTestId('pane-git');
+    await expect(paneGit).toBeVisible({ timeout: 10_000 });
+    await expect(paneGit).toHaveAttribute('data-active-job', 'false');
+    await expect(page.getByTestId('git-view-suppressed-non-active')).toBeVisible();
+    await expect(page.getByTestId('git-files-count')).toHaveCount(0);
   });
 });

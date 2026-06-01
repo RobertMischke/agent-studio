@@ -1,60 +1,9 @@
 <!--
-  F55: inline state-aware git panel. The 'committed' case was retired
-  - the Git pane already surfaces the same commit list (with file counts
-  and diffs), and the protocol pane now carries the commit count as a
-  small badge on the Git pane-toggle in the header. Keeping it here
-  duplicated the same information in two places and produced a noisy
-  "Committed 0 commits" strip on review-lane tasks that had not yet
-  auto-committed. Inline view now only renders worktree / idle modes.
+  Live worktree status moved to the Git pane (see app-git-pane), which
+  owns the working-tree summary, file tree, diff, and commit form. This
+  component is now purely the per-run diff overlay so the Activity tab
+  no longer duplicates the worktree view.
 -->
-@if (!visible()) {
-  @switch (displayMode()) {
-    @case ('worktree') {
-      <div class="rgv-inline" data-testid="rgv-inline-worktree">
-        <div class="rgv-inline__header">
-          <span class="rgv-inline__badge rgv-inline__badge--worktree">Live worktree</span>
-          @if (worktreeLoading()) {
-            <span class="rgv-inline__poll-indicator" data-testid="rgv-worktree-polling" aria-label="Polling">●</span>
-          }
-        </div>
-        @if (worktreeStatus(); as ws) {
-          @if (ws.error) {
-            <div class="rgv-inline__empty">{{ ws.error }}</div>
-          } @else if (!ws.isRepo) {
-            <div class="rgv-inline__empty">Not a git repository.</div>
-          } @else if (ws.filesChanged === 0) {
-            <div class="rgv-inline__empty">Working tree clean. No uncommitted changes.</div>
-          } @else {
-            <div class="rgv-inline__worktree-summary">
-              <span class="rgv-inline__branch">{{ ws.branch || '(detached)' }}</span>
-              <span class="rgv-inline__wt-stat">{{ ws.filesChanged }} files</span>
-              <span class="rgv__add">+{{ ws.totalAdded }}</span>
-              <span class="rgv__del">-{{ ws.totalRemoved }}</span>
-            </div>
-            <div class="rgv-inline__file-list">
-              @for (f of ws.files; track f.path) {
-                <div class="rgv-inline__wt-file">
-                  <span class="rgv__status" [attr.data-status]="f.status">{{ f.status }}</span>
-                  <span class="rgv-inline__wt-path">{{ f.path }}</span>
-                  @if (f.added > 0) { <span class="rgv__add">+{{ f.added }}</span> }
-                  @if (f.removed > 0) { <span class="rgv__del">-{{ f.removed }}</span> }
-                </div>
-              }
-            </div>
-          }
-        } @else {
-          <div class="rgv-inline__empty">Loading worktree status...</div>
-        }
-      </div>
-    }
-    @case ('idle') {
-      <div class="rgv-inline rgv-inline--idle" data-testid="rgv-inline-idle">
-        <div class="rgv-inline__empty">No commits yet — this task hasn't run.</div>
-      </div>
-    }
-  }
-}
-
 <!-- Per-run diff overlay (existing F20 behavior) -->
 @if (visible()) {
   <div class="rgv__backdrop" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()"></div>
