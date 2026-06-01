@@ -118,6 +118,15 @@ public class ProjectRunner
     // the offenders without re-scanning.
     private readonly Queue<string> _recentAutoFailureJobIds = new();
 
+    // Distinct tasks that have each failed AutoFailureHaltThreshold times and
+    // been parked in 5-human-review. A single bad task is parked and auto-mode
+    // CONTINUES with the next task (no project-wide halt on one offender). Only
+    // a systemic pattern - AutoFailureDistinctTaskHaltThreshold distinct tasks
+    // parked this way without a success in between ("3x3") - flips the project
+    // to manual. Reset on any auto-issued run that reaches Review.
+    private readonly HashSet<string> _parkedFailedJobIds = new(StringComparer.Ordinal);
+    internal const int AutoFailureDistinctTaskHaltThreshold = 3;
+
     // Per-job consecutive capture-fail counter. A capture-fail run is one
     // that exited without claude/codex/gemini emitting a usable session id
     // - the prior run's UUID is dead, can't be resumed, and we have no new
@@ -2278,6 +2287,11 @@ public class ProjectRunner
                 {
                     _consecutiveAutoFailureCount = 0;
                     _recentAutoFailureJobIds.Clear();
+                    // A success between failures means the project is not
+                    // systemically broken; forget previously-parked offenders
+                    // so the "3 distinct parked tasks" halt only fires on a
+                    // genuine run of failures with no success in between.
+                    _parkedFailedJobIds.Clear();
                 }
                 else if (WasDeliberatelyStopped(execution.Status))
                 {
@@ -2295,56 +2309,7 @@ public class ProjectRunner
                 }
                 else
                 {
-                    _consecutiveAutoFailureCount++;
-                    _recentAutoFailureJobIds.Enqueue(jobId);
-                    while (_recentAutoFailureJobIds.Count > AutoFailureHaltThreshold)
-                        _recentAutoFailureJobIds.Dequeue();
-                    if (_consecutiveAutoFailureCount >= AutoFailureHaltThreshold && IsAutoMode(_mode))
-                    {
-                        var offenders = string.Join(", ", _recentAutoFailureJobIds);
-                        _logger.LogWarning(
-                            "Runner '{Project}' halting auto-mode after {N} consecutive failures: {Offenders}",
-                            ProjectName, _consecutiveAutoFailureCount, offenders);
-
-                        // If all N recent failures are the SAME job, the
-                        // offender is unambiguous — route it out of
-                        // 3-progress into 5-human-review so the user sees
-                        // a clear "needs your attention" surface instead
-                        // of a job stuck mid-pipeline. We still pause
-                        // auto-mode to protect the rest of the queue.
-                        var sameJobRepeated = _recentAutoFailureJobIds.Count >= AutoFailureHaltThreshold
-                            && _recentAutoFailureJobIds.All(id => string.Equals(id, jobId, StringComparison.Ordinal));
-
-                        if (activeInfo != null)
-                        {
-                            var note = sameJobRepeated
-                                ? $"Auto-mode paused and job moved to human review: {AutoFailureHaltThreshold} consecutive runs of '{jobId}' did not reach review. Investigate before re-running."
-                                : $"Auto-mode paused: {AutoFailureHaltThreshold} consecutive auto-pickup runs did not reach review ({offenders}). Investigate before re-enabling.";
-                            _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision, note);
-                        }
-
-                        if (sameJobRepeated && activeInfo != null)
-                        {
-                            try
-                            {
-                                // Fire-and-forget: the move is the right
-                                // thing, but a failure here must not
-                                // prevent the auto-mode pause below.
-                                _ = _transitions.MoveAsync(jobId, TaskStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Loud-failure routing to human-review failed for {JobId}", jobId);
-                            }
-                        }
-
-                        SetMode("manual",
-                            sameJobRepeated
-                                ? $"auto-failure circuit-breaker: {_consecutiveAutoFailureCount}x same job '{jobId}' did not reach review"
-                                : $"auto-failure circuit-breaker: {_consecutiveAutoFailureCount} consecutive auto-pickups did not reach review ({offenders})");
-                        _consecutiveAutoFailureCount = 0;
-                        _recentAutoFailureJobIds.Clear();
-                    }
+                    HandleAutoPickupFailure(jobId, activeInfo);
                 }
             }
         }
@@ -2835,6 +2800,102 @@ public class ProjectRunner
     /// <summary>Test seam: read the per-slug attempt counter.</summary>
     internal int GetPickupAttempts(string slug)
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
+
+    /// <summary>Test seam: number of distinct tasks the auto-failure breaker has
+    /// parked in 5-human-review without a success in between - the "3x3" halt
+    /// counter that flips the project to manual at
+    /// <see cref="AutoFailureDistinctTaskHaltThreshold"/>.</summary>
+    internal int GetParkedFailedTaskCountForTest() => _parkedFailedJobIds.Count;
+
+    /// <summary>
+    /// Auto-failure handling for a finished auto-pickup run that did NOT reach
+    /// review and was not a deliberate stop. Park-and-continue: a task that
+    /// fails <see cref="AutoFailureHaltThreshold"/> times in a row is parked in
+    /// 5-human-review and auto-mode KEEPS running with the next task; only when
+    /// <see cref="AutoFailureDistinctTaskHaltThreshold"/> DISTINCT tasks have
+    /// each failed out without a success in between ("3x3") does the project
+    /// flip to manual. <paramref name="activeInfo"/> may be null (e.g. in tests):
+    /// the counting + halt decision still runs; the park-move + chat note are
+    /// skipped.
+    /// </summary>
+    private void HandleAutoPickupFailure(string jobId, TaskInfo? activeInfo)
+    {
+        _consecutiveAutoFailureCount++;
+        _recentAutoFailureJobIds.Enqueue(jobId);
+        while (_recentAutoFailureJobIds.Count > AutoFailureHaltThreshold)
+            _recentAutoFailureJobIds.Dequeue();
+
+        // A single task that fails AutoFailureHaltThreshold times in a row
+        // without reaching review is the unambiguous offender.
+        var sameJobRepeated = _recentAutoFailureJobIds.Count >= AutoFailureHaltThreshold
+            && _recentAutoFailureJobIds.All(id => string.Equals(id, jobId, StringComparison.Ordinal));
+
+        if (sameJobRepeated && IsAutoMode(_mode))
+        {
+            // PARK-AND-CONTINUE (not a project-wide halt on one bad task).
+            // Route the offender out of 3-progress into 5-human-review so a
+            // human sees it, then keep auto-mode running so the rest of the
+            // queue proceeds. Only a SYSTEMIC pattern halts (distinct-task
+            // check below).
+            if (activeInfo != null)
+            {
+                try
+                {
+                    _ = _transitions.MoveAsync(jobId, TaskStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Park-to-human-review failed for {JobId}", jobId);
+                }
+            }
+
+            _parkedFailedJobIds.Add(jobId);
+            // Reset the per-task window so the next task starts clean.
+            _consecutiveAutoFailureCount = 0;
+            _recentAutoFailureJobIds.Clear();
+
+            if (_parkedFailedJobIds.Count >= AutoFailureDistinctTaskHaltThreshold)
+            {
+                var parked = string.Join(", ", _parkedFailedJobIds);
+                if (activeInfo != null)
+                    _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+                        $"Auto-mode paused: {_parkedFailedJobIds.Count} distinct tasks each failed {AutoFailureHaltThreshold}x without reaching review and were parked in human review ({parked}). Looks systemic - investigate before re-enabling.");
+                _logger.LogWarning(
+                    "Runner '{Project}' halting auto-mode: {Count} distinct tasks failed out (3x{Threshold}): {Parked}",
+                    ProjectName, _parkedFailedJobIds.Count, AutoFailureHaltThreshold, parked);
+                SetMode("manual",
+                    $"auto-failure circuit-breaker: {_parkedFailedJobIds.Count} distinct tasks failed out (3x{AutoFailureHaltThreshold}); last '{jobId}'");
+                _parkedFailedJobIds.Clear();
+            }
+            else if (activeInfo != null)
+            {
+                _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+                    $"Job '{jobId}' did not reach review after {AutoFailureHaltThreshold} runs; parked in human review. Auto-mode continues with the next task ({_parkedFailedJobIds.Count}/{AutoFailureDistinctTaskHaltThreshold} distinct tasks parked before a systemic pause).");
+                _logger.LogWarning(
+                    "Runner '{Project}' parked '{JobId}' to human-review after {N} failures; auto-mode continues ({Count}/{Halt} distinct parked).",
+                    ProjectName, jobId, AutoFailureHaltThreshold, _parkedFailedJobIds.Count, AutoFailureDistinctTaskHaltThreshold);
+            }
+        }
+        else if (_consecutiveAutoFailureCount >= AutoFailureHaltThreshold && IsAutoMode(_mode))
+        {
+            // Window full but no single repeated offender (mixed transient
+            // failures across different jobs). Don't park or halt: reset the
+            // window and let recovery proceed. A genuinely stuck job re-
+            // accumulates as same-job-repeated above and gets parked then.
+            _logger.LogInformation(
+                "Runner '{Project}' saw {N} mixed auto-pickup failures (no single repeat); resetting window, auto-mode continues.",
+                ProjectName, _consecutiveAutoFailureCount);
+            _consecutiveAutoFailureCount = 0;
+            _recentAutoFailureJobIds.Clear();
+        }
+    }
+
+    /// <summary>Test seam: drive one auto-pickup failure through the breaker
+    /// decision (park-and-continue / 3x3 halt) without a full run. Pass
+    /// <paramref name="activeInfo"/> null to exercise the pure counting + mode
+    /// decision.</summary>
+    internal void RecordAutoPickupFailureForTest(string jobId, TaskInfo? activeInfo = null)
+        => HandleAutoPickupFailure(jobId, activeInfo);
 
     /// <summary>Test seam: prime the per-slug zombie-resume-failure counter
     /// so a regression test can drive the picker's zombie dead-letter path
