@@ -32,7 +32,7 @@ export interface Job {
   execution: JobExecution | null;
 }
 
-export const listJobs = () => api<Job[]>('/api/jobs');
+export const listJobs = () => api<Job[]>('/api/tasks');
 
 interface JobDetail {
   info: Job;
@@ -41,16 +41,16 @@ interface JobDetail {
   log?: unknown[];
 }
 
-/** GET /api/jobs/{id} returns a JobDetail; we unwrap to the Job for callers. */
+/** GET /api/tasks/{id} returns a JobDetail; we unwrap to the Job for callers. */
 export async function getJob(jobId: string, watchPath?: string): Promise<Job> {
   const qs = watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '';
-  const detail = await api<JobDetail>(`/api/jobs/${encodeURIComponent(jobId)}${qs}`);
+  const detail = await api<JobDetail>(`/api/tasks/${encodeURIComponent(jobId)}${qs}`);
   return detail.info;
 }
 
 export async function getJobDetail(jobId: string, watchPath?: string): Promise<JobDetail> {
   const qs = watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '';
-  return api<JobDetail>(`/api/jobs/${encodeURIComponent(jobId)}${qs}`);
+  return api<JobDetail>(`/api/tasks/${encodeURIComponent(jobId)}${qs}`);
 }
 
 export interface CreateJobInput {
@@ -65,7 +65,7 @@ export interface CreateJobInput {
   /**
    * When true, the new job is marked as a Playwright / E2E fixture
    * (`fixture: true` in job.json) and is hidden from the default
-   * `/api/jobs` and `/api/jobs/grouped` responses on stable. Tests can
+   * `/api/tasks` and `/api/tasks/grouped` responses on stable. Tests can
    * still observe their own fixtures via `?includeFixtures=true`.
    * Defaults to `true` so spec authors do not have to remember the flag;
    * pass `false` only when a spec genuinely needs to plant a "real" job.
@@ -74,7 +74,7 @@ export interface CreateJobInput {
 }
 
 export async function createJob(input: CreateJobInput): Promise<{ id: string }> {
-  return api<{ id: string }>('/api/jobs', {
+  return api<{ id: string }>('/api/tasks', {
     method: 'POST',
     body: JSON.stringify({
       id: input.id ?? '',
@@ -105,7 +105,7 @@ export async function startJob(
   // project is busy. Tests that call this helper expect the running
   // case; unwrap to the execution and throw if we got queued instead.
   const resp = await api<{ status: string; execution?: JobExecution; queued?: unknown }>(
-    `/api/jobs/${encodeURIComponent(jobId)}/start?watchPath=${encodeURIComponent(watchPath)}`,
+    `/api/tasks/${encodeURIComponent(jobId)}/start?watchPath=${encodeURIComponent(watchPath)}`,
     { method: 'POST', body: JSON.stringify({ model: opts.model ?? null, cliType: opts.cliType ?? null }) }
   );
   if (resp.status !== 'started' || !resp.execution) {
@@ -118,13 +118,13 @@ export async function startJob(
 
 export async function getJobOutput(jobId: string, watchPath: string): Promise<unknown> {
   return api(
-    `/api/jobs/${encodeURIComponent(jobId)}/output?watchPath=${encodeURIComponent(watchPath)}`
+    `/api/tasks/${encodeURIComponent(jobId)}/output?watchPath=${encodeURIComponent(watchPath)}`
   );
 }
 
 export async function moveJob(jobId: string, watchPath: string, targetState: string): Promise<void> {
   await api(
-    `/api/jobs/${encodeURIComponent(jobId)}/move?watchPath=${encodeURIComponent(watchPath)}`,
+    `/api/tasks/${encodeURIComponent(jobId)}/move?watchPath=${encodeURIComponent(watchPath)}`,
     { method: 'POST', body: JSON.stringify({ targetState }) }
   );
 }
