@@ -80,9 +80,9 @@ export class DetailHeaderComponent {
   readonly triageAction = output<TriageActionPayload>();
 
   /**
-   * Plain-text tooltip explaining the snapshot iteration. Stays inside
-   * the `title` attribute (default browser delay, no rich HTML) per the
-   * project's tooltip rule.
+   * Tooltip text explaining the snapshot iteration, surfaced through the
+   * app's canonical `[appTooltip]` directive (single visual standard,
+   * instant hover). Plain readable language, no embedded markup.
    */
   readonly pagerTooltip = computed(() => {
     const total = this.pagerTotal();

@@ -1,19 +1,90 @@
 import { test, expect, type Page } from '@playwright/test';
-import { api, BACKEND } from '../helpers/api';
-import { createJob, moveJob } from '../helpers/jobs';
+import { api } from '../helpers/api';
 
 interface WatchPath { name: string; path: string; rootPath: string; }
 
+// Task create/move are kept local on `/api/tasks` on purpose: the shared
+// helpers in e2e/helpers/jobs.ts still target the renamed `/api/jobs`
+// prefix, whose migration is tracked separately as repo-wide route rot
+// (see commit 20ce863). This spec drives the live backend, so it hits the
+// real route directly - matching the local `deleteJob` below.
+async function createTask(input: {
+  id?: string;
+  title: string;
+  watchPath: string;
+  targetState?: string;
+  fixture?: boolean;
+}): Promise<{ id: string }> {
+  return api<{ id: string }>('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: input.id ?? '',
+      title: input.title,
+      watchPath: input.watchPath,
+      agent: 'claude',
+      cliType: 'claude',
+      model: null,
+      promptMarkdown: null,
+      targetState: input.targetState ?? '2-ready',
+      fixture: input.fixture ?? true,
+    }),
+  });
+}
+
+async function moveTask(jobId: string, watchPath: string, targetState: string): Promise<void> {
+  await api(
+    `/api/tasks/${encodeURIComponent(jobId)}/move?watchPath=${encodeURIComponent(watchPath)}`,
+    { method: 'POST', body: JSON.stringify({ targetState }) }
+  );
+}
+
+// Prefer the dedicated "Playwright Test" project. The live Runbook project the
+// API lists first runs the auto-runner, which moves tasks out of 2-ready mid
+// test and makes the snapshot-shrink assertions non-deterministic. The test
+// project isn't auto-driven, so the lane only changes when this spec changes it.
 async function getFirstWatchPath(): Promise<WatchPath> {
   const paths = await api<WatchPath[]>('/api/watch-paths?includeFixtures=true');
   if (!paths.length) throw new Error('No watch paths configured');
-  return paths[0];
+  return paths.find(p => /playwright/i.test(p.name)) ?? paths[0];
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
-    method: 'DELETE'
-  });
+  // Go through the shared `api` client (not a bare fetch) so the delete
+  // carries the `x-client-id` identity header. Without it the backend
+  // silently refuses the mutation, which is how the shared lane accumulated
+  // a backlog of orphaned fixtures from earlier runs.
+  await api(
+    `/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`,
+    { method: 'DELETE' }
+  );
+}
+
+interface GroupedTasks { [lane: string]: Array<{ id?: string; watchPath?: string }>; }
+
+/**
+ * Delete every leftover `e2e-pager-*` fixture from the board. Tests that
+ * time out skip their per-test cleanup, so fixtures from earlier runs
+ * survive and interleave (by id) with a fresh run's fixtures - which breaks
+ * the snapshot-order neighbour assertions. Purging up front keeps each run
+ * deterministic.
+ *
+ * The grouped board is unified across every watch path, so a fixture must be
+ * deleted with its OWN `watchPath` (older runs created fixtures under a
+ * different project); deleting with the wrong path returns 404 and silently
+ * leaves the orphan in place. Looped because a delete can race a
+ * still-settling move left behind by a prior teardown.
+ */
+async function purgeLeftoverFixtures(readWatchPath: string): Promise<void> {
+  const wpEnc = encodeURIComponent(readWatchPath);
+  for (let pass = 0; pass < 6; pass++) {
+    const grouped = await api<GroupedTasks>(`/api/tasks/grouped?watchPath=${wpEnc}`);
+    const leftovers = Object.values(grouped)
+      .flat()
+      .filter(t => String(t?.id ?? '').startsWith('e2e-pager') && t.watchPath)
+      .map(t => ({ id: String(t.id), watchPath: String(t.watchPath) }));
+    if (leftovers.length === 0) return;
+    for (const { id, watchPath } of leftovers) await deleteJob(id, watchPath).catch(() => {});
+  }
 }
 
 function uid(suffix: string) {
@@ -21,7 +92,7 @@ function uid(suffix: string) {
 }
 
 async function clickCardAndWaitForDetail(page: Page, jobId: string): Promise<void> {
-  await page.locator('[data-testid="job-card"]', { hasText: jobId }).first().click();
+  await page.locator('[data-testid="task-card"]', { hasText: jobId }).first().click();
   await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(jobId)}`), { timeout: 10_000 });
   await expect(page.getByTestId('detail-state-select')).toBeVisible({ timeout: 10_000 });
 }
@@ -35,9 +106,27 @@ async function clickCardAndWaitForDetail(page: Page, jobId: string): Promise<voi
  */
 async function waitForFixtureCards(page: Page, ids: ReadonlyArray<string>): Promise<void> {
   for (const id of ids) {
-    await expect(page.locator('[data-testid="job-card"]', { hasText: id }).first())
+    await expect(page.locator('[data-testid="task-card"]', { hasText: id }).first())
       .toBeVisible({ timeout: 15_000 });
   }
+}
+
+/**
+ * Snapshot order of the given fixtures, top-to-bottom as they sit in the
+ * kanban column. The pager iterates the lane order captured on entry, which
+ * is NOT the creation sequence: the board applies its own sort. Neighbour
+ * assertions must therefore key off the observed order. Sorting by the card's
+ * vertical position keeps the spec correct regardless of which sort the board
+ * applies.
+ */
+async function laneOrder(page: Page, ids: ReadonlyArray<string>): Promise<string[]> {
+  const withY: { id: string; y: number }[] = [];
+  for (const id of ids) {
+    const box = await page.locator('[data-testid="task-card"]', { hasText: id }).first().boundingBox();
+    withY.push({ id, y: box?.y ?? Number.MAX_SAFE_INTEGER });
+  }
+  withY.sort((a, b) => a.y - b.y);
+  return withY.map(e => e.id);
 }
 
 /**
@@ -50,25 +139,54 @@ async function waitForFixtureCards(page: Page, ids: ReadonlyArray<string>): Prom
  * Plain-text `title` tooltips (no rich HTML) per the project tooltip rule.
  */
 test.describe('Detail view - lane pager', () => {
+  // The snapshot-backed pager under test lives in the legacy <app-detail-header>
+  // (testids lane-pager*, detail-state-select, triage-overflow-*). The default
+  // `vsCodeLayout` studio shell hides that header and renders its own slim pager
+  // (studio-task-*) bound to LIVE lane peers, not the LanePagerService snapshot -
+  // a different implementation, not a renamed control. Opt back into the legacy
+  // chrome so this spec exercises the stable-iteration feature it covers.
+  //
+  // This spec was authored for the quiet "stable" target. When pointed at a
+  // busy shared dev backend (auto-runner churning several projects, thousands
+  // of tasks) every API round-trip and board render is slow: the default 60s
+  // per-test budget is routinely blown by backend latency, not the feature,
+  // and which test trips the 60s wall shifts run to run. Triple the budget so
+  // latency, not logic, decides, and allow one retry to absorb transient load
+  // spikes (the beforeEach purge re-runs, so a retry starts from a clean lane).
+  test.describe.configure({ timeout: 180_000, retries: 1 });
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('atp.flag.vsCodeLayout', '0');
+    });
+    // Start every test from a clean lane. The Playwright Test lane is shared
+    // across runs, and a timed-out test skips its per-test teardown, so
+    // orphaned fixtures otherwise pile up and interleave with this run's
+    // fixtures - breaking the snapshot-order neighbour assertions.
+    const wp = await getFirstWatchPath();
+    await purgeLeftoverFixtures(wp.path);
+  });
+
   test('captures lane snapshot on entry and walks with prev/next', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4, 5].map(i => uid(`walk-${i}`));
     const created: { id: string }[] = [];
     for (const id of ids) {
-      created.push(await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false }));
+      created.push(await createTask({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false }));
     }
 
     try {
       await page.goto('/');
       await waitForFixtureCards(page, ids);
-      // Land on the third created job. Created in order so it's the third
-      // of our fixture set; we click by its unique title.
-      await clickCardAndWaitForDetail(page, ids[2]);
+      // Land on the third fixture in lane order (newest-first), not creation
+      // order, so prev/next assertions match the snapshot the pager captures.
+      const order = await laneOrder(page, ids);
+      await clickCardAndWaitForDetail(page, order[2]);
 
       const pager = page.getByTestId('lane-pager');
       await expect(pager).toBeVisible({ timeout: 10_000 });
 
-      // The lane has at least our 5 fixtures, so position is "3 / N" with N >= 5.
+      // The lane has at least our 5 fixtures, so position is "k / N" with N >= 5.
       const count = page.getByTestId('lane-pager-count');
       await expect(count).toContainText(/^\d+ \/ \d+$/);
       const initial = (await count.textContent())!.trim();
@@ -77,22 +195,26 @@ test.describe('Detail view - lane pager', () => {
       expect(total).toBeGreaterThanOrEqual(5);
       const startPos = Number(posStr);
 
-      // Tooltip is plain text on the title attribute - no rich HTML widget.
-      const titleAttr = await pager.getAttribute('title');
-      expect(titleAttr).toMatch(/Iterating jobs.*Showing job \d+ of \d+/);
-      // Sanity-check: no nested tooltip-renderer element on or under the pager.
-      const customTooltipMarkers = await pager.locator('[data-tooltip-html],[data-tippy-content]').count();
-      expect(customTooltipMarkers).toBe(0);
+      // Tooltip follows the app's canonical [appTooltip] standard: hovering
+      // surfaces the singleton overlay (data-testid="app-tooltip") whose text
+      // explains the captured iteration in plain, readable language. We hover
+      // the count span (it has no tooltip of its own) so the group tooltip,
+      // not a button tooltip, is the one that shows.
+      await expect(pager).not.toHaveAttribute('title', /.+/);
+      await page.getByTestId('lane-pager-count').hover();
+      const tip = page.getByTestId('app-tooltip');
+      await expect(tip).toBeVisible({ timeout: 5_000 });
+      await expect(tip).toHaveText(/Iterating jobs.*Showing job \d+ of \d+/);
 
       // Next advances to the fourth job in the captured iteration.
       await page.getByTestId('lane-pager-next').click();
       await expect(count).toHaveText(`${startPos + 1} / ${total}`, { timeout: 5_000 });
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[3])}`), { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[3])}`), { timeout: 10_000 });
 
       // Prev rewinds.
       await page.getByTestId('lane-pager-prev').click();
       await expect(count).toHaveText(`${startPos} / ${total}`, { timeout: 5_000 });
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[2])}`), { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[2])}`), { timeout: 10_000 });
     } finally {
       for (const id of ids) await deleteJob(id, wp.path).catch(() => {});
     }
@@ -101,8 +223,16 @@ test.describe('Detail view - lane pager', () => {
   test('state change from the detail header auto-advances to the next captured slug and removes the moved task from the pager', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4, 5].map(i => uid(`stable-${i}`));
+    // The create endpoint intakes every new task into 0-backlog regardless of
+    // the requested targetState, so that is where these fixtures land. Backlog
+    // is the right lane for this test anyway: it is a manual triage lane the
+    // auto-runner never pulls (it only auto-picks 2-ready and auto-processes
+    // 4-auto-review), so the captured iteration only changes when THIS test
+    // changes it. Freshly created, the five fixtures sort newest-first to the
+    // top of the lane, so they occupy contiguous snapshot slots - the pager can
+    // walk them and auto-advance lands on the next fixture, not a foreign card.
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+      await createTask({ id, title: id, watchPath: wp.path, targetState: '0-backlog', fixture: false });
     }
     try {
       await page.goto('/');
@@ -110,8 +240,10 @@ test.describe('Detail view - lane pager', () => {
       // the pager snapshot - otherwise openDetail can grab a list that's
       // missing the last-created jobs and the rest of the test races.
       await waitForFixtureCards(page, ids);
-      // Open the third job, then advance once so we're on the fourth.
-      await clickCardAndWaitForDetail(page, ids[2]);
+      // Open the third job in lane order, then advance once so we're on the
+      // fourth. Lane order is newest-first, so we resolve it at runtime.
+      const order = await laneOrder(page, ids);
+      await clickCardAndWaitForDetail(page, order[2]);
       const count = page.getByTestId('lane-pager-count');
       const initial = (await count.textContent())!.trim();
       const [posStr, totalStr] = initial.split('/').map(s => s.trim());
@@ -119,29 +251,29 @@ test.describe('Detail view - lane pager', () => {
       const startTotal = Number(totalStr);
 
       await page.getByTestId('lane-pager-next').click();
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[3])}`), { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[3])}`), { timeout: 10_000 });
 
-      // Move the current (4th) job out of 2-ready. The user wants to keep
-      // triaging the 2-ready lane, so the detail panel must auto-advance to
-      // ids[4] - the next captured slug - and the moved task must vanish
+      // Move the current (4th) job out of the captured lane. The user wants to
+      // keep triaging backlog, so the detail panel must auto-advance to
+      // order[4] - the next captured slug - and the moved task must vanish
       // from the pager (k / N-1, where the same numeric index now points at
       // the next job in the iteration).
       const moveResponse = page.waitForResponse(resp =>
         resp.request().method() === 'POST'
-        && resp.url().includes(`/api/tasks/${encodeURIComponent(ids[3])}/move`)
+        && resp.url().includes(`/api/tasks/${encodeURIComponent(order[3])}/move`)
       );
-      await page.getByTestId('detail-state-select').selectOption('4-auto-review');
+      await page.getByTestId('detail-state-select').selectOption('6-completed');
       await moveResponse;
 
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[4])}`), { timeout: 10_000 });
-      // The new detail view is anchored on ids[4], which is still in 2-ready.
-      await expect(page.getByTestId('detail-state-select')).toHaveValue('2-ready', { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[4])}`), { timeout: 10_000 });
+      // The new detail view is anchored on order[4], which is still in backlog.
+      await expect(page.getByTestId('detail-state-select')).toHaveValue('0-backlog', { timeout: 10_000 });
       // Pager count shrunk by one and the position is preserved.
       await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 5_000 });
     } finally {
-      // The fourth job was moved to auto-review; the rest are in 2-ready.
+      // The fourth job was moved to completed; the rest stay in backlog.
       for (const id of ids) {
-        await moveJob(id, wp.path, '7-archive').catch(() => {});
+        await moveTask(id, wp.path, '7-archive').catch(() => {});
         await deleteJob(id, wp.path).catch(() => {});
       }
     }
@@ -150,25 +282,31 @@ test.describe('Detail view - lane pager', () => {
   test('delete from the detail menu auto-advances to the next captured slug in the original lane', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4, 5].map(i => uid(`del-adv-${i}`));
+    // Fixtures intake to 0-backlog (a manual lane the auto-runner never pulls),
+    // so the snapshot count can only change when this test changes it (see the
+    // state-change test for the full rationale).
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+      await createTask({ id, title: id, watchPath: wp.path, targetState: '0-backlog', fixture: false });
     }
     try {
       await page.goto('/');
       await waitForFixtureCards(page, ids);
-      await clickCardAndWaitForDetail(page, ids[2]);
+      // Resolve lane order (newest-first) so the slot indices below match the
+      // snapshot the pager captures, not the creation sequence.
+      const order = await laneOrder(page, ids);
+      await clickCardAndWaitForDetail(page, order[2]);
       const count = page.getByTestId('lane-pager-count');
       const initial = (await count.textContent())!.trim();
       const [posStr, totalStr] = initial.split('/').map(s => s.trim());
       const startPos = Number(posStr);
       const startTotal = Number(totalStr);
 
-      // Walk Next once so we're on the fourth slot (ids[3]).
+      // Walk Next once so we're on the fourth slot (order[3]).
       await page.getByTestId('lane-pager-next').click();
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[3])}`), { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[3])}`), { timeout: 10_000 });
 
       // Delete via the detail-header triage overflow menu. The view must
-      // land on the next slot (ids[4]) and the pager count must drop by one
+      // land on the next slot (order[4]) and the pager count must drop by one
       // with the position preserved.
       await page.getByTestId('triage-overflow-btn').click();
       await page.getByTestId('triage-overflow-item-delete').click();
@@ -176,12 +314,12 @@ test.describe('Detail view - lane pager', () => {
       await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
       const deleteResponse = page.waitForResponse(resp =>
         resp.request().method() === 'DELETE'
-        && resp.url().includes(`/api/tasks/${encodeURIComponent(ids[3])}`)
+        && resp.url().includes(`/api/tasks/${encodeURIComponent(order[3])}`)
       );
       await page.getByTestId('confirm-dialog-confirm').click();
       await deleteResponse;
 
-      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[4])}`), { timeout: 10_000 });
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[4])}`), { timeout: 10_000 });
       await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 5_000 });
     } finally {
       for (const id of ids) await deleteJob(id, wp.path).catch(() => {});
@@ -191,16 +329,21 @@ test.describe('Detail view - lane pager', () => {
   test('multiple state changes in a row keep the pager anchored on the original lane', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4, 5].map(i => uid(`multi-${i}`));
+    // Fixtures intake to 0-backlog (a manual lane the auto-runner never pulls),
+    // so repeated moves below shrink the snapshot by exactly one each time with
+    // no auto-runner interleaving its own moves.
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+      await createTask({ id, title: id, watchPath: wp.path, targetState: '0-backlog', fixture: false });
     }
 
     try {
       await page.goto('/');
       await waitForFixtureCards(page, ids);
-      // Open the first fixture job. The pager captures the 2-ready iteration;
-      // total includes our 5 fixtures plus any leftover 2-ready peers.
-      await clickCardAndWaitForDetail(page, ids[0]);
+      // Open the first fixture in lane order (newest-first). The pager captures
+      // the backlog iteration; total includes our 5 fixtures plus any leftover
+      // backlog peers.
+      const order = await laneOrder(page, ids);
+      await clickCardAndWaitForDetail(page, order[0]);
       const count = page.getByTestId('lane-pager-count');
       const initial = (await count.textContent())!.trim();
       const [posStr, totalStr] = initial.split('/').map(s => s.trim());
@@ -212,25 +355,25 @@ test.describe('Detail view - lane pager', () => {
       // by one each time, and the panel must land on the next captured slug
       // each time without the user touching prev/next.
       for (let i = 0; i < 3; i++) {
-        const movingId = ids[i];
+        const movingId = order[i];
         await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(movingId)}`), { timeout: 10_000 });
         const moveResp = page.waitForResponse(resp =>
           resp.request().method() === 'POST'
           && resp.url().includes(`/api/tasks/${encodeURIComponent(movingId)}/move`)
         );
-        await page.getByTestId('detail-state-select').selectOption('4-auto-review');
+        await page.getByTestId('detail-state-select').selectOption('6-completed');
         await moveResp;
-        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[i + 1])}`), { timeout: 10_000 });
+        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[i + 1])}`), { timeout: 10_000 });
         await expect(count).toHaveText(`${startPos} / ${startTotal - (i + 1)}`, { timeout: 5_000 });
-        // The lane the detail header shows must still be 2-ready - the next
+        // The lane the detail header shows must still be 0-backlog - the next
         // captured slug is anchored on the original lane, not on the lane the
         // user just moved the previous job to.
-        await expect(page.getByTestId('detail-state-select')).toHaveValue('2-ready', { timeout: 10_000 });
+        await expect(page.getByTestId('detail-state-select')).toHaveValue('0-backlog', { timeout: 10_000 });
       }
     } finally {
-      // Three of the fixtures landed in auto-review; the rest in 2-ready.
+      // Three of the fixtures landed in completed; the rest in backlog.
       for (const id of ids) {
-        await moveJob(id, wp.path, '7-archive').catch(() => {});
+        await moveTask(id, wp.path, '7-archive').catch(() => {});
         await deleteJob(id, wp.path).catch(() => {});
       }
     }
@@ -240,11 +383,15 @@ test.describe('Detail view - lane pager', () => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4].map(i => uid(`reload-${i}`));
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+      await createTask({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
     }
 
     try {
       await page.goto('/');
+      // Wait for the fixture cards to render before clicking. On a slow shared
+      // backend the board can take longer than the 10s action timeout to paint
+      // the card, so clicking blind races the load and times out.
+      await waitForFixtureCards(page, ids);
       await clickCardAndWaitForDetail(page, ids[1]);
 
       const before = (await page.getByTestId('lane-pager-count').textContent())!.trim();
@@ -263,7 +410,7 @@ test.describe('Detail view - lane pager', () => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3].map(i => uid(`deep-link-${i}`));
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+      await createTask({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
     }
 
     try {
@@ -295,11 +442,12 @@ test.describe('Detail view - lane pager', () => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3].map(i => uid(`bounds-${i}`));
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+      await createTask({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
     }
 
     try {
       await page.goto('/');
+      await waitForFixtureCards(page, ids);
       await clickCardAndWaitForDetail(page, ids[0]);
       const count = page.getByTestId('lane-pager-count');
       const initial = (await count.textContent())!.trim();
