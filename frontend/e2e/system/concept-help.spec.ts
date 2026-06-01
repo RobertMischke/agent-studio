@@ -26,6 +26,18 @@ const SCREENSHOT_DIR = (() => {
 })();
 
 let projectName = '';
+let projectSlug = '';
+
+// Mirror of ProjectShell `toProjectSlug` (project-shell.config.ts). The
+// public shell hash contract is `#/projects/<slug>[/<rail>]`, parsed by
+// ProjectOverlaysService.syncShellFromHash and reload-safe on app boot.
+function toProjectSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 test.beforeAll(async () => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -33,7 +45,19 @@ test.beforeAll(async () => {
   expect(paths.length).toBeGreaterThan(0);
   const preferred = paths.find(p => /agent.?task/i.test(p.name)) ?? paths[0];
   projectName = preferred.name;
+  projectSlug = toProjectSlug(projectName);
 });
+
+// Deep-link straight to a project-shell rail. The studio-shell refactor
+// removed the per-project `project-shell-open-<name>` button from the `/`
+// landing board, so navigation goes through the hash contract instead.
+async function openProjectRail(
+  page: import('@playwright/test').Page,
+  rail: string,
+) {
+  await page.goto(`/#/projects/${projectSlug}/${rail}`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+}
 
 async function assertConceptHelp(
   page: import('@playwright/test').Page,
@@ -65,12 +89,9 @@ async function assertConceptHelp(
 }
 
 test('orchestrator concept-help on the global orchestrator card', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
   // The global orchestrator card lives under the Orchestrator rail of the
   // project shell (see project-detail.html `view === 'orchestrator'`).
-  await page.getByTestId('project-shell-rail-orchestrator').click();
+  await openProjectRail(page, 'orchestrator');
   const card = page.getByTestId('global-orchestrator-card');
   await card.scrollIntoViewIfNeeded();
   await expect(card).toBeVisible({ timeout: 10_000 });
@@ -82,12 +103,9 @@ test('orchestrator concept-help on the global orchestrator card', async ({ page 
 });
 
 test('supervisor concept-help on the project supervisor section', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
   // The supervisor section lives under the Observability rail (see
   // project-detail.html `view === 'observability'`).
-  await page.getByTestId('project-shell-rail-observability').click();
+  await openProjectRail(page, 'observability');
   const section = page.getByTestId('project-supervisor-section');
   await section.scrollIntoViewIfNeeded();
   await expect(section).toBeVisible();
@@ -99,10 +117,7 @@ test('supervisor concept-help on the project supervisor section', async ({ page 
 });
 
 test('audits-and-checks concept-help on the project security panel', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId('project-shell-rail-security').click();
+  await openProjectRail(page, 'security');
   await expect(page.getByTestId('security-panel')).toBeVisible();
   await assertConceptHelp(page, 'audits-and-checks', 'docs/security/overview.md');
   await page.screenshot({
@@ -112,10 +127,7 @@ test('audits-and-checks concept-help on the project security panel', async ({ pa
 });
 
 test('skills concept-help on the project skill-readiness section', async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
-  await page.getByTestId('project-shell-rail-steering').click();
+  await openProjectRail(page, 'steering');
   const section = page.getByTestId('project-skill-readiness-section');
   await section.scrollIntoViewIfNeeded();
   await expect(section).toBeVisible();
