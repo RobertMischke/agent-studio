@@ -27,7 +27,7 @@ namespace OrchestratorApi.Services.Cli;
 /// than throwing so orphan sessions render cleanly.
 /// </para>
 /// </summary>
-public sealed class SessionToJobIndex
+public sealed class SessionToTaskIndex
 {
     /// <summary>Sentinel entry in <see cref="TaskInfo.SessionChain"/> marking a recovery break.</summary>
     public const string RecoverySentinel = "(recovery)";

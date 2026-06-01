@@ -6,7 +6,7 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Locks in the contract for <see cref="SessionToJobIndex"/>: orphan ids
+/// Locks in the contract for <see cref="SessionToTaskIndex"/>: orphan ids
 /// return null, recovery sentinels are skipped, and the multi-checkout
 /// tie-break prefers a cwd match.
 ///
@@ -23,7 +23,7 @@ public class SessionToJobIndexTests
     [Fact]
     public void OrphanSessionId_ReturnsNull()
     {
-        var index = new SessionToJobIndex();
+        var index = new SessionToTaskIndex();
         index.Rebuild(new[]
         {
             MakeJob("job-a", TaskStates.Progress, watchPath: "/w/p1", chain: new[] { "s-1" })
@@ -36,15 +36,15 @@ public class SessionToJobIndexTests
     [Fact]
     public void RecoverySentinel_IsSkipped()
     {
-        var index = new SessionToJobIndex();
+        var index = new SessionToTaskIndex();
         index.Rebuild(new[]
         {
             MakeJob("job-a", TaskStates.Progress, watchPath: "/w/p1",
-                chain: new[] { "before-id", SessionToJobIndex.RecoverySentinel, "after-id" })
+                chain: new[] { "before-id", SessionToTaskIndex.RecoverySentinel, "after-id" })
         });
 
         // The sentinel itself must not show up as a key.
-        Assert.Null(index.Lookup(SessionToJobIndex.RecoverySentinel));
+        Assert.Null(index.Lookup(SessionToTaskIndex.RecoverySentinel));
         // Ids on both sides of the sentinel resolve back to the owning job.
         Assert.Equal("job-a", index.Lookup("before-id")!.JobId);
         Assert.Equal("job-a", index.Lookup("after-id")!.JobId);
@@ -55,7 +55,7 @@ public class SessionToJobIndexTests
     [Fact]
     public void EmptyOrWhitespaceChainEntries_AreSkipped()
     {
-        var index = new SessionToJobIndex();
+        var index = new SessionToTaskIndex();
         index.Rebuild(new[]
         {
             MakeJob("job-a", TaskStates.Progress, watchPath: "/w/p1",
@@ -71,7 +71,7 @@ public class SessionToJobIndexTests
     {
         // Two jobs in different checkouts share the same Claude session id
         // (the user has the same ~/.claude store visible to both).
-        var index = new SessionToJobIndex();
+        var index = new SessionToTaskIndex();
         var devJob = MakeJob("job-dev", TaskStates.Ready,    watchPath: "/w/dev",    chain: new[] { "shared-uuid" });
         var stbJob = MakeJob("job-stb", TaskStates.Progress, watchPath: "/w/stable", chain: new[] { "shared-uuid" });
         index.Rebuild(new[] { devJob, stbJob });
@@ -86,7 +86,7 @@ public class SessionToJobIndexTests
     [Fact]
     public void MultiCheckoutCollision_NoCwd_PrefersProgressLane()
     {
-        var index = new SessionToJobIndex();
+        var index = new SessionToTaskIndex();
         index.Rebuild(new[]
         {
             MakeJob("idle-job", TaskStates.Ready,    watchPath: "/w/a", chain: new[] { "s-1" }),
@@ -100,7 +100,7 @@ public class SessionToJobIndexTests
     [Fact]
     public void Rebuild_Replaces_PreviousIndex()
     {
-        var index = new SessionToJobIndex();
+        var index = new SessionToTaskIndex();
         index.Rebuild(new[] { MakeJob("old", TaskStates.Archive, watchPath: "/w", chain: new[] { "gone" }) });
         Assert.NotNull(index.Lookup("gone"));
 
@@ -126,13 +126,13 @@ public class SessionToJobIndexTests
             {
                 // Inject a recovery sentinel roughly 1 in 6 ids so the skip
                 // path is exercised at scale.
-                if (rng.Next(6) == 0) chain.Add(SessionToJobIndex.RecoverySentinel);
+                if (rng.Next(6) == 0) chain.Add(SessionToTaskIndex.RecoverySentinel);
                 chain.Add($"sess-{i:D4}-{c}");
             }
             jobs.Add(MakeJob($"job-{i:D4}", TaskStates.Archive, watchPath: "/w/perf", chain: chain.ToArray()));
         }
 
-        var index = new SessionToJobIndex();
+        var index = new SessionToTaskIndex();
         // Warm-up rebuild so JIT and allocator are settled - the assertion
         // measures steady-state behaviour, not first-touch cost.
         index.Rebuild(jobs);
@@ -143,7 +143,7 @@ public class SessionToJobIndexTests
 
         Assert.True(
             sw.ElapsedMilliseconds < 250,
-            $"SessionToJobIndex rebuild over {jobCount} jobs took {sw.ElapsedMilliseconds} ms; " +
+            $"SessionToTaskIndex rebuild over {jobCount} jobs took {sw.ElapsedMilliseconds} ms; " +
             "the plan target is well under 50 ms. If this regresses, look for accidental " +
             "disk I/O or per-job allocation churn in the rebuild path.");
         // Sanity: every job contributed at least one non-sentinel id.

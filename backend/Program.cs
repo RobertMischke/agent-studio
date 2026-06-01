@@ -188,7 +188,7 @@ builder.Services.AddSingleton<CodexCliService>();
 builder.Services.AddSingleton<GeminiCliService>();
 builder.Services.AddSingleton<ClaudeSessionInspector>();
 builder.Services.AddSingleton<CliRouter>();
-builder.Services.AddSingleton<SessionToJobIndex>();
+builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();

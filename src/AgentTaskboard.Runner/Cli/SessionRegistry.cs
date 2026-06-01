@@ -21,7 +21,7 @@ public sealed class SessionRegistry
 {
     private readonly ILogger<SessionRegistry> _logger;
     private readonly ITaskScanner _scanner;
-    private readonly SessionToJobIndex? _sessionIndex;
+    private readonly SessionToTaskIndex? _sessionIndex;
 
     public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner)
         : this(logger, scanner, sessionIndex: null) { }
@@ -34,7 +34,7 @@ public sealed class SessionRegistry
     /// without the index keep working (the chip is just empty in that
     /// case, which matches today's behaviour).
     /// </summary>
-    public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner, SessionToJobIndex? sessionIndex)
+    public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner, SessionToTaskIndex? sessionIndex)
     {
         _logger = logger;
         _scanner = scanner;
@@ -65,7 +65,7 @@ public sealed class SessionRegistry
             try { _sessionIndex.Rebuild(_scanner.ScanAllJobs()); }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "SessionToJobIndex rebuild failed; LinkedJob chips will be absent this tick");
+                _logger.LogWarning(ex, "SessionToTaskIndex rebuild failed; LinkedJob chips will be absent this tick");
             }
         }
 
