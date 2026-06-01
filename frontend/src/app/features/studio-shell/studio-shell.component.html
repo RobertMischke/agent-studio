@@ -14,7 +14,7 @@
       <button type="button"
               class="studio-titlebar__crumb studio-titlebar__crumb--ws studio-titlebar__crumb--btn"
               data-testid="studio-titlebar-workspace"
-              title="Workspace — switch workspace flow lands in a follow-up slice"
+              appTooltip="Workspace — switch workspace flow lands in a follow-up slice"
               (click)="onAddWorkspace()">
         <span>Workspace</span>
         <span class="studio-titlebar__crumb-caret" aria-hidden="true">▾</span>
@@ -46,7 +46,7 @@
               [class.studio-pill--active]="true"
               [style.--studio-pill-color]="activeProjectColor()"
               data-testid="studio-project-picker-trigger"
-              [title]="activeProjectPickerLabel() + ' — click to switch project'"
+              [appTooltip]="activeProjectPickerLabel() + ' — click to switch project'"
               (click)="togglePickerMenu($event)">
         @if (activeProjectName(); as name) {
           <span class="studio-pill__glyph"
@@ -64,7 +64,7 @@
                 tabindex="0"
                 [class.studio-auto-toggle--on]="autoModeFor(name) !== 'manual' && autoModeFor(name) !== 'paused'"
                 data-testid="studio-titlebar-auto-toggle"
-                [title]="autoToggleTooltip(name)"
+                [appTooltip]="autoToggleTooltip(name)"
                 (click)="toggleAuto.emit(name); $event.stopPropagation()"
                 (keydown.enter)="toggleAuto.emit(name); $event.stopPropagation()"
                 (keydown.space)="toggleAuto.emit(name); $event.stopPropagation()">
@@ -96,7 +96,7 @@
     <span class="studio-titlebar__spacer"></span>
 
     <button type="button" class="studio-titlebar__search" disabled
-            title="Search tasks, commits, files (coming soon)">
+            appTooltip="Search tasks, commits, files (coming soon)">
       <app-studio-icon name="search" [size]="13"></app-studio-icon>
       <span class="studio-titlebar__search-label">Search tasks, commits, files…</span>
       <span class="studio-titlebar__kbd">⌘P</span>
@@ -106,18 +106,18 @@
       <button type="button"
               class="studio-titlebar__chatbtn"
               data-testid="studio-titlebar-chat"
-              title="Open project chat (orchestrator side sheet)"
+              appTooltip="Open project chat (orchestrator side sheet)"
               (click)="chatToggle.emit()">
         <app-studio-icon name="bot" [size]="14"></app-studio-icon>
         <span>Project Chat</span>
       </button>
       <button type="button"
               class="studio-titlebar__iconbtn"
-              [title]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
+              [appTooltip]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
               (click)="toggleTheme()">
         <app-studio-icon [name]="theme() === 'light' ? 'moon' : 'sun'" [size]="14"></app-studio-icon>
       </button>
-      <button type="button" class="studio-titlebar__iconbtn" title="Notifications">
+      <button type="button" class="studio-titlebar__iconbtn" appTooltip="Notifications">
         <app-studio-icon name="bell" [size]="14"></app-studio-icon>
       </button>
     </div>
@@ -172,7 +172,7 @@
             <button type="button"
                     class="studio-sidebar__action"
                     data-testid="studio-sidebar-add-workspace"
-                    title="Add a project to the workspace"
+                    appTooltip="Add a project to the workspace"
                     aria-label="Add a project to the workspace"
                     (click)="onAddWorkspace()">
               <app-studio-icon name="plus" [size]="14"></app-studio-icon>
@@ -180,7 +180,7 @@
             <button type="button"
                     class="studio-sidebar__action"
                     data-testid="studio-sidebar-refresh"
-                    title="Refresh project list"
+                    appTooltip="Refresh project list"
                     aria-label="Refresh project list"
                     (click)="onRefreshWorkspace()">
               <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
@@ -188,7 +188,7 @@
             <button type="button"
                     class="studio-sidebar__action"
                     data-testid="studio-sidebar-collapse-all"
-                    title="Collapse all projects"
+                    appTooltip="Collapse all projects"
                     aria-label="Collapse all projects"
                     (click)="onCollapseAllProjects()">
               <app-studio-icon name="collapse" [size]="14"></app-studio-icon>
@@ -198,7 +198,7 @@
             <button type="button"
                     class="studio-sidebar__action studio-sidebar__action--text"
                     data-testid="studio-sidebar-filter-clear-all"
-                    title="Clear all active filters"
+                    appTooltip="Clear all active filters"
                     aria-label="Clear all filters"
                     (click)="boardFilters.clearSearchAndFilters()">Clear all</button>
           }
@@ -666,7 +666,7 @@
               @if (isTabSticky(t)) {
                 <span class="studio-tab__pin"
                       aria-label="Pinned tab"
-                      title="This tab is pinned and cannot be closed"
+                      appTooltip="This tab is pinned and cannot be closed"
                       data-testid="studio-tab-pin">
                   <app-studio-icon name="pin" [size]="11"></app-studio-icon>
                 </span>

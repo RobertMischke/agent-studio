@@ -12,6 +12,7 @@ import { StudioIconComponent } from '../../../../components/studio-icon/studio-i
 import { EmptyStateComponent } from '../../../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
+import { TooltipDirective } from '../../../../components/tooltip';
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 
@@ -75,7 +76,7 @@ function folderTail(path: string): string {
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent],
+  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',

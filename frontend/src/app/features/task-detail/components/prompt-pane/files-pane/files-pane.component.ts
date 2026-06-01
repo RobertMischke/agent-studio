@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { TaskService } from '../../../../../services/task.service';
 import { MarkdownRichEditorComponent } from '../../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
+import { TooltipDirective } from '../../../../../components/tooltip';
 import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.model';
 
 /**
@@ -31,7 +32,7 @@ import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.
   selector: 'app-files-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownViewComponent],
+  imports: [MarkdownRichEditorComponent, MarkdownViewComponent, TooltipDirective],
   templateUrl: './files-pane.component.html',
   styleUrl: './files-pane.component.scss',
 })

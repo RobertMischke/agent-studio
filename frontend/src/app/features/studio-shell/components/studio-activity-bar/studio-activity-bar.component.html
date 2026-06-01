@@ -7,7 +7,7 @@
   <button type="button"
           class="studio-ab__btn studio-ab__btn--board"
           [class.studio-ab__btn--active]="boardActive()"
-          title="Open board (Ctrl+B)"
+          appTooltip="Open board (Ctrl+B)"
           data-testid="studio-ab-board"
           (click)="openBoardRequest.emit()">
     <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
@@ -22,7 +22,7 @@
     <button type="button"
             class="studio-ab__btn"
             [class.studio-ab__btn--active]="activePanel() === item.key && sidebarVisible()"
-            [title]="item.label"
+            [appTooltip]="item.label"
             [attr.data-panel]="item.key"
             [attr.data-testid]="'studio-ab-' + item.key"
             (click)="panelToggle.emit(item.key)">
@@ -62,7 +62,7 @@
   <button type="button"
           class="studio-ab__btn"
           [class.studio-ab__btn--active]="activePanel() === 'settings' && sidebarVisible()"
-          title="Settings"
+          appTooltip="Settings"
           data-testid="studio-ab-settings"
           (click)="panelToggle.emit('settings')">
     <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"

@@ -29,7 +29,7 @@
                   class="file-card__action"
                   data-testid="file-card-prompt-edit"
                   [disabled]="isRunning()"
-                  [title]="isRunning() ? 'Stop the CLI first to edit prompt.md' : 'Edit prompt.md'"
+                  [appTooltip]="isRunning() ? 'Stop the CLI first to edit prompt.md' : 'Edit prompt.md'"
                   (click)="beginEditPrompt($event)">Edit</button>
         }
         @if (isPromptFile(file.name) && isExpanded(file.name) && isEditing()) {

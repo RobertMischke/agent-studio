@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import type { EpicRollup } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
+import { TooltipDirective } from '../../../../components/tooltip';
 
 /**
  * Epic rollup pane: shown in the task-detail view when the open card is an
@@ -12,6 +13,7 @@ import { TaskService } from '../../../../services/task.service';
 @Component({
   selector: 'app-epic-rollup-pane',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './epic-rollup-pane.component.html',
   styleUrl: './epic-rollup-pane.component.scss',

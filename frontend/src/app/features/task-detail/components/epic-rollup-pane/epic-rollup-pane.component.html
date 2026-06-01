@@ -26,7 +26,7 @@
       <ul class="epic-rollup__list" data-testid="epic-rollup-list">
         @for (sub of r.subTasks; track sub.id) {
           <li class="epic-rollup__item">
-            <span class="epic-rollup__item-title" [attr.title]="sub.title">{{ sub.title || sub.id }}</span>
+            <span class="epic-rollup__item-title" [appTooltip]="sub.title">{{ sub.title || sub.id }}</span>
             <span class="epic-rollup__item-state" [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
           </li>
         }

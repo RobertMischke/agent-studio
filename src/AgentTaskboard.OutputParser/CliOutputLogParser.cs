@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
 
@@ -34,8 +35,101 @@ public static partial class CliOutputLogParser
         if (!File.Exists(path)) return [];
 
         var fallbackDate = File.GetLastWriteTimeUtc(path).Date;
-        return ParseLines(File.ReadLines(path), fallbackDate);
+        var (tail, droppedLines) = ReadBoundedTail(path, MaxLinesCap, MaxLineCharsCap, MaxTotalCharsCap);
+        var parsed = ParseLines(tail, fallbackDate);
+
+        if (droppedLines > 0)
+        {
+            // Stay within the cap: the notice takes one slot so the returned
+            // list never exceeds MaxLinesCap, and make the truncation visible
+            // instead of silently presenting a partial log.
+            if (parsed.Count >= MaxLinesCap && parsed.Count > 0)
+            {
+                parsed.RemoveAt(0);
+                droppedLines++;
+            }
+            parsed.Insert(0, new CliOutputLine
+            {
+                Timestamp = fallbackDate,
+                Stream = "system",
+                Text = $"[taskboard] cli-output.log truncated for parsing: dropped {droppedLines} older line(s) " +
+                       $"to stay within the {MaxLinesCap:N0}-line parse cap (showing most recent activity)."
+            });
+        }
+
+        return parsed;
     }
+
+    /// <summary>
+    /// Stream <paramref name="path"/> and return only the trailing
+    /// <paramref name="maxLines"/> lines (and at most <paramref name="maxTotalChars"/>
+    /// characters), truncating any individual line longer than
+    /// <paramref name="maxLineChars"/>. Reads with a fixed char buffer rather
+    /// than <see cref="StreamReader.ReadLine"/> so a pathological newline-less
+    /// line cannot be materialised in full (which would OOM before any cap
+    /// could apply). Memory is bounded to roughly
+    /// <c>maxTotalChars + maxLineChars</c> regardless of file size.
+    /// </summary>
+    private static (List<string> Lines, long DroppedLines) ReadBoundedTail(
+        string path, int maxLines, int maxLineChars, long maxTotalChars)
+    {
+        var tail = new LinkedList<string>();
+        long totalChars = 0;
+        long dropped = 0;
+
+        void Append(string line)
+        {
+            tail.AddLast(line);
+            totalChars += line.Length;
+            while (tail.Count > maxLines || (totalChars > maxTotalChars && tail.Count > 1))
+            {
+                totalChars -= tail.First!.Value.Length;
+                tail.RemoveFirst();
+                dropped++;
+            }
+        }
+
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+
+        var sb = new StringBuilder();
+        var overflow = false;
+        var buffer = new char[16 * 1024];
+        int read;
+        while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            for (var i = 0; i < read; i++)
+            {
+                var c = buffer[i];
+                if (c == '\n')
+                {
+                    Append(FinishLine(sb, overflow, maxLineChars));
+                    sb.Clear();
+                    overflow = false;
+                }
+                else if (c == '\r')
+                {
+                    // Swallow CR; a following LF terminates the line (CRLF),
+                    // matching the log writer's newline handling.
+                }
+                else if (!overflow)
+                {
+                    if (sb.Length < maxLineChars) sb.Append(c);
+                    else overflow = true; // drop the rest of an over-long line
+                }
+            }
+        }
+
+        if (sb.Length > 0 || overflow)
+            Append(FinishLine(sb, overflow, maxLineChars));
+
+        return (new List<string>(tail), dropped);
+    }
+
+    private static string FinishLine(StringBuilder sb, bool overflow, int maxLineChars)
+        => overflow
+            ? sb.ToString() + $"…[truncated: line exceeded {maxLineChars:N0} chars]"
+            : sb.ToString();
 
     public static List<CliOutputLine> ParseLines(IEnumerable<string> lines, DateTime fallbackDateUtc)
     {
