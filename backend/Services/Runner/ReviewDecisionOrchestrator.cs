@@ -128,6 +128,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly TimelineLog? _timeline;
     private readonly ProjectSettingsService? _projectSettings;
+    // The system-escalation funnel. Used here only for the boot-time repair of
+    // legacy 5-human-review cards that carry no verdict (RecordVerdictAndStatus,
+    // no move). Optional so test fixtures that do not exercise the backfill keep
+    // their existing constructor; production DI always supplies it.
+    private readonly HumanReviewEscalation? _humanReviewEscalation;
 
     /// <summary>
     /// Stable prefix on the <c>Reason</c> field of every
@@ -155,7 +160,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PipelineExecutionLog? pipelineLog = null,
         ILintScssRunner? lintScssRunner = null,
         TimelineLog? timeline = null,
-        ProjectSettingsService? projectSettings = null)
+        ProjectSettingsService? projectSettings = null,
+        HumanReviewEscalation? humanReviewEscalation = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -174,6 +180,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _lintScssRunner = lintScssRunner;
         _timeline = timeline;
         _projectSettings = projectSettings;
+        _humanReviewEscalation = humanReviewEscalation;
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -230,6 +237,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             try { await Task.Delay(TimeSpan.FromSeconds(bootDelaySeconds), stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
+
+        // Pure data-repair, run on EVERY boot regardless of the Enabled flag:
+        // give any 5-human-review card that carries no orchestrator verdict a
+        // retroactive Escalate verdict + status.md stub so the board can explain
+        // it. These are the cards that landed there before the escalation funnel
+        // existed (the bug this fixes). Idempotent - a card with a verdict is
+        // skipped, so repeated boots are no-ops.
+        try { BackfillVerdictlessHumanReview(workspace!, stoppingToken); }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator: verdict-less human-review backfill failed"); }
 
         if (_configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false))
         {
@@ -433,6 +450,76 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             _logger.LogInformation("ReviewDecisionOrchestrator: tag-drift backfill cleaned {Cleaned} card(s).", cleaned);
         }
+    }
+
+    /// <summary>
+    /// One-shot boot repair for the bug
+    /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
+    /// every card parked in <c>5-human-review</c> whose per-project decision
+    /// journal holds NO record for that job gets a retroactive
+    /// <see cref="ReviewDecisionKind.Escalate"/> verdict (category
+    /// <see cref="HumanReviewEscalationCategories.UnknownLegacy"/>) and a minimal
+    /// <c>status.md</c> stub, written through <see cref="HumanReviewEscalation"/>.
+    /// These are the cards that reached the lane through the pre-funnel
+    /// ProjectRunner paths, so the board showed them as done-but-blank with
+    /// <c>orchestratorVerdict == null</c>. Idempotent: the gate is "no existing
+    /// verdict record", and the status stub is never written over a real summary,
+    /// so re-running on later boots is a no-op. Public so tests can drive it.
+    /// </summary>
+    public void BackfillVerdictlessHumanReview(string workspace, CancellationToken ct)
+    {
+        if (_humanReviewEscalation == null)
+        {
+            _logger.LogDebug("ReviewDecisionOrchestrator: no HumanReviewEscalation funnel injected; skipping verdict-less backfill.");
+            return;
+        }
+
+        List<TaskInfo> jobs;
+        try { jobs = _scanner.ScanAllJobs(); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ReviewDecisionOrchestrator: verdict-less backfill scan failed");
+            return;
+        }
+
+        var decisionsByProject = new Dictionary<string, IReadOnlyList<ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
+        var repairedKeys = new HashSet<string>(StringComparer.Ordinal);
+        var repaired = 0;
+
+        foreach (var job in jobs)
+        {
+            if (ct.IsCancellationRequested) return;
+            if (job.State != TaskStates.HumanReview) continue;
+            if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
+
+            if (!decisionsByProject.TryGetValue(job.ProjectName, out var records))
+            {
+                try { records = ReviewDecisionLog.ReadAll(workspace, job.ProjectName); }
+                catch { records = Array.Empty<ReviewDecisionRecord>(); }
+                decisionsByProject[job.ProjectName] = records;
+            }
+
+            // Gate: a card that already has ANY verdict record is explained -
+            // the endpoint-derived OrchestratorVerdict reads the latest of these.
+            // Only verdict-less cards are the legacy ones this repairs. The
+            // HashSet keeps a second folder for the same job id (rare, e.g. mid
+            // crash-recovery) from being appended twice in one sweep.
+            if (records.Any(r => r.JobId == job.Id)) continue;
+            if (!repairedKeys.Add($"{job.ProjectName} {job.Id}")) continue;
+
+            _humanReviewEscalation.RecordVerdictAndStatus(
+                job.ProjectName, job.Id, job.FolderPath,
+                HumanReviewEscalationCategories.UnknownLegacy,
+                "Parked in human review before the escalation funnel existed; no automated review ran.");
+
+            repaired++;
+            _logger.LogInformation(
+                "ReviewDecisionOrchestrator: verdict-less backfill gave {Project}/{JobId} a retroactive escalate verdict (category={Category}).",
+                job.ProjectName, job.Id, HumanReviewEscalationCategories.UnknownLegacy);
+        }
+
+        if (repaired > 0)
+            _logger.LogInformation("ReviewDecisionOrchestrator: verdict-less human-review backfill repaired {Repaired} card(s).", repaired);
     }
 
     private IReadOnlyList<string> ResolveAspectRunners()

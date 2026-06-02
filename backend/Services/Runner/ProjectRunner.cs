@@ -44,6 +44,14 @@ public class ProjectRunner
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
+    // The single funnel for SYSTEM-initiated moves into 5-human-review (watchdog
+    // kill, permission/environment block, auto-failure park, pickup zombie). It
+    // pairs every move with an Escalate verdict in the decision journal and a
+    // status.md stub, so an escalated card never lands verdict-less / blank. DI
+    // always supplies it; test fixtures that build the runner directly may pass
+    // null, in which case a workspace-less fallback is built (move + status stub
+    // still fire; the journal append is skipped when no workspace root is known).
+    private readonly HumanReviewEscalation _humanReviewEscalation;
     private readonly AgentMessageBusBridge? _bus;
     private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
     private string _mode = "manual";
@@ -189,7 +197,8 @@ public class ProjectRunner
         PickupLockFile? pickupLock = null,
         PickupLockOwner? pickupLockOwner = null,
         OrchestratorApi.Services.Tasks.TimelineLog? timeline = null,
-        OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null)
+        OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
+        HumanReviewEscalation? humanReviewEscalation = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -213,6 +222,12 @@ public class ProjectRunner
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
         _taskAccess = taskAccess;
+        // DI supplies the funnel; tests that construct the runner directly may
+        // not. The fallback wires the same state-machine + transition service so
+        // the move (and its OnJobMoved side-effects / status stub) still fire;
+        // without a configured workspace root the journal verdict is skipped.
+        _humanReviewEscalation = humanReviewEscalation
+            ?? new HumanReviewEscalation(states, transitions, workspaceRoot: null, logger);
         _bus = bus;
         _role = role;
         _pickupLock = pickupLock;
@@ -2200,7 +2215,11 @@ public class ProjectRunner
                         Summary = $"Routed \"{activeInfo.Title}\" to human review after {ToIssueTopic(action.IssueKind)}.",
                         Reasoning = action.MetaMessage
                     });
-                    var move = await _transitions.MoveAsync(jobId, TaskStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
+                    var move = await _humanReviewEscalation.EscalateAsync(
+                        jobId, activeInfo.WatchPath, ProjectName,
+                        ToEscalationCategory(action.IssueKind),
+                        action.MetaMessage ?? ToIssueTopic(action.IssueKind),
+                        CancellationToken.None);
                     if (move.Status != MoveJobStatus.Success)
                     {
                         _logger.LogWarning(
@@ -2375,6 +2394,17 @@ public class ProjectRunner
         RunIssueKind.NoAgentOutput            => "no-agent-output",
         RunIssueKind.EnvironmentBlocker       => "environment-blocker",
         _                                     => "none"
+    };
+
+    /// <summary>Maps the issue that triggered a human-review route onto a
+    /// <see cref="HumanReviewEscalationCategories"/> value so the decision
+    /// journal records WHY the card was escalated.</summary>
+    private static string ToEscalationCategory(RunIssueKind issueKind) => issueKind switch
+    {
+        RunIssueKind.WatchdogTimeout    => HumanReviewEscalationCategories.WatchdogKill,
+        RunIssueKind.PermissionBlocked  => HumanReviewEscalationCategories.PermissionBlocked,
+        RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
+        _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
 
     /// <summary>
@@ -2913,7 +2943,11 @@ public class ProjectRunner
             {
                 try
                 {
-                    _ = _transitions.MoveAsync(jobId, TaskStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
+                    _ = _humanReviewEscalation.EscalateAsync(
+                        jobId, activeInfo.WatchPath, ProjectName,
+                        HumanReviewEscalationCategories.AutoFailurePark,
+                        $"Auto-pickup ran '{jobId}' {AutoFailureHaltThreshold}x in a row without reaching review; parked for a human.",
+                        CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -3393,7 +3427,22 @@ public class ProjectRunner
 
         var targetState = spawnFailure ? TaskStates.Ready : TaskStates.HumanReview;
 
-        var moveResult = _states.MoveJob(jobIdBeforeMove, targetState, Entry.Path);
+        // Computed up front so the zombie escalation can carry the reason into
+        // the decision journal + status.md stub written by the funnel.
+        var reason = reasonOverride
+            ?? (spawnFailure
+                ? $"Auto-pickup could not start the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}': {attempts} consecutive attempts (budget {threshold}) failed to spawn a process. The task is unchanged and was returned to {TaskStates.Ready}; the runner paused so it does not spin against an unavailable CLI."
+                : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated to human review for a person to look at.");
+
+        // Spawn failure returns the unchanged task to 2-ready (no verdict - it
+        // is re-picked once the CLI is fixed). A task-shaped / zombie folder is
+        // terminal: route it through the escalation funnel so 5-human-review
+        // always carries an Escalate verdict + status.md stub.
+        var moveResult = spawnFailure
+            ? _states.MoveJob(jobIdBeforeMove, TaskStates.Ready, Entry.Path)
+            : _humanReviewEscalation.Escalate(
+                jobIdBeforeMove, Entry.Path, ProjectName,
+                HumanReviewEscalationCategories.PickupZombie, reason);
         if (moveResult.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -3405,11 +3454,6 @@ public class ProjectRunner
             _zombieResumeFailures.TryRemove(slug, out _);
             return false;
         }
-
-        var reason = reasonOverride
-            ?? (spawnFailure
-                ? $"Auto-pickup could not start the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}': {attempts} consecutive attempts (budget {threshold}) failed to spawn a process. The task is unchanged and was returned to {TaskStates.Ready}; the runner paused so it does not spin against an unavailable CLI."
-                : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated to {TaskStates.HumanReview} for a person to look at.");
 
         var record = new PickupFailureRecord
         {

@@ -204,6 +204,7 @@ builder.Services.AddSingleton<StaleProgressArchiver>();
 builder.Services.AddSingleton<PickupFailureLog>();
 builder.Services.AddSingleton<InfraHaltLog>();
 builder.Services.AddSingleton<CrossSlugInfraCircuitBreaker>();
+builder.Services.AddSingleton<HumanReviewEscalation>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
 builder.Services.AddSingleton<AgentMessageBusBridge>();
 builder.Services.AddSingleton<ICliModelRegistry, CliModelRegistry>();
