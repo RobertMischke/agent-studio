@@ -1217,13 +1217,18 @@ public class ProjectRunner
         if (string.IsNullOrEmpty(cliType)) return;
 
         var cli = _router.Get(cliType);
-        // Today only the Codex driver captures the rich parsed-usage stash.
-        // Claude / Gemini will be added behind the same interface as their
-        // adapters move onto the shared parser; until then the dispatch is
-        // explicit so the call is a clear no-op for those CLIs.
-        if (cli is not CodexCliService codex) return;
-
-        var snapshot = codex.GetLastParsedTurnUsage(jobKey);
+        // The coding-agent drivers that parse their CLI's terminal usage frame
+        // expose the same (usage, observedAt, startedAt) stash. Codex parses
+        // turn.completed; Claude parses its stream-json result frame. The
+        // CORE agent run is usually claude, so omitting it here was the
+        // "no token activity recorded" symptom. Any other CLI stays a clean
+        // no-op until its adapter moves onto the shared parser.
+        var snapshot = cli switch
+        {
+            CodexCliService codex   => codex.GetLastParsedTurnUsage(jobKey),
+            ClaudeCliService claude => claude.GetLastParsedTurnUsage(jobKey),
+            _ => null,
+        };
         if (snapshot is null) return;
         var (usage, observedAt, startedAt) = snapshot.Value;
 
@@ -1983,11 +1988,17 @@ public class ProjectRunner
         if (_pipelineLog == null) return;
         try
         {
-            _pipelineLog.EnsureRun(
+            var record = _pipelineLog.EnsureRun(
                 info.FolderPath,
                 OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
                 ProjectName,
                 info.Id);
+            // Carry the CORE step's accumulated duration forward. A re-run of
+            // the same task reuses one in-flight record, so without preserving
+            // this the run-start write would zero the total and the prior
+            // attempts' duration would be lost (Symptom 2). RecordStep replaces
+            // the whole step, so the value must be passed through here.
+            var accumulatedMs = CoreStepDurationMs(record);
             _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
             {
                 StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
@@ -1995,6 +2006,7 @@ public class ProjectRunner
                 Model = execution.Model ?? info.Model,
                 Status = PipelineStepStatus.Running,
                 StartedAt = execution.StartedAt,
+                DurationMs = accumulatedMs,
             });
             // Arm the loop-guard row. At spawn there is no auto-mode loop yet,
             // so it reads as a clean pass (no verdict pill). RunOrchestratorDecisionAsync
@@ -2129,17 +2141,22 @@ public class ProjectRunner
             // Resume the record opened at spawn. EnsureRun only re-creates the
             // file in the rare case the start write was lost, so the finished
             // step still lands and the row is never left blank.
-            _pipelineLog.EnsureRun(
+            var record = _pipelineLog.EnsureRun(
                 folder,
                 OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
                 ProjectName,
                 jobId);
 
             var startedAt = execution.StartedAt;
-            var durationMs = execution.DurationSeconds is double secs && secs > 0
-                ? (long)Math.Round(secs * 1000)
-                : Math.Max(0, (long)(DateTime.UtcNow - startedAt).TotalMilliseconds);
-            var completedAt = startedAt.AddMilliseconds(durationMs);
+            // Accumulate this run's duration onto the total carried forward from
+            // prior runs (Symptom 2): a multi-attempt task shares one CORE step,
+            // so the row must reflect every run, not just the last. The reported
+            // CompletedAt stays at THIS run's end (start + this run), not the
+            // cumulative span, so it never drifts into the future.
+            var thisRunMs = CoreRunStepAccumulator.RunDurationMs(
+                execution.DurationSeconds, startedAt, DateTime.UtcNow);
+            var durationMs = CoreRunStepAccumulator.Accumulate(CoreStepDurationMs(record), thisRunMs);
+            var completedAt = startedAt.AddMilliseconds(thisRunMs);
 
             // Key the CORE step off the deterministic run status, not the OS
             // exit code: a sentinel-detected / silent-completion run is a
@@ -2173,6 +2190,19 @@ public class ProjectRunner
             ? $"agent run {status} (exit {code})"
             : $"agent run {status}";
     }
+
+    /// <summary>
+    /// Duration already accumulated onto the CORE "Agent execution" step of a
+    /// pipeline record, or 0 when the step is absent. The CORE step persists
+    /// across every run of a multi-attempt task, so this is the total to add
+    /// the current run's duration onto (Symptom 2). See
+    /// <see cref="CoreRunStepAccumulator"/>.
+    /// </summary>
+    private static long CoreStepDurationMs(PipelineExecutionRecord? record)
+        => record?.Steps.FirstOrDefault(s => string.Equals(
+               s.StepId,
+               OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
+               StringComparison.OrdinalIgnoreCase))?.DurationMs ?? 0;
 
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {

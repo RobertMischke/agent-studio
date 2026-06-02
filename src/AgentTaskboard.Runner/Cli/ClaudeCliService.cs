@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli.Adapters;
 using OrchestratorApi.Services.Runner;
 
@@ -31,9 +33,23 @@ public record ClaudeRateLimitSnapshot(
 public sealed class ClaudeCliService : CliExecutionServiceBase
 {
     private string? _cliPathOverride;
+    private readonly CliUsageParserRegistry? _usageParsers;
+    private readonly ICliModelRegistry _modelRegistry;
 
-    public ClaudeCliService(ILogger<ClaudeCliService> logger, IConfiguration configuration)
-        : base(logger, configuration) { }
+    // The usage registries are optional so the many test callsites that
+    // construct this driver with just (logger, configuration) keep compiling;
+    // production DI fills both from the registered singletons (see Program.cs),
+    // and a null parser registry makes the per-turn usage capture a clean no-op.
+    public ClaudeCliService(
+        ILogger<ClaudeCliService> logger,
+        IConfiguration configuration,
+        CliUsageParserRegistry? usageParsers = null,
+        ICliModelRegistry? modelRegistry = null)
+        : base(logger, configuration)
+    {
+        _usageParsers = usageParsers;
+        _modelRegistry = modelRegistry ?? new CliModelRegistry();
+    }
 
     public override string CliType => CliTypes.Claude;
 
@@ -220,7 +236,71 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
     {
         if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
+
+        // Capture the result-frame usage onto ProcInfo BEFORE the typed
+        // TurnCompleted event is raised by the adapter below, mirroring
+        // CodexCliService. The runner's TurnCompleted subscriber immediately
+        // reads GetLastParsedTurnUsage to mirror the spend onto the agent
+        // message bus, so the stash must land first or that mirror races empty.
+        if (_processes.TryGetValue(jobKey, out var info))
+        {
+            TryCaptureTurnUsage(info, line);
+        }
+
         return ClaudeEventAdapter.Map(line.Text, jobKey);
+    }
+
+    /// <summary>
+    /// Parse the cumulative <c>usage</c> block on the stream-json
+    /// <c>result</c> frame via the shared <see cref="ClaudeUsageParser"/> and
+    /// stash it on <see cref="CliExecutionServiceBase.ProcInfo.LastParsedUsage"/>.
+    /// The runner consumes the stash when the matching <c>TurnCompleted</c>
+    /// event arrives and mirrors it onto the agent message bus as
+    /// <c>kind:token-usage</c>. Without this the CORE coding-agent run's own
+    /// per-run spend is invisible to <c>BusAggregationCache</c>, the per-job
+    /// token summary, and the Overview - the exact "no token activity recorded"
+    /// symptom. Only the top-level <c>usage</c> object (which the parser
+    /// requires) appears on the <c>result</c> frame; assistant frames nest
+    /// usage under <c>message</c>, so they are correctly ignored. Best-effort:
+    /// a malformed frame or parser miss leaves the previous snapshot untouched.
+    /// </summary>
+    private void TryCaptureTurnUsage(ProcInfo info, CliOutputLine line)
+    {
+        var text = line.Text?.TrimStart();
+        if (string.IsNullOrEmpty(text) || text![0] != '{') return;
+        // Fast prefilter: cumulative usage rides the `result` frame; skip JSON
+        // parsing for everything else. The parser is the authority - it only
+        // returns true for a frame with a top-level `usage` object.
+        if (!text.Contains("result", StringComparison.Ordinal)) return;
+
+        var parser = _usageParsers?.Get(CliTypes.Claude);
+        if (parser == null) return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var modelHint = info.Execution.Model;
+            if (!parser.TryParse(doc.RootElement, modelHint, _modelRegistry, out var usage)) return;
+
+            info.LastParsedUsage = usage;
+            info.LastParsedUsageAt = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp;
+        }
+        catch (JsonException) { /* malformed frame; nothing to capture */ }
+        catch (Exception ex) { _logger.LogDebug(ex, "Claude turn-usage capture skipped"); }
+    }
+
+    /// <summary>
+    /// Surface the most recently parsed <c>result</c>-frame usage snapshot for
+    /// a job (captured by <see cref="TryCaptureTurnUsage"/>) along with the UTC
+    /// time it was observed and the run's start time. The runner uses this to
+    /// mirror per-turn usage onto the agent message bus. Mirrors
+    /// <see cref="CodexCliService.GetLastParsedTurnUsage"/>.
+    /// </summary>
+    public (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
+        return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
     }
 
     /// <summary>
