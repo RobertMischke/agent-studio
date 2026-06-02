@@ -71,43 +71,62 @@ Keep the prefix short — the length-guard test in `CodexCliServiceTests.BuildSy
 
 ## `--json` frame model
 
-Codex emits JSON Lines on stdout. Unlike Claude's `stream-json`, Codex frames are **pass-through**: `TransformReadLine` is the identity transform (no per-CLI translation yet — see § Limitations). `OnOutputLine` parses the raw JSON directly to capture the session UUID.
+Codex emits JSON Lines on stdout. `TransformReadLine` delegates to the pure
+[`CodexOutputRenderer`](../../src/AgentTaskboard.Runner/Cli/Rendering/CodexOutputRenderer.cs)
+(the marker-line twin of `CodexEventAdapter`; see `cli-overview` § "Unified renderer
+layer"), which maps each frame onto the **same** marker vocabulary Claude emits, so
+a Codex run reads as cleanly as a Claude run in the Activity Log.
 
-| Frame | Purpose | Action |
+| Frame | Marker out | Stream |
 |---|---|---|
-| `{"type":"session_meta","payload":{"id":"<uuid>",…}}` | First frame on a fresh run; carries the session UUID. | Capture `payload.id` in `OnOutputLine`, assign to `info.CapturedSessionId` and `info.SessionName`. |
-| `{"type":"message",…}` etc. | Assistant text, tool use, tool results. | Pass through unchanged today. The Activity Log shows raw JSON for these. |
+| `{"type":"thread.started","thread_id":"<uuid>"}` | `● Session <uuid>` | stdout |
+| `{"type":"session_meta","payload":{"id":"<uuid>"}}` (legacy; `session_id` on root also accepted) | `● Session <uuid>` | stdout |
+| `{"type":"turn.started"}` | *(suppressed)* | — |
+| `{"type":"turn.completed","usage":{…}}` | `● Turn completed (tokens: <input+output>)` | stdout |
+| `{"type":"turn.failed","error":{"message":…}}` | `● Turn failed: <reason>` | stderr |
+| `{"type":"item.started",…}` | *(suppressed — `item.completed` renders the same item)* | — |
+| `item.completed` `agent_message` | model text, multi-line split | stdout |
+| `item.completed` `reasoning` | *(suppressed, like Claude's `thinking`)* | — |
+| `item.completed` `command_execution` / `command_call` / `local_shell_call` | `● Run <cmd>` | stderr iff `exit_code != 0` |
+| `item.completed` `file_change` | `● Edit <path>` | stdout |
+| `item.completed` `web_search` | `● Search web <query>` | stdout |
+| `item.completed` `update_plan` / `todo` | `● Todo update` | stdout |
+| any other frame / item type | `● <type>` (never raw JSON) | stdout |
 
-**Known gap:** Codex frames are surfaced raw because no `TransformReadLine` translation exists. `docs/supported-clis.md §3.2` flags this as `⚠ Pass-through; no marker-line transform yet`. When you add the transform:
-
-1. Capture real `--json` output to `backend.Tests/Fixtures/cli/codex/` first.
-2. Build the switch in `TransformReadLine` analogous to Claude's, mapping Codex tool names to the marker-line vocabulary in `cli-overview`.
-3. Add a `CodexCliServiceTests` file (template: `GeminiCliServiceTests`).
-4. **Don't** move session capture out of `OnOutputLine`'s raw-JSON path — that's the only place we have the full payload before the transform mangles it. Either keep `session_meta` pass-through, or move capture to read the marker line (Claude/Gemini style) — but not both.
+**Deliberate equivalences (not byte-identical to Claude).** Codex's frame catalogue
+differs from Claude's, so the marker *text* differs, but each maps to a verb the
+frontend `classifyAction` already buckets: `● Session` (vs Claude `● Session init`),
+`● Turn completed (tokens: N)` (Codex analogue of Claude's `● Result (success)`), and
+`● Run`/`● Edit`/`● Search web`/`● Todo update` reuse Claude's verbs verbatim. The
+AC's literal `"Tool: pwsh.exe"` shape was **not** used: it would classify as `other`,
+not `command`. Frame→marker snapshots are locked in `backend.Tests/CodexOutputRendererTests.cs`.
 
 ## Session-UUID capture
 
-```csharp
-protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
-{
-    if (info.CapturedSessionId != null) return;
-    if (line.Stream != "stdout") return;
-    var text = line.Text?.TrimStart();
-    if (text == null || !text.StartsWith('{')) return;
-    if (!text.Contains("session_meta")) return;
+Capture runs in `MapLineToRunEvents` (via `TryCaptureSessionId`), **not** in
+`OnOutputLine`. The base class invokes `MapLineToRunEvents` on the **raw** stdout
+line but `OnOutputLine` on the **transformed** line; now that `TransformReadLine`
+rewrites `thread.started` → `● Session <id>`, the original `thread_id` payload is
+gone by the time `OnOutputLine` fires. `MapLineToRunEvents` is the same raw-line hook
+where `TryCaptureTurnUsage` already lives, so both telemetry captures read real JSON.
 
-    using var doc = JsonDocument.Parse(text);
-    if (doc.RootElement.TryGetProperty("payload", out var payload)
-        && payload.TryGetProperty("id", out var id)
-        && id.ValueKind == JsonValueKind.String)
+```csharp
+protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+{
+    if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
+    if (_processes.TryGetValue(jobKey, out var info))
     {
-        info.CapturedSessionId = id.GetString();
-        info.SessionName ??= info.CapturedSessionId;
+        TryCaptureTurnUsage(info, line);
+        TryCaptureSessionId(info, line);   // reads the raw thread.started / session_meta frame
     }
+    return CodexEventAdapter.Map(line.Text, jobKey);
 }
 ```
 
-Note Codex captures from the **raw** JSON line because `TransformReadLine` is identity. If you ever introduce a transform that drops or rewrites `session_meta`, capture breaks.
+`TryExtractSessionId(string?)` (the pure parser, with 7 regression tests) is unchanged:
+it accepts `thread.started.thread_id` (preferred) or legacy `session_meta` `payload.id` /
+`session_id`, gated on a canonical UUID. **Anti-pattern:** do not move capture back into
+`OnOutputLine` — it would parse the `● Session` marker text instead of the JSON and break.
 
 ## Stale Codex sessions
 
@@ -147,7 +166,7 @@ The watchdog tunings shipped for Claude in ADR-0030 are CLI-agnostic and apply u
 
 Codex-specific differences worth flagging during a hang:
 
-- Codex `--json` frames are **pass-through today** (see § "`--json` frame model"); the `CodexEventAdapter` is the typed-event surface for the watchdog. If you patch frame parsing here, run the deterministic suite in [`backend.Tests/CliWatchdogIntegrationTests.cs`](../../backend.Tests/CliWatchdogIntegrationTests.cs) and the per-CLI tests in [`backend.Tests/CodexEventAdapterTests.cs`](../../backend.Tests/CodexEventAdapterTests.cs).
+- Codex `--json` frames have two parallel surfaces: the typed-event `CodexEventAdapter` (what the watchdog reads) and the marker-line `CodexOutputRenderer` (what the Activity Log reads). They are independent pure mappers over the same frames; patching one does not touch the other. If you patch frame parsing, run the deterministic suite in [`backend.Tests/CliWatchdogIntegrationTests.cs`](../../backend.Tests/CliWatchdogIntegrationTests.cs), the typed-event tests in [`backend.Tests/CodexEventAdapterTests.cs`](../../backend.Tests/CodexEventAdapterTests.cs), and the marker-line tests in [`backend.Tests/CodexOutputRendererTests.cs`](../../backend.Tests/CodexOutputRendererTests.cs).
 - Codex does not emit Claude's `rate_limit_event` shape; the rate-limit-aware budget multiplier (an ADR-0030 follow-up) will need its own probe before it can flip on for Codex runs.
 - Codex has no equivalent of Claude's `~/.claude/projects/<cwd>/<uuid>.jsonl` side-channel session file. The heartbeat helper documented for Claude does not have a Codex analogue today; the same pipe-buffer hypothesis would need a different signal (e.g. polling `codex` IPC or a process-level CPU heartbeat).
 
@@ -159,15 +178,19 @@ The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
 
 ## Common tasks
 
-### "Add the missing TransformReadLine translation"
+### "Add a marker mapping for a new Codex frame / item type"
 
-Order:
+The `TransformReadLine` translation now exists in
+[`CodexOutputRenderer`](../../src/AgentTaskboard.Runner/Cli/Rendering/CodexOutputRenderer.cs).
+To extend it for a new frame or `item.type`:
 
-1. Run a Codex job and capture `~/.runtime/cli-output/codex-*.jsonl` to `backend.Tests/Fixtures/cli/codex/`.
-2. Inspect frame shapes — Codex's tool naming differs from Claude's (verify against the CLI source / observed frames).
-3. Build the `TransformReadLine` switch, mapping Codex tool names to the marker-line vocabulary in `cli-overview`. Suppress noisy frames (echo of user prompt, ack frames). Surface assistant text frames as plain text.
-4. Move session capture to read the marker line if the transform now rewrites `session_meta`. Otherwise leave it on the raw JSON path.
-5. Add `backend.Tests/CodexCliServiceTests.cs` modelled on `GeminiCliServiceTests.cs`.
+1. Capture the real `--json` frame from `.runtime/cli-output/codex-*.jsonl`.
+2. Add a `case` to `CodexOutputRenderer.Render` (top-level frame) or `RenderItem`
+   (item type), mapping to an existing marker in `cli-overview` § "Marker-line
+   vocabulary". Do not invent a new marker shape — pick `read`/`search`/`command`/`edit`.
+3. Add a snapshot test to `backend.Tests/CodexOutputRendererTests.cs` (frame in → marker out).
+4. Session capture stays in `MapLineToRunEvents` on the raw JSON — never move it onto
+   the rendered marker line.
 
 ### "Codex isn't resuming"
 

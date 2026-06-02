@@ -74,7 +74,12 @@ The runner never pre-generates a slug for Claude (that's a Copilot pattern). On 
 
 ## Stream-json frame catalogue
 
-Each line of stdout is a JSON object. `TransformReadLine` switches on the `type` field. The shapes below are verified against the live CLI; when adding a new branch, capture a fixture under `backend.Tests/Fixtures/cli/claude/` and lock it with a test.
+Each line of stdout is a JSON object. The frame switch lives in the pure
+[`ClaudeOutputRenderer`](../../src/AgentTaskboard.Runner/Cli/Rendering/ClaudeOutputRenderer.cs)
+(`ICliOutputRenderer`); `ClaudeCliService.TransformReadLine` is a thin delegate
+to it (see `cli-overview` § "Unified renderer layer"). The shapes below are
+verified against the live CLI; when adding a new branch, capture a fixture under
+`backend.Tests/Fixtures/cli/claude/` and lock it with a test.
 
 | `type` | Purpose | Renders to | Action |
 |---|---|---|---|
@@ -87,7 +92,7 @@ Each line of stdout is a JSON object. `TransformReadLine` switches on the `type`
 
 ### Tool-name → marker mapping
 
-Implemented in `FormatToolUse`. The mapping is stable; new tools should land here, not in a per-tool branch in the parser.
+Implemented in `ClaudeOutputRenderer.FormatToolUse`. The mapping is stable; new tools should land here, not in a per-tool branch in the parser.
 
 | Claude tool | Marker line | Activity-log kind |
 |---|---|---|
@@ -108,12 +113,12 @@ Implemented in `FormatToolUse`. The mapping is stable; new tools should land her
 
 Capture is **two-step** because `OnOutputLine` runs on the *transformed* line:
 
-1. `TransformReadLine` reads the raw `system` frame, pulls `subtype` + `session_id`, and emits `● Session <subtype> <uuid>`.
+1. `ClaudeOutputRenderer` reads the raw `system` frame, pulls `subtype` + `session_id`, and emits `● Session <subtype> <uuid>`.
 2. `OnOutputLine` runs the `SessionMarkerRegex` against that marker line, sets `info.CapturedSessionId`, and assigns `info.SessionName` to the same UUID.
 
 The runner picks the captured UUID up in `ProjectRunner.OnCliFinishedAsync` and persists it via `_sessions.AppendSessionToChain`. Without that, every "Continue" would start a fresh session because `info.SessionName` would never advance.
 
-**Anti-pattern:** capturing in `TransformReadLine` directly. The transform must stay a pure function over a single line; capture is a side effect on `ProcInfo` and belongs in `OnOutputLine`.
+**Anti-pattern:** capturing inside the renderer / `TransformReadLine`. The renderer must stay a pure function over a single line; capture is a side effect on `ProcInfo` and belongs in `OnOutputLine` (Claude/Gemini) or `MapLineToRunEvents` (Codex, which captures from the raw frame). Both hooks live on the driver, never the renderer.
 
 ## Session loss is an expected state, not an error
 
@@ -255,12 +260,12 @@ If `/usage` output format changes, the parser in [`ClaudeQuotaParser`](../../bac
 ### "Add a new tool marker"
 
 1. Identify the Claude tool name (`Read`, `Edit`, `Bash`, …).
-2. Add a switch arm in `FormatToolUse` that builds the marker line in the existing vocabulary (§ Marker-line vocabulary in `cli-overview`). Don't invent a new prefix.
-3. Add a test under `backend.Tests` (a new `ClaudeCliServiceTests.cs` if absent — Gemini's file is the template) that constructs a synthetic `assistant` frame and asserts the emitted marker.
+2. Add a switch arm in `ClaudeOutputRenderer.FormatToolUse` that builds the marker line in the existing vocabulary (§ Marker-line vocabulary in `cli-overview`). Don't invent a new prefix.
+3. Add a snapshot test in `backend.Tests/ClaudeCliServiceTests.cs` (which drives `svc.TransformReadLine`, now delegating to the renderer) that constructs a synthetic `assistant` frame and asserts the emitted marker.
 
 ### "Capture new telemetry from a frame"
 
-1. Locate the frame type in the catalogue above; add a switch arm if new.
+1. Locate the frame type in the catalogue above; add a switch arm in `ClaudeOutputRenderer` if new.
 2. Render to a marker line with a stable bracketed kv tail (`[key=value …]`) — same pattern as `rate_limit_event`.
 3. Add a regex in `OnOutputLine` to read the kv tail back; assign to a typed snapshot on `ProcInfo`.
 4. Expose via the existing `/api/jobs/{id}/claude/session-info` endpoint (do not introduce a new endpoint per snapshot).
