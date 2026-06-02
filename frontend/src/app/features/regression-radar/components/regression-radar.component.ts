@@ -11,12 +11,13 @@ import {
 import type { RegressionRadarResult, SpecChangeEntry } from '../models/regression-radar.model';
 import { TaskService } from '../../../services/task.service';
 import { TooltipDirective } from '../../../components/tooltip';
+import { InfoButtonComponent } from '../../../components/info-button/info-button.component';
 
 @Component({
   selector: 'app-regression-radar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, InfoButtonComponent],
   templateUrl: './regression-radar.component.html',
   styleUrl: './regression-radar.component.scss',
 })

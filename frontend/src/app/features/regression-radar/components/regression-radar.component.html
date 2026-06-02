@@ -15,7 +15,12 @@
 } @else if (hasData()) {
   <div class="radar" data-testid="regression-radar">
     <div class="radar__header">
-      <h4 class="radar__title">Regression Radar</h4>
+      <div class="radar__title-group">
+        <h4 class="radar__title">Regression Radar</h4>
+        <app-info-button topic="regression-radar"
+                         eyebrow="Regression Radar"
+                         label="How does Regression Radar work?" />
+      </div>
       @if (statusIcon(); as si) {
         <span class="radar__overall-badge"
               [class]="'radar__overall-badge--' + si.tone"

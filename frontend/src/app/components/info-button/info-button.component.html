@@ -2,12 +2,12 @@
         class="info-btn"
         [attr.data-testid]="'info-button-' + topic()"
         [attr.aria-expanded]="open()"
-        [attr.aria-label]="'How does this lane work?'"
-        [appTooltip]="'How does this lane work?'"
+        [attr.aria-label]="label()"
+        [appTooltip]="label()"
         (click)="toggle($event)">i</button>
 @if (open()) {
   <app-dialog
-    eyebrow="Lane"
+    [eyebrow]="eyebrow()"
     [title]="title()"
     role="dialog"
     [testid]="'info-button-modal-' + topic()"

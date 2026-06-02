@@ -45,13 +45,19 @@ export class InfoButtonComponent {
   private readonly http = inject(HttpClient);
 
   readonly topic = input.required<string>();
+  /** Eyebrow shown above the modal title. Defaults to the lane framing. */
+  readonly eyebrow = input<string>('Lane');
+  /** Trigger aria-label + tooltip. Defaults to the lane framing. */
+  readonly label = input<string>('How does this lane work?');
+  /** Header title shown until the doc's own H1 loads (or on error). */
+  readonly fallbackTitle = input<string>('About this lane');
 
   readonly open = signal(false);
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
   private readonly doc = signal<ConceptDocPayload | null>(null);
 
-  readonly title = computed(() => this.doc()?.title ?? 'About this lane');
+  readonly title = computed(() => this.doc()?.title ?? this.fallbackTitle());
   readonly body = computed<string | null>(() => this.doc()?.body ?? null);
 
   toggle(event: Event): void {
