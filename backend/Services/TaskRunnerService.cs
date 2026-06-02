@@ -233,7 +233,7 @@ public class TaskRunnerService : BackgroundService
                 timeline: _timeline,
                 pipelineLog: _pipelineLog,
                 humanReviewEscalation: _humanReviewEscalation);
-            runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
+            runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
             runner.OnStatusChanged += status =>

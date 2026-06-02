@@ -1,3 +1,5 @@
+using System.Linq;
+using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services.Runner;
@@ -46,8 +48,18 @@ public sealed record PhaseBudget(
         RunPhase.TurnInProgress       => new PhaseBudget(SuspiciousSeconds: 60,  HungSeconds: 180),
         RunPhase.OutputDelta          => new PhaseBudget(SuspiciousSeconds: 60,  HungSeconds: 180),
         // Tool execution legitimately runs longer than ordinary turns
-        // (Bash builds, grep over big repos, web fetches). Be generous.
-        RunPhase.ToolExecuting        => new PhaseBudget(SuspiciousSeconds: 180, HungSeconds: 600),
+        // (Bash builds, grep over big repos, web fetches) and - for Codex -
+        // a single long reasoning/tool turn can stay stdout-silent for
+        // minutes at a stretch. The consolidated Codex-stability card
+        // (2026-06) established that ~600 s of silence in ToolExecuting is
+        // *realistic healthy work*, not a hang; the previous HungSeconds=600
+        // therefore killed runs at the exact boundary of normal behaviour
+        // (symptom A: watchdog kills with no genuine hang). Widen the kill
+        // threshold well past that realistic ceiling while keeping an early,
+        // visible Suspicious warning so the kill path stays "loud, not
+        // silent". Operators can re-calibrate per CLI via
+        // Watchdog:Phase:ToolExecuting:{Suspicious,Hung}Seconds.
+        RunPhase.ToolExecuting        => new PhaseBudget(SuspiciousSeconds: 300, HungSeconds: 1200),
         // Terminal-for-this-turn states - the watchdog stays its hand
         // because the runner is about to finalize anyway.
         RunPhase.TurnCompleted        => new PhaseBudget(SuspiciousSeconds: 9999, HungSeconds: 9999),
@@ -61,6 +73,66 @@ public sealed record PhaseBudget(
         RunPhase.Unknown              => new PhaseBudget(SuspiciousSeconds: 60, HungSeconds: 240),
         _                              => new PhaseBudget(SuspiciousSeconds: 60, HungSeconds: 180)
     };
+}
+
+/// <summary>
+/// Fully-resolved per-phase budget set used by <see cref="PhaseAwareWatchdog"/>.
+/// Starts from the hardcoded profile in <see cref="PhaseBudget.For(RunPhase)"/>
+/// and applies optional per-phase, per-field overrides read from
+/// <c>Watchdog:Phase:&lt;phase&gt;:&lt;Suspicious|Hung&gt;Seconds</c>.
+///
+/// <para>
+/// This is the config knob the <see cref="PhaseBudget"/> doc-comment has
+/// always promised. Until now it was documented but never wired, so an
+/// operator who needed to widen e.g. ToolExecuting for a model that
+/// legitimately runs long tools had to recompile. Making the profile
+/// data-driven lets the "real hang" vs "lots of work" separation be tuned
+/// per CLI without a build - the core ask of the Codex-stability card.
+/// </para>
+/// </summary>
+public sealed class PhaseBudgetTable
+{
+    private readonly IReadOnlyDictionary<RunPhase, PhaseBudget> _budgets;
+
+    private PhaseBudgetTable(IReadOnlyDictionary<RunPhase, PhaseBudget> budgets) => _budgets = budgets;
+
+    /// <summary>
+    /// Resolve the budget for a phase, falling back to the hardcoded
+    /// default for any phase not present in the table.
+    /// </summary>
+    public PhaseBudget For(RunPhase phase) =>
+        _budgets.TryGetValue(phase, out var b) ? b : PhaseBudget.For(phase);
+
+    /// <summary>The hardcoded profile with no configuration overrides applied.</summary>
+    public static PhaseBudgetTable Default { get; } = new(BuildDefaults());
+
+    private static Dictionary<RunPhase, PhaseBudget> BuildDefaults() =>
+        Enum.GetValues<RunPhase>().ToDictionary(p => p, PhaseBudget.For);
+
+    /// <summary>
+    /// Build a table from configuration. Every phase starts at its
+    /// hardcoded default; a <c>Watchdog:Phase:&lt;phase&gt;</c> sub-section
+    /// may override either or both of <c>SuspiciousSeconds</c> /
+    /// <c>HungSeconds</c>. Unknown phase keys are ignored so config written
+    /// for a phase this build does not know is forward-compatible rather
+    /// than fatal.
+    /// </summary>
+    public static PhaseBudgetTable FromConfig(IConfiguration cfg)
+    {
+        var map = BuildDefaults();
+        var section = cfg.GetSection("Watchdog:Phase");
+        if (!section.Exists()) return new PhaseBudgetTable(map);
+        foreach (var child in section.GetChildren())
+        {
+            if (!Enum.TryParse<RunPhase>(child.Key, ignoreCase: true, out var phase))
+                continue;
+            var baseline = map.TryGetValue(phase, out var b) ? b : PhaseBudget.For(phase);
+            map[phase] = new PhaseBudget(
+                SuspiciousSeconds: child.GetValue("SuspiciousSeconds", baseline.SuspiciousSeconds),
+                HungSeconds:       child.GetValue("HungSeconds", baseline.HungSeconds));
+        }
+        return new PhaseBudgetTable(map);
+    }
 }
 
 /// <summary>
@@ -92,11 +164,25 @@ public static class PhaseAwareWatchdog
         double runAgeSeconds,
         RunPhase phase,
         WatchdogConfig config)
+        => DecideState(silenceSeconds, runAgeSeconds, phase, config, PhaseBudgetTable.Default);
+
+    /// <inheritdoc cref="DecideState(double,double,RunPhase,WatchdogConfig)"/>
+    /// <param name="budgets">
+    /// Resolved per-phase budgets (defaults plus any
+    /// <c>Watchdog:Phase:*</c> configuration overrides). Pass
+    /// <see cref="PhaseBudgetTable.Default"/> for the hardcoded profile.
+    /// </param>
+    public static WatchdogState DecideState(
+        double silenceSeconds,
+        double runAgeSeconds,
+        RunPhase phase,
+        WatchdogConfig config,
+        PhaseBudgetTable budgets)
     {
         if (!config.Enabled) return WatchdogState.Healthy;
         if (runAgeSeconds < config.WarmUpGraceSeconds) return WatchdogState.Healthy;
 
-        var budget = PhaseBudget.For(phase);
+        var budget = budgets.For(phase);
         if (silenceSeconds >= budget.HungSeconds)       return WatchdogState.Hung;
         if (silenceSeconds >= budget.SuspiciousSeconds) return WatchdogState.Suspicious;
         // Quiet level still uses the global QuietSeconds for a soft
@@ -112,8 +198,12 @@ public static class PhaseAwareWatchdog
     /// so the message reads as evidence, not policy.
     /// </summary>
     public static string FormatBudgetReason(RunPhase phase, double silenceSeconds)
+        => FormatBudgetReason(phase, silenceSeconds, PhaseBudgetTable.Default);
+
+    /// <inheritdoc cref="FormatBudgetReason(RunPhase,double)"/>
+    public static string FormatBudgetReason(RunPhase phase, double silenceSeconds, PhaseBudgetTable budgets)
     {
-        var budget = PhaseBudget.For(phase);
+        var budget = budgets.For(phase);
         return $"phase={phase} silence={silenceSeconds:F0}s allowed={budget.SuspiciousSeconds:F0}/{budget.HungSeconds:F0}s";
     }
 }

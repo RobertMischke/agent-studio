@@ -872,7 +872,7 @@ public class ProjectRunner
         {
             phase = phaseSnap.Phase;
             silence = (now - phaseSnap.LastActivityAt).TotalSeconds;
-            next = PhaseAwareWatchdog.DecideState(silence, age, phaseSnap.Phase, _watchdogConfig);
+            next = PhaseAwareWatchdog.DecideState(silence, age, phaseSnap.Phase, _watchdogConfig, _phaseBudgets);
         }
         else
         {
@@ -890,8 +890,8 @@ public class ProjectRunner
 
         var hungAtSeconds = phase is null
             ? _watchdogConfig.HungSeconds
-            : PhaseBudget.For(phase.Value).HungSeconds;
-        var phaseTag = phase is null ? "" : $" [{PhaseAwareWatchdog.FormatBudgetReason(phase.Value, silence)}]";
+            : _phaseBudgets.For(phase.Value).HungSeconds;
+        var phaseTag = phase is null ? "" : $" [{PhaseAwareWatchdog.FormatBudgetReason(phase.Value, silence, _phaseBudgets)}]";
         var title = string.IsNullOrWhiteSpace(info.Title) ? info.Id : info.Title;
         var cliLabel = string.IsNullOrWhiteSpace(info.CliType) ? cliType : info.CliType;
         switch (next)
@@ -936,6 +936,13 @@ public class ProjectRunner
     /// when nothing is configured.
     /// </summary>
     private WatchdogConfig _watchdogConfig = WatchdogConfig.Default;
+
+    /// <summary>
+    /// Per-phase silence budgets for this runner. Defaults to the hardcoded
+    /// profile; replaced with a config-derived table (honoring any
+    /// <c>Watchdog:Phase:*</c> overrides) by <see cref="ConfigureWatchdog"/>.
+    /// </summary>
+    private PhaseBudgetTable _phaseBudgets = PhaseBudgetTable.Default;
 
     /// <summary>
     /// Per-jobKey phase tracker. Populated as adapters emit
@@ -1244,7 +1251,11 @@ public class ProjectRunner
     }
 
     /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
-    public void ConfigureWatchdog(WatchdogConfig config) => _watchdogConfig = config;
+    public void ConfigureWatchdog(WatchdogConfig config, PhaseBudgetTable? phaseBudgets = null)
+    {
+        _watchdogConfig = config;
+        _phaseBudgets = phaseBudgets ?? PhaseBudgetTable.Default;
+    }
 
     /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
     public void ConfigureStuckLoopBudget(StuckLoopBudget budget) => _stuckLoopBudget = budget;

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Runner;
 using Xunit;
@@ -62,16 +63,78 @@ public class PhaseAwareWatchdogTests
     }
 
     [Fact]
-    public void ToolExecuting_TolerantBudget_StillHealthyAt100s()
+    public void ToolExecuting_RealisticSilence_IsSuspiciousNotKilled()
     {
-        // PhaseBudget.For(ToolExecuting) = (180s, 600s). A long Bash build
-        // is normal and must not trigger a kill.
+        // PhaseBudget.For(ToolExecuting) = (300s, 1200s) since the 2026-06
+        // Codex-stability re-tune. The card established that ~600 s of
+        // stdout silence during a single long tool/reasoning turn is
+        // *realistic healthy work*, so the watchdog must NOT kill there
+        // (symptom A). Lock that contract: 600 s is Suspicious (loud,
+        // visible) but never Hung; a kill only fires past 1200 s.
         Assert.Equal(WatchdogState.Quiet, // global Quiet at 30s still applies
             PhaseAwareWatchdog.DecideState(100, 200, RunPhase.ToolExecuting, Cfg));
         Assert.Equal(WatchdogState.Suspicious,
-            PhaseAwareWatchdog.DecideState(200, 300, RunPhase.ToolExecuting, Cfg));
+            PhaseAwareWatchdog.DecideState(350, 400, RunPhase.ToolExecuting, Cfg));
+        // The realistic-work boundary: visible, not killed.
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(600, 700, RunPhase.ToolExecuting, Cfg));
         Assert.Equal(WatchdogState.Hung,
-            PhaseAwareWatchdog.DecideState(610, 700, RunPhase.ToolExecuting, Cfg));
+            PhaseAwareWatchdog.DecideState(1250, 1400, RunPhase.ToolExecuting, Cfg));
+    }
+
+    private static IConfiguration ConfigFrom(params (string Key, string Value)[] pairs) =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(pairs.Select(p =>
+                new KeyValuePair<string, string?>(p.Key, p.Value)))
+            .Build();
+
+    [Fact]
+    public void PhaseBudgetTable_FromConfig_NoSection_UsesHardcodedDefaults()
+    {
+        var table = PhaseBudgetTable.FromConfig(ConfigFrom());
+        var tool = table.For(RunPhase.ToolExecuting);
+        Assert.Equal(300, tool.SuspiciousSeconds);
+        Assert.Equal(1200, tool.HungSeconds);
+    }
+
+    [Fact]
+    public void PhaseBudgetTable_FromConfig_OverridesPerPhaseAndPerField()
+    {
+        // Operator widens ToolExecuting Hung only; Suspicious must keep its
+        // default. Phase keys are case-insensitive.
+        var table = PhaseBudgetTable.FromConfig(ConfigFrom(
+            ("Watchdog:Phase:ToolExecuting:HungSeconds", "2000")));
+        var tool = table.For(RunPhase.ToolExecuting);
+        Assert.Equal(300, tool.SuspiciousSeconds);   // unchanged default
+        Assert.Equal(2000, tool.HungSeconds);        // overridden
+
+        // A phase with no override keeps its full default.
+        var spawn = table.For(RunPhase.Spawning);
+        Assert.Equal(30, spawn.SuspiciousSeconds);
+        Assert.Equal(60, spawn.HungSeconds);
+    }
+
+    [Fact]
+    public void PhaseBudgetTable_FromConfig_UnknownPhaseKey_Ignored()
+    {
+        // Forward-compatible: config for a phase this build doesn't know
+        // must not throw, and known phases stay at defaults.
+        var table = PhaseBudgetTable.FromConfig(ConfigFrom(
+            ("Watchdog:Phase:NotARealPhase:HungSeconds", "5")));
+        Assert.Equal(1200, table.For(RunPhase.ToolExecuting).HungSeconds);
+    }
+
+    [Fact]
+    public void DecideState_HonorsConfiguredBudgetOverride()
+    {
+        // With ToolExecuting widened to Hung=2000, the previously-fatal
+        // 1250 s silence is now merely Suspicious; the kill moves to 2000 s.
+        var table = PhaseBudgetTable.FromConfig(ConfigFrom(
+            ("Watchdog:Phase:ToolExecuting:HungSeconds", "2000")));
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(1250, 1400, RunPhase.ToolExecuting, Cfg, table));
+        Assert.Equal(WatchdogState.Hung,
+            PhaseAwareWatchdog.DecideState(2050, 2200, RunPhase.ToolExecuting, Cfg, table));
     }
 
     [Fact]
