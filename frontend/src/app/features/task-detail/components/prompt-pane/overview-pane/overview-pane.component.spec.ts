@@ -247,6 +247,75 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.stepStatusLabel('running')).toBe('Running');
   });
 
+  it('pipeline block: per-step rows carry start/end stamps and a live-counting duration for the running step', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    const runningStart = new Date(Date.now() - 4_000).toISOString();
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+          { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: '2026-06-02T08:00:00Z', completedAt: null,
+        steps: [
+          { stepId: 'aspect-code-quality', kind: 'aspect', model: 'm', status: 'passed', startedAt: '2026-06-02T08:00:00Z', completedAt: '2026-06-02T08:00:42Z', durationMs: 42_000, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
+          { stepId: 'core-agent-run', kind: 'core', model: 'm', status: 'running', startedAt: runningStart, completedAt: null, durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+        ],
+      },
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const rows = c.pipelineRows();
+    const done = rows.find(r => r.id === 'aspect-code-quality')!;
+    const running = rows.find(r => r.id === 'core-agent-run')!;
+    const pending = rows.find(r => r.id === 'aspect-code-quality');
+
+    // Rows carry the raw stamps so the table can render times.
+    expect(done.startedAt).toBe('2026-06-02T08:00:00Z');
+    expect(done.completedAt).toBe('2026-06-02T08:00:42Z');
+    expect(running.startedAt).toBe(runningStart);
+    expect(running.completedAt).toBeNull();
+
+    // A completed step shows its recorded duration, independent of the clock.
+    expect(c.liveStepDurationMs(done)).toBe(42_000);
+    // The running step counts up from its start (≈ now − startedAt), so the
+    // value is the live elapsed time, not the recorded 0.
+    const live = c.liveStepDurationMs(running);
+    expect(live).toBeGreaterThanOrEqual(3_000);
+    expect(live).toBeLessThan(60_000);
+
+    // Wall-clock formatter is locale-tolerant: HH:MM, empty for unset.
+    expect(c.formatClock(done.startedAt)).toMatch(/\d{1,2}:\d{2}/);
+    expect(c.formatClock(null)).toBe('');
+    expect(c.formatClock('not-a-date')).toBe('');
+
+    // Timing tooltip: start + end + duration for a finished step; a live
+    // "running for" line while in flight; null before the step starts.
+    const doneTip = c.stepTimingTooltip(done)!;
+    expect(doneTip.title).toBe('Code quality');
+    expect(doneTip.body).toContain('Started:');
+    expect(doneTip.body).toContain('Ended:');
+    expect(doneTip.body).toContain('Duration:');
+
+    const runTip = c.stepTimingTooltip(running)!;
+    expect(runTip.body).toContain('Running for');
+    expect(runTip.body).not.toContain('Ended:');
+
+    expect(pending).toBeTruthy();
+    // A row with no start stamp carries no timing tooltip.
+    const noStart = { ...done, startedAt: null, completedAt: null, status: 'pending' as const };
+    expect(c.stepTimingTooltip(noStart)).toBeNull();
+  });
+
   it('pipeline block: concern tooltip is built for a non-pass aspect verdict, and absent for pass', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe: TaskPipelineResponse = {

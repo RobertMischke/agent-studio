@@ -122,6 +122,31 @@ function pipelineRunningCore() {
   };
 }
 
+// Snapshot for the live-duration test: the core step started a few seconds
+// ago (relative to the test run), so its duration renders in the seconds
+// range that ticks visibly once per second rather than a static "Xh Ym".
+function pipelineRunningFresh() {
+  const startedAt = new Date(Date.now() - 3_000).toISOString();
+  return {
+    pipeline: basePipeline(),
+    execution: {
+      pipelineId: 'standard-task-pipeline',
+      pipelineVersion: 1,
+      jobId: JOB_ID,
+      project: PROJECT,
+      startedAt,
+      completedAt: null,
+      steps: [
+        { stepId: 'core-agent-run', kind: 'core', status: 'running', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, startedAt, completedAt: null },
+        execStep('post-lint-scss', 'tool', 'pending', 0),
+        execStep('post-orchestrator-decision', 'orchestrator', 'pending', 0),
+      ],
+    },
+    cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+    config: {},
+  };
+}
+
 // Snapshot 2 (after the poll refreshes): core is done, the lint step is now
 // the one running. Proves the highlight moves live with the data.
 function pipelineRunningLint() {
@@ -305,6 +330,13 @@ test.describe('Pipeline live step status', () => {
     const lintRow = page.locator('[data-step-id="post-lint-scss"]');
     await expect(lintRow).toHaveAttribute('data-status', 'pending');
 
+    // Acceptance ("jede Tabellenzeile zeigt Dauer + Zeiten"): the running
+    // step shows its start clock (HH:MM) and a duration; a not-yet-started
+    // step shows the placeholder for its start time.
+    await expect(coreRow.getByTestId('overview-pipeline-step-started')).toHaveText(/\d{1,2}:\d{2}/);
+    await expect(coreRow.getByTestId('overview-pipeline-step-duration')).toBeVisible();
+    await expect(lintRow.getByTestId('overview-pipeline-step-started')).toHaveText('—');
+
     if (RESULTS_DIR) {
       await coreRow.scrollIntoViewIfNeeded();
       await page.screenshot({
@@ -341,5 +373,37 @@ test.describe('Pipeline live step status', () => {
     await expect(lintRow).toHaveAttribute('data-status', 'running', { timeout: 15_000 });
     await expect(coreRow).toHaveAttribute('data-status', 'passed');
     await expect(page.getByTestId('overview-pipeline-step-running')).toHaveCount(1);
+  });
+
+  test('the running step duration counts up live between polls', async ({ page }) => {
+    // The backend records the running step's startedAt; the duration cell
+    // computes "now − startedAt" and re-renders once per second, so it ticks
+    // up without waiting for the 10s pipeline poll. The mocked snapshot is
+    // static (same startedAt every fetch) - any change in the rendered
+    // duration is the client-side live counter, not new data.
+    await installRoutes(page, '3-progress', pipelineRunningFresh);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await dismissErrorDialog(page);
+
+    const coreRow = page.locator('[data-step-id="core-agent-run"]');
+    await expect(coreRow).toHaveAttribute('data-status', 'running', { timeout: 10_000 });
+
+    const durationCell = coreRow.getByTestId('overview-pipeline-step-duration');
+    // It started ~3s ago, so the duration is in the seconds range ("Ns").
+    await expect(durationCell).toHaveText(/^\d+s$/);
+    const initial = (await durationCell.textContent())?.trim() ?? '';
+
+    // The per-second tick must move the value within a couple of seconds.
+    await expect(durationCell).not.toHaveText(initial, { timeout: 4_000 });
+
+    if (RESULTS_DIR) {
+      await coreRow.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-live-duration-ticking.png'),
+        fullPage: true,
+      });
+    }
   });
 });

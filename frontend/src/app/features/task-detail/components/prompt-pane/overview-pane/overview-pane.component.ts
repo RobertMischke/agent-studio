@@ -54,6 +54,10 @@ interface PipelineRowVm {
   concernTooltip: StructuredTooltip | null;
   /** Recorded wall-clock duration of the step in ms; 0 when not yet run. */
   durationMs: number;
+  /** ISO start stamp from the execution record; null until the step starts. */
+  startedAt: string | null;
+  /** ISO end stamp; null while running or before the step is reached. */
+  completedAt: string | null;
   totalTokens: number;
   costUsd: number;
   /** False -> the model is not in the price table, render cost as n/a. */
@@ -394,6 +398,8 @@ export class OverviewPaneComponent {
         verdict,
         concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
         durationMs: e?.durationMs ?? 0,
+        startedAt: e?.startedAt ?? null,
+        completedAt: e?.completedAt ?? null,
         totalTokens: c?.totalTokens ?? 0,
         costUsd: c?.costUsd ?? 0,
         costKnown: c ? c.modelKnown : true,
@@ -412,6 +418,81 @@ export class OverviewPaneComponent {
 
   /** True once at least one step has a recorded execution. */
   readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
+
+  /** True while any pipeline step is in flight. */
+  private readonly anyStepRunning = computed(() =>
+    this.pipelineRows().some(r => r.status === 'running'),
+  );
+
+  /**
+   * Wall-clock "now", advanced once per second only while a step is running,
+   * so the active step's duration counts up live between the 10 s pipeline
+   * polls. Idle (no interval, no change detection) when nothing is running.
+   * Deliberately not read by `pipelineRows` / `anyStepRunning` so ticking
+   * the clock never re-triggers the interval-management effect below.
+   */
+  private readonly now = signal(Date.now());
+  private tickHandle: ReturnType<typeof setInterval> | null = null;
+
+  private readonly manageLiveTick = effect(() => {
+    if (this.anyStepRunning()) {
+      if (this.tickHandle == null) {
+        this.now.set(Date.now());
+        this.tickHandle = setInterval(() => this.now.set(Date.now()), 1000);
+      }
+    } else if (this.tickHandle != null) {
+      clearInterval(this.tickHandle);
+      this.tickHandle = null;
+    }
+  });
+
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      if (this.tickHandle != null) {
+        clearInterval(this.tickHandle);
+        this.tickHandle = null;
+      }
+    });
+  }
+
+  /**
+   * Effective duration in ms for a step row: a live "now − startedAt" while
+   * the step is running (so the cell ticks up), otherwise the recorded
+   * `durationMs`. Reads the `now` signal so the running row re-renders each
+   * second; a completed row is independent of the clock.
+   */
+  liveStepDurationMs(row: PipelineRowVm): number {
+    if (row.status === 'running' && row.startedAt) {
+      const start = new Date(row.startedAt).getTime();
+      if (!Number.isNaN(start)) return Math.max(0, this.now() - start);
+    }
+    return row.durationMs;
+  }
+
+  /** Wall-clock "HH:MM" for a step timestamp; empty string when unset. */
+  formatClock(iso: string | null): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  /**
+   * Structured tooltip for a step's timing cell: absolute start (and end, or
+   * a live "running for" line). Null before the step starts so a pending /
+   * disabled row carries no misleading tooltip.
+   */
+  stepTimingTooltip(row: PipelineRowVm): StructuredTooltip | null {
+    if (!row.startedAt) return null;
+    const lines: string[] = [`Started: ${this.formatAbsoluteTime(row.startedAt)}`];
+    if (row.status === 'running') {
+      lines.push(`Running for ${this.formatStepDuration(this.liveStepDurationMs(row))}`);
+    } else {
+      if (row.completedAt) lines.push(`Ended: ${this.formatAbsoluteTime(row.completedAt)}`);
+      if (row.durationMs > 0) lines.push(`Duration: ${this.formatStepDuration(row.durationMs)}`);
+    }
+    return { title: row.label, body: lines.join('\n') };
+  }
 
   stepKindLabel(kind: StepKind): string {
     switch (kind) {

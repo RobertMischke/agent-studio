@@ -280,10 +280,15 @@
               <span class="ov-pl-step__model" data-testid="overview-pipeline-step-model"
                     [appTooltip]="'Model used for this step'">{{ row.model }}</span>
             }
-            <span class="ov-pl-step__duration ov-value--mono"
-                  data-testid="overview-pipeline-step-duration"
-                  [appTooltip]="'Recorded duration of this step'">
-              {{ formatStepDuration(row.durationMs) }}
+            <span class="ov-pl-step__timing"
+                  data-testid="overview-pipeline-step-timing"
+                  [appTooltip]="stepTimingTooltip(row)">
+              <span class="ov-pl-step__started"
+                    data-testid="overview-pipeline-step-started"
+                    aria-label="Step start time">{{ row.startedAt ? formatClock(row.startedAt) : '—' }}</span>
+              <span class="ov-pl-step__duration ov-value--mono"
+                    [class.ov-pl-step__duration--live]="row.status === 'running'"
+                    data-testid="overview-pipeline-step-duration">{{ formatStepDuration(liveStepDurationMs(row)) }}</span>
             </span>
             <span class="ov-pl-step__tokens ov-value--mono"
                   data-testid="overview-pipeline-step-tokens">

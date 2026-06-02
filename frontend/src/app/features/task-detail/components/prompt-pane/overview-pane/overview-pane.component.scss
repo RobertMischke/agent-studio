@@ -528,11 +528,41 @@
     white-space: nowrap;
   }
 
+  // Per-step timing: the recorded start clock ("19:56") next to the
+  // duration. The duration counts up live while the step is running; the
+  // group carries a tooltip with the absolute start / end stamps. Right
+  // aligned as one cell so the times + duration scan as a single column.
+  &__timing {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 5px;
+    cursor: help;
+  }
+
+  &__started {
+    flex: 0 0 auto;
+    width: 38px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--studio-fg-muted);
+  }
+
   &__duration {
     flex: 0 0 auto;
     width: 52px;
     text-align: right;
     color: var(--studio-fg-dim);
+
+    // While the step is running the value ticks up every second; tint it
+    // with the running accent so the live count reads as in-flight, not a
+    // final recorded duration.
+    &--live {
+      color: var(--lane-progress);
+      font-weight: 600;
+    }
   }
 
   &__tokens {
