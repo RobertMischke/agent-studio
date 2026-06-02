@@ -34,6 +34,18 @@ public sealed class PtySession : IAsyncDisposable
         ["<Space>"] = " ",
     };
 
+    /// <summary>
+    /// Hard cap on the rolling ANSI capture buffer. The PTY mirrors a child
+    /// program's raw stdout; a misbehaving CLI (e.g. a model picker that never
+    /// settles and spin-renders the screen — the "Model picker did not appear"
+    /// path) can emit output without bound. <see cref="SnapshotStripped"/> runs
+    /// three full-buffer regex replaces on every <see cref="WaitForPatternAsync"/>
+    /// poll (~10x/s), so an unbounded buffer is both an OOM risk and O(n^2) CPU
+    /// churn — a silent-host-death vector. Snapshot consumers only ever read the
+    /// most recent screen state, so we keep a bounded tail and drop the head.
+    /// </summary>
+    public const int MaxBufferChars = 512 * 1024;
+
     private readonly IPtyConnection _conn;
     private readonly StringBuilder _buffer = new();
     private readonly object _bufferLock = new();
@@ -101,7 +113,7 @@ public sealed class PtySession : IAsyncDisposable
                 if (n <= 0) break;
                 lock (_bufferLock)
                 {
-                    _buffer.Append(Encoding.UTF8.GetString(buf, 0, n));
+                    AppendBounded(_buffer, Encoding.UTF8.GetString(buf, 0, n), MaxBufferChars);
                     _lastByteAt = DateTime.UtcNow;
                 }
             }
@@ -183,6 +195,23 @@ public sealed class PtySession : IAsyncDisposable
     public void ClearBuffer()
     {
         lock (_bufferLock) _buffer.Clear();
+    }
+
+    /// <summary>
+    /// Append <paramref name="text"/> to <paramref name="sb"/> while keeping
+    /// its length at or below <paramref name="maxChars"/>, evicting the oldest
+    /// characters first. Snapshot consumers only read the recent screen state,
+    /// so dropping the head is safe and keeps memory and per-snapshot regex
+    /// cost bounded regardless of how much a runaway child program emits.
+    /// </summary>
+    public static void AppendBounded(StringBuilder sb, string text, int maxChars)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        sb.Append(text);
+        if (sb.Length > maxChars)
+        {
+            sb.Remove(0, sb.Length - maxChars);
+        }
     }
 
     public void Resize(int cols, int rows)

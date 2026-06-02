@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -32,6 +33,19 @@ public class TaskScannerService : ITaskScanner
     /// scanner needs cache for hot-path reads).
     /// </summary>
     private TaskIndexCache? _indexCache;
+
+    /// <summary>
+    /// Watch paths that resolved to a non-existent folder and have already
+    /// been warned about. <see cref="ScanAllJobsRaw"/> runs on every cache
+    /// refresh, which a busy job's FileSystemWatcher churn can trigger many
+    /// times per second; without this latch the "Watch path does not exist"
+    /// warning spammed the api log endlessly and buried the real crash cause
+    /// in the last seconds before a silent host death (observed 2026-06-02
+    /// against the misconfigured Runbook watch path). Warn once per path; a
+    /// path that later reappears is removed so a fresh disappearance still
+    /// surfaces. Concurrent because the scan fans out across cache readers.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _warnedMissingWatchPaths = new(StringComparer.OrdinalIgnoreCase);
 
     public TaskScannerService(IConfiguration config, ILogger<TaskScannerService> logger, SummaryGenerationService summaryService)
     {
@@ -164,9 +178,15 @@ public class TaskScannerService : ITaskScanner
         {
             if (!Directory.Exists(entry.Path))
             {
-                _logger.LogWarning("Watch path does not exist: {Path}", entry.Path);
+                // Log-once per path: this runs on every cache refresh, so an
+                // unthrottled warning floods the log under watcher churn.
+                if (_warnedMissingWatchPaths.TryAdd(entry.Path, 0))
+                    _logger.LogWarning("Watch path does not exist: {Path}", entry.Path);
                 continue;
             }
+            // Path is present again — clear the latch so a future disappearance
+            // is surfaced rather than silently swallowed.
+            _warnedMissingWatchPaths.TryRemove(entry.Path, out _);
 
             foreach (var state in TaskStates.All)
             {
