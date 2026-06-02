@@ -149,12 +149,15 @@
       [activePanel]="activePanel()"
       [sidebarVisible]="sidebarVisible()"
       [badgeCounts]="activityBarBadgeCounts()"
-      [boardActive]="isBoardTabActive() && !backlogTriage.open()"
+      [boardActive]="isBoardTabActive() && !backlogTriage.open() && !epicOverview.open()"
       [backlogActive]="backlogTriage.open()"
       [backlogCount]="backlogCount()"
+      [epicsActive]="epicOverview.open()"
+      [hasEpics]="hasEpics()"
       (panelToggle)="togglePanel($event)"
       (openBoardRequest)="onActivityBarOpenBoard()"
-      (openBacklogRequest)="onActivityBarOpenBacklog()" />
+      (openBacklogRequest)="onActivityBarOpenBacklog()"
+      (openEpicsRequest)="onActivityBarOpenEpics()" />
 
     <!-- Sidebar host -->
     @if (sidebarVisible()) {

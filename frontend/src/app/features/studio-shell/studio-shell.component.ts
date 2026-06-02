@@ -24,7 +24,7 @@ import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
 import { TaskSelectionService } from '../task-detail';
 import { UiPreferencesService } from '../shell';
-import { BoardFiltersService, BacklogTriageService } from '../board';
+import { BoardFiltersService, BacklogTriageService, EpicOverviewService, flattenGrouped } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
@@ -109,6 +109,7 @@ export class StudioShellComponent {
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
   readonly backlogTriage = inject(BacklogTriageService);
+  readonly epicOverview = inject(EpicOverviewService);
   readonly updateClient = inject(UpdateClientService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
@@ -736,9 +737,10 @@ export class StudioShellComponent {
    * regardless of which other tab is currently active.
    */
   onActivityBarOpenBoard(): void {
-    // Closing the triage screen is part of "go to board": Ctrl+B and the
-    // Board button both surface the kanban, not the triage overlay.
+    // Closing the overlays is part of "go to board": Ctrl+B and the Board
+    // button both surface the kanban, not a full-screen overlay.
     if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
+    if (this.epicOverview.open()) this.epicOverview.closeOverview();
     this.tabState.activateSticky();
   }
 
@@ -751,9 +753,33 @@ export class StudioShellComponent {
     if (this.backlogTriage.open()) {
       this.backlogTriage.closeTriage();
     } else {
+      // The two full-screen overlays are mutually exclusive.
+      if (this.epicOverview.open()) this.epicOverview.closeOverview();
       this.backlogTriage.openTriage();
     }
   }
+
+  /**
+   * Activity-bar Epics button click. Toggles the read-only epic overview
+   * screen at `#/epics`. Mutually exclusive with the backlog overlay.
+   */
+  onActivityBarOpenEpics(): void {
+    if (this.epicOverview.open()) {
+      this.epicOverview.closeOverview();
+    } else {
+      if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
+      this.epicOverview.openOverview();
+    }
+  }
+
+  /**
+   * Whether any epic cards exist across all projects. Drives the
+   * activity-bar Epics button visibility (hide-when-empty), so projects
+   * that don't use epics never see the entry point.
+   */
+  readonly hasEpics = computed(() =>
+    flattenGrouped(this.grouped()).some(t => t.kind === 'epic'),
+  );
 
   /**
    * Backlog count under the active filter (project + type + tag + owner).

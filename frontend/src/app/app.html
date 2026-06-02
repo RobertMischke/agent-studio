@@ -217,6 +217,10 @@
             <app-backlog-triage-screen
               (closeRequested)="backlogTriage.closeTriage()"
               (newTaskRequested)="onBacklogNewTask()" />
+          } @else if (epicOverviewOpen()) {
+            <app-epic-overview-screen
+              (closeRequested)="epicOverview.closeOverview()"
+              (openTask)="onEpicOverviewOpenTask($event)" />
           } @else {
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {

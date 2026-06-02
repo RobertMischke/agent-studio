@@ -1,0 +1,106 @@
+<section class="epic-overview" data-testid="epic-overview-screen" role="region" aria-label="Epic overview">
+  <header class="epic-overview__header">
+    <div class="epic-overview__title-block">
+      <button type="button"
+              class="epic-overview__close"
+              data-testid="epic-overview-close"
+              [appTooltip]="'Back to board'"
+              aria-label="Close epic overview"
+              (click)="close()">←</button>
+      <div>
+        <h1 class="epic-overview__title">
+          <span aria-hidden="true">🧩</span>
+          Epics
+        </h1>
+        <p class="epic-overview__subtitle" data-testid="epic-overview-count">
+          {{ totalEpics() }} {{ totalEpics() === 1 ? 'epic' : 'epics' }}
+        </p>
+      </div>
+    </div>
+  </header>
+
+  @if (loading() && epics().length === 0) {
+    <div class="epic-overview__muted" data-testid="epic-overview-loading">Loading epics…</div>
+  } @else if (error()) {
+    <div class="epic-overview__muted" data-testid="epic-overview-error">Could not load epics.</div>
+  } @else if (epics().length === 0) {
+    <div class="epic-overview__empty" data-testid="epic-overview-empty">
+      <p class="epic-overview__empty-text">No epics yet.</p>
+      <p class="epic-overview__empty-hint">Create a task with kind “epic”, then attach sub-tasks to it.</p>
+    </div>
+  } @else {
+    <ul class="epic-overview__list" data-testid="epic-overview-list" role="list">
+      @for (epic of epics(); track trackByEpic($index, epic)) {
+        @let identity = identityFor(epic.projectName);
+        @let expanded = isExpanded(epic.id);
+        <li class="epic-overview__card"
+            data-testid="epic-overview-card"
+            [attr.data-epic-id]="epic.id">
+          <div class="epic-overview__card-head">
+            <button type="button"
+                    class="epic-overview__expand"
+                    [class.epic-overview__expand--open]="expanded"
+                    [attr.aria-expanded]="expanded"
+                    [attr.data-testid]="'epic-overview-expand'"
+                    [appTooltip]="expanded ? 'Hide sub-tasks' : 'Show sub-tasks'"
+                    aria-label="Toggle sub-tasks"
+                    (click)="toggleExpanded(epic.id)">▸</button>
+            <button type="button"
+                    class="epic-overview__epic-title"
+                    data-testid="epic-overview-open-epic"
+                    [appTooltip]="'Open epic'"
+                    (click)="openEpic(epic)">{{ epic.title || epic.id }}</button>
+            <span class="epic-overview__project-chip"
+                  data-testid="epic-overview-project"
+                  [style.--project-color]="identity.color"
+                  [style.--project-soft]="identity.soft">
+              <span class="epic-overview__project-disk" aria-hidden="true">{{ identity.initial }}</span>
+              <span>{{ epic.projectName }}</span>
+            </span>
+            <span class="epic-overview__count"
+                  data-testid="epic-overview-card-count">{{ epic.completed }} / {{ epic.subTaskTotal }} done</span>
+          </div>
+
+          <div class="epic-overview__bar"
+               role="img"
+               [attr.aria-label]="epic.completed + ' done, ' + epic.inProgress + ' in progress, ' + epic.open + ' open'">
+            <div class="epic-overview__seg epic-overview__seg--done"
+                 [style.width.%]="segmentPct(epic.completed, epic.subTaskTotal)"></div>
+            <div class="epic-overview__seg epic-overview__seg--prog"
+                 [style.width.%]="segmentPct(epic.inProgress, epic.subTaskTotal)"></div>
+            <div class="epic-overview__seg epic-overview__seg--open"
+                 [style.width.%]="segmentPct(epic.open, epic.subTaskTotal)"></div>
+          </div>
+
+          <div class="epic-overview__stats">
+            <span class="epic-overview__stat epic-overview__stat--done" data-testid="epic-overview-stat-done">{{ epic.completed }} done</span>
+            <span class="epic-overview__stat epic-overview__stat--prog" data-testid="epic-overview-stat-prog">{{ epic.inProgress }} in progress</span>
+            <span class="epic-overview__stat epic-overview__stat--open" data-testid="epic-overview-stat-open">{{ epic.open }} open</span>
+          </div>
+
+          @if (expanded) {
+            @if (epic.subTasks.length === 0) {
+              <div class="epic-overview__muted epic-overview__subs-empty" data-testid="epic-overview-subs-empty">No sub-tasks yet.</div>
+            } @else {
+              <ul class="epic-overview__subs" data-testid="epic-overview-subs" role="list">
+                @for (sub of epic.subTasks; track sub.id) {
+                  <li class="epic-overview__sub">
+                    <button type="button"
+                            class="epic-overview__sub-btn"
+                            data-testid="epic-overview-open-sub"
+                            [attr.data-sub-id]="sub.id"
+                            [appTooltip]="'Open sub-task'"
+                            (click)="openSubTask(epic, sub.id)">
+                      <span class="epic-overview__sub-title">{{ sub.title || sub.id }}</span>
+                      <span class="epic-overview__sub-state" [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

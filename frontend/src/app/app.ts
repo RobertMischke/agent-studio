@@ -20,6 +20,8 @@ import {
   BoardFiltersService,
   CreateTaskDialogComponent,
   EpicGroupBoardComponent,
+  EpicOverviewScreenComponent,
+  EpicOverviewService,
   FiltersDropdownComponent,
   TaskColumnComponent,
   KanbanFilterSidesheetComponent,
@@ -153,6 +155,7 @@ interface VerboseDebugContext {
     TooltipDirective,
     MenuComponent,
     BacklogTriageScreenComponent,
+    EpicOverviewScreenComponent,
     StudioShellComponent,
     ProjectHubViewComponent,
     StudioDiffViewComponent,
@@ -290,6 +293,8 @@ export class App implements OnInit, OnDestroy {
   private readonly boardFilters = inject(BoardFiltersService);
   readonly backlogTriage = inject(BacklogTriageService);
   readonly backlogTriageOpen = this.backlogTriage.open;
+  readonly epicOverview = inject(EpicOverviewService);
+  readonly epicOverviewOpen = this.epicOverview.open;
   private readonly tagRegistryStore = inject(TagRegistryStore);
   private readonly cliCatalogStore = inject(CliCatalogStore);
   readonly activeProjects = this.boardFilters.activeProjects;
@@ -1011,6 +1016,7 @@ export class App implements OnInit, OnDestroy {
       this.workspaceOverlays.syncFromHash();
       this.applyProjectShellHash();
       this.backlogTriage.syncFromHash();
+      this.epicOverview.syncFromHash();
     };
     applyHash();
     this.hashListener = applyHash;
@@ -1027,6 +1033,7 @@ export class App implements OnInit, OnDestroy {
       if (this.workspaceTokensOpen() || this.workspaceScreenshotsOpen() || this.workspaceSummaryOpen()) return;
       if (this.projectShellName() !== null) return;
       if (this.backlogTriage.open()) return;
+      if (this.epicOverview.open()) return;
       const target = ev.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -1282,8 +1289,20 @@ export class App implements OnInit, OnDestroy {
       this.backlogTriage.closeTriage();
       this.studioTabState.activateSticky();
     } else {
+      // The two full-screen overlays are mutually exclusive.
+      if (this.epicOverview.open()) this.epicOverview.closeOverview();
       this.backlogTriage.openTriage();
     }
+  }
+
+  /**
+   * Epic overview screen "open epic" / "open sub-task" click. Closes the
+   * overlay so the editor area is free, then routes to the card's detail
+   * via the same flow as the side-sheet "Open task" action.
+   */
+  onEpicOverviewOpenTask(event: { jobId: string; watchPath: string }): void {
+    this.epicOverview.closeOverview();
+    this.onOpenJobDetailFromSheet(event);
   }
 
   openCreate(targetState?: string) {

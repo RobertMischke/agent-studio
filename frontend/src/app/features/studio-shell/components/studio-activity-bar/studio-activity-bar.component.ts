@@ -33,9 +33,15 @@ export class StudioActivityBarComponent {
   readonly backlogActive = input<boolean>(false);
   /** Count of `0-backlog` tasks under the current project filter; renders a numeric badge. */
   readonly backlogCount = input<number>(0);
+  /** True while the epic overview screen is visible. Drives the active highlight. */
+  readonly epicsActive = input<boolean>(false);
+  /** Whether any epics exist. The Epics button is hidden when false. */
+  readonly hasEpics = input<boolean>(false);
   readonly panelToggle = output<StudioActivityPanelKey | 'settings'>();
   /** Fires when the user clicks the always-visible Board button. */
   readonly openBoardRequest = output<void>();
   /** Fires when the user clicks the always-visible Backlog button. */
   readonly openBacklogRequest = output<void>();
+  /** Fires when the user clicks the Epics button (shown only when epics exist). */
+  readonly openEpicsRequest = output<void>();
 }
