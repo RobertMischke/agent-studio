@@ -23,6 +23,7 @@ import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
+import type { StructuredTooltip } from '../../../../../components/tooltip';
 import { RowComponent } from '../../../../../components/row/row.component';
 import {
   cliTypeIcon,
@@ -45,10 +46,45 @@ interface PipelineRowVm {
   status: PipelineStepStatus | 'disabled';
   model: string | null;
   verdict: string | null;
+  /**
+   * Structured tooltip for the verdict pill, built from the per-aspect
+   * concern summary. Null unless the step flagged a concern, so a pass
+   * verdict never grows a misleading tooltip.
+   */
+  concernTooltip: StructuredTooltip | null;
   totalTokens: number;
   costUsd: number;
   /** False -> the model is not in the price table, render cost as n/a. */
   costKnown: boolean;
+}
+
+/** Title-case label for an aspect concern verdict, for the tooltip header. */
+function verdictTitle(verdict: string | null): string | null {
+  switch ((verdict ?? '').toLowerCase()) {
+    case 'concern':
+    case 'concerns': return 'Concerns';
+    case 'blocked':
+    case 'block':    return 'Blocking concern';
+    default:         return null;
+  }
+}
+
+/**
+ * Build the structured tooltip for an aspect step's verdict pill. Returns
+ * null unless the step carries concern detail (a non-pass verdict with
+ * summary text), so a pass verdict — or a step the backend left unenriched
+ * — shows no tooltip rather than a misleading empty one.
+ */
+function buildConcernTooltip(
+  label: string,
+  verdict: string | null,
+  summary: string | null,
+): StructuredTooltip | null {
+  const text = summary?.trim();
+  if (!text) return null;
+  const kind = verdictTitle(verdict);
+  if (!kind) return null;
+  return { title: `${label} · ${kind}`, body: text };
 }
 
 @Component({
@@ -344,14 +380,17 @@ export class OverviewPaneComponent {
       else if (e) status = e.status;
       else if (step.stub) status = 'planned';
       else status = 'pending';
+      const label = step.displayName || step.id;
+      const verdict = e?.verdict ?? null;
       return {
         id: step.id,
-        label: step.displayName || step.id,
+        label,
         kind: step.kind,
         enabled,
         status,
         model: e?.model ?? cfg?.model ?? step.model ?? null,
-        verdict: e?.verdict ?? null,
+        verdict,
+        concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
         totalTokens: c?.totalTokens ?? 0,
         costUsd: c?.costUsd ?? 0,
         costKnown: c ? c.modelKnown : true,

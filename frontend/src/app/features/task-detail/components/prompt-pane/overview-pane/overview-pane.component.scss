@@ -454,6 +454,9 @@
     &[data-verdict='pass']     { color: var(--lane-completed); }
     &[data-verdict='concerns'] { color: var(--severity-warn); }
     &[data-verdict='block']    { color: var(--severity-high); }
+
+    // Hover affordance: the pill carries the concrete concern in a tooltip.
+    &--concern { cursor: help; }
   }
 
   &__model {

@@ -260,7 +260,12 @@
             <span class="ov-pl-step__kind">{{ stepKindLabel(row.kind) }}</span>
             <span class="ov-pl-step__name">{{ row.label }}</span>
             @if (row.verdict) {
-              <span class="ov-pl-step__verdict" [attr.data-verdict]="row.verdict">{{ row.verdict }}</span>
+              <span class="ov-pl-step__verdict"
+                    [class.ov-pl-step__verdict--concern]="row.concernTooltip"
+                    [attr.data-verdict]="row.verdict"
+                    [appTooltip]="row.concernTooltip"
+                    [tooltipSeverity]="row.verdict === 'block' ? 'error' : 'warn'"
+                    data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
             }
             @if (row.model) {
               <span class="ov-pl-step__model" data-testid="overview-pipeline-step-model"

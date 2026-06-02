@@ -39,7 +39,11 @@ public static class TaskPipelineEndpoints
 
             var pipeline = PipelineCatalogue.Standard;
             var record = pipelineLog.Read(info.FolderPath);
+            // Cost is derived from the raw recorded tokens; enrich a copy
+            // with per-aspect concern detail for the response so the
+            // Overview pipeline can tooltip the CONCERNS pill.
             var cost = PipelineCostCalculator.Summarize(record);
+            var execution = AspectConcernReader.Enrich(record, info.FolderPath);
 
             var settings = string.IsNullOrWhiteSpace(info.ProjectName)
                 ? null
@@ -57,7 +61,7 @@ public static class TaskPipelineEndpoints
             return Results.Ok(new
             {
                 pipeline,
-                execution = record,
+                execution,
                 cost,
                 config,
             });

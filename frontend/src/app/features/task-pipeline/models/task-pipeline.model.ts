@@ -56,6 +56,12 @@ export interface PipelineStepExecution {
   cacheCreationTokens: number;
   reason?: string | null;
   verdict?: string | null;
+  /**
+   * Human-readable concern detail for aspect steps with a non-pass
+   * verdict, lifted from `aspect-{id}.md` frontmatter by the backend.
+   * Drives the tooltip on the CONCERNS pill in the Overview pipeline.
+   */
+  verdictSummary?: string | null;
 }
 
 /** The persisted execution record (null when the job never ran a pipeline). */

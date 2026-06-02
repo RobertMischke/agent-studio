@@ -7,6 +7,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
 import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
+import { TaskTimelinePollService } from '../../../../polling/services/task-timeline-poll.service';
 import { OverviewPaneComponent } from './overview-pane.component';
 import type { TaskInfo } from '../../../../../models/task.model';
 import type { AgentWorkSummary } from '../../../../session-events';
@@ -14,7 +15,7 @@ import type { TaskPipelineResponse } from '../../../../task-pipeline';
 
 function baseJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
-    id: 'test-1', key: 'wp::test-1', title: 'Test', state: '2-ready',
+    id: 'test-1', taskKey: 'wp::test-1', key: 'wp::test-1', title: 'Test', state: '2-ready',
     order: 1, agent: 'human', createdAt: new Date().toISOString(),
     watchPath: '/tmp', projectName: 'test', folderPath: '/tmp/test-1',
     lastActivity: new Date().toISOString(), sessionName: null,
@@ -35,6 +36,7 @@ async function build(job: TaskInfo, agentWork: AgentWorkSummary | null = null) {
       RunTimelinePollService,
       AgentWorkSummaryPollService,
       TaskPipelinePollService,
+      TaskTimelinePollService,
     ],
   }).compileComponents();
   if (agentWork) {
@@ -208,6 +210,44 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.pipelineTotal()).toEqual({ totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false });
     expect(c.formatCost(0.002)).toBe('$0.0020');
     expect(c.formatCost(1.5)).toBe('$1.50');
+  });
+
+  it('pipeline block: concern tooltip is built for a non-pass aspect verdict, and absent for pass', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'aspect-requirement-fit', displayName: 'Requirement fit', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+          { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'aspect-requirement-fit', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'concerns', verdictSummary: 'Acceptance item 3 (empty-state tooltip) has no evidence.' },
+          { stepId: 'aspect-code-quality', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
+        ],
+      },
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const rows = fixture.componentInstance.pipelineRows();
+    const concerned = rows.find(r => r.id === 'aspect-requirement-fit')!;
+    expect(concerned.verdict).toBe('concerns');
+    expect(concerned.concernTooltip).not.toBeNull();
+    expect(concerned.concernTooltip!.title).toBe('Requirement fit · Concerns');
+    expect(concerned.concernTooltip!.body).toContain('Acceptance item 3');
+
+    // A pass verdict (or a verdict with no summary) must not grow a tooltip.
+    const passing = rows.find(r => r.id === 'aspect-code-quality')!;
+    expect(passing.verdict).toBe('pass');
+    expect(passing.concernTooltip).toBeNull();
   });
 
   it('session row was removed (component no longer exposes session-id helpers)', async () => {
