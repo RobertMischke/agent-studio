@@ -498,7 +498,17 @@ public class ProjectRunner
         // case, not the most-skippable. Folders that have failed silently
         // for the configured retry budget get dead-lettered into 7-archive
         // here so the iteration drains and falls through to the ready queue.
-        var nextJob = TryPickProgressJobOrDeadLetter() ?? GetNextReadyJob();
+        var nextJob = TryPickProgressJobOrDeadLetter();
+        if (nextJob == null)
+        {
+            // Only when no in-flight 3-progress folder needs resuming: sweep
+            // any human-decision-needed card out of 2-ready into 1b before the
+            // ready picker runs. Placed after the progress pickup so its scan
+            // does not perturb the mtime-ordered resume walk above.
+            RelocateStrayHumanDecisionCards();
+            nextJob = GetNextReadyJob();
+        }
+
         if (nextJob == null)
         {
             if (_mode == "auto-single")
@@ -2644,9 +2654,71 @@ public class ProjectRunner
             .Where(j => j.ProjectName == ProjectName
                         && j.State == TaskStates.Ready
                         && AgentTypes.IsAutoPickupEligible(j.Agent)
+                        // Hard safety net for the human-decision-needed marker:
+                        // never auto-run such a card even if the 2-ready->1b
+                        // relocation sweep failed to move it. Running it just
+                        // NOOP-burns a CLI and trips the infra breaker.
+                        && !TaskSlugs.IsHumanDecisionNeeded(j.Id)
                         && IsPickupAllowed(j, intakeEnabled))
             .OrderBy(j => j.Order)
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Relocate any <see cref="TaskSlugs.HumanDecisionNeededPrefix"/> card that
+    /// has come to rest in <c>2-ready</c> into <c>1b-needs-human-review</c>
+    /// before the pickup selection runs. Such a card is a marker for a human
+    /// call, not a unit of agent work: auto-picking it spawns a CLI run the
+    /// agent correctly NOOPs (exit=1 after a few seconds), which burns tokens
+    /// and trips the cross-slug infra circuit breaker into a manual demotion.
+    /// The orchestrator-prep loop keeps these out of the 1-preparation side
+    /// (see <see cref="OrchestratorPrepRules"/>); this is the 2-ready-side
+    /// guard for cards that arrived here by a manual drop or a legacy spawn.
+    /// </summary>
+    private void RelocateStrayHumanDecisionCards()
+    {
+        List<TaskInfo> stray;
+        try
+        {
+            stray = _scanner.ScanAllJobs()
+                .Where(j => j.ProjectName == ProjectName
+                            && j.State == TaskStates.Ready
+                            && TaskSlugs.IsHumanDecisionNeeded(j.Id))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[taskboard] human-decision-needed sweep: scan failed for {Project}", ProjectName);
+            return;
+        }
+
+        foreach (var job in stray)
+        {
+            var move = _states.MoveJob(job.Id, TaskStates.NeedsHumanReview, Entry.Path);
+            if (move.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "[taskboard] human-decision-needed card {JobId} on {Project} could not be moved 2-ready -> {Target}: {Status} {Message}; it stays parked and is skipped by pickup",
+                    job.Id, ProjectName, TaskStates.NeedsHumanReview, move.Status, move.Message);
+                continue;
+            }
+
+            _logger.LogInformation(
+                "[taskboard] routed human-decision-needed card {JobId} on {Project} from 2-ready -> {Target} (never auto-run: it is a human-decision marker)",
+                job.Id, ProjectName, TaskStates.NeedsHumanReview);
+
+            try
+            {
+                var moved = _scanner.FindJob(job.Id, Entry.Path);
+                if (moved != null)
+                    _chatLog.AppendSupervisor(moved, "human-decision-routed",
+                        "Routed to 1b-needs-human-review: this card is a human-decision marker, so the runner will not spawn a CLI run for it.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[taskboard] human-decision-needed sweep: chat-log append failed for {JobId}", job.Id);
+            }
+        }
     }
 
     /// <summary>

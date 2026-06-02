@@ -1,3 +1,5 @@
+using OrchestratorApi.Models;
+
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
@@ -27,6 +29,14 @@ public static class OrchestratorPrepRules
         public int Iteration { get; init; }
         public int MaxIterations { get; init; } = 3;
         public int AutonomyLevel { get; init; } = 2;
+
+        /// <summary>
+        /// The task slug (folder id). Carries semantic markers the prompt
+        /// heuristics cannot see - notably the
+        /// <see cref="TaskSlugs.HumanDecisionNeededPrefix"/> that forces a
+        /// bounce regardless of autonomy level.
+        /// </summary>
+        public string Slug { get; init; } = "";
 
         /// <summary>The previous task's prompt text in the queue, or empty.</summary>
         public string PrevPromptText { get; init; } = "";
@@ -58,6 +68,14 @@ public static class OrchestratorPrepRules
         ConflictsPrev,
         OutOfScope,
         IterationCap,
+
+        /// <summary>
+        /// The card carries the <see cref="TaskSlugs.HumanDecisionNeededPrefix"/>
+        /// marker: it exists for a human to decide, so the prep loop parks it
+        /// in <c>1b-needs-human-review</c> without running the clarity bands or
+        /// the autonomy gating. A semantic marker, not a heuristic threshold.
+        /// </summary>
+        HumanDecisionNeededMarker,
     }
 
     public sealed record PrepDecision
@@ -76,6 +94,11 @@ public static class OrchestratorPrepRules
     /// </summary>
     public static double ScoreClarity(PrepInput input)
     {
+        // Belt-and-suspenders to the Decide() marker override: a card minted
+        // explicitly for a human decision has zero machine-actionable clarity,
+        // whatever its prompt body happens to say.
+        if (TaskSlugs.IsHumanDecisionNeeded(input.Slug)) return 0.0;
+
         var text = input.PromptText ?? "";
         var lower = text.ToLowerInvariant();
         var wordCount = text.Split(new[] { ' ', '\t', '\n', '\r' }, System.StringSplitOptions.RemoveEmptyEntries).Length;
@@ -132,6 +155,25 @@ public static class OrchestratorPrepRules
     public static PrepDecision Decide(PrepInput input)
     {
         var clarity = ScoreClarity(input);
+
+        // Semantic-marker override. A card whose slug carries the
+        // human-decision-needed prefix exists for a person to decide; the
+        // automation must not reason about it at all. Bounce it to
+        // 1b-needs-human-review unconditionally - this overrides the "level 4
+        // never bounces" doctrine on purpose, because the marker is an explicit
+        // intent, not a clarity heuristic. Checked first so no autonomy branch
+        // (including the level-0 hold and the cap-exit accept) can swallow it.
+        if (TaskSlugs.IsHumanDecisionNeeded(input.Slug))
+        {
+            return new PrepDecision
+            {
+                Verdict = Verdict.Bounce,
+                Clarity = clarity,
+                BounceReason = BounceReason.HumanDecisionNeededMarker,
+                Note = "human-decision-needed marker: parking in 1b-needs-human-review for a human decision",
+            };
+        }
+
         var level = System.Math.Clamp(input.AutonomyLevel, 0, 4);
 
         // Level 0: orchestrator never moves a task forward without a click.

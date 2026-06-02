@@ -163,6 +163,66 @@ public class OrchestratorPrepRulesTests
     }
 
     [Fact]
+    public void HumanDecisionNeededSlug_BouncesAtLevel4_OverridingNeverBounces()
+    {
+        // A card minted explicitly for a human decision must park in
+        // 1b-needs-human-review no matter how clear the prompt looks or how
+        // high the autonomy is. The slug prefix is a semantic marker, so it
+        // overrides the "level 4 never bounces" doctrine. AC#3 of the
+        // human-decision-needed routing bug.
+        var decision = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput
+        {
+            // ClearPrompt would otherwise score well above the accept band.
+            PromptText = ClearPrompt,
+            Slug = "human-decision-needed-bug-card-delete-button-has-no-effect",
+            AutonomyLevel = 4,
+            Iteration = 1,
+            MaxIterations = 3,
+        });
+
+        Assert.Equal(OrchestratorPrepRules.Verdict.Bounce, decision.Verdict);
+        Assert.Equal(OrchestratorPrepRules.BounceReason.HumanDecisionNeededMarker, decision.BounceReason);
+        Assert.Equal(0.0, decision.Clarity);
+    }
+
+    [Fact]
+    public void HumanDecisionNeededSlug_BouncesAcrossEveryAutonomyLevelAndCapState()
+    {
+        // The marker override sits ahead of every autonomy branch: the level-0
+        // hold and the cap-exit accept must not swallow it either.
+        foreach (var level in new[] { 0, 1, 2, 3, 4 })
+        foreach (var iteration in new[] { 0, 3 })
+        {
+            var decision = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput
+            {
+                PromptText = AmbiguousPrompt,
+                Slug = "human-decision-needed-xyz",
+                AutonomyLevel = level,
+                Iteration = iteration,
+                MaxIterations = 3,
+            });
+            Assert.Equal(OrchestratorPrepRules.Verdict.Bounce, decision.Verdict);
+            Assert.Equal(OrchestratorPrepRules.BounceReason.HumanDecisionNeededMarker, decision.BounceReason);
+        }
+    }
+
+    [Fact]
+    public void NonHumanDecisionSlug_DoesNotTriggerMarkerOverride()
+    {
+        // Sanity: the prefix match is anchored. A card that merely mentions a
+        // human decision in its body, or whose slug contains the phrase
+        // mid-string, still flows through the normal bands.
+        var decision = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput
+        {
+            PromptText = ClearPrompt,
+            Slug = "fix-human-decision-needed-banner-styling",
+            AutonomyLevel = 4,
+        });
+        Assert.Equal(OrchestratorPrepRules.Verdict.Accept, decision.Verdict);
+        Assert.NotEqual(OrchestratorPrepRules.BounceReason.HumanDecisionNeededMarker, decision.BounceReason);
+    }
+
+    [Fact]
     public void Decide_ClampsAutonomyLevelOutsideZeroFour()
     {
         var below = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput

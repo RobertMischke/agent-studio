@@ -1982,6 +1982,30 @@ public record CliOutputLine
     public string Text { get; init; } = "";
 }
 
+/// <summary>
+/// Well-known task-slug prefixes that carry semantic meaning across the
+/// pipeline. Kept next to <see cref="TaskStates"/> so the runner, the
+/// orchestrator-prep rules, and the workspace summary agree on one spelling.
+/// </summary>
+public static class TaskSlugs
+{
+    /// <summary>
+    /// Prefix the orchestrator stamps on a card that exists only so a human
+    /// can make a call the automation must not. Such a card is never
+    /// machine-actionable: the prep rules bounce it to
+    /// <see cref="TaskStates.NeedsHumanReview"/> regardless of autonomy level,
+    /// and the runner refuses to auto-pick it out of
+    /// <see cref="TaskStates.Ready"/> (which would NOOP-burn a CLI run and
+    /// trip the cross-slug infra circuit breaker).
+    /// </summary>
+    public const string HumanDecisionNeededPrefix = "human-decision-needed-";
+
+    /// <summary>True when <paramref name="slug"/> names a human-decision-needed card.</summary>
+    public static bool IsHumanDecisionNeeded(string? slug) =>
+        !string.IsNullOrEmpty(slug)
+        && slug.StartsWith(HumanDecisionNeededPrefix, System.StringComparison.OrdinalIgnoreCase);
+}
+
 public static class TaskStates
 {
     /// <summary>

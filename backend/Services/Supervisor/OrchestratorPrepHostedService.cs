@@ -161,6 +161,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
             var input = new OrchestratorPrepRules.PrepInput
             {
                 PromptText = promptText,
+                Slug = job.Id,
                 Iteration = iteration,
                 MaxIterations = level == 1 ? 1 : maxIterations,
                 AutonomyLevel = level,
