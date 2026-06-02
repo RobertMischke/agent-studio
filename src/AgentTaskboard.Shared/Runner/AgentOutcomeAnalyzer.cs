@@ -49,7 +49,19 @@ public enum RunIssueKind
     /// Distinct from <see cref="PermissionBlocked"/>: the agent cannot
     /// recover via a soft intervention, only the user can.
     /// </summary>
-    EnvironmentBlocker
+    EnvironmentBlocker,
+    /// <summary>
+    /// Codex stopped emitting frames after a successful tool call but never
+    /// produced a closing <c>turn.completed</c> or terminal sentinel.
+    /// The runner detected the stale silence (see
+    /// <c>CodexSilentCompletionDetector</c>), wrote a synthetic
+    /// <c>[codex-silent-completion]</c> marker, and killed the lingering
+    /// process so the regular post-run pipeline could run. The work is
+    /// likely complete - the missing sign-off is a Codex-side quirk - but
+    /// we flag it explicitly so the auto-review aspect calls and the
+    /// human-reviewer in the lane see why no sentinel landed.
+    /// </summary>
+    SilentCompletion
 }
 
 /// <summary>
@@ -163,6 +175,29 @@ public static class AgentOutcomeAnalyzer
                 OutputLineCount: lineCount,
                 DurationSeconds: durationSeconds)
             { IssueKind = RunIssueKind.EnvironmentBlocker };
+        }
+
+        // Codex silent-completion: the per-tick detector wrote a
+        // [codex-silent-completion] marker and asked the base class to stop
+        // the process. The marker is the only signal we trust here (gated
+        // the same way as [environment-blocker]); a false positive is
+        // impossible without the live detector having fired. Classify as
+        // AgentOutcomeKind.Done because the on-disk evidence usually shows
+        // the work happened, but keep MatchedSentinel=false so the chat
+        // surface plus auto-review still highlight the missing sign-off.
+        var silentDiagnosis = ExtractSilentCompletionDiagnosis(rawText);
+        if (silentDiagnosis != null)
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Done,
+                Summary: silentDiagnosis,
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "codex silent-completion marker observed in CLI output",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.SilentCompletion };
         }
 
         if (IsPermissionBlocked(rawText))
@@ -330,6 +365,28 @@ public static class AgentOutcomeAnalyzer
         var slice = newline >= 0 ? afterMarker[..newline] : afterMarker;
         var trimmed = slice.Trim();
         return trimmed.Length == 0 ? "environment blocker detected" : trimmed;
+    }
+
+    /// <summary>
+    /// Pull the diagnosis text out of the synthetic
+    /// <c>[codex-silent-completion] &lt;diagnosis&gt;</c> system line written
+    /// by <c>ProjectRunner.TickSilentCompletion</c> when Codex went stale
+    /// after a successful tool call. Same gating shape as
+    /// <see cref="ExtractEnvironmentBlockerDiagnosis"/>: a false positive is
+    /// impossible without the runtime detector having fired and added the
+    /// marker line itself.
+    /// </summary>
+    private static string? ExtractSilentCompletionDiagnosis(string rawText)
+    {
+        if (string.IsNullOrEmpty(rawText)) return null;
+        const string marker = "[codex-silent-completion]";
+        var idx = rawText.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+        var afterMarker = rawText[(idx + marker.Length)..];
+        var newline = afterMarker.IndexOf('\n');
+        var slice = newline >= 0 ? afterMarker[..newline] : afterMarker;
+        var trimmed = slice.Trim();
+        return trimmed.Length == 0 ? "Codex stopped after final tool call without a closing sentinel." : trimmed;
     }
 
     private static bool IsPermissionBlocked(string text)

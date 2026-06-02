@@ -39,7 +39,19 @@ public enum RunStopReason
     /// and killed the process before the agent could burn the full silence
     /// budget retrying against an unrecoverable host error.
     /// </summary>
-    EnvironmentBlocker
+    EnvironmentBlocker,
+    /// <summary>
+    /// Codex stopped emitting frames after a successful tool call but never
+    /// sent a closing <c>turn.completed</c> or sentinel. The runner waited
+    /// past the silent-completion grace window
+    /// (<c>CodexSilentCompletionDetector.DefaultSilenceSeconds</c>), then
+    /// killed the still-alive process so the regular post-run pipeline can
+    /// run. Treated as a successful completion by the classifier - the
+    /// agent likely finished its work, only the sign-off was missing. The
+    /// auto-review path tags the job with <c>outcome:silent-finish</c> and
+    /// posts an observation event so the case is visible in the lane.
+    /// </summary>
+    SilentCompletion
 }
 
 /// <summary>String constants for <see cref="Models.CliExecution.Status"/>. Persisted; keep stable.</summary>
@@ -75,6 +87,12 @@ public static class RunStatusClassifier
         // typed sentinel; we killed only the lingering process. Treat as a
         // successful completion regardless of the kill-induced exit code.
         if (reason == RunStopReason.SentinelDetected) return RunStatuses.Completed;
+        // SilentCompletion: Codex's post-tool-call hang shape. The work is
+        // already on disk; the missing sign-off is a CLI behaviour quirk,
+        // not a run failure. Route through the same Completed lane so the
+        // regular post-run pipeline (auto-review aspect calls + lane move)
+        // runs as if the CLI had exited cleanly.
+        if (reason == RunStopReason.SilentCompletion) return RunStatuses.Completed;
         if (reason != RunStopReason.None) return RunStatuses.Stopped;
         return exitCode == 0 ? RunStatuses.Completed : RunStatuses.Failed;
     }

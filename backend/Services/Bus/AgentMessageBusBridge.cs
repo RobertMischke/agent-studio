@@ -338,6 +338,42 @@ public sealed class AgentMessageBusBridge
     }
 
     /// <summary>
+    /// Codex silent-completion observation. Emitted from the per-tick runner
+    /// detector (<see cref="CodexSilentCompletionDetector"/>) when Codex
+    /// stopped after a successful tool call but never sent a closing
+    /// <c>turn.completed</c> or sentinel. Distinct kind / topic from
+    /// <c>RunStopRequested</c> so pattern-spotting reviews can grep for
+    /// silent-completion events directly. The body carries the last command
+    /// + output tail so a reviewer can pivot from the bus message back to
+    /// what Codex actually did just before going stale.
+    /// </summary>
+    public Task EmitCodexSilentCompletionAsync(
+        TaskInfo info,
+        string? lastCommand,
+        string? lastOutputTail,
+        double silenceSeconds,
+        CancellationToken ct = default)
+    {
+        if (info == null) return Task.CompletedTask;
+        var summary = TruncateSummary(
+            $"Codex silent-completion: stopped {silenceSeconds:F0}s after a successful tool call without a closing sentinel.");
+        var msg = NewMessage(
+            participantId: ParticipantRuntime,
+            role: "system",
+            kind: "observation",
+            severity: "Warn",
+            project: info.ProjectName,
+            jobId: info.Id,
+            topic: "codex-silent-completion",
+            summary: summary,
+            body: $"last command: {lastCommand ?? "<unknown>"}\noutput tail:\n{lastOutputTail ?? "(empty)"}",
+            artifacts: new[] { LogSliceArtifact(info) },
+            payload: new { silenceSeconds, lastCommand, lastOutputTail },
+            tags: new[] { "codex-silent-completion", "observation" });
+        return EmitAsync(msg, ct);
+    }
+
+    /// <summary>
     /// Run lifecycle: a stop was requested by the user, the watchdog, or an
     /// auto-mode policy. The actual termination still flows through
     /// <c>RunFinished</c>; this records the trigger.

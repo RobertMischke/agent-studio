@@ -81,6 +81,28 @@ public static class RunOutcomePolicy
             && string.Equals(plan.EventKind, "continue", StringComparison.OrdinalIgnoreCase)
             && plan.ResumeFlag;
 
+        if (outcome.IssueKind == RunIssueKind.SilentCompletion)
+        {
+            // Codex stopped after a successful tool call and never produced
+            // a closing sentinel. The runtime detector already killed the
+            // lingering process with RunStopReason.SilentCompletion (which
+            // the classifier maps to status=Completed), so the run flows
+            // through the standard accept path: lane moves to
+            // 4-auto-review, summary generation runs, aspect calls run.
+            // We surface a typed meta note + IssueKind so the orchestrator
+            // chat clearly distinguishes "agent finished and signed off"
+            // from "agent likely finished but never said so".
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndAccept,
+                MetaMessage: outcome.Summary
+                    ?? "Codex stopped after its final tool call without a closing sentinel. Treating the run as complete but flagging it for review.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.SilentCompletion,
+                MessageKind = OrchestratorMessageKind.SilentCompletion
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.EnvironmentBlocker)
         {
             // Environment blockers are unrecoverable by the agent. The

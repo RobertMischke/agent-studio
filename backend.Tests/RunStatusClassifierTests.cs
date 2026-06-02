@@ -68,4 +68,22 @@ public class RunStatusClassifierTests
             RunStatuses.Completed,
             RunStatusClassifier.Classify(exitCode, RunStopReason.SentinelDetected));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(1)]
+    [InlineData(137)]
+    [InlineData(null)]
+    public void SilentCompletion_AnyExitCode_IsCompleted(int? exitCode)
+    {
+        // Codex stopped after a successful tool call without a closing
+        // sentinel. The runner killed the lingering process via
+        // RunStopReason.SilentCompletion so the post-run pipeline can run;
+        // status must be Completed so the normal "move to 4-auto-review"
+        // path applies instead of "stopped → stays in 3-progress".
+        Assert.Equal(
+            RunStatuses.Completed,
+            RunStatusClassifier.Classify(exitCode, RunStopReason.SilentCompletion));
+    }
 }

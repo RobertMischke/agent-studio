@@ -112,9 +112,10 @@ public class BacklogLaneAndTagsTests : IDisposable
         var (_, _, _) = Build();
         var tags = NewTagRegistry();
         var entries = tags.GetAll();
-        // Seven taxonomy tags plus the orchestrator-moved provenance tag.
-        Assert.Equal(8, entries.Count);
-        foreach (var id in new[] { "ui-ux", "performance", "quality", "architecture", "security", "docs", "observability", "orchestrator-moved" })
+        // Seven taxonomy tags plus the orchestrator-moved provenance tag
+        // plus outcome-silent-finish (Codex silent-completion outcome marker).
+        Assert.Equal(9, entries.Count);
+        foreach (var id in new[] { "ui-ux", "performance", "quality", "architecture", "security", "docs", "observability", "orchestrator-moved", "outcome-silent-finish" })
             Assert.Contains(entries, t => t.Id == id);
         // Every seed entry must carry a non-empty description so the UI can
         // surface the "wofür" line on hover and in the registry manager.
@@ -130,13 +131,13 @@ public class BacklogLaneAndTagsTests : IDisposable
         // First boot: seed file written with the full default set.
         var first = NewTagRegistry();
         var firstEntries = first.GetAll();
-        Assert.Equal(8, firstEntries.Count);
+        Assert.Equal(9, firstEntries.Count);
 
         // Second boot: re-reading should produce exactly the same rows; no
         // duplicates appended on subsequent loads.
         var second = NewTagRegistry();
         var secondEntries = second.GetAll();
-        Assert.Equal(8, secondEntries.Count);
+        Assert.Equal(9, secondEntries.Count);
         Assert.Equal(
             firstEntries.Select(t => t.Id).OrderBy(s => s, StringComparer.Ordinal).ToArray(),
             secondEntries.Select(t => t.Id).OrderBy(s => s, StringComparer.Ordinal).ToArray());
@@ -153,7 +154,7 @@ public class BacklogLaneAndTagsTests : IDisposable
 
         var third = NewTagRegistry();
         var thirdEntries = third.GetAll();
-        Assert.Equal(8, thirdEntries.Count);
+        Assert.Equal(9, thirdEntries.Count);
         var arch = thirdEntries.Single(t => t.Id == "architecture");
         Assert.Equal("My Custom Arch", arch.Label);
         Assert.Equal("#abcdef", arch.Color);

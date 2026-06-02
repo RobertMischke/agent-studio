@@ -269,9 +269,114 @@ public sealed class CodexCliService : CliExecutionServiceBase
         {
             TryCaptureTurnUsage(info, line);
             TryCaptureSessionId(info, line);
+            TryCaptureCommandExecution(info, line);
         }
 
         return CodexEventAdapter.Map(line.Text, jobKey);
+    }
+
+    /// <summary>
+    /// Inputs the runner's per-tick silent-completion check needs. Returns
+    /// <c>null</c> when no <c>command_execution</c> <c>item.completed</c>
+    /// has been observed yet for this run. Mirrors the
+    /// <see cref="GetLastParsedTurnUsage"/> shape: pure read on top of the
+    /// per-CLI capture done inside <see cref="MapLineToRunEvents"/>.
+    /// </summary>
+    public CodexLastCommandSnapshot? GetLastCommandExecution(string jobKey)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        if (info.LastCommandObservedAt is null) return null;
+        return new CodexLastCommandSnapshot(
+            ExitCode: info.LastCommandExitCode,
+            Command: info.LastCommandLine,
+            OutputTail: info.LastCommandOutputTail,
+            ObservedAt: info.LastCommandObservedAt.Value);
+    }
+
+    /// <summary>True once the per-tick silent-completion detector tripped for this run.</summary>
+    public bool IsSilentCompletionTripped(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) && info.SilentCompletionTripped;
+
+    /// <summary>
+    /// Last <c>command_execution</c> <c>item.completed</c> frame the run
+    /// emitted. Carried as a value type because the runner reads it from a
+    /// different thread than the read loop that wrote it; the snapshot is
+    /// immutable so no copy-coupling exists between producer and consumer.
+    /// </summary>
+    public readonly record struct CodexLastCommandSnapshot(
+        int? ExitCode,
+        string? Command,
+        string? OutputTail,
+        DateTime ObservedAt);
+
+    /// <summary>
+    /// Pre-parse <c>item.completed</c> frames whose nested item is a
+    /// <c>command_execution</c> and stash the trigger data on
+    /// <see cref="ProcInfo"/>. The runner reads this via
+    /// <see cref="GetLastCommandExecution"/> to feed
+    /// <see cref="CodexSilentCompletionDetector"/>.
+    /// <para>
+    /// Best-effort: a malformed frame leaves the previous snapshot
+    /// untouched. Fast prefilter keeps the hot path cheap - most stdout
+    /// lines never reach <see cref="JsonDocument.Parse"/>.
+    /// </para>
+    /// </summary>
+    private static void TryCaptureCommandExecution(ProcInfo info, CliOutputLine line)
+    {
+        var parsed = TryExtractCommandExecution(line.Text);
+        if (parsed is not { } cap) return;
+
+        info.LastCommandExitCode = cap.ExitCode;
+        info.LastCommandLine = cap.Command;
+        info.LastCommandOutputTail = cap.OutputTail;
+        info.LastCommandObservedAt = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp;
+    }
+
+    /// <summary>
+    /// Pure JSON parser for the silent-completion capture path. Exposed
+    /// <c>internal</c> so the regression test for the Codex 0.128
+    /// <c>command_execution</c> frame shape can drive it without spinning
+    /// up a live CLI. Returns <c>null</c> for any non-matching line shape
+    /// (other frame type, missing <c>item</c>, malformed JSON, non-JSON
+    /// text) so the caller's hot path stays cheap and a malformed frame
+    /// never throws.
+    /// </summary>
+    internal static (int? ExitCode, string? Command, string? OutputTail)? TryExtractCommandExecution(string? line)
+    {
+        var text = line?.TrimStart();
+        if (string.IsNullOrEmpty(text) || text![0] != '{') return null;
+        if (!text.Contains("item.completed", StringComparison.Ordinal)) return null;
+        if (!text.Contains("command_execution", StringComparison.Ordinal)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+            if (!string.Equals(type, "item.completed", StringComparison.Ordinal)) return null;
+            if (!root.TryGetProperty("item", out var item) || item.ValueKind != JsonValueKind.Object) return null;
+            var itemType = item.TryGetProperty("type", out var ity) ? ity.GetString() : null;
+            if (!string.Equals(itemType, "command_execution", StringComparison.Ordinal)) return null;
+
+            int? exitCode = null;
+            if (item.TryGetProperty("exit_code", out var ec) && ec.TryGetInt32(out var ecValue))
+                exitCode = ecValue;
+
+            string? command = null;
+            if (item.TryGetProperty("command", out var cmd) && cmd.ValueKind == JsonValueKind.String)
+                command = cmd.GetString();
+
+            string? outputTail = null;
+            if (item.TryGetProperty("aggregated_output", out var agg) && agg.ValueKind == JsonValueKind.String)
+            {
+                var raw = agg.GetString() ?? string.Empty;
+                outputTail = raw.Length <= 400 ? raw : raw[^400..];
+            }
+
+            return (exitCode, command, outputTail);
+        }
+        catch (JsonException) { return null; }
     }
 
     /// <summary>

@@ -600,6 +600,57 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     }
 
     /// <summary>
+    /// Runner-side hook for the Codex silent-completion detector. Writes
+    /// the synthetic <c>[codex-silent-completion]</c> marker line into the
+    /// run's output buffer + persisted log (so <see cref="AgentOutcomeAnalyzer"/>
+    /// recognises it on the post-run analysis), latches the
+    /// <see cref="ProcInfo.SilentCompletionTripped"/> flag so the per-tick
+    /// detector cannot fire again, and asks the CLI service to stop the
+    /// process with <see cref="RunStopReason.SilentCompletion"/>. Returns
+    /// <c>true</c> when the trip happened, <c>false</c> when the latch was
+    /// already set (idempotent for callers that race).
+    ///
+    /// <para>
+    /// Lives on the base class so the wiring matches
+    /// <c>CheckEnvironmentBlocker</c>: same marker shape, same kill semantics,
+    /// same buffer + log append discipline. Today only the runner's Codex
+    /// path uses it (the detector itself is Codex-only); other CLIs would
+    /// hook in identically if their own silent-completion shape is later
+    /// recognised.
+    /// </para>
+    /// </summary>
+    public bool TripSilentCompletion(string jobKey, string diagnosis)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return false;
+        if (info.SilentCompletionTripped) return false;
+
+        info.SilentCompletionTripped = true;
+
+        var synthetic = new CliOutputLine
+        {
+            Timestamp = DateTime.UtcNow,
+            Stream = "system",
+            Text = $"[codex-silent-completion] {diagnosis}"
+        };
+        info.OutputBuffer.Add(synthetic);
+        try
+        {
+            if (!info.OutputLog.Append(synthetic))
+                _logger.LogWarning("Failed to persist codex-silent-completion marker for {TaskKey}", jobKey);
+        }
+        catch (Exception ex) { _logger.LogDebug(ex, "Persisting codex-silent-completion marker failed for {TaskKey}", jobKey); }
+        try { OnOutput?.Invoke(jobKey, synthetic); } catch { }
+
+        _logger.LogWarning(
+            "Codex silent-completion tripped for {Cli} job {TaskKey}: {Diagnosis}",
+            CliType, jobKey, diagnosis);
+
+        try { Stop(jobKey, RunStopReason.SilentCompletion); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Stop after codex-silent-completion failed for {TaskKey}", jobKey); }
+        return true;
+    }
+
+    /// <summary>
     /// Startup hook. Default behaviour for base-class CLIs (Claude / Codex /
     /// Gemini) is to <b>reap</b> orphaned processes — kill any CLI process that
     /// outlived a previous backend run. We deliberately do not re-attach: the
@@ -1234,6 +1285,28 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// detector or producing duplicate synthetic markers.
         /// </summary>
         public bool EnvironmentBlockerTripped { get; set; }
+
+        /// <summary>
+        /// Codex silent-completion capture. Mirrors the trigger shape of the
+        /// <see cref="CodexSilentCompletionDetector"/>: the last
+        /// <c>command_execution</c> <c>item.completed</c> the run emitted,
+        /// with its reported exit code, the command string, a tail of the
+        /// aggregated output, and the UTC observation timestamp. The runner's
+        /// per-tick silent-completion check reads these to build its
+        /// detection inputs without parsing the buffer again.
+        /// </summary>
+        public int? LastCommandExitCode { get; set; }
+        public string? LastCommandLine { get; set; }
+        public string? LastCommandOutputTail { get; set; }
+        public DateTime? LastCommandObservedAt { get; set; }
+
+        /// <summary>
+        /// Latch set once the run has been killed for a Codex silent
+        /// completion. Mirrors <see cref="EnvironmentBlockerTripped"/>:
+        /// stops the per-tick detector from re-firing while the stop is in
+        /// flight and the second-to-last frame ages further.
+        /// </summary>
+        public bool SilentCompletionTripped { get; set; }
 
         /// <summary>
         /// Read-loop tasks captured at spawn time. <see cref="MonitorProcessAsync"/>

@@ -232,6 +232,33 @@ public class RunOutcomePolicyTests
     }
 
     /// <summary>
+    /// Codex silent-completion: the runtime detector tripped, the analyzer
+    /// surfaced <see cref="RunIssueKind.SilentCompletion"/>. Policy must
+    /// route through <see cref="OutcomeActionKind.NotifyUserAndAccept"/> so
+    /// the regular post-completion path runs (auto-review move + aspect
+    /// calls) while the chat surface clearly distinguishes the case from a
+    /// real sentinel-backed Done.
+    /// </summary>
+    [Fact]
+    public void SilentCompletion_NotifiesUserAndAccepts_RoutesThroughAutoReview()
+    {
+        var outcome = Outcome(AgentOutcomeKind.Done, sentinel: false, duration: 320.0, agentChars: 1500)
+            with { IssueKind = RunIssueKind.SilentCompletion, Summary = "Codex stopped after final tool call without a closing sentinel (silence=92s)." };
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            outcome,
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.Equal(RunIssueKind.SilentCompletion, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.SilentCompletion, action.MessageKind);
+        Assert.False(action.IsHeuristicFallback);
+        Assert.Contains("sentinel", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Progress mid-run shape: the agent kept moving, no need for a meta
     /// message. The activity log itself shows the run is alive.
     /// </summary>

@@ -463,6 +463,14 @@ public class ProjectRunner
 
     public async Task TickAsync(CancellationToken ct)
     {
+        // Codex-specific: recognise the silent-completion hang shape
+        // BEFORE the watchdog escalates. If the detector trips, the run is
+        // finalized as Completed (not Watchdog-killed) and the rest of the
+        // post-run pipeline (auto-review move, aspect calls, tagging) runs
+        // as if Codex had cleanly exited. Cheap (one dictionary lookup +
+        // a struct construction per active job).
+        TickSilentCompletion();
+
         // Watchdog ticks regardless of runner mode: even when auto-pickup is
         // disabled, an active CLI on this project still needs to be watched
         // for hangs. Cheap (one timestamp arithmetic per active job).
@@ -830,6 +838,114 @@ public class ProjectRunner
         {
             _processing = false;
         }
+    }
+
+    /// <summary>
+    /// Per-tick Codex silent-completion check. Runs BEFORE
+    /// <see cref="TickWatchdog"/> so a recognised silent completion
+    /// finalizes the run cleanly (Completed status, normal auto-review
+    /// move) instead of being escalated as a watchdog kill.
+    ///
+    /// <para>
+    /// Trigger contract is enforced by the pure
+    /// <see cref="CodexSilentCompletionDetector.Decide"/>; here we wire
+    /// the side effects: write the synthetic
+    /// <c>[codex-silent-completion]</c> marker, post a typed chat note,
+    /// emit a <c>kind:observation</c> bus event for pattern review, tag
+    /// the job with <c>outcome:silent-finish</c>, then ask the CLI to
+    /// stop with <see cref="RunStopReason.SilentCompletion"/>. All side
+    /// effects are best-effort - a tag/log/bus failure must not block the
+    /// stop call, otherwise the run keeps hanging.
+    /// </para>
+    /// </summary>
+    private void TickSilentCompletion()
+    {
+        var jobId = _activeJobId;
+        var cliType = _activeCliType;
+        if (jobId == null || cliType == null) return;
+        if (!string.Equals(cliType, CliTypes.Codex, StringComparison.OrdinalIgnoreCase)) return;
+
+        ICliExecutionService cli;
+        try { cli = _router.Get(cliType); }
+        catch { return; }
+        if (cli is not CodexCliService codex) return;
+
+        var jobKey = TaskIdentity.CreateKey(Entry.Path, jobId);
+        var exec = codex.GetExecution(jobKey);
+        if (exec == null || !string.Equals(exec.Status, "running", StringComparison.OrdinalIgnoreCase)) return;
+        if (codex.IsSilentCompletionTripped(jobKey)) return;
+
+        var lastCommand = codex.GetLastCommandExecution(jobKey);
+        if (lastCommand == null) return;
+
+        var phase = _phaseByJob.TryGetValue(jobKey, out var phaseSnap) ? phaseSnap.Phase : RunPhase.Unknown;
+        var silence = (DateTime.UtcNow - lastCommand.Value.ObservedAt).TotalSeconds;
+
+        var inputs = new CodexSilentCompletionDetector.DetectionInputs(
+            CliType: cliType,
+            Phase: phase,
+            SilenceSinceLastEventSeconds: silence,
+            LastCommandExecutionExitCode: lastCommand.Value.ExitCode,
+            LastCommandExecutionCommand: lastCommand.Value.Command,
+            LastCommandExecutionOutputTail: lastCommand.Value.OutputTail,
+            AlreadyTripped: false);
+
+        var verdict = CodexSilentCompletionDetector.Decide(inputs);
+        if (!verdict.ShouldTrip) return;
+
+        var info = _scanner.FindJob(jobId, Entry.Path);
+        var title = info != null && !string.IsNullOrWhiteSpace(info.Title) ? info.Title : jobId;
+
+        // Side effects: chat note + bus observation + tag, then the
+        // synthetic marker + Stop via the base-class helper. The Stop call
+        // is last so the marker line is already in the buffer when
+        // OnCliFinished runs the analyzer.
+        if (info != null)
+        {
+            try
+            {
+                _chatLog.Append(info, OrchestratorMessageKind.SilentCompletion,
+                    $"\"{title}\" (codex): {verdict.Diagnosis}");
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "SilentCompletion chat append failed for {JobId}", jobId); }
+
+            try
+            {
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Observation,
+                    Topic = "codex-silent-completion",
+                    JobId = jobId,
+                    Summary = $"Codex silent-completion detected for \"{title}\" after {silence:F0}s.",
+                    Reasoning = verdict.Diagnosis
+                });
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "SilentCompletion orchestrator-log append failed for {JobId}", jobId); }
+
+            try
+            {
+                _ = _bus?.EmitCodexSilentCompletionAsync(
+                    info,
+                    lastCommand.Value.Command,
+                    lastCommand.Value.OutputTail,
+                    silence);
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "SilentCompletion bus emit failed for {JobId}", jobId); }
+
+            // Tag id must survive NormalizeTagId ([a-z0-9-]); the prompt's
+            // "outcome:silent-finish" reads naturally but ':' is stripped, so
+            // we persist the hyphenated form. The label can still read as
+            // "outcome: silent finish" via the registry if a seed is added
+            // later; today an unknown id renders as a ghost chip, which is
+            // the documented fallback.
+            try { _mutations.AddJobTag(jobId, "outcome-silent-finish", info.WatchPath); }
+            catch (Exception ex) { _logger.LogDebug(ex, "SilentCompletion tag stamp failed for {JobId}", jobId); }
+        }
+
+        // Always attempt the stop, even if side-effect bookkeeping above
+        // failed: leaving the run pinned would defeat the whole purpose.
+        try { codex.TripSilentCompletion(jobKey, verdict.Diagnosis); }
+        catch (Exception ex) { _logger.LogWarning(ex, "TripSilentCompletion failed for {JobId}", jobId); }
     }
 
     /// <summary>
@@ -2437,6 +2553,7 @@ public class ProjectRunner
         RunIssueKind.ClassifierUnknown        => "classifier-unknown",
         RunIssueKind.NoAgentOutput            => "no-agent-output",
         RunIssueKind.EnvironmentBlocker       => "environment-blocker",
+        RunIssueKind.SilentCompletion         => "codex-silent-completion",
         _                                     => "none"
     };
 

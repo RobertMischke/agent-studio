@@ -221,6 +221,41 @@ public class CodexCliServiceTests
     }
 
     [Fact]
+    public void TryExtractCommandExecution_ParsesCanonicalFrame()
+    {
+        // Real Codex frame shape from the 2026-05-12 Lotta-dashboard bug.
+        const string frame = """{"type":"item.completed","item":{"id":"item66","type":"command_execution","command":"pwsh.exe -Command \".\\serve.ps1 status\"","aggregated_output":"ng serve laeuft nicht.\r\nFalse\r\n","exit_code":0,"status":"completed"}}""";
+        var cap = CodexCliService.TryExtractCommandExecution(frame);
+        Assert.NotNull(cap);
+        Assert.Equal(0, cap!.Value.ExitCode);
+        Assert.Contains("serve.ps1", cap.Value.Command);
+        Assert.Contains("ng serve laeuft nicht", cap.Value.OutputTail);
+    }
+
+    [Fact]
+    public void TryExtractCommandExecution_TailTruncatedForLongOutput()
+    {
+        var bigOutput = new string('y', 1000);
+        var frame = "{\"type\":\"item.completed\",\"item\":{\"type\":\"command_execution\",\"command\":\"x\",\"exit_code\":0,\"aggregated_output\":\""
+                  + bigOutput + "\"}}";
+        var cap = CodexCliService.TryExtractCommandExecution(frame);
+        Assert.NotNull(cap);
+        Assert.True(cap!.Value.OutputTail!.Length <= 400);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-json")]
+    [InlineData("{\"type\":\"turn.started\"}")]
+    [InlineData("{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"hi\"}}")]
+    [InlineData("{\"type\":\"item.completed\",\"item\":{")]
+    public void TryExtractCommandExecution_ReturnsNullForUnrelatedOrBrokenFrames(string? line)
+    {
+        Assert.Null(CodexCliService.TryExtractCommandExecution(line));
+    }
+
+    [Fact]
     public void IsCompatibleSessionName_AcceptsUuidsRejectsSlugs()
     {
         var svc = BuildService();

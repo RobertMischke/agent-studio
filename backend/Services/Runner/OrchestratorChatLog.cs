@@ -170,7 +170,16 @@ public enum OrchestratorMessageKind
     /// review with a typed diagnosis instead of a generic
     /// missing-terminal-sentinel verdict.
     /// </summary>
-    EnvironmentBlocker
+    EnvironmentBlocker,
+    /// <summary>
+    /// Codex stopped emitting frames after a successful tool call but
+    /// never sent a closing <c>turn.completed</c> or sentinel
+    /// (<see cref="CodexSilentCompletionDetector"/>). The runner finalized
+    /// the run as Completed with the <c>outcome:silent-finish</c> tag so
+    /// the auto-review aspect calls still run and the user sees why no
+    /// sentinel landed.
+    /// </summary>
+    SilentCompletion
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -190,6 +199,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.GiveUp            => "giveup",
         OrchestratorMessageKind.Steer             => "steer",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
+        OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         _ => "info"
     };
 
@@ -204,6 +214,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
+        OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         _ => kind.ToString().ToLowerInvariant()
     };
 }

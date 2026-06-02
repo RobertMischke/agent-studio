@@ -34,7 +34,8 @@ public sealed class TagRegistryService
         new() { Id = "security",      Label = "Security",      Color = "#f38ba8", Description = "Auth, secrets, data boundaries, sandboxing." },
         new() { Id = "docs",          Label = "Docs",          Color = "#94e2d5", Description = "README / AGENTS / ADR / skill files / lookup index updates." },
         new() { Id = "observability", Label = "Observability", Color = "#f9e2af", Description = "Logs, metrics, drift reports, token aggregates, supervisor signals." },
-        new() { Id = "orchestrator-moved", Label = "Orchestrator: moved", Color = "#b4befe", Description = "The orchestrator advanced this task toward Completed (accept-as-done), as opposed to a human accepting it." }
+        new() { Id = "orchestrator-moved", Label = "Orchestrator: moved", Color = "#b4befe", Description = "The orchestrator advanced this task toward Completed (accept-as-done), as opposed to a human accepting it." },
+        new() { Id = "outcome-silent-finish", Label = "Outcome: silent finish", Color = "#f9e2af", Description = "Codex stopped after its final tool call without a closing sentinel; the runner detected the silent-completion shape and finalized the run. The work is likely complete but the sign-off is missing - double-check before promoting." }
     ];
 
     private readonly ILogger<TagRegistryService> _logger;

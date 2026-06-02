@@ -144,6 +144,28 @@ public class AgentOutcomeAnalyzerTests
     }
 
     [Fact]
+    public void SilentCompletionMarker_Output_IsClassifiedAsSilentCompletion()
+    {
+        // Mirror of the [environment-blocker] path: the analyzer trusts
+        // the synthetic [codex-silent-completion] marker the runner wrote
+        // when CodexSilentCompletionDetector tripped, because the gating
+        // happened one layer up and the needle cannot appear elsewhere
+        // without the runtime detector having fired.
+        var ts = DateTime.UtcNow;
+        var lines = new List<CliOutputLine>
+        {
+            new() { Timestamp = ts, Stream = "stdout", Text = "I edited some files." },
+            new() { Timestamp = ts.AddSeconds(2), Stream = "system",
+                Text = "[codex-silent-completion] Codex stopped after final tool call without a closing sentinel (silence=92s)" }
+        };
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 320.0);
+        Assert.Equal(RunIssueKind.SilentCompletion, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+        Assert.Contains("sentinel", outcome.Summary ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void WatchdogKilled_Output_IsClassifiedAsWatchdogTimeout()
     {
         var lines = new List<CliOutputLine>

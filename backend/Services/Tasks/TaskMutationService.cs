@@ -412,6 +412,35 @@ public class TaskMutationService
     }
 
     /// <summary>
+    /// Merge-add a single tag id without clobbering existing tags. Used by
+    /// runner-side typing paths (e.g. the Codex silent-completion detector
+    /// stamps <c>outcome:silent-finish</c>) where the call site does not own
+    /// the full tag set and must not race with operator-authored tags. The
+    /// tag id is normalised through <see cref="NormalizeTagId"/>; an
+    /// already-present id (case-insensitive) is a no-op that still returns
+    /// <c>true</c>. Returns <c>false</c> when the job cannot be found or the
+    /// supplied id normalises to empty.
+    /// </summary>
+    public bool AddJobTag(string jobId, string tag, string? watchPath = null)
+    {
+        var normalized = NormalizeTagId(tag);
+        if (string.IsNullOrWhiteSpace(normalized)) return false;
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var existing = (IReadOnlyList<string>?)info.Tags ?? Array.Empty<string>();
+        if (existing.Any(t => string.Equals(NormalizeTagId(t), normalized, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        var merged = existing
+            .Select(NormalizeTagId)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Append(normalized)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        TaskJsonFile.UpdateField(info.FolderPath, "tags", merged, _logger);
+        return Updated();
+    }
+
+    /// <summary>
     /// F34: replace-all write of the structured <c>references</c> object
     /// (dependsOn / relatedTo / blockedBy / supersedes). The supplied set is
     /// normalised (trim, drop blanks, de-duplicate case-insensitively per kind)
