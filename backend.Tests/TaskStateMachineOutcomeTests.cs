@@ -80,16 +80,25 @@ public class TaskStateMachineOutcomeTests : IDisposable
     }
 
     [Fact]
-    public void MoveJob_TargetFolderExists_NewFolderPathIsNull()
+    public void MoveJob_TargetFolderExists_AutoSuffixesAndReturnsSuffixedPath()
     {
+        // FindJob resolves the earliest-state copy (4-auto-review) as the move
+        // source. The move into 5-human-review collides on the occupied slug;
+        // Layer 2 suffixes the moved folder and returns the authoritative
+        // suffixed path rather than failing.
         SeedJob(TaskStates.AutoReview, "collide");
         SeedJob(TaskStates.HumanReview, "collide");
 
         var (machine, _) = BuildMachine();
         var outcome = machine.MoveJob("collide", TaskStates.HumanReview, _watchPath);
 
-        Assert.Equal(MoveJobStatus.TargetFolderExists, outcome.Status);
-        Assert.Null(outcome.NewFolderPath);
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.Equal(
+            Path.Combine(_watchPath, TaskStates.HumanReview, "collide-2"),
+            outcome.NewFolderPath);
+        Assert.True(Directory.Exists(outcome.NewFolderPath));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "collide")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "collide")));
     }
 
     private void SeedJob(string state, string slug)

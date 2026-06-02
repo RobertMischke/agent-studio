@@ -43,10 +43,22 @@ public static class AdminConfigEndpoints
             }
         });
 
-        app.MapGroup("/api/maintenance").MapPost("/backfill-keys", (TaskMutationService mutations) =>
+        var maintenance = app.MapGroup("/api/maintenance");
+
+        maintenance.MapPost("/backfill-keys", (TaskMutationService mutations) =>
         {
             var count = mutations.BackfillTaskKeys();
             return Results.Ok(new { stamped = count });
+        });
+
+        // One-shot sweep for the duplicate-slug root cause: neutralises stale
+        // namesake folders (the shells behind the recurring 409-on-archive) by
+        // renaming them with a leading underscore so the scanner ignores them.
+        // Idempotent — safe to re-run. See TaskStateMachine.DedupeSlugFolders.
+        maintenance.MapPost("/dedupe-slug-folders", (TaskStateMachine states) =>
+        {
+            var report = states.DedupeSlugFolders();
+            return Results.Ok(report);
         });
     }
 }

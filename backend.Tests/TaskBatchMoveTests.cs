@@ -70,14 +70,15 @@ public class TaskBatchMoveTests : IDisposable
     }
 
     [Fact]
-    public async Task BatchMoveAsync_ConflictOnItemThree_StillAppliesItemsOneTwoFourFive()
+    public async Task BatchMoveAsync_TargetSlugCollision_AutoSuffixesAndStillMovesEveryItem()
     {
         // Items 1, 2, 4, 5 come from archive and should move into 2-ready.
-        // Item 3 (gamma) starts in 1-preparation but a stale folder with
-        // the same slug already exists in 2-ready - that's the
-        // TargetFolderExists case that surfaced the 409 conflict on the
-        // single-item endpoint. The batch must keep going and report
-        // conflict for gamma while items 1, 2, 4, 5 all land.
+        // Item 3 (gamma) starts in 1-preparation but a stale folder with the
+        // same slug already exists in 2-ready - the case that used to surface
+        // a 409 conflict on the single-item endpoint and strand the batch.
+        // With the collision-safe move (Layer 2) every item moves: gamma is
+        // auto-suffixed into 2-ready and the pre-existing namesake is left
+        // untouched.
         WriteJob(TaskStates.Archive,     "alpha");
         WriteJob(TaskStates.Archive,     "beta");
         WriteJob(TaskStates.Preparation, "gamma");
@@ -99,23 +100,19 @@ public class TaskBatchMoveTests : IDisposable
         var results = await transitions.BatchMoveAsync(items, CancellationToken.None);
 
         Assert.Equal(5, results.Count);
-        Assert.Equal("moved",    results[0].Status);
-        Assert.Equal("moved",    results[1].Status);
-        Assert.Equal("conflict", results[2].Status);
-        Assert.Equal("moved",    results[3].Status);
-        Assert.Equal("moved",    results[4].Status);
-        Assert.False(string.IsNullOrEmpty(results[2].Message),
-            "conflict result must carry the stale-duplicate message so the caller can surface it");
+        Assert.All(results, r => Assert.Equal("moved", r.Status));
 
-        // Folders 1, 2, 4, 5 must have landed in 2-ready. Item 3 must
-        // still be in 1-preparation - the conflict prevented the move,
-        // not "moved + rolled back".
+        // alpha/beta/delta/epsilon land under their own slug; gamma's move
+        // collided on the namesake so it landed as gamma-2. The 1-preparation
+        // source is drained and the stale namesake in 2-ready is preserved.
         var folders = ReadFoldersByLane();
         Assert.Contains("alpha",   folders[TaskStates.Ready]);
         Assert.Contains("beta",    folders[TaskStates.Ready]);
         Assert.Contains("delta",   folders[TaskStates.Ready]);
         Assert.Contains("epsilon", folders[TaskStates.Ready]);
-        Assert.Contains("gamma",   folders[TaskStates.Preparation]);
+        Assert.Contains("gamma",   folders[TaskStates.Ready]);
+        Assert.Contains("gamma-2", folders[TaskStates.Ready]);
+        Assert.DoesNotContain("gamma", folders[TaskStates.Preparation]);
     }
 
     [Fact]

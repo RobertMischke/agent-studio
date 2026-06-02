@@ -62,27 +62,36 @@ public class TaskStateMachine
         if (recheck.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
 
         var jobFolderName = Path.GetFileName(recheck.FolderPath);
-        var targetDir = Path.Combine(recheck.WatchPath, targetState, jobFolderName);
+        var targetSlug = jobFolderName;
+        var targetDir = Path.Combine(recheck.WatchPath, targetState, targetSlug);
 
-        // A pre-existing target folder almost always means a stale duplicate of the same
-        // slug was left behind in another state — Directory.Move would throw a generic
-        // IOException and the user would see a 404. Detect it up front and surface a
-        // clear message so they know what to clean up.
+        // Layer 2 of the duplicate-slug root-cause fix (belt-and-suspenders).
+        // A pre-existing target folder means a stale duplicate of this slug was
+        // left behind in the target lane. Hard-failing here (the old 409 /
+        // TargetFolderExists) stranded Archive-all and forced an operator to
+        // fall back to a manual mv/rename. Instead, give the moved folder a
+        // globally-unique suffixed slug and proceed. The folder name is the
+        // canonical task id, so the scanner self-heals the id field to match
+        // the new folder — we also rewrite it eagerly below to avoid a
+        // transient divergence warning on the next scan.
         if (Directory.Exists(targetDir))
         {
+            targetSlug = LaneSlug.EnsureUnique(recheck.WatchPath, jobFolderName);
+            targetDir = Path.Combine(recheck.WatchPath, targetState, targetSlug);
             _logger.LogWarning(
-                "Cannot move {JobId} to {State}: target folder already exists at {Target}",
-                jobId, targetState, targetDir);
-            return new MoveJobOutcome(
-                MoveJobStatus.TargetFolderExists,
-                $"A job folder named '{jobFolderName}' already exists in {targetState}. " +
-                "This usually means a stale duplicate was left behind; remove or rename one of the folders and retry.");
+                "move-slug-deduped jobId={JobId} targetState={State} baseSlug={BaseSlug} resolvedSlug={ResolvedSlug}",
+                jobId, targetState, jobFolderName, targetSlug);
         }
 
         try
         {
             Directory.Move(recheck.FolderPath, targetDir);
             TaskJsonFile.UpdateField(targetDir, "state", targetState, _logger);
+            // Keep the canonical id in lockstep with the (possibly suffixed)
+            // folder name so FindJob resolves the moved folder immediately,
+            // without waiting for the scanner's self-heal pass.
+            if (!string.Equals(targetSlug, jobFolderName, StringComparison.Ordinal))
+                TaskJsonFile.UpdateField(targetDir, "id", targetSlug, _logger);
             // Cycle 2: invalidate the cache synchronously so a POST-then-GET
             // sequence (e.g. drag a card, frontend re-polls) never sees the
             // pre-move snapshot. The 250 ms FileSystemWatcher debounce alone
@@ -689,4 +698,149 @@ public class TaskStateMachine
         _notifier?.PublishBulkChanged();
         return true;
     }
+
+    /// <summary>
+    /// One-shot maintenance sweep for the duplicate-slug root cause: finds
+    /// folders that share the same slug across two or more lanes (the state
+    /// that produced the recurring <c>409 … 'slug' already exists in
+    /// 7-archive</c>), keeps the richest copy in place (largest on disk, with
+    /// newest mtime as the tie-break), and neutralises every other copy by
+    /// renaming it with a leading underscore. The scanner skips
+    /// <c>_</c>-prefixed folders, so the stale shell drops off the board
+    /// without deleting any data — an operator can inspect or remove it later.
+    ///
+    /// <para>Idempotent: a second run finds nothing because each survivor is
+    /// the only un-prefixed folder for its slug. The rename routes through
+    /// this state machine — the single <see cref="Directory.Move"/> owner — so
+    /// the API-first folder-isolation contract holds. Lane mutex is held per
+    /// watch path so the sweep cannot race a live move/create.</para>
+    /// </summary>
+    public SlugDedupeReport DedupeSlugFolders()
+    {
+        var groups = new List<SlugDedupeGroup>();
+        var renamedTotal = 0;
+
+        foreach (var entry in _scanner.GetWatchPaths())
+        {
+            var watchPath = entry.Path;
+            if (!Directory.Exists(watchPath)) continue;
+
+            using var _ = _laneMutex.Acquire(watchPath);
+
+            // slug -> every live (un-neutralised) folder carrying that slug,
+            // across all lanes of this watch path.
+            var bySlug = new Dictionary<string, List<DedupeCandidate>>(StringComparer.Ordinal);
+            foreach (var state in TaskStates.All)
+            {
+                var laneDir = Path.Combine(watchPath, state);
+                if (!Directory.Exists(laneDir)) continue;
+                foreach (var folder in Directory.GetDirectories(laneDir))
+                {
+                    var slug = Path.GetFileName(folder);
+                    if (slug.StartsWith('_')) continue; // already neutralised / scanner-ignored
+                    if (!bySlug.TryGetValue(slug, out var list))
+                        bySlug[slug] = list = new List<DedupeCandidate>();
+                    list.Add(new DedupeCandidate(folder, state, FolderSizeBytes(folder), FolderLastWriteUtc(folder)));
+                }
+            }
+
+            var sweptHere = false;
+            foreach (var (slug, candidates) in bySlug)
+            {
+                if (candidates.Count < 2) continue;
+
+                var winner = candidates
+                    .OrderByDescending(c => c.SizeBytes)
+                    .ThenByDescending(c => c.LastWriteUtc)
+                    .First();
+
+                var neutralised = new List<string>();
+                foreach (var loser in candidates.Where(c => !ReferenceEquals(c, winner)))
+                {
+                    var renamed = NeutralizeFolder(loser.FolderPath);
+                    if (renamed != null)
+                    {
+                        neutralised.Add(renamed);
+                        renamedTotal++;
+                    }
+                }
+
+                if (neutralised.Count == 0) continue;
+                sweptHere = true;
+                groups.Add(new SlugDedupeGroup(slug, watchPath, winner.State, winner.SizeBytes, neutralised));
+                _logger.LogWarning(
+                    "slug-dedupe-sweep slug={Slug} watchPath={WatchPath} keptLane={KeptLane} keptBytes={KeptBytes} neutralised={Neutralised}",
+                    slug, watchPath, winner.State, winner.SizeBytes, neutralised.Count);
+            }
+
+            if (sweptHere) _scanner.InvalidateCache();
+        }
+
+        return new SlugDedupeReport(groups.Count, renamedTotal, groups);
+    }
+
+    private sealed record DedupeCandidate(string FolderPath, string State, long SizeBytes, DateTime LastWriteUtc);
+
+    private static long FolderSizeBytes(string folder)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+                .Sum(f => { try { return new FileInfo(f).Length; } catch { return 0L; } });
+        }
+        catch { return 0L; }
+    }
+
+    private static DateTime FolderLastWriteUtc(string folder)
+    {
+        try { return Directory.GetLastWriteTimeUtc(folder); }
+        catch { return DateTime.MinValue; }
+    }
+
+    /// <summary>
+    /// Rename <paramref name="folderPath"/> in place with a leading underscore
+    /// so the scanner ignores it. Resolves an underscore-name collision with a
+    /// numeric suffix. Returns the new folder name, or null on failure.
+    /// </summary>
+    private string? NeutralizeFolder(string folderPath)
+    {
+        var parent = Path.GetDirectoryName(folderPath);
+        var name = Path.GetFileName(folderPath);
+        if (string.IsNullOrEmpty(parent)) return null;
+
+        var target = Path.Combine(parent, "_" + name);
+        for (var n = 2; Directory.Exists(target); n++)
+            target = Path.Combine(parent, $"_{name}-{n}");
+
+        try
+        {
+            Directory.Move(folderPath, target);
+            return Path.GetFileName(target);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "slug-dedupe-sweep failed to neutralise {Folder}", folderPath);
+            return null;
+        }
+    }
 }
+
+/// <summary>
+/// Summary of a <see cref="TaskStateMachine.DedupeSlugFolders"/> run.
+/// <paramref name="SlugsDeduped"/> is the number of slugs that had more than
+/// one live folder; <paramref name="FoldersNeutralised"/> is the total number
+/// of stale shells renamed with a leading underscore across all of them.
+/// </summary>
+public sealed record SlugDedupeReport(
+    int SlugsDeduped,
+    int FoldersNeutralised,
+    IReadOnlyList<SlugDedupeGroup> Groups);
+
+/// <summary>Per-slug detail for a dedup sweep: which copy was kept and which
+/// shells were neutralised.</summary>
+public sealed record SlugDedupeGroup(
+    string Slug,
+    string WatchPath,
+    string KeptLane,
+    long KeptSizeBytes,
+    IReadOnlyList<string> Neutralised);

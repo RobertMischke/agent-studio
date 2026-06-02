@@ -8,10 +8,13 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Locks in the failure-mode contract for <see cref="TaskStateMachine.MoveJob"/>.
-/// The pre-existing-target-folder case used to surface as a generic 404 in the UI;
-/// it must now return <c>TargetFolderExists</c> so the endpoint can map it to 409
-/// with a message that points at the stale duplicate.
+/// Locks in the contract for <see cref="TaskStateMachine.MoveJob"/>.
+/// The pre-existing-target-folder case used to surface as a generic 404 in the
+/// UI, then briefly as a <c>TargetFolderExists</c> 409. Both stranded
+/// Archive-all behind a stale namesake. It is now collision-safe: the move
+/// auto-suffixes the moved folder to a globally-unique slug and succeeds,
+/// leaving the pre-existing folder untouched. See the duplicate-slug
+/// root-cause fix (Layer 2).
 /// </summary>
 public class TaskScannerMoveTests : IDisposable
 {
@@ -74,18 +77,34 @@ public class TaskScannerMoveTests : IDisposable
     }
 
     [Fact]
-    public void MoveJob_TargetFolderAlreadyExists_ReturnsTargetFolderExists()
+    public void MoveJob_TargetFolderAlreadyExists_AutoSuffixesAndSucceeds()
     {
+        // Completed/duplicate-slug is the real task; Archive/duplicate-slug is
+        // a stale namesake left behind in another lane. FindJob resolves the
+        // earliest-state copy (Completed) as the move source. The move into
+        // 7-archive collides on the occupied slug; Layer 2 resolves it by
+        // suffixing the moved folder rather than failing with a 409.
         WriteJob(TaskStates.Completed, "duplicate-slug");
         WriteJob(TaskStates.Archive, "duplicate-slug");
 
         var outcome = BuildStateMachine().MoveJob("duplicate-slug", TaskStates.Archive, _watchPath);
 
-        Assert.Equal(MoveJobStatus.TargetFolderExists, outcome.Status);
-        Assert.NotNull(outcome.Message);
-        Assert.Contains("duplicate-slug", outcome.Message);
-        Assert.Contains(TaskStates.Archive, outcome.Message);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "duplicate-slug")));
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.Equal(
+            Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2"),
+            outcome.NewFolderPath);
+
+        // Source lane is drained; the pre-existing namesake is untouched; the
+        // moved folder lives under the suffixed slug with its job.json intact.
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "duplicate-slug")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2")));
+        Assert.True(File.Exists(Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2", "job.json")));
+
+        // The canonical id was rewritten to match the new folder name so the
+        // scanner does not have to self-heal a divergent id on the next pass.
+        var movedJson = File.ReadAllText(
+            Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2", "job.json"));
+        Assert.Contains("\"duplicate-slug-2\"", movedJson);
     }
 }
