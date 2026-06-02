@@ -1,150 +1,104 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { forkJoin, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
-import type { TaskInfo, WatchPathEntry } from '../../../models/task.model';
-import { TaskService } from '../../../services/task.service';
+import { Injectable, computed, signal } from '@angular/core';
 
 /**
- * Owns the explorer sidebar's "drag a project onto another project to
- * reassign it to that workspace" flow. Lifted out of StudioShellComponent
- * so the shell stays within the component-size budget and so the
- * stateful pieces (dragging name, hovered drop target, in-flight move,
- * error message) are addressable from a Playwright spec without going
- * through the entire shell.
+ * Owns the explorer sidebar's "drag a project onto a workspace folder to
+ * reassign its workspace membership" flow (F46 two-level tree). Lifted out
+ * of StudioShellComponent so the shell stays within its component-size
+ * budget and so the stateful pieces (dragged project, hovered workspace,
+ * in-flight move, error message) are addressable from a Playwright spec
+ * without going through the whole shell.
  *
- * Project name and watch-path name are 1:1 in this app — the backend
- * stamps `TaskInfo.projectName` from the matching `WatchPathEntry.Name` —
- * so each project row in the explorer is effectively both the project
- * entry AND its workspace header. Dropping project A onto project B's
- * row means: move every job in project A to project B's watch path.
+ * Pre-F46 the tree was a single flat project list and the gesture "drop
+ * project A onto project B's row" merged A's jobs into B's watch path. After
+ * F46 the tree is workspace -> project, so the gesture now targets a
+ * WORKSPACE folder: dropping project P onto workspace W reassigns P's
+ * registry `workspaceId` to W via PUT /api/projects/{id}. No job folder is
+ * moved on disk; the registry is the source of truth for the grouping, so
+ * reloading it re-homes the row under its new workspace (ADR-0042 /
+ * ADR-0048). The shell owns the PUT + reload; this service only owns the
+ * drag lifecycle state and the drop-validity rule.
  */
 @Injectable({ providedIn: 'root' })
 export class ProjectDragDropService {
-  private readonly jobService = inject(TaskService);
-
+  /** Registry id (PROJ-NNN) of the project row being dragged, or null. */
+  readonly draggingProjectId = signal<string | null>(null);
+  /** Job-derived name of the dragged row (drives the source-row fade + tooltip). */
   readonly draggingProjectName = signal<string | null>(null);
-  readonly dragOverProjectName = signal<string | null>(null);
-  readonly movingProjectName = signal<string | null>(null);
+  /** Workspace the dragged project currently lives in; rejects same-workspace drops. */
+  readonly draggingSourceWorkspaceId = signal<string | null>(null);
+  /** Workspace folder currently hovered as a candidate drop target. */
+  readonly dragOverWorkspaceId = signal<string | null>(null);
+  /** Project id whose reassignment is in flight (drives the source-row pulse). */
+  readonly movingProjectId = signal<string | null>(null);
   readonly moveErrorMessage = signal<string | null>(null);
 
-  private workspaces = signal<readonly WatchPathEntry[]>([]);
-
-  /** The host (StudioShellComponent) calls this whenever its
-   *  `workspaces` input changes; lets the service resolve project
-   *  names to watch-path values without needing a second source. */
-  setWorkspaces(entries: readonly WatchPathEntry[]): void {
-    this.workspaces.set(entries);
+  /** A real registry workspace the move can persist to — not one of the
+   *  synthetic tree buckets ("__all__" empty-registry fallback,
+   *  "__unassigned__" no-registry-match group). */
+  private isRealWorkspace(id: string): boolean {
+    return id !== '__all__' && id !== '__unassigned__';
   }
 
-  private workspaceFor(projectName: string): WatchPathEntry | null {
-    return this.workspaces().find(w => w.name === projectName) ?? null;
+  /** True only when a registered project is being dragged and the target is a
+   *  real workspace that differs from the project's current one. */
+  canDropOnWorkspace(targetWorkspaceId: string): boolean {
+    if (!this.draggingProjectId()) return false;
+    if (!this.isRealWorkspace(targetWorkspaceId)) return false;
+    return this.draggingSourceWorkspaceId() !== targetWorkspaceId;
   }
 
-  /** True only when both endpoints map to a real watch path and the
-   *  user is not dropping onto the source row. */
-  canDropProjectOn(source: string | null, target: string): boolean {
-    if (!source || source === target) return false;
-    return this.workspaceFor(source) !== null && this.workspaceFor(target) !== null;
-  }
-
-  onDragStart(event: DragEvent, projectName: string): void {
+  onDragStart(
+    event: DragEvent,
+    project: { projectId: string | null; name: string; workspaceId: string | null },
+  ): void {
     if (!event.dataTransfer) return;
-    if (this.workspaceFor(projectName) === null) {
+    // Rows with no registry record (the empty-registry "__all__" fallback or
+    // the "__unassigned__" bucket) have no workspace membership to reassign.
+    if (!project.projectId) {
       event.preventDefault();
       return;
     }
     event.dataTransfer.effectAllowed = 'move';
-    try { event.dataTransfer.setData('text/x-studio-project', projectName); } catch { /* ignore */ }
-    this.draggingProjectName.set(projectName);
+    try { event.dataTransfer.setData('text/x-studio-project', project.projectId); } catch { /* ignore */ }
+    this.draggingProjectId.set(project.projectId);
+    this.draggingProjectName.set(project.name);
+    this.draggingSourceWorkspaceId.set(project.workspaceId);
     this.moveErrorMessage.set(null);
   }
 
-  onDragOver(event: DragEvent, overName: string): void {
-    const source = this.draggingProjectName();
-    if (!source) return;
-    if (!this.canDropProjectOn(source, overName)) {
+  onWorkspaceDragOver(event: DragEvent, targetWorkspaceId: string): void {
+    if (!this.draggingProjectId()) return;
+    if (!this.canDropOnWorkspace(targetWorkspaceId)) {
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
       return;
     }
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    if (this.dragOverProjectName() !== overName) {
-      this.dragOverProjectName.set(overName);
+    if (this.dragOverWorkspaceId() !== targetWorkspaceId) {
+      this.dragOverWorkspaceId.set(targetWorkspaceId);
     }
   }
 
-  onDragLeave(overName: string): void {
-    if (this.dragOverProjectName() === overName) {
-      this.dragOverProjectName.set(null);
+  onWorkspaceDragLeave(targetWorkspaceId: string): void {
+    if (this.dragOverWorkspaceId() === targetWorkspaceId) {
+      this.dragOverWorkspaceId.set(null);
     }
-  }
-
-  onDrop(event: DragEvent, overName: string, jobs: readonly TaskInfo[]): void {
-    event.preventDefault();
-    const source = this.draggingProjectName();
-    this.draggingProjectName.set(null);
-    this.dragOverProjectName.set(null);
-    if (!source) return;
-    if (!this.canDropProjectOn(source, overName)) return;
-    this.moveProjectToWorkspace(source, overName, jobs.filter(j => j.projectName === source));
   }
 
   onDragEnd(): void {
+    this.draggingProjectId.set(null);
     this.draggingProjectName.set(null);
-    this.dragOverProjectName.set(null);
-  }
-
-  /** Fan out one change-project call per job in `sourceJobs`. The
-   *  shell refreshes the job list when the fan-out settles so the
-   *  source row shows its new (zero) count and the target's count
-   *  grows. Mirrors the per-project Settings dropdown in
-   *  ProjectWorkspaceSectionComponent. */
-  private moveProjectToWorkspace(
-    sourceProject: string,
-    targetProject: string,
-    sourceJobs: readonly TaskInfo[],
-  ): void {
-    const target = this.workspaceFor(targetProject);
-    if (!target) return;
-    if (sourceJobs.length === 0) {
-      this.moveErrorMessage.set(`Project "${sourceProject}" has no jobs to move.`);
-      this.jobService.refresh(true);
-      return;
-    }
-    this.movingProjectName.set(sourceProject);
-    this.moveErrorMessage.set(null);
-    const calls = sourceJobs.map(j =>
-      this.jobService.changeProject(j.id, target.path, j.watchPath).pipe(
-        map(() => ({ ok: true as const })),
-        catchError(() => of({ ok: false as const })),
-      ),
-    );
-    forkJoin(calls).subscribe({
-      next: (results) => {
-        this.movingProjectName.set(null);
-        const failures = results.filter(r => !r.ok).length;
-        if (failures > 0) {
-          this.moveErrorMessage.set(
-            `Moved ${results.length - failures} of ${results.length} jobs from "${sourceProject}" to "${targetProject}"; ${failures} failed.`,
-          );
-        }
-        this.jobService.refresh(true);
-      },
-      error: () => {
-        this.movingProjectName.set(null);
-        this.moveErrorMessage.set(`Could not move "${sourceProject}" to "${targetProject}".`);
-      },
-    });
+    this.draggingSourceWorkspaceId.set(null);
+    this.dragOverWorkspaceId.set(null);
   }
 
   /** Test helper: clear all drag state and any lingering error. */
   reset(): void {
-    this.draggingProjectName.set(null);
-    this.dragOverProjectName.set(null);
-    this.movingProjectName.set(null);
+    this.onDragEnd();
+    this.movingProjectId.set(null);
     this.moveErrorMessage.set(null);
   }
 
-  /** Convenience computed: is any move currently in flight? */
-  readonly isMoving = computed(() => this.movingProjectName() !== null);
+  /** Convenience computed: is a reassignment currently in flight? */
+  readonly isMoving = computed(() => this.movingProjectId() !== null);
 }

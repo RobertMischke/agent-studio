@@ -224,7 +224,7 @@
                   (openBoardRequest)="openBoard($event)"
                   (openHubRequest)="openHub($event)"
                   (renameWorkspace)="onTreeRenameWorkspace($event)"
-                  (projectDrop)="onProjectDrop($event.event, $event.name)" />
+                  (projectDrop)="onProjectWorkspaceDrop($event)" />
                 @if (moveErrorMessage(); as msg) {
                   <div class="studio-explorer__move-error"
                        role="alert"

@@ -10,6 +10,29 @@
   margin-top: var(--studio-spacing-1);
 }
 
+/* Each workspace group (header + its project rows) is the drop zone for the
+   project drag-and-drop: dropping a project anywhere inside a different,
+   real workspace reassigns it there. The radius/outline mirrors the
+   project-row drop styles in studio-shell.component.scss so the two read as
+   one drag system. */
+.studio-explorer-tree__ws-group {
+  display: block;
+  border-radius: 4px;
+
+  &--drop-target {
+    background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+    outline: 2px solid var(--studio-accent);
+    outline-offset: -2px;
+  }
+
+  /* Non-target groups while a drag is in progress (including the source's own
+     workspace, which is a no-op drop) recede so the valid target reads as
+     the selected one. */
+  &--drop-invalid:not(&--drop-target) {
+    opacity: 0.75;
+  }
+}
+
 /* Inline rename swaps the workspace header for a text input occupying the
    same row, so the tree does not reflow while editing. */
 .studio-explorer-tree__ws-rename {

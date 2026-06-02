@@ -14,7 +14,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { TaskInfo, WatchPathEntry, RegistryWorkspaceListItem } from '../../models/task.model';
+import type { TaskInfo, RegistryWorkspaceListItem } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
@@ -102,15 +102,6 @@ export class StudioShellComponent {
    */
   readonly knownProjectNames = input<readonly string[]>([]);
 
-  /**
-   * Full watch-path entries from the backend config. Needed by the
-   * Explorer's project drag-and-drop so a drop on a target project
-   * row can be turned into a `change-project` call (which expects a
-   * `targetWatchPath` value, not the project name). Defaults to []
-   * so legacy hosts keep working — drag-and-drop simply becomes a
-   * no-op until the host wires the workspaces input.
-   */
-  readonly workspaces = input<readonly WatchPathEntry[]>([]);
   private readonly featureFlags = inject(FeatureFlagsService);
   private readonly tabState = inject(StudioTabStateService);
   private readonly panelState = inject(StudioPanelStateService);
@@ -293,12 +284,6 @@ export class StudioShellComponent {
     const t = this.theme();
     document.documentElement.dataset['studioTheme'] = t;
     localStorage.setItem('atp.studio.theme', t);
-  });
-
-  /** Keep the project drag service synced with the latest workspaces
-   *  input so its target-watch-path lookups never read stale entries. */
-  private readonly syncProjectDragWorkspacesFx = effect(() => {
-    this.projectDrag.setWorkspaces(this.workspaces());
   });
 
   /**
@@ -827,23 +812,29 @@ export class StudioShellComponent {
   }
 
   // ---- project drag-and-drop -----------------------------------------
-  // Drag a project entry onto another project row to reassign every
-  // job in the source project to the target's watch path. Project name
-  // and watch-path name are 1:1 (JobScannerService stamps `projectName`
-  // from `WatchPathEntry.Name`), so each project row is both the
-  // project entry AND its workspace header. State + the change-project
-  // fan-out live in `ProjectDragDropService` so the shell stays inside
-  // its size budget.
+  // F46: drag a project row onto a (different, real) workspace folder to
+  // reassign the project's registry workspace membership. The drag
+  // lifecycle + drop-validity live in `ProjectDragDropService`; the shell
+  // owns the persistence because it already holds the registry-reload path.
+  // No job folder is moved on disk — the registry is the source of truth
+  // for the tree's grouping, so reloading it re-homes the row (ADR-0048).
 
   readonly projectDrag = inject(ProjectDragDropService);
   readonly moveErrorMessage = this.projectDrag.moveErrorMessage;
 
-  // The Explorer tree's drag state, drop-validity and row hover-title
-  // are owned by <app-explorer-workspace-tree>, which talks to
-  // ProjectDragDropService directly. The shell only handles the drop
-  // itself, because that needs the full job list to fan the move out.
-  onProjectDrop(event: DragEvent, overName: string): void {
-    this.projectDrag.onDrop(event, overName, this.allJobs());
+  onProjectWorkspaceDrop(e: { projectId: string; targetWorkspaceId: string }): void {
+    this.projectDrag.movingProjectId.set(e.projectId);
+    this.projectDrag.moveErrorMessage.set(null);
+    this.jobService.updateRegistryProject(e.projectId, { workspaceId: e.targetWorkspaceId }).subscribe({
+      next: () => {
+        this.projectDrag.movingProjectId.set(null);
+        this.reloadRegistryWorkspaces();
+      },
+      error: (err: unknown) => {
+        this.projectDrag.movingProjectId.set(null);
+        this.projectDrag.moveErrorMessage.set(this.errMsg(err));
+      },
+    });
   }
 
   /**
@@ -860,23 +851,6 @@ export class StudioShellComponent {
         this.registryWorkspacesError.set(this.errMsg(err));
       },
     });
-  }
-
-  /** Flat list of every job across all lanes; consumed by
-   *  `ProjectDragDropService.onDrop` to find which jobs to move. */
-  private allJobs(): TaskInfo[] {
-    const grouped = this.grouped();
-    const seen = new Set<string>();
-    const out: TaskInfo[] = [];
-    for (const lane of Object.values(grouped)) {
-      for (const job of lane as TaskInfo[]) {
-        const key = `${job.watchPath}::${job.id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(job);
-      }
-    }
-    return out;
   }
 
   /** Drop into the empty trailing region of the tab strip → append. */

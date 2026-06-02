@@ -2,142 +2,140 @@ import { test, expect } from '@playwright/test';
 import { api } from '../helpers/api';
 
 /**
- * Regression spec for the sidebar "drag a project onto another project's
- * row to reassign it to that workspace" flow. Mirrors the static dropdown
- * already shipped in the Project Settings panel (
- * `project-workspace-section`), but exercises the drag affordance the
- * shell adds in the Explorer sidebar.
+ * Regression spec for the sidebar "drag a project onto a workspace folder to
+ * reassign it to that workspace" flow (F46 two-level tree). Pre-F46 the
+ * gesture dropped a project onto another project's ROW and fanned out
+ * `change-project` calls; after F46 the tree is workspace -> project, so the
+ * drop target is a WORKSPACE folder and the action is a single registry
+ * reassignment (`PUT /api/projects/{PROJ-NNN}` with `{ workspaceId }`). No
+ * job folder is moved on disk (ADR-0048).
  *
- * Backstop: even if no jobs exist in the source project, the spec proves
- * the visual contract — draggable rows + valid-target highlight + invalid
- * self-drop guard — without needing to actually mutate the backend. The
- * call to `/api/jobs/{id}/change-project` is observed via a route handler
- * so the test asserts what the UI WOULD do without polluting the running
- * workspace.
+ * Backstop: the PUT is observed via a route handler and answered 200 so the
+ * spec proves the UI contract — draggable rows, valid-target highlight on
+ * the workspace group, same-workspace no-op — without mutating the running
+ * registry.
  */
 
-interface WatchPath { name: string; path: string }
-
-async function getWatchPaths(): Promise<WatchPath[]> {
-  const list = await api<WatchPath[]>('/api/watch-paths');
-  return Array.isArray(list) ? list : [];
+interface RegistryProject {
+  id: string;
+  displayName: string;
+  workspaceId: string;
+  storageLocation: string;
+  archived: boolean;
+}
+interface RegistryWorkspace {
+  id: string;
+  displayName: string;
+  projects: RegistryProject[];
 }
 
-test.describe('Sidebar: drag a project between workspaces', () => {
-  test('project rows are draggable, visual feedback fires, drop reassigns via change-project', async ({ page }) => {
-    const workspaces = await getWatchPaths();
-    test.skip(workspaces.length < 2, 'Need at least two configured workspaces to test the drag-to-workspace flow.');
+function folderTail(p: string): string {
+  const parts = p.split(/[\\/]+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : p;
+}
+
+test.describe('Sidebar: drag a project onto a workspace folder', () => {
+  test('project rows are draggable, workspace folder highlights, drop reassigns via the registry', async ({ page }) => {
+    const workspaces = await api<RegistryWorkspace[]>('/api/workspaces');
+    test.skip(!Array.isArray(workspaces) || workspaces.length < 2,
+      'Need at least two registry workspaces to test the drag-to-workspace flow.');
+
+    // Pick a non-archived project P living in workspace A, plus any other
+    // workspace B to drop it onto.
+    let source: { project: RegistryProject; workspace: RegistryWorkspace } | null = null;
+    let target: RegistryWorkspace | null = null;
+    for (const ws of workspaces) {
+      const p = (ws.projects ?? []).find(pr => !pr.archived);
+      if (!p) continue;
+      const other = workspaces.find(w => w.id !== ws.id);
+      if (!other) continue;
+      source = { project: p, workspace: ws };
+      target = other;
+      break;
+    }
+    test.skip(!source || !target, 'No movable project found across the configured workspaces.');
+    const src = source!;
+    const dst = target!;
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
-    // Surface the Explorer panel so the project rows are rendered.
     const sidebar = page.getByTestId('studio-sidebar');
     await expect(sidebar).toBeVisible({ timeout: 10_000 });
 
-    // Find at least two project rows. The Explorer's project rows carry
-    // testids of the form `studio-explorer-project-row-<name>`.
-    const source = workspaces[0];
-    const target = workspaces[1];
-    const sourceRow = page.getByTestId(`studio-explorer-project-row-${source.name}`);
-    const targetRow = page.getByTestId(`studio-explorer-project-row-${target.name}`);
-    await expect(sourceRow).toBeVisible({ timeout: 10_000 });
-    await expect(targetRow).toBeVisible({ timeout: 10_000 });
+    // The Explorer's project rows are keyed by their job-derived name, which
+    // is either the registry displayName or the storage-folder tail.
+    const rowByDisplay = page.getByTestId(`studio-explorer-project-row-${src.project.displayName}`);
+    const rowByTail = page.getByTestId(`studio-explorer-project-row-${folderTail(src.project.storageLocation)}`);
+    const sourceRow = (await rowByDisplay.count()) ? rowByDisplay : rowByTail;
+    if (!(await sourceRow.count())) {
+      test.skip(true, 'Source project row is not rendered (its workspace may be collapsed / empty).');
+      return;
+    }
+    await expect(sourceRow.first()).toBeVisible({ timeout: 10_000 });
 
-    // Contract 1: project rows are HTML-draggable.
-    await expect(sourceRow).toHaveAttribute('draggable', 'true');
-    await expect(targetRow).toHaveAttribute('draggable', 'true');
+    const dropZone = page.getByTestId(`studio-explorer-ws-drop-${dst.id}`);
+    await expect(dropZone).toBeVisible({ timeout: 10_000 });
 
-    // Capture the change-project POST as it leaves the page so the spec
-    // can assert the right target path was sent without leaving the
-    // backend in a different state when the spec ends. We respond with a
-    // 200 OK and roll the move back by re-sending the inverse to keep
-    // the dev workspace pristine.
-    const observed: { jobId: string; targetWatchPath: string; sourceWatchPath: string }[] = [];
-    await page.route('**/api/jobs/*/change-project**', async (route, request) => {
+    // Contract 1: the project row is HTML-draggable.
+    await expect(sourceRow.first()).toHaveAttribute('draggable', 'true');
+
+    // Observe the registry reassignment as it leaves the page and answer 200
+    // so the running registry is not actually mutated by the test.
+    const observed: { projId: string; workspaceId: string }[] = [];
+    await page.route('**/api/projects/*', async (route, request) => {
+      if (request.method() !== 'PUT') { await route.continue(); return; }
       const url = new URL(request.url());
-      const m = /\/api\/jobs\/([^/]+)\/change-project/.exec(url.pathname);
-      const jobId = m ? decodeURIComponent(m[1]) : '';
-      const sourceWatchPath = url.searchParams.get('watchPath') ?? '';
-      let targetWatchPath = '';
+      const m = /\/api\/projects\/([^/?]+)/.exec(url.pathname);
+      const projId = m ? decodeURIComponent(m[1]) : '';
+      let workspaceId = '';
       try {
-        const body = request.postDataJSON() as { targetWatchPath?: string } | null;
-        targetWatchPath = body?.targetWatchPath ?? '';
+        const body = request.postDataJSON() as { workspaceId?: string } | null;
+        workspaceId = body?.workspaceId ?? '';
       } catch { /* ignore */ }
-      observed.push({ jobId, targetWatchPath, sourceWatchPath });
-      await route.fulfill({ status: 200, body: '' });
+      observed.push({ projId, workspaceId });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
 
-    // Drive the HTML5 drag dispatch directly. Playwright's `dragTo` does
-    // not emit `dragstart` + `dragend` events the way native HTML5 drag
-    // needs, so we synthesize them. (Same approach as the agent-orchestrator
-    // tab drag specs.)
-    await page.evaluate(({ sourceName, targetName }) => {
-      const sel = (name: string) => document.querySelector(`[data-testid="studio-explorer-project-row-${name}"]`) as HTMLElement | null;
-      const src = sel(sourceName);
-      const dst = sel(targetName);
-      if (!src || !dst) throw new Error('rows missing');
+    // HTML5 drag has to be synthesized — Playwright's dragTo does not emit the
+    // dragstart/dragover/drop sequence the native API needs. Same approach as
+    // the tab-drag specs.
+    const sourceName = (await rowByDisplay.count()) ? src.project.displayName : folderTail(src.project.storageLocation);
+    await page.evaluate(({ sourceName, dropId }) => {
+      const srcEl = document.querySelector(`[data-testid="studio-explorer-project-row-${sourceName}"]`) as HTMLElement | null;
+      const dstEl = document.querySelector(`[data-testid="studio-explorer-ws-drop-${dropId}"]`) as HTMLElement | null;
+      if (!srcEl || !dstEl) throw new Error('drag endpoints missing');
       const dataTransfer = new DataTransfer();
       const fire = (el: HTMLElement, type: string) => {
-        const ev = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer });
-        el.dispatchEvent(ev);
+        el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
       };
-      fire(src, 'dragstart');
-      fire(dst, 'dragenter');
-      fire(dst, 'dragover');
-    }, { sourceName: source.name, targetName: target.name });
+      fire(srcEl, 'dragstart');
+      fire(dstEl, 'dragenter');
+      fire(dstEl, 'dragover');
+    }, { sourceName, dropId: dst.id });
 
-    // After dragstart over the target, the row should pick up the
-    // drop-target highlight class.
-    await expect(targetRow).toHaveClass(/studio-tree-project--drop-target/);
-    // The source row fades while dragging.
-    await expect(sourceRow).toHaveClass(/studio-tree-project--dragging/);
-    // The own-row cannot be its own drop target — drop-invalid stays
-    // off the source row itself (the source is excluded from invalid
-    // styling by design).
-    await expect(sourceRow).not.toHaveClass(/studio-tree-project--drop-target/);
+    // The workspace folder picks up the drop-target highlight; the source row fades.
+    await expect(dropZone).toHaveClass(/studio-explorer-tree__ws-group--drop-target/);
+    await expect(sourceRow.first()).toHaveClass(/studio-tree-project--dragging/);
 
-    // Now complete the drop. The change-project POST fires once per job
-    // in the source project; an empty source project routes through the
-    // "no jobs to move" hint path instead.
-    await page.evaluate(({ sourceName, targetName }) => {
-      const sel = (name: string) => document.querySelector(`[data-testid="studio-explorer-project-row-${name}"]`) as HTMLElement | null;
-      const src = sel(sourceName);
-      const dst = sel(targetName);
-      if (!src || !dst) throw new Error('rows missing');
+    // Complete the drop.
+    await page.evaluate(({ sourceName, dropId }) => {
+      const srcEl = document.querySelector(`[data-testid="studio-explorer-project-row-${sourceName}"]`) as HTMLElement | null;
+      const dstEl = document.querySelector(`[data-testid="studio-explorer-ws-drop-${dropId}"]`) as HTMLElement | null;
+      if (!srcEl || !dstEl) throw new Error('drag endpoints missing');
       const dataTransfer = new DataTransfer();
       const fire = (el: HTMLElement, type: string) => {
-        const ev = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer });
-        el.dispatchEvent(ev);
+        el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer }));
       };
-      fire(dst, 'drop');
-      fire(src, 'dragend');
-    }, { sourceName: source.name, targetName: target.name });
+      fire(dstEl, 'drop');
+      fire(srcEl, 'dragend');
+    }, { sourceName, dropId: dst.id });
 
-    // Either we observed at least one change-project call (when the
-    // source project had jobs), or the move-error hint surfaced (when
-    // the source project was empty). Either branch is a green
-    // assertion for the visual contract.
-    const hint = page.getByTestId('studio-explorer-move-error');
-    const wasEmpty = await hint.isVisible().catch(() => false);
-    if (observed.length === 0 && !wasEmpty) {
-      // Allow a beat for the forkJoin to settle before failing.
-      await page.waitForTimeout(500);
-    }
-    const finalObserved = observed.slice();
-    const finalEmpty = await hint.isVisible().catch(() => false);
+    await expect.poll(() => observed.length, { timeout: 5_000 }).toBeGreaterThan(0);
+    expect(observed[0].projId).toBe(src.project.id);
+    expect(observed[0].workspaceId).toBe(dst.id);
 
-    if (finalObserved.length > 0) {
-      for (const row of finalObserved) {
-        expect(row.targetWatchPath).toBe(target.path);
-        expect(row.sourceWatchPath).toBe(source.path);
-      }
-    } else {
-      expect(finalEmpty).toBeTruthy();
-    }
-
-    // Capture for the job results bundle.
     await page.screenshot({
       path: 'test-results/project-drag-between-workspaces.png',
       fullPage: false,

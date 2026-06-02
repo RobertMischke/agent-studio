@@ -153,3 +153,100 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(cmp.wsContextMenu()).toBeNull();
   });
 });
+
+describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspace reassignment)', () => {
+  function twoWorkspaces(cmp: ExplorerWorkspaceTreeComponent, fixture: ReturnType<typeof mount>) {
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+      workspace('ws-2', 'Side Projects', 1, [project('Beta', 'ws-2', '/repos/Beta')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha'), row('Beta'), row('Orphan')]);
+    cmp.projectDrag.reset();
+  }
+
+  const dragEvent = () =>
+    ({ effectAllowed: '', dropEffect: '', setData() {} });
+
+  it('attaches the registry projectId + owning workspaceId to matched nodes', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    twoWorkspaces(cmp, fixture);
+
+    const groups = cmp.groups();
+    const alpha = groups[0].projects[0];
+    expect(alpha.projectId).toBe('PROJ-Alpha');
+    expect(alpha.workspaceId).toBe('ws-default');
+
+    const orphan = groups.find(g => g.id === '__unassigned__')!.projects[0];
+    expect(orphan.projectId).toBeNull();
+    expect(orphan.workspaceId).toBeNull();
+  });
+
+  it('drops a project onto a different workspace and emits the reassignment', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    twoWorkspaces(cmp, fixture);
+
+    const groups = cmp.groups();
+    const alpha = groups[0].projects[0]; // lives in ws-default
+    const sideGroup = groups[1];         // ws-2
+
+    const dt = dragEvent();
+    cmp.onDragStart({ dataTransfer: dt, preventDefault() {} } as unknown as DragEvent, alpha);
+    expect(cmp.projectDrag.draggingProjectId()).toBe('PROJ-Alpha');
+    expect(cmp.canDropOnWorkspace('ws-2')).toBe(true);
+    expect(cmp.canDropOnWorkspace('ws-default')).toBe(false); // same workspace = no-op
+
+    let emitted: { projectId: string; targetWorkspaceId: string } | null = null;
+    const sub = cmp.projectDrop.subscribe(e => (emitted = e));
+    cmp.onWorkspaceDrop({ preventDefault() {}, dataTransfer: dt } as unknown as DragEvent, sideGroup);
+    sub.unsubscribe();
+
+    expect(emitted).toEqual({ projectId: 'PROJ-Alpha', targetWorkspaceId: 'ws-2' });
+    // Drag state is cleared on drop.
+    expect(cmp.projectDrag.draggingProjectId()).toBeNull();
+  });
+
+  it('does not emit when a project is dropped on its own workspace', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    twoWorkspaces(cmp, fixture);
+
+    const groups = cmp.groups();
+    const alpha = groups[0].projects[0]; // ws-default
+    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault() {} } as unknown as DragEvent, alpha);
+
+    let emitted = false;
+    const sub = cmp.projectDrop.subscribe(() => (emitted = true));
+    cmp.onWorkspaceDrop({ preventDefault() {}, dataTransfer: dragEvent() } as unknown as DragEvent, groups[0]);
+    sub.unsubscribe();
+
+    expect(emitted).toBe(false);
+  });
+
+  it('refuses to start a drag for an unregistered (__unassigned__) row', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    twoWorkspaces(cmp, fixture);
+
+    const orphan = cmp.groups().find(g => g.id === '__unassigned__')!.projects[0];
+    let prevented = false;
+    cmp.onDragStart(
+      { dataTransfer: dragEvent(), preventDefault() { prevented = true; } } as unknown as DragEvent,
+      orphan,
+    );
+    expect(prevented).toBe(true);
+    expect(cmp.projectDrag.draggingProjectId()).toBeNull();
+  });
+
+  it('rejects synthetic workspaces as drop targets even mid-drag', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    twoWorkspaces(cmp, fixture);
+
+    const alpha = cmp.groups()[0].projects[0];
+    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault() {} } as unknown as DragEvent, alpha);
+    expect(cmp.canDropOnWorkspace('__unassigned__')).toBe(false);
+    expect(cmp.canDropOnWorkspace('__all__')).toBe(false);
+  });
+});

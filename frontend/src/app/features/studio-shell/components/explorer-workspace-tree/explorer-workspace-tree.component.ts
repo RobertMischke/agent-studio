@@ -43,6 +43,13 @@ export interface ExplorerProjectRow {
 /** A project row decorated with its lane counts, ready to render. */
 export interface ExplorerProjectNode extends ExplorerProjectRow {
   lanes: ExplorerLaneCounts;
+  /** Registry id (PROJ-NNN) when this row matches a registry project; null
+   *  for the empty-registry "__all__" fallback and "__unassigned__" rows,
+   *  which have no workspace membership and are therefore not draggable. */
+  projectId: string | null;
+  /** Owning registry workspace id for matched rows (the drag source's current
+   *  workspace, used to reject same-workspace drops); null when unmatched. */
+  workspaceId: string | null;
 }
 
 /** One workspace folder and the project rows that belong to it. */
@@ -102,7 +109,13 @@ export class ExplorerWorkspaceTreeComponent {
   readonly toggleExpanded = output<string>();
   readonly openBoardRequest = output<string>();
   readonly openHubRequest = output<string>();
-  readonly projectDrop = output<{ event: DragEvent; name: string }>();
+  /**
+   * Emitted when a project row is dropped onto a (different, real) workspace
+   * folder. The shell persists it via PUT /api/projects/{projectId}
+   * `{ workspaceId }` and reloads the registry so the row re-homes under the
+   * new workspace. No job folder is touched on disk (ADR-0048).
+   */
+  readonly projectDrop = output<{ projectId: string; targetWorkspaceId: string }>();
 
   /**
    * F46 — workspace-header inline rename. Double-clicking a (real) workspace
@@ -168,15 +181,21 @@ export class ExplorerWorkspaceTreeComponent {
   readonly groups = computed<ExplorerWorkspaceGroup[]>(() => {
     const rows = this.projectRows();
     const lanes = this.projectLanes();
-    const node = (r: ExplorerProjectRow): ExplorerProjectNode => ({
+    const node = (
+      r: ExplorerProjectRow,
+      projectId: string | null,
+      workspaceId: string | null,
+    ): ExplorerProjectNode => ({
       ...r,
       lanes: lanes.get(r.name) ?? ZERO_LANES,
+      projectId,
+      workspaceId,
     });
 
     const workspaces = [...this.registryWorkspaces()].sort((a, b) => a.sortOrder - b.sortOrder);
     if (workspaces.length === 0) {
       return rows.length
-        ? [{ id: '__all__', displayName: 'Workspace', color: null, projects: rows.map(node) }]
+        ? [{ id: '__all__', displayName: 'Workspace', color: null, projects: rows.map(r => node(r, null, null)) }]
         : [];
     }
 
@@ -189,7 +208,9 @@ export class ExplorerWorkspaceTreeComponent {
         const match = byName.get(rp.displayName) ?? byName.get(folderTail(rp.storageLocation));
         if (match && !used.has(match.name)) {
           used.add(match.name);
-          projects.push(node(match));
+          // Carry the registry id + owning workspace so the drag source knows
+          // what to reassign and which workspace drop is a no-op.
+          projects.push(node(match, rp.id, ws.id));
         }
       }
       projects.sort((a, b) => a.name.localeCompare(b.name));
@@ -199,7 +220,7 @@ export class ExplorerWorkspaceTreeComponent {
     const leftover = rows
       .filter(r => !used.has(r.name))
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map(node);
+      .map(r => node(r, null, null));
     if (leftover.length) {
       groups.push({ id: '__unassigned__', displayName: 'Unassigned', color: null, projects: leftover });
     }
@@ -309,39 +330,53 @@ export class ExplorerWorkspaceTreeComponent {
     this.renameWorkspace.emit({ id, displayName: value });
   }
 
-  canDrop(source: string | null, target: string): boolean {
-    return this.projectDrag.canDropProjectOn(source, target);
+  /** True when dropping the dragged project on this workspace folder would
+   *  actually move it (real workspace, not the source's current one). */
+  canDropOnWorkspace(targetWorkspaceId: string): boolean {
+    return this.projectDrag.canDropOnWorkspace(targetWorkspaceId);
   }
 
-  /** Hover-title for a project row, mirroring the shell's drag affordances. */
-  rowTitle(name: string): string {
-    const source = this.projectDrag.draggingProjectName();
-    if (!source || source === name) {
-      return 'Drag to move this project to another workspace';
+  /** Hover-title for a project row. Drop targets are workspace folders now,
+   *  so the affordance points the user at the gesture rather than the row. */
+  rowTitle(p: ExplorerProjectNode): string {
+    return p.projectId
+      ? 'Drag onto a workspace folder to move this project there'
+      : 'This project is not in the registry yet — drag to move is unavailable';
+  }
+
+  onDragStart(event: DragEvent, p: ExplorerProjectNode): void {
+    this.projectDrag.onDragStart(event, {
+      projectId: p.projectId,
+      name: p.name,
+      workspaceId: p.workspaceId,
+    });
+  }
+
+  onWorkspaceDragOver(event: DragEvent, g: ExplorerWorkspaceGroup): void {
+    this.projectDrag.onWorkspaceDragOver(event, g.id);
+  }
+
+  /** Only clear the hover highlight when the pointer leaves the whole group
+   *  wrapper — moving between the header and a child row fires dragleave on
+   *  the inner element and would otherwise flicker the highlight off. */
+  onWorkspaceDragLeave(event: DragEvent, g: ExplorerWorkspaceGroup): void {
+    const related = event.relatedTarget as Node | null;
+    const wrapper = event.currentTarget as HTMLElement | null;
+    if (related && wrapper?.contains(related)) return;
+    this.projectDrag.onWorkspaceDragLeave(g.id);
+  }
+
+  onWorkspaceDrop(event: DragEvent, g: ExplorerWorkspaceGroup): void {
+    event.preventDefault();
+    const projectId = this.projectDrag.draggingProjectId();
+    const valid = !!projectId && this.projectDrag.canDropOnWorkspace(g.id);
+    this.projectDrag.onDragEnd();
+    if (valid && projectId) {
+      this.projectDrop.emit({ projectId, targetWorkspaceId: g.id });
     }
-    if (this.projectDrag.canDropProjectOn(source, name)) {
-      return `Drop here to move ${source} to workspace ${name}`;
-    }
-    return 'Not a valid drop target';
-  }
-
-  onDragStart(event: DragEvent, name: string): void {
-    this.projectDrag.onDragStart(event, name);
-  }
-
-  onDragOver(event: DragEvent, name: string): void {
-    this.projectDrag.onDragOver(event, name);
-  }
-
-  onDragLeave(name: string): void {
-    this.projectDrag.onDragLeave(name);
   }
 
   onDragEnd(): void {
     this.projectDrag.onDragEnd();
-  }
-
-  onDrop(event: DragEvent, name: string): void {
-    this.projectDrop.emit({ event, name });
   }
 }
