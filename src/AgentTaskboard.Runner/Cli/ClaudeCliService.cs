@@ -53,7 +53,8 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
-        string? model)
+        string? model,
+        string? permissionMode)
     {
         // claude -p <prompt-as-argv> [-r <s>] [--model <m>]
         //   --output-format stream-json --verbose --dangerously-skip-permissions
@@ -120,7 +121,13 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         psi.ArgumentList.Add("--output-format");
         psi.ArgumentList.Add("stream-json");
         psi.ArgumentList.Add("--verbose");
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
+
+        // Permission posture is resolved per-project (default YOLO ==
+        // --dangerously-skip-permissions). See CliPermissionFlags / the
+        // sandbox-and-yolo doc. A null mode normalizes to YOLO, preserving the
+        // historic always-skip behaviour for callers that don't thread a mode.
+        foreach (var flag in CliPermissionFlags.For(CliType, permissionMode))
+            psi.ArgumentList.Add(flag);
 
         // Inject centrally-managed agent rules as a system-prompt overlay.
         // Using --append-system-prompt-file (vs. --append-system-prompt) keeps

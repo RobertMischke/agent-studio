@@ -66,6 +66,18 @@ public static class ProjectSettingsEndpoints
                     // Only the steps the operator has touched appear here;
                     // an absent step is on its built-in default.
                     pipelineSteps = kv.Value.PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+                    // Resolved per-CLI permission mode + source for all four CLIs
+                    // (project override → detected global config → YOLO default).
+                    // The project-settings UI uses this to render the effective
+                    // mode without a per-CLI round-trip.
+                    cliModes = CliTypes.All.ToDictionary(
+                        cli => cli,
+                        cli =>
+                        {
+                            var r = settings.ResolveCliMode(kv.Key, cli);
+                            return new { mode = r.Mode, source = r.Source, args = r.Args };
+                        },
+                        StringComparer.OrdinalIgnoreCase),
                 },
                 StringComparer.OrdinalIgnoreCase);
             return Results.Ok(projected);
@@ -153,6 +165,75 @@ public static class ProjectSettingsEndpoints
             var normalized = AutoPushStrategies.Normalize(req.Strategy);
             settings.SetAutoPushStrategy(projectName, normalized);
             return Results.Ok(settings.Get(projectName));
+        });
+
+        // Per-project CLI permission modes. GET returns the resolved mode +
+        // source + rendered flags for every CLI (defaults filled in) so the
+        // settings UI can render the effective state and dropdown in one shot.
+        app.MapGet("/api/projects/{projectName}/cli-modes", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var s = settings.Get(projectName);
+            var resolved = CliTypes.All.ToDictionary(
+                cli => cli,
+                cli =>
+                {
+                    var r = settings.ResolveCliMode(projectName, cli);
+                    return new { mode = r.Mode, source = r.Source, args = r.Args };
+                },
+                StringComparer.OrdinalIgnoreCase);
+            return Results.Ok(new
+            {
+                resolved,
+                overrides = s.CliModes ?? new Dictionary<string, string>(),
+                available = CliPermissionModes.UserVisible,
+            });
+        });
+
+        // PUT one CLI's permission mode. An empty/null mode clears the override
+        // (revert to the platform default / global config). Takes effect on the
+        // next spawn without a backend restart (ProjectRunner resolves live).
+        app.MapPut("/api/projects/{projectName}/cli-mode", (string projectName, SetCliModeRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            if (!CliTypes.IsValid(req.CliType))
+                return Results.BadRequest(new { error = $"Unknown CLI '{req.CliType}'" });
+            // Empty clears; a non-empty value must be a known mode.
+            if (!string.IsNullOrWhiteSpace(req.Mode) && !CliPermissionModes.IsValid(req.Mode))
+                return Results.BadRequest(new { error = $"Unsupported permission mode '{req.Mode}'" });
+
+            settings.SetCliMode(projectName, req.CliType, req.Mode);
+            var r = settings.ResolveCliMode(projectName, req.CliType);
+            return Results.Ok(new { cli = r.CliType, mode = r.Mode, source = r.Source, args = r.Args });
+        });
+
+        // Effective-mode probe (ticket test path). Returns the mode a spawn of
+        // <name> in <project> would use right now, its source, and the exact
+        // flags the driver would inject — the reload-able check the E2E uses to
+        // confirm a UI toggle reaches the resolver.
+        app.MapGet("/api/cli/{name}/effective-mode", (string name, string? project, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            if (!CliTypes.IsValid(name))
+                return Results.BadRequest(new { error = $"Unknown CLI '{name}'" });
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "query parameter 'project' is required" });
+
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, project, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{project}'" });
+
+            var r = settings.ResolveCliMode(project, name);
+            return Results.Ok(new
+            {
+                cli = r.CliType,
+                project,
+                mode = r.Mode,
+                source = r.Source,
+                args = r.Args,
+            });
         });
 
         // ADR-0052: max number of tasks the runner runs concurrently for this

@@ -13,6 +13,7 @@ These files are the current proto-skill set. The broader portable skill architec
 | [cli-codex](cli-codex.md) | Touching `CodexCliService`, the `--json` parser, `CodexModelDiscovery`, `CodexQuotaProbe`. |
 | [cli-copilot](cli-copilot.md) | Touching `CopilotCliService` (legacy code path), `gh` token integration, `CopilotModelDiscovery`, `CopilotQuotaProbe`. |
 | [cli-gemini](cli-gemini.md) | Touching `GeminiCliService`, the Gemini stream-json parser, the buffered-stdout limitation, `GeminiQuotaProbe`. |
+| [sandbox-and-yolo](sandbox-and-yolo.md) | Touching the permission/sandbox flags any driver injects on spawn, the per-project CLI-mode surface, or the `effective-mode` probe. The mode → flags table and `source` semantics live here. |
 
 ## How the skills interact with the contract
 

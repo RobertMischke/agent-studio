@@ -32,7 +32,7 @@ The platform's mitigation: spawn every CLI in its **maximum-permission / no-prom
 - **What "YOLO" means**: skip all per-tool approval prompts. Claude executes tool calls (Read, Bash, Edit, Write) without interrupting for confirmation.
 - **Platform default**: `--dangerously-skip-permissions` for orchestrated runs.
 - **Risk rating**: **Medium**. Claude has a strong agentic loop and self-corrects on errors; the watchdog catches stuck runs. The main risk is destructive Bash (`rm -rf`, `git reset --hard`); the platform forbids these via [docs/commit-push-doctrine.md](../commit-push-doctrine.md) and ADR-0019.
-- **How to verify**: grep the spawn args in the run's `cli-output.log` for `--dangerously-skip-permissions`. Or call `GET /api/cli/claude/effective-mode?project=<name>` once that endpoint exists (see the [cli-config feature ticket](#related)).
+- **How to verify**: grep the spawn args in the run's `cli-output.log` for `--dangerously-skip-permissions`, or call `GET /api/cli/claude/effective-mode?project=<name>` (see [Effective-mode probe](#effective-mode-probe)).
 
 ### OpenAI Codex (`codex`)
 
@@ -42,16 +42,17 @@ The platform's mitigation: spawn every CLI in its **maximum-permission / no-prom
   - `approval_policy = "never"` — no interactive approval prompts.
 - **Platform default**: both set to the YOLO values above.
 - **Risk rating**: **Medium-High**. Codex's sandbox is the most actively-blocking of the four on Windows; turning it off removes a real safety net. The platform compensates with watchdog timeouts and post-run review.
-- **How to verify**: `Get-Content ~/.codex/config.toml | Select-String 'sandbox_mode|approval_policy'`. Also visible in `codex exec --json` output: when sandbox is on, you see `command_execution` items with `exit_code=null, status=in_progress` followed by a sandbox-refusal error; when YOLO, the command runs.
+- **How to verify**: `GET /api/cli/codex/effective-mode?project=<name>` (see [Effective-mode probe](#effective-mode-probe)), or `Get-Content ~/.codex/config.toml | Select-String 'sandbox_mode|approval_policy'`. Also visible in `codex exec --json` output: when sandbox is on, you see `command_execution` items with `exit_code=null, status=in_progress` followed by a sandbox-refusal error; when YOLO, the command runs. Codex is the **only** CLI whose `~/.codex/config.toml` is parsed as a `global`-source fallback when no project override is set.
 - **Quirk**: `[windows] sandbox` (`elevated`/`unelevated`) is a *separate axis* from `sandbox_mode`. We keep it on `unelevated` because `elevated` produces `CreateProcessAsUserW failed: 1312` on this machine (see comment in `~/.codex/config.toml`).
 
 ### GitHub Copilot CLI (`gh-copilot` / `copilot`)
 
-- **Knob**: `--yolo` flag (Copilot-specific) or interactive `/yolo` slash command.
+- **Knob**: `--allow-all` flag (skip every per-action confirmation).
 - **What "YOLO" means**: skip every per-action confirmation.
-- **Platform default**: `--yolo` on the spawn command.
+- **Platform default**: `--allow-all` on the spawn command.
 - **Risk rating**: **Medium**. Copilot's tool surface is smaller than Claude/Codex, so the blast radius per command is also smaller.
-- **How to verify**: spawn command logged in `cli-output.log`. Once the cli-config feature ticket ships, `GET /api/cli/copilot/effective-mode?project=…`.
+- **Non-YOLO modes**: Copilot has no graduated permission flags, so Workspace-Write / Read-only / Custom all inject *nothing* — the CLI falls back to its own interactive defaults. Picking one of those for an unattended run risks a hang; YOLO is the only fully non-interactive mode.
+- **How to verify**: spawn command logged in `cli-output.log`, or `GET /api/cli/copilot/effective-mode?project=…`.
 
 ### Google Gemini CLI (`gemini`)
 
@@ -60,6 +61,39 @@ The platform's mitigation: spawn every CLI in its **maximum-permission / no-prom
 - **Platform default**: `--skip-trust -y` on spawn.
 - **Risk rating**: **Low-Medium**. Gemini's tool layer is more conservative by default; the prompts it skips are mostly noise for an automated runner.
 - **How to verify**: spawn command logged. The Codex/Claude pattern of `effective-mode` endpoint applies once shipped.
+
+## Mode → CLI flags (as shipped)
+
+The pure mapper `CliPermissionFlags.For(cliType, mode)` in `AgentTaskboard.Shared` renders these exact args on every spawn. A null/unknown mode normalises to **YOLO**, preserving each driver's pre-feature behaviour byte-for-byte.
+
+| Mode | Claude | Codex | Gemini | Copilot |
+|---|---|---|---|---|
+| **YOLO** (default) | `--dangerously-skip-permissions` | `--sandbox danger-full-access` | `--skip-trust -y` | `--allow-all` |
+| **Workspace-Write** | `--permission-mode acceptEdits` | `--sandbox workspace-write` | `--skip-trust --approval-mode auto_edit` | *(none)* |
+| **Read-only** | `--permission-mode plan` | `--sandbox read-only` | `--skip-trust --approval-mode default` | *(none)* |
+| **Custom** | *(none)* | *(none)* | `--skip-trust` | *(none)* |
+
+Notes:
+- **Gemini always keeps `--skip-trust`** in every mode — without it the CLI blocks on the workspace-trust modal, which no unattended runner can answer. "Custom" therefore still injects `--skip-trust` and nothing else.
+- **Copilot** has no graduated flags, so only YOLO is non-interactive (see its subsection above).
+
+## Effective-mode probe
+
+`GET /api/cli/{name}/effective-mode?project=<name>` returns the mode a spawn would use *right now*, without restarting the backend:
+
+```json
+{ "cli": "codex", "project": "Runbook", "mode": "read-only", "source": "project", "args": ["--sandbox", "read-only"] }
+```
+
+`source` is one of:
+
+| Source | Meaning |
+|---|---|
+| `project` | An explicit per-project override (set in the UI or via `PUT /api/projects/{name}/cli-mode`). Wins over everything. |
+| `global` | Inherited from the CLI's own global config. **Codex only** — `~/.codex/config.toml`'s `sandbox_mode` is parsed; the other three CLIs have no parseable persistent posture, so they never report `global`. |
+| `default` | The platform default (**YOLO**) — no override, no detected global config. |
+
+Resolution order is **project → global → default**. The override is persisted in `project-settings.json` under the project's `CliModes` map; clearing it (empty mode) reverts to `global`/`default`.
 
 ## How to test on the fly
 
@@ -85,7 +119,7 @@ If the command runs without an interactive prompt and produces output, the agent
 
 ## Override at the project level
 
-The Project Settings → Agent Configuration surface lets you downgrade any agent for a specific project (e.g. `claude: workspace-write` for a security-sensitive repo). The toggle persists to the project's `cli-config.json` and takes effect on the next CLI spawn without a backend restart.
+The Project Settings → **CLI permission modes** surface lets you downgrade any agent for a specific project (e.g. `claude: workspace-write` for a security-sensitive repo). The toggle persists to the project's entry in `project-settings.json` (the `CliModes` map) and takes effect on the next CLI spawn without a backend restart. Each row shows the effective mode, its source chip (`project` / `global` / `default`), and the exact args the next spawn will inject; a **Reset** button clears the override.
 
 Inline-meta in the UI must reproduce:
 1. The current mode + its source (project-override vs. global-default vs. CLI-default).
@@ -106,5 +140,5 @@ Per [design-principles.md §Inline meta](../design-principles.md#inline-meta-exp
 
 ## Open follow-ups
 
-- The current `~/.codex/config.toml` change (2026-05-13) is a global stop-gap. Once the per-project CLI-config surface ships, that top-level `sandbox_mode = "danger-full-access"` can move into the project default and the stop-gap can be removed.
-- `effective-mode` probe endpoint not yet implemented — the verification commands above are the manual fallback.
+- The global `~/.codex/config.toml` `sandbox_mode = "danger-full-access"` change (2026-05-13) was a stop-gap. Now that the per-project surface defaults to YOLO and the runner injects `--sandbox danger-full-access` per spawn, **that top-level stop-gap can be removed** — Codex YOLO no longer depends on the global file. (Leaving it in place is harmless: an explicit project override always wins, and the global value only surfaces as the `global` source when no override is set.)
+- Out of scope for this feature (deliberately): real OS-level sandbox enforcement and a per-command permission audit trail. The modes here select each CLI's *own* sandbox/approval flags; they do not add an independent enforcement layer.

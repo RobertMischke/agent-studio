@@ -131,7 +131,7 @@ public class CopilotCliService : ICliExecutionService
         return available;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? jobFolderPath = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? jobFolderPath = null, string? permissionMode = null, CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
         {
@@ -157,7 +157,7 @@ public class CopilotCliService : ICliExecutionService
             sessionArg += $" --model=\"{EscapeArg(model)}\"";
         }
 
-        var psi = CreateCliStartInfo(prompt, workingDirectory, sessionArg, redirectInput: true, jobFolderPath);
+        var psi = CreateCliStartInfo(prompt, workingDirectory, sessionArg, redirectInput: true, jobFolderPath, permissionMode);
 
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
@@ -577,12 +577,19 @@ public class CopilotCliService : ICliExecutionService
 
     private static string EscapeArg(string arg) => arg.Replace("\"", "\\\"");
 
-    private ProcessStartInfo CreateCliStartInfo(string prompt, string workingDirectory, string sessionArg, bool redirectInput, string? jobFolderPath = null)
+    private ProcessStartInfo CreateCliStartInfo(string prompt, string workingDirectory, string sessionArg, bool redirectInput, string? jobFolderPath = null, string? permissionMode = null)
     {
+        // Permission posture is resolved per-project. Copilot's headless surface
+        // is all-or-nothing: YOLO (the default, and the only mode that supports
+        // unattended runs) renders --allow-all; tighter modes inject nothing and
+        // let Copilot fall back to its interactive defaults. See the
+        // sandbox-and-yolo doc for why non-YOLO Copilot stalls a pipeline run.
+        var permissionFlags = string.Join(" ", CliPermissionFlags.For(CliType, permissionMode));
+        var permissionSegment = string.IsNullOrEmpty(permissionFlags) ? "" : $" {permissionFlags}";
         var psi = new ProcessStartInfo
         {
             FileName = GetCliPath(),
-            Arguments = $"-p \"{EscapeArg(prompt)}\" --allow-all{sessionArg}",
+            Arguments = $"-p \"{EscapeArg(prompt)}\"{permissionSegment}{sessionArg}",
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

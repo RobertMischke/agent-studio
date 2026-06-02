@@ -1247,9 +1247,38 @@ export class TaskService {
           // F35: resolved per-lane sort strategy map (every lane key present).
           laneSortStrategies?: Record<string, string>;
           pipelineSteps?: Record<string, PipelineStepSetting>;
+          // Per-CLI effective permission mode (YOLO default), one entry per CLI.
+          cliModes?: Record<string, { mode: string; source: string; args: string[] }>;
         }
       >
     >(`${this.baseUrl}/projects/settings`);
+  }
+
+  /**
+   * Read the resolved per-CLI permission modes for one project. `resolved`
+   * has one entry per CLI (effective mode + source + spawned args, defaults
+   * filled in); `overrides` holds only the CLIs the operator explicitly set;
+   * `available` is the user-selectable mode id list (yolo/workspace-write/...).
+   */
+  getProjectCliModes(projectName: string) {
+    return this.http.get<{
+      resolved: Record<string, { mode: string; source: string; args: string[] }>;
+      overrides: Record<string, string>;
+      available: string[];
+    }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/cli-modes`);
+  }
+
+  /**
+   * Write one CLI's permission mode for a project. Pass an empty string to
+   * clear the override (the CLI reverts to global/default = YOLO). Takes
+   * effect on the next CLI spawn without a backend restart. Returns the
+   * resolved mode + source + spawned args after the write.
+   */
+  setProjectCliMode(projectName: string, cliType: string, mode: string) {
+    return this.http.put<{ cli: string; mode: string; source: string; args: string[] }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/cli-mode`,
+      { cliType, mode },
+    );
   }
 
   /**

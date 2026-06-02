@@ -52,6 +52,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [cli-skills/cli-codex.md](cli-skills/cli-codex.md) | OpenAI Codex CLI driver: `--json` frame model, session capture, watchdog parity with Claude (ADR-0030), quota probe, common tasks. |
 | [cli-skills/cli-copilot.md](cli-skills/cli-copilot.md) | GitHub Copilot CLI driver: PTY interaction, slash-command probes, model handling. |
 | [cli-skills/cli-gemini.md](cli-skills/cli-gemini.md) | Google Gemini CLI driver: stream-json parsing, session capture, /stats PTY probe. |
+| [cli-skills/sandbox-and-yolo.md](cli-skills/sandbox-and-yolo.md) | Per-CLI permission/sandbox/YOLO modes: why YOLO is the default, the mode → flags table for all four CLIs, the per-project override surface, and the `effective-mode` probe + `source` semantics. |
 
 ## Setup and onboarding (operator-facing)
 

@@ -1224,6 +1224,19 @@ public record ProjectSettings
     /// when <see cref="MaxParallelism"/> &gt; 1.
     /// </summary>
     public string IntegrationStrategy { get; init; } = IntegrationStrategies.DirectMerge;
+
+    /// <summary>
+    /// Per-CLI permission / sandbox mode override. Map of <see cref="CliTypes"/>
+    /// id (<c>claude</c> / <c>codex</c> / <c>gemini</c> / <c>copilot</c>) to a
+    /// mode id from <see cref="CliPermissionModes"/>. A missing CLI key means
+    /// "no project override" and resolves to the platform default
+    /// (<see cref="CliPermissionModes.Yolo"/>) or, where detectable, the CLI's
+    /// global config. The resolved mode is rendered to concrete flags by
+    /// <see cref="CliPermissionFlags"/> on every spawn, so changes take effect
+    /// on the next run without a backend restart. Persisted in
+    /// <c>project-settings.json</c>.
+    /// </summary>
+    public Dictionary<string, string>? CliModes { get; init; }
 }
 
 /// <summary>
@@ -1526,6 +1539,17 @@ public record SetIntegrationStrategyRequest
 public record SetAutoPushStrategyRequest
 {
     public string Strategy { get; init; } = AutoPushStrategies.OnCompleted;
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/cli-mode</c>. Sets the per-project
+/// permission mode for one CLI. A null / empty <see cref="Mode"/> clears the
+/// override so the CLI reverts to the platform default (YOLO) / global config.
+/// </summary>
+public record SetCliModeRequest
+{
+    public string CliType { get; init; } = "";
+    public string? Mode { get; init; }
 }
 
 public record SetOrchestratorModelRequest

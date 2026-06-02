@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services;
@@ -260,6 +261,127 @@ public class ProjectSettingsService
             Persist();
         }
         _logger.LogInformation("Pipeline step '{StepId}' config updated for project {Project}", stepId, projectName);
+    }
+
+    /// <summary>
+    /// Sets the per-project permission mode for one CLI
+    /// (<see cref="ProjectSettings.CliModes"/>). A null / empty / unknown
+    /// <paramref name="mode"/> clears the override so the CLI reverts to the
+    /// platform default (YOLO) / global config. Invalid CLI ids are ignored.
+    /// </summary>
+    public void SetCliMode(string projectName, string cliType, string? mode)
+    {
+        if (!CliTypes.IsValid(cliType)) return;
+        EnsureLoaded();
+        var cli = CliTypes.Normalize(cliType);
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var map = current.CliModes is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(current.CliModes, StringComparer.OrdinalIgnoreCase);
+
+            // Empty/unknown mode clears the override (revert to default). A valid
+            // mode is stored canonically so only known ids ever land on disk.
+            if (string.IsNullOrWhiteSpace(mode) || !CliPermissionModes.IsValid(mode))
+                map.Remove(cli);
+            else
+                map[cli] = CliPermissionModes.Normalize(mode);
+
+            _cache[projectName] = current with { CliModes = map.Count == 0 ? null : map };
+            Persist();
+        }
+        _logger.LogInformation("CLI permission mode for {Cli} set to {Mode} for project {Project}",
+            cli, string.IsNullOrWhiteSpace(mode) ? "(default)" : CliPermissionModes.Normalize(mode), projectName);
+    }
+
+    /// <summary>
+    /// Resolves the effective permission mode for one CLI in one project.
+    /// Order: explicit per-project override → detected global CLI config →
+    /// platform default (YOLO). The returned resolution carries the concrete
+    /// flags the driver will inject, so callers (probe endpoint, UI) can show
+    /// exactly what a spawn would do.
+    /// </summary>
+    public CliPermissionResolution ResolveCliMode(string projectName, string? cliType)
+    {
+        var cli = CliTypes.Normalize(cliType);
+        var settings = Get(projectName);
+
+        if (settings.CliModes != null
+            && settings.CliModes.TryGetValue(cli, out var configured)
+            && CliPermissionModes.IsValid(configured))
+        {
+            var mode = CliPermissionModes.Normalize(configured);
+            return new CliPermissionResolution
+            {
+                CliType = cli,
+                Mode = mode,
+                Source = CliPermissionSources.Project,
+                Args = CliPermissionFlags.For(cli, mode),
+            };
+        }
+
+        var global = TryDetectGlobalMode(cli);
+        if (global != null)
+        {
+            return new CliPermissionResolution
+            {
+                CliType = cli,
+                Mode = global,
+                Source = CliPermissionSources.Global,
+                Args = CliPermissionFlags.For(cli, global),
+            };
+        }
+
+        return new CliPermissionResolution
+        {
+            CliType = cli,
+            Mode = CliPermissionModes.Yolo,
+            Source = CliPermissionSources.Default,
+            Args = CliPermissionFlags.For(cli, CliPermissionModes.Yolo),
+        };
+    }
+
+    private static readonly Regex CodexSandboxModeRegex = new(
+        "sandbox_mode\\s*=\\s*\"(?<mode>[a-z-]+)\"",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Best-effort detection of a CLI's persisted global permission mode.
+    /// Only Codex stores a parseable mode (<c>sandbox_mode</c> in
+    /// <c>~/.codex/config.toml</c>); the other CLIs keep no comparable
+    /// file-based posture, so they return null and resolve to the default.
+    /// Returns null when nothing is detected.
+    /// </summary>
+    private static string? TryDetectGlobalMode(string cli)
+    {
+        if (!string.Equals(cli, CliTypes.Codex, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        try
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrEmpty(home)) return null;
+            var configPath = Path.Combine(home, ".codex", "config.toml");
+            if (!File.Exists(configPath)) return null;
+
+            var match = CodexSandboxModeRegex.Match(File.ReadAllText(configPath));
+            if (!match.Success) return null;
+
+            return match.Groups["mode"].Value.ToLowerInvariant() switch
+            {
+                "danger-full-access" => CliPermissionModes.Yolo,
+                "workspace-write" => CliPermissionModes.WorkspaceWrite,
+                "read-only" => CliPermissionModes.ReadOnly,
+                _ => null,
+            };
+        }
+        catch
+        {
+            // A missing / unreadable / malformed global config is not an error:
+            // we simply fall through to the platform default.
+            return null;
+        }
     }
 
     public void SetAnalysisSchedule(string projectName, string topic, string? cadence)

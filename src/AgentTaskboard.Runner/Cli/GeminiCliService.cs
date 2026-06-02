@@ -52,7 +52,8 @@ public sealed class GeminiCliService : CliExecutionServiceBase
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
-        string? model)
+        string? model,
+        string? permissionMode)
     {
         // gemini -p "<prompt>" -o stream-json --skip-trust -y [-m <id>] [-r <uuid>]
         //
@@ -82,8 +83,13 @@ public sealed class GeminiCliService : CliExecutionServiceBase
         psi.ArgumentList.Add(string.IsNullOrEmpty(prompt) ? " " : prompt);
         psi.ArgumentList.Add("-o");
         psi.ArgumentList.Add("stream-json");
-        psi.ArgumentList.Add("--skip-trust");
-        psi.ArgumentList.Add("-y");
+
+        // Permission posture is resolved per-project. Default YOLO renders the
+        // historic "--skip-trust -y" pair; every mode keeps --skip-trust so the
+        // folder-trust modal can never hang an unattended run. A null mode
+        // normalizes to YOLO. See CliPermissionFlags / the sandbox-and-yolo doc.
+        foreach (var flag in CliPermissionFlags.For(CliType, permissionMode))
+            psi.ArgumentList.Add(flag);
 
         if (!string.IsNullOrWhiteSpace(model))
         {

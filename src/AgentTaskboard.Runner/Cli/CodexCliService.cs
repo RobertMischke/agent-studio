@@ -66,7 +66,8 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
-        string? model)
+        string? model,
+        string? permissionMode)
     {
         // For Codex, sessionName is the session UUID (or null for a fresh session).
         // codex exec [resume <uuid>] [--json] [-m <model>] -
@@ -99,6 +100,13 @@ public sealed class CodexCliService : CliExecutionServiceBase
         // --json keeps stdout machine-readable so we can extract the session UUID
         // from the first thread.started (or legacy session_meta) frame.
         psi.ArgumentList.Add("--json");
+
+        // Sandbox posture is resolved per-project (default YOLO ==
+        // --sandbox danger-full-access). This replaces the global
+        // ~/.codex/config.toml sandbox_mode stop-gap: a null mode normalizes to
+        // YOLO so the danger-full-access default holds even without the file.
+        foreach (var flag in CliPermissionFlags.For(CliType, permissionMode))
+            psi.ArgumentList.Add(flag);
 
         if (!string.IsNullOrWhiteSpace(model))
         {
@@ -142,13 +150,15 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
-        string? model)
+        string? model,
+        string? permissionMode = null)
         => BuildStartInfo(
             prompt,
             workingDirectory,
             sessionName,
             resumeSession,
-            NormalizeModelForInvocation(model));
+            NormalizeModelForInvocation(model),
+            permissionMode);
 
     internal string? BuildPromptStdinPayloadForTest(
         string prompt,

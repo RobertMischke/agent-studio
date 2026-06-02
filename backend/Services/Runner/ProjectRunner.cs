@@ -756,9 +756,13 @@ public class ProjectRunner
                 });
 
             _activeCliType = cli.CliType;
+            // Resolve the per-project permission mode at spawn time (default
+            // YOLO). Reading the live ProjectSettingsService here is what makes
+            // a toggle take effect on the next run without a backend restart.
+            var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, Entry.RootPath,
-                plan.SessionToResume, plan.ResumeFlag, info.Model, info.FolderPath, ct);
+                plan.SessionToResume, plan.ResumeFlag, info.Model, info.FolderPath, permissionMode, ct);
 
             if (execution == null)
             {

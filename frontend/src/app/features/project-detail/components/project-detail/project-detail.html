@@ -316,6 +316,57 @@
         </p>
       </section>
     }
+
+    <section class="proj-detail__group">
+      <h3>CLI permission modes</h3>
+      <p class="proj-detail__warn" data-testid="project-detail-cli-mode-warning">
+        <span class="proj-detail__warn-icon" aria-hidden="true">⚠</span>
+        <span><strong>YOLO is the default for agent-orchestrated operation.</strong> It skips every
+        permission and sandbox prompt so unattended pipeline runs never hang. Only pick a more
+        restrictive mode if you understand the implications — a sandboxed agent may stall waiting
+        for approval that no human is watching for.</span>
+      </p>
+      <div class="proj-detail__cli-modes" data-testid="project-detail-cli-modes">
+        @for (row of cliModeRows(); track row.cliType) {
+          <div class="proj-detail__cli-row"
+               [attr.data-testid]="'cli-mode-row-' + row.cliType">
+            <span class="proj-detail__cli-name">
+              <span class="proj-detail__cli-icon" aria-hidden="true">{{ row.icon }}</span>
+              {{ row.label }}
+            </span>
+            <span class="proj-detail__cli-source"
+                  [attr.data-testid]="'cli-mode-source-' + row.cliType"
+                  [class.proj-detail__cli-source--project]="row.source === 'project'"
+                  [appTooltip]="cliSourceHint(row.source)">{{ cliSourceLabel(row.source) }}</span>
+            <select class="proj-detail__cli-select"
+                    [attr.data-testid]="'cli-mode-select-' + row.cliType"
+                    [appTooltip]="cliModeHint(cliModeDraft[row.cliType])"
+                    [disabled]="cliModeBusy[row.cliType]"
+                    [(ngModel)]="cliModeDraft[row.cliType]"
+                    (ngModelChange)="onCliModeChange(row.cliType)">
+              @for (mode of cliModeAvailable(); track mode) {
+                <option [value]="mode">{{ cliModeLabel(mode) }}</option>
+              }
+            </select>
+            @if (row.source === 'project') {
+              <button type="button"
+                      class="proj-detail__cli-reset"
+                      [attr.data-testid]="'cli-mode-reset-' + row.cliType"
+                      [disabled]="cliModeBusy[row.cliType]"
+                      [appTooltip]="'Clear this project override and revert to the CLI’s global config / platform default.'"
+                      (click)="resetCliMode(row.cliType)">Reset</button>
+            }
+            <code class="proj-detail__cli-args"
+                  [attr.data-testid]="'cli-mode-args-' + row.cliType">{{ row.args.length ? row.args.join(' ') : '(no flags)' }}</code>
+          </div>
+        }
+      </div>
+      <p class="proj-detail__hint">
+        Shows the effective permission mode each CLI spawns with and where it came from
+        (<strong>project</strong> override, the CLI’s <strong>global</strong> config, or the
+        <strong>default</strong>). Changes take effect on the next task run without a backend restart.
+      </p>
+    </section>
   }
 
   @if (view() === 'orchestrator') {

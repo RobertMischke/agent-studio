@@ -164,13 +164,21 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             : (false, $"--version probe failed at '{probe.Path}'"));
     }
 
-    /// <summary>Subclass hook: build the actual command-line for this CLI.</summary>
+    /// <summary>
+    /// Subclass hook: build the actual command-line for this CLI.
+    /// <paramref name="permissionMode"/> is the resolved per-project permission
+    /// mode (one of <see cref="CliPermissionModes"/>); subclasses render it to
+    /// concrete flags via <see cref="CliPermissionFlags.For"/>. Null normalizes
+    /// to <see cref="CliPermissionModes.Yolo"/> so a caller that does not thread
+    /// a mode keeps the historic maximum-autonomy behaviour.
+    /// </summary>
     protected abstract ProcessStartInfo BuildStartInfo(
         string prompt,
         string workingDirectory,
         string? sessionName,
         bool resumeSession,
-        string? model);
+        string? model,
+        string? permissionMode);
 
     /// <summary>
     /// Subclass hook: return the text the runner should write to the child's
@@ -250,6 +258,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         bool resumeSession = false,
         string? model = null,
         string? jobFolderPath = null,
+        string? permissionMode = null,
         CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
@@ -276,7 +285,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
 
         var invocationModel = NormalizeModelForInvocation(model);
-        var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, invocationModel);
+        var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, invocationModel, permissionMode);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError  = true;
         // ADR-0014: stdin is default-deny. We only redirect (and pipe a

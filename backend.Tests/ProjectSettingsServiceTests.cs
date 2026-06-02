@@ -191,6 +191,71 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Equal(IntegrationStrategies.DirectMerge, svc.Get("runbook").IntegrationStrategy);
     }
 
+    [Fact]
+    public void ResolveCliMode_UnconfiguredProject_DefaultsToYolo()
+    {
+        var svc = Build();
+
+        var r = svc.ResolveCliMode("new-project", CliTypes.Claude);
+
+        Assert.Equal(CliPermissionModes.Yolo, r.Mode);
+        Assert.Equal(CliPermissionSources.Default, r.Source);
+        Assert.Equal(["--dangerously-skip-permissions"], r.Args);
+    }
+
+    [Fact]
+    public void SetCliMode_OverridePersistsAcrossReloadAndIsSourcedToProject()
+    {
+        var svc = Build();
+
+        svc.SetCliMode("runbook", CliTypes.Codex, CliPermissionModes.ReadOnly);
+
+        var reloaded = Build();
+        var r = reloaded.ResolveCliMode("runbook", CliTypes.Codex);
+        Assert.Equal(CliPermissionModes.ReadOnly, r.Mode);
+        Assert.Equal(CliPermissionSources.Project, r.Source);
+        Assert.Equal(["--sandbox", "read-only"], r.Args);
+    }
+
+    [Fact]
+    public void SetCliMode_BlankClearsOverrideRevertingToDefault()
+    {
+        var svc = Build();
+        svc.SetCliMode("runbook", CliTypes.Gemini, CliPermissionModes.WorkspaceWrite);
+        Assert.Equal(CliPermissionSources.Project, svc.ResolveCliMode("runbook", CliTypes.Gemini).Source);
+
+        svc.SetCliMode("runbook", CliTypes.Gemini, null);
+
+        var r = svc.ResolveCliMode("runbook", CliTypes.Gemini);
+        Assert.Equal(CliPermissionModes.Yolo, r.Mode);
+        Assert.Equal(CliPermissionSources.Default, r.Source);
+        Assert.Null(svc.Get("runbook").CliModes);
+    }
+
+    [Fact]
+    public void SetCliMode_UnknownCli_IsIgnored()
+    {
+        var svc = Build();
+
+        svc.SetCliMode("runbook", "not-a-cli", CliPermissionModes.ReadOnly);
+
+        Assert.Null(svc.Get("runbook").CliModes);
+    }
+
+    [Fact]
+    public void SetCliMode_OnlyOverridesTheNamedCli_OthersStayDefault()
+    {
+        var svc = Build();
+
+        svc.SetCliMode("runbook", CliTypes.Claude, CliPermissionModes.ReadOnly);
+
+        Assert.Equal(CliPermissionSources.Project, svc.ResolveCliMode("runbook", CliTypes.Claude).Source);
+        // Gemini/Copilot have no global-config probe, so an un-overridden CLI is
+        // always the platform default here regardless of the host's ~/.codex.
+        Assert.Equal(CliPermissionSources.Default, svc.ResolveCliMode("runbook", CliTypes.Gemini).Source);
+        Assert.Equal(CliPermissionModes.Yolo, svc.ResolveCliMode("runbook", CliTypes.Copilot).Mode);
+    }
+
     private ProjectSettingsService Build()
     {
         var config = new ConfigurationBuilder()

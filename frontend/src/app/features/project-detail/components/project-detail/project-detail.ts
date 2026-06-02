@@ -3,6 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
+import { CLI_TYPES, type CliType } from '../../../../models/task.model';
+import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import { OrchestratorRunner_KnownModels, PipelineStep_KnownModels, PipelineStep_GateModes } from './project-detail.models';
 import type { PipelineCatalogueStep, PipelineStepSetting } from '../../../../features/task-pipeline';
@@ -107,6 +109,51 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   laneSortMeta(strategy: string | null | undefined) {
     return laneSortStrategyMeta(strategy);
   }
+
+  // Per-CLI permission/sandbox mode (YOLO default). One row per CLI shows the
+  // effective mode + where it came from (project override / global config /
+  // platform default), with a dropdown to override and a reset-to-default.
+  // Defaults to YOLO so orchestrated pipeline runs never hang on a prompt.
+  readonly cliTypes = CLI_TYPES;
+  readonly cliModeResolved = signal<Record<string, { mode: string; source: string; args: string[] }>>({});
+  readonly cliModeAvailable = signal<readonly string[]>(['yolo', 'workspace-write', 'read-only', 'custom']);
+  /** Bound select value per CLI; mirrors the resolved effective mode until the operator picks one. */
+  readonly cliModeDraft: Record<string, string> = {};
+  /** Per-CLI write in flight; disables that row's controls until the PUT resolves. */
+  readonly cliModeBusy: Record<string, boolean> = {};
+
+  readonly cliModeMeta: Record<string, { label: string; hint: string }> = {
+    'yolo': { label: 'YOLO', hint: 'Maximum autonomy — skips every permission/sandbox prompt. Default for agent-orchestrated runs.' },
+    'workspace-write': { label: 'Workspace-Write', hint: 'Agent may write inside the workspace but is sandboxed from the wider system.' },
+    'read-only': { label: 'Read-only', hint: 'Agent may read and plan but not write (plan-mode for Claude, read-only sandbox for Codex).' },
+    'custom': { label: 'Custom', hint: 'Inject no permission flags — the CLI obeys whatever its own config files dictate.' },
+  };
+  readonly cliSourceMeta: Record<string, { label: string; hint: string }> = {
+    'project': { label: 'project', hint: 'Set explicitly for this project — overrides global config and the platform default.' },
+    'global': { label: 'global', hint: 'Inherited from the CLI’s own global config file (e.g. ~/.codex/config.toml).' },
+    'default': { label: 'default', hint: 'Platform default (YOLO) — no project override and no global config detected.' },
+  };
+
+  cliModeLabel(mode: string | null | undefined) { return this.cliModeMeta[mode ?? '']?.label ?? mode ?? ''; }
+  cliModeHint(mode: string | null | undefined) { return this.cliModeMeta[mode ?? '']?.hint ?? ''; }
+  cliSourceLabel(source: string | null | undefined) { return this.cliSourceMeta[source ?? '']?.label ?? source ?? ''; }
+  cliSourceHint(source: string | null | undefined) { return this.cliSourceMeta[source ?? '']?.hint ?? ''; }
+
+  /** One row per CLI: effective mode + source + the args the next spawn will inject. */
+  readonly cliModeRows = computed(() => {
+    const resolved = this.cliModeResolved();
+    return this.cliTypes.map((cli) => {
+      const r = resolved[cli];
+      return {
+        cliType: cli as string,
+        label: cliTypeLabel(cli as CliType),
+        icon: cliTypeIcon(cli as CliType),
+        mode: r?.mode ?? 'yolo',
+        source: r?.source ?? 'default',
+        args: r?.args ?? [],
+      };
+    });
+  });
 
   // Pre/post pipeline-step config. The catalogue (which steps exist + what
   // each accepts) is project-independent and fetched once; the per-project
@@ -262,6 +309,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.refreshAll();
     this.loadPipelineConfig();
+    this.refreshCliModes();
     // Cycle 3: skip the 6-endpoint refreshAll fan-out when the panel is in
     // a backgrounded tab. The pre-Cycle-3 cadence put 42 requests over a
     // 10 s window from the project-detail panel alone (see logs/perf
@@ -402,6 +450,48 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.setProjectOrchestratorModel(this.projectName(), model || null).subscribe({
       next: () => this.refreshAll(true),
       error: () => this.refreshAll(true)
+    });
+  }
+
+  /**
+   * Read the resolved per-CLI permission modes for this project. Fills the
+   * dropdown drafts from the effective mode so an un-overridden CLI shows its
+   * global/default posture rather than a blank control. Runs on panel open
+   * and after each write.
+   */
+  private refreshCliModes(): void {
+    this.jobService.getProjectCliModes(this.projectName()).subscribe({
+      next: (res) => {
+        this.cliModeResolved.set(res.resolved ?? {});
+        if (res.available?.length) this.cliModeAvailable.set(res.available);
+        for (const cli of this.cliTypes) {
+          const resolved = res.resolved?.[cli]?.mode ?? 'yolo';
+          if (this.cliModeDraft[cli] !== resolved) this.cliModeDraft[cli] = resolved;
+        }
+      },
+      error: () => { /* keep last known modes */ }
+    });
+  }
+
+  /**
+   * Persist one CLI's permission mode as a project override, then refresh the
+   * resolved map. Takes effect on the next spawn without a backend restart.
+   */
+  onCliModeChange(cli: string): void {
+    const mode = this.cliModeDraft[cli] ?? 'yolo';
+    this.cliModeBusy[cli] = true;
+    this.jobService.setProjectCliMode(this.projectName(), cli, mode).subscribe({
+      next: () => { this.cliModeBusy[cli] = false; this.refreshCliModes(); },
+      error: () => { this.cliModeBusy[cli] = false; this.refreshCliModes(); }
+    });
+  }
+
+  /** Clear a CLI's project override, reverting to global config / platform default. */
+  resetCliMode(cli: string): void {
+    this.cliModeBusy[cli] = true;
+    this.jobService.setProjectCliMode(this.projectName(), cli, '').subscribe({
+      next: () => { this.cliModeBusy[cli] = false; this.refreshCliModes(); },
+      error: () => { this.cliModeBusy[cli] = false; this.refreshCliModes(); }
     });
   }
 
