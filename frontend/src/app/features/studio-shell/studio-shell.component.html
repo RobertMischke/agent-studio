@@ -231,8 +231,9 @@
                        data-testid="studio-explorer-move-error">{{ msg }}</div>
                 }
                 @if (tabs().length > 0) {
-                  <!-- F27: Open tabs header is collapsible too. -->
-                  <app-section-header
+                  <!-- F27: Open tabs header is collapsible too — shares the
+                       app-pane-header section mode with the Workspaces header. -->
+                  <app-pane-header
                     [collapsible]="true"
                     [collapsed]="explorerSections.isCollapsed('open-tabs')"
                     title="Open tabs"

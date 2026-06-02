@@ -1,7 +1,8 @@
 <section class="studio-explorer-tree">
-  <!-- Panel section header (F27 testid preserved): collapses the whole
-       tree and hosts the "show all projects" affordance. -->
-  <app-section-header
+  <!-- Panel header (F27 testid preserved): the shared collapsible panel
+       header (app-pane-header section mode). Collapses the whole tree and
+       hosts the "show all projects" affordance. -->
+  <app-pane-header
     [collapsible]="true"
     [collapsed]="isCollapsed('workspace')"
     title="Workspaces"
@@ -18,7 +19,7 @@
             (click)="showAll.emit(); $event.stopPropagation()">
       <app-studio-icon name="grid" [size]="11"></app-studio-icon>
     </button>
-  </app-section-header>
+  </app-pane-header>
 
   @if (!isCollapsed('workspace')) {
     @for (g of groups(); track g.id) {
@@ -47,16 +48,25 @@
                  (blur)="commitRename()" />
         </div>
       } @else {
-        <app-section-header
+        <!-- F-studio-sidebar: a single workspace is a tree node, NOT a
+             panel header. It renders as a tree-row (folder glyph + name +
+             count) under the "Workspaces" panel header. Click/​chevron
+             toggle collapse, double-click opens inline rename, right-click
+             opens the rename menu. The `studio-explorer-ws-group-<id>`
+             testid + aria-expanded contract is preserved for the F46
+             specs. -->
+        <app-tree-row
+          level="root"
           class="studio-explorer-tree__ws-head"
-          [collapsible]="true"
-          [collapsed]="isCollapsed('ws:' + g.id)"
-          [title]="g.displayName"
+          glyph="folder"
+          [chevron]="isCollapsed('ws:' + g.id) ? 'collapsed' : 'expanded'"
+          [label]="g.displayName"
           [count]="g.projects.length"
           [testid]="'studio-explorer-ws-group-' + g.id"
           appTooltip="Double-click or right-click to rename this workspace"
-          (collapsedChange)="onWsHeaderToggle(g)"
-          (dblclick)="startRenameWorkspace(g)"
+          (chevronClick)="onWsHeaderToggle(g)"
+          (selectRequest)="onWsHeaderToggle(g)"
+          (secondary)="startRenameWorkspace(g)"
           (contextmenu)="openWsContextMenu($event, g)" />
       }
 

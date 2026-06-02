@@ -16,7 +16,7 @@ import type { RegistryWorkspaceListItem } from '../../../../models/task.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../../../components/empty-state/empty-state.component';
-import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import { TooltipDirective } from '../../../../components/tooltip';
 import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../../components/menu';
@@ -92,7 +92,7 @@ function folderTail(path: string): string {
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent],
+  imports: [PaneHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',
@@ -237,10 +237,10 @@ export class ExplorerWorkspaceTreeComponent {
 
   /**
    * Toggle a workspace folder's collapsed state from the live service value
-   * rather than the section-header's `[collapsed]` input. A double-click (used
-   * to open inline rename) fires two click events faster than the input
-   * re-renders, so both clicks would otherwise read the same stale value and
-   * collapse the folder instead of netting back to its prior state.
+   * rather than the tree-row's `[chevron]` input. A double-click (used to open
+   * inline rename) fires two click events faster than the row re-renders, so
+   * both clicks would otherwise read the same stale value and collapse the
+   * folder instead of netting back to its prior state.
    */
   onWsHeaderToggle(g: ExplorerWorkspaceGroup): void {
     const key = 'ws:' + g.id;

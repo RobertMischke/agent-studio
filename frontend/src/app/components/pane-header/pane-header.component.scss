@@ -78,3 +78,83 @@
     color: var(--studio-fg-strong);
   }
 }
+
+/*
+ * Section mode — the compact uppercase collapsible header used by the
+ * sidebar / explorer panel headers (Workspaces, Open tabs). Absorbed
+ * verbatim from the former section-header.component.scss so the look is
+ * unchanged after the two header controls were consolidated onto
+ * app-pane-header.
+ */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg);
+  width: 100%;
+  text-align: left;
+  user-select: none;
+
+  &--btn {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover {
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg-strong);
+    }
+  }
+
+  &__chev {
+    display: inline-grid;
+    place-items: center;
+    width: 12px;
+    color: var(--studio-fg-muted);
+    flex-shrink: 0;
+  }
+
+  &__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    color: var(--studio-fg-muted);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__count {
+    min-width: 18px;
+    height: 14px;
+    padding: 0 5px;
+    background: var(--studio-bg-elevated);
+    color: var(--studio-fg-muted);
+    border-radius: 7px;
+    font-size: 10px;
+    font-weight: 500;
+    display: grid;
+    place-items: center;
+    text-transform: none;
+    letter-spacing: 0;
+    flex-shrink: 0;
+  }
+}

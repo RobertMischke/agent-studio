@@ -4,6 +4,7 @@
         [class.tree-row--root]="level() === 'root'"
         [class.tree-row--child]="level() === 'child'"
         [attr.data-testid]="testid()"
+        [attr.aria-expanded]="chevron() === null ? null : (chevron() === 'expanded')"
         (click)="onSelect($event)"
         (dblclick)="onSecondary($event)">
   @if (chevron(); as c) {
