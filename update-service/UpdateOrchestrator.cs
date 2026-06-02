@@ -139,7 +139,7 @@ public sealed class UpdateOrchestrator
             _store.SetHead(headAfterPull);
 
             // PHASE 4 — building
-            SetPhase("building", "npm install if package-lock changed", runId, startedAt);
+            SetPhase("building", "npm install (frontend deps)", runId, startedAt);
             var (buildRc, buildOut, buildRan) = await MaybeRunNpmInstallAsync(headBefore, headAfterPull, ct);
             if (buildRan) folder.WriteOutput("npm-install-output.txt", buildOut);
             if (buildRc != 0)
@@ -485,14 +485,16 @@ public sealed class UpdateOrchestrator
 
     private async Task<(int Rc, string Output, bool Ran)> MaybeRunNpmInstallAsync(string before, string after, CancellationToken ct)
     {
-        // Best-effort detection: did frontend/package-lock.json change?
-        var (diffRc, diffOut) = await RunBashAsync("-c",
-            $"git diff --name-only {before} {after}",
-            _options.StableCheckoutDir, ct);
-        if (diffRc != 0) return (0, diffOut, false);
-        if (!diffOut.Contains("frontend/package-lock.json", StringComparison.Ordinal))
-            return (0, "package-lock.json unchanged; skipping", false);
-
+        // Always run npm install (idempotent: fast when the dep tree already
+        // matches the lock, installs anything missing otherwise). The previous
+        // "only if frontend/package-lock.json changed in this pull" optimisation
+        // skipped installs when node_modules had drifted from the lock (a dep
+        // added in a commit window a prior update skipped), leaving the frontend
+        // build failing on a missing module after a successful-looking update
+        // (the 2026-06-02 @microsoft/signalr incident). npm install IS the cheap
+        // check-and-fix; a non-zero rc aborts the update before the restart.
+        _ = before;
+        _ = after;
         var (rc, output) = await RunBashAsync("-c",
             "cd frontend && npm install",
             _options.StableCheckoutDir, ct);
