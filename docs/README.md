@@ -109,6 +109,7 @@ Read these before re-litigating a decision they already explored.
 | [research/path-forward-plan-2026-05.md](research/path-forward-plan-2026-05.md) | Phase plan that the autonomy-scale work executes against. |
 | [research/planning-research-task-kinds-2026-05.md](research/planning-research-task-kinds-2026-05.md) | Task-kind taxonomy (Bug / User Story / Chore) that informed the backlog-lane work. |
 | [research/runner-outcome-visibility-2026-05-11.md](research/runner-outcome-visibility-2026-05-11.md) | Concrete runner outcome categories replacing broad heuristicfallback for permission blocks, watchdog kills, missing sentinels, and classifier misses. |
+| [research/auto-review-postprocessing-consolidation-2026-06.md](research/auto-review-postprocessing-consolidation-2026-06.md) | Why `4-auto-review` stalls (decoupled off-by-default poll) and how to consolidate review into synchronous orchestrator post-processing as its own task/step, decoupled from runner throughput. Grounding for the `post-processing-orchestrator-lane` epic (ASS-176). |
 
 ## Schemas (the wire / disk shapes)
 
