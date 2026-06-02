@@ -6,7 +6,10 @@ import {
   OnDestroy,
   inject,
 } from '@angular/core';
-import { MediaLightboxService } from '../services/media-lightbox.service';
+import {
+  MediaLightboxImage,
+  MediaLightboxService,
+} from '../services/media-lightbox.service';
 
 /**
  * Click-to-enlarge for markdown-rendered images.
@@ -21,7 +24,10 @@ import { MediaLightboxService } from '../services/media-lightbox.service';
  * On click within the host, the directive walks up from `event.target`
  * looking for an `<img>` (or a wrapper carrying `data-results-lightbox`
  * from the legacy beautiful-results renderer) and opens
- * `MediaLightboxService` with the image's `src` / `alt`.
+ * `MediaLightboxService`. It hands over *every* usable image in the host
+ * as a gallery plus the index of the one that was clicked, so the
+ * lightbox can page the surface's images with the arrow keys (evidence /
+ * results screenshots, a chat thread with several attachments, ...).
  *
  * Accessibility:
  *  - On view init and on any DOM mutation under the host (new agent text
@@ -72,20 +78,14 @@ export class MarkdownImageLightboxDirective implements AfterViewInit, OnDestroy 
     const legacy = target.closest<HTMLElement>('[data-results-lightbox]');
     if (legacy) {
       event.preventDefault();
-      this.lightbox.open({
-        src: legacy.getAttribute('data-results-lightbox') ?? '',
-        alt: legacy.getAttribute('data-results-alt') ?? '',
-      });
+      this.openGalleryAt(legacy);
       return;
     }
     const img = target.closest<HTMLImageElement>('img');
     if (!img || !this.host.nativeElement.contains(img)) return;
     if (!isUsableSrc(img.getAttribute('src'))) return;
     event.preventDefault();
-    this.lightbox.open({
-      src: img.currentSrc || img.src,
-      alt: img.getAttribute('alt') ?? '',
-    });
+    this.openGalleryAt(img);
   }
 
   @HostListener('keydown', ['$event'])
@@ -97,10 +97,52 @@ export class MarkdownImageLightboxDirective implements AfterViewInit, OnDestroy 
     const img = target as HTMLImageElement;
     if (!isUsableSrc(img.getAttribute('src'))) return;
     event.preventDefault();
-    this.lightbox.open({
-      src: img.currentSrc || img.src,
-      alt: img.getAttribute('alt') ?? '',
-    });
+    this.openGalleryAt(img);
+  }
+
+  /**
+   * Open the lightbox as a gallery of every usable image under the host,
+   * positioned on the `anchor` the user activated. Falls back to a
+   * single-image open if the anchor cannot be located in the collected
+   * set (defensive - should not happen for in-DOM elements).
+   */
+  private openGalleryAt(anchor: HTMLElement): void {
+    const { images, anchors } = this.collectGallery();
+    if (images.length === 0) return;
+    const index = anchors.indexOf(anchor);
+    this.lightbox.openGallery({ images, index: index < 0 ? 0 : index });
+  }
+
+  /**
+   * Collect the host's images in document order. Each entry pairs the
+   * lightbox payload with the DOM element that represents it (the bare
+   * `<img>`, or the legacy `[data-results-lightbox]` button wrapper) so a
+   * click target can be mapped back to a gallery index. The wrapper's
+   * data attributes win over the inner `<img>` so a thumbnail that points
+   * at a full-res asset still enlarges the full-res one.
+   */
+  private collectGallery(): { images: MediaLightboxImage[]; anchors: HTMLElement[] } {
+    const images: MediaLightboxImage[] = [];
+    const anchors: HTMLElement[] = [];
+    const seenWrappers = new Set<HTMLElement>();
+    this.host.nativeElement
+      .querySelectorAll<HTMLImageElement>('img')
+      .forEach((img) => {
+        const wrapper = img.closest<HTMLElement>('[data-results-lightbox]');
+        if (wrapper) {
+          if (seenWrappers.has(wrapper)) return;
+          seenWrappers.add(wrapper);
+          const src = wrapper.getAttribute('data-results-lightbox') ?? '';
+          if (!isUsableSrc(src)) return;
+          images.push({ src, alt: wrapper.getAttribute('data-results-alt') ?? '' });
+          anchors.push(wrapper);
+          return;
+        }
+        if (!isUsableSrc(img.getAttribute('src'))) return;
+        images.push({ src: img.currentSrc || img.src, alt: img.getAttribute('alt') ?? '' });
+        anchors.push(img);
+      });
+    return { images, anchors };
   }
 
   private markImages(): void {

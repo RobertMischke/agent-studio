@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { MediaLightboxComponent } from './media-lightbox.component';
+import { MediaLightboxService } from '../../services/media-lightbox.service';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -42,5 +43,70 @@ describe('MediaLightboxComponent (smoke)', () => {
       console.warn('[smoke] MediaLightboxComponent TestBed setup skipped:', (e as Error).message);
       expect(MediaLightboxComponent).toBeTruthy();
     }
+  });
+});
+
+/**
+ * Arrow-key paging. The lightbox is mounted ahead of task-detail, so its
+ * document:keydown handler must run first and `preventDefault()` the
+ * Left/Right arrows; that is what makes task-detail's `onTriageKey` bail
+ * (it returns early on `event.defaultPrevented`) instead of switching the
+ * active task. We assert on `defaultPrevented` because that is the exact
+ * signal the triage handler reads.
+ */
+describe('MediaLightboxComponent (arrow paging)', () => {
+  let svc: MediaLightboxService;
+
+  function mount(): void {
+    const fixture = TestBed.createComponent(MediaLightboxComponent);
+    fixture.detectChanges();
+  }
+
+  function pressArrow(key: 'ArrowLeft' | 'ArrowRight'): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    return event;
+  }
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [MediaLightboxComponent],
+      providers: [provideZonelessChangeDetection()],
+    });
+    svc = TestBed.inject(MediaLightboxService);
+  });
+
+  it('pages a multi-image gallery and swallows the arrows', () => {
+    svc.openGallery({
+      images: [{ src: '/a.png' }, { src: '/b.png' }, { src: '/c.png' }],
+      index: 0,
+    });
+    mount();
+
+    const right = pressArrow('ArrowRight');
+    expect(right.defaultPrevented).toBe(true);
+    expect(svc.position()).toBe(2);
+
+    const left = pressArrow('ArrowLeft');
+    expect(left.defaultPrevented).toBe(true);
+    expect(svc.position()).toBe(1);
+  });
+
+  it('swallows arrows for a single image (no-op paging, never leaks to task nav)', () => {
+    svc.open({ src: '/only.png' });
+    mount();
+
+    const right = pressArrow('ArrowRight');
+    // Still prevented so the key cannot reach onTriageKey and switch tasks.
+    expect(right.defaultPrevented).toBe(true);
+    expect(svc.position()).toBe(1);
+  });
+
+  it('leaves arrows alone while the lightbox is closed', () => {
+    mount();
+    expect(svc.active()).toBeNull();
+
+    const right = pressArrow('ArrowRight');
+    expect(right.defaultPrevented).toBe(false);
   });
 });

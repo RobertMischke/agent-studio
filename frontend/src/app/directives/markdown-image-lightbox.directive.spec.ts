@@ -82,4 +82,37 @@ describe('MarkdownImageLightboxDirective', () => {
     img.click();
     expect(svc.active()).toBeNull();
   });
+
+  it('opens a gallery of every image in the host, positioned on the clicked one', () => {
+    const host = mount(
+      '<p><img src="/one.png" alt="One"></p>' +
+        '<p><img src="/two.png" alt="Two"></p>' +
+        '<p><img src="/three.png" alt="Three"></p>'
+    );
+    const imgs = host.querySelectorAll('img');
+    imgs[1].click();
+
+    expect(svc.count()).toBe(3);
+    expect(svc.position()).toBe(2);
+    expect(svc.active()?.src).toContain('/two.png');
+    // Arrows now page within this surface instead of switching tasks.
+    expect(svc.hasNext()).toBe(true);
+    svc.next();
+    expect(svc.active()?.src).toContain('/three.png');
+  });
+
+  it('builds the gallery from legacy results wrappers and bare images together', () => {
+    const host = mount(
+      '<figure><button type="button" data-results-lightbox="/full/a.png" data-results-alt="A"><img src="/thumb/a.png" alt="A"></button></figure>' +
+        '<img src="/b.png" alt="B">'
+    );
+    host.querySelector('button')!.click();
+
+    expect(svc.count()).toBe(2);
+    expect(svc.position()).toBe(1);
+    // Wrapper data-attr (full-res) wins over the inner thumbnail src.
+    expect(svc.active()?.src).toBe('/full/a.png');
+    svc.next();
+    expect(svc.active()?.src).toContain('/b.png');
+  });
 });

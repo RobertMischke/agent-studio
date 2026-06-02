@@ -11,6 +11,26 @@
             data-testid="media-lightbox-close"
             aria-label="Close"
             (click)="close(); $event.stopPropagation()">×</button>
+
+    @if (lightbox.count() > 1) {
+      <button type="button"
+              class="media-lightbox__nav media-lightbox__nav--prev"
+              data-testid="media-lightbox-prev"
+              aria-label="Previous image"
+              [disabled]="!lightbox.hasPrev()"
+              (click)="prev(); $event.stopPropagation()"
+              (keydown.enter)="prev(); $event.stopPropagation(); $event.preventDefault()"
+              (keydown.space)="prev(); $event.stopPropagation(); $event.preventDefault()">‹</button>
+      <button type="button"
+              class="media-lightbox__nav media-lightbox__nav--next"
+              data-testid="media-lightbox-next"
+              aria-label="Next image"
+              [disabled]="!lightbox.hasNext()"
+              (click)="next(); $event.stopPropagation()"
+              (keydown.enter)="next(); $event.stopPropagation(); $event.preventDefault()"
+              (keydown.space)="next(); $event.stopPropagation(); $event.preventDefault()">›</button>
+    }
+
     <figure class="media-lightbox__figure"
             (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <img class="media-lightbox__img"
@@ -22,5 +42,18 @@
                     data-testid="media-lightbox-caption">{{ media.alt }}</figcaption>
       }
     </figure>
+
+    <div class="media-lightbox__hint"
+         data-testid="media-lightbox-hint"
+         (click)="$event.stopPropagation()">
+      @if (lightbox.count() > 1) {
+        <span class="media-lightbox__hint-pos" data-testid="media-lightbox-position"
+          >Bild {{ lightbox.position() }} / {{ lightbox.count() }}</span>
+        <span class="media-lightbox__hint-sep" aria-hidden="true">·</span>
+        <span class="media-lightbox__hint-keys"><kbd>←</kbd> <kbd>→</kbd> blättern</span>
+        <span class="media-lightbox__hint-sep" aria-hidden="true">·</span>
+      }
+      <span class="media-lightbox__hint-keys"><kbd>Esc</kbd> schließen</span>
+    </div>
   </div>
 }

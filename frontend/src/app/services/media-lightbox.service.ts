@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 
 /**
  * App-wide image lightbox / enlarge view.
@@ -9,8 +9,16 @@ import { Injectable, signal } from '@angular/core';
  * stack (Escape, focus trap, etc.) instead of every surface re-inventing
  * its own zoom widget.
  *
- * Usage:
- *   inject(MediaLightboxService).open({ src, alt });
+ * Two entry points:
+ *   inject(MediaLightboxService).open({ src, alt });            // single image
+ *   inject(MediaLightboxService).openGallery({ images, index }); // paged set
+ *
+ * The gallery form lets a surface hand over every image it rendered plus
+ * the one that was clicked, so the lightbox can page Prev/Next with the
+ * arrow keys instead of the keys leaking up to the task-detail triage
+ * handler (which would switch tasks). `open()` is just a one-element
+ * gallery so the single-image callers (TipTap description editor, etc.)
+ * keep working unchanged.
  *
  * The lightbox component (`<app-media-lightbox>`) is mounted once at the
  * app shell. It binds `active()` to its template and calls `close()` on
@@ -22,22 +30,82 @@ export interface MediaLightboxRequest {
   readonly alt?: string | null;
 }
 
-export interface MediaLightboxState {
+export interface MediaLightboxGalleryRequest {
+  readonly images: ReadonlyArray<MediaLightboxRequest>;
+  /** Index of the image that was clicked; clamped into range. */
+  readonly index?: number;
+}
+
+export interface MediaLightboxImage {
   readonly src: string;
   readonly alt: string;
 }
 
+/** Backwards-compatible shape for the current image. */
+export type MediaLightboxState = MediaLightboxImage;
+
 @Injectable({ providedIn: 'root' })
 export class MediaLightboxService {
-  readonly active = signal<MediaLightboxState | null>(null);
+  private readonly images = signal<MediaLightboxImage[]>([]);
+  private readonly cursor = signal(0);
+
+  /** The image currently shown, or null when the lightbox is closed. */
+  readonly active = computed<MediaLightboxState | null>(() => {
+    const list = this.images();
+    if (list.length === 0) return null;
+    return list[this.cursor()] ?? null;
+  });
+
+  /** Total images in the open gallery (0 when closed). */
+  readonly count = computed(() => this.images().length);
+  /** 1-based position of the current image (0 when closed). */
+  readonly position = computed(() =>
+    this.images().length === 0 ? 0 : this.cursor() + 1
+  );
+  readonly hasPrev = computed(() => this.cursor() > 0);
+  readonly hasNext = computed(() => this.cursor() < this.images().length - 1);
 
   open(req: MediaLightboxRequest): void {
-    const src = (req.src ?? '').trim();
-    if (!src) return;
-    this.active.set({ src, alt: (req.alt ?? '').toString() });
+    const image = normalise(req);
+    if (!image) return;
+    this.images.set([image]);
+    this.cursor.set(0);
+  }
+
+  openGallery(req: MediaLightboxGalleryRequest): void {
+    const list: MediaLightboxImage[] = [];
+    for (const candidate of req.images ?? []) {
+      const image = normalise(candidate);
+      if (image) list.push(image);
+    }
+    if (list.length === 0) return;
+    const requested = req.index ?? 0;
+    const index = clamp(requested, 0, list.length - 1);
+    this.images.set(list);
+    this.cursor.set(index);
+  }
+
+  next(): void {
+    if (this.hasNext()) this.cursor.update((i) => i + 1);
+  }
+
+  prev(): void {
+    if (this.hasPrev()) this.cursor.update((i) => i - 1);
   }
 
   close(): void {
-    this.active.set(null);
+    this.images.set([]);
+    this.cursor.set(0);
   }
+}
+
+function normalise(req: MediaLightboxRequest | null | undefined): MediaLightboxImage | null {
+  const src = (req?.src ?? '').trim();
+  if (!src) return null;
+  return { src, alt: (req?.alt ?? '').toString() };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (Number.isNaN(value)) return min;
+  return Math.min(Math.max(Math.trunc(value), min), max);
 }
