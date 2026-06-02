@@ -61,7 +61,7 @@ import {
   WorkspaceOverlaysComponent,
   WorkspaceOverlaysService,
 } from './features/shell';
-import { E2ECleanupDialogComponent } from './features/dev-tools';
+import { E2ECleanupDialogComponent, TagManagerDialogComponent } from './features/dev-tools';
 import {
   UpdateBlockModalComponent,
   UpdateCenterComponent,
@@ -138,6 +138,7 @@ interface VerboseDebugContext {
     MediaLightboxComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,
+    TagManagerDialogComponent,
     WorkspaceOverlaysComponent,
     WorkspaceBannerComponent,
     WorkspaceCreateDialogComponent,
@@ -371,6 +372,7 @@ export class App implements OnInit, OnDestroy {
     this.effectiveCompactCards() ? 'Show full cards' : 'Show compact cards (titles only)',
   );
   readonly showE2ECleanup = signal(false);
+  readonly showTagManager = signal(false);
   readonly devToolsMenuOpen = signal(false);
   /**
    * Free-text query for the kanban search box. Matched as a case-insensitive
@@ -701,6 +703,12 @@ export class App implements OnInit, OnDestroy {
         label: 'Orchestrator config',
         hint: 'supervisor + meta-cycle flags',
       },
+      {
+        kind: 'row',
+        id: 'tag-manager',
+        label: 'Tag manager',
+        hint: 'add, edit, and remove registry tags',
+      },
     ];
     if (flags.updateStableEnabled || flags.deleteE2EJobsEnabled) {
       items.push({ kind: 'header', label: 'Dev tools' });
@@ -730,6 +738,9 @@ export class App implements OnInit, OnDestroy {
       case 'orch-config':
         this.onPickOrchestratorConfig();
         break;
+      case 'tag-manager':
+        this.onPickTagManager();
+        break;
       case 'update-stable':
         this.onPickUpdateStable();
         break;
@@ -758,6 +769,19 @@ export class App implements OnInit, OnDestroy {
   onPickDeleteE2E(): void {
     this.devToolsMenuOpen.set(false);
     this.showE2ECleanup.set(true);
+  }
+
+  onPickTagManager(): void {
+    this.devToolsMenuOpen.set(false);
+    this.showTagManager.set(true);
+  }
+
+  onTagManagerClosed(): void {
+    this.showTagManager.set(false);
+    // Pick up any out-of-band changes (e.g. a deletion that was reported
+    // back as a banner after the dialog had already started rendering)
+    // by refreshing the store from the server.
+    this.loadTagRegistry();
   }
 
   onPickOrchestratorConfig(): void {

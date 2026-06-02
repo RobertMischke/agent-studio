@@ -1,0 +1,201 @@
+<app-dialog eyebrow="Dev tool"
+            title="Tag manager"
+            subtitle="Workspace tag registry. Add, edit, and remove tags used across cards and filters."
+            role="dialog"
+            kind="default"
+            testid="tag-manager-dialog"
+            [width]="720"
+            (closeRequest)="closed.emit()"
+            (backdropClick)="onBackdropClick()">
+  @switch (phase()) {
+    @case ('loading') {
+      <div class="empty">Loading…</div>
+    }
+    @case ('error') {
+      <div class="empty empty--error">{{ errorText() }}</div>
+    }
+    @case ('list') {
+      @if (errorText()) {
+        <div class="banner banner--error" data-testid="tag-manager-banner">{{ errorText() }}</div>
+      }
+      <div class="toolbar">
+        <div class="toolbar__count">{{ tags().length }} tag{{ tags().length === 1 ? '' : 's' }}</div>
+        @if (!addOpen()) {
+          <button class="btn btn--primary"
+                  data-testid="tag-manager-add-toggle"
+                  (click)="openAdd()">＋ Add tag</button>
+        }
+      </div>
+
+      @if (addOpen()) {
+        <form class="form" data-testid="tag-manager-add-form" (submit)="$event.preventDefault(); submitAdd()">
+          <div class="form__row">
+            <label class="field">
+              <span class="field__label">Label *</span>
+              <input class="field__input"
+                     data-testid="tag-manager-add-label"
+                     type="text"
+                     maxlength="64"
+                     [ngModel]="addDraft().label"
+                     (ngModelChange)="patchAddDraft('label', $event)"
+                     name="add-label"
+                     autocomplete="off"
+                     required />
+            </label>
+            <label class="field">
+              <span class="field__label">Id <span class="field__hint">(optional, auto from label)</span></span>
+              <input class="field__input field__input--mono"
+                     data-testid="tag-manager-add-id"
+                     type="text"
+                     maxlength="32"
+                     placeholder="auto-kebab"
+                     [ngModel]="addDraft().id"
+                     (ngModelChange)="patchAddDraft('id', $event)"
+                     name="add-id"
+                     autocomplete="off"
+                     pattern="[a-z0-9-]*" />
+            </label>
+            <label class="field field--color">
+              <span class="field__label">Color</span>
+              <input class="field__color"
+                     data-testid="tag-manager-add-color"
+                     type="color"
+                     [ngModel]="addDraft().color"
+                     (ngModelChange)="patchAddDraft('color', $event)"
+                     name="add-color" />
+            </label>
+          </div>
+          <label class="field">
+            <span class="field__label">Description</span>
+            <input class="field__input"
+                   data-testid="tag-manager-add-desc"
+                   type="text"
+                   maxlength="160"
+                   [ngModel]="addDraft().description"
+                   (ngModelChange)="patchAddDraft('description', $event)"
+                   name="add-desc"
+                   autocomplete="off" />
+          </label>
+          @if (addError()) {
+            <div class="form__error" data-testid="tag-manager-add-error">{{ addError() }}</div>
+          }
+          <div class="form__actions">
+            <button type="button"
+                    class="btn btn--ghost"
+                    data-testid="tag-manager-add-cancel"
+                    [disabled]="addBusy()"
+                    (click)="cancelAdd()">Cancel</button>
+            <button type="submit"
+                    class="btn btn--primary"
+                    data-testid="tag-manager-add-submit"
+                    [disabled]="addBusy()">
+              {{ addBusy() ? 'Saving…' : 'Add tag' }}
+            </button>
+          </div>
+        </form>
+      }
+
+      @if (tags().length === 0) {
+        <div class="empty">No tags in the registry.</div>
+      } @else {
+        <ul class="list" data-testid="tag-manager-list">
+          @for (tag of tags(); track tag.id) {
+            <li class="row" [attr.data-testid]="'tag-manager-row-' + tag.id">
+              @if (isEditing(tag.id)) {
+                <form class="row__edit" (submit)="$event.preventDefault(); submitEdit()">
+                  <div class="row__edit-fields">
+                    <label class="field field--color">
+                      <span class="field__label">Color</span>
+                      <input class="field__color"
+                             data-testid="tag-manager-edit-color"
+                             type="color"
+                             [ngModel]="editDraft().color"
+                             (ngModelChange)="patchEditDraft('color', $event)"
+                             name="edit-color" />
+                    </label>
+                    <label class="field field--grow">
+                      <span class="field__label">Label *</span>
+                      <input class="field__input"
+                             data-testid="tag-manager-edit-label"
+                             type="text"
+                             maxlength="64"
+                             [ngModel]="editDraft().label"
+                             (ngModelChange)="patchEditDraft('label', $event)"
+                             name="edit-label"
+                             autocomplete="off"
+                             required />
+                    </label>
+                    <code class="row__id" [title]="tag.id">{{ tag.id }}</code>
+                  </div>
+                  <label class="field">
+                    <span class="field__label">Description</span>
+                    <input class="field__input"
+                           data-testid="tag-manager-edit-desc"
+                           type="text"
+                           maxlength="160"
+                           [ngModel]="editDraft().description"
+                           (ngModelChange)="patchEditDraft('description', $event)"
+                           name="edit-desc"
+                           autocomplete="off" />
+                  </label>
+                  @if (editError()) {
+                    <div class="form__error" data-testid="tag-manager-edit-error">{{ editError() }}</div>
+                  }
+                  <div class="row__edit-actions">
+                    <button type="button"
+                            class="btn btn--ghost btn--small"
+                            data-testid="tag-manager-edit-cancel"
+                            [disabled]="editBusy()"
+                            (click)="cancelEdit()">Cancel</button>
+                    <button type="submit"
+                            class="btn btn--primary btn--small"
+                            data-testid="tag-manager-edit-save"
+                            [disabled]="editBusy()">
+                      {{ editBusy() ? 'Saving…' : 'Save' }}
+                    </button>
+                  </div>
+                </form>
+              } @else {
+                <span class="row__swatch"
+                      [style.background]="tag.color || '#94a3b8'"
+                      [attr.aria-hidden]="true"></span>
+                <div class="row__main">
+                  <div class="row__title">{{ tag.label }}</div>
+                  <code class="row__id">{{ tag.id }}</code>
+                  @if (tag.description) {
+                    <div class="row__desc" [title]="tag.description">{{ tag.description }}</div>
+                  }
+                </div>
+                <div class="row__actions">
+                  <button class="btn btn--ghost btn--small"
+                          [attr.data-testid]="'tag-manager-edit-' + tag.id"
+                          (click)="startEdit(tag)">Edit</button>
+                  <button class="btn btn--danger btn--small"
+                          [attr.data-testid]="'tag-manager-delete-' + tag.id"
+                          (click)="confirmDelete(tag)">Delete</button>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+  <ng-container footer>
+    @switch (phase()) {
+      @case ('error') {
+        <div>
+          <button class="btn" (click)="refresh()">Retry</button>
+          <button class="btn btn--ghost" (click)="closed.emit()">Close</button>
+        </div>
+      }
+      @default {
+        <div>
+          <button class="btn btn--ghost"
+                  data-testid="tag-manager-close"
+                  (click)="closed.emit()">Close</button>
+        </div>
+      }
+    }
+  </ng-container>
+</app-dialog>

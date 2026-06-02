@@ -384,6 +384,10 @@
           (closed)="showE2ECleanup.set(false)"
           (didDelete)="onE2EDidDelete()" />
       }
+      @if (showTagManager()) {
+        <app-tag-manager-dialog
+          (closed)="onTagManagerClosed()" />
+      }
       @if (orchestratorSettingsOpen()) {
         <app-orchestrator-settings-modal
           (closed)="closeOrchestratorSettings()" />
@@ -710,6 +714,11 @@
         <app-e2e-cleanup-dialog
           (closed)="showE2ECleanup.set(false)"
           (didDelete)="onE2EDidDelete()" />
+      }
+
+      @if (showTagManager()) {
+        <app-tag-manager-dialog
+          (closed)="onTagManagerClosed()" />
       }
 
       @if (errorDialog.activeError(); as error) {

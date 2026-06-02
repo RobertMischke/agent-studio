@@ -8,6 +8,7 @@ Imports via `from './features/dev-tools'`. See [`index.ts`](./index.ts).
 
 - `UpdateStableConsoleComponent` — full-screen console for the "Update Stable" pull-and-restart flow.
 - `E2ECleanupDialogComponent` — bulk-delete generated e2e jobs by pattern.
+- `TagManagerDialogComponent` — workspace tag registry CRUD (add / edit / delete) backed by `/api/tags`.
 
 ## Notable
 
