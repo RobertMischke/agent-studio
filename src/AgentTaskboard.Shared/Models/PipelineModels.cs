@@ -149,6 +149,23 @@ public sealed record PipelineExecutionRecord
     public DateTime? CompletedAt { get; init; }
     public List<PipelineStepExecution> Steps { get; init; } = [];
 
+    /// <summary>
+    /// 1-based run counter for this job. A pipeline re-run / re-issue starts a
+    /// fresh record (new <see cref="StartedAt"/>) and increments this so the
+    /// Overview pipeline table can show "Run #N" and flag a restart. Attempt 1
+    /// is the first run; anything above 1 means the pipeline was restarted.
+    /// </summary>
+    public int Attempt { get; init; } = 1;
+
+    /// <summary>
+    /// Prior completed runs for this job, most-recent first, so the operator can
+    /// still tell old step runs apart from the current ones after a restart.
+    /// Each archived entry keeps its own <see cref="Steps"/> but carries an empty
+    /// <see cref="PreviousAttempts"/> (the chain is flattened on this list, not
+    /// nested) and is bounded to the last few runs to keep the file small.
+    /// </summary>
+    public List<PipelineExecutionRecord> PreviousAttempts { get; init; } = [];
+
     [JsonIgnore]
     public bool IsComplete => CompletedAt.HasValue;
 }

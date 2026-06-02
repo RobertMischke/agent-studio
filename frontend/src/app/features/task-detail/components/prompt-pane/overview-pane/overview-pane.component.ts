@@ -18,7 +18,13 @@ import { RunTimelinePollService } from '../../../../polling/services/run-timelin
 import { CompletionLoopIndicatorComponent } from '../../../../task-timeline';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
 import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
-import type { PipelineStep, PipelineStepStatus, StepKind } from '../../../../task-pipeline';
+import type {
+  PipelineExecutionRecord,
+  PipelineStep,
+  PipelineStepExecution,
+  PipelineStepStatus,
+  StepKind,
+} from '../../../../task-pipeline';
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
@@ -62,6 +68,22 @@ interface PipelineRowVm {
   costUsd: number;
   /** False -> the model is not in the price table, render cost as n/a. */
   costKnown: boolean;
+}
+
+/**
+ * One row in the "Previous runs" strip below the pipeline steps. A restart
+ * archives the prior run's record; this is the compact summary the operator
+ * scans to tell an old run apart from the current one.
+ */
+interface PreviousRunVm {
+  attempt: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number;
+  passed: number;
+  failed: number;
+  /** Structured tooltip listing per-step outcomes for this archived run. */
+  tooltip: StructuredTooltip | null;
 }
 
 /** Title-case label for an aspect concern verdict, for the tooltip header. */
@@ -418,6 +440,84 @@ export class OverviewPaneComponent {
 
   /** True once at least one step has a recorded execution. */
   readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
+
+  /** The current run's execution record, or null before any run. */
+  private readonly pipelineExecution = computed<PipelineExecutionRecord | null>(
+    () => this.pipelinePoll.pipeline()?.execution ?? null,
+  );
+
+  /** 1-based run counter for the current pipeline run (1 when never restarted). */
+  readonly pipelineAttempt = computed<number>(() => this.pipelineExecution()?.attempt ?? 1);
+
+  /**
+   * True when this job's pipeline has been restarted at least once, so the
+   * Overview can flag the current run as a fresh attempt and surface the
+   * archived prior runs. A restart shows up as attempt > 1 or as a non-empty
+   * archive (belt-and-suspenders in case only one of the two is populated).
+   */
+  readonly isPipelineRestart = computed<boolean>(() => {
+    const exec = this.pipelineExecution();
+    if (exec == null) return false;
+    return (exec.attempt ?? 1) > 1 || (exec.previousAttempts?.length ?? 0) > 0;
+  });
+
+  /** ISO start stamp of the current run, for the restart badge tooltip. */
+  readonly pipelineStartedAt = computed<string | null>(
+    () => this.pipelineExecution()?.startedAt ?? null,
+  );
+
+  /**
+   * Compact summaries of prior runs, most-recent first, so an operator can
+   * tell old step runs apart from the current ones after a restart. Empty
+   * when the pipeline never restarted.
+   */
+  readonly previousRuns = computed<PreviousRunVm[]>(() => {
+    const prior = this.pipelineExecution()?.previousAttempts ?? [];
+    return prior.map(rec => this.toPreviousRunVm(rec));
+  });
+
+  private toPreviousRunVm(rec: PipelineExecutionRecord): PreviousRunVm {
+    const steps = rec.steps ?? [];
+    const passed = steps.filter(s => s.status === 'passed').length;
+    const failed = steps.filter(s => s.status === 'failed').length;
+    const durationMs = this.recordDurationMs(rec);
+    return {
+      attempt: rec.attempt ?? 1,
+      startedAt: rec.startedAt ?? null,
+      completedAt: rec.completedAt ?? null,
+      durationMs,
+      passed,
+      failed,
+      tooltip: this.buildPreviousRunTooltip(rec, steps, durationMs),
+    };
+  }
+
+  /** Wall-clock duration of an archived run from its start/complete stamps. */
+  private recordDurationMs(rec: PipelineExecutionRecord): number {
+    if (!rec.startedAt || !rec.completedAt) return 0;
+    const start = new Date(rec.startedAt).getTime();
+    const end = new Date(rec.completedAt).getTime();
+    if (Number.isNaN(start) || Number.isNaN(end)) return 0;
+    return Math.max(0, end - start);
+  }
+
+  private buildPreviousRunTooltip(
+    rec: PipelineExecutionRecord,
+    steps: PipelineStepExecution[],
+    durationMs: number,
+  ): StructuredTooltip | null {
+    const lines: string[] = [];
+    if (rec.startedAt) lines.push(`Started: ${this.formatAbsoluteTime(rec.startedAt)}`);
+    if (durationMs > 0) lines.push(`Duration: ${this.formatStepDuration(durationMs)}`);
+    const ran = steps.filter(s =>
+      s.status === 'passed' || s.status === 'failed' || s.status === 'skipped',
+    );
+    for (const s of ran) {
+      lines.push(`${this.stepStatusIcon(s.status)} ${s.stepId}`);
+    }
+    if (lines.length === 0) return null;
+    return { title: `Run #${rec.attempt ?? 1}`, body: lines.join('\n') };
+  }
 
   /** True while any pipeline step is in flight. */
   private readonly anyStepRunning = computed(() =>

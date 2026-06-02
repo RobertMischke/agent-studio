@@ -245,6 +245,17 @@
       <h3 class="ov-section__title"
           [appTooltip]="'Pre / core / post processing steps for this task. Per-step model and enable/disable are configured in project Settings.'">
         Pipeline
+        @if (isPipelineRestart()) {
+          <span class="ov-pl-restart-badge"
+                data-testid="overview-pipeline-restart-badge"
+                [attr.data-attempt]="pipelineAttempt()"
+                [appTooltip]="pipelineStartedAt()
+                  ? 'Restarted — current run started ' + formatAbsoluteTime(pipelineStartedAt()!)
+                  : 'This pipeline was restarted; the steps below are the latest run.'">
+            <span class="ov-pl-restart-badge__dot" aria-hidden="true"></span>
+            Restarted · Run #{{ pipelineAttempt() }}
+          </span>
+        }
       </h3>
 
       <div class="ov-pipeline" data-testid="overview-pipeline-steps">
@@ -323,6 +334,33 @@
                     [appTooltip]="'One or more steps used a model with no price on file; the total excludes them.'">*</span>
             }
           </span>
+        </div>
+      }
+
+      @if (previousRuns().length > 0) {
+        <div class="ov-pl-history" data-testid="overview-pipeline-previous-runs">
+          <span class="ov-pl-history__label">Previous runs</span>
+          <div class="ov-pl-history__list">
+            @for (run of previousRuns(); track run.attempt) {
+              <span class="ov-pl-history__run"
+                    data-testid="overview-pipeline-previous-run"
+                    [attr.data-attempt]="run.attempt"
+                    [appTooltip]="run.tooltip">
+                <span class="ov-pl-history__run-name">Run #{{ run.attempt }}</span>
+                @if (run.startedAt) {
+                  <span class="ov-pl-history__run-time ov-dim">{{ formatRelativeTime(run.startedAt) }}</span>
+                }
+                <span class="ov-pl-history__run-outcome ov-value--mono">
+                  @if (run.passed > 0) {
+                    <span class="ov-pl-history__pass">{{ run.passed }}✓</span>
+                  }
+                  @if (run.failed > 0) {
+                    <span class="ov-pl-history__fail">{{ run.failed }}✗</span>
+                  }
+                </span>
+              </span>
+            }
+          </div>
         </div>
       }
     </section>

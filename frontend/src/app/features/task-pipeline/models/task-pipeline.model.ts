@@ -73,6 +73,19 @@ export interface PipelineExecutionRecord {
   startedAt: string;
   completedAt?: string | null;
   steps: PipelineStepExecution[];
+  /**
+   * 1-based run counter. A re-run / re-issue starts a fresh record and
+   * increments this; anything above 1 means the pipeline was restarted, so
+   * the Overview pipeline can flag it as a new run.
+   */
+  attempt?: number;
+  /**
+   * Prior completed runs for this job, most-recent first, so old step runs
+   * stay distinguishable from the current ones after a restart. Each entry
+   * keeps its own `steps` but carries an empty `previousAttempts` (the chain
+   * is flattened, not nested) and is bounded to the last few runs.
+   */
+  previousAttempts?: PipelineExecutionRecord[];
 }
 
 /** Derived per-step cost (USD) for one recorded step. */

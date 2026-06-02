@@ -22,6 +22,14 @@ public sealed class PipelineExecutionLog
 {
     public const string FileName = "pipeline-execution.json";
 
+    /// <summary>
+    /// Cap on how many prior runs we keep in <see cref="PipelineExecutionRecord.PreviousAttempts"/>.
+    /// A restarted task rarely needs more than a couple of runs of step history;
+    /// the bound keeps <c>pipeline-execution.json</c> from growing without limit
+    /// when an operator re-issues the same task many times.
+    /// </summary>
+    private const int MaxArchivedAttempts = 10;
+
     private static readonly JsonSerializerOptions WriteOpts = new()
     {
         WriteIndented = true,
@@ -44,8 +52,12 @@ public sealed class PipelineExecutionLog
 
     /// <summary>
     /// Start a new pipeline run record in the job folder. Overwrites any
-    /// existing file - a re-run is a new pipeline execution. Steps are
-    /// pre-populated from the supplied <see cref="TaskPipeline"/> in
+    /// existing file - a re-run is a new pipeline execution. When the existing
+    /// file is a prior run of the SAME job + pipeline, it is archived into the
+    /// new record's <see cref="PipelineExecutionRecord.PreviousAttempts"/> and
+    /// <see cref="PipelineExecutionRecord.Attempt"/> increments, so a restart
+    /// stays visible rather than silently clobbering the previous run's steps.
+    /// Steps are pre-populated from the supplied <see cref="TaskPipeline"/> in
     /// <see cref="PipelineStepStatus.Pending"/> / <see cref="PipelineStepStatus.Planned"/>
     /// state so the file is observable from t=0.
     /// </summary>
@@ -56,9 +68,14 @@ public sealed class PipelineExecutionLog
         string jobId,
         DateTime? nowUtc = null)
     {
-        var record = BuildFresh(pipeline, project, jobId, nowUtc ?? DateTime.UtcNow);
-        WriteAtomic(jobFolderPath, record);
-        return record;
+        var lockObj = _locks.GetOrAdd(NormalizeKey(jobFolderPath), _ => new object());
+        lock (lockObj)
+        {
+            var prior = PriorAttemptOf(TryRead(jobFolderPath), pipeline, jobId);
+            var record = BuildFresh(pipeline, project, jobId, nowUtc ?? DateTime.UtcNow, prior);
+            WriteAtomic(jobFolderPath, record);
+            return record;
+        }
     }
 
     /// <summary>
@@ -99,17 +116,36 @@ public sealed class PipelineExecutionLog
             {
                 return current;
             }
-            var record = BuildFresh(pipeline, project, jobId, nowUtc ?? DateTime.UtcNow);
+            var prior = PriorAttemptOf(current, pipeline, jobId);
+            var record = BuildFresh(pipeline, project, jobId, nowUtc ?? DateTime.UtcNow, prior);
             WriteAtomic(jobFolderPath, record);
             return record;
         }
+    }
+
+    /// <summary>
+    /// Treat an existing on-disk record as the prior attempt of THIS job only
+    /// when it belongs to the same job + pipeline. A leftover record from a
+    /// different job or pipeline is not a restart of this one, so it is ignored
+    /// (the new record begins at attempt 1) rather than archived as history.
+    /// </summary>
+    private static PipelineExecutionRecord? PriorAttemptOf(
+        PipelineExecutionRecord? existing,
+        TaskPipeline pipeline,
+        string jobId)
+    {
+        if (existing == null) return null;
+        var sameJob = string.Equals(existing.JobId, jobId, StringComparison.Ordinal)
+            && string.Equals(existing.PipelineId, pipeline.Id, StringComparison.OrdinalIgnoreCase);
+        return sameJob ? existing : null;
     }
 
     private static PipelineExecutionRecord BuildFresh(
         TaskPipeline pipeline,
         string project,
         string jobId,
-        DateTime started)
+        DateTime started,
+        PipelineExecutionRecord? prior = null)
     {
         var steps = new List<PipelineStepExecution>();
         foreach (var step in pipeline.AllSteps)
@@ -122,6 +158,22 @@ public sealed class PipelineExecutionLog
                 Status = step.Stub ? PipelineStepStatus.Planned : PipelineStepStatus.Pending,
             });
         }
+
+        var attempt = 1;
+        var previous = new List<PipelineExecutionRecord>();
+        if (prior != null)
+        {
+            attempt = prior.Attempt + 1;
+            // Flatten: archive the prior run with its steps but no nested
+            // history, then carry forward its own archive, newest first, bounded.
+            previous.Add(prior with { PreviousAttempts = [] });
+            previous.AddRange(prior.PreviousAttempts);
+            if (previous.Count > MaxArchivedAttempts)
+            {
+                previous = previous.Take(MaxArchivedAttempts).ToList();
+            }
+        }
+
         return new PipelineExecutionRecord
         {
             PipelineId = pipeline.Id,
@@ -130,6 +182,8 @@ public sealed class PipelineExecutionLog
             JobId = jobId,
             StartedAt = started,
             Steps = steps,
+            Attempt = attempt,
+            PreviousAttempts = previous,
         };
     }
 
