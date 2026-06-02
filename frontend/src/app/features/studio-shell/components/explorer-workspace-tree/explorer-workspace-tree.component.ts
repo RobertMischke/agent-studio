@@ -19,6 +19,7 @@ import { EmptyStateComponent } from '../../../../components/empty-state/empty-st
 import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../../components/menu';
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 
@@ -75,14 +76,16 @@ function folderTail(path: string): string {
  * Explorer never goes blank.
  *
  * Project drag-and-drop, expand/collapse, row testids and BEM classes are
- * preserved verbatim from the shell — management (rename / colour / move /
- * delete) deliberately stays in the Settings panel (F47 / F66 / ADR-0048);
- * this is navigation only.
+ * preserved verbatim from the shell. Colour / move / delete still live in the
+ * Settings panel (F47 / F66 / ADR-0048); the one in-tree management affordance
+ * is workspace rename, surfaced at the node itself via double-click and a
+ * right-click "Rename" context menu so the operator does not have to know the
+ * Settings panel exists. Both routes drive the same registry-only inline edit.
  */
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective],
+  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',
@@ -236,6 +239,42 @@ export class ExplorerWorkspaceTreeComponent {
     if (g.id === '__all__' || g.id === '__unassigned__') return;
     this.renameDraft.set(g.displayName);
     this.renamingWsId.set(g.id);
+  }
+
+  /**
+   * Right-click "Rename" context menu on a workspace header. Double-click is
+   * the fast path but undiscoverable, so the menu makes the same registry-only
+   * rename visible. Viewport-relative coordinates feed `<app-menu>`'s absolute
+   * positioning; synthetic groups have no real registry record to rename, so we
+   * let the browser's native menu through for them instead.
+   */
+  readonly wsContextMenu = signal<{ id: string; x: number; y: number } | null>(null);
+
+  readonly wsContextMenuItems = computed<readonly MenuItem[]>(() =>
+    this.wsContextMenu() ? [{ kind: 'row', id: 'rename', label: 'Rename' }] : [],
+  );
+
+  readonly wsContextMenuPosition = computed(() => {
+    const ctx = this.wsContextMenu();
+    return ctx ? { x: ctx.x, y: ctx.y } : null;
+  });
+
+  openWsContextMenu(event: MouseEvent, g: ExplorerWorkspaceGroup): void {
+    if (g.id === '__all__' || g.id === '__unassigned__') return;
+    event.preventDefault();
+    this.wsContextMenu.set({ id: g.id, x: event.clientX, y: event.clientY });
+  }
+
+  closeWsContextMenu(): void {
+    this.wsContextMenu.set(null);
+  }
+
+  onWsContextMenuItemClick(ev: MenuItemClickEvent): void {
+    const ctx = this.wsContextMenu();
+    this.closeWsContextMenu();
+    if (!ctx || ev.id !== 'rename') return;
+    const g = this.groups().find(group => group.id === ctx.id);
+    if (g) this.startRenameWorkspace(g);
   }
 
   cancelRename(): void {

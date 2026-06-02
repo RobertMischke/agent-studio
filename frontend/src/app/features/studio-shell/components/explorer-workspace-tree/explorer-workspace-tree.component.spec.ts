@@ -116,4 +116,40 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(groups[0].id).toBe('__all__');
     expect(groups[0].projects.map(p => p.name)).toEqual(['Alpha', 'Beta']);
   });
+
+  it('right-click opens a text-only Rename menu that starts the inline rename', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+
+    const g = cmp.groups()[0];
+    const ev = { preventDefault: () => {}, clientX: 12, clientY: 34 } as MouseEvent;
+    cmp.openWsContextMenu(ev, g);
+
+    expect(cmp.wsContextMenu()).toEqual({ id: 'ws-default', x: 12, y: 34 });
+    const items = cmp.wsContextMenuItems();
+    expect(items).toEqual([{ kind: 'row', id: 'rename', label: 'Rename' }]);
+
+    cmp.onWsContextMenuItemClick({ id: 'rename', item: items[0] as never });
+    expect(cmp.wsContextMenu()).toBeNull();
+    expect(cmp.renamingWsId()).toBe('ws-default');
+    expect(cmp.renameDraft()).toBe('Default');
+  });
+
+  it('does not open a custom context menu for synthetic groups', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+
+    const g = cmp.groups()[0]; // synthetic "__all__" fallback
+    let prevented = false;
+    cmp.openWsContextMenu({ preventDefault: () => { prevented = true; }, clientX: 1, clientY: 2 } as MouseEvent, g);
+
+    expect(prevented).toBe(false);
+    expect(cmp.wsContextMenu()).toBeNull();
+  });
 });

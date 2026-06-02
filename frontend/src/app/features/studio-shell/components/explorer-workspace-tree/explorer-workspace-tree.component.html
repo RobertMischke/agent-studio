@@ -44,9 +44,10 @@
           [title]="g.displayName"
           [count]="g.projects.length"
           [testid]="'studio-explorer-ws-group-' + g.id"
-          appTooltip="Double-click to rename this workspace"
+          appTooltip="Double-click or right-click to rename this workspace"
           (collapsedChange)="onWsHeaderToggle(g)"
-          (dblclick)="startRenameWorkspace(g)" />
+          (dblclick)="startRenameWorkspace(g)"
+          (contextmenu)="openWsContextMenu($event, g)" />
       }
 
       @if (!isCollapsed('ws:' + g.id)) {
@@ -117,4 +118,16 @@
       <app-empty-state>No projects loaded</app-empty-state>
     }
   }
+
+  <!-- Right-click "Rename" surface for workspace headers. Text-only menu
+       (project convention: no icons in menu items); selecting it opens the
+       same inline rename as the double-click path. -->
+  <app-menu
+    [open]="wsContextMenu() !== null"
+    [items]="wsContextMenuItems()"
+    [position]="wsContextMenuPosition()"
+    testIdPrefix="studio-explorer-ws-ctx"
+    ariaLabel="Workspace actions"
+    (itemClick)="onWsContextMenuItemClick($event)"
+    (closeRequest)="closeWsContextMenu()" />
 </section>

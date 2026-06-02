@@ -114,6 +114,43 @@ test.describe('F46: workspace-header inline rename', () => {
     expect(await workspaceName(page, ws.id)).toBe(ws.displayName);
   });
 
+  test('right-click opens a text-only Rename menu that starts the inline rename', async ({ page }) => {
+    await gotoStudio(page);
+    const ws = await firstRealWorkspace(page);
+    if (!ws) {
+      test.skip(true, 'No real registry workspace — rename contract skipped.');
+      return;
+    }
+
+    const header = page.getByTestId(`studio-explorer-ws-group-${ws.id}`);
+    await expect(header).toBeVisible({ timeout: 10_000 });
+
+    await header.click({ button: 'right' });
+
+    const panel = page.getByTestId('studio-explorer-ws-ctx-panel');
+    await expect(panel).toBeVisible({ timeout: 3_000 });
+    await expect(panel.getByTestId('studio-explorer-ws-ctx-item-rename')).toHaveText('Rename');
+
+    // Menu convention: text-only, no decorative icons.
+    await expect(panel.locator('.app-menu__icon')).toHaveCount(0);
+    await expect(panel.locator('img')).toHaveCount(0);
+    await expect(panel.locator('svg')).toHaveCount(0);
+
+    await panel.screenshot({ path: path.join(dest, 'f46-rename-context-menu.png') });
+
+    await panel.getByTestId('studio-explorer-ws-ctx-item-rename').click();
+
+    // The context-menu route opens the same inline rename input as double-click.
+    const input = page.getByTestId(`studio-explorer-ws-rename-input-${ws.id}`);
+    await expect(input).toBeVisible();
+    await expect(input).toBeFocused();
+
+    // Cancel without persisting so the operator's registry is left untouched.
+    await input.press('Escape');
+    await expect(input).toHaveCount(0);
+    expect(await workspaceName(page, ws.id)).toBe(ws.displayName);
+  });
+
   test('Escape cancels the rename and leaves the name unchanged', async ({ page }) => {
     await gotoStudio(page);
     const ws = await firstRealWorkspace(page);
