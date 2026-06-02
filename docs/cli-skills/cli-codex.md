@@ -50,11 +50,25 @@ The orchestrator passes `-` as the positional and pipes the full prompt
 closes the pipe so Codex sees EOF. `-m` selects the model. `--json` makes
 stdout machine-readable; without it we cannot extract the session UUID.
 
-**Why stdin, not positional argv** (codex 0.130+): handing the prompt as the
-last positional argv made the model treat the entire block as system-side
-"initial instructions" and reply with `[[TASK_NOOP]]` ("no task provided")
-on every fresh job. See `docs/codex-runner-investigation.md` for the
-forensic write-up.
+**Why stdin, not positional argv.** Two independent failures share this one
+fix; reverting either half to positional-argv re-opens both:
+
+1. **NOOP on every fresh job** (codex 0.130+): handing the prompt as the
+   last positional argv made the model treat the entire block as system-side
+   "initial instructions" and reply with `[[TASK_NOOP]]` ("no task
+   provided"). See `docs/codex-runner-investigation.md` for the forensic
+   write-up.
+2. **"The command line is too long." on Windows** (the 2026-05-11 reissue
+   incident): codex on Windows is an npm `.cmd` shim launched through
+   cmd.exe, whose command line is capped at 8191 chars. A rules-heavy
+   prompt plus accumulated reissue framing crossed that cap after 2-3
+   reissues, so the spawn failed with exitCode 1 and a 0s duration before
+   the model ever ran (the orchestrator then logged three rapid-fire
+   `[stderr] The command line is too long.` exits and auto-paused). Routing
+   the whole prompt over stdin keeps the argv constant and tiny regardless
+   of prompt size or reissue count, so the cmd.exe cap can no longer be
+   reached. `BuildStartInfo_ArgvSizeDoesNotGrowWithReissuePromptLength` and
+   `BuildStartInfo_LongPromptKeepsPromptOutOfArgvAndUsesStdin` lock this.
 
 ### Resume
 
