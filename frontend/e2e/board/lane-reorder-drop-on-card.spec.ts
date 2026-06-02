@@ -38,7 +38,7 @@
  * 3-progress (active runner state) or the review/archive lanes.
  */
 import { test, expect, Page } from '@playwright/test';
-import { api, BACKEND } from '../helpers/api';
+import { api } from '../helpers/api';
 import { createJob, listJobs, moveJob } from '../helpers/jobs';
 
 interface WatchPath { name: string; path: string; rootPath: string; }
@@ -50,7 +50,9 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+  // Route through the api() helper so the mutation carries the
+  // x-client-id identity header the backend requires; raw fetch omitted it.
+  await api(`/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
     method: 'DELETE'
   });
 }
@@ -59,7 +61,7 @@ async function cleanup(prefix: string, watchPath: string): Promise<void> {
   // includeFixtures so we also sweep up trios from a prior run that
   // were created with fixture:true (the helper's old default). Without
   // this, a re-run hits 409 on the same `id`.
-  const all = await api<{ id: string; watchPath: string }[]>('/api/jobs?includeFixtures=true');
+  const all = await api<{ id: string; watchPath: string }[]>('/api/tasks?includeFixtures=true');
   const stale = all.filter(j => j.watchPath === watchPath && j.id.startsWith(prefix));
   await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath).catch(() => {})));
 }
@@ -71,7 +73,7 @@ async function readColumnTitles(page: Page, heading: string): Promise<string[]> 
     if (!target) return [];
     const column = target.closest('.column');
     if (!column) return [];
-    const cards = Array.from(column.querySelectorAll('app-job-card .job-card__title')) as HTMLElement[];
+    const cards = Array.from(column.querySelectorAll('app-job-card .task-card__title-text')) as HTMLElement[];
     return cards.map(el => el.textContent?.trim() ?? '');
   }, heading);
 }
@@ -100,7 +102,7 @@ async function dispatchDropOnCard(
     if (!column) throw new Error(`Column root not found for "${columnHeading}"`);
 
     const cards = Array.from(column.querySelectorAll('app-job-card')) as HTMLElement[];
-    const titles = cards.map(c => c.querySelector('.job-card__title')?.textContent?.trim() ?? '');
+    const titles = cards.map(c => c.querySelector('.task-card__title-text')?.textContent?.trim() ?? '');
     const sourceIdx = titles.indexOf(sourceCardTitle);
     const targetIdx = titles.indexOf(targetCardTitle);
     if (sourceIdx < 0) throw new Error(`Source card "${sourceCardTitle}" not found in "${columnHeading}"`);
@@ -134,7 +136,7 @@ async function dispatchDropOnZone(
     if (!column) throw new Error(`Column root not found for "${columnHeading}"`);
 
     const cards = Array.from(column.querySelectorAll('app-job-card')) as HTMLElement[];
-    const titles = cards.map(c => c.querySelector('.job-card__title')?.textContent?.trim() ?? '');
+    const titles = cards.map(c => c.querySelector('.task-card__title-text')?.textContent?.trim() ?? '');
     const sourceIdx = titles.indexOf(sourceCardTitle);
     if (sourceIdx < 0) throw new Error(`Card "${sourceCardTitle}" not found in column`);
     const card = cards[sourceIdx];
@@ -194,7 +196,7 @@ async function seedThreeCardsIn(state: string, watchPath: string, prefix: string
   const others = all
     .filter(j => j.state === state && ![a.id, b.id, c.id].includes(j.id))
     .map(j => ({ jobId: j.id, watchPath: j.watchPath }));
-  await api('/api/jobs/reorder', {
+  await api('/api/tasks/reorder', {
     method: 'POST',
     body: JSON.stringify({
       jobs: [
@@ -280,7 +282,7 @@ test.describe('Within-lane drag-drop never drops the card from the lane', () => 
         expect(dropZoneCount).toBeGreaterThan(0);
 
         const reorderResp = page.waitForResponse(
-          r => r.url().includes('/api/jobs/reorder') && r.request().method() === 'POST'
+          r => r.url().includes('/api/tasks/reorder') && r.request().method() === 'POST'
         );
         await dispatchDropOnZone(page, lane.heading, trio.a.title, dropZoneCount - 1);
         await reorderResp;
