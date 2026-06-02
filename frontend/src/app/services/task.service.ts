@@ -748,12 +748,14 @@ export class TaskService {
   }
 
   getGitDiff(jobId: string, path: string | null, watchPath?: string) {
-    const opts = this.withWatchPath(watchPath);
-    const params = (opts.params as Record<string, string> | undefined) ?? {};
-    if (path) params['path'] = path;
+    // `path` scopes the diff to one file. It MUST go through HttpParams.set
+    // (via withWatchPathAndPath) — assigning it as a plain property on the
+    // immutable HttpParams from withWatchPath() is silently ignored by
+    // HttpClient, which dropped the param whenever watchPath was present and
+    // made the backend return the whole-tree diff instead of the file's.
+    const opts = path ? this.withWatchPathAndPath(watchPath, path) : this.withWatchPath(watchPath);
     return this.http.get(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/diff`, {
       ...opts,
-      params,
       responseType: 'text',
     });
   }
@@ -784,12 +786,11 @@ export class TaskService {
   }
 
   getJobCommitDiff(jobId: string, path: string | null, watchPath?: string) {
-    const opts = this.withWatchPath(watchPath);
-    const params = (opts.params as Record<string, string> | undefined) ?? {};
-    if (path) params['path'] = path;
+    // See getGitDiff: scope the commit diff to one path via HttpParams.set,
+    // not a plain property on the immutable HttpParams (which is dropped).
+    const opts = path ? this.withWatchPathAndPath(watchPath, path) : this.withWatchPath(watchPath);
     return this.http.get(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commit/diff`, {
       ...opts,
-      params,
       responseType: 'text',
     });
   }
@@ -812,12 +813,12 @@ export class TaskService {
    * picks any commit other than the latest.
    */
   getJobCommitDiffBySha(jobId: string, sha: string, path: string | null, watchPath?: string) {
-    const opts = this.withWatchPath(watchPath);
-    const params = (opts.params as Record<string, string> | undefined) ?? {};
-    if (path) params['path'] = path;
+    // See getGitDiff: scope to one path via HttpParams.set, not a plain
+    // property on the immutable HttpParams (which is dropped).
+    const opts = path ? this.withWatchPathAndPath(watchPath, path) : this.withWatchPath(watchPath);
     return this.http.get<{ diff: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
-      { ...opts, params },
+      opts,
     );
   }
 

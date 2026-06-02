@@ -306,6 +306,14 @@ export class GitPaneService implements OnDestroy {
       return;
     }
     this.diffText.set('');
+    // Diff fetches are async, but the user can click another file before a
+    // slow round-trip resolves. Without a guard the late response writes its
+    // text into `diffText` even though `selectedDiffPath` has since moved on,
+    // so the pane shows file A's diff under file B's highlight + path label.
+    // Pin the request to the path it was issued for and drop any result that
+    // is no longer the selected file. We still populate the cache so a later
+    // click on that path is served instantly.
+    const stillSelected = () => this.selectedDiffPath() === path;
     // In commit mode the diff comes from `git show <sha> -- <path>` so we
     // see the historical change, not whatever the working tree looks like
     // right now. When the selected commit is one of the older entries on
@@ -323,12 +331,13 @@ export class GitPaneService implements OnDestroy {
           const d = (res as { diff?: string }).diff;
           text = typeof d === 'string' ? d : '';
         }
-        this.diffText.set(text);
         if (text) this.cachePut(cacheKey, text);
+        if (!stillSelected()) return;
+        this.diffText.set(text);
       };
       const handlers = {
         next: setDiff,
-        error: () => this.diffText.set('(failed to load diff)'),
+        error: () => { if (stillSelected()) this.diffText.set('(failed to load diff)'); },
       };
       if (useShaEndpoint) {
         this.jobService
@@ -342,10 +351,11 @@ export class GitPaneService implements OnDestroy {
     this.jobService.getGitDiff(info.id, path, info.watchPath).subscribe({
       next: (text: unknown) => {
         const t = typeof text === 'string' ? text : '';
-        this.diffText.set(t);
         if (t) this.cachePut(cacheKey, t);
+        if (!stillSelected()) return;
+        this.diffText.set(t);
       },
-      error: () => this.diffText.set('(failed to load diff)'),
+      error: () => { if (stillSelected()) this.diffText.set('(failed to load diff)'); },
     });
   }
 
