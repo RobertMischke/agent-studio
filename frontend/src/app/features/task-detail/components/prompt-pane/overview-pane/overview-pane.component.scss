@@ -510,6 +510,11 @@
     &[data-verdict='at-risk']  { color: var(--severity-warn); }
     &[data-verdict='drift']    { color: var(--severity-high); }
 
+    // Auto-mode Ralph-loop guard (pre-loop-guard step): a forming loop warns,
+    // a circuit-broken loop reads as a hard stop.
+    &[data-verdict='looping']       { color: var(--severity-warn); }
+    &[data-verdict='loop-detected'] { color: var(--severity-high); }
+
     // Hover affordance: the pill carries the concrete concern in a tooltip.
     &--concern { cursor: help; }
   }

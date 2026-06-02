@@ -90,10 +90,13 @@ interface PreviousRunVm {
 function verdictTitle(verdict: string | null): string | null {
   switch ((verdict ?? '').toLowerCase()) {
     case 'concern':
-    case 'concerns': return 'Concerns';
+    case 'concerns':      return 'Concerns';
     case 'blocked':
-    case 'block':    return 'Blocking concern';
-    default:         return null;
+    case 'block':         return 'Blocking concern';
+    // Auto-mode Ralph-loop guard verdicts (pre-loop-guard step).
+    case 'looping':       return 'Loop forming';
+    case 'loop-detected': return 'Loop detected';
+    default:              return null;
   }
 }
 

@@ -46,6 +46,20 @@ public static class PipelineCatalogue
     public const string CoreAgentRunStepId = "core-agent-run";
 
     /// <summary>
+    /// Pre-step that surfaces the auto-mode Ralph-loop guard
+    /// (<c>OrchestratorApi.Services.Runner.StuckLoopGuard</c>) in the
+    /// pipeline table. It is the first row of <see cref="TaskPipeline.AllSteps"/>
+    /// so a forming or stopped loop is visible early - before the core run and
+    /// the aspect verdicts. Deterministic (no LLM); the recording lives in
+    /// <c>ProjectRunner</c>: <see cref="PipelineStepStatus.Passed"/> with no
+    /// verdict while healthy, <see cref="PipelineStepStatus.Passed"/> with a
+    /// <c>looping</c> verdict while a loop builds under budget, and
+    /// <see cref="PipelineStepStatus.Failed"/> with a <c>loop-detected</c>
+    /// verdict when the circuit-breaker fires.
+    /// </summary>
+    public const string LoopGuardStepId = "pre-loop-guard";
+
+    /// <summary>
     /// The five drift dimensions ship as opt-in <see cref="StepKind.Drift"/>
     /// post-steps (DRIFT Nachtrag): four LLM dimensions plus the rule-based
     /// code-pattern check. They default <c>DefaultEnabled = false</c> because a
@@ -136,7 +150,17 @@ public static class PipelineCatalogue
             Id = StandardPipelineId,
             DisplayName = "Standard task pipeline",
             Version = 1,
-            Pre = [],
+            Pre =
+            [
+                new PipelineStep
+                {
+                    Id = LoopGuardStepId,
+                    DisplayName = "Loop check",
+                    Kind = StepKind.Module,
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                },
+            ],
             Core =
             [
                 new PipelineStep

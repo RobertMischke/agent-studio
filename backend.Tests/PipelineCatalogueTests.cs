@@ -22,7 +22,10 @@ public class PipelineCatalogueTests
         var p = PipelineCatalogue.Standard;
         Assert.Equal(PipelineCatalogue.StandardPipelineId, p.Id);
         Assert.Equal(1, p.Version);
-        Assert.Empty(p.Pre); // Phase 1 ships no pre-steps; reserved slot.
+        // Pre: the auto-mode loop guard surfaces the StuckLoopGuard breaker in
+        // the pipeline table (Ralph-loop early detection).
+        var preStep = Assert.Single(p.Pre);
+        Assert.Equal(PipelineCatalogue.LoopGuardStepId, preStep.Id);
         Assert.Single(p.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, p.Core[0].Id);
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
@@ -31,6 +34,23 @@ public class PipelineCatalogueTests
         // Post: 4 aspects + commit-attribution + lint-scss + regression-radar
         // + orchestrator decision + 5 opt-in drift dimensions (DRIFT Nachtrag).
         Assert.Equal(13, p.Post.Count);
+    }
+
+    [Fact]
+    public void StandardPipeline_LoopGuard_IsFirstStep_Deterministic_AndDefaultOn()
+    {
+        // Ralph-loop early detection: the loop guard ships as the single Pre
+        // step so it leads AllSteps and the Overview renders it as the first
+        // row ("frueh markiert"). It is deterministic (no model) and on by
+        // default - the StuckLoopGuard breaker is a safety net, not opt-in.
+        var p = PipelineCatalogue.Standard;
+        var guard = Assert.Single(p.Pre);
+        Assert.Equal(PipelineCatalogue.LoopGuardStepId, guard.Id);
+        Assert.Equal(StepKind.Module, guard.Kind);
+        Assert.True(guard.Idempotent);
+        Assert.True(guard.DefaultEnabled);
+        Assert.Null(guard.Model);
+        Assert.Equal(PipelineCatalogue.LoopGuardStepId, p.AllSteps.First().Id);
     }
 
     [Fact]

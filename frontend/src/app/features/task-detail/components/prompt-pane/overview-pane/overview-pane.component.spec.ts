@@ -354,6 +354,75 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(passing.concernTooltip).toBeNull();
   });
 
+  it('pipeline block: a circuit-broken loop guard surfaces a loop-detected verdict as the first row with a concern tooltip', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'pre-loop-guard', displayName: 'Loop check', kind: 'module', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: null,
+        steps: [
+          { stepId: 'pre-loop-guard', kind: 'module', status: 'failed', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'loop-detected', verdictSummary: 'Auto-loop circuit-breaker fired after 5/5 iterations; awaiting user.' },
+          { stepId: 'core-agent-run', kind: 'core', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+        ],
+      },
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const rows = c.pipelineRows();
+    // The loop guard is the first row (Pre), so a detected loop is visible early.
+    expect(rows[0].id).toBe('pre-loop-guard');
+    expect(c.stepKindLabel(rows[0].kind)).toBe('Pre');
+
+    const guard = rows.find(r => r.id === 'pre-loop-guard')!;
+    expect(guard.status).toBe('failed');
+    expect(guard.verdict).toBe('loop-detected');
+    expect(guard.concernTooltip).not.toBeNull();
+    expect(guard.concernTooltip!.title).toBe('Loop check · Loop detected');
+    expect(guard.concernTooltip!.body).toContain('circuit-breaker');
+  });
+
+  it('pipeline block: a forming loop under budget reads as a passed guard with a looping verdict', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'pre-loop-guard', displayName: 'Loop check', kind: 'module', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: null,
+        steps: [
+          { stepId: 'pre-loop-guard', kind: 'module', status: 'passed', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'looping', verdictSummary: 'Auto-mode loop forming: 2/5 iterations, 40000/200000 orchestrator tokens used.' },
+        ],
+      },
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const guard = fixture.componentInstance.pipelineRows().find(r => r.id === 'pre-loop-guard')!;
+    expect(guard.status).toBe('passed');
+    expect(guard.verdict).toBe('looping');
+    expect(guard.concernTooltip).not.toBeNull();
+    expect(guard.concernTooltip!.title).toBe('Loop check · Loop forming');
+  });
+
   it('session row was removed (component no longer exposes session-id helpers)', async () => {
     const fixture = await build(baseJob({ sessionName: 'c705779a-aaaa-bbbb-cccc-ddddeeeeffff' }));
     // The overview no longer surfaces session id in any row. The session

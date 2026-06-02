@@ -1599,7 +1599,24 @@ public class ProjectRunner
                     Summary = $"Auto-loop circuit-breaker fired for \"{info.Title}\".",
                     Reasoning = $"Iterations {existingLoop.IterationCount}/{_stuckLoopBudget.MaxIterations}; orchestrator tokens {existingLoop.CumulativeOrchestratorTokens}/{_stuckLoopBudget.MaxOrchestratorTokens}. Loop stopped to preserve quota; awaiting user."
                 });
+                // Mark the detected loop in the pipeline table (acceptance:
+                // "erkannter Loop wird frueh markiert + in der Step-Tabelle angezeigt").
+                RecordLoopGuard(info, PipelineStepStatus.Failed,
+                    verdict: "loop-detected",
+                    summary: StuckLoopGuard.FormatBreakerMessage(existingLoop, _stuckLoopBudget));
                 return;
+            }
+
+            // The agent came back asking again (existingLoop non-null) but we are
+            // still under budget: a loop is forming. Surface the pressure on the
+            // loop-guard row now, before the breaker fires, so a building loop is
+            // visible early rather than only at the hard stop.
+            if (existingLoop != null)
+            {
+                RecordLoopGuard(info, PipelineStepStatus.Passed,
+                    verdict: "looping",
+                    summary: $"Auto-mode loop forming: {existingLoop.IterationCount}/{_stuckLoopBudget.MaxIterations} iterations, "
+                           + $"{existingLoop.CumulativeOrchestratorTokens}/{_stuckLoopBudget.MaxOrchestratorTokens} orchestrator tokens used.");
             }
 
             // Release the active-job latch so the orchestrator's spawned
@@ -1979,10 +1996,55 @@ public class ProjectRunner
                 Status = PipelineStepStatus.Running,
                 StartedAt = execution.StartedAt,
             });
+            // Arm the loop-guard row. At spawn there is no auto-mode loop yet,
+            // so it reads as a clean pass (no verdict pill). RunOrchestratorDecisionAsync
+            // flips it to "looping" / "loop-detected" if the Ralph-loop builds up
+            // or trips the circuit-breaker.
+            RecordLoopGuard(info, PipelineStepStatus.Passed, verdict: null, summary: null,
+                startedAt: execution.StartedAt);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to record CORE run-start for {JobId}", info.Id);
+        }
+    }
+
+    /// <summary>
+    /// Record the auto-mode loop guard (<see cref="StuckLoopGuard"/>) as the
+    /// pipeline's <see cref="OrchestratorApi.Services.Pipeline.PipelineCatalogue.LoopGuardStepId"/>
+    /// step so a forming or stopped Ralph-loop is visible in the Overview pipeline
+    /// table - early, ahead of the core run and the aspect verdicts. The status
+    /// drives the row icon (Passed = healthy / forming under budget, Failed =
+    /// circuit-breaker fired); <paramref name="verdict"/> + <paramref name="summary"/>
+    /// drive the pill and its tooltip. Best-effort observability, never a
+    /// state-machine input, so any write failure is swallowed.
+    /// </summary>
+    private void RecordLoopGuard(
+        TaskInfo info,
+        PipelineStepStatus status,
+        string? verdict,
+        string? summary,
+        DateTime? startedAt = null)
+    {
+        if (_pipelineLog == null) return;
+        try
+        {
+            var now = DateTime.UtcNow;
+            _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+            {
+                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.LoopGuardStepId,
+                Kind = StepKind.Module,
+                Status = status,
+                StartedAt = startedAt ?? now,
+                CompletedAt = now,
+                Verdict = verdict,
+                VerdictSummary = summary,
+                Reason = summary,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to record loop-guard step for {JobId}", info.Id);
         }
     }
 

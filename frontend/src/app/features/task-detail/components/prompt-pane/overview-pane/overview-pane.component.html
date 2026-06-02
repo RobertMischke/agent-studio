@@ -284,7 +284,7 @@
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"
                     [attr.data-verdict]="row.verdict"
                     [appTooltip]="row.concernTooltip"
-                    [tooltipSeverity]="row.verdict === 'block' ? 'error' : 'warn'"
+                    [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
                     data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
             }
             @if (row.model) {

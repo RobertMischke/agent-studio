@@ -106,7 +106,13 @@ public static class ProjectSettingsEndpoints
                 // gate steps accept a mode.
                 usesModel = s.Kind is StepKind.Aspect or StepKind.Drift,
                 supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
-                canDisable = s.Kind != StepKind.Core,
+                // The loop guard is a safety net that always runs (the
+                // StuckLoopGuard circuit-breaker fires regardless of this row);
+                // the pipeline step only mirrors its state, so it is not an
+                // opt-out toggle - making it disable-able would let a project
+                // hide a loop the breaker still acts on.
+                canDisable = s.Kind != StepKind.Core
+                    && !string.Equals(s.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal),
                 // The drift post-steps default off (opt-in); every other step
                 // defaults on. The Settings UI uses this to render the toggle's
                 // initial state when the project has no explicit override.
