@@ -87,6 +87,10 @@ public class TaskStateMachine
         {
             Directory.Move(recheck.FolderPath, targetDir);
             TaskJsonFile.UpdateField(targetDir, "state", targetState, _logger);
+            // Lane-entry sort anchor: the task just entered targetState, so
+            // re-stamp its entry time. Drives the lane-entry default sort
+            // (newest entry on top). Migration paths deliberately skip this.
+            TaskJsonFile.UpdateField(targetDir, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
             // Keep the canonical id in lockstep with the (possibly suffixed)
             // folder name so FindJob resolves the moved folder immediately,
             // without waiting for the scanner's self-heal pass.
@@ -362,16 +366,20 @@ public class TaskStateMachine
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
             Directory.Move(sourceFolder, targetDir);
             var jobJsonPath = Path.Combine(targetDir, "job.json");
+            var enteredLaneAt = DateTime.UtcNow.ToString("o");
             if (File.Exists(jobJsonPath))
             {
                 TaskJsonFile.UpdateField(targetDir, "state", targetState, _logger);
+                // Lane-entry anchor: archive/failed-pickup/restore are genuine
+                // lane changes, so re-stamp the entry time like a normal move.
+                TaskJsonFile.UpdateField(targetDir, "enteredLaneAt", enteredLaneAt, _logger);
             }
             else if (writePlaceholderJobJson)
             {
                 // The empty-stale path lacks any metadata. Synthesize a minimal
                 // job.json so the scanner sees the card and the state-field
                 // invariant ("every job folder has a state field on disk") holds.
-                var placeholder = $"{{\"id\":\"{newSlug}\",\"title\":\"{newSlug}\",\"state\":\"{targetState}\",\"order\":1,\"agent\":\"unknown\"}}";
+                var placeholder = $"{{\"id\":\"{newSlug}\",\"title\":\"{newSlug}\",\"state\":\"{targetState}\",\"order\":1,\"agent\":\"unknown\",\"enteredLaneAt\":\"{enteredLaneAt}\"}}";
                 File.WriteAllText(jobJsonPath, placeholder);
             }
             _scanner.InvalidateCache();

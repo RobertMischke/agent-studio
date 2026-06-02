@@ -280,6 +280,10 @@ public class TaskScannerService : ITaskScanner
                 ProjectName = entry.Name,
                 FolderPath = jobDir,
                 LastActivity = lastActivity,
+                // Lane-entry sort anchor. Legacy folders written before this
+                // field existed fall back to lastActivity, so the lane-entry
+                // sort degrades gracefully instead of treating them as epoch.
+                EnteredLaneAt = raw.TryGetProperty("enteredLaneAt", out var entered) && entered.TryGetDateTime(out var entDt) ? entDt : lastActivity,
                 SessionName = raw.TryGetProperty("sessionName", out var sn) ? sn.GetString() : null,
                 LastUsage = raw.TryGetProperty("lastUsage", out var lu) && lu.ValueKind == JsonValueKind.Object
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), TaskJsonFile.ReadOpts)

@@ -634,6 +634,9 @@ public class TaskMutationService
             ["id"] = jobId,
             ["title"] = req.Title,
             ["createdAt"] = DateTime.UtcNow.ToString("o"),
+            // Lane-entry sort anchor: a freshly created task has just entered
+            // its initial lane, so stamp it now. Re-stamped on every move.
+            ["enteredLaneAt"] = DateTime.UtcNow.ToString("o"),
             ["state"] = targetState,
             ["order"] = resolvedOrder,
             ["agent"] = effectiveAgent,

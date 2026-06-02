@@ -24,6 +24,14 @@ public record TaskInfo
     public string FolderPath { get; init; } = "";
     public DateTime LastActivity { get; init; }
     /// <summary>
+    /// Wall-clock UTC instant the task most recently entered its current lane.
+    /// Stamped at create time and on every lane move. Legacy tasks written
+    /// before this field existed fall back to <see cref="LastActivity"/> at
+    /// scan time, so this is never default(DateTime) for a scanned task.
+    /// Drives the <c>lane-entry</c> sort (newest entry on top).
+    /// </summary>
+    public DateTime EnteredLaneAt { get; init; }
+    /// <summary>
     /// Per-job orchestrator token totals, surfaced on the kanban card as a
     /// small "token bubble". Populated at endpoint-read time from the
     /// project's <c>orchestrator.jsonl</c>, filtered by this job's id; null
@@ -1312,44 +1320,39 @@ public static class LaneSortStrategies
     public const string LastActivity = "last-activity";
 
     /// <summary>
+    /// Hybrid default: most-recently-entered-lane on top, with manually
+    /// dragged cards pinned. Cards with an explicit <c>order</c> (i.e. not the
+    /// 999 sentinel) cluster on top by <c>order</c> asc — these are the
+    /// drag-pinned cards; the rest flow by <c>enteredLaneAt</c> desc so the
+    /// newest arrival is on top. This is the default for every lane.
+    /// </summary>
+    public const string LaneEntry = "lane-entry";
+
+    /// <summary>
     /// Internal auto-pickup priority. Sort by <c>order</c> asc + <c>lastActivity</c>
     /// asc. Reserved for the runner; not selectable in the project-settings UI.
     /// </summary>
     public const string PickupPriority = "pickup-priority";
 
+    /// <summary>The sentinel <c>order</c> value meaning "not explicitly placed".</summary>
+    public const int UnpinnedOrder = 999;
+
     /// <summary>All strategies including the internal pickup-priority.</summary>
     public static readonly string[] All =
-        [Manual, NewestFirst, OldestFirst, LastActivity, PickupPriority];
+        [Manual, NewestFirst, OldestFirst, LastActivity, LaneEntry, PickupPriority];
 
     /// <summary>Strategies surfaced in the project-settings UI dropdown.</summary>
     public static readonly string[] UserVisible =
-        [Manual, NewestFirst, OldestFirst, LastActivity];
+        [LaneEntry, Manual, NewestFirst, OldestFirst, LastActivity];
 
     /// <summary>
     /// Default strategy used when a lane has no explicit override in
-    /// <see cref="ProjectSettings.LaneSortStrategies"/>. Picked to match the
-    /// operator mental model: newest-first for the queue lanes, last-activity
-    /// for the working lanes, oldest-first for the review FIFO, manual
-    /// otherwise.
+    /// <see cref="ProjectSettings.LaneSortStrategies"/>. Every lane now defaults
+    /// to <see cref="LaneEntry"/>: the card that most recently entered the lane
+    /// floats to the top, while a manual drag pins a card in place. A project
+    /// can still override any lane via <c>LaneSortStrategyOverrides</c>.
     /// </summary>
-    public static string GetDefaultForLane(string lane)
-    {
-        return lane switch
-        {
-            TaskStates.Backlog => NewestFirst,
-            TaskStates.Preparation => NewestFirst,
-            TaskStates.OrchestratorPrep => NewestFirst,
-            TaskStates.NeedsHumanReview => NewestFirst,
-            TaskStates.Ready => NewestFirst,
-            TaskStates.Progress => LastActivity,
-            TaskStates.FailedPickup => NewestFirst,
-            TaskStates.AutoReview => LastActivity,
-            TaskStates.HumanReview => OldestFirst,
-            TaskStates.Completed => LastActivity,
-            TaskStates.Archive => LastActivity,
-            _ => Manual,
-        };
-    }
+    public static string GetDefaultForLane(string lane) => LaneEntry;
 
     /// <summary>
     /// Returns the configured strategy for a lane, falling back to
@@ -1396,6 +1399,7 @@ public static class LaneSortStrategies
             NewestFirst => Comparer<TaskInfo>.Create(CompareNewestFirst),
             OldestFirst => Comparer<TaskInfo>.Create(CompareOldestFirst),
             LastActivity => Comparer<TaskInfo>.Create(CompareLastActivityDesc),
+            LaneEntry => Comparer<TaskInfo>.Create(CompareLaneEntry),
             PickupPriority => Comparer<TaskInfo>.Create(ComparePickupPriority),
             _ => Comparer<TaskInfo>.Create(CompareManual),
         };
@@ -1407,6 +1411,31 @@ public static class LaneSortStrategies
         if (byOrder != 0) return byOrder;
         // Stable tiebreaker: newer key on top so two cards at order 999
         // sort consistently. CompareKeyDesc handles null keys safely.
+        return CompareKeyDesc(a, b);
+    }
+
+    /// <summary>
+    /// Hybrid lane-entry order. A card is "pinned" when it carries an explicit
+    /// <c>order</c> (anything other than the <see cref="UnpinnedOrder"/>
+    /// sentinel) — those are the cards a user dragged into place. Pinned cards
+    /// cluster on top sorted by <c>order</c> asc; everything else flows below
+    /// them by <c>enteredLaneAt</c> desc (newest arrival on top), with key desc
+    /// as a stable tiebreaker. This lets a manual drag override the time-based
+    /// flow without disabling it for the rest of the lane.
+    /// </summary>
+    private static int CompareLaneEntry(TaskInfo a, TaskInfo b)
+    {
+        var aPinned = a.Order != UnpinnedOrder;
+        var bPinned = b.Order != UnpinnedOrder;
+        if (aPinned != bPinned) return aPinned ? -1 : 1;
+        if (aPinned)
+        {
+            var byOrder = a.Order.CompareTo(b.Order);
+            if (byOrder != 0) return byOrder;
+            return CompareKeyDesc(a, b);
+        }
+        var byEntry = b.EnteredLaneAt.CompareTo(a.EnteredLaneAt);
+        if (byEntry != 0) return byEntry;
         return CompareKeyDesc(a, b);
     }
 

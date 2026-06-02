@@ -16,6 +16,12 @@ export interface LaneSortStrategyMeta {
 }
 
 const META: Record<string, LaneSortStrategyMeta> = {
+  'lane-entry': {
+    value: 'lane-entry',
+    label: 'Lane entry',
+    icon: '⤓',
+    hint: 'Most recently entered on top; drag a card to pin it.',
+  },
   manual: {
     value: 'manual',
     label: 'Manual',
@@ -52,6 +58,7 @@ const META: Record<string, LaneSortStrategyMeta> = {
 
 /** Strategies offered in the project-settings dropdown, in display order. */
 export const USER_VISIBLE_LANE_SORT_STRATEGIES: readonly LaneSortStrategyMeta[] = [
+  META['lane-entry'],
   META['manual'],
   META['newest-first'],
   META['oldest-first'],
@@ -60,11 +67,20 @@ export const USER_VISIBLE_LANE_SORT_STRATEGIES: readonly LaneSortStrategyMeta[] 
 
 export function laneSortStrategyMeta(strategy: string | null | undefined): LaneSortStrategyMeta {
   if (strategy && META[strategy]) return META[strategy];
-  return META['manual'];
+  return META['lane-entry'];
 }
 
 export function isManualStrategy(strategy: string | null | undefined): boolean {
   return strategy === 'manual';
+}
+
+/**
+ * Strategies under which drag-reorder is allowed. `manual` reorders the whole
+ * lane; `lane-entry` lets a drag pin individual cards while the rest flow by
+ * entry time. Mirrors the backend `laneReorderDisabled` gate.
+ */
+export function allowsDragReorder(strategy: string | null | undefined): boolean {
+  return strategy === 'manual' || strategy === 'lane-entry';
 }
 
 export interface SortableLaneMeta {

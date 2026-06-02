@@ -34,7 +34,7 @@ public class TaskScannerMoveTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private TaskStateMachine BuildStateMachine()
+    private TaskScannerService BuildScanner()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -44,9 +44,11 @@ public class TaskScannerMoveTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
-        return new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
     }
+
+    private TaskStateMachine BuildStateMachine()
+        => new(BuildScanner(), NullLogger<TaskStateMachine>.Instance);
 
     private void WriteJob(string state, string slug)
     {
@@ -66,6 +68,36 @@ public class TaskScannerMoveTests : IDisposable
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "demo-task")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "demo-task")));
+    }
+
+    [Fact]
+    public void MoveJob_StampsEnteredLaneAtOnTargetJobJson()
+    {
+        // WriteJob deliberately omits enteredLaneAt (a legacy folder). The move
+        // must stamp it so the lane-entry sort has an anchor in the new lane.
+        WriteJob(TaskStates.Completed, "stamp-task");
+
+        var outcome = BuildStateMachine().MoveJob("stamp-task", TaskStates.Archive, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var json = File.ReadAllText(
+            Path.Combine(_watchPath, TaskStates.Archive, "stamp-task", "job.json"));
+        Assert.Contains("\"enteredLaneAt\"", json);
+    }
+
+    [Fact]
+    public void Scanner_LegacyJobWithoutEnteredLaneAt_FallsBackToLastActivity()
+    {
+        // A legacy folder has no enteredLaneAt field. The scanner must not throw
+        // and must surface a non-default EnteredLaneAt, falling back to the
+        // folder's LastActivity so the lane-entry sort degrades gracefully.
+        WriteJob(TaskStates.Ready, "legacy-task");
+
+        var jobs = BuildScanner().ScanAllJobsRaw();
+        var legacy = jobs.Single(j => j.Id == "legacy-task");
+
+        Assert.NotEqual(default, legacy.EnteredLaneAt);
+        Assert.Equal(legacy.LastActivity, legacy.EnteredLaneAt);
     }
 
     [Fact]

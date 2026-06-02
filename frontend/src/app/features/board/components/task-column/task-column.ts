@@ -8,7 +8,7 @@ import { groupReviewJobs } from '../review-grouping.util';
 import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
-import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
+import { laneSortStrategyMeta, isManualStrategy, allowsDragReorder } from '../../../../services/lane-sort.util';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
@@ -108,6 +108,13 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     const meta = laneSortStrategyMeta(strategy);
     if (isManualStrategy(strategy)) {
       return { icon: meta.icon, label: meta.label, tooltip: 'Manual order — drag cards to reorder.' };
+    }
+    if (strategy === 'lane-entry') {
+      return {
+        icon: meta.icon,
+        label: meta.label,
+        tooltip: 'Most recently entered on top — drag a card to pin it in place.',
+      };
     }
     return {
       icon: meta.icon,

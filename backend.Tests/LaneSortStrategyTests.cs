@@ -30,16 +30,20 @@ public sealed class LaneSortStrategyTests : IDisposable
     }
 
     [Theory]
-    [InlineData(TaskStates.Backlog, LaneSortStrategies.NewestFirst)]
-    [InlineData(TaskStates.Preparation, LaneSortStrategies.NewestFirst)]
-    [InlineData(TaskStates.Ready, LaneSortStrategies.NewestFirst)]
-    [InlineData(TaskStates.Progress, LaneSortStrategies.LastActivity)]
-    [InlineData(TaskStates.AutoReview, LaneSortStrategies.LastActivity)]
-    [InlineData(TaskStates.HumanReview, LaneSortStrategies.OldestFirst)]
-    [InlineData(TaskStates.Completed, LaneSortStrategies.LastActivity)]
-    public void DefaultStrategyMatchesPromptTable(string lane, string expected)
+    [InlineData(TaskStates.Backlog)]
+    [InlineData(TaskStates.Preparation)]
+    [InlineData(TaskStates.OrchestratorPrep)]
+    [InlineData(TaskStates.NeedsHumanReview)]
+    [InlineData(TaskStates.Ready)]
+    [InlineData(TaskStates.Progress)]
+    [InlineData(TaskStates.FailedPickup)]
+    [InlineData(TaskStates.AutoReview)]
+    [InlineData(TaskStates.HumanReview)]
+    [InlineData(TaskStates.Completed)]
+    [InlineData(TaskStates.Archive)]
+    public void EveryLaneDefaultsToLaneEntry(string lane)
     {
-        Assert.Equal(expected, LaneSortStrategies.GetDefaultForLane(lane));
+        Assert.Equal(LaneSortStrategies.LaneEntry, LaneSortStrategies.GetDefaultForLane(lane));
     }
 
     [Fact]
@@ -66,7 +70,7 @@ public sealed class LaneSortStrategyTests : IDisposable
                 [TaskStates.Ready] = "bogus-strategy",
             },
         };
-        Assert.Equal(LaneSortStrategies.NewestFirst,
+        Assert.Equal(LaneSortStrategies.LaneEntry,
             LaneSortStrategies.Resolve(settings, TaskStates.Ready));
     }
 
@@ -142,6 +146,55 @@ public sealed class LaneSortStrategyTests : IDisposable
     }
 
     [Fact]
+    public void LaneEntryComparator_OrdersByEnteredLaneAtDescIgnoringCreatedAt()
+    {
+        // All cards are unpinned (sentinel order). The most recently entered
+        // lane sits on top even when its CreatedAt is the oldest — acceptance (a).
+        var jobs = new[]
+        {
+            J("a", order: LaneSortStrategies.UnpinnedOrder, createdAt: T(100), enteredLaneAt: T(1)),
+            J("b", order: LaneSortStrategies.UnpinnedOrder, createdAt: T(1), enteredLaneAt: T(3)),
+            J("c", order: LaneSortStrategies.UnpinnedOrder, createdAt: T(50), enteredLaneAt: T(2)),
+        };
+        var cmp = LaneSortStrategies.GetComparer(LaneSortStrategies.LaneEntry);
+        var sorted = jobs.OrderBy(j => j, cmp).Select(j => j.Id).ToArray();
+        Assert.Equal(new[] { "b", "c", "a" }, sorted);
+    }
+
+    [Fact]
+    public void LaneEntryComparator_PinnedCardStaysOnTopWhileOthersFlowByEntryTime()
+    {
+        // "p" was dragged (explicit order) so it pins to the top even though it
+        // entered the lane first; the unpinned cards flow by entry desc below
+        // it — acceptance (b): drag overrides the time-based flow.
+        var jobs = new[]
+        {
+            J("x", order: LaneSortStrategies.UnpinnedOrder, enteredLaneAt: T(5)),
+            J("p", order: 1, enteredLaneAt: T(1)),
+            J("y", order: LaneSortStrategies.UnpinnedOrder, enteredLaneAt: T(3)),
+        };
+        var cmp = LaneSortStrategies.GetComparer(LaneSortStrategies.LaneEntry);
+        var sorted = jobs.OrderBy(j => j, cmp).Select(j => j.Id).ToArray();
+        Assert.Equal(new[] { "p", "x", "y" }, sorted);
+    }
+
+    [Fact]
+    public void LaneEntryComparator_MultiplePinnedClusterByOrderAboveUnpinned()
+    {
+        // Two dragged cards cluster on top by order asc regardless of entry
+        // time; the unpinned card flows below them.
+        var jobs = new[]
+        {
+            J("p2", order: 2, enteredLaneAt: T(9)),
+            J("u", order: LaneSortStrategies.UnpinnedOrder, enteredLaneAt: T(8)),
+            J("p1", order: 1, enteredLaneAt: T(1)),
+        };
+        var cmp = LaneSortStrategies.GetComparer(LaneSortStrategies.LaneEntry);
+        var sorted = jobs.OrderBy(j => j, cmp).Select(j => j.Id).ToArray();
+        Assert.Equal(new[] { "p1", "p2", "u" }, sorted);
+    }
+
+    [Fact]
     public void NullKey_PushedToBottomInKeyBasedStrategies()
     {
         var jobs = new[]
@@ -169,18 +222,19 @@ public sealed class LaneSortStrategyTests : IDisposable
         };
         ProjectSettings Resolver(string projectName)
         {
-            // Alpha uses default newest-first; Bravo overrides to manual.
-            if (string.Equals(projectName, "Bravo", StringComparison.OrdinalIgnoreCase))
+            // Alpha overrides to newest-first; Bravo overrides to manual. Both
+            // are explicit so this test isolates per-project grouping rather
+            // than tracking whatever the lane default happens to be.
+            var strategy = string.Equals(projectName, "Bravo", StringComparison.OrdinalIgnoreCase)
+                ? LaneSortStrategies.Manual
+                : LaneSortStrategies.NewestFirst;
+            return new ProjectSettings
             {
-                return new ProjectSettings
+                LaneSortStrategyOverrides = new Dictionary<string, string>
                 {
-                    LaneSortStrategyOverrides = new Dictionary<string, string>
-                    {
-                        [TaskStates.Ready] = LaneSortStrategies.Manual,
-                    },
-                };
-            }
-            return new ProjectSettings();
+                    [TaskStates.Ready] = strategy,
+                },
+            };
         }
 
         var sorted = LaneSortApplier
@@ -206,7 +260,7 @@ public sealed class LaneSortStrategyTests : IDisposable
         Assert.Equal(LaneSortStrategies.Manual, s.LaneSortStrategyOverrides![TaskStates.Ready]);
         Assert.Equal(LaneSortStrategies.Manual, LaneSortStrategies.Resolve(s, TaskStates.Ready));
         // Lanes without an override still resolve via defaults.
-        Assert.Equal(LaneSortStrategies.NewestFirst, LaneSortStrategies.Resolve(s, TaskStates.Backlog));
+        Assert.Equal(LaneSortStrategies.LaneEntry, LaneSortStrategies.Resolve(s, TaskStates.Backlog));
     }
 
     [Fact]
@@ -218,7 +272,7 @@ public sealed class LaneSortStrategyTests : IDisposable
 
         var s = svc.Get("acme");
         Assert.Null(s.LaneSortStrategyOverrides);
-        Assert.Equal(LaneSortStrategies.NewestFirst, LaneSortStrategies.Resolve(s, TaskStates.Ready));
+        Assert.Equal(LaneSortStrategies.LaneEntry, LaneSortStrategies.Resolve(s, TaskStates.Ready));
     }
 
     private ProjectSettingsService BuildSettings()
@@ -240,7 +294,8 @@ public sealed class LaneSortStrategyTests : IDisposable
         string? project = null,
         int order = 1,
         DateTime? createdAt = null,
-        DateTime? lastActivity = null)
+        DateTime? lastActivity = null,
+        DateTime? enteredLaneAt = null)
     {
         return new TaskInfo
         {
@@ -254,6 +309,7 @@ public sealed class LaneSortStrategyTests : IDisposable
             WatchPath = "/tmp/" + (project ?? "TestProject"),
             CreatedAt = createdAt ?? T(0),
             LastActivity = lastActivity ?? createdAt ?? T(0),
+            EnteredLaneAt = enteredLaneAt ?? lastActivity ?? createdAt ?? T(0),
         };
     }
 }

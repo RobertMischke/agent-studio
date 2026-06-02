@@ -101,7 +101,7 @@ import { MediaLightboxComponent } from './components/media-lightbox/media-lightb
 import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
-import { displayStateToLaneKey } from './services/lane-sort.util';
+import { displayStateToLaneKey, allowsDragReorder } from './services/lane-sort.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
@@ -1757,15 +1757,18 @@ export class App implements OnInit, OnDestroy {
   }
 
   /**
-   * F35: drag-reorder is permitted only on lanes whose resolved strategy is
-   * `manual`. While strategy data is still loading (empty string) we keep
-   * the historical behaviour and allow reorder so the board never flickers
-   * into a disabled state if the settings endpoint is briefly unavailable.
+   * F35: drag-reorder is permitted on lanes whose resolved strategy is
+   * `manual` or `lane-entry`. Under `lane-entry` a drag pins a card in place
+   * (explicit order) while the rest of the lane keeps flowing by entry time —
+   * so reorder must stay enabled for the override to work. While strategy data
+   * is still loading (empty string) we keep the historical behaviour and allow
+   * reorder so the board never flickers into a disabled state if the settings
+   * endpoint is briefly unavailable.
    */
   laneReorderDisabled(state: string, jobs: TaskInfo[]): boolean {
     const strategy = this.laneSortStrategy(state, jobs);
     if (!strategy) return false;
-    return strategy !== 'manual';
+    return !allowsDragReorder(strategy);
   }
 
   /**
