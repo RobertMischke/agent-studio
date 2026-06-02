@@ -79,6 +79,39 @@
         "disableFix": true,
         "severity": "error"
       }
+    ],
+    "declaration-property-unit-disallowed-list": [
+      {
+        "padding": ["px"],
+        "padding-top": ["px"],
+        "padding-right": ["px"],
+        "padding-bottom": ["px"],
+        "padding-left": ["px"],
+        "padding-block": ["px"],
+        "padding-inline": ["px"],
+        "padding-block-start": ["px"],
+        "padding-block-end": ["px"],
+        "padding-inline-start": ["px"],
+        "padding-inline-end": ["px"],
+        "margin": ["px"],
+        "margin-top": ["px"],
+        "margin-right": ["px"],
+        "margin-bottom": ["px"],
+        "margin-left": ["px"],
+        "margin-block": ["px"],
+        "margin-inline": ["px"],
+        "margin-block-start": ["px"],
+        "margin-block-end": ["px"],
+        "margin-inline-start": ["px"],
+        "margin-inline-end": ["px"],
+        "gap": ["px"],
+        "row-gap": ["px"],
+        "column-gap": ["px"]
+      },
+      {
+        "message": "Use a --studio-spacing-* token instead of a hardcoded px value. See docs/style-guide/tokens.md.",
+        "severity": "warning"
+      }
     ]
   },
 
@@ -91,7 +124,17 @@
       ],
       "rules": {
         "color-no-hex": null,
-        "scale-unlimited/declaration-strict-value": null
+        "scale-unlimited/declaration-strict-value": null,
+        "declaration-property-unit-disallowed-list": null
+      }
+    },
+    {
+      "comment": "Shared SCSS mixins (icon-button, chip, empty-state, thin-scroll). The mixin file owns the px source-of-truth for the canonical shapes; consumers @include the mixin instead of duplicating the values. Exempt the spacing-unit rule on this file.",
+      "files": [
+        "src/styles/_mixins.scss"
+      ],
+      "rules": {
+        "declaration-property-unit-disallowed-list": null
       }
     },
     {
@@ -101,7 +144,8 @@
       ],
       "rules": {
         "color-no-hex": null,
-        "scale-unlimited/declaration-strict-value": null
+        "scale-unlimited/declaration-strict-value": null,
+        "declaration-property-unit-disallowed-list": null
       }
     },
     {

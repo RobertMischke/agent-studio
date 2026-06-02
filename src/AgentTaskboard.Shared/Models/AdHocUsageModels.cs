@@ -57,6 +57,7 @@ public static class AdHocUsageSources
     public const string CommitMessage     = "commit-message";
     public const string SoftReasoning     = "soft-reasoning";
     public const string ReviewDecision    = "review-decision";
+    public const string DriftAnalysis     = "drift-analysis";
     public const string Unknown           = "unknown";
 }
 

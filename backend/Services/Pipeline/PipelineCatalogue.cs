@@ -44,6 +44,32 @@ public static class PipelineCatalogue
     };
 
     public const string CoreAgentRunStepId = "core-agent-run";
+
+    /// <summary>
+    /// The five drift dimensions ship as opt-in <see cref="StepKind.Drift"/>
+    /// post-steps (DRIFT Nachtrag): four LLM dimensions plus the rule-based
+    /// code-pattern check. They default <c>DefaultEnabled = false</c> because a
+    /// drift run is an expensive extra pass an operator turns on per project;
+    /// the trigger is wired in <c>DriftPostStepRunner</c>, which reuses the
+    /// existing <c>*DriftAnalysisService</c> + <c>DriftReportStore</c>. The id
+    /// suffix after <c>post-drift-</c> selects the dimension; keep it in sync
+    /// with <c>DriftPostStepRunner</c>'s dispatch.
+    /// </summary>
+    public const string DriftAdrCodeStepId = "post-drift-adr-code";
+    public const string DriftSoftwareArchitectureStepId = "post-drift-software-architecture";
+    public const string DriftDocsMarketingStepId = "post-drift-docs-marketing";
+    public const string DriftSpecTaskJobStepId = "post-drift-spec-task-job";
+    public const string DriftCodePatternStepId = "post-drift-code-pattern";
+
+    public static readonly string[] DriftStepIds =
+    {
+        DriftAdrCodeStepId,
+        DriftSoftwareArchitectureStepId,
+        DriftDocsMarketingStepId,
+        DriftSpecTaskJobStepId,
+        DriftCodePatternStepId,
+    };
+
     public const string GitCommitAttributionStepId = "post-git-commit-attribution";
     /// <summary>
     /// Post-step that runs <c>npx stylelint</c> over the frontend SCSS tree
@@ -149,7 +175,39 @@ public static class PipelineCatalogue
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
                 },
+                .. BuildDriftSteps(),
             ],
         };
+    }
+
+    // The opt-in drift post-steps. They run after the auto-review decision (so
+    // the task's own work is settled before drift is measured) and default off
+    // - an absent override leaves them disabled. Four are LLM dimensions that
+    // accept a per-step model; code-pattern is rule-based but still carries a
+    // model so an operator can opt into the optional LLM verdict-enrichment pass.
+    private static IEnumerable<PipelineStep> BuildDriftSteps()
+    {
+        var dependsOnReview = new[] { OrchestratorDecisionStepId };
+        (string Id, string Name)[] dims =
+        {
+            (DriftAdrCodeStepId, "Drift: ADR / Code"),
+            (DriftSoftwareArchitectureStepId, "Drift: Software / Architecture"),
+            (DriftDocsMarketingStepId, "Drift: Docs / Marketing"),
+            (DriftSpecTaskJobStepId, "Drift: Spec / Task / Job"),
+            (DriftCodePatternStepId, "Drift: Code-Pattern (rule-based)"),
+        };
+        foreach (var (id, name) in dims)
+        {
+            yield return new PipelineStep
+            {
+                Id = id,
+                DisplayName = name,
+                Kind = StepKind.Drift,
+                RunMode = StepRunMode.Sequential,
+                DependsOn = [.. dependsOnReview],
+                Idempotent = true,
+                DefaultEnabled = false,
+            };
+        }
     }
 }

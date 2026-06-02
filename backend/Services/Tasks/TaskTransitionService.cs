@@ -18,6 +18,7 @@ public sealed class TaskTransitionService
     private readonly ILogger<TaskTransitionService> _logger;
     private readonly TaskSessionLog? _sessions;
     private readonly CompletedPushQueue? _pushQueue;
+    private readonly OrchestratorApi.Services.Drift.DriftPostStepRunner? _driftRunner;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -39,7 +40,8 @@ public sealed class TaskTransitionService
         ProjectSettingsService settings,
         ILogger<TaskTransitionService> logger,
         TaskSessionLog? sessions = null,
-        CompletedPushQueue? pushQueue = null)
+        CompletedPushQueue? pushQueue = null,
+        OrchestratorApi.Services.Drift.DriftPostStepRunner? driftRunner = null)
     {
         _scanner = scanner;
         _states = states;
@@ -49,6 +51,7 @@ public sealed class TaskTransitionService
         _logger = logger;
         _sessions = sessions;
         _pushQueue = pushQueue;
+        _driftRunner = driftRunner;
     }
 
     /// <summary>
@@ -112,6 +115,16 @@ public sealed class TaskTransitionService
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
             if (attributed != null) RunCommitAttribution(attributed, watchPath);
+
+            // DRIFT Nachtrag: fire the enabled drift dimensions as automatic
+            // post-steps once the task has settled into auto-review. Fire-and-
+            // forget and fully guarded - a drift failure (or the absence of any
+            // enabled dimension; the runner self-gates default-OFF) must never
+            // affect the lane transition that already completed above.
+            if (attributed != null && _driftRunner != null)
+            {
+                TriggerDriftPostSteps(attributed, settings);
+            }
         }
 
         // Drag-and-drop carries a desired slot in the target lane. Without
@@ -263,6 +276,33 @@ public sealed class TaskTransitionService
         {
             _logger.LogWarning(ex, "commit-attribution post-step failed for {JobId}", moved.Id);
         }
+    }
+
+    /// <summary>
+    /// Fire-and-forget trigger for the opt-in drift post-steps (DRIFT Nachtrag).
+    /// The transition has already committed on disk, so this runs on a detached
+    /// task and swallows every failure: a drift run is an expensive extra pass
+    /// whose outcome must never feed back into the lane move. The runner itself
+    /// self-gates (default-OFF), so when no drift dimension is enabled for the
+    /// project this returns almost immediately.
+    /// </summary>
+    private void TriggerDriftPostSteps(TaskInfo moved, ProjectSettings settings)
+    {
+        var runner = _driftRunner;
+        if (runner == null) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await runner.RunAsync(moved.ProjectName, moved.Id, moved.FolderPath, settings, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "drift post-step trigger failed for {JobId}", moved.Id);
+            }
+        });
     }
 
     private async Task<TaskCommitInfo?> TryAutoCommitAsync(string jobId, string? watchPath, CancellationToken ct)

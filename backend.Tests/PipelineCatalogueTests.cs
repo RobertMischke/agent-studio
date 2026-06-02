@@ -28,8 +28,37 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post: 4 aspects + commit-attribution + lint-scss + orchestrator decision.
-        Assert.Equal(7, p.Post.Count);
+        // Post: 4 aspects + commit-attribution + lint-scss + orchestrator
+        // decision + 5 opt-in drift dimensions (DRIFT Nachtrag).
+        Assert.Equal(12, p.Post.Count);
+    }
+
+    [Fact]
+    public void StandardPipeline_DriftSteps_AreOptInPostSteps_DefaultOff_AfterTheDecision()
+    {
+        // DRIFT Nachtrag: the five drift dimensions ship as Kind=Drift
+        // post-steps that default OFF (an opt-in expensive pass) and run after
+        // the auto-review decision so the task's own work is settled before
+        // drift is measured.
+        var p = PipelineCatalogue.Standard;
+        var driftSteps = p.Post.Where(s => s.Kind == StepKind.Drift).ToList();
+        Assert.Equal(5, driftSteps.Count);
+
+        // The ids on the pipeline match the catalogue constants one-to-one.
+        Assert.Equal(
+            PipelineCatalogue.DriftStepIds.OrderBy(x => x, StringComparer.Ordinal),
+            driftSteps.Select(s => s.Id).OrderBy(x => x, StringComparer.Ordinal));
+
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        foreach (var step in driftSteps)
+        {
+            Assert.False(step.DefaultEnabled, $"{step.Id} drift step must default OFF (opt-in)");
+            Assert.True(step.Idempotent, $"{step.Id} drift step must be idempotent");
+            Assert.Contains(PipelineCatalogue.OrchestratorDecisionStepId, step.DependsOn);
+            var stepIndex = p.Post.FindIndex(s => s.Id == step.Id);
+            Assert.True(stepIndex > decisionIndex,
+                $"{step.Id} (idx {stepIndex}) must come after the orchestrator-decision (idx {decisionIndex})");
+        }
     }
 
     [Fact]

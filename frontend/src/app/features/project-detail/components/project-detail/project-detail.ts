@@ -120,8 +120,9 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   /**
    * One row per configurable step: the catalogue metadata joined with the
-   * project's current override. `enabled` defaults true (absent override or
-   * null Enabled both mean on); `model` / `mode` empty string = inherit.
+   * project's current override. With no override (or a null `enabled`) the row
+   * falls back to the step's `defaultEnabled` - on for most steps, off for the
+   * opt-in drift post-steps. `model` / `mode` empty string = inherit.
    */
   readonly pipelineRows = computed(() => {
     const overrides = this.pipelineOverrides();
@@ -134,7 +135,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         usesModel: step.usesModel,
         supportsMode: step.supportsMode,
         canDisable: step.canDisable,
-        enabled: ov?.enabled !== false,
+        enabled: ov?.enabled ?? step.defaultEnabled,
         model: ov?.model ?? '',
         mode: ov?.mode ?? '',
       };

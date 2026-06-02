@@ -65,9 +65,24 @@ public static class PipelineStepConfigResolver
         return null;
     }
 
-    /// <summary>True unless the project explicitly disabled the step.</summary>
+    /// <summary>
+    /// True unless the project explicitly disabled the step. This overload has
+    /// no catalogue step in hand, so an absent override defaults to on - the
+    /// right behavior for the always-on aspect / tool / orchestrator steps.
+    /// For an opt-in step (drift) prefer the <see cref="IsEnabled(ProjectSettings?, PipelineStep)"/>
+    /// overload so the step's own <see cref="PipelineStep.DefaultEnabled"/> is honored.
+    /// </summary>
     public static bool IsEnabled(ProjectSettings? settings, string stepId)
         => Lookup(settings, stepId)?.Enabled ?? true;
+
+    /// <summary>
+    /// True when the step should run for this project: an explicit project
+    /// override wins, otherwise the step's own <see cref="PipelineStep.DefaultEnabled"/>.
+    /// This is what makes the drift post-steps default off (opt-in) while every
+    /// other step stays on by default.
+    /// </summary>
+    public static bool IsEnabled(ProjectSettings? settings, PipelineStep step)
+        => Lookup(settings, step.Id)?.Enabled ?? step.DefaultEnabled;
 
     /// <summary>
     /// Resolve the model for a step addressed by id, with no catalogue

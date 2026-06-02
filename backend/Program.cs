@@ -234,6 +234,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DocsMarketingDriftA
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SpecTaskDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SoftwareArchitectureDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.ArchitectureElementStateStore>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DriftPostStepRunner>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Tags.TagRegistryService>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<FilesystemLayerSnapshotService>();

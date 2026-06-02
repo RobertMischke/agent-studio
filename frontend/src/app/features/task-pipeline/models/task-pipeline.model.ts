@@ -5,7 +5,7 @@
  * enums as camelCase strings via the global `JsonStringEnumConverter`).
  */
 
-export type StepKind = 'module' | 'core' | 'aspect' | 'orchestrator' | 'tool';
+export type StepKind = 'module' | 'core' | 'aspect' | 'orchestrator' | 'tool' | 'drift';
 export type StepRunMode = 'sequential' | 'parallel';
 export type PipelineStepStatus =
   | 'pending'
@@ -112,6 +112,11 @@ export interface PipelineCatalogueStep {
   usesModel: boolean;
   supportsMode: boolean;
   canDisable: boolean;
+  /**
+   * Initial toggle state when the project has no explicit override. Drift
+   * post-steps ship `false` (opt-in, expensive); every other step is `true`.
+   */
+  defaultEnabled: boolean;
 }
 
 /** Envelope of `GET /api/projects/pipeline-catalogue`. */

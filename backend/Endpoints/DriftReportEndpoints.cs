@@ -682,25 +682,9 @@ public static class DriftReportEndpoints
     /// Resolves the source repository root by walking up from
     /// <see cref="AppContext.BaseDirectory"/> until <c>AGENTS.md</c> is found.
     /// Falls back to the current working directory when no marker exists.
+    /// Shared with the automatic drift trigger via <see cref="DriftRepoRootLocator"/>.
     /// </summary>
-    private static string ResolveRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "AGENTS.md")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-        var cwd = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (cwd is not null)
-        {
-            if (File.Exists(Path.Combine(cwd.FullName, "AGENTS.md")))
-                return cwd.FullName;
-            cwd = cwd.Parent;
-        }
-        return Directory.GetCurrentDirectory();
-    }
+    private static string ResolveRepoRoot() => DriftRepoRootLocator.Resolve();
 
     private static string BuildDocsMarketingEvidenceOnlyMarkdown(
         DocsMarketingDriftScope scope,

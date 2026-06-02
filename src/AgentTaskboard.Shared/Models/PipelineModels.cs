@@ -65,6 +65,14 @@ public sealed record PipelineStep
     /// execution record but does not run.
     /// </summary>
     public bool Stub { get; init; }
+    /// <summary>
+    /// Whether the step runs when a project has no explicit override for it.
+    /// Most steps default on; the opt-in drift post-steps default off because
+    /// a drift run is an expensive extra LLM pass the operator turns on per
+    /// project. <see cref="OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.IsEnabled(ProjectSettings?, PipelineStep)"/>
+    /// resolves the project override against this default.
+    /// </summary>
+    public bool DefaultEnabled { get; init; } = true;
 }
 
 public enum StepKind
@@ -98,6 +106,17 @@ public enum StepKind
     /// the implementation.
     /// </summary>
     Tool,
+    /// <summary>
+    /// One drift-analysis dimension run as an opt-in post-step (ADR / Code,
+    /// Software / Architecture, Docs / Marketing, Spec / Task / Job, and the
+    /// rule-based Code-Pattern check). Reuses the existing
+    /// <c>*DriftAnalysisService</c> + <c>DriftReportStore</c>; the post-step
+    /// only adds the automatic trigger. Drift steps default off (opt-in) and
+    /// accept a per-step model like an aspect because four of the five
+    /// dimensions drive an LLM call. Implemented by
+    /// <c>DriftPostStepRunner</c>.
+    /// </summary>
+    Drift,
 }
 
 public enum StepRunMode

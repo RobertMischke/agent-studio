@@ -84,6 +84,17 @@ module.exports = tseslint.config(
       '@angular-eslint/template/eqeqeq': 'error',
       '@angular-eslint/template/no-empty-control-flow': 'error',
       '@angular-eslint/template/no-negated-async': 'error',
+      // Design-system rule: literal `style="..."` attributes in templates are
+      // a token-bypass — the design-system tokens stop being authoritative the
+      // moment a template ships a raw hex / px. Programmatic style bindings
+      // (`[style.width.px]="..."`, `[ngStyle]="..."`) are exempt because they
+      // are needed for runtime-computed geometry (e.g. the side-sheet width
+      // animation). Severity: warning while the codebase migrates; promotion
+      // to error is tracked in docs/style-guide/migration-status.md.
+      '@angular-eslint/template/no-inline-styles': [
+        'warn',
+        { allowNgStyle: true, allowBindToStyle: true },
+      ],
     },
   },
   {

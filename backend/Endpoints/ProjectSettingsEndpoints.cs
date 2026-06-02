@@ -84,12 +84,16 @@ public static class ProjectSettingsEndpoints
                 displayName = s.DisplayName,
                 kind = s.Kind.ToString(),
                 // The core agent run cannot be disabled or model-overridden
-                // here (it uses the task's own CLI + model); aspect steps
-                // invoke an LLM so they accept a model; tool/orchestrator
+                // here (it uses the task's own CLI + model); aspect and drift
+                // steps invoke an LLM so they accept a model; tool/orchestrator
                 // gate steps accept a mode.
-                usesModel = s.Kind == StepKind.Aspect,
+                usesModel = s.Kind is StepKind.Aspect or StepKind.Drift,
                 supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
                 canDisable = s.Kind != StepKind.Core,
+                // The drift post-steps default off (opt-in); every other step
+                // defaults on. The Settings UI uses this to render the toggle's
+                // initial state when the project has no explicit override.
+                defaultEnabled = s.DefaultEnabled,
             }).ToList();
             return Results.Ok(new { pipelineId = pipeline.Id, steps });
         });
