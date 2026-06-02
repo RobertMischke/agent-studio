@@ -417,6 +417,132 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task NoCompletionSignal_WithRealPrompt_ReissuesDemandingSentinel_WithoutSpendingFastModel()
+    {
+        // Requirement 4 (deterministic completion): a run landed in
+        // 4-auto-review with NO terminal sentinel - only heuristic
+        // "done"-ish prose. It must NOT be silently treated as completed;
+        // the loop reissues to 2-ready demanding a deterministic close-out.
+        SeedReviewJobWithoutSentinel("ghosted-completion",
+            title: "Add pagination to the task list endpoint",
+            promptBody: "# Add pagination\n\nAdd cursor-based pagination to GET /api/tasks so the kanban can lazy-load lanes with hundreds of cards.\n");
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Deterministic branch: no fast-model call.
+        Assert.Equal(0, calls);
+
+        // Loop, do not accept: the job goes back to 2-ready at order 0, not
+        // forward to human-review or completed.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ghosted-completion")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "ghosted-completion")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "ghosted-completion")));
+        Assert.Equal(0, ReadJobOrder(TaskStates.Ready, "ghosted-completion"));
+
+        var log = ReadCliLog(TaskStates.Ready, "ghosted-completion");
+        Assert.Contains("[orchestrator]", log);
+        Assert.Contains("[reissue]", log);
+        Assert.Contains("no completion signal", log);
+
+        var followUpPath = Path.Combine(_watchPath, TaskStates.Ready, "ghosted-completion", "orchestrator-follow-up.md");
+        Assert.True(File.Exists(followUpPath));
+        var followUp = File.ReadAllText(followUpPath);
+        Assert.Contains("terminal sentinel", followUp);
+        Assert.Contains("[[TASK_DONE]]", followUp);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
+    }
+
+    [Fact]
+    public async Task NoCompletionSignal_AfterReissueBudgetExhausted_EscalatesNeverAcceptsAsDone()
+    {
+        // The acceptance criterion's terminating case: once the shared
+        // reissue budget is spent and the deterministic signal still never
+        // arrived, the orchestrator escalates to human review - it must
+        // NEVER fall back to accept-as-done.
+        SeedReviewJobWithoutSentinel("stubborn-no-signal",
+            title: "Wire up the metrics exporter",
+            promptBody: "# Metrics exporter\n\nExpose Prometheus counters for run starts, completions, and escalations from the orchestrator loop.\n");
+
+        // Default budget = 2; two prior reissues exhaust it.
+        AppendReissueDecision("stubborn-no-signal", "prior reissue 1");
+        AppendReissueDecision("stubborn-no-signal", "prior reissue 2");
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "stubborn-no-signal")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "stubborn-no-signal")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stubborn-no-signal")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "stubborn-no-signal")));
+
+        var log = ReadCliLog(TaskStates.HumanReview, "stubborn-no-signal");
+        Assert.Contains("[supervisor]", log);
+        Assert.Contains("[escalate]", log);
+        Assert.Contains("deterministic completion signal", log);
+
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Equal(3, records.Count);
+        Assert.Equal(ReviewDecisionKind.Escalate, records[^1].Kind);
+        // Never accept-as-done on a missing deterministic signal.
+        Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.AcceptAsDone);
+    }
+
+    [Fact]
+    public async Task NoCompletionSignal_WithEmptyPrompt_EscalatesImmediately()
+    {
+        // A placeholder/empty prompt cannot be driven to a sentinel by
+        // re-running, so escalate straight to human review rather than
+        // burning the reissue budget.
+        SeedReviewJobWithoutSentinel("empty-scope-no-signal",
+            title: "TODO",
+            promptBody: "# TODO\n");
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "empty-scope-no-signal")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "empty-scope-no-signal")));
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+    }
+
+    [Fact]
+    public async Task NoCompletionSignal_DoesNotReprocess_OnceEscalateLineIsPresent()
+    {
+        // Negative guard: a sentinel-less job the orchestrator already
+        // escalated (a [supervisor] follow-up line is present, nothing ran
+        // after it) must not be re-detected as a fresh no-signal case.
+        SeedReviewJobWithoutSentinel("already-escalated-no-signal",
+            title: "Refactor the watcher",
+            promptBody: "# Refactor\n\nSplit the watch-path scanner into per-project workers so a slow project cannot stall the others.\n",
+            includeRunnerActiveClearedMarker: false);
+        var logPath = TaskPathLog(TaskStates.AutoReview, "already-escalated-no-signal");
+        File.AppendAllText(logPath,
+            $"[12:05:00.000] [supervisor] [escalate] Orchestrator could not obtain a deterministic completion signal.{Environment.NewLine}");
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "already-escalated-no-signal")));
+        Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
+    }
+
+    [Fact]
     public async Task Blocked_PromotesToHumanReview_NoWrapperCard_WithoutSpendingFastModel()
     {
         SeedReviewJobWithBlocked("bug-commit-hangs", "awaiting user decision A/B/C");
@@ -1132,6 +1258,39 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
             $"[12:00:01.000] [stdout] [[TASK_BLOCKED: {reason}]]{Environment.NewLine}");
+    }
+
+    private void SeedReviewJobWithoutSentinel(string slug, string title, string promptBody, bool includeRunnerActiveClearedMarker = true)
+    {
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
+        var suffix = includeRunnerActiveClearedMarker
+            ? $"[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review){Environment.NewLine}"
+            : string.Empty;
+        // No terminal sentinel anywhere - just prose plus the technical
+        // "Runner active state cleared" bookkeeping marker that does not
+        // resolve anything. This is the heuristic-done / Unknown-completed
+        // shape that requirement 4 must not treat as silently completed.
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
+            $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
+            $"[12:00:01.000] [stdout] I think the work is finished, everything looks good.{Environment.NewLine}" +
+            suffix);
+    }
+
+    private void AppendReissueDecision(string slug, string reason)
+    {
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: slug,
+            Project: Project,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: reason,
+            Prompt: string.Empty,
+            Response: string.Empty,
+            FollowUp: string.Empty));
     }
 
     private void SeedReviewJobWithNoOp(string slug, string title, string promptBody)

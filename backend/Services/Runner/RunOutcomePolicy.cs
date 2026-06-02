@@ -315,8 +315,17 @@ public static class RunOutcomePolicy
          + "When you finish, end with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].";
 
     public static string BuildMissingSentinelInterventionPrompt(AgentOutcome outcome)
+        => BuildMissingSentinelInterventionPrompt(outcome.Summary);
+
+    /// <summary>
+    /// Overload used by the review-decision orchestrator's no-completion-signal
+    /// loop, which has a short situational summary rather than a full
+    /// <see cref="AgentOutcome"/>. Same framing so the agent always gets the
+    /// identical "close out with exactly one terminal sentinel" instruction.
+    /// </summary>
+    public static string BuildMissingSentinelInterventionPrompt(string? previousSummary)
         => "Your previous reply did not include the terminal sentinel required by this taskboard. "
          + "Continue the task if work remains; otherwise close it out now. "
          + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]]. "
-         + $"The orchestrator's current summary of your previous reply was: {outcome.Summary ?? "unclassified"}.";
+         + $"The orchestrator's current summary of your previous reply was: {previousSummary ?? "unclassified"}.";
 }

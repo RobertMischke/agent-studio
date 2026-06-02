@@ -336,6 +336,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             continue;
                         }
 
+                        if (pending.Kind == ReviewSignalKind.NoCompletionSignal)
+                        {
+                            // No terminal sentinel arrived. Fully
+                            // deterministic, like NOOP: reissue demanding a
+                            // sentinel until the shared budget is spent, then
+                            // escalate. Never a fast-model call, never an
+                            // accept-as-done.
+                            await ProcessNoCompletionSignalAsync(workspace, entry, pending, maxReissues, ct);
+                            _statusSnapshot.RecordReissue();
+                            continue;
+                        }
+
                         if (pending.Kind == ReviewSignalKind.Blocked)
                         {
                             // BLOCKED is also deterministic: the agent has
@@ -751,6 +763,126 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Kind: ReviewDecisionKind.Escalate,
             Reason: reason,
             Prompt: "(deterministic NOOP branch)",
+            Response: "(no fast-model call)",
+            FollowUp: string.Empty));
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Deterministic-completion contract (requirement 4): the run finished
+    /// without emitting any terminal sentinel. Mirrors <see cref="ProcessNoOpAsync"/> -
+    /// reissue with a sentinel-demanding follow-up while the shared reissue
+    /// budget allows, otherwise escalate to human review. The run is NEVER
+    /// accepted as done here: a job counts as completed only when the
+    /// deterministic signal is present.
+    /// </summary>
+    private async Task ProcessNoCompletionSignalAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        int maxReissues,
+        CancellationToken ct)
+    {
+        var (taskTitle, taskBody) = LoadTaskTitleAndBody(pending);
+        var promptUsable = IsPromptUsable(taskTitle, taskBody);
+
+        // Empty / placeholder prompt: re-running cannot help because there is
+        // nothing actionable to drive toward a sentinel. Hand to a human.
+        if (!promptUsable)
+        {
+            var reason = "Run finished without a terminal sentinel and the task prompt is empty or placeholder; cannot auto-recover.";
+            await EscalateNoCompletionSignalAsync(workspace, entry, pending, reason, ct);
+            return;
+        }
+
+        var prior = CountPriorReissues(workspace, entry.Name, pending.Job.Id);
+
+        // Budget exhausted: stop looping and hand to a human. Crucially we do
+        // not fall back to "accept as done" - the deterministic completion
+        // signal never arrived, so a human must judge the work.
+        if (prior >= maxReissues)
+        {
+            var reason = $"Run finished without a terminal sentinel after {prior} prior orchestrator reissue(s); user attention required.";
+            await EscalateNoCompletionSignalAsync(workspace, entry, pending, reason, ct);
+            return;
+        }
+
+        // Budget left: reissue, explicitly demanding a terminal sentinel on
+        // close-out.
+        var followUp = RunOutcomePolicy.BuildMissingSentinelInterventionPrompt(
+            "the previous run ended without any [[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel");
+        await ReissueNoCompletionSignalAsync(workspace, entry, pending, followUp, ct);
+    }
+
+    private async Task ReissueNoCompletionSignalAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        string followUp,
+        CancellationToken ct)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var reason = "Run finished without a terminal sentinel; reissuing and demanding a deterministic close-out signal.";
+
+        _chatLog.Append(current, OrchestratorMessageKind.Reissue,
+            $"Decision: reissue (no completion signal). Reason: {reason}");
+
+        var moved = MoveReissueToReadyTop(current, entry, "NO-SIGNAL");
+        if (moved != null)
+        {
+            await WriteFollowUpFileAsync(moved, followUp, ct);
+            EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+                TimelineActors.QualityLoop,
+                "Reopened: run finished without a terminal sentinel, reissued demanding one.",
+                BuildReopenDetails("no-completion-signal",
+                    CountPriorReissues(workspace, entry.Name, current.Id),
+                    reason));
+        }
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: reason,
+            Prompt: "(deterministic no-completion-signal branch)",
+            Response: "(no fast-model call)",
+            FollowUp: followUp));
+    }
+
+    private Task EscalateNoCompletionSignalAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        string reason,
+        CancellationToken ct)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+
+        _chatLog.AppendSupervisor(current, "escalate",
+            $"Orchestrator could not obtain a deterministic completion signal. Reason: {reason}. Promoted to 5-human-review.");
+
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after no-completion-signal escalate: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
+        EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
+            TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
+            BuildEscalateDetails("no-completion-signal", reason,
+                CountPriorReissues(workspace, entry.Name, current.Id)));
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reason,
+            Prompt: "(deterministic no-completion-signal branch)",
             Response: "(no fast-model call)",
             FollowUp: string.Empty));
 
@@ -1992,7 +2124,28 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var blocked = ReviewDecisionParsing.FindUnresolvedBlocked(log);
             var done = ReviewDecisionParsing.FindUnresolvedDone(log);
 
-            if (needs == null && noop == null && blocked == null && done == null) continue;
+            if (needs == null && noop == null && blocked == null && done == null)
+            {
+                // Deterministic-completion contract (requirement 4): a job can
+                // reach 4-auto-review with NO terminal sentinel at all - the
+                // run exited with only heuristic "done"-ish prose, or the
+                // terminal classifier force-routed an Unknown / committed-
+                // partial outcome here. Such a run must never be silently
+                // accepted as completed; it has to keep looping (reissue
+                // demanding a sentinel) until the shared reissue budget is
+                // spent, then escalate to human review.
+                //
+                // LacksTerminalSentinelInLatestRun separates that from a
+                // sentinel that was already resolved on a prior tick (the
+                // orchestrator wrote a follow-up line and nothing ran since):
+                // the latter returns false and is left untouched, so we never
+                // re-bill an already-handled card.
+                if (ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log))
+                {
+                    yield return new PendingDecision(info, ReviewSignalKind.NoCompletionSignal, LineNumber: -1, Reason: null, NeedsInput: null);
+                }
+                continue;
+            }
 
             int needsLine = needs?.LineNumber ?? -1;
             int noopLine = noop?.LineNumber ?? -1;
@@ -2194,7 +2347,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         NeedsInput,
         NoOp,
         Blocked,
-        Done
+        Done,
+        /// <summary>
+        /// The run landed in 4-auto-review with no terminal sentinel at all
+        /// (heuristic "done"-ish prose, an Unknown/committed-partial outcome
+        /// force-routed here, etc.). The deterministic-completion contract
+        /// forbids treating this as completed: the loop reissues demanding a
+        /// sentinel until the shared reissue budget is spent, then escalates
+        /// to human review. Detected via
+        /// <see cref="ReviewDecisionParsing.LacksTerminalSentinelInLatestRun"/>.
+        /// </summary>
+        NoCompletionSignal
     }
 
     private sealed record PendingDecision(

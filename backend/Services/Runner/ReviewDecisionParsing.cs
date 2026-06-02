@@ -96,6 +96,60 @@ public static class ReviewDecisionParsing
         return hit == null ? null : new DoneState(hit.Value.LineNumber);
     }
 
+    /// <summary>
+    /// True when the job's most recent run produced no terminal task
+    /// sentinel at all. The "most recent run" is the slice of the log after
+    /// the last orchestrator/supervisor/user follow-up line (the technical
+    /// "Runner active state cleared" marker is bookkeeping, not a
+    /// follow-up). Returns <c>false</c> when that slice is empty (nothing
+    /// new since the last follow-up, so the orchestrator has already acted)
+    /// or when it carries any of
+    /// <c>[[TASK_DONE]] / [[TASK_NOOP]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]]</c>.
+    ///
+    /// <para>
+    /// This is the deterministic-completion contract's "no signal arrived"
+    /// detector. A run can land in 4-auto-review with no terminal sentinel -
+    /// e.g. it exited 0 with only heuristic "done"-ish prose, or the
+    /// terminal classifier force-routed an Unknown / committed-partial
+    /// outcome there. Such a run must never be silently accepted as
+    /// completed: the review-decision loop reissues it (demanding a
+    /// sentinel) until the shared reissue budget is spent, then escalates to
+    /// human review. Distinguishing "no sentinel ever" from "a sentinel that
+    /// was already resolved on a prior tick" is exactly what the
+    /// last-follow-up slice gives us, so an already-handled card is left
+    /// untouched.
+    /// </para>
+    /// </summary>
+    public static bool LacksTerminalSentinelInLatestRun(string log)
+    {
+        if (string.IsNullOrWhiteSpace(log)) return false;
+        var lines = log.Split('\n');
+
+        var lastFollowUp = -1;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (LineHasFollowUpStream(lines[i])) lastFollowUp = i;
+        }
+
+        var sawContent = false;
+        for (var i = lastFollowUp + 1; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (LineIsTechnicalOrchestratorMarker(line)) continue;
+            if (NeedsInputRegex.IsMatch(line) || NoOpRegex.IsMatch(line)
+                || BlockedRegex.IsMatch(line) || DoneRegex.IsMatch(line))
+            {
+                // A terminal sentinel lives in the latest run; the typed
+                // FindUnresolved* helpers own this case.
+                return false;
+            }
+            sawContent = true;
+        }
+
+        return sawContent;
+    }
+
     private static (int LineNumber, string? Reason)? FindLatestUnresolvedSentinel(string log, Regex regex)
     {
         if (string.IsNullOrEmpty(log)) return null;

@@ -179,6 +179,95 @@ public class ReviewDecisionParsingTests
         Assert.Equal("needs scope", state!.Reason);
     }
 
+    // --- LacksTerminalSentinelInLatestRun: the "no completion signal arrived"
+    // detector for the deterministic-completion contract. Positive cases must
+    // fire so the loop reissues/escalates; negative cases must NOT fire so an
+    // already-handled or already-signalled card is left alone.
+
+    [Fact]
+    public void LacksTerminalSentinel_True_WhenRunFinishedWithProseButNoSentinel()
+    {
+        // Heuristic "done"-ish completion: the run exited but never emitted a
+        // terminal sentinel. This is the gap requirement 4 closes.
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] working on the task",
+            "[12:00:01.000] [stdout] I believe everything is finished now.",
+            "[12:00:02.000] [system] [taskboard] claude CLI exited: status=completed, exitCode=0");
+
+        Assert.True(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log));
+    }
+
+    [Fact]
+    public void LacksTerminalSentinel_True_IgnoresRunnerActiveStateClearedMarker()
+    {
+        // The technical "Runner active state cleared" line is bookkeeping,
+        // not a follow-up answer, so a freshly routed sentinel-less job is
+        // still detected.
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] did some work",
+            "[12:00:01.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review)");
+
+        Assert.True(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log));
+    }
+
+    [Fact]
+    public void LacksTerminalSentinel_False_WhenTaskDonePresent()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] working",
+            "[12:00:01.000] [stdout] [[TASK_DONE]]");
+
+        Assert.False(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log));
+    }
+
+    [Theory]
+    [InlineData("[[TASK_NOOP]]")]
+    [InlineData("[[TASK_BLOCKED: needs scope]]")]
+    [InlineData("[[TASK_NEEDS_INPUT: which option?]]")]
+    public void LacksTerminalSentinel_False_WhenAnyTerminalSentinelPresent(string sentinel)
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] working",
+            $"[12:00:01.000] [stdout] {sentinel}");
+
+        Assert.False(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log));
+    }
+
+    [Fact]
+    public void LacksTerminalSentinel_False_WhenOrchestratorAlreadyActedAndNothingFollows()
+    {
+        // A resolved sentinel: the orchestrator already wrote a follow-up
+        // line and the run produced nothing after it. Must not be re-acted
+        // on as a "no signal" case.
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_NEEDS_INPUT: anything?]]",
+            "[12:00:30.000] [orchestrator] [reissue] previously answered");
+
+        Assert.False(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log));
+    }
+
+    [Fact]
+    public void LacksTerminalSentinel_True_WhenReissuedRunComesBackWithoutSentinel()
+    {
+        // A NEEDS_INPUT that was answered, then the reissued run finished
+        // without any sentinel of its own. The latest-run slice (after the
+        // orchestrator follow-up) has prose but no sentinel, so the loop
+        // must keep driving toward a deterministic signal.
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_NEEDS_INPUT: anything?]]",
+            "[12:00:30.000] [orchestrator] [reissue] answered: do it",
+            "[12:01:00.000] [stdout] re-running, looks done to me");
+
+        Assert.True(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log));
+    }
+
+    [Fact]
+    public void LacksTerminalSentinel_False_OnEmptyLog()
+    {
+        Assert.False(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(string.Empty));
+        Assert.False(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun("   \n  \n"));
+    }
+
     [Fact]
     public void ParseDecision_Reissue_RoundTripsActionAndReason()
     {
