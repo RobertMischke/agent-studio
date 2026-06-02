@@ -65,6 +65,64 @@ public class RunOutcomeContractTests
         Assert.True(terminal.ShouldShowFailureToast);
     }
 
+    // Regression for the bug "Codex exit=-1 trotz erfolgreichem Commit landet in
+    // 4-auto-review verdict=reissue + ATP-manual": a run that committed real work
+    // (commitCount > 0) but then exited -1 because its downstream test runs were
+    // killed must NOT be treated as a hard failure. It is an honest "partial":
+    // route it to review (4-auto-review) with a Partial verdict and no crash
+    // toast, so auto-continuous mode is preserved and the successful commit is
+    // not silently discarded by a reissue loop.
+    //
+    // AC#1: exit=-1 + commitCount > 0 is not classified as hard-fail.
+    // AC#3: expect the card in 4-auto-review with a partial (not reissue) verdict.
+    [Fact]
+    public void FailedRunThatCommitted_RoutesToReviewAsCommittedPartial()
+    {
+        var outcome = new AgentOutcome(
+            Kind: AgentOutcomeKind.Unknown,
+            Summary: "tests killed after commit",
+            MatchedSentinel: false,
+            SentinelKeyword: null,
+            Reason: "no terminal signal",
+            AgentTextChars: 240,
+            OutputLineCount: 30,
+            DurationSeconds: 42.0);
+
+        var terminal = TerminalRunOutcomeClassifier.Classify(
+            RunStatuses.Failed, outcome, commitsDuringRun: 2);
+
+        Assert.Equal("committed-partial", terminal.Kind);
+        Assert.Equal("Partial", terminal.ProtocolResult);
+        Assert.True(terminal.ShouldMoveToReview);
+        Assert.True(RunCompletionPolicy.ShouldMoveToReview(terminal));
+        Assert.False(terminal.ShouldShowFailureToast);
+    }
+
+    // The commit-aware branch must not soften an honest crash: a failed run that
+    // committed nothing (commitCount == 0) stays a hard failure everywhere. This
+    // pins the boundary so the fix above cannot drift into swallowing real crashes.
+    [Fact]
+    public void FailedRunWithZeroCommits_StaysHardFailure()
+    {
+        var outcome = new AgentOutcome(
+            Kind: AgentOutcomeKind.Unknown,
+            Summary: "crash",
+            MatchedSentinel: false,
+            SentinelKeyword: null,
+            Reason: "no terminal signal",
+            AgentTextChars: 0,
+            OutputLineCount: 1,
+            DurationSeconds: 3.5);
+
+        var terminal = TerminalRunOutcomeClassifier.Classify(
+            RunStatuses.Failed, outcome, commitsDuringRun: 0);
+
+        Assert.Equal("failed", terminal.Kind);
+        Assert.Equal("Failed", terminal.ProtocolResult);
+        Assert.False(terminal.ShouldMoveToReview);
+        Assert.True(terminal.ShouldShowFailureToast);
+    }
+
     // The bug this guards: five identical Codex runs (all exitCode=-1, all
     // [[TASK_NOOP]]) produced three different status.md values, four different
     // target lanes, and an inconsistent failure toast, because lane routing,

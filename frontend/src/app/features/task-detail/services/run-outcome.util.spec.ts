@@ -23,6 +23,10 @@ describe('shouldShowFailureToast', () => {
     expect(shouldShowFailureToast({ ...baseExecution, runOutcome: 'failed' })).toBe(true);
   });
 
+  it('suppresses the crash toast for a committed-partial run (committed work, downstream step killed)', () => {
+    expect(shouldShowFailureToast({ ...baseExecution, runOutcome: 'committed-partial' })).toBe(false);
+  });
+
   it('keeps legacy failed execution behavior when no runOutcome is present', () => {
     expect(shouldShowFailureToast({ ...baseExecution, runOutcome: null })).toBe(true);
   });

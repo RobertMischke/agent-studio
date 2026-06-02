@@ -13,6 +13,15 @@ public static class TerminalRunOutcomeKinds
     public const string NeedsInput = "needs-input";
     public const string Interrupted = "interrupted";
     public const string Unknown = "unknown";
+
+    /// <summary>
+    /// A run that committed real work but then exited non-zero without a
+    /// terminal sentinel (classically a watchdog-killed downstream test run,
+    /// which on Windows surfaces as exitCode=-1). Honest middle ground: not a
+    /// hard failure (the commit is real), not a clean success (no sentinel).
+    /// Routes to review with a "Partial" verdict instead of re-looping the card.
+    /// </summary>
+    public const string CommittedPartial = "committed-partial";
 }
 
 /// <summary>
@@ -37,7 +46,7 @@ public static class TerminalRunOutcomeClassifier
         @"\[taskboard\]\s+\S+\s+CLI\s+exited:\s*status=(?<status>\w+)(?:,\s*exitCode=(?<code>-?\d+|\?))?(?:,\s*duration=(?<duration>[\d.,]+)s)?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public static TerminalRunOutcome Classify(string? executionStatus, AgentOutcome agentOutcome)
+    public static TerminalRunOutcome Classify(string? executionStatus, AgentOutcome agentOutcome, int commitsDuringRun = 0)
     {
         if (agentOutcome.MatchedSentinel)
         {
@@ -73,6 +82,23 @@ public static class TerminalRunOutcomeClassifier
 
         if (string.Equals(executionStatus, RunStatuses.Failed, StringComparison.OrdinalIgnoreCase))
         {
+            // Reaching here means no terminal sentinel matched. If the run still
+            // committed real work, the non-zero exit is almost always a killed
+            // downstream step (e.g. the watchdog terminating a post-commit test
+            // run, which on Windows reports exitCode=-1) rather than a genuine
+            // crash. Treat it as an honest "partial": route to review so a human
+            // sees it, but do not hard-fail, do not show a crash toast, and do
+            // not feed the auto-failure circuit breaker that flips mode to manual.
+            if (commitsDuringRun > 0)
+            {
+                return new TerminalRunOutcome(
+                    TerminalRunOutcomeKinds.CommittedPartial,
+                    "Partial",
+                    ShouldMoveToReview: true,
+                    ShouldShowFailureToast: false,
+                    Reason: $"process exited without a terminal sentinel but committed {commitsDuringRun} change(s) during the run; routing to review instead of hard-failing");
+            }
+
             return new TerminalRunOutcome(
                 TerminalRunOutcomeKinds.Failed,
                 "Failed",
@@ -107,10 +133,10 @@ public static class TerminalRunOutcomeClassifier
         return UnknownTerminal(agentOutcome.Reason ?? "unknown execution status");
     }
 
-    public static TerminalRunOutcome Classify(string? executionStatus, IReadOnlyList<CliOutputLine> lines, double durationSeconds)
+    public static TerminalRunOutcome Classify(string? executionStatus, IReadOnlyList<CliOutputLine> lines, double durationSeconds, int commitsDuringRun = 0)
     {
         var analyzed = AgentOutcomeAnalyzer.Analyze(lines, executionStatus ?? string.Empty, durationSeconds);
-        return Classify(executionStatus, analyzed);
+        return Classify(executionStatus, analyzed, commitsDuringRun);
     }
 
     public static (TerminalRunOutcome Outcome, AgentOutcome AgentOutcome)? TryClassifyRenderedLog(string rawLog)

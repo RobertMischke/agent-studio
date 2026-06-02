@@ -2139,7 +2139,36 @@ public class ProjectRunner
                 liveOutputSnapshot,
                 execution.Status ?? "completed",
                 execution.DurationSeconds ?? 0.0);
-            var terminalOutcome = TerminalRunOutcomeClassifier.Classify(execution.Status, outcome);
+
+            // Count the commits this run actually produced (HeadShaBefore..After).
+            // A run that committed real work but exited non-zero without a
+            // sentinel - classically because a post-commit test run was killed
+            // by the watchdog (exitCode=-1 on Windows) - must not be hard-failed
+            // and re-looped; the commit-aware classifier routes it to review as
+            // an honest "committed-partial" instead. See the run-outcome contract.
+            int commitsDuringRun = 0;
+            try
+            {
+                var beforeSha = _sessions.ReadSessionEvents(jobId, Entry.Path).LastOrDefault()?.HeadShaBefore;
+                if (!string.IsNullOrWhiteSpace(beforeSha)
+                    && !string.IsNullOrWhiteSpace(headShaAfter)
+                    && !string.Equals(beforeSha, headShaAfter, StringComparison.OrdinalIgnoreCase))
+                {
+                    commitsDuringRun = _git.GetCommitsInShaRange(jobId, Entry.Path, beforeSha, headShaAfter).Count;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "commit-count for {JobId} failed; treating as 0", jobId);
+            }
+
+            var terminalOutcome = TerminalRunOutcomeClassifier.Classify(execution.Status, outcome, commitsDuringRun);
+            if (string.Equals(terminalOutcome.Kind, TerminalRunOutcomeKinds.CommittedPartial, StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "run-committed-partial job={JobId} commits={Commits} status={Status} duration={Duration}s: routing to review instead of hard-failing",
+                    jobId, commitsDuringRun, execution.Status, execution.DurationSeconds ?? 0.0);
+            }
             OutcomeAction? action = capturedPlan != null
                 ? RunOutcomePolicy.Decide(capturedIntent, capturedPlan, outcome, capturedFollowup, capturedAttempt)
                 : null;
