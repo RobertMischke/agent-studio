@@ -110,6 +110,7 @@ Read these before re-litigating a decision they already explored.
 | [research/planning-research-task-kinds-2026-05.md](research/planning-research-task-kinds-2026-05.md) | Task-kind taxonomy (Bug / User Story / Chore) that informed the backlog-lane work. |
 | [research/runner-outcome-visibility-2026-05-11.md](research/runner-outcome-visibility-2026-05-11.md) | Concrete runner outcome categories replacing broad heuristicfallback for permission blocks, watchdog kills, missing sentinels, and classifier misses. |
 | [research/auto-review-postprocessing-consolidation-2026-06.md](research/auto-review-postprocessing-consolidation-2026-06.md) | Why `4-auto-review` stalls (decoupled off-by-default poll) and how to consolidate review into synchronous orchestrator post-processing as its own task/step, decoupled from runner throughput. Grounding for the `post-processing-orchestrator-lane` epic (ASS-176). |
+| [research/orchestrator-prep-as-active-pipeline-step-2026-06.md](research/orchestrator-prep-as-active-pipeline-step-2026-06.md) | The pre-side sibling: retire the `1a-orchestrator-prep` lane and converge it with the intake phase into one optional, parallelizable Pre pipeline step that gates `2-ready -> 3-progress`, uses the project model, and shows status/duration in the pipeline table. Supersedes ADR-0026's lane; fills the ADR-0045 Pre slot. |
 
 ## Schemas (the wire / disk shapes)
 
