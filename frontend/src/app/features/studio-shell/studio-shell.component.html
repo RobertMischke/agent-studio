@@ -149,9 +149,12 @@
       [activePanel]="activePanel()"
       [sidebarVisible]="sidebarVisible()"
       [badgeCounts]="activityBarBadgeCounts()"
-      [boardActive]="isBoardTabActive()"
+      [boardActive]="isBoardTabActive() && !backlogTriage.open()"
+      [backlogActive]="backlogTriage.open()"
+      [backlogCount]="backlogCount()"
       (panelToggle)="togglePanel($event)"
-      (openBoardRequest)="onActivityBarOpenBoard()" />
+      (openBoardRequest)="onActivityBarOpenBoard()"
+      (openBacklogRequest)="onActivityBarOpenBacklog()" />
 
     <!-- Sidebar host -->
     @if (sidebarVisible()) {

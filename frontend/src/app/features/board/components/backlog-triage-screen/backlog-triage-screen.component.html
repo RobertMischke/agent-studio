@@ -1,0 +1,176 @@
+<section class="backlog-triage" data-testid="backlog-triage-screen" role="region" aria-label="Backlog triage">
+  <header class="backlog-triage__header">
+    <div class="backlog-triage__title-block">
+      <button type="button"
+              class="backlog-triage__close"
+              data-testid="backlog-triage-close"
+              [appTooltip]="'Back to board (Ctrl+B)'"
+              aria-label="Close backlog triage"
+              (click)="close()">←</button>
+      <div>
+        <h1 class="backlog-triage__title">
+          <span aria-hidden="true">📋</span>
+          Backlog triage
+        </h1>
+        <p class="backlog-triage__subtitle"
+           data-testid="backlog-triage-count">
+          {{ visibleJobs().length }}
+          {{ visibleJobs().length === 1 ? 'task' : 'tasks' }}
+          @if (hasActiveFiltersOrSearch()) {
+            <span>· filtered</span>
+          }
+        </p>
+      </div>
+    </div>
+    <div class="backlog-triage__header-actions">
+      <app-filters-dropdown
+        [typeOptions]="typeFilterOptions"
+        [activeType]="activeType()"
+        [tags]="tagRegistry()"
+        [activeTagIds]="activeTagFilter()"
+        (setType)="onSetType($event)"
+        (toggleTag)="onToggleTag($event)" />
+      <div class="backlog-triage__sort" role="group" aria-label="Sort backlog">
+        <span class="backlog-triage__sort-label">Sort:</span>
+        @for (opt of sortOptions; track opt.value) {
+          <button type="button"
+                  class="backlog-triage__sort-btn"
+                  [class.backlog-triage__sort-btn--active]="sortMode() === opt.value"
+                  [attr.aria-pressed]="sortMode() === opt.value"
+                  [attr.data-testid]="'backlog-triage-sort-' + opt.value"
+                  (click)="setSort(opt.value)">{{ opt.label }}</button>
+        }
+      </div>
+      <button type="button"
+              class="backlog-triage__new-btn"
+              data-testid="backlog-triage-new-task"
+              (click)="newTask()">＋ New task</button>
+    </div>
+  </header>
+
+  @if (visibleJobs().length === 0) {
+    <div class="backlog-triage__empty" data-testid="backlog-triage-empty">
+      @if (hasActiveFiltersOrSearch()) {
+        <p class="backlog-triage__empty-text">No backlog tasks match the current filter.</p>
+        <button type="button"
+                class="backlog-triage__empty-action"
+                data-testid="backlog-triage-clear-filters"
+                (click)="onClearFilters()">Clear filters</button>
+      } @else {
+        <p class="backlog-triage__empty-text">Backlog is empty — nothing to triage.</p>
+        <button type="button"
+                class="backlog-triage__empty-action"
+                data-testid="backlog-triage-new-task-empty"
+                (click)="newTask()">＋ New task</button>
+      }
+    </div>
+  } @else {
+    <ul class="backlog-triage__list"
+        data-testid="backlog-triage-list"
+        role="list">
+      @for (task of visibleJobs(); track trackByKey($index, task)) {
+        @let identity = identityFor(task.projectName);
+        @let typeChip = taskTypeChip(task);
+        @let tagChips = tagChipsFor(task);
+        @let owner = ownerChip(task);
+        <li class="backlog-triage__row"
+            data-testid="backlog-triage-row"
+            [attr.data-task-id]="task.id"
+            [attr.data-task-key]="task.taskKey">
+          <div class="backlog-triage__row-main">
+            <div class="backlog-triage__row-title">
+              @if (task.key) {
+                <span class="backlog-triage__key-chip" data-testid="backlog-triage-row-key">{{ task.key }}</span>
+              }
+              <span class="backlog-triage__title-text" [appTooltip]="task.title">{{ task.title || task.id }}</span>
+            </div>
+            <div class="backlog-triage__chips">
+              <span class="backlog-triage__type-chip"
+                    [class]="'backlog-triage__type-chip--' + typeChip.kind"
+                    [attr.data-testid]="'backlog-triage-row-type'"
+                    [attr.data-task-type]="typeChip.kind">{{ typeChip.icon }} {{ typeChip.label }}</span>
+              @for (chip of tagChips; track chip.id) {
+                <span class="backlog-triage__tag-chip"
+                      [class.backlog-triage__tag-chip--ghost]="chip.isGhost"
+                      [style.--tag-color]="chip.color || null"
+                      [attr.data-tag-id]="chip.id"
+                      data-testid="backlog-triage-row-tag">{{ chip.label }}</span>
+              }
+              @if (owner) {
+                <span class="backlog-triage__owner-chip"
+                      data-testid="backlog-triage-row-owner"
+                      [style.borderColor]="owner.color || null">
+                  <span aria-hidden="true">{{ owner.emoji }}</span>
+                  <span>{{ owner.label }}</span>
+                </span>
+              }
+              <span class="backlog-triage__project-chip"
+                    data-testid="backlog-triage-row-project"
+                    [style.--project-color]="identity.color"
+                    [style.--project-soft]="identity.soft">
+                <span class="backlog-triage__project-disk" aria-hidden="true">{{ identity.initial }}</span>
+                <span>{{ task.projectName }}</span>
+              </span>
+              <span class="backlog-triage__age"
+                    data-testid="backlog-triage-row-age"
+                    [appTooltip]="task.createdAt">{{ relativeAge(task.createdAt) }}</span>
+            </div>
+          </div>
+          <div class="backlog-triage__actions">
+            <button type="button"
+                    class="backlog-triage__action backlog-triage__action--primary"
+                    [attr.data-testid]="'backlog-triage-promote-prep'"
+                    [appTooltip]="'Promote to Preparation lane'"
+                    (click)="promote(task, '1-preparation')">→ Preparation</button>
+            <button type="button"
+                    class="backlog-triage__action"
+                    [attr.data-testid]="'backlog-triage-promote-ready'"
+                    [appTooltip]="'Promote directly to Ready (skip Preparation)'"
+                    (click)="promote(task, '2-ready')">→ Ready</button>
+            <button type="button"
+                    class="backlog-triage__action"
+                    [class.backlog-triage__action--active]="tagEditorOpen() === task.taskKey"
+                    [attr.data-testid]="'backlog-triage-edit-tags'"
+                    [appTooltip]="'Edit tags'"
+                    (click)="toggleTagEditor(task)">Edit tags</button>
+            <button type="button"
+                    class="backlog-triage__action backlog-triage__action--danger"
+                    [attr.data-testid]="'backlog-triage-delete'"
+                    [appTooltip]="'Delete task'"
+                    (click)="onDelete(task)">Delete</button>
+          </div>
+          @if (tagEditorOpen() === task.taskKey) {
+            <div class="backlog-triage__tag-editor"
+                 data-testid="backlog-triage-tag-editor"
+                 role="group"
+                 aria-label="Edit tags">
+              @if (tagRegistry().length === 0) {
+                <span class="backlog-triage__tag-editor-empty">No tags in the registry yet.</span>
+              } @else {
+                @for (tag of tagRegistry(); track trackByTagId($index, tag)) {
+                  <button type="button"
+                          class="backlog-triage__tag-toggle"
+                          [class.backlog-triage__tag-toggle--active]="isTagInDraft(tag.id)"
+                          [style.--tag-color]="tag.color || null"
+                          [attr.data-testid]="'backlog-triage-tag-toggle-' + tag.id"
+                          [appTooltip]="tag.description || tag.label"
+                          (click)="toggleDraftTag(tag.id)">{{ tag.label }}</button>
+                }
+              }
+              <div class="backlog-triage__tag-editor-actions">
+                <button type="button"
+                        class="backlog-triage__action"
+                        data-testid="backlog-triage-tag-cancel"
+                        (click)="cancelTagDraft()">Cancel</button>
+                <button type="button"
+                        class="backlog-triage__action backlog-triage__action--primary"
+                        data-testid="backlog-triage-tag-save"
+                        (click)="saveTagDraft(task)">Save tags</button>
+              </div>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -15,6 +15,8 @@ import {
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import {
+  BacklogTriageScreenComponent,
+  BacklogTriageService,
   BoardFiltersService,
   CreateTaskDialogComponent,
   EpicGroupBoardComponent,
@@ -150,6 +152,7 @@ interface VerboseDebugContext {
     KanbanFilterSidesheetComponent,
     TooltipDirective,
     MenuComponent,
+    BacklogTriageScreenComponent,
     StudioShellComponent,
     ProjectHubViewComponent,
     StudioDiffViewComponent,
@@ -285,6 +288,8 @@ export class App implements OnInit, OnDestroy {
    * existing template bindings keep working unchanged.
    */
   private readonly boardFilters = inject(BoardFiltersService);
+  readonly backlogTriage = inject(BacklogTriageService);
+  readonly backlogTriageOpen = this.backlogTriage.open;
   private readonly tagRegistryStore = inject(TagRegistryStore);
   private readonly cliCatalogStore = inject(CliCatalogStore);
   readonly activeProjects = this.boardFilters.activeProjects;
@@ -1001,9 +1006,11 @@ export class App implements OnInit, OnDestroy {
 
     // Deep-link: open the workspace token timeline when the URL already
     // points at it, and keep the overlay in sync as the hash changes.
+    // Also reconciles the backlog triage `#/backlog` route.
     const applyHash = () => {
       this.workspaceOverlays.syncFromHash();
       this.applyProjectShellHash();
+      this.backlogTriage.syncFromHash();
     };
     applyHash();
     this.hashListener = applyHash;
@@ -1019,6 +1026,7 @@ export class App implements OnInit, OnDestroy {
       if (this.showCreate()) return;
       if (this.workspaceTokensOpen() || this.workspaceScreenshotsOpen() || this.workspaceSummaryOpen()) return;
       if (this.projectShellName() !== null) return;
+      if (this.backlogTriage.open()) return;
       const target = ev.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -1057,11 +1065,9 @@ export class App implements OnInit, OnDestroy {
     };
     window.addEventListener('keydown', this.kanbanKeyListener);
 
-    // Global Ctrl+B (Cmd+B on macOS): focus the sticky default board tab.
-    // Sister to the activity-bar Board button — the user can be inside any
-    // task / hub / diff tab and snap back to the board without aiming for
-    // a button. Suppressed inside text inputs so Ctrl+B keeps its bold
-    // behaviour in markdown editors / textareas.
+    // Global Ctrl+B (Cmd+B on macOS): toggle between the dedicated backlog
+    // triage screen at #/backlog and the kanban board. Suppressed inside
+    // text inputs so Ctrl+B keeps its bold behaviour in markdown editors.
     this.boardShortcutListener = (ev: KeyboardEvent) => {
       if (ev.defaultPrevented) return;
       if (!this.featureFlags.vsCodeLayout()) return;
@@ -1074,7 +1080,7 @@ export class App implements OnInit, OnDestroy {
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
         if (target.isContentEditable) return;
       }
-      this.studioTabState.activateSticky();
+      this.toggleBacklogTriage();
       ev.preventDefault();
     };
     window.addEventListener('keydown', this.boardShortcutListener);
@@ -1268,6 +1274,16 @@ export class App implements OnInit, OnDestroy {
   }
   onArchiveAll() {
     this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed);
+  }
+
+  onBacklogNewTask(): void { this.openCreate('0-backlog'); }
+  toggleBacklogTriage(): void {
+    if (this.backlogTriage.open()) {
+      this.backlogTriage.closeTriage();
+      this.studioTabState.activateSticky();
+    } else {
+      this.backlogTriage.openTriage();
+    }
   }
 
   openCreate(targetState?: string) {

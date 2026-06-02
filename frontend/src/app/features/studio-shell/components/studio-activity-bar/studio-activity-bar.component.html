@@ -18,6 +18,23 @@
       <rect x="17" y="4" width="4" height="7" rx="1" />
     </svg>
   </button>
+  <!-- Dedicated backlog triage destination. Sister to the Board button; the
+       triage screen (route #/backlog) opens via Ctrl+B as a toggle. The
+       badge counts 0-backlog jobs under the active project filter. -->
+  <button type="button"
+          class="studio-ab__btn studio-ab__btn--backlog"
+          [class.studio-ab__btn--active]="backlogActive()"
+          appTooltip="Open backlog triage (Ctrl+B)"
+          data-testid="studio-ab-backlog"
+          (click)="openBacklogRequest.emit()">
+    <span class="studio-ab__emoji" aria-hidden="true">📋</span>
+    @if (backlogCount() > 0) {
+      <span class="studio-ab__badge studio-ab__badge--count"
+            data-testid="studio-ab-backlog-badge"
+            [appTooltip]="backlogCount() + (backlogCount() === 1 ? ' backlog task' : ' backlog tasks')"
+            aria-hidden="true">{{ backlogCount() }}</span>
+    }
+  </button>
   @for (item of items(); track item.key) {
     <button type="button"
             class="studio-ab__btn"

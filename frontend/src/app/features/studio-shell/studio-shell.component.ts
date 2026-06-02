@@ -24,7 +24,7 @@ import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
 import { TaskSelectionService } from '../task-detail';
 import { UiPreferencesService } from '../shell';
-import { BoardFiltersService } from '../board';
+import { BoardFiltersService, BacklogTriageService } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
@@ -108,6 +108,7 @@ export class StudioShellComponent {
   private readonly jobSelection = inject(TaskSelectionService);
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
+  readonly backlogTriage = inject(BacklogTriageService);
   readonly updateClient = inject(UpdateClientService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
@@ -735,8 +736,33 @@ export class StudioShellComponent {
    * regardless of which other tab is currently active.
    */
   onActivityBarOpenBoard(): void {
+    // Closing the triage screen is part of "go to board": Ctrl+B and the
+    // Board button both surface the kanban, not the triage overlay.
+    if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
     this.tabState.activateSticky();
   }
+
+  /**
+   * Activity-bar Backlog button click. Opens (or closes) the dedicated
+   * backlog triage screen at `#/backlog`. Mirrors the toggle the Ctrl+B
+   * accelerator drives so the two entry points stay in lock-step.
+   */
+  onActivityBarOpenBacklog(): void {
+    if (this.backlogTriage.open()) {
+      this.backlogTriage.closeTriage();
+    } else {
+      this.backlogTriage.openTriage();
+    }
+  }
+
+  /**
+   * Backlog count under the active filter (project + type + tag + owner).
+   * Drives the activity-bar Backlog badge so the operator can see at a
+   * glance how many tasks are waiting on triage.
+   */
+  readonly backlogCount = computed(
+    () => this.boardFilters.filteredGrouped().backlog?.length ?? 0,
+  );
 
   openTask(job: TaskInfo): void {
     this.tabState.open({ kind: 'task', taskKey: job.taskKey });

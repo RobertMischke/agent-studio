@@ -29,7 +29,13 @@ export class StudioActivityBarComponent {
    * at a glance whether clicking it would switch context or no-op.
    */
   readonly boardActive = input<boolean>(false);
+  /** True while the backlog triage screen is visible. Drives the active highlight. */
+  readonly backlogActive = input<boolean>(false);
+  /** Count of `0-backlog` tasks under the current project filter; renders a numeric badge. */
+  readonly backlogCount = input<number>(0);
   readonly panelToggle = output<StudioActivityPanelKey | 'settings'>();
   /** Fires when the user clicks the always-visible Board button. */
   readonly openBoardRequest = output<void>();
+  /** Fires when the user clicks the always-visible Backlog button. */
+  readonly openBacklogRequest = output<void>();
 }

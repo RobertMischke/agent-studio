@@ -9,8 +9,10 @@ export { BoardFiltersService, type ActiveFilterPill } from './state/board-filter
 export { LaneCollapseService } from './state/lane-collapse.service';
 export { CreateTaskFormService } from './state/create-task-form.service';
 export { BoardMutationsService } from './state/board-mutations.service';
+export { BacklogTriageService, type BacklogSortMode } from './state/backlog-triage.service';
 
 // components
+export { BacklogTriageScreenComponent } from './components/backlog-triage-screen/backlog-triage-screen.component';
 export { BoardSearchIconComponent } from './components/board-search-icon/board-search-icon.component';
 export { CreateTaskDialogComponent, type PendingAttachment } from './components/create-task-dialog/create-task-dialog.component';
 export { FiltersDropdownComponent, type TypeFilterOption } from './components/filters-dropdown/filters-dropdown.component';

@@ -213,6 +213,11 @@
           }
         </div>
         <div studioContent class="studio-projected-content">
+          @if (backlogTriageOpen()) {
+            <app-backlog-triage-screen
+              (closeRequested)="backlogTriage.closeTriage()"
+              (newTaskRequested)="onBacklogNewTask()" />
+          } @else {
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
               @if (hasActiveFiltersOrSearch() && filteredTaskCount() === 0) {
@@ -338,6 +343,7 @@
             @default {
               <!-- Welcome screen owned by the shell itself when no tab is active. -->
             }
+          }
           }
         </div>
       </app-studio-shell>

@@ -7,10 +7,10 @@
   },
   "components": {
     "src/app/app.ts": {
-      "typeScript": 1822,
+      "typeScript": 1838,
       "template": 837,
       "styles": 2165,
-      "total": 4524
+      "total": 4546
     },
     "src/app/components/chat/chat/chat.component.ts": {
       "typeScript": 635,
