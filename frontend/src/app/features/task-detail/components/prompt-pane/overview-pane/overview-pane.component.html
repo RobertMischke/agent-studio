@@ -251,6 +251,7 @@
         @for (row of pipelineRows(); track row.id) {
           <div class="ov-pl-step"
                [class.ov-pl-step--disabled]="row.status === 'disabled'"
+               [class.ov-pl-step--running]="row.status === 'running'"
                [attr.data-step-id]="row.id"
                [attr.data-status]="row.status"
                data-testid="overview-pipeline-step">
@@ -259,6 +260,14 @@
                   aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind">{{ stepKindLabel(row.kind) }}</span>
             <span class="ov-pl-step__name">{{ row.label }}</span>
+            @if (row.status === 'running') {
+              <span class="ov-pl-step__running-badge"
+                    data-testid="overview-pipeline-step-running"
+                    [appTooltip]="'This step is running right now'">
+                <span class="ov-pl-step__running-dot" aria-hidden="true"></span>
+                Running
+              </span>
+            }
             @if (row.verdict) {
               <span class="ov-pl-step__verdict"
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"

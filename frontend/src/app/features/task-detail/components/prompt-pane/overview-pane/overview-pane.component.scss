@@ -411,6 +411,54 @@
     }
   }
 
+  // Active step: tint the whole row and ride a left accent rail so the one
+  // step the pipeline is executing right now is unmistakable at a glance,
+  // not just a small ▶️ glyph. Reuses the board-wide running tokens
+  // (--studio-bg-running, --lane-progress) so card and pipeline agree on
+  // what "running" looks like. The status glyph pulses, matching the card's
+  // execution dot.
+  &--running {
+    background: var(--studio-bg-running);
+    border-radius: 6px;
+    box-shadow: inset 2px 0 0 var(--lane-progress);
+    padding-inline: 6px;
+    margin-inline: -6px;
+
+    .ov-pl-step__status {
+      animation: ov-pulse 1.3s ease-in-out infinite;
+    }
+
+    .ov-pl-step__name {
+      color: var(--studio-fg-strong);
+      font-weight: 600;
+    }
+  }
+
+  &__running-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 999px;
+    color: var(--studio-accent-3-strong);
+    background: color-mix(in srgb, var(--studio-accent-3) 18%, var(--studio-bg-elevated));
+    border: 1px solid color-mix(in srgb, var(--studio-accent-3) 40%, transparent);
+  }
+
+  &__running-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+    flex: 0 0 auto;
+    animation: ov-pulse 1.3s ease-in-out infinite;
+  }
+
   &__status {
     flex: 0 0 auto;
     font-size: 12px;
