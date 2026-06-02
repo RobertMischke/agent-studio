@@ -124,6 +124,49 @@ public static class AgentEnvironmentDetector
     }
 
     /// <summary>
+    /// True when <paramref name="line"/> is the agent's own tool / shell-command
+    /// I/O rather than the CLI runtime's own diagnostics. Codex emits shell tool
+    /// calls and their captured output as <c>command_execution</c> JSON events;
+    /// Claude emits <c>tool_use</c> / <c>tool_result</c> blocks. Such lines carry
+    /// whatever the agent grepped or read — and for a task that is ABOUT
+    /// sandbox / permission bugs that includes the literal blocker strings, even
+    /// this detector's own source and tests.
+    /// <para>
+    /// 2026-06-02: every run that grepped <c>AgentEnvironmentDetector*</c> (the
+    /// codex/claude tickets we re-queued) self-tripped <c>codex-windows-sandbox</c>
+    /// because the needle showed up inside a <c>command_execution.aggregated_output</c>
+    /// line — i.e. the vicious cycle where the tasks meant to FIX the false
+    /// positive were killed BY it. The runtime hook skips these lines via
+    /// <see cref="MatchRuntimeBlocker"/> so only the runtime's own error output
+    /// (plain stderr, runtime error events) can trip a blocker.
+    /// </para>
+    /// Conservative: only structured JSON-object event lines are excluded, so a
+    /// bare stderr error line (the shape the canonical patterns target) is still
+    /// scanned.
+    /// </summary>
+    public static bool IsAgentToolEcho(string? line)
+    {
+        if (string.IsNullOrEmpty(line)) return false;
+        var i = 0;
+        while (i < line.Length && char.IsWhiteSpace(line[i])) i++;
+        if (i >= line.Length || line[i] != '{') return false; // only structured JSON events
+        return line.Contains("\"command_execution\"", StringComparison.Ordinal)
+            || line.Contains("\"aggregated_output\"", StringComparison.Ordinal)
+            || line.Contains("\"tool_result\"", StringComparison.Ordinal)
+            || line.Contains("\"tool_use\"", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Runtime entry point for the in-stream hook: like <see cref="Match"/> but
+    /// returns <c>null</c> for agent tool-echo lines (<see cref="IsAgentToolEcho"/>),
+    /// so an agent that reads or greps blocker strings cannot self-terminate its
+    /// own run. <see cref="Match"/> stays pure (the pattern-locking tests assert
+    /// on bare lines); the guard lives one layer up.
+    /// </summary>
+    public static EnvironmentBlockerPattern? MatchRuntimeBlocker(string? line)
+        => IsAgentToolEcho(line) ? null : Match(line);
+
+    /// <summary>
     /// Render a one-paragraph diagnosis for a matched blocker, suitable
     /// for display in the chat log and on the job card tooltip. Includes
     /// the originating CLI type so the suggested recovery is specific.

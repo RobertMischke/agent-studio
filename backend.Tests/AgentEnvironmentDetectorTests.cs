@@ -41,6 +41,55 @@ public class AgentEnvironmentDetectorTests
     }
 
     [Fact]
+    public void MatchRuntimeBlocker_SkipsAgentCommandOutputContainingNeedle()
+    {
+        // 2026-06-02 regression: a re-queued codex/claude ticket grepped this
+        // detector's own tests, so the needle surfaced inside a codex
+        // command_execution event and self-tripped codex-windows-sandbox,
+        // killing the run. The runtime entry point must ignore tool-echo lines.
+        const string toolEcho =
+            "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\"," +
+            "\"command\":\"rg -n windows-sandbox\",\"aggregated_output\":" +
+            "\"AgentEnvironmentDetectorTests.cs:17: windows sandbox: runner error: CreateProcessAsUserW failed: 1312\"}}";
+
+        Assert.True(AgentEnvironmentDetector.IsAgentToolEcho(toolEcho));
+        Assert.Null(AgentEnvironmentDetector.MatchRuntimeBlocker(toolEcho));
+        // The pure pattern matcher still sees the needle — the guard lives one layer up.
+        Assert.NotNull(AgentEnvironmentDetector.Match(toolEcho));
+    }
+
+    [Fact]
+    public void MatchRuntimeBlocker_StillFiresForBareRuntimeErrorLine()
+    {
+        // A genuine wrapper/stderr error (the shape the canonical patterns
+        // target) is NOT tool-echo and must still trip the blocker.
+        const string runtimeErr = "windows sandbox: runner error: CreateProcessAsUserW failed: 1312";
+        Assert.False(AgentEnvironmentDetector.IsAgentToolEcho(runtimeErr));
+        var m = AgentEnvironmentDetector.MatchRuntimeBlocker(runtimeErr);
+        Assert.NotNull(m);
+        Assert.Equal("codex-windows-sandbox", m!.Id);
+    }
+
+    [Theory]
+    [InlineData("Error: EACCES: permission denied, open '/etc/shadow'")]   // bare stderr
+    [InlineData("Reading files…")]                                          // not JSON
+    [InlineData("{\"type\":\"agent_message\",\"text\":\"done\"}")]          // JSON but not tool I/O
+    public void IsAgentToolEcho_FalseForNonToolLines(string line)
+    {
+        Assert.False(AgentEnvironmentDetector.IsAgentToolEcho(line));
+    }
+
+    [Fact]
+    public void IsAgentToolEcho_TrueForClaudeToolResult()
+    {
+        const string toolResult =
+            "{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\"," +
+            "\"content\":\"EACCES: permission denied\"}]}}";
+        Assert.True(AgentEnvironmentDetector.IsAgentToolEcho(toolResult));
+        Assert.Null(AgentEnvironmentDetector.MatchRuntimeBlocker(toolResult));
+    }
+
+    [Fact]
     public void Diagnose_IncludesCliTypeAndRecoveryHint()
     {
         var match = AgentEnvironmentDetector.Match("windows sandbox: runner error: CreateProcessAsUserW failed: 1312");

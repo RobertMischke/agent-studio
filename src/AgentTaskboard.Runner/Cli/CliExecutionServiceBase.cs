@@ -620,7 +620,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     {
         if (info.EnvironmentBlockerTripped) return;
         AgentEnvironmentDetector.EnvironmentBlockerPattern? match;
-        try { match = AgentEnvironmentDetector.Match(rawLine.Text); }
+        // MatchRuntimeBlocker (not Match) so an agent that greps/reads blocker
+        // strings into its own command_execution / tool-result output cannot
+        // self-terminate the run. See AgentEnvironmentDetector.IsAgentToolEcho.
+        try { match = AgentEnvironmentDetector.MatchRuntimeBlocker(rawLine.Text); }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Environment-blocker detector threw for {TaskKey}", jobKey);
