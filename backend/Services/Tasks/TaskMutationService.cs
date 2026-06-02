@@ -549,7 +549,7 @@ public class TaskMutationService
         string jobDir;
         using (_laneMutex.Acquire(entry.Path))
         {
-            jobId = EnsureUniqueSlug(entry.Path, baseSlug);
+            jobId = LaneSlug.EnsureUnique(entry.Path, baseSlug);
             jobDir = Path.Combine(entry.Path, targetState, jobId);
             Directory.CreateDirectory(jobDir);
         }
@@ -1045,28 +1045,6 @@ public class TaskMutationService
 
         if (stamped > 0) _scanner.InvalidateCache();
         return stamped;
-    }
-
-    /// <summary>
-    /// Reserve a folder slug that is unique across <em>all</em> lanes of the
-    /// given watch path (including <c>7-archive</c>), not just the target
-    /// lane. Returns <paramref name="baseSlug"/> unchanged when it is free,
-    /// otherwise appends an incrementing <c>-N</c> suffix until an unused name
-    /// is found. Callers hold the lane mutex so the existence check + folder
-    /// create that follows is atomic against concurrent creates. See the
-    /// duplicate-slug root-cause note at the call site in <see cref="CreateJob"/>.
-    /// </summary>
-    private string EnsureUniqueSlug(string watchPath, string baseSlug)
-    {
-        bool Taken(string slug) =>
-            TaskStates.All.Any(state => Directory.Exists(Path.Combine(watchPath, state, slug)));
-
-        if (!Taken(baseSlug)) return baseSlug;
-        for (var n = 2; ; n++)
-        {
-            var candidate = $"{baseSlug}-{n}";
-            if (!Taken(candidate)) return candidate;
-        }
     }
 
     private static string ToSlug(string text)
