@@ -1,7 +1,10 @@
-import type { TaskInfo, ClientSummary, CliType } from '../../../../models/task.model';
+import type { TaskInfo, ClientSummary, CliType, TagRegistryEntry, EpicRollup, AutoLoopSnapshot, PendingIntent } from '../../../../models/task.model';
 import type { TaskCommitInfo } from '../../../../features/git';
 import type { StructuredTooltip } from '../../../../components/tooltip';
+import type { MenuItem } from '../../../../components/menu';
+import type { AutoReviewStatusView } from '../../../../services/auto-review-status.store';
 import { cliTypeIcon, cliTypeLabel, shortModelName } from '../../../../services/format.util';
+import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
 
 export interface TaskTypeChip {
   kind: string;
@@ -355,4 +358,405 @@ function buildModelTooltip(
     title: source === 'run' ? 'Running model' : source === 'default' ? 'Effective model (client default)' : 'Effective model',
     body: lines.join('<br>'),
   };
+}
+
+export interface TaskTagChip {
+  id: string;
+  label: string;
+  color: string;
+  ghost: boolean;
+  concern: boolean;
+  unparseable: boolean;
+  tooltip: string;
+}
+
+/**
+ * Tag chips on the card. Looks up label + colour from the workspace registry
+ * map; tags whose id no longer exists render as a faint "ghost" chip with the
+ * raw id so the user knows to clean up.
+ */
+export function buildTagChips(ids: readonly string[] | undefined, byId: Map<string, TagRegistryEntry>): TaskTagChip[] {
+  const list = ids ?? [];
+  if (list.length === 0) return [];
+  return list.map((id) => {
+    // A1 (2026-05-21): review:unparseable is a structurally different signal
+    // from {namespace}:concerns — the model didn't follow the verdict format,
+    // NOT a real quality concern. Render it as its own chip variant so the
+    // operator can sort/scan past "format violations" without conflating them
+    // with model-flagged issues.
+    if (id === 'review:unparseable') {
+      return {
+        id,
+        label: 'review:unparseable',
+        color: '#a5b4fc',
+        ghost: false,
+        concern: false,
+        unparseable: true,
+        tooltip: 'Auto-review could not parse the model\'s verdict (no [[ASPECT_VERDICT]] sentinel). NOT a quality concern; the model just did not follow the format. See aspect-*.md for the raw reply.'
+      };
+    }
+    // Auto-review concern tags use the `<namespace>:concerns` shape and are not
+    // in the registry by design (they are ephemeral findings, not curated
+    // taxonomy). The card renders them with a small ⚠ chip so the user sees the
+    // source aspect at a glance instead of a generic "unknown tag" ghost. See
+    // ADR-0025.
+    const concernMatch = /^([a-z][a-z0-9-]*):concerns$/i.exec(id);
+    if (concernMatch) {
+      const ns = concernMatch[1];
+      return {
+        id,
+        label: `${ns}:concerns`,
+        color: '#fbbf24',
+        ghost: false,
+        concern: true,
+        unparseable: false,
+        tooltip: `Auto-review aspect '${ns}' flagged concerns. Open the task and read aspect-*.md for details.`
+      };
+    }
+    const entry = byId.get(id);
+    if (entry) {
+      return {
+        id,
+        label: entry.label,
+        color: entry.color,
+        ghost: false,
+        concern: false,
+        unparseable: false,
+        tooltip: entry.description ? `${entry.label}: ${entry.description}` : entry.label
+      };
+    }
+    return {
+      id,
+      label: id,
+      color: '#475569',
+      ghost: true,
+      concern: false,
+      unparseable: false,
+      tooltip: `Unknown tag '${id}'; registry entry was removed`
+    };
+  });
+}
+
+export interface OwnerChip {
+  id: string;
+  label: string;
+  emoji: string;
+  background: string;
+  border: string;
+  foreground: string;
+  tooltip: string;
+}
+
+function tintFromHex(hex: string, alpha: number): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return `rgba(100,116,139,${alpha})`;
+  let body = m[1];
+  if (body.length === 3) body = body.split('').map(ch => ch + ch).join('');
+  const r = parseInt(body.slice(0, 2), 16);
+  const g = parseInt(body.slice(2, 4), 16);
+  const b = parseInt(body.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Owner-attribution chip: emoji + display name + the owner's chosen colour. */
+export function buildOwnerChip(owner: ClientSummary): OwnerChip {
+  const baseColour = owner.colour || '#64748b';
+  return {
+    id: owner.id,
+    label: owner.displayName || owner.id,
+    emoji: owner.emoji || '·',
+    background: tintFromHex(baseColour, 0.12),
+    border: tintFromHex(baseColour, 0.32),
+    foreground: '#e2e8f0',
+    tooltip: `Owner: ${owner.displayName || owner.id} (${owner.id})`
+  };
+}
+
+/** Lane label derived from the state slug (`3-progress` -> `progress`). */
+export function formatStateLabel(state: string): string {
+  const name = state.includes('-') ? state.substring(state.indexOf('-') + 1) : state;
+  return name.replace(/-/g, ' ');
+}
+
+export type PhaseBadgeTone = 'human-ready' | 'intake-running' | 'intake-blocked' | 'intake-passed';
+export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
+
+/**
+ * Lifecycle-phase chip. Surfaces the `phase` substate on cards that carry one.
+ * Returns null when the job has no explicit phase, so cards that predate the
+ * field render exactly like before.
+ */
+export function buildPhaseBadge(phase: TaskInfo['phase']): PhaseBadge | null {
+  switch (phase ?? null) {
+    case 'human-ready':
+      return { label: 'Ready', tone: 'human-ready',
+               tooltip: 'The user marked this task ready. Orchestrator intake will check it before the coding runner picks it up.' };
+    case 'intake-running':
+      return { label: 'Intake running', tone: 'intake-running',
+               tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' };
+    case 'intake-blocked':
+      return { label: 'Intake blocked', tone: 'intake-blocked',
+               tooltip: 'Orchestrator intake flagged this card. Check the activity log for the reason and resolve before the coding runner can pick it up.' };
+    case 'intake-passed':
+      return { label: 'Intake passed', tone: 'intake-passed',
+               tooltip: 'Orchestrator intake approved this card. The coding runner is now allowed to pick it up.' };
+    default:
+      return null;
+  }
+}
+
+export interface ExecutionBadge { label: string; tone: 'running' | 'failed' | 'cancelled'; }
+
+export function buildExecutionBadge(job: TaskInfo): ExecutionBadge | null {
+  const execution = job.execution;
+  if (!execution) return null;
+
+  // Lane wins over execution-status. The backend overlay already clears
+  // Execution for non-progress tasks (TaskEndpointHelpers.WithRuntime), but a
+  // stale poll snapshot or an optimistic move can briefly land on the card
+  // before the next round-trip. Without this guard, a card in 4-auto-review /
+  // 5-human-review can flash "Running live" while the task is not actually
+  // executing in this lane.
+  if (job.state !== '3-progress') return null;
+
+  if (execution.status === 'running') {
+    return { label: 'Running live', tone: 'running' };
+  }
+
+  if (shouldShowFailureToast(execution)) {
+    return { label: execution.exitCode === null ? 'Failed' : `Failed (${execution.exitCode})`, tone: 'failed' };
+  }
+
+  if (execution.runOutcome === 'noop') {
+    return { label: 'NoOp', tone: 'cancelled' };
+  }
+
+  if (execution.runOutcome === 'blocked') {
+    return { label: 'Blocked', tone: 'cancelled' };
+  }
+
+  if (execution.runOutcome === 'needs-input') {
+    return { label: 'Needs input', tone: 'cancelled' };
+  }
+
+  // 'stopped' is the new deliberate-kill status from the backend (user pause,
+  // Pause-&-Send, watchdog kill). Render as a calm "Stopped" pill, not a
+  // failure. Legacy 'cancelled' value stays supported so older in-memory
+  // CliExecution records keep rendering.
+  if (execution.status === 'stopped' || execution.status === 'cancelled') {
+    return { label: 'Stopped', tone: 'cancelled' };
+  }
+
+  return null;
+}
+
+export interface ReviewBadge { label: string; tone: 'generating' | 'ready' | 'failed'; tooltip: string; }
+
+/**
+ * Review-pill descriptor: shows the auto-review (Haiku summarizer) status on a
+ * card that landed in 4-auto-review. Returns null when there is nothing to show
+ * (no run, or the user already moved on).
+ */
+export function buildReviewBadge(summaryState: TaskInfo['summaryState']): ReviewBadge | null {
+  if (!summaryState) return null;
+  switch (summaryState.status) {
+    case 'generating':
+      return { label: 'auto-reviewing', tone: 'generating',
+               tooltip: 'Orchestrator is summarizing the run output (Haiku). The card will become quiet once status.md has been written.' };
+    case 'ready':
+      return { label: 'review ready', tone: 'ready',
+               tooltip: summaryState.bytesWritten ? `Auto-review wrote ${summaryState.bytesWritten} bytes to status.md.` : 'Auto-review finished.' };
+    case 'failed':
+      return { label: 'review failed', tone: 'failed',
+               tooltip: summaryState.errorMessage ?? 'Auto-review failed.' };
+    default:
+      return null;
+  }
+}
+
+export interface AutoReviewProcessBadge { label: string; tone: 'active' | 'queued' | 'stale' | 'done'; tooltip: string; }
+
+export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewStatusView | null, nowMs: number): AutoReviewProcessBadge | null {
+  if (job.state !== '4-auto-review') return null;
+
+  const matchesCurrent = !!status?.currentJob
+    && status.currentJob === job.id
+    && (!status.currentProject || status.currentProject === job.projectName);
+
+  if (matchesCurrent) {
+    return {
+      label: 'reviewing now',
+      tone: 'active',
+      tooltip: 'Auto-review is currently running its multi-aspect pass for this task.'
+    };
+  }
+
+  if (job.orchestratorVerdict) {
+    return {
+      label: `review ${job.orchestratorVerdict}`,
+      tone: 'done',
+      tooltip: `Auto-review has already recorded an orchestrator verdict: ${job.orchestratorVerdict}.`
+    };
+  }
+
+  if (!status?.lastTickAt) {
+    return {
+      label: 'review pending',
+      tone: 'queued',
+      tooltip: 'This task is in Auto Review. The global auto-review status has not loaded yet.'
+    };
+  }
+
+  const ageMs = nowMs - Date.parse(status.lastTickAt);
+  if (ageMs > 90_000) {
+    return {
+      label: 'review stale',
+      tone: 'stale',
+      tooltip: `Auto-review has not completed a tick since ${new Date(status.lastTickAt).toLocaleString()}.`
+    };
+  }
+
+  return {
+    label: 'queued for review',
+    tone: 'queued',
+    tooltip: `Auto-review is alive. Last tick saw ${status.pending ?? 0} candidate(s); this task is waiting in 4-auto-review.`
+  };
+}
+
+// Lanes that sit in the "Done & Decide" super-column and carry an orchestrator
+// verdict the operator must act on. 4-auto-review is deliberately excluded — it
+// lives in the "active" column and already surfaces its verdict via the
+// auto-review process badge.
+const HUMAN_DECISION_LANES = new Set(['5-human-review', '4-review']);
+
+export interface HumanReviewBadge { label: string; tone: 'attention' | 'accept'; tooltip: string; }
+
+/**
+ * Human-decision badge. An escalated / reissue card parked in 5-human-review
+ * used to render identically to a Completed card, hiding that a human still has
+ * to act ("Failed-Cards sehen aus wie Done"). This pill makes the verdict
+ * explicit: a loud red "Escalated" / "Needs rework" marker for action-required
+ * verdicts, and a calm green "Ready to sign off" for an accepted card awaiting
+ * confirmation. Returns null for plain human review (no verdict yet) so
+ * undecided cards stay quiet.
+ */
+export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
+  if (!HUMAN_DECISION_LANES.has(job.state)) return null;
+  switch (job.orchestratorVerdict) {
+    case 'escalate':
+      return {
+        label: 'Escalated',
+        tone: 'attention',
+        tooltip: 'Auto-review escalated this task: the orchestrator could not accept the result and a human must decide what happens next. This is NOT a completed task.'
+      };
+    case 'reissue':
+      return {
+        label: 'Needs rework',
+        tone: 'attention',
+        tooltip: 'Auto-review asked for a reissue: the work needs changes before it can be accepted. Waiting on a human to act.'
+      };
+    case 'accept':
+      return {
+        label: 'Ready to sign off',
+        tone: 'accept',
+        tooltip: 'Auto-review accepted this task. A human just needs to confirm and move it to Completed.'
+      };
+    default:
+      return null;
+  }
+}
+
+/** Host-level "this card needs a human" flag: an escalate/reissue verdict in a
+ *  human-decision lane. Drives the red left ribbon + faint tint. */
+export function cardNeedsAttention(job: TaskInfo): boolean {
+  if (!HUMAN_DECISION_LANES.has(job.state)) return false;
+  return job.orchestratorVerdict === 'escalate' || job.orchestratorVerdict === 'reissue';
+}
+
+export interface OutcomeIssueBadge { label: string; tone: 'info' | 'warn' | 'high'; tooltip: string; }
+
+export function buildOutcomeIssueBadge(issue: TaskInfo['outcomeIssue']): OutcomeIssueBadge | null {
+  if (!issue) return null;
+  const severity = (issue.severity ?? '').toLowerCase();
+  const tone = severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
+  const seen = issue.lastSeenAt ? `\nLast seen: ${formatShortTime(issue.lastSeenAt)}` : '';
+  const summary = issue.summary ? `\n\n${issue.summary}` : '';
+  return {
+    label: issue.label || issue.kind,
+    tone,
+    tooltip: `Runner outcome issue: ${issue.kind}${seen}${summary}`
+  };
+}
+
+export function buildLoopTooltip(al: AutoLoopSnapshot): string {
+  const tokenLine = `${al.tokensUsed.toLocaleString()} / ${al.maxTokens.toLocaleString()} orchestrator tokens`;
+  const startedAt = (() => { try { return new Date(al.startedAt).toLocaleString(); } catch { return al.startedAt; } })();
+  const lastQ = (al.lastQuestion ?? '').slice(0, 160);
+  const lastErr = al.lastError ? `\nLast error: ${al.lastError}` : '';
+  return `Auto-loop: orchestrator answering NEEDS_INPUT for this task.\n` +
+         `Iteration ${al.iteration} of ${al.maxIterations}.\n` +
+         `${tokenLine}.\nStarted ${startedAt}.${lastErr}\n\nLast question: ${lastQ}${(al.lastQuestion ?? '').length > 160 ? '...' : ''}`;
+}
+
+export function buildPendingTooltip(pi: PendingIntent): string {
+  const when = (() => {
+    try { return new Date(pi.savedAt).toLocaleString(); }
+    catch { return pi.savedAt; }
+  })();
+  const preview = (pi.prompt ?? '').slice(0, 120);
+  return `Pending follow-up (${pi.mode}) saved ${when}.\nWill run on next auto-pickup.\n\n${preview}${(pi.prompt ?? '').length > 120 ? '...' : ''}`;
+}
+
+// Context-menu action ids shared between the menu builder and the click
+// handler in the component.
+export const EPIC_ASSIGN_PREFIX = 'epic-assign:';
+export const EPIC_DETACH_ID = 'epic-detach';
+export const FILTER_DEPENDENTS_ID = 'filter-dependents';
+
+/**
+ * Right-click context-menu rows for a card: copy actions + (for non-epic cards)
+ * the epic assign/detach submenu. The active epic is marked; a detach row is
+ * appended only when the card is already attached to one.
+ */
+export function buildCardCtxMenuItems(
+  job: TaskInfo,
+  isEpic: boolean,
+  epics: readonly EpicRollup[],
+  currentEpicId: string | null,
+): MenuItem[] {
+  const items: MenuItem[] = [
+    { kind: 'row', id: 'copy-name', label: 'Copy Name' },
+    { kind: 'row', id: 'copy-id', label: 'Copy ID' },
+  ];
+  if (job.key) {
+    items.push({ kind: 'row', id: 'copy-key', label: `Copy Key (${job.key})` });
+    items.push({
+      kind: 'row',
+      id: FILTER_DEPENDENTS_ID,
+      label: `Filter: tasks depending on ${job.key}`,
+    });
+  }
+
+  // Epic assignment is only meaningful for ordinary task cards - an epic is not
+  // a sub-task of another epic.
+  if (!isEpic) {
+    items.push({ kind: 'separator' });
+    items.push({ kind: 'header', label: 'Epic' });
+    if (epics.length === 0 && !currentEpicId) {
+      items.push({ kind: 'row', id: 'epic-none', label: 'No epics in this project', disabled: true });
+    } else {
+      for (const epic of epics) {
+        items.push({
+          kind: 'row',
+          id: EPIC_ASSIGN_PREFIX + epic.id,
+          label: epic.title || epic.id,
+          active: epic.id === currentEpicId,
+        });
+      }
+      if (currentEpicId) {
+        items.push({ kind: 'row', id: EPIC_DETACH_ID, label: 'Detach from epic' });
+      }
+    }
+  }
+  return items;
 }
