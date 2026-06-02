@@ -182,6 +182,31 @@ public class EpicDecompositionTests : IDisposable
         Assert.NotNull(result.Error);
     }
 
+    // ---- Planning-run gate (kind x intent) ---------------------------------
+
+    [Theory]
+    [InlineData(TaskKinds.Epic, RunIntent.ManualStart, true)]
+    [InlineData(TaskKinds.Epic, RunIntent.AutoPickup, true)]
+    [InlineData(TaskKinds.Epic, RunIntent.UserContinue, false)] // steering, not re-planning
+    [InlineData(TaskKinds.Task, RunIntent.ManualStart, false)]
+    [InlineData(TaskKinds.Task, RunIntent.AutoPickup, false)]
+    [InlineData(TaskKinds.Task, RunIntent.UserContinue, false)]
+    public void IsPlanningRun_GatesOnEpicKindAndFreshStart(string kind, RunIntent intent, bool expected)
+    {
+        Assert.Equal(expected, EpicRunPolicy.IsPlanningRun(kind, intent));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("story")]
+    public void IsPlanningRun_NonEpicKind_IsNeverPlanning(string? kind)
+    {
+        Assert.False(EpicRunPolicy.IsPlanningRun(kind, RunIntent.ManualStart));
+        Assert.False(EpicRunPolicy.IsPlanningRun(kind, RunIntent.AutoPickup));
+        Assert.False(EpicRunPolicy.IsPlanningRun(kind, RunIntent.UserContinue));
+    }
+
     // ---- Sub-task creation with epicId -------------------------------------
 
     [Fact]

@@ -659,7 +659,7 @@ public class ProjectRunner
             // authors a sub-task list) and, optionally, the planning model.
             // A user continue on an epic is the user steering the plan, not a
             // fresh decomposition, so it is left on the normal path.
-            var isEpicPlanningRun = TaskKinds.IsEpic(info.Kind) && intent != RunIntent.UserContinue;
+            var isEpicPlanningRun = EpicRunPolicy.IsPlanningRun(info.Kind, intent);
             var runModel = info.Model;
             if (isEpicPlanningRun)
             {
@@ -2440,8 +2440,7 @@ public class ProjectRunner
             // so it does not trigger this (mirrors RunCliAsync's gate).
             if (movedToReview
                 && activeInfo != null
-                && intentSnapshot != RunIntent.UserContinue
-                && TaskKinds.IsEpic(activeInfo.Kind))
+                && EpicRunPolicy.IsPlanningRun(activeInfo.Kind, intentSnapshot))
             {
                 DecomposeEpicAndCreateSubTasks(
                     activeInfo,
