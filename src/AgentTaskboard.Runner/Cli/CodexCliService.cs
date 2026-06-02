@@ -258,6 +258,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
         if (_processes.TryGetValue(jobKey, out var info))
         {
             TryCaptureTurnUsage(info, line);
+            TryCaptureSessionId(info, line);
         }
 
         return CodexEventAdapter.Map(line.Text, jobKey);
@@ -271,11 +272,18 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// stays empty and every follow-up rebuilds context from disk via Recovery
     /// instead of <c>codex exec resume &lt;uuid&gt;</c>, throwing away Codex's
     /// own prompt-cache.
+    /// <para>
+    /// This runs in <see cref="MapLineToRunEvents"/> on the RAW stdout line, not
+    /// in <c>OnOutputLine</c>. <c>OnOutputLine</c> now receives the rendered
+    /// <c>● Session &lt;id&gt;</c> marker (see <see cref="Rendering.CodexOutputRenderer"/>),
+    /// from which the original <c>thread_id</c> payload is no longer recoverable;
+    /// capturing here keeps <see cref="TryExtractSessionId"/> reading the real
+    /// JSON frame.
+    /// </para>
     /// </summary>
-    protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
+    private void TryCaptureSessionId(ProcInfo info, CliOutputLine line)
     {
         if (info.CapturedSessionId != null) return;
-        if (line.Stream != "stdout") return;
 
         var id = TryExtractSessionId(line.Text);
         if (id == null) return;
@@ -284,6 +292,19 @@ public sealed class CodexCliService : CliExecutionServiceBase
         info.SessionName ??= id;
         _logger.LogInformation("Captured Codex session id {Id}", id);
     }
+
+    /// <summary>
+    /// Translate a single <c>codex exec --json</c> JSONL frame into the marker
+    /// vocabulary the frontend activity-log parser classifies, e.g.
+    /// <c>● Run &lt;cmd&gt;</c> or <c>● Edit &lt;path&gt;</c>. Delegates to the pure,
+    /// dependency-free <see cref="Rendering.CodexOutputRenderer"/> (the
+    /// marker-line twin of <see cref="CodexEventAdapter"/>). Before this existed
+    /// Codex had no override and raw JSONL leaked into the Activity Log.
+    /// </summary>
+    public override IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
+        => _renderer.Render(raw);
+
+    private static readonly Rendering.CodexOutputRenderer _renderer = new();
 
     /// <summary>
     /// Parse a <c>turn.completed</c> frame's <c>usage</c> block via the
