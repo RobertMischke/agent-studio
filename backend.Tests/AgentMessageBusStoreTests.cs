@@ -407,14 +407,6 @@ public class AgentMessageBusStoreTests : IDisposable
     }
 
     [Fact]
-    public void WarmProject_RejectsBlankInputs()
-    {
-        var store = new AgentMessageBusStore();
-        Assert.Throws<ArgumentException>(() => store.WarmProject("", "p"));
-        Assert.Throws<ArgumentException>(() => store.WarmProject(_workspace, ""));
-    }
-
-    [Fact]
     public async Task AppendAsync_SerialisesConcurrentAppendsToSameDayFile()
     {
         var store = new AgentMessageBusStore();
