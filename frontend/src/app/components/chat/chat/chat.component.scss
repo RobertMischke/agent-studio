@@ -60,8 +60,17 @@
   font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.5;
-  scroll-behavior: smooth;
+  // No smooth scroll-behavior: the auto-follow pins to the bottom with an
+  // instant scrollTop write. A smooth animation would (a) re-trigger on
+  // every poll tick and visibly wobble, and (b) fire scroll events for
+  // several frames after our suppress flag clears, which onBodyScroll then
+  // misreads — flipping stickToBottom off and stranding the view above the
+  // bottom. Instant is jank-free and idempotent when already at the bottom.
   position: relative;
+  // Scroll-anchoring keeps the viewport pinned to a visible row when the
+  // content above it changes height (poll re-render, virtualisation spacer
+  // resize), eliminating the few-pixel wobble while scrolling history.
+  overflow-anchor: auto;
   color: var(--studio-fg, #e2e8f0);
   // F28: dezent scrollbar — transparent thumb that fades in on hover so
   // the conversation surface is not bordered by a permanent scroll
@@ -104,6 +113,8 @@
   cursor: pointer;
   z-index: 2;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.32);
+  // Sticky overlay — never let it become the scroll anchor.
+  overflow-anchor: none;
 }
 .chat__empty {
   padding: 28px 12px;
@@ -612,6 +623,10 @@
 .chat__spacer {
   width: 1px;
   flex: 0 0 auto;
+  // The spacers resize as the virtual window slides; keep the browser
+  // from anchoring to them so it picks a real message row instead and
+  // the visible content stays put while scrolling.
+  overflow-anchor: none;
 }
 
 .chat__attachment-error {

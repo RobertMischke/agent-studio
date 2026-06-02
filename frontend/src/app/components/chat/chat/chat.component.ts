@@ -559,11 +559,23 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
 
   private scheduleScrollToBottom(): void {
     if (typeof requestAnimationFrame === 'undefined') return;
+    // Coalesce to a single pin per frame. A poll tick can fire the
+    // autoscroll effect several times (new message + event + pending
+    // arrays all land together), but we only want one scrollTop write,
+    // after Angular has rendered the new rows — never multiple per tick.
     if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
     this.scrollFrame = requestAnimationFrame(() => {
       this.scrollFrame = null;
       const el = this.bodyRef()?.nativeElement;
       if (!el) return;
+      // The user may have scrolled up between scheduling and this frame;
+      // honour that and never yank them back to the bottom once they've
+      // left it. The autoscroll effect re-schedules us when they return.
+      if (!this.stickToBottom()) return;
+      // Suppress the scroll event this write provokes so onBodyScroll
+      // doesn't misread the position and flip stickToBottom. The write
+      // is instant (the body intentionally has no smooth scroll-behavior),
+      // so it fires exactly one scroll event — cleared on the next frame.
       this.suppressScrollEvent = true;
       el.scrollTop = el.scrollHeight;
       requestAnimationFrame(() => { this.suppressScrollEvent = false; });
