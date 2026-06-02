@@ -2050,12 +2050,17 @@ public class ProjectRunner
 
     /// <summary>
     /// Mark the CORE step terminal in pipeline-execution.json once the agent
-    /// process exits: <see cref="PipelineStepStatus.Passed"/> on a clean exit,
+    /// process exits: <see cref="PipelineStepStatus.Passed"/> when the run
+    /// classified as <see cref="RunStatuses.Completed"/>,
     /// <see cref="PipelineStepStatus.Failed"/> otherwise, with the run's real
     /// duration and start/end timestamps. The agent's own verdict
     /// (DONE / BLOCKED / NEEDS_INPUT) drives the lane transition, not this
     /// step: CORE answers "did the agent run execute", which is true
     /// regardless of the verdict, so a clean exit is Passed even on BLOCKED.
+    /// The status comes from <see cref="CoreRunStepStatusMapper"/>, which keys
+    /// off the deterministic run status and never the OS exit code - a
+    /// sentinel-detected / silent-completion run is a completion even though the
+    /// process kill yields exitCode = -1 on Windows.
     /// </summary>
     private void RecordCoreRunFinish(string jobId, CliExecution execution)
     {
@@ -2081,15 +2086,18 @@ public class ProjectRunner
                 : Math.Max(0, (long)(DateTime.UtcNow - startedAt).TotalMilliseconds);
             var completedAt = startedAt.AddMilliseconds(durationMs);
 
-            var passed = string.Equals(execution.Status, "completed", StringComparison.OrdinalIgnoreCase)
-                && execution.ExitCode is null or 0;
+            // Key the CORE step off the deterministic run status, not the OS
+            // exit code: a sentinel-detected / silent-completion run is a
+            // completion even though the process kill returns exitCode = -1.
+            var coreStatus = CoreRunStepStatusMapper.From(execution);
+            var passed = coreStatus == PipelineStepStatus.Passed;
 
             _pipelineLog.RecordStep(folder, new PipelineStepExecution
             {
                 StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
                 Kind = StepKind.Core,
                 Model = execution.Model ?? info?.Model,
-                Status = passed ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+                Status = coreStatus,
                 StartedAt = startedAt,
                 CompletedAt = completedAt,
                 DurationMs = durationMs,
