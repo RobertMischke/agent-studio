@@ -1,4 +1,15 @@
+---
+name: regenerate-readme
+description: Rebuild README.md from current product reality (ROADMAP, AGENTS, design docs) after a load-bearing change or tone refresh, following the repeatable regeneration contract.
+trigger: user
+mutates_code: true
+mutates_queue: false
+sentinel: TASKBOARD-SKILL-REGENERATE-README
+---
+
 # Skill: Regenerate README
+
+> Sentinel: `TASKBOARD-SKILL-REGENERATE-README`. Echo this string in your first reply when the orchestrator probes whether the skill loaded.
 
 Rebuild [`README.md`](../../../README.md) from the current product reality. README is a narrative document; it drifts whenever code, architecture, or tone changes. This skill captures the contract so the regeneration is repeatable.
 

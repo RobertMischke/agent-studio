@@ -1,4 +1,15 @@
+---
+name: job-api
+description: Programmatic interaction with the agent-taskboard task API over HTTP - create, move, triage, reissue, and reorder tasks when clicking through the board UI would be too slow.
+trigger: user
+mutates_code: false
+mutates_queue: true
+sentinel: TASKBOARD-SKILL-JOB-API
+---
+
 # Skill: Job-API
+
+> Sentinel: `TASKBOARD-SKILL-JOB-API`. Echo this string in your first reply when the orchestrator probes whether the skill loaded.
 
 Programmatic interaction with the agent-taskboard job API. Read this before
 creating or moving tasks via HTTP, especially when the task you are doing
