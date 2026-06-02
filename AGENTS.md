@@ -380,6 +380,8 @@ States (ADR-0025: three-stage review pipeline):
 
 `4-auto-review` is the orchestrator's lane (machine icon in the kanban): the `ReviewDecisionOrchestrator` decides reissue / accept-as-done / escalate. `5-human-review` is the lane that waits for the user (eye icon). The user always gets the final say on completion - the orchestrator never moves a task directly from `4-auto-review` to `6-completed`.
 
+When the orchestrator accepts a task as done on its own judgment (advancing it to `5-human-review` rather than a human accepting it), it stamps the workspace provenance tag `orchestrator-moved` (label "Orchestrator: moved", text-only) on the card so a glance shows who advanced it. The tag is seeded in `TagRegistryService` and applied by `ReviewDecisionOrchestrator` on both the multi-aspect (`ProcessDoneAsync`) and single-verdict (`HandleAcceptAsDone`) accept paths; tasks a human accepts carry no such tag. `TagDriftRule` treats it as a provenance tag that survives aspect-concern reconciliation. The kanban lane labels themselves are display-only ("Ready", "Review", "Auto Review") and never rename the underlying `2-ready` / `5-human-review` / `4-auto-review` state keys, which are part of the on-disk + API contract.
+
 Only tasks in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New tasks default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
 
 Successful CLI runs move from `3-progress` to `4-auto-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation. The pre-ADR-0025 single `4-review` lane is migrated automatically on backend boot via `JobStateMachine.EnsureStateFoldersAndMigrate`.
