@@ -55,22 +55,7 @@ public static class EpicEndpoints
             if (req?.SubTasks is null || req.SubTasks.Count == 0)
                 return Results.BadRequest(new { error = "subTasks is required and must contain at least one entry" });
 
-            var created = new List<string>();
-            foreach (var spec in req.SubTasks)
-            {
-                if (string.IsNullOrWhiteSpace(spec.Title)) continue;
-                var id = mutations.CreateJob(new CreateJobRequest
-                {
-                    Title = spec.Title,
-                    WatchPath = epic.WatchPath,
-                    EpicId = epic.Id,
-                    PromptMarkdown = spec.PromptMarkdown,
-                    CliType = spec.CliType ?? epic.CliType,
-                    Model = spec.Model ?? epic.Model,
-                    TargetState = TaskStates.Backlog,
-                });
-                if (id is not null) created.Add(id);
-            }
+            var created = EpicSubTaskFactory.CreateSubTasks(mutations, epic, req.SubTasks, TaskStates.Backlog);
             return Results.Ok(new { epicId = epic.Id, created });
         });
     }

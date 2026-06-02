@@ -1237,6 +1237,27 @@ public record ProjectSettings
     /// <c>project-settings.json</c>.
     /// </summary>
     public Dictionary<string, string>? CliModes { get; init; }
+
+    /// <summary>
+    /// Model the epic planning/decomposition run uses (way 3): when a
+    /// <see cref="TaskKinds.Epic"/> card is picked up, the runner runs a
+    /// planning step that authors the sub-task list instead of a coding run.
+    /// Null means "use the epic card's own <see cref="TaskInfo.Model"/>"; set
+    /// it to bias decomposition toward a stronger (or cheaper) model than the
+    /// sub-tasks themselves will run on. Persisted in
+    /// <c>project-settings.json</c>.
+    /// </summary>
+    public string? EpicPlanningModel { get; init; }
+
+    /// <summary>
+    /// Where an epic decomposition run's generated sub-tasks land. False /
+    /// null (default) lands them in <c>0-backlog</c> for human triage, exactly
+    /// like the deterministic <c>POST /api/epics/{id}/sub-tasks</c> path. True
+    /// lands them straight in <c>2-ready</c> so an auto-pickup project starts
+    /// executing the plan without a manual triage pass. Persisted in
+    /// <c>project-settings.json</c>.
+    /// </summary>
+    public bool? EpicSubTasksToReady { get; init; }
 }
 
 /// <summary>
@@ -1555,6 +1576,18 @@ public record SetCliModeRequest
 public record SetOrchestratorModelRequest
 {
     public string? Model { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/epic-planning</c>. Tunes the epic
+/// decomposition (planning) run: which model authors the sub-task list, and
+/// whether the generated sub-tasks land in <c>2-ready</c> instead of
+/// <c>0-backlog</c>. Null/absent fields leave that knob on its default.
+/// </summary>
+public record SetEpicPlanningRequest
+{
+    public string? Model { get; init; }
+    public bool? SubTasksToReady { get; init; }
 }
 
 /// <summary>

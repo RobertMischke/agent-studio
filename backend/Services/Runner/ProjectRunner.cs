@@ -653,6 +653,24 @@ public class ProjectRunner
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
             }
 
+            // Way 3 (non-deterministic half): an epic card runs a planning /
+            // decomposition step instead of a coding run. We keep the normal
+            // start lifecycle and only swap the prompt template (the agent
+            // authors a sub-task list) and, optionally, the planning model.
+            // A user continue on an epic is the user steering the plan, not a
+            // fresh decomposition, so it is left on the normal path.
+            var isEpicPlanningRun = TaskKinds.IsEpic(info.Kind) && intent != RunIntent.UserContinue;
+            var runModel = info.Model;
+            if (isEpicPlanningRun)
+            {
+                plan = plan with { PromptTemplate = RuntimePromptService.EpicDecomposition, PromptOverride = null };
+                var planningModel = _projectSettings.Get(ProjectName).EpicPlanningModel;
+                if (!string.IsNullOrWhiteSpace(planningModel)) runModel = planningModel;
+                _logger.LogInformation(
+                    "[taskboard] epic {JobId} -> planning/decomposition run (model={Model})",
+                    jobId, runModel ?? "<task-default>");
+            }
+
             var prompt = RenderPrompt(plan, info);
 
             // Disk-backed pickup lock (ADR-0044). When the lock is configured
@@ -770,7 +788,7 @@ public class ProjectRunner
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, Entry.RootPath,
-                plan.SessionToResume, plan.ResumeFlag, info.Model, info.FolderPath, permissionMode, ct);
+                plan.SessionToResume, plan.ResumeFlag, runModel, info.FolderPath, permissionMode, ct);
 
             if (execution == null)
             {
@@ -2413,6 +2431,24 @@ public class ProjectRunner
             _stuckLoops.TryRemove(jobId, out _);
 
             var movedToReview = RunCompletionPolicy.ShouldMoveToReview(terminalOutcome);
+
+            // Way 3 (non-deterministic half): an epic's planning run just
+            // finished successfully. Parse the authored plan and create the
+            // sub-tasks under the epic BEFORE the epic moves to review, so a
+            // crash mid-finalisation cannot strand a successful plan with no
+            // sub-tasks. A continue on an epic is steering, not decomposition,
+            // so it does not trigger this (mirrors RunCliAsync's gate).
+            if (movedToReview
+                && activeInfo != null
+                && intentSnapshot != RunIntent.UserContinue
+                && TaskKinds.IsEpic(activeInfo.Kind))
+            {
+                DecomposeEpicAndCreateSubTasks(
+                    activeInfo,
+                    liveOutputSnapshot.Select(l => l.Text).ToList(),
+                    planSnapshot?.EventInputSessionId);
+            }
+
             if (movedToReview)
             {
                 // Drop a completion marker BEFORE the move so a crash between
@@ -2537,6 +2573,64 @@ public class ProjectRunner
         if (string.IsNullOrEmpty(folder)) return;
         try { _pickupLock.Release(folder, _pickupLockOwner); }
         catch (Exception ex) { _logger.LogDebug(ex, "Pickup lock release failed for '{Folder}'", folder); }
+    }
+
+    /// <summary>
+    /// Way 3 (non-deterministic half): turn the output of an epic's planning /
+    /// decomposition run into sub-tasks under the epic. The parser is pure
+    /// (<see cref="EpicDecompositionParser"/>); creation goes through the same
+    /// <see cref="EpicSubTaskFactory"/> path as the deterministic
+    /// <c>POST /api/epics/{id}/sub-tasks</c> endpoint, so the sub-tasks land
+    /// with <see cref="TaskInfo.EpicId"/> set and round-trip through the
+    /// scanner identically. The target lane is the project's
+    /// <see cref="ProjectSettings.EpicSubTasksToReady"/> choice (default
+    /// 0-backlog for triage). Emits the "Epic decomposition" timeline step
+    /// either way so the operator sees the outcome.
+    /// </summary>
+    private void DecomposeEpicAndCreateSubTasks(TaskInfo epic, IReadOnlyList<string> outputLines, string? runId)
+    {
+        var result = EpicDecompositionParser.Parse(outputLines);
+        var toReady = _projectSettings.Get(ProjectName).EpicSubTasksToReady == true;
+        var targetState = toReady ? TaskStates.Ready : TaskStates.Backlog;
+
+        if (!result.HasSubTasks)
+        {
+            _logger.LogInformation(
+                "[taskboard] epic {EpicId} decomposition produced no sub-tasks: {Reason}",
+                epic.Id, result.Error ?? "unknown");
+            _chatLog.Append(epic, OrchestratorMessageKind.Decision,
+                $"[epic] Decomposition run produced no sub-tasks ({result.Error ?? "no plan found"}). Re-run with a clearer goal or add sub-tasks manually.");
+            _timeline?.Append(
+                epic.FolderPath,
+                TimelineEventKinds.EpicDecomposed,
+                TimelineActors.Orchestrator,
+                summary: "Epic decomposition produced no sub-tasks",
+                runId: runId,
+                details: new()
+                {
+                    ["created"] = "0",
+                    ["reason"] = result.Error ?? "no plan found",
+                });
+            return;
+        }
+
+        var created = EpicSubTaskFactory.CreateSubTasks(_mutations, epic, result.SubTasks, targetState);
+        _logger.LogInformation(
+            "[taskboard] epic {EpicId} decomposed into {Count} sub-task(s) -> {Lane}",
+            epic.Id, created.Count, targetState);
+        _chatLog.Append(epic, OrchestratorMessageKind.Decision,
+            $"[epic] Decomposition created {created.Count} sub-task(s) in {targetState}.");
+        _timeline?.Append(
+            epic.FolderPath,
+            TimelineEventKinds.EpicDecomposed,
+            TimelineActors.Orchestrator,
+            summary: $"Epic decomposition created {created.Count} sub-task(s)",
+            runId: runId,
+            details: new()
+            {
+                ["created"] = created.Count.ToString(),
+                ["targetState"] = targetState,
+            });
     }
 
     private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)

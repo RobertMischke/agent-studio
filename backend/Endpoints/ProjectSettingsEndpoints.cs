@@ -47,6 +47,11 @@ public static class ProjectSettingsEndpoints
                     autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
                     runnerMode = kv.Value.RunnerMode,
                     orchestratorModel = kv.Value.OrchestratorModel,
+                    // Epic decomposition (planning) run knobs (way 3): null
+                    // model means "use the epic card's own model"; subTasksToReady
+                    // null/false lands generated sub-tasks in 0-backlog.
+                    epicPlanningModel = kv.Value.EpicPlanningModel,
+                    epicSubTasksToReady = kv.Value.EpicSubTasksToReady ?? false,
                     intakeEnabled = kv.Value.IntakeEnabled,
                     autonomyLevel = kv.Value.AutonomyLevel,
                     // ADR-0052: parallel-execution knobs. maxParallelism == 1
@@ -282,6 +287,18 @@ public static class ProjectSettingsEndpoints
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             settings.SetOrchestratorModel(projectName, req.Model);
+            return Results.Ok(settings.Get(projectName));
+        });
+
+        // Epic decomposition (planning) run knobs (way 3): the model that
+        // authors the sub-task list and whether generated sub-tasks land in
+        // 2-ready instead of 0-backlog. Null fields leave that knob untouched.
+        app.MapPut("/api/projects/{projectName}/epic-planning", (string projectName, SetEpicPlanningRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetEpicPlanning(projectName, req.Model, req.SubTasksToReady);
             return Results.Ok(settings.Get(projectName));
         });
 

@@ -148,6 +148,32 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// Tunes the epic decomposition (planning) run for a project. A null
+    /// argument leaves that knob untouched, so the caller can set the model
+    /// and the backlog/ready target independently. An empty model string
+    /// clears the override (revert to the epic card's own model).
+    /// </summary>
+    public void SetEpicPlanning(string projectName, string? model, bool? subTasksToReady)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with
+            {
+                EpicPlanningModel = model is null
+                    ? current.EpicPlanningModel
+                    : (string.IsNullOrWhiteSpace(model) ? null : model.Trim()),
+                EpicSubTasksToReady = subTasksToReady ?? current.EpicSubTasksToReady,
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Epic planning settings updated for project {Project} (model={Model}, subTasksToReady={ToReady})",
+            projectName, model, subTasksToReady);
+    }
+
+    /// <summary>
     /// ADR-0026: sets the per-project autonomy level for the
     /// orchestrator-prep loop. Accepts <c>0..4</c>; out-of-range values are
     /// clamped to the nearest valid stop. Null clears (revert to the default
