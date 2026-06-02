@@ -103,4 +103,31 @@ public class TimelineLogTests : IDisposable
     {
         Assert.Empty(_log.ReadAll(_jobFolder));
     }
+
+    [Fact]
+    public void Append_ReadOnlyContainmentViolation_RoundTrips()
+    {
+        // ADR-0049 requires a new kind to ship with a writer test. The runner
+        // emits this when a read-only (planning / research) run leaves a dirty
+        // working tree; the wire string is the closed-enum constant and the
+        // details bag carries the mode, changed-file count, and capped file list.
+        var ok = _log.Append(_jobFolder,
+            kind: TimelineEventKinds.ReadOnlyContainmentViolation,
+            actor: TimelineActors.System,
+            summary: "Read-only planning run left 2 changed file(s) - containment violation (not auto-reverted)",
+            details: new Dictionary<string, string>
+            {
+                ["mode"] = "planning",
+                ["changedFiles"] = "2",
+                ["files"] = "src/a.cs, src/b.cs",
+            });
+        Assert.True(ok);
+
+        var evt = Assert.Single(_log.ReadAll(_jobFolder));
+        Assert.Equal("read_only_containment_violation", evt.Kind);
+        Assert.Equal(TimelineActors.System, evt.Actor);
+        Assert.Equal("planning", evt.Details?["mode"]);
+        Assert.Equal("2", evt.Details?["changedFiles"]);
+        Assert.Equal("src/a.cs, src/b.cs", evt.Details?["files"]);
+    }
 }

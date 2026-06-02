@@ -71,10 +71,11 @@ export class TaskTimelinePaneComponent {
   /** Tone for an individual event row keyed off its kind. */
   rowTone(kind: string): string {
     switch (kind) {
-      case TIMELINE_KIND.orchestratorVerdictAccepted: return 'ok';
-      case TIMELINE_KIND.qualityLoopReopened:         return 'warn';
-      case TIMELINE_KIND.orchestratorEscalated:       return 'danger';
-      default:                                        return 'neutral';
+      case TIMELINE_KIND.orchestratorVerdictAccepted:    return 'ok';
+      case TIMELINE_KIND.qualityLoopReopened:            return 'warn';
+      case TIMELINE_KIND.orchestratorEscalated:          return 'danger';
+      case TIMELINE_KIND.readOnlyContainmentViolation:   return 'danger';
+      default:                                           return 'neutral';
     }
   }
 
@@ -107,6 +108,7 @@ export class TaskTimelinePaneComponent {
       case TIMELINE_KIND.humanReviewDecided:          return 'Human review decided';
       case TIMELINE_KIND.laneChanged:                 return 'Lane changed';
       case TIMELINE_KIND.mergedIn:                    return 'Merged in';
+      case TIMELINE_KIND.readOnlyContainmentViolation: return 'Containment violation';
       default:                                        return kind;
     }
   }

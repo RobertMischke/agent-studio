@@ -30,6 +30,15 @@ public static class PipelineCatalogue
     public const string StandardPipelineId = "standard-task-pipeline";
 
     /// <summary>
+    /// The read-only variant for planning / research modes. Same steps as
+    /// <see cref="StandardPipelineId"/> minus the git pre/post steps (see
+    /// <see cref="GitStepIds"/>): render prompt -&gt; run agent -&gt; produce
+    /// report -&gt; status, with no worktree / commit / merge / teardown. Chosen
+    /// per run by <see cref="ForMode"/>.
+    /// </summary>
+    public const string ReadOnlyPipelineId = "read-only-task-pipeline";
+
+    /// <summary>
     /// The four aspect step ids ship as parallel post-steps. Kept in
     /// sync with <see cref="AspectRunnerService.Catalogue"/> -
     /// <see cref="PipelineCatalogueAsserts.AspectStepsMatchAspectRunnerCatalogue"/>
@@ -104,14 +113,42 @@ public static class PipelineCatalogue
     public const string RegressionRadarStepId = "post-regression-radar";
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
 
+    /// <summary>
+    /// Steps whose work mutates the git tree (worktree create, commit + push,
+    /// merge / integration, teardown). Today the only catalogue git step is the
+    /// commit-attribution slot; future worktree / merge steps add their ids here.
+    /// The read-only pipeline filters these out so a planning / research run does
+    /// no git work - <see cref="BuildReadOnlyPipeline"/> drops any step whose id
+    /// is in this set. The git side effects that live outside the catalogue
+    /// (auto-commit, push, completed-push) are gated separately in
+    /// <c>TaskTransitionService</c> on the same <see cref="TaskModes.IsReadOnly"/>
+    /// predicate.
+    /// </summary>
+    public static readonly HashSet<string> GitStepIds = new(StringComparer.Ordinal)
+    {
+        GitCommitAttributionStepId,
+    };
+
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
+    private static readonly TaskPipeline ReadOnlyPipeline = BuildReadOnlyPipeline();
 
     public static TaskPipeline Standard => StandardPipeline;
+    public static TaskPipeline ReadOnly => ReadOnlyPipeline;
+
+    /// <summary>
+    /// Select the pipeline for a task's execution mode: read-only modes
+    /// (planning / research) get the git-free <see cref="ReadOnly"/> variant;
+    /// everything else gets <see cref="Standard"/>.
+    /// </summary>
+    public static TaskPipeline ForMode(string? mode) =>
+        TaskModes.IsReadOnly(mode) ? ReadOnlyPipeline : StandardPipeline;
 
     public static TaskPipeline? Get(string id) =>
-        string.Equals(id, StandardPipelineId, StringComparison.OrdinalIgnoreCase) ? StandardPipeline : null;
+        string.Equals(id, StandardPipelineId, StringComparison.OrdinalIgnoreCase) ? StandardPipeline
+        : string.Equals(id, ReadOnlyPipelineId, StringComparison.OrdinalIgnoreCase) ? ReadOnlyPipeline
+        : null;
 
-    public static IReadOnlyList<TaskPipeline> All { get; } = [StandardPipeline];
+    public static IReadOnlyList<TaskPipeline> All { get; } = [StandardPipeline, ReadOnlyPipeline];
 
     private static TaskPipeline BuildStandardPipeline()
     {
@@ -219,6 +256,27 @@ public static class PipelineCatalogue
                 },
                 .. BuildDriftSteps(),
             ],
+        };
+    }
+
+    // The read-only variant for planning / research modes. It is the standard
+    // pipeline with every git step (see GitStepIds) filtered out of all three
+    // sections, so a read-only run does no worktree / commit / merge / teardown
+    // work: render prompt -> run agent -> produce report -> status. Filtering the
+    // standard definition (rather than hand-listing steps) keeps the two
+    // pipelines in lock-step as the standard pipeline grows.
+    private static TaskPipeline BuildReadOnlyPipeline()
+    {
+        static List<PipelineStep> WithoutGitSteps(IEnumerable<PipelineStep> steps) =>
+            steps.Where(s => !GitStepIds.Contains(s.Id)).ToList();
+
+        return StandardPipeline with
+        {
+            Id = ReadOnlyPipelineId,
+            DisplayName = "Read-only task pipeline",
+            Pre = WithoutGitSteps(StandardPipeline.Pre),
+            Core = WithoutGitSteps(StandardPipeline.Core),
+            Post = WithoutGitSteps(StandardPipeline.Post),
         };
     }
 

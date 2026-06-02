@@ -41,6 +41,7 @@ export const TIMELINE_KIND = {
   humanReviewDecided: 'human_review_decided',
   laneChanged: 'lane_changed',
   mergedIn: 'merged_in',
+  readOnlyContainmentViolation: 'read_only_containment_violation',
 } as const;
 
 /** The three terminals of the completion loop. */

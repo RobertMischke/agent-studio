@@ -120,4 +120,69 @@ public sealed class ParallelSlotPolicyTests
         Assert.Null(ParallelSlotPolicy.FirstScopeConflict(new[] { "frontend/" }, new[] { "backend/" }));
         Assert.NotNull(ParallelSlotPolicy.FirstScopeConflict(new[] { "Backend\\Services" }, new[] { "backend/services/x.cs" }));
     }
+
+    [Fact]
+    public void ReadOnlyCandidate_AdmitsAlongsideOverlappingScope_NoScopeComputation()
+    {
+        // A planning / research run writes no files, so it has no scope to prove
+        // disjoint. The gate admits it as parallel-ok even when a running task's
+        // scope would have collided for a coding candidate - the scope loop is
+        // skipped entirely.
+        var running = new[] { Running("a", "backend/Services/") };
+        var admission = ParallelSlotPolicy.Decide(
+            "ro", TaskParallelism.ReadOnlyTask, running, maxParallelism: 2);
+
+        Assert.Equal(SlotDecision.Admit, admission.Decision);
+        Assert.Contains("read-only task (no file scope)", admission.Reason);
+    }
+
+    [Fact]
+    public void ReadOnlyCandidate_WithUnknownScope_StillAdmits()
+    {
+        // The conservative unknown-scope serialize rule does not apply to a
+        // read-only candidate: it never writes, so an empty predicted scope is
+        // not a risk, and the short-circuit admits it.
+        var running = new[] { Running("a", "frontend/") };
+        var admission = ParallelSlotPolicy.Decide(
+            "ro", TaskParallelism.ReadOnlyTask, running, maxParallelism: 2);
+
+        Assert.Equal(SlotDecision.Admit, admission.Decision);
+        Assert.Contains("read-only task (no file scope)", admission.Reason);
+    }
+
+    [Fact]
+    public void ReadOnlyCandidate_StillCountsAgainstQuota_SerializesWhenNoFreeSlot()
+    {
+        // Slot / quota are unchanged: a read-only run still consumes a slot, so
+        // when none is free it waits like any other candidate (it does not get a
+        // free pass past the budget).
+        var running = new[] { Running("a", "frontend/") };
+        var admission = ParallelSlotPolicy.Decide(
+            "ro", TaskParallelism.ReadOnlyTask, running, maxParallelism: 1);
+
+        Assert.Equal(SlotDecision.Serialize, admission.Decision);
+        Assert.Contains("no free slot", admission.Reason);
+    }
+
+    [Fact]
+    public void ReadOnlyCandidate_WaitsBehindRunningExclusive()
+    {
+        // A running exclusive task is a hard "run alone" guarantee that even a
+        // read-only candidate respects (the exclusive-running check precedes the
+        // read-only short-circuit).
+        var running = new[] { new RunningTask("big", Exclusive()) };
+        var admission = ParallelSlotPolicy.Decide(
+            "ro", TaskParallelism.ReadOnlyTask, running, maxParallelism: 4);
+
+        Assert.Equal(SlotDecision.Serialize, admission.Decision);
+        Assert.Contains("exclusive task 'big' is running", admission.Reason);
+    }
+
+    [Fact]
+    public void ReadOnlyTask_Factory_IsNotExclusive_AndHasNoScope()
+    {
+        Assert.True(TaskParallelism.ReadOnlyTask.ReadOnly);
+        Assert.False(TaskParallelism.ReadOnlyTask.Exclusive);
+        Assert.Empty(TaskParallelism.ReadOnlyTask.PredictedScope);
+    }
 }

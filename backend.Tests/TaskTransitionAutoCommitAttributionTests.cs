@@ -146,6 +146,40 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         Assert.NotNull(moved?.Commit);
     }
 
+    [Fact]
+    public async Task MoveProgressToAutoReview_ReadOnlyMode_SkipsAutoCommit_LeavesTreeDirty()
+    {
+        // Read-only-Pipeline fuer planning/research: a planning / research run
+        // skips every git side effect on the transition. Even an agent edit that
+        // WOULD qualify for attribution (mtime > first activity) must NOT be
+        // auto-committed - the runner reports the dirty tree as a containment
+        // violation instead. Contrast with
+        // MoveProgressToAutoReview_AgentEditDuringRun_StampsCommit (coding mode).
+        WriteJob(TaskStates.Progress, "plan-task", mode: TaskModes.Planning);
+        var firstActivity = DateTime.UtcNow;
+        AppendSessionEvent("plan-task", firstActivity);
+
+        var edited = Path.Combine(_repoRoot, "stray.txt");
+        File.WriteAllText(edited, "agent wrote this in a read-only run\n");
+        File.SetLastWriteTimeUtc(edited, firstActivity.AddSeconds(30));
+
+        var deps = BuildDeps();
+        var outcome = await deps.Transitions.MoveAsync("plan-task", TaskStates.AutoReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+
+        // No commit was stamped (auto-commit + attribution were both skipped).
+        var moved = ReadJob(TaskStates.AutoReview, "plan-task");
+        Assert.Null(moved?.Commit);
+        Assert.Empty(moved?.Commits ?? new List<TaskCommitInfo>());
+
+        // And the stray edit is still uncommitted in the working tree, so the
+        // runner's containment check can see and report it.
+        var status = deps.Git.GetStatus("plan-task", _watchPath);
+        Assert.True(status.IsRepo);
+        Assert.Contains(status.Files, f => f.Path.EndsWith("stray.txt", StringComparison.Ordinal));
+    }
+
     private Deps BuildDeps()
     {
         var config = new ConfigurationBuilder()
@@ -175,15 +209,16 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
             scanner, states, mutations, git, settings,
             NullLogger<TaskTransitionService>.Instance,
             sessions);
-        return new Deps(scanner, transitions);
+        return new Deps(scanner, transitions, git);
     }
 
-    private void WriteJob(string state, string slug)
+    private void WriteJob(string state, string slug, string? mode = null)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
+        var modeField = mode == null ? "" : $",\"mode\":\"{mode}\"";
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"{modeField}}}");
     }
 
     private void AppendSessionEvent(string slug, DateTime ts)
@@ -226,5 +261,5 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         p.WaitForExit(15_000);
     }
 
-    private sealed record Deps(TaskScannerService Scanner, TaskTransitionService Transitions);
+    private sealed record Deps(TaskScannerService Scanner, TaskTransitionService Transitions, GitService Git);
 }

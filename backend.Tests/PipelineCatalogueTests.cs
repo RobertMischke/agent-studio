@@ -194,7 +194,68 @@ public class PipelineCatalogueTests
     {
         Assert.NotNull(PipelineCatalogue.Get(PipelineCatalogue.StandardPipelineId));
         Assert.NotNull(PipelineCatalogue.Get("STANDARD-TASK-PIPELINE")); // case-insensitive
+        Assert.NotNull(PipelineCatalogue.Get(PipelineCatalogue.ReadOnlyPipelineId));
         Assert.Null(PipelineCatalogue.Get("does-not-exist"));
+    }
+
+    [Fact]
+    public void ReadOnlyPipeline_OmitsEveryGitStep_KeepsEverythingElse()
+    {
+        // Read-only-Pipeline fuer planning/research: the git steps are dropped so
+        // a planning / research run does no worktree / commit / merge / teardown
+        // work - it only renders the prompt, runs the agent, and produces a
+        // report. The single catalogue git step today is commit-attribution.
+        var standard = PipelineCatalogue.Standard;
+        var ro = PipelineCatalogue.ReadOnly;
+
+        Assert.Equal(PipelineCatalogue.ReadOnlyPipelineId, ro.Id);
+
+        // No step in any section is a git step.
+        foreach (var step in ro.AllSteps)
+            Assert.DoesNotContain(step.Id, PipelineCatalogue.GitStepIds);
+
+        // The commit-attribution slot is present on standard but gone here.
+        Assert.Contains(standard.Post, s => s.Id == PipelineCatalogue.GitCommitAttributionStepId);
+        Assert.DoesNotContain(ro.Post, s => s.Id == PipelineCatalogue.GitCommitAttributionStepId);
+
+        // Every non-git step from standard survives, in the same relative order,
+        // so the variant tracks the standard pipeline as it grows.
+        var expected = standard.AllSteps
+            .Where(s => !PipelineCatalogue.GitStepIds.Contains(s.Id))
+            .Select(s => s.Id)
+            .ToList();
+        Assert.Equal(expected, ro.AllSteps.Select(s => s.Id).ToList());
+
+        // The core agent run and the loop guard are not git steps, so they remain.
+        Assert.Single(ro.Core);
+        Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ro.Core[0].Id);
+        Assert.Single(ro.Pre);
+        Assert.Equal(PipelineCatalogue.LoopGuardStepId, ro.Pre[0].Id);
+
+        // Exactly the one git step was removed from Post.
+        Assert.Equal(standard.Post.Count - 1, ro.Post.Count);
+    }
+
+    [Fact]
+    public void ForMode_SelectsReadOnlyForPlanningAndResearch_StandardOtherwise()
+    {
+        Assert.Same(PipelineCatalogue.ReadOnly, PipelineCatalogue.ForMode("planning"));
+        Assert.Same(PipelineCatalogue.ReadOnly, PipelineCatalogue.ForMode("research"));
+        Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode("coding"));
+        Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode(null));
+        Assert.Same(PipelineCatalogue.Standard, PipelineCatalogue.ForMode("anything-else"));
+    }
+
+    [Fact]
+    public void ReadOnlyPipeline_HasNoDanglingDependsOnEdges()
+    {
+        // Filtering out the git steps must not leave a surviving step depending on
+        // a removed id (a DAG-resolver would deadlock on the missing node).
+        var ro = PipelineCatalogue.ReadOnly;
+        var presentIds = ro.AllSteps.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var step in ro.AllSteps)
+            foreach (var dep in step.DependsOn)
+                Assert.Contains(dep, presentIds);
     }
 
     [Fact]

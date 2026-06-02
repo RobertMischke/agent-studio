@@ -1985,7 +1985,7 @@ public class ProjectRunner
         {
             _pipelineLog.EnsureRun(
                 info.FolderPath,
-                OrchestratorApi.Services.Pipeline.PipelineCatalogue.Standard,
+                OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
                 ProjectName,
                 info.Id);
             _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
@@ -2049,6 +2049,61 @@ public class ProjectRunner
     }
 
     /// <summary>
+    /// Containment for read-only modes (planning / research): such a run should
+    /// produce only a report and touch no source, and it deliberately skips the
+    /// git pre/post steps - so a non-empty working-tree diff at run end means the
+    /// agent wrote files it should not have. We do NOT auto-revert (the operator
+    /// owns the decision); instead we report it as a hard violation on the
+    /// timeline (<see cref="TimelineEventKinds.ReadOnlyContainmentViolation"/>),
+    /// log a warning, and drop a one-line orchestrator note so the dirty tree is
+    /// visible everywhere the operator looks. No-op for coding mode and for a
+    /// clean tree. Best-effort observability: any failure is swallowed.
+    /// </summary>
+    private void ReportReadOnlyContainmentIfDirty(TaskInfo info)
+    {
+        if (!TaskModes.IsReadOnly(info.Mode)) return;
+        try
+        {
+            var status = _git.GetStatus(info.Id, Entry.Path);
+            if (!status.IsRepo || status.Files.Count == 0) return;
+
+            // Cap the inlined file list so a runaway diff cannot bloat the
+            // ledger row; the count is the load-bearing signal.
+            const int maxFiles = 20;
+            var files = status.Files.Select(f => f.Path).ToList();
+            var fileList = string.Join(", ", files.Take(maxFiles));
+            if (files.Count > maxFiles) fileList += $", +{files.Count - maxFiles} more";
+
+            var summary =
+                $"Read-only {info.Mode} run left {status.Files.Count} changed file(s) - " +
+                "containment violation (not auto-reverted)";
+
+            _logger.LogWarning(
+                "Read-only containment violation for {JobId} (mode {Mode}): {Count} changed file(s): {Files}",
+                info.Id, info.Mode, status.Files.Count, fileList);
+
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.ReadOnlyContainmentViolation,
+                TimelineActors.System,
+                summary: summary,
+                details: new()
+                {
+                    ["mode"] = info.Mode ?? string.Empty,
+                    ["changedFiles"] = status.Files.Count.ToString(),
+                    ["files"] = fileList,
+                });
+
+            _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                $"[containment] {summary}. Files: {fileList}.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to evaluate read-only containment for {JobId}", info.Id);
+        }
+    }
+
+    /// <summary>
     /// Mark the CORE step terminal in pipeline-execution.json once the agent
     /// process exits: <see cref="PipelineStepStatus.Passed"/> when the run
     /// classified as <see cref="RunStatuses.Completed"/>,
@@ -2076,7 +2131,7 @@ public class ProjectRunner
             // step still lands and the row is never left blank.
             _pipelineLog.EnsureRun(
                 folder,
-                OrchestratorApi.Services.Pipeline.PipelineCatalogue.Standard,
+                OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
                 ProjectName,
                 jobId);
 
@@ -2200,6 +2255,13 @@ public class ProjectRunner
                         ["cli"] = cliType ?? string.Empty,
                         ["status"] = execution.Status ?? "unknown",
                     });
+
+                // Containment, not trust: a planning / research run is supposed
+                // to produce only a report. If it left a non-empty working-tree
+                // diff, report it as a hard violation on the timeline (we do not
+                // auto-revert - the operator decides). Runs after the git
+                // pre/post steps are skipped, so the tree is still dirty here.
+                ReportReadOnlyContainmentIfDirty(finishedInfo);
             }
 
             // Persist the captured session UUID so follow-ups can resume.

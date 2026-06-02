@@ -132,6 +132,16 @@ public static class TimelineEventKinds
     /// <c>merged_in</c> summary entry alongside.
     /// </summary>
     public const string MergedIn = "merged_in";
+    /// <summary>
+    /// A read-only task (planning / research) left a non-empty working-tree
+    /// diff at run end. Read-only modes are supposed to produce only a report
+    /// and touch no source; the runner reports a dirty tree as a hard
+    /// containment violation rather than auto-reverting it, so the operator
+    /// decides what to do with the stray changes. <see cref="TimelineEvent.Summary"/>
+    /// carries the changed-file count; <see cref="TimelineEvent.Details"/> the
+    /// mode and the (capped) file list. Emitted by the runner at run-finish.
+    /// </summary>
+    public const string ReadOnlyContainmentViolation = "read_only_containment_violation";
 }
 
 /// <summary>

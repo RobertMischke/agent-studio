@@ -11,8 +11,19 @@ namespace OrchestratorApi.Services.Runner;
 /// </summary>
 public sealed record TaskParallelism(bool Exclusive, IReadOnlyList<string> PredictedScope)
 {
+    /// <summary>
+    /// True for a read-only task mode (planning / research). A read-only task
+    /// writes no files, so it has no predicted scope and can never collide with
+    /// a running task - the pick-gate admits it as parallel-ok without any scope
+    /// computation. It still counts against the slot budget like any other task.
+    /// </summary>
+    public bool ReadOnly { get; init; }
+
     /// <summary>Default: parallelisable, scope unknown.</summary>
     public static readonly TaskParallelism Default = new(false, Array.Empty<string>());
+
+    /// <summary>A read-only (planning / research) task: never exclusive, no scope.</summary>
+    public static readonly TaskParallelism ReadOnlyTask = new(false, Array.Empty<string>()) { ReadOnly = true };
 }
 
 /// <summary>A task currently occupying a runner slot, with its parallelism facts.</summary>
@@ -84,6 +95,13 @@ public static class ParallelSlotPolicy
         if (exclusiveRunning != null)
             return new SlotAdmission(SlotDecision.Serialize,
                 $"exclusive task '{exclusiveRunning.TaskId}' is running");
+
+        // Read-only modes (planning / research) write no files, so there is no
+        // scope to prove disjoint - admit as parallel-ok and skip the scope loop
+        // below. The free-slot check above already enforced the quota.
+        if (candidate.ReadOnly)
+            return new SlotAdmission(SlotDecision.Admit,
+                "parallel-ok: read-only task (no file scope)");
 
         if (candidate.Exclusive)
         {

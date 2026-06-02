@@ -75,7 +75,15 @@ public sealed class TaskTransitionService
         var settings = _settings.Get(info.ProjectName);
         var autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy);
 
+        // Read-only modes (planning / research) skip every git side effect on the
+        // transition: no auto-commit, no immediate push, no commit-attribution,
+        // no completed-push. Such a run produces only a report; the runner
+        // reports any stray working-tree diff as a containment violation rather
+        // than committing it. See TaskModes / ParallelSlotPolicy and ADR-0052.
+        var isReadOnly = TaskModes.IsReadOnly(info.Mode);
+
         var shouldAutoCommit =
+            !isReadOnly &&
             info.State == TaskStates.Progress &&
             targetState == TaskStates.AutoReview &&
             settings.AutoCommit;
@@ -114,7 +122,10 @@ public sealed class TaskTransitionService
             && info.State == TaskStates.Progress && targetState == TaskStates.AutoReview)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
-            if (attributed != null) RunCommitAttribution(attributed, watchPath);
+            // Commit-attribution is a git step; skip it for read-only runs (they
+            // produce no commits to attribute). Drift below is not a git step and
+            // self-gates, so it still runs.
+            if (attributed != null && !isReadOnly) RunCommitAttribution(attributed, watchPath);
 
             // DRIFT Nachtrag: fire the enabled drift dimensions as automatic
             // post-steps once the task has settled into auto-review. Fire-and-
@@ -140,7 +151,7 @@ public sealed class TaskTransitionService
 
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
         {
-            if (targetState == TaskStates.Completed && autoPushStrategy != AutoPushStrategies.Never)
+            if (targetState == TaskStates.Completed && autoPushStrategy != AutoPushStrategies.Never && !isReadOnly)
             {
                 var moved = _scanner.FindJob(jobId, watchPath);
                 if (moved != null)

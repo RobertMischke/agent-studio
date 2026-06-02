@@ -65,8 +65,10 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.rowTone(TIMELINE_KIND.orchestratorVerdictAccepted)).toBe('ok');
     expect(c.rowTone(TIMELINE_KIND.qualityLoopReopened)).toBe('warn');
     expect(c.rowTone(TIMELINE_KIND.orchestratorEscalated)).toBe('danger');
+    expect(c.rowTone(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('danger');
     expect(c.verdictLabel('escalated')).toBe('Escalated to human');
     expect(c.kindLabel(TIMELINE_KIND.qualityLoopReopened)).toBe('Re-opened (go again)');
+    expect(c.kindLabel(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('Containment violation');
   });
 
   it('formatTime shows time only for today and date + time for other days', async () => {
