@@ -1031,6 +1031,34 @@ public class GitService
     }
 
     /// <summary>
+    /// Deletes the local branch <paramref name="branch"/> from
+    /// <paramref name="repoRoot"/>. ADR-0052 worktree teardown: after a task
+    /// branch has been folded back into the integration branch its ref is dead
+    /// weight, so the cleanup post-step drops it. <paramref name="force"/>
+    /// chooses <c>git branch -D</c> (drop even when not fully merged - used when
+    /// the work was abandoned) over the default safe <c>git branch -d</c> (which
+    /// refuses to delete an unmerged branch, so a successful merge can be
+    /// asserted by the delete succeeding). A branch that is still checked out in
+    /// a live worktree cannot be deleted; remove the worktree first.
+    /// </summary>
+    public GitWorktreeResult DeleteBranch(string repoRoot, string branch, bool force = false)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (!IsLikelyBranchName(branch))
+            return new GitWorktreeResult(false, null, $"Invalid branch name '{branch}'.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "branch", force ? "-D" : "-d", branch);
+        if (code != 0)
+        {
+            _logger.LogWarning("Delete branch {Branch} failed at {Path}: {Error}", branch, repoRoot, err.Trim());
+            return new GitWorktreeResult(false, null, err.Trim());
+        }
+        _logger.LogInformation("Deleted branch {Branch} at {Path}", branch, repoRoot);
+        return new GitWorktreeResult(true, null, null);
+    }
+
+    /// <summary>
     /// Returns the working tree's current HEAD SHA, or null when the path
     /// is not a git repository or git is unavailable. Used by the run
     /// timeline to capture the deterministic "before / after" SHAs that
@@ -1045,6 +1073,23 @@ public class GitService
         if (configured == null) return null;
         var root = ResolveGitToplevel(configured);
         if (root == null) return null;
+        var (output, _, code) = RunGit(root, "rev-parse HEAD");
+        if (code != 0) return null;
+        var sha = output.Trim();
+        return string.IsNullOrWhiteSpace(sha) ? null : sha;
+    }
+
+    /// <summary>
+    /// Reads HEAD at an explicit repo or worktree root with no config-based
+    /// resolution. ADR-0052 integration steps drive git against paths the
+    /// orchestrator already holds (the main checkout, a task worktree), so they
+    /// need a direct HEAD read rather than the jobId/watchPath lookup
+    /// <see cref="GetHeadSha"/> performs. Returns null when the path is missing
+    /// or not a git repo.
+    /// </summary>
+    public string? ReadHeadShaAt(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
         var (output, _, code) = RunGit(root, "rev-parse HEAD");
         if (code != 0) return null;
         var sha = output.Trim();
