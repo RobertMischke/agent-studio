@@ -101,3 +101,38 @@ export interface ProjectJobTokenDetail {
   runs: ProjectJobTokenRun[];
   fetchedAt: string;
 }
+
+/**
+ * Per-step-kind pipeline cost over time. Mirrors backend
+ * `ProjectPipelineCostTimeline`: the "how it develops over time" view that
+ * folds every task's pipeline-execution.json into a per-day series per
+ * step kind, priced through the single TokenPricing table.
+ */
+export type PipelineStepKindKey = 'core' | 'aspect' | 'tool' | 'orchestrator' | 'module';
+
+export interface PipelineKindDayCell {
+  day: string;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export interface PipelineKindSeries {
+  kind: PipelineStepKindKey;
+  totalTokens: number;
+  totalCostUsd: number;
+  anyModelUnknown: boolean;
+  cells: PipelineKindDayCell[];
+}
+
+export interface ProjectPipelineCostTimeline {
+  project: string;
+  days: string[];
+  windowDays: number;
+  kinds: PipelineKindSeries[];
+  totalTokens: number;
+  totalCostUsd: number;
+  anyModelUnknown: boolean;
+  taskCount: number;
+  hasData: boolean;
+  fetchedAt: string;
+}

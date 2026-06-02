@@ -11,3 +11,27 @@ export const OrchestratorRunner_KnownModels: readonly { id: string; label: strin
   { id: 'claude-opus-4-7',   label: 'Claude Opus 4.7' },
   { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (cheaper)' }
 ];
+
+/**
+ * Models a per-pipeline-step LLM call can be pinned to. Wider than the
+ * orchestrator list because a cheap post-step (a quality aspect, a
+ * summary) is fine on Haiku, whereas the orchestrator deliberately
+ * excludes the cheap tier. Empty `id` clears the override so the step
+ * falls back to the project OrchestratorModel and then the runtime
+ * default (see PipelineStepConfigResolver.ResolveModel). The price table
+ * that turns these into cost lives in backend TokenPricing.
+ */
+export const PipelineStep_KnownModels: readonly { id: string; label: string }[] = [
+  { id: '',                  label: 'Inherit (project / default)' },
+  { id: 'claude-opus-4-7',   label: 'Opus 4.7 (strongest)' },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+  { id: 'claude-haiku-4-5',  label: 'Haiku 4.5 (cheapest)' }
+];
+
+/** Gate-mode choices for steps that expose a warn/fail gate (lint, decision). */
+export const PipelineStep_GateModes: readonly { id: string; label: string }[] = [
+  { id: '',     label: 'Default' },
+  { id: 'off',  label: 'Off' },
+  { id: 'warn', label: 'Warn' },
+  { id: 'fail', label: 'Fail' }
+];

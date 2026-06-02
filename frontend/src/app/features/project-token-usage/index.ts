@@ -10,4 +10,8 @@ export type {
   ProjectExpensiveJobsResponse,
   ProjectJobTokenRun,
   ProjectJobTokenDetail,
+  PipelineStepKindKey,
+  PipelineKindDayCell,
+  PipelineKindSeries,
+  ProjectPipelineCostTimeline,
 } from './models/project-token-usage.model';

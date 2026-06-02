@@ -148,4 +148,108 @@ public class PipelineConfigAndCostTests
         Assert.False(summary.Steps[1].ModelKnown);
         Assert.Equal(700, summary.TotalTokens);
     }
+
+    private static PipelineExecutionRecord RunOn(DateTime day, params PipelineStepExecution[] steps)
+        => new()
+        {
+            JobId = Guid.NewGuid().ToString("n"),
+            Project = "P",
+            StartedAt = day,
+            CompletedAt = day,
+            Steps = steps.ToList(),
+        };
+
+    [Fact]
+    public void PipelineTimeline_AggregatesPerStepKind_OverDenseDayAxis()
+    {
+        var now = new DateTime(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
+        var records = new[]
+        {
+            // yesterday: an aspect on Haiku + the core run on Opus
+            RunOn(now.AddDays(-1),
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                },
+                new PipelineStepExecution
+                {
+                    StepId = "core-agent-run", Kind = StepKind.Core,
+                    Model = "claude-opus-4-8", InputTokens = 100_000, OutputTokens = 10_000, // $0.75
+                }),
+            // today: a second aspect run on Haiku, same cost
+            RunOn(now,
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000, // $2.00
+                }),
+        };
+
+        var timeline = ProjectPipelineCostService.BuildFromRecords("P", records, days: 3, nowUtc: now);
+
+        // Dense axis: one cell per requested day even when idle.
+        Assert.Equal(3, timeline.Days.Count);
+        Assert.Equal(new[] { "2026-05-31", "2026-06-01", "2026-06-02" }, timeline.Days);
+        Assert.True(timeline.HasData);
+        Assert.Equal(2, timeline.TaskCount);
+
+        // Two kinds present, in stable order (core before aspect).
+        Assert.Equal(new[] { "core", "aspect" }, timeline.Kinds.Select(k => k.Kind).ToArray());
+
+        var aspect = timeline.Kinds.Single(k => k.Kind == "aspect");
+        Assert.Equal(4.00m, aspect.TotalCostUsd); // two $2.00 runs
+        Assert.Equal(2_400_000, aspect.TotalTokens);
+        // Cells align to Days: idle 05-31, $2 on 06-01, $2 on 06-02.
+        Assert.Equal(0m, aspect.Cells[0].CostUsd);
+        Assert.Equal(2.00m, aspect.Cells[1].CostUsd);
+        Assert.Equal(2.00m, aspect.Cells[2].CostUsd);
+
+        var core = timeline.Kinds.Single(k => k.Kind == "core");
+        Assert.Equal(0.75m, core.TotalCostUsd);
+        Assert.Equal(0.75m, core.Cells[1].CostUsd);
+
+        Assert.Equal(4.75m, timeline.TotalCostUsd);
+        Assert.False(timeline.AnyModelUnknown);
+    }
+
+    [Fact]
+    public void PipelineTimeline_DropsRunsOutsideWindow_AndFlagsUnknownModel()
+    {
+        var now = new DateTime(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
+        var records = new[]
+        {
+            // Inside window, unknown model that spent tokens -> flag.
+            RunOn(now,
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "gpt-5-codex", InputTokens = 500, OutputTokens = 200,
+                }),
+            // Outside the 2-day window -> excluded entirely.
+            RunOn(now.AddDays(-10),
+                new PipelineStepExecution
+                {
+                    StepId = "aspect-code-quality", Kind = StepKind.Aspect,
+                    Model = "claude-haiku-4-5", InputTokens = 1_000_000, OutputTokens = 200_000,
+                }),
+        };
+
+        var timeline = ProjectPipelineCostService.BuildFromRecords("P", records, days: 2, nowUtc: now);
+
+        Assert.Equal(1, timeline.TaskCount); // the old run dropped out
+        Assert.True(timeline.AnyModelUnknown);
+        Assert.Equal(0m, timeline.TotalCostUsd); // only the unpriced run survived
+        Assert.Equal(700, timeline.TotalTokens);
+    }
+
+    [Fact]
+    public void PipelineTimeline_EmptyWhenNoRecords()
+    {
+        var timeline = ProjectPipelineCostService.BuildFromRecords("P", Array.Empty<PipelineExecutionRecord>(), days: 7);
+        Assert.False(timeline.HasData);
+        Assert.Empty(timeline.Kinds);
+        Assert.Equal(0, timeline.TaskCount);
+        Assert.Equal(7, timeline.Days.Count); // axis still dense
+    }
 }

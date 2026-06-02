@@ -257,6 +257,65 @@
         Controls the order cards appear in each board lane. <strong>Manual</strong> enables drag-and-drop reordering; the other strategies sort automatically and disable drag on that lane. The auto-pickup runner always uses its own priority order regardless of this setting.
       </p>
     </section>
+
+    @if (pipelineRows().length > 0) {
+      <section class="proj-detail__group">
+        <h3>Pipeline steps</h3>
+        <div class="proj-detail__pipeline" data-testid="project-detail-pipeline">
+          @for (step of pipelineRows(); track step.id) {
+            <div class="proj-detail__pl-row"
+                 [class.proj-detail__pl-row--disabled]="!step.enabled"
+                 [attr.data-testid]="'pipeline-step-row-' + step.id">
+              <span class="proj-detail__pl-kind">{{ step.kind }}</span>
+              <span class="proj-detail__pl-name">{{ step.displayName }}</span>
+
+              @if (step.usesModel) {
+                <select class="proj-detail__pl-model"
+                        [attr.data-testid]="'pipeline-step-model-' + step.id"
+                        [appTooltip]="'Model for this step LLM call. Inherit falls back to the project orchestrator model, then the runtime default.'"
+                        [disabled]="!step.enabled || pipelineStepBusy[step.id]"
+                        [ngModel]="step.model"
+                        (ngModelChange)="onStepModelChange(step.id, $event)">
+                  @for (opt of pipelineStepModels; track opt.id) {
+                    <option [value]="opt.id">{{ opt.label }}</option>
+                  }
+                </select>
+              }
+
+              @if (step.supportsMode) {
+                <select class="proj-detail__pl-mode"
+                        [attr.data-testid]="'pipeline-step-mode-' + step.id"
+                        [appTooltip]="'Gate mode: Off skips, Warn records but never blocks, Fail can block the transition.'"
+                        [disabled]="!step.enabled || pipelineStepBusy[step.id]"
+                        [ngModel]="step.mode"
+                        (ngModelChange)="onStepModeChange(step.id, $event)">
+                  @for (opt of pipelineGateModes; track opt.id) {
+                    <option [value]="opt.id">{{ opt.label }}</option>
+                  }
+                </select>
+              }
+
+              @if (step.canDisable) {
+                <label class="proj-detail__pl-toggle"
+                       [appTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped for this project. Click to enable.'">
+                  <input type="checkbox"
+                         [attr.data-testid]="'pipeline-step-enabled-' + step.id"
+                         [disabled]="pipelineStepBusy[step.id]"
+                         [ngModel]="step.enabled"
+                         (ngModelChange)="onStepEnabledChange(step.id, $event)">
+                  <span>{{ step.enabled ? 'On' : 'Off' }}</span>
+                </label>
+              } @else {
+                <span class="proj-detail__pl-locked" [appTooltip]="'Core step; always runs on the task own CLI and model.'">always on</span>
+              }
+            </div>
+          }
+        </div>
+        <p class="proj-detail__hint">
+          Per-project pre/post step configuration. A cheap aspect can run on Haiku; a verification step can use a stronger model. Tokens and cost per step are shown on each task's Overview. Changes apply to the next task run.
+        </p>
+      </section>
+    }
   }
 
   @if (view() === 'orchestrator') {

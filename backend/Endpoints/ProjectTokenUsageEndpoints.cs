@@ -1,6 +1,7 @@
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Runner;
 using OrchestratorApi.Services.Tokens;
+using OrchestratorApi.Services.Pipeline;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -71,6 +72,27 @@ public static class ProjectTokenUsageEndpoints
             var list = tokens.ProjectExpensiveJobs(projectName, entry.Path,
                 limit ?? ProjectTokenUsageService.DefaultExpensiveLimit);
             return Results.Ok(new { project = projectName, jobs = list });
+        });
+
+        // Per-step-kind pipeline cost over time ("how it develops"): walks
+        // the project's task folders, prices each pipeline-execution.json
+        // through the single TokenPricing table, returns a per-day series
+        // per step kind. Separate, cached path from the per-task Overview
+        // poll (PipelineCostCalculator) so the poll never triggers a scan.
+        app.MapGet("/api/projects/{projectName}/token-usage/pipeline-cost", (
+            string projectName,
+            int? days,
+            TaskScannerService scanner,
+            ProjectPipelineCostService pipelineCost) =>
+        {
+            if (string.IsNullOrWhiteSpace(projectName))
+                return Results.BadRequest(new { error = "project required" });
+            var entry = scanner.GetWatchPaths().FirstOrDefault(e =>
+                string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+            return Results.Ok(pipelineCost.Build(projectName, entry.Path,
+                days ?? ProjectPipelineCostService.DefaultDays));
         });
 
         app.MapGet("/api/projects/{projectName}/token-usage/job/{jobId}", (

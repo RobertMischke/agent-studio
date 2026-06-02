@@ -311,6 +311,83 @@
   border-radius: 6px;
 }
 
+/* Pipeline cost by step kind (the "how it develops over time" trend). */
+.tup__pipeline { margin-top: 4px; }
+
+.tup__pl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+.tup__pl-legend-item,
+.tup__pl-legend-total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.74rem;
+}
+.tup__pl-legend-total {
+  margin-left: auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--studio-bg-elevated);
+  font-weight: 600;
+}
+.tup__pl-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  align-self: center;
+}
+.tup__pl-legend-label { color: var(--studio-fg-muted); }
+.tup__pl-legend-cost { color: var(--studio-fg); font-variant-numeric: tabular-nums; }
+.tup__pl-legend-tokens { color: var(--studio-fg-muted); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+.tup__pl-star { color: #fab387; }
+
+.tup__pl-bars {
+  display: flex;
+  align-items: flex-end;
+  height: 72px;
+  gap: 2px;
+  padding: 4px 4px 18px;
+  background: #11111b;
+  border: 1px solid var(--studio-bg-elevated);
+  border-radius: 6px;
+}
+.tup__pl-col {
+  flex: 1;
+  min-width: 4px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  position: relative;
+}
+.tup__pl-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  min-height: 1px;
+  border-radius: 2px 2px 0 0;
+  overflow: hidden;
+}
+.tup__pl-seg { display: block; width: 100%; min-height: 1px; }
+.tup__pl-col-day {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.62rem;
+  color: var(--studio-fg-muted);
+}
+
+/* Per-step-kind colour scale, shared by the legend swatch and the stack. */
+.tup__pl-swatch--core,        .tup__pl-seg--core        { background: var(--severity-info); }
+.tup__pl-swatch--aspect,      .tup__pl-seg--aspect      { background: #a6e3a1; }
+.tup__pl-swatch--tool,        .tup__pl-seg--tool        { background: #fab387; }
+.tup__pl-swatch--orchestrator,.tup__pl-seg--orchestrator{ background: #cba6f7; }
+.tup__pl-swatch--module,      .tup__pl-seg--module      { background: #9399b2; }
+
 @media (max-width: 720px) {
   .tup__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tup__expensive-btn { grid-template-columns: 80px 1fr; }

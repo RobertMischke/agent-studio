@@ -38,6 +38,7 @@ import type {
   ProjectTokenHeatmap,
   ProjectExpensiveJobsResponse,
   ProjectJobTokenDetail,
+  ProjectPipelineCostTimeline,
 } from '../features/project-token-usage';
 import type {
   RunTimeline,
@@ -1411,6 +1412,19 @@ export class TaskService {
   getProjectJobTokenDetail(projectName: string, jobId: string) {
     return this.http.get<ProjectJobTokenDetail>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/job/${encodeURIComponent(jobId)}`,
+    );
+  }
+
+  /**
+   * Per-step-kind pipeline cost over time: the "how it develops" trend.
+   * Folds every task's pipeline-execution.json into a per-day series per
+   * step kind. `days` defaults to 30, capped at 180 by the backend.
+   */
+  getProjectPipelineCost(projectName: string, days = 30) {
+    const params = new HttpParams().set('days', String(days));
+    return this.http.get<ProjectPipelineCostTimeline>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/pipeline-cost`,
+      { params },
     );
   }
 

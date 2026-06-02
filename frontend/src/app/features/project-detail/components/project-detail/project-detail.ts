@@ -4,7 +4,8 @@ import { TaskService } from '../../../../services/task.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../models/task.model';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
-import { OrchestratorRunner_KnownModels } from './project-detail.models';
+import { OrchestratorRunner_KnownModels, PipelineStep_KnownModels, PipelineStep_GateModes } from './project-detail.models';
+import type { PipelineCatalogueStep, PipelineStepSetting } from '../../../../features/task-pipeline';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
@@ -106,6 +107,39 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   laneSortMeta(strategy: string | null | undefined) {
     return laneSortStrategyMeta(strategy);
   }
+
+  // Pre/post pipeline-step config. The catalogue (which steps exist + what
+  // each accepts) is project-independent and fetched once; the per-project
+  // overrides come from the settings projection. Both feed pipelineRows().
+  readonly pipelineCatalogue = signal<readonly PipelineCatalogueStep[]>([]);
+  readonly pipelineOverrides = signal<Record<string, PipelineStepSetting>>({});
+  readonly pipelineStepModels = PipelineStep_KnownModels;
+  readonly pipelineGateModes = PipelineStep_GateModes;
+  /** Per-step write in flight; disables that row's controls until the PUT resolves. */
+  readonly pipelineStepBusy: Record<string, boolean> = {};
+
+  /**
+   * One row per configurable step: the catalogue metadata joined with the
+   * project's current override. `enabled` defaults true (absent override or
+   * null Enabled both mean on); `model` / `mode` empty string = inherit.
+   */
+  readonly pipelineRows = computed(() => {
+    const overrides = this.pipelineOverrides();
+    return this.pipelineCatalogue().map(step => {
+      const ov = overrides[step.id];
+      return {
+        id: step.id,
+        displayName: step.displayName,
+        kind: step.kind,
+        usesModel: step.usesModel,
+        supportsMode: step.supportsMode,
+        canDisable: step.canDisable,
+        enabled: ov?.enabled !== false,
+        model: ov?.model ?? '',
+        mode: ov?.mode ?? '',
+      };
+    });
+  });
 
   /**
    * Mode buttons. The four runner modes are: manual (off), auto-single
@@ -226,11 +260,34 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.refreshAll();
+    this.loadPipelineConfig();
     // Cycle 3: skip the 6-endpoint refreshAll fan-out when the panel is in
     // a backgrounded tab. The pre-Cycle-3 cadence put 42 requests over a
     // 10 s window from the project-detail panel alone (see logs/perf
     // baseline); this drops to zero when the tab is hidden.
     this.pollTimer = setVisibleInterval(() => this.refreshAll(true), 5_000);
+  }
+
+  /**
+   * Load the step catalogue (once) and this project's current per-step
+   * overrides. The overrides ride on the settings projection rather than
+   * the per-project snapshot, so this is a separate read; it is cheap and
+   * runs on panel open plus after each write.
+   */
+  private loadPipelineConfig(): void {
+    this.jobService.getPipelineCatalogue().subscribe({
+      next: (cat) => this.pipelineCatalogue.set(cat.steps ?? []),
+      error: () => { /* leave catalogue empty; the section just hides */ }
+    });
+    this.refreshPipelineOverrides();
+  }
+
+  private refreshPipelineOverrides(): void {
+    const project = this.projectName();
+    this.jobService.getAllProjectSettings().subscribe({
+      next: (all) => this.pipelineOverrides.set(all[project]?.pipelineSteps ?? {}),
+      error: () => { /* keep last known overrides */ }
+    });
   }
 
   ngOnDestroy(): void {
@@ -353,6 +410,50 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.setLaneSortStrategy(this.projectName(), lane, strategy).subscribe({
       next: () => this.refreshAll(true),
       error: () => this.refreshAll(true)
+    });
+  }
+
+  onStepEnabledChange(stepId: string, enabled: boolean): void {
+    this.writeStep(stepId, { enabled });
+  }
+
+  onStepModelChange(stepId: string, model: string): void {
+    this.writeStep(stepId, { model });
+  }
+
+  onStepModeChange(stepId: string, mode: string): void {
+    this.writeStep(stepId, { mode });
+  }
+
+  /**
+   * Merge one changed facet onto the step's current override and PUT the
+   * whole step (the backend replaces the entry, so unchanged facets must
+   * be resent). `enabled` is sent as null when the step is on so an
+   * all-default step clears its entry instead of leaving a dead one.
+   * Empty model/mode normalise to null = inherit the built-in default.
+   */
+  private writeStep(stepId: string, patch: { enabled?: boolean; model?: string; mode?: string }): void {
+    const cur = this.pipelineOverrides()[stepId] ?? {};
+    const enabled = patch.enabled ?? (cur.enabled !== false);
+    const model = (patch.model ?? cur.model ?? '').trim();
+    const mode = (patch.mode ?? cur.mode ?? '').trim();
+
+    this.pipelineStepBusy[stepId] = true;
+    this.jobService.setProjectPipelineStep(this.projectName(), {
+      stepId,
+      enabled: enabled ? null : false,
+      model: model || null,
+      mode: mode || null,
+    }).subscribe({
+      next: (res) => {
+        this.pipelineStepBusy[stepId] = false;
+        this.pipelineOverrides.set(res.pipelineSteps ?? {});
+      },
+      error: () => {
+        this.pipelineStepBusy[stepId] = false;
+        // Re-read so the controls snap back to the persisted truth.
+        this.refreshPipelineOverrides();
+      }
     });
   }
 

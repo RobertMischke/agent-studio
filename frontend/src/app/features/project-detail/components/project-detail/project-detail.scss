@@ -473,4 +473,77 @@
   white-space: pre-wrap;
   margin: 6px 0 0;
 }
-  
+
+// Pre/post pipeline-step config rows. One compact flex line per step:
+// kind tag, name (grows), optional model + mode selects, enable toggle.
+.proj-detail__pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.proj-detail__pl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+}
+.proj-detail__pl-row--disabled {
+  opacity: 0.55;
+}
+.proj-detail__pl-row--disabled .proj-detail__pl-name {
+  text-decoration: line-through;
+}
+.proj-detail__pl-kind {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255,255,255,0.55);
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.proj-detail__pl-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cdd6f4;
+  font-size: 0.85rem;
+}
+.proj-detail__pl-model,
+.proj-detail__pl-mode {
+  flex: 0 0 auto;
+  background: rgba(0,0,0,0.30);
+  color: #cdd6f4;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 0.78rem;
+}
+.proj-detail__pl-model { min-width: 150px; }
+.proj-detail__pl-mode { min-width: 86px; }
+.proj-detail__pl-model:disabled,
+.proj-detail__pl-mode:disabled { opacity: 0.5; cursor: not-allowed; }
+.proj-detail__pl-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #cdd6f4;
+  font-size: 0.78rem;
+  min-width: 48px;
+}
+.proj-detail__pl-locked {
+  flex: 0 0 auto;
+  font-size: 0.70rem;
+  color: rgba(255,255,255,0.45);
+  font-style: italic;
+  min-width: 48px;
+}
+
