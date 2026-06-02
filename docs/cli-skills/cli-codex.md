@@ -42,27 +42,37 @@ Codex `exec` runs unattended and may inspect the working tree with `git status` 
 ### Fresh run
 
 ```sh
-codex exec --json [-m <model>] "<prompt>"
+codex exec --json [-m <model>] -    # then write prompt to stdin, close
 ```
 
-The prompt is **the last positional argument**. `-m` selects the model. `--json` makes stdout machine-readable; without it we cannot extract the session UUID.
+The orchestrator passes `-` as the positional and pipes the full prompt
+(system-prefix + rendered template) over the redirected stdin pipe, then
+closes the pipe so Codex sees EOF. `-m` selects the model. `--json` makes
+stdout machine-readable; without it we cannot extract the session UUID.
+
+**Why stdin, not positional argv** (codex 0.130+): handing the prompt as the
+last positional argv made the model treat the entire block as system-side
+"initial instructions" and reply with `[[TASK_NOOP]]` ("no task provided")
+on every fresh job. See `docs/codex-runner-investigation.md` for the
+forensic write-up.
 
 ### Resume
 
 ```sh
-codex exec resume <uuid> --json [-m <model>] "<prompt>"
+codex exec resume <uuid> --json [-m <model>] -   # prompt via stdin
 ```
 
-`resume` is a **subcommand of `exec`**, taking the UUID positionally. Don't pass it as `--resume=<uuid>` (that's Copilot's flag) and don't pass it as `-r <uuid>` (that's Claude/Gemini). Codex's `exec resume <uuid>` is positional.
+`resume` is a **subcommand of `exec`**, taking the UUID positionally. Don't pass it as `--resume=<uuid>` (that's Copilot's flag) and don't pass it as `-r <uuid>` (that's Claude/Gemini). Codex's `exec resume <uuid>` is positional. The prompt itself goes over stdin via the same `-` switch as fresh runs.
 
 ### Anti-patterns
 
-- **Don't** swap argument order. `codex exec --json resume <uuid> "<prompt>"` parses `resume` as the prompt.
+- **Don't** swap argument order. `codex exec --json resume <uuid> -` parses `resume` as the prompt sentinel.
 - **Don't** pass a non-UUID session id. `IsCompatibleSessionName` rejects non-UUIDs to keep cross-CLI session names from leaking through.
+- **Don't** revert to positional-argv prompt delivery. `BuildStartInfo_LongPromptKeepsPromptOutOfArgvAndUsesStdin` locks the stdin path; `docs/codex-runner-investigation.md` records why.
 
 ### System-prompt prefix
 
-Codex has no `--append-system-prompt` flag, so `CodexCliService.BuildSystemPromptPrefix` prepends a short orchestrator note to the positional prompt argument on every invocation (fresh runs and resumes). The prefix carries two prophylactic hints:
+Codex has no `--append-system-prompt` flag, so `CodexCliService.BuildSystemPromptPrefix` prepends a short orchestrator note to the stdin payload on every invocation (fresh runs and resumes). The prefix carries two prophylactic hints:
 
 1. **Sentinel reminder.** Repeats the `[[TASK_DONE]] / [[TASK_BLOCKED:...]] / [[TASK_NEEDS_INPUT:...]] / [[TASK_NOOP]]` grammar. On a resume turn the fresh-start template is not re-rendered, so without this the agent regularly drops the terminal sentinel and the run lands in auto-review as "missing-terminal-sentinel".
 2. **Windows no-shell hint** (only when `OperatingSystem.IsWindows()`). Tells Codex not to retry on `windows sandbox: runner error` / `CreateProcessAsUserW failed` and to surface `[[TASK_BLOCKED:windows-sandbox]]` instead. This is the preventive complement to `AgentEnvironmentDetector`'s reactive in-stream match.
@@ -135,7 +145,7 @@ Codex is the second reference path for stale-session reliability after Claude. T
 Codex has a stronger structured-protocol story than Claude: the cloned `openai-codex` reference contains an App Server protocol over JSON-RPC, and ADR-0013 points the future adapter in that direction. Until that migration exists, the current `codex exec --json` path must still prove three things:
 
 1. `session_meta.payload.id` is captured and persisted into `sessionChain`.
-2. `exec resume <uuid> --json "<prompt>"` continues the intended conversation rather than starting fresh.
+2. `exec resume <uuid> --json -` (prompt over stdin) continues the intended conversation rather than starting fresh.
 3. If a resume target is rejected or produces no useful work, the runner routes through Recovery and re-issues the user follow-up once with stronger framing.
 
 Next stale-session probes for Codex should mirror Claude's: fresh run, short resume, backend-restart resume, deliberately missing session id, and accepted stale resume with an observable edit or protocol update.
@@ -195,7 +205,7 @@ To extend it for a new frame or `item.type`:
 ### "Codex isn't resuming"
 
 1. Verify the persisted `sessionName` in `job.json` is a UUID.
-2. Verify the `exec resume <uuid> --json "<prompt>"` argument order.
+2. Verify the `exec resume <uuid> --json -` argument order (prompt arrives over stdin).
 3. Verify the captured UUID matches what's on disk in `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`.
 
 ### "Live model discovery returned an empty list"
