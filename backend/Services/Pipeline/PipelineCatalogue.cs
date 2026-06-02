@@ -79,6 +79,15 @@ public static class PipelineCatalogue
     /// when configured to fail. See ASS-563.
     /// </summary>
     public const string LintScssStepId = "post-lint-scss";
+    /// <summary>
+    /// Post-step that runs the Regression Radar spec-change analysis after the
+    /// agent run finishes. Deterministic (no LLM): it diffs the run's SHA range
+    /// and classifies each changed spec as intended / at-risk / drift. Reporting
+    /// only - the verdict surfaces in the pipeline list but never triggers a
+    /// reissue. Behaviour lives in
+    /// <see cref="OrchestratorApi.Services.RegressionRadar.RegressionRadarService"/>.
+    /// </summary>
+    public const string RegressionRadarStepId = "post-regression-radar";
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -161,6 +170,15 @@ public static class PipelineCatalogue
                 {
                     Id = LintScssStepId,
                     DisplayName = "Frontend stylelint",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [.. AspectStepIds],
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = RegressionRadarStepId,
+                    DisplayName = "Regression radar",
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [.. AspectStepIds],

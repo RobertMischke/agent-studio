@@ -52,6 +52,8 @@ interface PipelineRowVm {
    * verdict never grows a misleading tooltip.
    */
   concernTooltip: StructuredTooltip | null;
+  /** Recorded wall-clock duration of the step in ms; 0 when not yet run. */
+  durationMs: number;
   totalTokens: number;
   costUsd: number;
   /** False -> the model is not in the price table, render cost as n/a. */
@@ -391,6 +393,7 @@ export class OverviewPaneComponent {
         model: e?.model ?? cfg?.model ?? step.model ?? null,
         verdict,
         concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
+        durationMs: e?.durationMs ?? 0,
         totalTokens: c?.totalTokens ?? 0,
         costUsd: c?.costUsd ?? 0,
         costKnown: c ? c.modelKnown : true,
@@ -504,6 +507,17 @@ export class OverviewPaneComponent {
     const hrs = Math.floor(min / 60);
     const remMin = min % 60;
     return remMin > 0 ? `${hrs}h ${remMin}m` : `${hrs}h`;
+  }
+
+  /**
+   * Per-step duration for the pipeline rows. Sub-second steps (most
+   * deterministic Tool steps) show in ms; longer steps fall through to the
+   * coarser m/s/h formatter. Returns an em-dash when nothing ran yet.
+   */
+  formatStepDuration(ms: number): string {
+    if (ms <= 0) return '—';
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    return this.formatDuration(ms / 1000);
   }
 
   runStatusIcon(status: string): string {

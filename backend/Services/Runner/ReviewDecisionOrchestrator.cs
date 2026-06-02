@@ -4,6 +4,7 @@ using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Pipeline;
+using OrchestratorApi.Services.RegressionRadar;
 using OrchestratorApi.Services.TaskAccess;
 
 namespace OrchestratorApi.Services.Runner;
@@ -126,6 +127,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
+    private readonly RegressionRadarService? _regressionRadar;
+
+    /// <summary>
+    /// Regression-radar analysis injection point. Tests substitute a
+    /// deterministic stub so the post-step can be exercised without git or
+    /// a session timeline. Args: jobId, watchPath -> classification result.
+    /// Null in production, where the post-step calls the injected
+    /// <see cref="RegressionRadarService"/> directly.
+    /// </summary>
+    public Func<string, string?, RegressionRadarResult>? RegressionRadarAnalyzer { get; set; }
     private readonly TimelineLog? _timeline;
     private readonly ProjectSettingsService? _projectSettings;
     // The system-escalation funnel. Used here only for the boot-time repair of
@@ -161,7 +172,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         ILintScssRunner? lintScssRunner = null,
         TimelineLog? timeline = null,
         ProjectSettingsService? projectSettings = null,
-        HumanReviewEscalation? humanReviewEscalation = null)
+        HumanReviewEscalation? humanReviewEscalation = null,
+        RegressionRadarService? regressionRadar = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -181,6 +193,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _timeline = timeline;
         _projectSettings = projectSettings;
         _humanReviewEscalation = humanReviewEscalation;
+        _regressionRadar = regressionRadar;
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -850,6 +863,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reissue (or, if we've already reissued once, an escalation).
         var lintResult = await RunLintScssPostStepAsync(workspace, entry, current, ct);
 
+        // Regression radar post-step: a deterministic spec-change classification
+        // recorded alongside lint so the Overview pipeline lists it with a
+        // status + duration. Reporting only - the verdict never gates the move
+        // to review (unlike lint Fail above), so it sits between lint and the
+        // Complete mark and feeds nothing into the decision branches below.
+        RunRegressionRadarPostStep(entry, current);
+
         _pipelineLog?.Complete(current.FolderPath);
 
         if (report.Overall == AspectStatus.Block)
@@ -1120,6 +1140,107 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 "ReviewDecisionOrchestrator: failed to persist lint-scss log under {TaskFolder}",
                 jobFolderPath);
         }
+    }
+
+    /// <summary>
+    /// Drive the regression-radar post-step: resolve the per-project enable
+    /// flag, run the deterministic spec-change analysis, and record the
+    /// verdict + duration on <c>pipeline-execution.json</c>. Reporting only -
+    /// returns void because the outcome never gates the move to review.
+    /// Skips silently when neither a test analyzer seam nor the injected
+    /// <see cref="RegressionRadarService"/> is wired (stand-alone test path).
+    /// Never throws: a broken analysis falls through to a
+    /// <see cref="PipelineStepStatus.Skipped"/> record rather than crash the
+    /// orchestrator tick.
+    /// </summary>
+    private void RunRegressionRadarPostStep(WatchPathEntry entry, TaskInfo current)
+    {
+        var analyze = RegressionRadarAnalyzer
+            ?? (_regressionRadar != null
+                ? _regressionRadar.Analyze
+                : (Func<string, string?, RegressionRadarResult>?)null);
+        if (analyze == null) return;
+
+        var settings = _projectSettings?.Get(entry.Name);
+        if (!PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.RegressionRadarStepId))
+        {
+            RecordRegressionRadarStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config");
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+        RegressionRadarResult result;
+        try
+        {
+            result = analyze(current.Id, entry.Path);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: regression-radar post-step threw for {Project}/{JobId}; treating as skipped",
+                entry.Name, current.Id);
+            RecordRegressionRadarStep(current.FolderPath, PipelineStepStatus.Skipped,
+                sw.ElapsedMilliseconds, "error", ex.Message);
+            return;
+        }
+        sw.Stop();
+
+        var (status, verdict, reason) = MapRegressionRadarOutcome(result);
+        RecordRegressionRadarStep(current.FolderPath, status, sw.ElapsedMilliseconds, verdict, reason);
+    }
+
+    private void RecordRegressionRadarStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string? reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.RegressionRadarStepId,
+            Kind = StepKind.Tool,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Verdict = verdictToken,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
+    /// Pure mapping from a <see cref="RegressionRadarResult"/> to the
+    /// recorded step status + verdict token + reason. The radar never blocks,
+    /// so every successful analysis records as
+    /// <see cref="PipelineStepStatus.Passed"/> with the spec-change category
+    /// carried in the verdict token (clean / intended / at-risk / drift); an
+    /// analysis that could not run (no repo / no commit range) records as
+    /// <see cref="PipelineStepStatus.Skipped"/>. Static + internal so unit
+    /// tests can assert the mapping without the orchestrator.
+    /// </summary>
+    internal static (PipelineStepStatus Status, string Verdict, string Reason) MapRegressionRadarOutcome(
+        RegressionRadarResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.Error))
+            return (PipelineStepStatus.Skipped, "n/a", result.Error!);
+
+        if (result.TotalSpecChanges == 0)
+            return (PipelineStepStatus.Passed, "clean", "No spec changes in the commit range");
+
+        var counts = $"{result.TotalSpecChanges} spec change(s): "
+            + $"{result.IntendedCount} intended, {result.AtRiskCount} at-risk, {result.DriftCount} drift";
+
+        return result.OverallStatus switch
+        {
+            SpecChangeCategory.Drift  => (PipelineStepStatus.Passed, "drift", counts),
+            SpecChangeCategory.AtRisk => (PipelineStepStatus.Passed, "at-risk", counts),
+            _                         => (PipelineStepStatus.Passed, "intended", counts),
+        };
     }
 
     /// <summary>

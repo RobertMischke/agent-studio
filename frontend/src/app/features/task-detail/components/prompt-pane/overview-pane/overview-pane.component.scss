@@ -455,6 +455,13 @@
     &[data-verdict='concerns'] { color: var(--severity-warn); }
     &[data-verdict='block']    { color: var(--severity-high); }
 
+    // Regression-radar spec-change categories (reporting only - the step
+    // status stays Passed; the pill carries the signal).
+    &[data-verdict='clean']    { color: var(--lane-completed); }
+    &[data-verdict='intended'] { color: var(--lane-completed); }
+    &[data-verdict='at-risk']  { color: var(--severity-warn); }
+    &[data-verdict='drift']    { color: var(--severity-high); }
+
     // Hover affordance: the pill carries the concrete concern in a tooltip.
     &--concern { cursor: help; }
   }
@@ -471,6 +478,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__duration {
+    flex: 0 0 auto;
+    width: 52px;
+    text-align: right;
+    color: var(--studio-fg-dim);
   }
 
   &__tokens {

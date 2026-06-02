@@ -271,6 +271,11 @@
               <span class="ov-pl-step__model" data-testid="overview-pipeline-step-model"
                     [appTooltip]="'Model used for this step'">{{ row.model }}</span>
             }
+            <span class="ov-pl-step__duration ov-value--mono"
+                  data-testid="overview-pipeline-step-duration"
+                  [appTooltip]="'Recorded duration of this step'">
+              {{ formatStepDuration(row.durationMs) }}
+            </span>
             <span class="ov-pl-step__tokens ov-value--mono"
                   data-testid="overview-pipeline-step-tokens">
               {{ row.totalTokens > 0 ? formatTokens(row.totalTokens) : '—' }}

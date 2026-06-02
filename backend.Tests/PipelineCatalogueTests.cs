@@ -28,9 +28,9 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post: 4 aspects + commit-attribution + lint-scss + orchestrator
-        // decision + 5 opt-in drift dimensions (DRIFT Nachtrag).
-        Assert.Equal(12, p.Post.Count);
+        // Post: 4 aspects + commit-attribution + lint-scss + regression-radar
+        // + orchestrator decision + 5 opt-in drift dimensions (DRIFT Nachtrag).
+        Assert.Equal(13, p.Post.Count);
     }
 
     [Fact]
@@ -125,6 +125,35 @@ public class PipelineCatalogueTests
         var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
         Assert.True(lintIndex < decisionIndex,
             $"lint-scss (idx {lintIndex}) must precede orchestrator-decision (idx {decisionIndex}) in Post list");
+    }
+
+    [Fact]
+    public void StandardPipeline_RegressionRadar_IsToolStep_WithAspectDependencies_AndNotAStub()
+    {
+        // Regression radar runs as a deterministic Tool post-step after the
+        // aspect verdicts and before the orchestrator decision, mirroring the
+        // lint-scss slot. Unlike commit-attribution it is implemented today,
+        // so it is not a stub. It is reporting-only (no reissue), but it still
+        // depends on the aspects so a DAG-resolver schedules it after them.
+        var p = PipelineCatalogue.Standard;
+        var radarStep = p.Post.First(s => s.Id == PipelineCatalogue.RegressionRadarStepId);
+        Assert.Equal(StepKind.Tool, radarStep.Kind);
+        Assert.False(radarStep.Stub);
+        Assert.True(radarStep.Idempotent);
+        Assert.True(radarStep.DefaultEnabled); // default-on, configurable off per project
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            Assert.Contains(aspectId, radarStep.DependsOn);
+        }
+
+        // Ordered between lint-scss and the orchestrator decision.
+        var lintIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.LintScssStepId);
+        var radarIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.RegressionRadarStepId);
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.True(lintIndex < radarIndex,
+            $"lint-scss (idx {lintIndex}) must precede regression-radar (idx {radarIndex})");
+        Assert.True(radarIndex < decisionIndex,
+            $"regression-radar (idx {radarIndex}) must precede orchestrator-decision (idx {decisionIndex})");
     }
 
     [Fact]
