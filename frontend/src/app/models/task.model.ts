@@ -520,6 +520,13 @@ export interface GroupedJobs {
    * drain empties any historical folders. Always empty after a clean boot.
    */
   failedPickup: TaskInfo[];
+  /**
+   * Park lane for tasks that exhausted their auto-pickup retry budget without
+   * reaching review (3b-code-not-complete). Hide-when-empty. The runner moves
+   * an offender here and keeps auto-mode running; the project only flips to
+   * manual once the systemic "3x3" pattern trips.
+   */
+  codeNotComplete: TaskInfo[];
   /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */
   autoReview: TaskInfo[];
   /** ADR-0025 lane: waiting for the user (5-human-review). */

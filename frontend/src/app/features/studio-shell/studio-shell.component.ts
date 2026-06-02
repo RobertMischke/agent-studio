@@ -593,6 +593,7 @@ export class StudioShellComponent {
     visit(grouped.ready, 'backlog');
     visit(grouped.progress, 'active');
     visit(grouped.failedPickup, 'active');
+    visit(grouped.codeNotComplete, 'active');
     visit(grouped.review, 'review');
     visit(grouped.autoReview, 'review');
     visit(grouped.humanReview, 'review');

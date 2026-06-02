@@ -38,6 +38,7 @@ function emptyGrouped(): GroupedJobs {
     ready: [],
     progress: [],
     failedPickup: [],
+    codeNotComplete: [],
     autoReview: [],
     humanReview: [],
     review: [],

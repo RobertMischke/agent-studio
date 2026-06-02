@@ -78,6 +78,10 @@ public static class TaskCrudEndpoints
                 // in 7-archive. Empty by default; clients render it only when
                 // it has at least one job.
                 FailedPickup = SortLane(TaskStates.FailedPickup),
+                // 3b-code-not-complete: hide-when-empty park lane for tasks that
+                // exhausted their auto-pickup retry budget without reaching
+                // review. Empty by default; clients render it only when populated.
+                CodeNotComplete = SortLane(TaskStates.CodeNotComplete),
                 AutoReview = autoReview,
                 HumanReview = humanReview,
                 Review = autoReview, // legacy alias for pre-ADR-0025 clients

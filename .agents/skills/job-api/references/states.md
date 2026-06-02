@@ -13,6 +13,7 @@ full form below. Source: `backend/Models/JobModels.cs::JobStates`.
 | `2-ready` | `Ready` | Queued; runner picks from here in auto mode |
 | `3-progress` | `Progress` | Actively running; max one per project |
 | `3a-failed-pickup` | `FailedPickup` | Failed to start (spawn-failed, orphan, empty) |
+| `3b-code-not-complete` | `CodeNotComplete` | Exhausted auto retries without reaching review; parked here so the queue keeps running (no project stop). Hidden when empty |
 | `4-auto-review` | `AutoReview` | CLI completed; aspect-runner verdicts pending |
 | `5-human-review` | `HumanReview` | Aspect verdicts done; awaiting human acceptance |
 | `6-completed` | `Completed` | Accepted; logically done (physically lands in `7-archive`) |

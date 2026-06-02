@@ -509,6 +509,17 @@ export class App implements OnInit, OnDestroy {
     lanes.push(
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+    );
+    // 3b-code-not-complete: hide-when-empty park lane (same rule as 1b).
+    if ((grouped.codeNotComplete ?? []).length > 0) {
+      lanes.push({
+        state: '3b-code-not-complete',
+        title: 'Code not complete',
+        icon: '🚧',
+        jobs: grouped.codeNotComplete,
+      });
+    }
+    lanes.push(
       { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
       { state: '5-human-review', title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
@@ -590,8 +601,26 @@ export class App implements OnInit, OnDestroy {
     });
     const activeLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
-      { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
     ];
+    // 3b-code-not-complete is a hide-when-empty park lane (same rule as
+    // 1b-needs-human-review): the runner moves a task here when it exhausts its
+    // auto-pickup retry budget without reaching review, and keeps auto-mode
+    // running. It sits at 3-progress / before review so the operator sees stuck
+    // work next to what is actively running.
+    if ((grouped.codeNotComplete ?? []).length > 0) {
+      activeLanes.push({
+        state: '3b-code-not-complete',
+        title: 'Code not complete',
+        icon: '🚧',
+        jobs: grouped.codeNotComplete,
+      });
+    }
+    activeLanes.push({
+      state: '4-auto-review',
+      title: 'Auto Review',
+      icon: '🤖',
+      jobs: grouped.autoReview,
+    });
     return [
       {
         id: 'backlog',

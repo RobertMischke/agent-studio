@@ -38,6 +38,7 @@ export const LANE_LABELS: Record<string, string> = {
   '1b-needs-human-review':  'Needs Clarification',
   '2-ready':                'Ready',
   '3-progress':             'In Progress',
+  '3b-code-not-complete':   'Code not complete',
   '4-auto-review':          'Auto Review',
   '5-human-review':         'Review',
   '6-completed':            'Completed',

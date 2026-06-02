@@ -44,6 +44,7 @@ function makeGrouped(jobs: TaskInfo[]): GroupedJobs {
     ready: byState('2-ready'),
     progress: byState('3-progress'),
     failedPickup: [],
+    codeNotComplete: [],
     autoReview: byState('4-auto-review'),
     humanReview: byState('5-human-review'),
     review: byState('4-auto-review'),

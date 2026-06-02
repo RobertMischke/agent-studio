@@ -2103,6 +2103,19 @@ public static class TaskStates
     // folder. See ADR-0028.
     public const string FailedPickup = "3a-failed-pickup";
 
+    // 3b-code-not-complete is the park lane for a task that exhausted its
+    // auto-pickup retry budget without ever reaching review (no commit, agent
+    // never signalled done, classifier-unknown). Instead of stopping the whole
+    // project at the first broken task, the runner parks it here and keeps
+    // pulling the next Ready task; the project only flips to manual once the
+    // systemic "3x3" pattern trips (see ProjectRunner.AutoFailureDistinctTaskHaltThreshold).
+    // Additive lane (no boot migration): the 3b- sort key slots between
+    // 3a-failed-pickup and 4-auto-review on disk and in the kanban (ASCII '-'
+    // (45) < 'a' (97), and '3' < '4'). Hide-when-empty in the UI (same rule as
+    // 1b-needs-human-review and 5-human-review). Auto-pickup never reaches into
+    // this lane: the picker only enumerates 3-progress.
+    public const string CodeNotComplete = "3b-code-not-complete";
+
     // 4-auto-review is the orchestrator's lane: ReviewDecisionOrchestrator
     // can reissue, accept-as-done, or escalate. Anything that has crossed
     // the "ready for the user" line lives in 5-human-review instead, so
@@ -2115,7 +2128,7 @@ public static class TaskStates
     public const string Archive = "7-archive";
 
     public static readonly string[] All =
-        [Backlog, Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, FailedPickup, AutoReview, HumanReview, Completed, Archive];
+        [Backlog, Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, FailedPickup, CodeNotComplete, AutoReview, HumanReview, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()

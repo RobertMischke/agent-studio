@@ -1376,7 +1376,7 @@ public class ProjectRunner
         var jobId = jobKey[(sep + 2)..];
         // Most likely to find an active job in 3-progress; fall through
         // the rest of the lifecycle if not.
-        foreach (var lane in new[] { "3-progress", "3a-failed-pickup", "4-auto-review", "5-human-review", "1-preparation", "2-ready", "0-backlog", "6-completed", "7-archive" })
+        foreach (var lane in new[] { "3-progress", "3a-failed-pickup", "3b-code-not-complete", "4-auto-review", "5-human-review", "1-preparation", "2-ready", "0-backlog", "6-completed", "7-archive" })
         {
             var candidate = System.IO.Path.Combine(watchPath, lane, jobId);
             if (System.IO.Directory.Exists(candidate)) return candidate;
@@ -3158,8 +3158,8 @@ public class ProjectRunner
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
 
     /// <summary>Test seam: number of distinct tasks the auto-failure breaker has
-    /// parked in 5-human-review without a success in between - the "3x3" halt
-    /// counter that flips the project to manual at
+    /// parked in 3b-code-not-complete without a success in between - the "3x3"
+    /// halt counter that flips the project to manual at
     /// <see cref="AutoFailureDistinctTaskHaltThreshold"/>.</summary>
     internal int GetParkedFailedTaskCountForTest() => _parkedFailedJobIds.Count;
 
@@ -3167,8 +3167,8 @@ public class ProjectRunner
     /// Auto-failure handling for a finished auto-pickup run that did NOT reach
     /// review and was not a deliberate stop. Park-and-continue: a task that
     /// fails <see cref="AutoFailureHaltThreshold"/> times in a row is parked in
-    /// 5-human-review and auto-mode KEEPS running with the next task; only when
-    /// <see cref="AutoFailureDistinctTaskHaltThreshold"/> DISTINCT tasks have
+    /// 3b-code-not-complete and auto-mode KEEPS running with the next task; only
+    /// when <see cref="AutoFailureDistinctTaskHaltThreshold"/> DISTINCT tasks have
     /// each failed out without a success in between ("3x3") does the project
     /// flip to manual. <paramref name="activeInfo"/> may be null (e.g. in tests):
     /// the counting + halt decision still runs; the park-move + chat note are
@@ -3189,23 +3189,22 @@ public class ProjectRunner
         if (sameJobRepeated && IsAutoMode(_mode))
         {
             // PARK-AND-CONTINUE (not a project-wide halt on one bad task).
-            // Route the offender out of 3-progress into 5-human-review so a
-            // human sees it, then keep auto-mode running so the rest of the
-            // queue proceeds. Only a SYSTEMIC pattern halts (distinct-task
-            // check below).
+            // Route the offender out of 3-progress into 3b-code-not-complete so
+            // it stops being re-picked (the picker only walks 3-progress), then
+            // keep auto-mode running so the rest of the queue proceeds. The move
+            // goes through TaskTransitionService.MoveAsync so the OnJobMoved side
+            // effects fire (active-job latch cleared, live board push). Only a
+            // SYSTEMIC pattern halts the project (distinct-task check below).
             if (activeInfo != null)
             {
                 try
                 {
-                    _ = _humanReviewEscalation.EscalateAsync(
-                        jobId, activeInfo.WatchPath, ProjectName,
-                        HumanReviewEscalationCategories.AutoFailurePark,
-                        $"Auto-pickup ran '{jobId}' {AutoFailureHaltThreshold}x in a row without reaching review; parked for a human.",
-                        CancellationToken.None);
+                    _ = _transitions.MoveAsync(
+                        jobId, TaskStates.CodeNotComplete, activeInfo.WatchPath, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Park-to-human-review failed for {JobId}", jobId);
+                    _logger.LogWarning(ex, "Park-to-code-not-complete failed for {JobId}", jobId);
                 }
             }
 
@@ -3219,7 +3218,7 @@ public class ProjectRunner
                 var parked = string.Join(", ", _parkedFailedJobIds);
                 if (activeInfo != null)
                     _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                        $"Auto-mode paused: {_parkedFailedJobIds.Count} distinct tasks each failed {AutoFailureHaltThreshold}x without reaching review and were parked in human review ({parked}). Looks systemic - investigate before re-enabling.");
+                        $"Auto-mode paused: {_parkedFailedJobIds.Count} distinct tasks each failed {AutoFailureHaltThreshold}x without reaching review and were moved to Code not complete ({parked}). Looks systemic - investigate before re-enabling.");
                 _logger.LogWarning(
                     "Runner '{Project}' halting auto-mode: {Count} distinct tasks failed out (3x{Threshold}): {Parked}",
                     ProjectName, _parkedFailedJobIds.Count, AutoFailureHaltThreshold, parked);
@@ -3230,9 +3229,9 @@ public class ProjectRunner
             else if (activeInfo != null)
             {
                 _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                    $"Job '{jobId}' did not reach review after {AutoFailureHaltThreshold} runs; parked in human review. Auto-mode continues with the next task ({_parkedFailedJobIds.Count}/{AutoFailureDistinctTaskHaltThreshold} distinct tasks parked before a systemic pause).");
+                    $"Job '{jobId}' did not reach review after {AutoFailureHaltThreshold} runs; moved to Code not complete. Auto-mode continues with the next task ({_parkedFailedJobIds.Count}/{AutoFailureDistinctTaskHaltThreshold} distinct tasks parked before a systemic pause).");
                 _logger.LogWarning(
-                    "Runner '{Project}' parked '{JobId}' to human-review after {N} failures; auto-mode continues ({Count}/{Halt} distinct parked).",
+                    "Runner '{Project}' moved '{JobId}' to code-not-complete after {N} failures; auto-mode continues ({Count}/{Halt} distinct parked).",
                     ProjectName, jobId, AutoFailureHaltThreshold, _parkedFailedJobIds.Count, AutoFailureDistinctTaskHaltThreshold);
             }
         }

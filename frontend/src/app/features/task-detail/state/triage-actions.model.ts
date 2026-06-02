@@ -88,6 +88,16 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     { id: 'stop-run',         label: 'Stop run',         variant: 'primary',   intent: { kind: 'stop' } },
     { id: 'view-live-output', label: 'View live output', variant: 'secondary', intent: { kind: 'showActivity' } },
   ],
+  // 3b-code-not-complete: a task the runner parked after it exhausted its
+  // auto-pickup retry budget without reaching review. The operator's natural
+  // moves are to requeue it (after fixing context) or send it back for
+  // preparation/triage.
+  '3b-code-not-complete': [
+    { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)', variant: 'primary',   intent: { kind: 'move', targetState: '2-ready' } },
+    SEND_TO_PREP,
+    SEND_TO_BACKLOG,
+    EDIT_BUTTON,
+  ],
   '4-auto-review': [
     { id: 'force-accept', label: 'Force-accept (→ Review)', variant: 'secondary', intent: { kind: 'move', targetState: '5-human-review' } },
     { id: 'reissue',      label: 'Reissue (→ Progress)',          variant: 'secondary', intent: { kind: 'move', targetState: '3-progress' } },
@@ -118,6 +128,7 @@ export const LANE_LABELS: Record<string, string> = {
   '1b-needs-human-review':  'Needs Clarification',
   '2-ready':                'Ready',
   '3-progress':             'In Progress',
+  '3b-code-not-complete':   'Code not complete',
   '4-auto-review':          'Auto Review',
   '5-human-review':         'Review',
   '6-completed':            'Completed',

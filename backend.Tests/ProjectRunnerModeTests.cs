@@ -215,6 +215,42 @@ public sealed class ProjectRunnerModeTests : IDisposable
     }
 
     /// <summary>
+    /// Park destination: a task that fails out is MOVED out of 3-progress into
+    /// 3b-code-not-complete (not 5-human-review), and the project stays auto so
+    /// the next Ready task is picked up. The move runs through
+    /// <see cref="TaskTransitionService.MoveAsync"/> fire-and-forget, so the
+    /// assertion polls the on-disk lane folder.
+    /// </summary>
+    [Fact]
+    public async Task AutoFailure_SingleTaskFailsOut_MovesToCodeNotCompleteAndKeepsAuto()
+    {
+        WriteJob(TaskStates.Progress, "job-a");
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        var info = new TaskInfo
+        {
+            Id = "job-a",
+            Title = "job-a",
+            State = TaskStates.Progress,
+            WatchPath = _watchPath,
+            ProjectName = ProjectName,
+        };
+
+        for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
+            runner.RecordAutoPickupFailureForTest("job-a", info);
+
+        var movedTo3b = await WaitForFolderAsync(TaskStates.CodeNotComplete, "job-a");
+        Assert.True(movedTo3b, "expected 'job-a' to be moved into 3b-code-not-complete");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "job-a")),
+            "expected 'job-a' to have left 3-progress");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "job-a")),
+            "park must NOT route into 5-human-review");
+        Assert.Equal(1, runner.GetParkedFailedTaskCountForTest());
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+    }
+
+    /// <summary>
     /// 3x3 systemic halt: only when AutoFailureDistinctTaskHaltThreshold
     /// DISTINCT tasks have each failed out (3 retries each) does the project
     /// flip to manual.
@@ -262,6 +298,29 @@ public sealed class ProjectRunnerModeTests : IDisposable
     [Fact]
     public void AutoFailureDistinctTaskHaltThreshold_Is3()
         => Assert.Equal(3, ProjectRunner.AutoFailureDistinctTaskHaltThreshold);
+
+    private void WriteJob(string state, string slug)
+    {
+        var dir = Path.Combine(_watchPath, state, slug);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\",\"cliType\":\"copilot\"}}");
+    }
+
+    /// <summary>Poll for a slug folder to appear under <paramref name="state"/>;
+    /// the park move is fire-and-forget so the folder rename completes
+    /// asynchronously after <c>RecordAutoPickupFailureForTest</c> returns.</summary>
+    private async Task<bool> WaitForFolderAsync(string state, string slug, int timeoutMs = 5000)
+    {
+        var target = Path.Combine(_watchPath, state, slug);
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (Directory.Exists(target)) return true;
+            await Task.Delay(25);
+        }
+        return Directory.Exists(target);
+    }
 
     private ProjectRunner BuildRunner(ILogger? logger = null)
     {
