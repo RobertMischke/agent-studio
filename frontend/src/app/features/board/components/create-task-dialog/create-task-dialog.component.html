@@ -121,6 +121,11 @@
       </div>
     </div>
 
+    <app-create-epic-picker
+      [watchPath]="newWatchPath()"
+      [show]="!isEpic()"
+      [(parentEpicId)]="newEpicId" />
+
     @if (availableTags().length > 0) {
       <div class="field">
         <span class="field__label">Tags</span>

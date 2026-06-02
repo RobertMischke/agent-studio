@@ -10,6 +10,7 @@ import { TagRegistryStore } from '../../../../services/tag-registry.store';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
+import { CreateEpicPickerComponent } from '../create-epic-picker/create-epic-picker.component';
 export interface PendingAttachment {
   id: string;
   file: File;
@@ -56,7 +57,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   selector: 'app-create-job-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent],
+  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent],
   templateUrl: './create-task-dialog.component.html'
 })
 export class CreateTaskDialogComponent implements AfterViewInit {
@@ -78,6 +79,8 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   /** Card kind: `task` (default) or `epic` (a sub-task container). */
   readonly newKind = model<TaskKind>('task');
   readonly isEpic = computed(() => this.newKind() === 'epic');
+  /** Way 1: parent epic id for a `kind=task`. Hidden when kind=epic. */
+  readonly newEpicId = model<string>('');
 
   setKind(kind: TaskKind): void { this.newKind.set(kind); }
 

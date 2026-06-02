@@ -45,6 +45,8 @@ export class CreateTaskFormService {
   newTags: string[] = [];
   /** Card kind: `task` (default) or `epic`. */
   newKind: TaskKind = 'task';
+  /** Assignment way 1: optional parent epic id for a `kind=task` create. */
+  newEpicId = '';
   newCliType: CliType = readDefaultCliPref();
   newModel: string = readDefaultModelPref(readDefaultCliPref());
   newAttachments: PendingAttachment[] = [];
@@ -179,6 +181,7 @@ export class CreateTaskFormService {
     this.newTags = [];
     this.newTargetState = '1-preparation';
     this.newKind = 'task';
+    this.newEpicId = '';
     this.newCliType = readDefaultCliPref();
     this.newModel = readDefaultModelPref(this.newCliType);
     this.availableModels.set([]);
@@ -213,6 +216,8 @@ export class CreateTaskFormService {
       taskType: this.newTaskType,
       tags: this.newTags.length > 0 ? [...this.newTags] : undefined,
       kind: this.newKind,
+      // Way 1 only applies to a task; an epic has no parent epic.
+      epicId: this.newKind === 'task' && this.newEpicId ? this.newEpicId : undefined,
     }).subscribe({
       next: (res) => {
         localStorage.setItem('lastCreateWatchPath', watchPath);
