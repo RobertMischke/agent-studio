@@ -404,10 +404,20 @@ catch (Exception ex)
 // into CreateJob. Runs after RegistryBootstrap so project short codes exist.
 // Idempotent; no-op once all jobs carry a key.
 {
-    var keyCount = app.Services.GetRequiredService<TaskMutationService>().BackfillTaskKeys();
+    var mutations = app.Services.GetRequiredService<TaskMutationService>();
+    var keyCount = mutations.BackfillTaskKeys();
     if (keyCount > 0)
         app.Services.GetRequiredService<ILogger<Program>>()
             .LogInformation("Backfilled task keys on {Count} job(s)", keyCount);
+
+    // Resolve any duplicate display keys (two tasks sharing one key). The
+    // sweep is idempotent and a no-op once every key is unique; it keeps the
+    // oldest task on the contested key and re-keys the namesakes. Runs after
+    // the backfill so freshly stamped jobs are part of the uniqueness check.
+    var dedupCount = mutations.DeduplicateTaskKeys();
+    if (dedupCount > 0)
+        app.Services.GetRequiredService<ILogger<Program>>()
+            .LogWarning("Resolved duplicate task keys by re-keying {Count} task(s)", dedupCount);
 }
 
 // ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any

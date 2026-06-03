@@ -1027,6 +1027,16 @@ public class TaskMutationService
     /// <paramref name="watchPath"/>. Returns null when the project
     /// registry has no record for this path (non-fatal; the job will
     /// simply have <c>key: null</c>).
+    ///
+    /// <para>Before issuing, the per-project counter floor is re-derived
+    /// from the keys actually present on disk. The in-memory
+    /// <c>NextTaskKeySeq</c> is the fast path, but it can be rewound under
+    /// the registry (e.g. a second backend sharing this workspace persists
+    /// a stale snapshot, clobbering the live counter). Deriving the floor
+    /// from disk on every mint makes the on-disk keys the source of truth,
+    /// so a rewound counter can never re-issue a key that is already in
+    /// use. This closed the bug where ASS-594/598 (and a contiguous band
+    /// around them) were each minted onto two different tasks.</para>
     /// </summary>
     private string? MintTaskKey(string watchPath)
     {
@@ -1034,6 +1044,10 @@ public class TaskMutationService
         {
             var project = _projectRegistry.FindByStorageLocation(watchPath);
             if (project == null) return null;
+
+            var floor = HighestExistingKeyNumber(project.Id, project.ShortCode) + 1;
+            _projectRegistry.EnsureTaskKeyFloor(project.Id, floor);
+
             var seq = _projectRegistry.IssueNextTaskKey(project.Id);
             return $"{project.ShortCode}-{seq}";
         }
@@ -1045,16 +1059,57 @@ public class TaskMutationService
     }
 
     /// <summary>
+    /// Highest numeric tail among the keys currently on disk for the
+    /// project identified by <paramref name="projectId"/> /
+    /// <paramref name="shortCode"/>. Returns 0 when the project has no
+    /// keyed tasks yet. Reads from the (cached) scanner snapshot.
+    /// </summary>
+    private int HighestExistingKeyNumber(string projectId, string shortCode)
+    {
+        var max = 0;
+        foreach (var job in _scanner.ScanAllJobs())
+        {
+            if (string.IsNullOrWhiteSpace(job.Key)) continue;
+            var owner = _projectRegistry.FindByStorageLocation(job.WatchPath);
+            if (owner == null ||
+                !string.Equals(owner.Id, projectId, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (TaskKeyNumbers.TryParse(job.Key, shortCode, out var n) && n > max)
+                max = n;
+        }
+        return max;
+    }
+
+    /// <summary>
     /// Boot-time backfill: stamps a <c>key</c> on every job whose
     /// <c>job.json</c> currently has no key. Idempotent; jobs that
-    /// already carry a key are skipped. After stamping, the project
-    /// counter is raised past the highest issued number so future
-    /// creates cannot collide. Returns the number of jobs stamped.
+    /// already carry a key are skipped. The project counter floor is first
+    /// raised past the highest key already on disk (across all tasks, not
+    /// only the ones being stamped) so a freshly stamped key cannot collide
+    /// with an existing one even when the in-memory counter has drifted
+    /// behind disk. Returns the number of jobs stamped.
     /// </summary>
     public int BackfillTaskKeys()
     {
         var stamped = 0;
-        var maxByProject = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        // Raise every keyed project's floor past its on-disk high-water mark
+        // before issuing any new number. This repairs a counter that drifted
+        // below disk (the same root cause as the duplicate-key bug) so the
+        // stamps below land above existing keys.
+        var byProject = new Dictionary<string, (string shortCode, int max)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var job in _scanner.ScanAllJobs())
+        {
+            var project = _projectRegistry.FindByStorageLocation(job.WatchPath);
+            if (project == null) continue;
+            if (TaskKeyNumbers.TryParse(job.Key, project.ShortCode, out var n))
+            {
+                if (!byProject.TryGetValue(project.Id, out var cur) || n > cur.max)
+                    byProject[project.Id] = (project.ShortCode, n);
+            }
+        }
+        foreach (var (projectId, info) in byProject)
+            _projectRegistry.EnsureTaskKeyFloor(projectId, info.max + 1);
 
         foreach (var job in _scanner.ScanAllJobs())
         {
@@ -1067,16 +1122,80 @@ public class TaskMutationService
             var key = $"{project.ShortCode}-{seq}";
             TaskJsonFile.UpdateField(job.FolderPath, "key", key, _logger);
             stamped++;
-
-            if (!maxByProject.TryGetValue(project.Id, out var prev) || seq > prev)
-                maxByProject[project.Id] = seq;
         }
-
-        foreach (var (projectId, max) in maxByProject)
-            _projectRegistry.EnsureTaskKeyFloor(projectId, max + 1);
 
         if (stamped > 0) _scanner.InvalidateCache();
         return stamped;
+    }
+
+    /// <summary>
+    /// One-shot sweep that resolves duplicate display keys: two or more
+    /// tasks in the same project carrying the identical <c>key</c>. The
+    /// oldest task (earliest <c>createdAt</c>, id as tiebreak) keeps the
+    /// contested key; every later namesake is re-keyed with a fresh number
+    /// minted above the project's on-disk high-water mark. Only the
+    /// <c>key</c> field changes - task ids, folders, and content are
+    /// untouched. Idempotent: a second run with no collisions returns 0.
+    /// Returns the number of tasks re-keyed.
+    /// </summary>
+    public int DeduplicateTaskKeys()
+    {
+        // Group keyed tasks by (projectId, key). A group with >1 member is a
+        // collision.
+        var groups = new Dictionary<(string ProjectId, string Key), List<TaskInfo>>();
+        foreach (var job in _scanner.ScanAllJobs())
+        {
+            if (string.IsNullOrWhiteSpace(job.Key)) continue;
+            var project = _projectRegistry.FindByStorageLocation(job.WatchPath);
+            if (project == null) continue;
+            var gk = (project.Id, job.Key!.Trim());
+            if (!groups.TryGetValue(gk, out var list))
+                groups[gk] = list = new List<TaskInfo>();
+            list.Add(job);
+        }
+
+        var collisions = groups
+            .Where(kvp => kvp.Value.Count > 1)
+            .ToList();
+        if (collisions.Count == 0) return 0;
+
+        // Raise each affected project's counter above its on-disk maximum so
+        // the replacement keys we mint cannot collide with an existing one.
+        foreach (var projectId in collisions.Select(c => c.Key.ProjectId).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var project = _projectRegistry.FindById(projectId);
+            if (project == null) continue;
+            var floor = HighestExistingKeyNumber(projectId, project.ShortCode) + 1;
+            _projectRegistry.EnsureTaskKeyFloor(projectId, floor);
+        }
+
+        var rekeyed = 0;
+        foreach (var ((projectId, oldKey), members) in collisions)
+        {
+            var project = _projectRegistry.FindById(projectId);
+            if (project == null) continue;
+
+            // Deterministic keeper: the task that has held the key longest.
+            var ordered = members
+                .OrderBy(m => m.CreatedAt)
+                .ThenBy(m => m.Id, StringComparer.Ordinal)
+                .ToList();
+            var keeper = ordered[0];
+
+            for (var i = 1; i < ordered.Count; i++)
+            {
+                var seq = _projectRegistry.IssueNextTaskKey(projectId);
+                var newKey = $"{project.ShortCode}-{seq}";
+                TaskJsonFile.UpdateField(ordered[i].FolderPath, "key", newKey, _logger);
+                rekeyed++;
+                _logger.LogInformation(
+                    "task-key-dedup project={ProjectId} oldKey={OldKey} newKey={NewKey} jobId={JobId} keeper={KeeperId}",
+                    projectId, oldKey, newKey, ordered[i].Id, keeper.Id);
+            }
+        }
+
+        if (rekeyed > 0) _scanner.InvalidateCache();
+        return rekeyed;
     }
 
     private static string ToSlug(string text)

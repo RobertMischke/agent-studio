@@ -51,6 +51,17 @@ public static class AdminConfigEndpoints
             return Results.Ok(new { stamped = count });
         });
 
+        // One-shot sweep for the duplicate display-key root cause: two tasks
+        // sharing one key (e.g. ASS-594 minted onto two different tasks after a
+        // rewound counter). Keeps the oldest task on the contested key and
+        // re-keys the namesakes. Idempotent — also runs at boot. See
+        // TaskMutationService.DeduplicateTaskKeys.
+        maintenance.MapPost("/dedupe-task-keys", (TaskMutationService mutations) =>
+        {
+            var count = mutations.DeduplicateTaskKeys();
+            return Results.Ok(new { rekeyed = count });
+        });
+
         // One-shot sweep for the duplicate-slug root cause: neutralises stale
         // namesake folders (the shells behind the recurring 409-on-archive) by
         // renaming them with a leading underscore so the scanner ignores them.
