@@ -34,9 +34,18 @@ public sealed class RunLogStore : IDisposable
     private readonly string _runDir;
     private readonly ConcurrentDictionary<string, CliOutputLogStore> _byStream = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
+    private volatile string? _lastAppendError;
 
     /// <summary>The per-run directory this store writes its stream files into.</summary>
     public string Path => _runDir;
+
+    /// <summary>
+    /// Reason of the most recent failed <see cref="Append"/> (propagated from
+    /// the per-stream <see cref="CliOutputLogStore.LastErrorMessage"/>), or
+    /// null when the last append succeeded. The read loop logs this once per
+    /// failure window instead of swallowing a bare false.
+    /// </summary>
+    public string? LastAppendError => _lastAppendError;
 
     public RunLogStore(string runDir)
     {
@@ -79,7 +88,9 @@ public sealed class RunLogStore : IDisposable
     {
         if (line is null || _disposed) return false;
         var store = StoreFor(line.Stream);
-        return store.Append(line);
+        if (store.Append(line)) return true;
+        _lastAppendError = store.LastErrorMessage;
+        return false;
     }
 
     private CliOutputLogStore StoreFor(string? stream)

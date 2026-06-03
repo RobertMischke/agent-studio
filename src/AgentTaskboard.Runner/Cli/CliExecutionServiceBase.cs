@@ -753,6 +753,30 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         catch (Exception ex) { _logger.LogWarning(ex, "Stop after environment-blocker failed for {TaskKey}", jobKey); }
     }
 
+    /// <summary>
+    /// Rate-limited accounting for a failed CLI-output persist. The read loop
+    /// runs once per streamed line, so logging every failure turned an
+    /// unwritable output target mid-stream into hundreds of identical warnings
+    /// per second - a log + I/O flood that helped take the host down. Instead
+    /// we count the drops and emit one warning on the first failure, then at
+    /// most one every <see cref="PersistWarnInterval"/> while the condition
+    /// persists, carrying the captured cause and the running drop count.
+    /// </summary>
+    private void NotePersistFailure(string jobKey, ProcInfo info)
+    {
+        var count = ++info.PersistFailureCount;
+        var now = DateTime.UtcNow;
+        if (count == 1 || now - info.LastPersistWarnAtUtc >= PersistWarnInterval)
+        {
+            info.LastPersistWarnAtUtc = now;
+            _logger.LogWarning(
+                "Failed to persist CLI output line for {JobId}: {Reason} ({Count} line(s) dropped so far; suppressing identical warnings for {Window}s)",
+                jobKey, info.OutputLog.LastAppendError ?? "unknown I/O error", count, (int)PersistWarnInterval.TotalSeconds);
+        }
+    }
+
+    private static readonly TimeSpan PersistWarnInterval = TimeSpan.FromSeconds(30);
+
     private async Task ReadStreamAsync(string jobKey, StreamReader reader, string stream, ProcInfo info, CancellationToken ct)
     {
         try
@@ -775,7 +799,14 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 // lose at most an in-flight write, never an acknowledged one.
                 // The visible buffer + event stream get the transformed lines.
                 if (!info.OutputLog.Append(rawLine))
-                    _logger.LogWarning("Failed to persist CLI output line for {JobId}", jobKey);
+                    NotePersistFailure(jobKey, info);
+                else if (info.PersistFailureCount > 0)
+                {
+                    _logger.LogInformation(
+                        "CLI output persistence recovered for {JobId} after {Count} dropped line(s)",
+                        jobKey, info.PersistFailureCount);
+                    info.PersistFailureCount = 0;
+                }
 
                 // Watchdog silence-clock reset: any real stdout/stderr line
                 // counts as activity. Synthetic taskboard / orchestrator /
@@ -1368,6 +1399,17 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// Null for CLIs without a stdout-independent activity signal.
         /// </summary>
         public IDisposable? SessionLiveness { get; set; }
+
+        /// <summary>
+        /// Running count of streamed lines this run failed to persist to the
+        /// on-disk log. Drives the rate-limited persist-failure warning in
+        /// <see cref="NotePersistFailure"/>; reset to 0 once a later line
+        /// persists successfully so a recovery is logged exactly once.
+        /// </summary>
+        public long PersistFailureCount { get; set; }
+
+        /// <summary>UTC timestamp of the most recent emitted persist-failure warning.</summary>
+        public DateTime LastPersistWarnAtUtc { get; set; }
 
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {

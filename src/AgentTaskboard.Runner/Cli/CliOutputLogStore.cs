@@ -33,11 +33,46 @@ public sealed class CliOutputLogStore : IDisposable
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
     private static readonly byte[] Newline = Encoding.UTF8.GetBytes("\n");
 
+    // Circuit breaker for a target that has gone unwritable mid-stream
+    // (job folder moved/deleted, antivirus quarantine, disk full). Each
+    // failed Append otherwise costs a Directory.CreateDirectory + FileStream
+    // open + fsync; when every CLI line hits that, the syscalls plus the
+    // per-line warning at the call site flooded the log and contributed to a
+    // host crash (the "Failed to persist CLI output line" storm). After a
+    // short burst of consecutive failures we stop touching the filesystem for
+    // a cooldown window and return false cheaply; the caller still has the
+    // in-memory OutputBuffer, so no acknowledged line is lost from the live
+    // view. One attempt per window then probes whether the path recovered.
+    private const int FailuresBeforeBackoff = 5;
+    private static readonly TimeSpan BackoffWindow = TimeSpan.FromSeconds(2);
+
     private readonly object _lock = new();
     private FileStream? _stream;
     private bool _disposed;
+    private int _consecutiveFailures;
+    private long _totalFailures;
+    private DateTime _backoffUntilUtc = DateTime.MinValue;
+    private string? _lastErrorMessage;
 
     public string Path { get; }
+
+    /// <summary>
+    /// Reason (<c>ExceptionType: message</c>) of the most recent failed
+    /// <see cref="Append"/>, or null when the last append succeeded. Lets the
+    /// call site surface the cause instead of swallowing it - the previous
+    /// behaviour returned a bare <c>false</c> and the operator never learned
+    /// <i>why</i> the line could not be persisted.
+    /// </summary>
+    public string? LastErrorMessage { get { lock (_lock) return _lastErrorMessage; } }
+
+    /// <summary>
+    /// Total number of <see cref="Append"/> calls that actually attempted a
+    /// filesystem write and threw, over this store's lifetime. Calls skipped
+    /// during a backoff window are not counted, so a value far below the
+    /// number of Append calls is the signal that the breaker is bounding the
+    /// I/O storm.
+    /// </summary>
+    public long TotalFailures { get { lock (_lock) return _totalFailures; } }
 
     public CliOutputLogStore(string path)
     {
@@ -82,6 +117,12 @@ public sealed class CliOutputLogStore : IDisposable
         lock (_lock)
         {
             if (_disposed) return false;
+
+            // Breaker open: a recent burst of failures put us in a cooldown.
+            // Skip the filesystem entirely so a vanished target cannot turn
+            // every streamed line into a failed open + fsync.
+            if (DateTime.UtcNow < _backoffUntilUtc) return false;
+
             try
             {
                 EnsureDirectory();
@@ -89,14 +130,29 @@ public sealed class CliOutputLogStore : IDisposable
                 _stream.Write(payload, 0, payload.Length);
                 _stream.Write(Newline, 0, Newline.Length);
                 _stream.Flush(flushToDisk: true);
+                if (_consecutiveFailures != 0)
+                {
+                    // Path recovered (or the breaker's probe succeeded): clear
+                    // the failure latch so the caller can log a recovery.
+                    _consecutiveFailures = 0;
+                    _backoffUntilUtc = DateTime.MinValue;
+                    _lastErrorMessage = null;
+                }
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
                 // The handle may have been invalidated (file deleted out from
-                // under us, antivirus quarantine, etc). Drop it so the next
-                // Append re-opens cleanly instead of looping on a dead stream.
+                // under us, antivirus quarantine, etc). Capture the cause so
+                // the caller can surface it once, drop the (possibly dead)
+                // handle so the next attempt re-opens cleanly, and arm the
+                // breaker once failures pile up so we stop tight-looping.
+                _lastErrorMessage = $"{ex.GetType().Name}: {ex.Message}";
+                _totalFailures++;
+                _consecutiveFailures++;
                 CloseStream();
+                if (_consecutiveFailures >= FailuresBeforeBackoff)
+                    _backoffUntilUtc = DateTime.UtcNow + BackoffWindow;
                 return false;
             }
         }
