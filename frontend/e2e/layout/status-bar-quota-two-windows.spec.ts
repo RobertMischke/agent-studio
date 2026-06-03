@@ -102,6 +102,56 @@ test.describe('Status bar quota: uniform primary pill', () => {
     await expect(codex.locator('.hquota__tag')).toContainText('5H');
   });
 
+  // Regression for the "Copilot quota windows empty / error pill" bug: the
+  // backend probe now reports the home-screen-footer "Remaining reqs." figure
+  // as a single monthly premium-requests window. This pins that the pill shows
+  // a real value (not blank / not the red error state) for that exact shape.
+  test('Copilot pill is non-empty for the footer-derived monthly window', async ({ page }) => {
+    const report = {
+      at: new Date().toISOString(),
+      ttlSeconds: 600,
+      snapshots: [
+        {
+          cliType: 'copilot',
+          fetchedAt: new Date().toISOString(),
+          plan: 'Pro',
+          // Exact shape CopilotQuotaProbe.ParseSnapshot emits for "Remaining reqs.: 71.1%".
+          windows: [
+            { label: 'Premium requests (monthly)', usedPct: 28.9, used: 87, limit: 300, unit: 'requests', resetAt: '2026-07-01T00:00:00Z', resetLabel: 'Jul 1' },
+          ],
+          source: 'home-screen footer',
+          rawSample: 'Remaining reqs.: 71.1%',
+          error: null,
+        },
+      ],
+    };
+
+    await page.route('**/api/cli/quota', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(report) });
+    });
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1200);
+
+    const card = page.getByTestId('hquota-card-copilot');
+    const copilot = page.getByTestId('hquota-copilot-primary');
+    await expect(copilot).toBeVisible();
+
+    // Non-empty: a concrete "%" value, not the muted "—" placeholder.
+    const value = copilot.locator('.hquota__value');
+    await expect(value).toContainText('29%');
+    await expect(value).not.toHaveText('—');
+    await expect(copilot.locator('.hquota__tag')).toContainText('MO');
+
+    // Not the error state (clean data, no red pill).
+    await expect(card).toHaveAttribute('data-state', /^(idle|stale|warn|hot)$/);
+
+    const outDir = process.env.JOB_RESULTS_DIR ?? 'test-results';
+    await card.screenshot({ path: `${outDir}/copilot-quota-pill.png` });
+  });
+
   test('Copilot pill renders even with a non-5H/WK window (Monthly)', async ({ page }) => {
     await page.route('**/api/cli/quota', async (route) => {
       await route.fulfill({
