@@ -41,6 +41,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [commit-push-doctrine.md](commit-push-doctrine.md) | Who owns the git commit + push boundary (the platform, not the CLI). When a CLI is allowed to commit (almost never). |
 | [skills-architecture.md](skills-architecture.md) | Portable-skills doctrine: central library plus per-target lookup contract. |
 | [supported-clis.md](supported-clis.md) | Cross-CLI invocation contract: what each CLI must satisfy (session model, output format, resume flag, quota probe). |
+| [wiki/README.md](wiki/README.md) | Project wiki conventions and the common-problems library. Search this when a familiar runtime, CLI, permission, filesystem, runner, or state-machine failure appears. |
 
 ## CLI integration (per-CLI deep refs)
 
