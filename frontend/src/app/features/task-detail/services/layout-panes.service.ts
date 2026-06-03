@@ -12,6 +12,13 @@ const DETAIL_PCT_MIN = 35;
 const DETAIL_PCT_MAX = 72;
 const DETAIL_PCT_DEFAULT = 54;
 
+// Mirror of the `.pane { min-width: 240px }` rule in task-detail.scss.
+// The splitter drag clamps its own pixel math to this floor so the CSS
+// min-width never has to override the flex weights mid-drag — that
+// override is what made the splitter detach from the cursor and spring
+// back when the drag reversed near a pane's minimum.
+const PANE_MIN_PX = 240;
+
 const VISIBLE_FALLBACK: PanesVisible = { prompt: true, protocol: true, git: false };
 // Chat-first redesign: the protocol pane (right column) hosts the
 // conversation the user actually reads, so the default split now
@@ -48,10 +55,18 @@ export class LayoutPanesService {
   private readonly layoutResizeMove = (e: PointerEvent) => this.resizeLayout(e);
   private readonly layoutResizeEnd = () => this.stopLayoutResize();
 
-  private paneResizeBounds: DOMRect | null = null;
   private paneResizeLeft: 'prompt' | 'protocol' | null = null;
   private paneResizeRight: 'protocol' | 'git' | null = null;
   private paneResizeStartTotal = 0;
+  // Drag-start reference for the pane splitter: the pointer X plus the two
+  // adjacent panes' rendered pixel widths captured on pointerdown. The
+  // move handler applies the pointer *delta* (not the absolute cursor
+  // position) to these, so the splitter tracks the cursor 1:1 with no
+  // snap-to-cursor jump on the first move and no scaling lag across the
+  // drag.
+  private paneResizeStartX = 0;
+  private paneResizeStartLeftPx = 0;
+  private paneResizeStartRightPx = 0;
   private readonly paneResizeMove = (e: PointerEvent) => this.resizePanes(e);
   private readonly paneResizeEnd = () => this.stopPaneResize();
 
@@ -115,11 +130,20 @@ export class LayoutPanesService {
 
   startPaneResize(event: PointerEvent, left: 'prompt' | 'protocol', right: 'protocol' | 'git'): void {
     event.preventDefault();
-    const container = (event.currentTarget as HTMLElement).parentElement;
-    if (!container) return;
-    this.paneResizeBounds = container.getBoundingClientRect();
+    const splitter = event.currentTarget as HTMLElement;
+    // The pane hosts (`<app-*-pane>`) use `display: contents`, so the actual
+    // flex item — and the box we can measure — is the inner `<section
+    // class="pane">`. Reach the adjacent panes through the splitter's
+    // element siblings rather than the container, so the drag math is anchored
+    // to the two panes being resized regardless of how many panes are visible.
+    const leftPane = (splitter.previousElementSibling?.firstElementChild ?? null) as HTMLElement | null;
+    const rightPane = (splitter.nextElementSibling?.firstElementChild ?? null) as HTMLElement | null;
+    if (!leftPane || !rightPane) return;
     this.paneResizeLeft = left;
     this.paneResizeRight = right;
+    this.paneResizeStartX = event.clientX;
+    this.paneResizeStartLeftPx = leftPane.getBoundingClientRect().width;
+    this.paneResizeStartRightPx = rightPane.getBoundingClientRect().width;
     this.paneResizeStartTotal = this.paneWeights()[left] + this.paneWeights()[right];
     this.paneSplitterDragging.set(true);
     window.addEventListener('pointermove', this.paneResizeMove);
@@ -127,20 +151,33 @@ export class LayoutPanesService {
   }
 
   private resizePanes(event: PointerEvent): void {
-    if (!this.paneResizeBounds || !this.paneResizeLeft || !this.paneResizeRight) return;
-    const { left, width } = this.paneResizeBounds;
-    const ratio = Math.max(0.1, Math.min(0.9, (event.clientX - left) / width));
+    if (!this.paneResizeLeft || !this.paneResizeRight) return;
+    const startSum = this.paneResizeStartLeftPx + this.paneResizeStartRightPx;
+    if (startSum <= 0) return;
+    // Delta from where the drag started, clamped so neither pane drops below
+    // PANE_MIN_PX. Clamping the delta (not the resulting weight) keeps the
+    // splitter pinned to the clamp position instead of springing back when
+    // the pointer overshoots the minimum and then reverses.
+    const lo = PANE_MIN_PX - this.paneResizeStartLeftPx;
+    const hi = this.paneResizeStartRightPx - PANE_MIN_PX;
+    let delta = event.clientX - this.paneResizeStartX;
+    if (lo <= hi) delta = Math.max(lo, Math.min(hi, delta));
+    // Because the panes use `flex: <weight>` with a zero basis, a pane's
+    // rendered width is proportional to its weight. Re-deriving the weights
+    // from the target pixel widths (preserving the pair's total weight, so
+    // any third pane is untouched) reproduces those widths exactly, so the
+    // splitter follows the cursor 1:1.
+    const leftPx = this.paneResizeStartLeftPx + delta;
     const total = this.paneResizeStartTotal;
     const w = { ...this.paneWeights() };
-    w[this.paneResizeLeft]  = Math.max(0.5, total * ratio);
-    w[this.paneResizeRight] = Math.max(0.5, total * (1 - ratio));
+    w[this.paneResizeLeft]  = total * leftPx / startSum;
+    w[this.paneResizeRight] = total * (startSum - leftPx) / startSum;
     this.paneWeights.set(w);
   }
 
   private stopPaneResize(): void {
     window.removeEventListener('pointermove', this.paneResizeMove);
     window.removeEventListener('pointerup', this.paneResizeEnd);
-    this.paneResizeBounds = null;
     this.paneResizeLeft = null;
     this.paneResizeRight = null;
     this.paneSplitterDragging.set(false);
