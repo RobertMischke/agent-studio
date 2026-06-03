@@ -531,14 +531,15 @@
                                     [appTooltip]="'Move down'"
                                     [disabled]="!canMoveWorkspaceDown(ws) || registryWorkspaceBusyId() === ws.id"
                                     (click)="moveRegistryWorkspace(ws, 1)">▼</button>
-                            <button type="button"
-                                    class="studio-settings-workspace-action studio-settings-workspace-action--danger"
-                                    data-testid="settings-workspace-delete"
-                                    [appTooltip]="ws.isDefault
-                                      ? 'Default workspace cannot be deleted'
-                                      : 'Delete'"
-                                    [disabled]="ws.isDefault || registryWorkspaceBusyId() === ws.id"
-                                    (click)="deleteRegistryWorkspace(ws)">×</button>
+                            <span class="studio-settings-workspace-action-wrap"
+                                  [appTooltip]="workspaceDeleteTooltip(ws)">
+                              <button type="button"
+                                      class="studio-settings-workspace-action studio-settings-workspace-action--danger"
+                                      data-testid="settings-workspace-delete"
+                                      [attr.aria-disabled]="!canDeleteWorkspace(ws)"
+                                      [disabled]="!canDeleteWorkspace(ws) || registryWorkspaceBusyId() === ws.id"
+                                      (click)="deleteRegistryWorkspace(ws)">×</button>
+                            </span>
                           </div>
                           @if (ws.projects.length > 0) {
                             <ul class="studio-settings-projects"

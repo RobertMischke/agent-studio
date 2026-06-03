@@ -1317,6 +1317,13 @@
   justify-content: flex-end;
 }
 
+// Wrapper carries the tooltip so the delete reason stays readable on hover
+// while the button itself is disabled (browsers suppress hover events on
+// disabled controls, so the tooltip host must stay enabled).
+.studio-settings-workspace-action-wrap {
+  display: inline-flex;
+}
+
 .studio-settings-workspace-action {
   background: transparent;
   border: 1px solid transparent;
@@ -1338,6 +1345,8 @@
   &[disabled] {
     cursor: not-allowed;
     opacity: 0.45;
+    // Let hover fall through to the wrapping tooltip host above.
+    pointer-events: none;
   }
 
   &--danger:hover:not([disabled]) {

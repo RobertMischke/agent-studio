@@ -403,35 +403,45 @@ export class StudioShellComponent {
   }
 
   /**
-   * F66 — delete a workspace after a confirm dialog. Per ADR-0048 the registry
-   * auto-rehomes any assigned projects to <c>ws-default</c>; the project
-   * `StorageLocation` on disk is never touched. The confirm prompt warns
-   * about how many projects will be rehomed so the operator can back out.
+   * F66 — delete a workspace after a confirm dialog. Delete is only allowed
+   * once the workspace is empty: per ADR-0048 the operator must move every
+   * project out first (no auto-rehome). The button is disabled while projects
+   * remain, and the backend rejects a populated delete with a 409; this guard
+   * is the matching client-side defence.
    */
   deleteRegistryWorkspace(ws: RegistryWorkspaceListItem): void {
-    if (ws.isDefault) return;
-    const assigned = ws.projects.length;
-    const message = assigned === 0
-      ? `Delete workspace "${ws.displayName}"?`
-      : `Delete workspace "${ws.displayName}"?\n\n${assigned} project(s) will be moved to the Default workspace. The project folders on disk are not affected.`;
-    const ok = window.confirm(message);
+    if (!this.canDeleteWorkspace(ws)) return;
+    const ok = window.confirm(`Delete workspace "${ws.displayName}"?`);
     if (!ok) return;
     this.registryWorkspaceBusyId.set(ws.id);
     this.jobService.deleteRegistryWorkspace(ws.id).subscribe({
       next: () => {
         this.registryWorkspaceBusyId.set(null);
         this.reloadRegistryWorkspaces();
-        if (assigned > 0) {
-          this.notifications.info(
-            `Workspace "${ws.displayName}" deleted; ${assigned} project(s) moved to the Default workspace.`,
-          );
-        }
       },
       error: (err: unknown) => {
         this.registryWorkspaceBusyId.set(null);
         this.registryWorkspacesError.set(this.errMsg(err));
       },
     });
+  }
+
+  /** A workspace is deletable only when it is non-default and holds no
+   *  projects; the operator moves projects out first (no auto-rehome). */
+  canDeleteWorkspace(ws: RegistryWorkspaceListItem): boolean {
+    return !ws.isDefault && ws.projects.length === 0;
+  }
+
+  /** Tooltip explaining the delete button's enabled/disabled reason:
+   *  default workspace is never deletable, a populated one must be emptied
+   *  first, an empty non-default one is ready to delete. */
+  workspaceDeleteTooltip(ws: RegistryWorkspaceListItem): string {
+    if (ws.isDefault) return 'Default workspace cannot be deleted';
+    const count = ws.projects.length;
+    if (count > 0) {
+      return `Move all ${count} project${count === 1 ? '' : 's'} out of this workspace before it can be deleted.`;
+    }
+    return 'Delete this workspace';
   }
 
   /** Up arrow is disabled when the workspace is already at the top of the list. */

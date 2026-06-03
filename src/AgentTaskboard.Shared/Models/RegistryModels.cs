@@ -95,12 +95,11 @@ public static class DefaultWorkspace
 }
 
 /// <summary>
-/// F66 — return shape for <c>DELETE /api/workspaces/{id}</c>. Lists the
-/// projects that were auto-rehomed to <c>ws-default</c> as part of the
-/// delete so the UI can surface a "moved N project(s) to Default" toast.
+/// F66 — return shape for <c>DELETE /api/workspaces/{id}</c>. The delete is
+/// blocked (409) while any project is still assigned, so a successful response
+/// only echoes the deleted id.
 /// </summary>
 public sealed record WorkspaceDeleteResult
 {
     public string DeletedId { get; init; } = "";
-    public List<string> RehomedProjectIds { get; init; } = [];
 }

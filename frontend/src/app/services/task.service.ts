@@ -475,13 +475,14 @@ export class TaskService {
   }
 
   /**
-   * F66 — delete a workspace. Backend refuses the default workspace (409)
-   * but auto-rehomes any still-assigned projects onto `ws-default` and
-   * returns the list of rehomed project ids so the UI can surface a
-   * "moved N project(s) to Default" toast.
+   * F66 — delete a workspace. The backend refuses the default workspace (409)
+   * and also refuses (409) any non-default workspace that still has projects
+   * assigned, with a "move all N projects out first" message in the error
+   * body. Projects are never auto-moved; the operator empties the workspace,
+   * then it is deletable.
    */
   deleteRegistryWorkspace(id: string) {
-    return this.http.delete<{ deletedId: string; rehomedProjectIds: string[] }>(
+    return this.http.delete<{ deletedId: string }>(
       `${this.baseUrl}/workspaces/${encodeURIComponent(id)}`);
   }
 

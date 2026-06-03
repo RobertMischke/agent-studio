@@ -268,12 +268,13 @@ public sealed class WorkspaceRegistry
     }
 
     /// <summary>
-    /// F66 — delete a workspace. Refuses to delete the default workspace. Any
-    /// projects still assigned to the workspace are auto-rehomed to
-    /// <c>ws-default</c> before the workspace row is removed; the rehomed ids
-    /// are returned so the caller can surface them to the user.
-    /// Per ADR-0048 a workspace is a virtual grouping — deleting it never
-    /// touches the filesystem and never affects project storage locations.
+    /// F66 — delete a workspace. Refuses to delete the default workspace, and
+    /// refuses (throws <see cref="InvalidOperationException"/>) any workspace
+    /// that still has projects assigned: the operator must move every project
+    /// out first. There is no auto-rehome — silently relocating projects on a
+    /// delete hides where work lives, so the delete blocks until the workspace
+    /// is empty. Per ADR-0048 a workspace is a virtual grouping; deleting it
+    /// never touches the filesystem and never affects project storage locations.
     /// </summary>
     public WorkspaceDeleteResult Delete(string id, ProjectRegistry projects)
     {
@@ -287,30 +288,27 @@ public sealed class WorkspaceRegistry
             if (existing.IsDefault)
                 throw new InvalidOperationException("Default workspace cannot be deleted");
 
-            var rehomed = projects.List()
+            var assigned = projects.List()
                 .Where(p => string.Equals(p.WorkspaceId, id, StringComparison.OrdinalIgnoreCase))
                 .Select(p => p.Id)
                 .ToList();
-            foreach (var projId in rehomed)
-            {
-                projects.SetWorkspaceUnchecked(projId, DefaultWorkspace.Id);
-            }
-            if (rehomed.Count > 0)
+            if (assigned.Count > 0)
             {
                 _logger.LogInformation(
-                    "workspace-registry-delete-rehomed sourceWs={Id} targetWs={TargetWs} count={Count} projectIds={ProjectIds}",
-                    id, DefaultWorkspace.Id, rehomed.Count, string.Join(",", rehomed));
+                    "workspace-registry-delete-blocked id={Id} assignedProjects={Count} projectIds={ProjectIds}",
+                    id, assigned.Count, string.Join(",", assigned));
+                throw new InvalidOperationException(
+                    $"Move all {assigned.Count} project{(assigned.Count == 1 ? "" : "s")} out of this workspace before deleting it.");
             }
+
             _state = _state with
             {
                 Workspaces = [.. _state.Workspaces.Where(w =>
                     !string.Equals(w.Id, id, StringComparison.OrdinalIgnoreCase))],
             };
             PersistLocked();
-            _logger.LogInformation(
-                "workspace-registry-deleted id={Id} rehomedProjects={Count}",
-                id, rehomed.Count);
-            return new WorkspaceDeleteResult { DeletedId = id, RehomedProjectIds = rehomed };
+            _logger.LogInformation("workspace-registry-deleted id={Id}", id);
+            return new WorkspaceDeleteResult { DeletedId = id };
         }
     }
 

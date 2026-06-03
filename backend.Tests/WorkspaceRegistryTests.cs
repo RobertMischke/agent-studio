@@ -222,7 +222,7 @@ public class WorkspaceRegistryTests : IDisposable
     }
 
     [Fact]
-    public void Delete_RehomesAssignedProjectsToDefault()
+    public void Delete_BlocksWhenProjectsAssigned_LeavesProjectsAndWorkspaceUntouched()
     {
         var reg = Build();
         reg.EnsureDefaultWorkspace();
@@ -237,19 +237,19 @@ public class WorkspaceRegistryTests : IDisposable
             initialDisplayName: "Proj B",
             workspaceId: ws.Id);
 
-        var result = reg.Delete(ws.Id, projects);
+        var ex = Assert.Throws<InvalidOperationException>(() => reg.Delete(ws.Id, projects));
+        // Message names the count so the 409 the endpoint surfaces is actionable.
+        Assert.Contains("2 projects", ex.Message);
 
-        Assert.Equal(ws.Id, result.DeletedId);
-        Assert.Equal(2, result.RehomedProjectIds.Count);
-        Assert.Contains(projA.Id, result.RehomedProjectIds);
-        Assert.Contains(projB.Id, result.RehomedProjectIds);
-        Assert.Null(reg.Find(ws.Id));
-        Assert.Equal(DefaultWorkspace.Id, projects.FindById(projA.Id)!.WorkspaceId);
-        Assert.Equal(DefaultWorkspace.Id, projects.FindById(projB.Id)!.WorkspaceId);
+        // No auto-rehome: both projects stay on the workspace and the
+        // workspace row survives.
+        Assert.NotNull(reg.Find(ws.Id));
+        Assert.Equal(ws.Id, projects.FindById(projA.Id)!.WorkspaceId);
+        Assert.Equal(ws.Id, projects.FindById(projB.Id)!.WorkspaceId);
     }
 
     [Fact]
-    public void Delete_EmptyWorkspace_ReturnsEmptyRehomedList()
+    public void Delete_EmptyWorkspace_Succeeds()
     {
         var reg = Build();
         reg.EnsureDefaultWorkspace();
@@ -259,7 +259,7 @@ public class WorkspaceRegistryTests : IDisposable
         var result = reg.Delete(ws.Id, projects);
 
         Assert.Equal(ws.Id, result.DeletedId);
-        Assert.Empty(result.RehomedProjectIds);
+        Assert.Null(reg.Find(ws.Id));
     }
 
     private ProjectRegistry BuildProjectRegistry() =>

@@ -68,6 +68,72 @@ test.describe('Settings panel — Workspaces section (F47)', () => {
     await expect(note).toContainText('F45b');
   });
 
+  test('blocks delete while a workspace still holds projects, with the reason in the tooltip (F66)', async ({ page }) => {
+    // Inject a deterministic workspace list so the gating is exercised without
+    // mutating the shared dev registry: one default, one empty non-default
+    // (deletable), one populated non-default (blocked). Same route-stub
+    // approach the project-drag spec uses to avoid touching real state.
+    const now = '2026-01-01T00:00:00Z';
+    const project = (id: string, workspaceId: string) => ({
+      id, displayName: id, shortCode: id, workspaceId,
+      color: null, cliDefault: null, modelDefault: null,
+      sortOrder: 0, storageLocation: `C:/proj/${id}`, archived: false, createdAt: now,
+    });
+    const stub = [
+      { id: 'ws-default', displayName: 'Default', sortOrder: 0, isDefault: true, color: null, createdAt: now, projects: [] },
+      { id: 'ws-empty', displayName: 'Empty WS', sortOrder: 1, isDefault: false, color: null, createdAt: now, projects: [] },
+      {
+        id: 'ws-pop', displayName: 'Populated WS', sortOrder: 2, isDefault: false, color: null, createdAt: now,
+        projects: [project('PROJ-901', 'ws-pop'), project('PROJ-902', 'ws-pop')],
+      },
+    ];
+    await page.route('**/api/workspaces', async (route, request) => {
+      if (request.method() !== 'GET') { await route.continue(); return; }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(stub) });
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.getByTestId('studio-ab-settings').click();
+    await expect(page.getByTestId('settings-workspaces')).toBeVisible({ timeout: 10_000 });
+
+    const deleteIn = (wsId: string) =>
+      page.locator(`[data-workspace-id="${wsId}"]`).getByTestId('settings-workspace-delete');
+
+    // Default + populated → delete blocked. Empty non-default → deletable.
+    await expect(deleteIn('ws-default')).toBeDisabled();
+    await expect(deleteIn('ws-pop')).toBeDisabled();
+    await expect(deleteIn('ws-empty')).toBeEnabled();
+
+    // The reason is still readable on hover even though the button is disabled
+    // (the tooltip host is the enabled wrapper around the button).
+    const popWrap = page.locator('[data-workspace-id="ws-pop"] .studio-settings-workspace-action-wrap');
+    await popWrap.hover();
+    const tip = page.getByTestId('app-tooltip');
+    await expect(tip).toBeVisible({ timeout: 5_000 });
+    await expect(tip.locator('.app-tooltip__body'))
+      .toHaveText('Move all 2 projects out of this workspace before it can be deleted.');
+
+    // Clip the screenshot around the Workspaces section (plus headroom for the
+    // tooltip that renders just outside the row) so the captured artifact is
+    // legible rather than a full-board thumbnail.
+    const panel = await page.getByTestId('settings-workspaces').boundingBox();
+    if (panel) {
+      const pad = 24;
+      await page.screenshot({
+        path: 'test-results/workspace-delete-blocked-tooltip.png',
+        clip: {
+          x: Math.max(0, panel.x - pad),
+          y: Math.max(0, panel.y - pad),
+          width: panel.width + pad * 2,
+          height: panel.height + pad * 3,
+        },
+      });
+    } else {
+      await page.screenshot({ path: 'test-results/workspace-delete-blocked-tooltip.png' });
+    }
+  });
+
   test('create → rename → delete round-trip via the REST API surface', async ({ page, request }) => {
     // The mutation endpoints require an X-Client-Id header on every write.
     // Register a throwaway identity for the run.

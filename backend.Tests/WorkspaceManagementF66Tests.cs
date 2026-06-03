@@ -20,8 +20,9 @@ namespace OrchestratorApi.Tests;
 /// directories are created, moved, or deleted.</item>
 /// <item>Project workspace reassignment touches only <c>projects.json</c>
 /// — the project's <c>StorageLocation</c> on disk is not moved.</item>
-/// <item>Delete auto-rehomes assigned projects onto <c>ws-default</c>;
-/// the project's <c>StorageLocation</c> is preserved.</item>
+/// <item>Delete is blocked while projects are still assigned (no
+/// auto-rehome); once the workspace is empty it deletes and nothing on
+/// disk is touched.</item>
 /// </list>
 ///
 /// These tests guard ADR-0048 ("workspaces are virtual groupings; projects
@@ -213,12 +214,13 @@ public sealed class WorkspaceManagementF66Tests : IDisposable
     }
 
     // ------------------------------------------------------------------
-    // Hard rule: deleting a non-default workspace auto-rehomes its
-    // projects onto ws-default; storage locations are preserved.
+    // Hard rule: deleting a non-default workspace is blocked while it
+    // still has projects assigned. The operator must move every project
+    // out first; there is no auto-rehome and nothing on disk is touched.
     // ------------------------------------------------------------------
 
     [Fact]
-    public void Delete_RehomesProjects_PreservesStorageLocations()
+    public void Delete_BlocksWhileProjectsAssigned_LeavesEverythingInPlace()
     {
         var workspaces = BuildWorkspaces();
         var projects = BuildProjects();
@@ -231,20 +233,41 @@ public sealed class WorkspaceManagementF66Tests : IDisposable
         var a = projects.EnsureProjectForStorage(storageA, "Proj A", ws.Id);
         var b = projects.EnsureProjectForStorage(storageB, "Proj B", ws.Id);
 
-        var result = workspaces.Delete(ws.Id, projects);
+        Assert.Throws<InvalidOperationException>(() => workspaces.Delete(ws.Id, projects));
 
-        Assert.Equal(ws.Id, result.DeletedId);
-        Assert.Equal(2, result.RehomedProjectIds.Count);
-        Assert.Contains(a.Id, result.RehomedProjectIds);
-        Assert.Contains(b.Id, result.RehomedProjectIds);
-        Assert.Null(workspaces.Find(ws.Id));
-        Assert.Equal(DefaultWorkspace.Id, projects.FindById(a.Id)!.WorkspaceId);
-        Assert.Equal(DefaultWorkspace.Id, projects.FindById(b.Id)!.WorkspaceId);
-        // Storage on disk untouched by the workspace delete.
+        // Workspace survives, projects stay assigned to it (no rehome),
+        // and storage on disk is untouched.
+        Assert.NotNull(workspaces.Find(ws.Id));
+        Assert.Equal(ws.Id, projects.FindById(a.Id)!.WorkspaceId);
+        Assert.Equal(ws.Id, projects.FindById(b.Id)!.WorkspaceId);
         Assert.True(Directory.Exists(storageA));
         Assert.True(Directory.Exists(storageB));
         Assert.Equal(storageA, projects.FindById(a.Id)!.StorageLocation);
         Assert.Equal(storageB, projects.FindById(b.Id)!.StorageLocation);
+    }
+
+    [Fact]
+    public void Delete_SucceedsOnceWorkspaceIsEmpty()
+    {
+        var workspaces = BuildWorkspaces();
+        var projects = BuildProjects();
+        workspaces.EnsureDefaultWorkspace();
+        var ws = workspaces.Create("Frontend");
+        var storage = Path.Combine(_root, "proj-a");
+        Directory.CreateDirectory(storage);
+        var a = projects.EnsureProjectForStorage(storage, "Proj A", ws.Id);
+
+        // Blocked while populated...
+        Assert.Throws<InvalidOperationException>(() => workspaces.Delete(ws.Id, projects));
+        // ...move the project out, then the empty workspace deletes.
+        projects.SetWorkspace(a.Id, DefaultWorkspace.Id, workspaces);
+
+        var result = workspaces.Delete(ws.Id, projects);
+
+        Assert.Equal(ws.Id, result.DeletedId);
+        Assert.Null(workspaces.Find(ws.Id));
+        Assert.Equal(DefaultWorkspace.Id, projects.FindById(a.Id)!.WorkspaceId);
+        Assert.True(Directory.Exists(storage)); // storage untouched throughout
     }
 
     // ------------------------------------------------------------------
