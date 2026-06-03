@@ -82,6 +82,33 @@ public class TaskSessionLog
     }
 
     /// <summary>
+    /// Captures the exact context string handed to the CLI for one run into
+    /// its own file under <c>logs/run-context/</c> and returns the relative,
+    /// forward-slashed path to store on the run's <see cref="SessionEvent.ContextRef"/>.
+    /// Kept out of <c>session-events.jsonl</c> (and therefore the polled runs
+    /// list) on purpose: a rendered prompt is multi-KB, so inlining it would
+    /// bloat every 5 s poll. The file is served on demand by the per-run
+    /// context endpoint. Best-effort: a write failure returns null and the run
+    /// is recorded with no context ref rather than failing the spawn.
+    /// </summary>
+    public string? PersistRunContext(string jobFolder, string context)
+    {
+        try
+        {
+            var dir = TaskPaths.RunContextDir(jobFolder);
+            Directory.CreateDirectory(dir);
+            var fileName = $"run-{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}.md";
+            File.WriteAllText(Path.Combine(dir, fileName), context ?? string.Empty, Encoding.UTF8);
+            return $"{TaskPaths.LogsDirName}/{TaskPaths.RunContextDirName}/{fileName}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist run context under {JobFolder}", jobFolder);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Append-one-line writer for <c>logs/session-events.jsonl</c>. JSONL keeps
     /// the file cheap to tail and tolerant to interrupted writes — a torn line
     /// is one lost event, not a corrupted document.

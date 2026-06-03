@@ -775,6 +775,13 @@ public class ProjectRunner
             // treat the software-side change set as a first-class signal.
             var headShaBefore = SafeGetHeadSha(jobId);
 
+            // Capture the exact context handed to the agent for this run so the
+            // run timeline can show *what* the run was started with (prompt +
+            // foregrounded open-items + resume framing). `prompt` is final here:
+            // RenderPrompt + the optional reissue open-items prepend have both
+            // run. Stored in its own file (multi-KB), referenced from the event.
+            var contextRef = _sessions.PersistRunContext(info.FolderPath, prompt);
+
             _sessions.AppendSessionEvent(jobId, new SessionEvent
             {
                 Ts = DateTime.UtcNow,
@@ -784,7 +791,8 @@ public class ProjectRunner
                 CapturedSessionId = null,
                 Resumed = plan.ResumeFlag,
                 Reason = plan.EventReason,
-                HeadShaBefore = headShaBefore
+                HeadShaBefore = headShaBefore,
+                ContextRef = contextRef
             }, Entry.Path);
 
             // ADR-0049: mirror the run-start onto the unified timeline so the

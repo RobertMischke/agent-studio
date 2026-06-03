@@ -147,6 +147,24 @@
 .run-card__commits-loading, .run-card__commits-empty, .run-card__commits-error { color: var(--studio-fg-dim); font-style: italic; font-size: 11.5px; }
 .run-card__commits-error { color: var(--severity-high); }
 
+.run-card__row--context { flex-direction: row; }
+.run-card__context { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.run-card__context-toggle {
+  align-self: flex-start;
+  background: transparent; border: 1px solid var(--studio-border); color: var(--studio-fg);
+  padding: 3px 8px; border-radius: 6px; font-size: 11.5px; cursor: pointer;
+}
+.run-card__context-toggle:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+.run-card__context-pre {
+  margin: 0; max-height: 320px; overflow: auto;
+  padding: 8px 10px; border: 1px solid var(--studio-border); border-radius: 6px;
+  background: var(--studio-bg-elevated); color: var(--studio-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+.run-card__context-loading, .run-card__context-empty, .run-card__context-error { color: var(--studio-fg-dim); font-style: italic; font-size: 11.5px; }
+.run-card__context-error { color: var(--severity-high); }
+
 .run-card__row--actions { gap: 6px; }
 .run-card__filter { background: transparent; border: 1px solid var(--studio-border); color: var(--studio-fg); padding: 3px 8px; border-radius: 6px; font-size: 11.5px; cursor: pointer; }
 .run-card__filter:hover:not(:disabled) { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }

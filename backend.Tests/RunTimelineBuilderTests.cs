@@ -148,6 +148,34 @@ public class RunTimelineBuilderTests
     }
 
     [Fact]
+    public void ContextRef_IsCarriedFromEventOntoRunRecord()
+    {
+        // The per-run passed-context pointer travels on the SessionEvent so it
+        // stays 1:1 with the run even under torn writes. The builder must copy
+        // it verbatim onto the RunRecord that the /runs/{index}/context
+        // endpoint later dereferences; a null event ref stays null.
+        var events = new List<SessionEvent>
+        {
+            new() { Ts = T0, Kind = "start", Cli = "claude", ContextRef = "logs/run-context/run-20260503-100000-000.md" },
+            new() { Ts = T0.AddSeconds(120), Kind = "continue", Cli = "claude", Resumed = true, InputSessionId = "uuid-1" }
+        };
+        var lines = new List<CliOutputLine>
+        {
+            Sys(0, "[taskboard] Started claude CLI (PID 1234)"),
+            Sys(50, "[taskboard] claude CLI exited: status=completed, exitCode=0, duration=50s"),
+            User(110, "Keep going"),
+            Sys(120, "[taskboard] Started claude CLI (PID 1235)"),
+            Sys(180, "[taskboard] claude CLI exited: status=completed, exitCode=0, duration=60s")
+        };
+
+        var t = RunTimelineBuilder.Build(events, lines, T0.AddSeconds(200));
+
+        Assert.Equal(2, t.RunCount);
+        Assert.Equal("logs/run-context/run-20260503-100000-000.md", t.Runs[0].ContextRef);
+        Assert.Null(t.Runs[1].ContextRef);
+    }
+
+    [Fact]
     public void ExitMarkerAfterNextEvent_IsNotMisattributed()
     {
         // Defensive: even though the product is sequential per project,

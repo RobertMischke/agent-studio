@@ -245,6 +245,54 @@ public static class TaskRunnerEndpoints
             return Results.Ok(new { diff });
         });
 
+        // The exact context handed to the agent for run #index: the rendered
+        // prompt template plus the task's prompt.md, attachments list, mode
+        // framing, and any foregrounded reissue open-items block. Captured at
+        // spawn time into logs/run-context/<ts>.md and referenced from the
+        // run's session event (ContextRef). Served on demand so the polled
+        // runs list stays lean. Makes reruns / escalations auditable: the run
+        // card can show *what* the run was started with. Index is 1-based to
+        // match RunRecord.Index.
+        group.MapGet("/{jobId}/runs/{index:int}/context", (
+            string jobId, int index, string? watchPath,
+            TaskScannerService scanner, TaskSessionLog sessions) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            if (run == null) return Results.NotFound(new { error });
+
+            if (string.IsNullOrWhiteSpace(run.ContextRef))
+            {
+                return Results.Ok(new
+                {
+                    runIndex = run.Index,
+                    context = (string?)null,
+                    note = "No passed-context captured for this run (recorded before context capture, or the write failed)."
+                });
+            }
+
+            // ContextRef is a relative path we wrote ourselves, but it comes
+            // off disk - guard against a tampered '..' escaping the job folder.
+            var folderFull = Path.GetFullPath(info.FolderPath);
+            var contextFull = Path.GetFullPath(Path.Combine(info.FolderPath, run.ContextRef));
+            if (!contextFull.StartsWith(folderFull, StringComparison.Ordinal) || !File.Exists(contextFull))
+            {
+                return Results.Ok(new
+                {
+                    runIndex = run.Index,
+                    context = (string?)null,
+                    note = "Context file missing or outside the job folder."
+                });
+            }
+
+            string context;
+            try { context = File.ReadAllText(contextFull); }
+            catch { context = string.Empty; }
+
+            return Results.Ok(new { runIndex = run.Index, context });
+        });
+
         // Manual re-trigger of the Haiku summary that the runner normally fires
         // post-execution. Surfaced behind a button while we iterate on the prompt
         // and observe failure modes — overwrites status.md when Haiku succeeds.

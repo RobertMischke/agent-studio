@@ -11,10 +11,13 @@ internal static class TaskPaths
     public const string SessionEventsLogFileName = "session-events.jsonl";
     public const string TimelineLogFileName = "timeline.jsonl";
     public const string LogsDirName = "logs";
+    public const string RunContextDirName = "run-context";
     public const string ResultsDirName = "results";
     public const string ReviewEvidenceFileName = "review-evidence.jsonl";
 
     public static string LogsDir(string jobFolder) => Path.Combine(jobFolder, LogsDirName);
+    /// <summary>Per-run captured-context files (<c>logs/run-context/&lt;ts&gt;.md</c>); see <c>SessionEvent.ContextRef</c>.</summary>
+    public static string RunContextDir(string jobFolder) => Path.Combine(jobFolder, LogsDirName, RunContextDirName);
     public static string CliOutputLog(string jobFolder) => Path.Combine(jobFolder, LogsDirName, CliOutputLogFileName);
     public static string SessionEventsLog(string jobFolder) => Path.Combine(jobFolder, LogsDirName, SessionEventsLogFileName);
     public static string TimelineLog(string jobFolder) => Path.Combine(jobFolder, LogsDirName, TimelineLogFileName);

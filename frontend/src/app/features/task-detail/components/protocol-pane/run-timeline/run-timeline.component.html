@@ -113,6 +113,33 @@
                   </div>
                 }
               </div>
+              <div class="run-card__row run-card__row--context">
+                <span class="run-card__row-label">Passed context</span>
+                @if (r.contextRef) {
+                  <div class="run-card__context">
+                    <button type="button"
+                            class="run-card__context-toggle"
+                            [attr.data-testid]="'run-context-toggle-' + r.index"
+                            [attr.aria-expanded]="contextExpandedIndex() === r.index"
+                            (click)="toggleContext(r.index); $event.stopPropagation()">
+                      {{ contextExpandedIndex() === r.index ? 'Hide passed context' : 'Show passed context' }}
+                    </button>
+                    @if (contextExpandedIndex() === r.index) {
+                      @if (contextState() === 'loading') {
+                        <span class="run-card__context-loading">loading…</span>
+                      } @else if (contextError()) {
+                        <span class="run-card__context-error">{{ contextError() }}</span>
+                      } @else if (!contextText()) {
+                        <span class="run-card__context-empty">No context captured for this run.</span>
+                      } @else {
+                        <pre class="run-card__context-pre" [attr.data-testid]="'run-context-pre-' + r.index">{{ contextText() }}</pre>
+                      }
+                    }
+                  </div>
+                } @else {
+                  <span class="run-card__context-empty">Not captured for this run.</span>
+                }
+              </div>
               <div class="run-card__row run-card__row--actions">
                 <button type="button"
                         class="run-card__filter"
@@ -204,6 +231,33 @@
                     }
                   </ul>
                 </div>
+              }
+            </div>
+            <div class="run-card__row run-card__row--context">
+              <span class="run-card__row-label">Passed context</span>
+              @if (r.contextRef) {
+                <div class="run-card__context">
+                  <button type="button"
+                          class="run-card__context-toggle"
+                          [attr.data-testid]="'run-context-toggle-' + r.index"
+                          [attr.aria-expanded]="contextExpandedIndex() === r.index"
+                          (click)="toggleContext(r.index); $event.stopPropagation()">
+                    {{ contextExpandedIndex() === r.index ? 'Hide passed context' : 'Show passed context' }}
+                  </button>
+                  @if (contextExpandedIndex() === r.index) {
+                    @if (contextState() === 'loading') {
+                      <span class="run-card__context-loading">loading…</span>
+                    } @else if (contextError()) {
+                      <span class="run-card__context-error">{{ contextError() }}</span>
+                    } @else if (!contextText()) {
+                      <span class="run-card__context-empty">No context captured for this run.</span>
+                    } @else {
+                      <pre class="run-card__context-pre" [attr.data-testid]="'run-context-pre-' + r.index">{{ contextText() }}</pre>
+                    }
+                  }
+                </div>
+              } @else {
+                <span class="run-card__context-empty">Not captured for this run.</span>
               }
             </div>
             <div class="run-card__row run-card__row--actions">

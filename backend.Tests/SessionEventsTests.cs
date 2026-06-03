@@ -218,4 +218,30 @@ public class SessionEventsTests : IDisposable
         var info = scanner.FindJob("fresh-task", _watchPath)!;
         Assert.Empty(info.SessionChain);
     }
+
+    /// <summary>
+    /// The per-run passed-context snapshot is written to its own file under
+    /// <c>logs/run-context/</c> (kept out of the polled events log) and the
+    /// returned pointer must be a forward-slashed relative path under the job
+    /// folder so the <c>/runs/{index}/context</c> endpoint can dereference it
+    /// and the path-traversal guard can verify it stays inside the folder.
+    /// </summary>
+    [Fact]
+    public void PersistRunContext_WritesFileAndReturnsRelativePointer()
+    {
+        WriteJob(TaskStates.Progress, "demo-task");
+        var (scanner, sessions) = BuildServices();
+        var folder = scanner.FindJob("demo-task", _watchPath)!.FolderPath;
+
+        const string context = "PROMPT\n\n## Open items\n- carry these forward";
+        var rel = sessions.PersistRunContext(folder, context);
+
+        Assert.NotNull(rel);
+        Assert.StartsWith("logs/run-context/", rel);
+        Assert.DoesNotContain('\\', rel!); // forward-slashed for the endpoint guard
+
+        var full = Path.Combine(folder, rel);
+        Assert.True(File.Exists(full));
+        Assert.Equal(context, File.ReadAllText(full));
+    }
 }

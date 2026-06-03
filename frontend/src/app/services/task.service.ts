@@ -46,6 +46,7 @@ import type {
   RunCommitsResponse,
   RunFilesResponse,
   RunDiffResponse,
+  RunContextResponse,
 } from '../features/run-timeline';
 import type { TaskTimelineEvent } from '../features/task-timeline';
 import type {
@@ -998,6 +999,14 @@ export class TaskService {
     return this.http.get<RunDiffResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/runs/${runIndex}/diff`,
       this.withWatchPathAndPath(watchPath, path),
+    );
+  }
+
+  /** The exact context (rendered prompt) handed to the agent for one run. Fetched on demand from the run card. */
+  getRunContext(jobId: string, runIndex: number, watchPath?: string) {
+    return this.http.get<RunContextResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/runs/${runIndex}/context`,
+      this.withWatchPath(watchPath),
     );
   }
 

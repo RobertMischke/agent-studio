@@ -81,6 +81,20 @@ export class RunTimelineComponent {
   readonly commitsState = signal<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   readonly commitsError = signal<string | null>(null);
 
+  // Per-card passed-context state. The context (rendered prompt) can be
+  // multi-KB, so it is fetched lazily only when the user reveals it, keyed
+  // by run.index so the cached text survives a timeline re-poll.
+  readonly contextExpandedIndex = signal<number | null>(null);
+  readonly contextByRun = signal<Map<number, string | null>>(new Map());
+  readonly contextState = signal<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  readonly contextError = signal<string | null>(null);
+
+  readonly contextText = computed<string | null>(() => {
+    const idx = this.contextExpandedIndex();
+    if (idx == null) return null;
+    return this.contextByRun().get(idx) ?? null;
+  });
+
   /** Most recent first - the user usually wants to see what just happened. */
   readonly visibleRuns = computed(() => [...this.runs()].sort((a, b) => b.index - a.index));
 
@@ -99,14 +113,27 @@ export class RunTimelineComponent {
   toggle(index: number): void {
     if (this.expandedIndex() === index) {
       this.expandedIndex.set(null);
+      this.contextExpandedIndex.set(null);
       return;
     }
     this.expandedIndex.set(index);
+    this.contextExpandedIndex.set(null);
     this.loadCommits(index);
   }
 
   closePopover(): void {
     this.expandedIndex.set(null);
+    this.contextExpandedIndex.set(null);
+  }
+
+  /** Reveal / hide the context block for a run, fetching the text on first reveal. */
+  toggleContext(index: number): void {
+    if (this.contextExpandedIndex() === index) {
+      this.contextExpandedIndex.set(null);
+      return;
+    }
+    this.contextExpandedIndex.set(index);
+    this.loadContext(index);
   }
 
   /**
@@ -207,6 +234,32 @@ export class RunTimelineComponent {
       error: (err) => {
         this.commitsError.set(err?.error?.error || err?.message || 'Could not load commits.');
         this.commitsState.set('error');
+      }
+    });
+  }
+
+  private loadContext(index: number): void {
+    const job = this.job();
+    if (!job) return;
+    if (this.contextByRun().has(index)) {
+      // Cached from a previous reveal; the context for a finished run never
+      // changes, so don't re-fetch the multi-KB payload.
+      this.contextState.set('loaded');
+      this.contextError.set(null);
+      return;
+    }
+    this.contextState.set('loading');
+    this.contextError.set(null);
+    this.jobService.getRunContext(job.id, index, job.watchPath).subscribe({
+      next: (res) => {
+        const map = new Map(this.contextByRun());
+        map.set(index, res.context ?? null);
+        this.contextByRun.set(map);
+        this.contextState.set('loaded');
+      },
+      error: (err) => {
+        this.contextError.set(err?.error?.error || err?.message || 'Could not load context.');
+        this.contextState.set('error');
       }
     });
   }

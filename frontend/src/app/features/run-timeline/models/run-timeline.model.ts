@@ -29,6 +29,20 @@ export interface RunRecord {
   headShaBefore: string | null;
   /** HEAD SHA after the run finished. Equal to headShaBefore when the agent did not commit. */
   headShaAfter: string | null;
+  /**
+   * Relative path (under the job folder) to the captured context this run
+   * was started with. Non-null means the "Show passed context" affordance is
+   * offered; the full text is fetched on demand from
+   * `/api/tasks/{id}/runs/{index}/context`, never inlined in the polled list.
+   */
+  contextRef: string | null;
+}
+
+/** Response of `GET /api/tasks/{id}/runs/{index}/context`. `context` is null when nothing was captured for the run. */
+export interface RunContextResponse {
+  runIndex: number;
+  context: string | null;
+  note?: string;
 }
 
 export interface RunTimeline {

@@ -46,6 +46,14 @@ public sealed record RunRecord
     public string? HeadShaBefore { get; init; }
     /// <summary>HEAD SHA captured after the run finished. Equal to <see cref="HeadShaBefore"/> when the agent did not commit.</summary>
     public string? HeadShaAfter { get; init; }
+    /// <summary>
+    /// Relative path (under the job folder) to the captured context this run
+    /// was started with (see <see cref="SessionEvent.ContextRef"/>). Non-null
+    /// signals the protocol-pane run card to offer "Show passed context"; the
+    /// full text is fetched on demand from
+    /// <c>GET /api/tasks/{id}/runs/{index}/context</c>, never inlined here.
+    /// </summary>
+    public string? ContextRef { get; init; }
 }
 
 /// <summary>
@@ -200,7 +208,8 @@ public static class RunTimelineBuilder
                 LineStart = lineStart,
                 LineEnd = lineEnd,
                 HeadShaBefore = evt.HeadShaBefore,
-                HeadShaAfter = evt.HeadShaAfter
+                HeadShaAfter = evt.HeadShaAfter,
+                ContextRef = evt.ContextRef
             });
         }
 

@@ -234,7 +234,8 @@ export function runTimelineForComposite(): RunTimeline {
     lineStart: 1,
     lineEnd: 7,
     headShaBefore: null,
-    headShaAfter: null
+    headShaAfter: null,
+    contextRef: null
   };
   return {
     runCount: 1,

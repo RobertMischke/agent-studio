@@ -524,6 +524,18 @@ public record SessionEvent
     /// when the agent did not commit during the run.
     /// </summary>
     public string? HeadShaAfter { get; init; }
+    /// <summary>
+    /// Relative path (under the job folder, forward-slashed) to the file
+    /// that captured the exact context string handed to the CLI for this
+    /// run - the rendered prompt template plus the task's prompt.md,
+    /// attachments list, mode framing, and any foregrounded reissue
+    /// open-items block. Written at spawn time so reruns / escalations are
+    /// auditable. Null for runs recorded before this was captured, or when
+    /// the file write failed. The full text is served on demand by
+    /// <c>GET /api/tasks/{id}/runs/{index}/context</c> and never inlined in
+    /// the polled runs list.
+    /// </summary>
+    public string? ContextRef { get; init; }
 }
 
 /// <summary>
