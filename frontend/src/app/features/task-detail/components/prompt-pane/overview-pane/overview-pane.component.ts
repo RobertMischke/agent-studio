@@ -119,6 +119,26 @@ function verdictTitle(verdict: string | null): string | null {
 }
 
 /**
+ * Reconcile the CORE step's self-reported verdict against its deterministic
+ * status so the row can never show a red "Failed" icon next to a green
+ * "SUCCESS" badge (bug ASS-2). The status (icon) is authoritative — it is the
+ * classified run status, not a prompt-based self-report — so a non-passed CORE
+ * step that still claims a success-class outcome ('success'/'noop') has its
+ * verdict dropped. The backend now writes a reconciled record, but this also
+ * guards legacy on-disk records persisted before the fix, which are only
+ * rewritten when the task re-runs. Every consistent pairing passes through.
+ */
+function reconcileCoreVerdict(
+  status: PipelineRowVm['status'],
+  verdict: string | null,
+): string | null {
+  if (status === 'passed') return verdict;
+  const claim = (verdict ?? '').toLowerCase();
+  if (claim === 'success' || claim === 'noop') return null;
+  return verdict;
+}
+
+/**
  * Build the structured tooltip for an aspect step's verdict pill. Returns
  * null unless the step carries concern detail (a non-pass verdict with
  * summary text), so a pass verdict — or a step the backend left unenriched
@@ -512,7 +532,8 @@ export class OverviewPaneComponent {
       else if (step.stub) status = 'planned';
       else status = 'pending';
       const label = step.displayName || step.id;
-      const verdict = e?.verdict ?? null;
+      let verdict = e?.verdict ?? null;
+      if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
       return {
         id: step.id,
         label,

@@ -49,28 +49,65 @@ public static class CoreRunStepStatusMapper
             : PipelineStepStatus.Failed;
 
     /// <summary>
-    /// Resolve the terminal CORE step's status AND its failure reason from a
-    /// finished run. The reason is <c>null</c> on a <see cref="PipelineStepStatus.Passed"/>
-    /// run (a completed run carries no failure note) and a short
-    /// <c>"agent run {status} (exit {code})"</c> string otherwise.
+    /// Resolve the terminal CORE step's status, failure reason AND reconciled
+    /// verdict from a finished run, in one decision so the persisted record can
+    /// never contradict itself. The reason is <c>null</c> on a
+    /// <see cref="PipelineStepStatus.Passed"/> run (a completed run carries no
+    /// failure note) and a short <c>"agent run {status} (exit {code})"</c>
+    /// string otherwise. The verdict is <see cref="ReconcileVerdict"/> applied
+    /// to the run's self-reported outcome.
     ///
     /// <para>
-    /// Both halves of the decision live here, not just the status, so the
+    /// All three halves of the decision live here, not just the status, so the
     /// load-bearing invariant - "a run the classifier calls
     /// <see cref="RunStatuses.Completed"/> is Passed with no reason, whatever
     /// the OS exit code" - is locked by one unit test at the exact decision the
     /// call site (<c>ProjectRunner.RecordCoreRunFinish</c>) uses. The original
     /// bug was an <c>exitCode is null or 0</c> gate at that call site, not in a
     /// pure helper, so a pure-status test alone could not catch it; pulling the
-    /// status + reason pair into one tested function closes that gap and stops a
-    /// future re-introduction of an exit-code gate from slipping in unguarded.
+    /// status + reason + verdict triple into one tested function closes that gap
+    /// and stops a future re-introduction of an exit-code gate from slipping in
+    /// unguarded.
     /// </para>
     /// </summary>
-    public static (PipelineStepStatus Status, string? Reason) Resolve(CliExecution execution)
+    public static (PipelineStepStatus Status, string? Reason, string? Verdict) Resolve(CliExecution execution)
     {
         var status = From(execution);
-        return (status, status == PipelineStepStatus.Passed ? null : DescribeFailure(execution));
+        return (
+            status,
+            status == PipelineStepStatus.Passed ? null : DescribeFailure(execution),
+            ReconcileVerdict(status, execution.RunOutcome));
     }
+
+    /// <summary>
+    /// Reconcile the run's self-reported outcome against the deterministic CORE
+    /// step status so the Overview row's icon and verdict badge can never tell
+    /// two stories. The status is authoritative (it is the classified run
+    /// status, not a prompt-based self-report): a non-<see cref="PipelineStepStatus.Passed"/>
+    /// step that still claims a success-class outcome (<c>success</c>/<c>noop</c>)
+    /// has its verdict dropped to <c>null</c>, suppressing the contradictory
+    /// "SUCCESS" badge that sat next to a red "Failed" icon (bug ASS-2). Every
+    /// other pairing - a Passed step with any verdict, or a failed step with a
+    /// failure-class verdict (<c>failed</c>/<c>blocked</c>/<c>interrupted</c>/...) -
+    /// is internally consistent and passes through untouched.
+    ///
+    /// <para>
+    /// This keys off <paramref name="status"/> (already keyed off the classified
+    /// run status, never the OS exit code), so it preserves the load-bearing
+    /// rule: a kill-induced <c>exitCode=-1</c> deterministic completion is
+    /// Passed, keeps its success verdict, and is never re-failed here.
+    /// </para>
+    /// </summary>
+    public static string? ReconcileVerdict(PipelineStepStatus status, string? runOutcome)
+    {
+        if (status != PipelineStepStatus.Passed && IsSuccessClaim(runOutcome))
+            return null;
+        return runOutcome;
+    }
+
+    private static bool IsSuccessClaim(string? runOutcome) =>
+        string.Equals(runOutcome, TerminalRunOutcomeKinds.Success, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(runOutcome, TerminalRunOutcomeKinds.NoOp, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Short, human-readable reason for a non-Passed CORE run, e.g.

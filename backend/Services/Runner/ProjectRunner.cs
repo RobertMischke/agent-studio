@@ -2310,9 +2310,11 @@ public class ProjectRunner
             // Key the CORE step off the deterministic run status, not the OS
             // exit code: a sentinel-detected / silent-completion run is a
             // completion even though the process kill returns exitCode = -1.
-            // Resolve binds the status AND its failure reason together so the
-            // call site cannot re-introduce an exit-code gate unguarded.
-            var (coreStatus, reason) = CoreRunStepStatusMapper.Resolve(execution);
+            // Resolve binds the status, its failure reason AND the reconciled
+            // verdict together so the persisted record can never show a Failed
+            // icon next to a SUCCESS badge (bug ASS-2), and so the call site
+            // cannot re-introduce an exit-code gate unguarded.
+            var (coreStatus, reason, verdict) = CoreRunStepStatusMapper.Resolve(execution);
 
             _pipelineLog.RecordStep(folder, new PipelineStepExecution
             {
@@ -2323,7 +2325,7 @@ public class ProjectRunner
                 StartedAt = startedAt,
                 CompletedAt = completedAt,
                 DurationMs = durationMs,
-                Verdict = execution.RunOutcome,
+                Verdict = verdict,
                 Reason = reason,
             });
         }

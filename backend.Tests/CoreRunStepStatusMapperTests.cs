@@ -79,7 +79,7 @@ public class CoreRunStepStatusMapperTests
         // on Windows). Must be Passed, and a completed run carries no reason.
         var execution = new CliExecution { Status = RunStatuses.Completed, ExitCode = -1 };
 
-        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+        var (status, reason, _) = CoreRunStepStatusMapper.Resolve(execution);
 
         Assert.Equal(PipelineStepStatus.Passed, status);
         Assert.Null(reason);
@@ -90,7 +90,7 @@ public class CoreRunStepStatusMapperTests
     {
         var execution = new CliExecution { Status = RunStatuses.Completed, ExitCode = 0 };
 
-        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+        var (status, reason, _) = CoreRunStepStatusMapper.Resolve(execution);
 
         Assert.Equal(PipelineStepStatus.Passed, status);
         Assert.Null(reason);
@@ -101,7 +101,7 @@ public class CoreRunStepStatusMapperTests
     {
         var execution = new CliExecution { Status = RunStatuses.Failed, ExitCode = 1 };
 
-        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+        var (status, reason, _) = CoreRunStepStatusMapper.Resolve(execution);
 
         Assert.Equal(PipelineStepStatus.Failed, status);
         Assert.Equal("agent run failed (exit 1)", reason);
@@ -112,7 +112,7 @@ public class CoreRunStepStatusMapperTests
     {
         var execution = new CliExecution { Status = RunStatuses.Failed, ExitCode = null };
 
-        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+        var (status, reason, _) = CoreRunStepStatusMapper.Resolve(execution);
 
         Assert.Equal(PipelineStepStatus.Failed, status);
         Assert.Equal("agent run failed", reason);
@@ -123,9 +123,119 @@ public class CoreRunStepStatusMapperTests
     {
         var execution = new CliExecution { Status = "", ExitCode = 2 };
 
-        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+        var (status, reason, _) = CoreRunStepStatusMapper.Resolve(execution);
 
         Assert.Equal(PipelineStepStatus.Failed, status);
         Assert.Equal("agent run unknown (exit 2)", reason);
+    }
+
+    // --- ReconcileVerdict: icon and badge can never tell two stories -------
+    //
+    // Bug ASS-2: the CORE row showed a red "Failed" icon (from Status) AND a
+    // green "SUCCESS" badge (from Verdict) at once because the two fields were
+    // computed independently and never reconciled. Resolve now drops a
+    // success-class verdict whenever the deterministic status is not Passed, so
+    // a single persisted record can no longer contradict itself.
+
+    [Fact]
+    public void Resolve_FailedRunClaimingSuccess_DropsContradictoryVerdict()
+    {
+        // The exact ASS-2 record: status not "completed" but RunOutcome="success".
+        // The Failed icon is authoritative; the success badge must be suppressed.
+        var execution = new CliExecution
+        {
+            Status = RunStatuses.Failed,
+            ExitCode = 1,
+            RunOutcome = TerminalRunOutcomeKinds.Success,
+        };
+
+        var (status, _, verdict) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Failed, status);
+        Assert.Null(verdict);
+    }
+
+    [Fact]
+    public void Resolve_StoppedRunClaimingNoOp_DropsContradictoryVerdict()
+    {
+        var execution = new CliExecution
+        {
+            Status = RunStatuses.Stopped,
+            ExitCode = -1,
+            RunOutcome = TerminalRunOutcomeKinds.NoOp,
+        };
+
+        var (status, _, verdict) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Failed, status);
+        Assert.Null(verdict);
+    }
+
+    [Fact]
+    public void Resolve_CompletedRunWithSuccess_KeepsVerdict()
+    {
+        // A consistent record: Passed icon + success badge tell one story.
+        var execution = new CliExecution
+        {
+            Status = RunStatuses.Completed,
+            ExitCode = 0,
+            RunOutcome = TerminalRunOutcomeKinds.Success,
+        };
+
+        var (status, _, verdict) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Passed, status);
+        Assert.Equal(TerminalRunOutcomeKinds.Success, verdict);
+    }
+
+    [Fact]
+    public void Resolve_SentinelKilledCompletionWithSuccess_KeepsVerdict()
+    {
+        // The load-bearing rule: a kill-induced exitCode=-1 deterministic
+        // completion is Passed and keeps its success verdict - reconciliation
+        // keys off the classified status, never the exit code, so it never
+        // re-fails this happy path.
+        var execution = new CliExecution
+        {
+            Status = RunStatuses.Completed,
+            ExitCode = -1,
+            RunOutcome = TerminalRunOutcomeKinds.Success,
+        };
+
+        var (status, _, verdict) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Passed, status);
+        Assert.Equal(TerminalRunOutcomeKinds.Success, verdict);
+    }
+
+    [Theory]
+    [InlineData(TerminalRunOutcomeKinds.Failed)]
+    [InlineData(TerminalRunOutcomeKinds.Interrupted)]
+    [InlineData(TerminalRunOutcomeKinds.Blocked)]
+    [InlineData(TerminalRunOutcomeKinds.CommittedPartial)]
+    public void Resolve_FailedRunWithFailureClassVerdict_KeepsVerdict(string runOutcome)
+    {
+        // A failed step paired with a failure-class verdict is internally
+        // consistent - nothing to reconcile, so the verdict passes through and
+        // the row can still show e.g. a "Partial" or "Blocked" badge.
+        var execution = new CliExecution
+        {
+            Status = RunStatuses.Failed,
+            ExitCode = 1,
+            RunOutcome = runOutcome,
+        };
+
+        var (status, _, verdict) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Failed, status);
+        Assert.Equal(runOutcome, verdict);
+    }
+
+    [Fact]
+    public void ReconcileVerdict_IsCaseInsensitiveOnSuccessClaim()
+    {
+        // RunOutcome casing must not let a contradictory badge slip through.
+        Assert.Null(CoreRunStepStatusMapper.ReconcileVerdict(PipelineStepStatus.Failed, "SUCCESS"));
+        Assert.Null(CoreRunStepStatusMapper.ReconcileVerdict(PipelineStepStatus.Failed, "NoOp"));
     }
 }

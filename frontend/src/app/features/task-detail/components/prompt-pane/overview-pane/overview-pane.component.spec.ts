@@ -439,6 +439,74 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(guard.concernTooltip!.body).toContain('circuit-breaker');
   });
 
+  it('pipeline block: a failed CORE step that still claims a success verdict drops the contradictory badge (ASS-2)', async () => {
+    // Bug ASS-2: a legacy on-disk record persisted the CORE step with
+    // status='failed' (red ❌ icon) AND verdict='success' (green SUCCESS badge)
+    // at once. The status is authoritative, so the success badge is suppressed
+    // and the row tells one story.
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'core-agent-run', kind: 'core', status: 'failed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'success' },
+        ],
+      },
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const core = c.pipelineRows().find(r => r.id === 'core-agent-run')!;
+    // Icon stays Failed; the contradictory success verdict is reconciled away.
+    expect(core.status).toBe('failed');
+    expect(c.stepStatusIcon(core.status)).toBe('❌');
+    expect(core.verdict).toBeNull();
+
+    // And the DOM carries no SUCCESS badge on the core row.
+    const coreRow = fixture.nativeElement.querySelector('[data-step-id="core-agent-run"]');
+    expect(coreRow).not.toBeNull();
+    expect(coreRow.querySelector('[data-testid="overview-pipeline-step-verdict"]')).toBeNull();
+  });
+
+  it('pipeline block: a passed CORE step keeps its success verdict (consistent record is untouched)', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'core-agent-run', kind: 'core', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'success' },
+        ],
+      },
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const core = fixture.componentInstance.pipelineRows().find(r => r.id === 'core-agent-run')!;
+    expect(core.status).toBe('passed');
+    expect(core.verdict).toBe('success');
+  });
+
   it('pipeline block: a forming loop under budget reads as a passed guard with a looping verdict', async () => {
     const fixture = await build(baseJob({ state: '3-progress' }));
     const pipe: TaskPipelineResponse = {
