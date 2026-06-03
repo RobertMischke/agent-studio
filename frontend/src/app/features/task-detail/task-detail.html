@@ -28,10 +28,6 @@
     (pagerNext)="nextInLaneRequested.emit()"
     (triageAction)="onTriageAction($event)" />
 
-  <app-references-section
-    [info]="detail().info"
-    (changed)="fileSaved.emit()" />
-
   <app-command-deck
     [currentWatchPath]="detail().info.watchPath"
     [watchPaths]="watchPaths()"
@@ -106,6 +102,7 @@
         (evidenceAcknowledge)="onEvidenceAcknowledge($event)"
         (evidenceCreateFollowup)="onEvidenceCreateFollowup($event)"
         (agentConfigCommit)="onAgentConfigCommit($event)"
+        (referencesChanged)="fileSaved.emit()"
         (titleSaved)="fileSaved.emit()" />
     }
 

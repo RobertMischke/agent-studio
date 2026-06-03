@@ -23,6 +23,7 @@
             [cliTypeOverride]="cliTypeOverride()"
             [modelOverride]="modelOverride()"
             (agentConfigCommit)="agentConfigCommit.emit($event)"
+            (referencesChanged)="referencesChanged.emit()"
             (titleSaved)="titleSaved.emit()" />
         }
       }

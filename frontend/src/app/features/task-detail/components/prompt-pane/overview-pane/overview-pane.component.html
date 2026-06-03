@@ -82,6 +82,8 @@
     </div>
   </section>
 
+  <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
+
   <!-- Agent block -->
   <section class="ov-section" data-testid="overview-agent">
     <h3 class="ov-section__title">Agent</h3>

@@ -70,6 +70,9 @@ export class PromptPaneComponent {
   /** Atomic CLI + model commit from the Overview tab's chat-model-badge picker.
    *  Forwarded to the parent task-detail which issues both PUTs in sequence. */
   readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
+  /** Forwarded from the Overview tab's compact References section after a
+   *  successful reference write so the parent can re-fetch the detail. */
+  readonly referencesChanged = output<void>();
   /** Forwarded from the Overview tab's inline title-edit so the parent
    *  task-detail can re-fetch the job and let the optimistic override
    *  drop. */

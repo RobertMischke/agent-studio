@@ -29,6 +29,7 @@ import type {
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { RegressionRadarComponent } from '../../../../regression-radar/components/regression-radar.component';
+import { ReferencesSectionComponent } from '../../references-section/references-section.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { StructuredTooltip } from '../../../../../components/tooltip';
 import { RowComponent } from '../../../../../components/row/row.component';
@@ -123,7 +124,7 @@ function buildConcernTooltip(
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CliModelSelectorComponent, RegressionRadarComponent, TooltipDirective, RowComponent, CompletionLoopIndicatorComponent],
+  imports: [CliModelSelectorComponent, RegressionRadarComponent, ReferencesSectionComponent, TooltipDirective, RowComponent, CompletionLoopIndicatorComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -143,6 +144,8 @@ export class OverviewPaneComponent {
   /** Atomic CLI + model commit from the unified <app-cli-model-selector>
    *  picker. The parent task-detail handler issues both PUTs in sequence. */
   readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
+  /** Re-emitted from the embedded References section after a successful write. */
+  readonly referencesChanged = output<void>();
   /** Fired after a successful title PUT so the parent can re-fetch the
    *  detail and let the optimistic override drop back to the canonical
    *  `job().title`. */

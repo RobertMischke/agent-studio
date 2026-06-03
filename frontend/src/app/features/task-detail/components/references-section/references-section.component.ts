@@ -61,8 +61,10 @@ export class ReferencesSectionComponent {
   private readonly localRefs = signal<TaskReferences>(emptyRefs());
   /** Relation kind whose write is currently in flight (null when idle). */
   readonly busyKind = signal<TaskReferenceKind | null>(null);
-  /** Whether the section body is expanded. */
-  readonly expanded = signal(false);
+  /** Edit mode: reveals the per-kind add-inputs and the per-chip remove
+   *  buttons. Off by default so the section reads as a calm, navigable
+   *  chip list; reset on job switch. */
+  readonly adding = signal(false);
   /** Per-kind add-input drafts. */
   readonly drafts = signal<Record<TaskReferenceKind, string>>({
     dependsOn: '',
@@ -79,7 +81,7 @@ export class ReferencesSectionComponent {
     const refs = info.references ?? emptyRefs();
     if (this.lastSeededKey !== info.taskKey) {
       this.lastSeededKey = info.taskKey;
-      this.expanded.set(!isEmptyRefs(refs));
+      this.adding.set(false);
     }
     if (this.busyKind() === null) {
       this.localRefs.set(cloneRefs(refs));
@@ -213,8 +215,8 @@ export class ReferencesSectionComponent {
     });
   }
 
-  toggleExpanded(): void {
-    this.expanded.update((v) => !v);
+  toggleAdding(): void {
+    this.adding.update((v) => !v);
   }
 }
 
@@ -229,15 +231,6 @@ function cloneRefs(r: TaskReferences): TaskReferences {
     blockedBy: [...r.blockedBy],
     supersedes: [...r.supersedes],
   };
-}
-
-function isEmptyRefs(r: TaskReferences): boolean {
-  return (
-    r.dependsOn.length === 0 &&
-    r.relatedTo.length === 0 &&
-    r.blockedBy.length === 0 &&
-    r.supersedes.length === 0
-  );
 }
 
 function isTerminalState(state: string): boolean {
