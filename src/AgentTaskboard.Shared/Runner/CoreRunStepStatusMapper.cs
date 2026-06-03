@@ -47,4 +47,41 @@ public static class CoreRunStepStatusMapper
         string.Equals(runStatus, RunStatuses.Completed, StringComparison.OrdinalIgnoreCase)
             ? PipelineStepStatus.Passed
             : PipelineStepStatus.Failed;
+
+    /// <summary>
+    /// Resolve the terminal CORE step's status AND its failure reason from a
+    /// finished run. The reason is <c>null</c> on a <see cref="PipelineStepStatus.Passed"/>
+    /// run (a completed run carries no failure note) and a short
+    /// <c>"agent run {status} (exit {code})"</c> string otherwise.
+    ///
+    /// <para>
+    /// Both halves of the decision live here, not just the status, so the
+    /// load-bearing invariant - "a run the classifier calls
+    /// <see cref="RunStatuses.Completed"/> is Passed with no reason, whatever
+    /// the OS exit code" - is locked by one unit test at the exact decision the
+    /// call site (<c>ProjectRunner.RecordCoreRunFinish</c>) uses. The original
+    /// bug was an <c>exitCode is null or 0</c> gate at that call site, not in a
+    /// pure helper, so a pure-status test alone could not catch it; pulling the
+    /// status + reason pair into one tested function closes that gap and stops a
+    /// future re-introduction of an exit-code gate from slipping in unguarded.
+    /// </para>
+    /// </summary>
+    public static (PipelineStepStatus Status, string? Reason) Resolve(CliExecution execution)
+    {
+        var status = From(execution);
+        return (status, status == PipelineStepStatus.Passed ? null : DescribeFailure(execution));
+    }
+
+    /// <summary>
+    /// Short, human-readable reason for a non-Passed CORE run, e.g.
+    /// <c>"agent run failed (exit 1)"</c>. Surfaced in the Overview pipeline
+    /// row's failure note.
+    /// </summary>
+    private static string DescribeFailure(CliExecution execution)
+    {
+        var status = string.IsNullOrWhiteSpace(execution.Status) ? "unknown" : execution.Status;
+        return execution.ExitCode is int code
+            ? $"agent run {status} (exit {code})"
+            : $"agent run {status}";
+    }
 }

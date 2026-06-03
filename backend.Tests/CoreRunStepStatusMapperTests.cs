@@ -62,4 +62,70 @@ public class CoreRunStepStatusMapperTests
     {
         Assert.Equal(PipelineStepStatus.Failed, CoreRunStepStatusMapper.From((string?)null));
     }
+
+    // --- Resolve: the call-site invariant ---------------------------------
+    //
+    // The original bug lived at the CALL SITE (ProjectRunner.RecordCoreRunFinish
+    // gated the step on "completed AND exitCode is null or 0"), not in the pure
+    // status mapper. A test that only exercises From() can stay green while a
+    // refactor re-adds an exit-code gate at the call site. Resolve binds status
+    // AND failure reason into the single function the call site is forced to
+    // use, so these tests lock the whole decision the row actually renders.
+
+    [Fact]
+    public void Resolve_SentinelKilledCompletion_IsPassedWithNoReason()
+    {
+        // The headline regression: status="completed", exitCode=-1 (Process.Kill
+        // on Windows). Must be Passed, and a completed run carries no reason.
+        var execution = new CliExecution { Status = RunStatuses.Completed, ExitCode = -1 };
+
+        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Passed, status);
+        Assert.Null(reason);
+    }
+
+    [Fact]
+    public void Resolve_CleanCompletion_IsPassedWithNoReason()
+    {
+        var execution = new CliExecution { Status = RunStatuses.Completed, ExitCode = 0 };
+
+        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Passed, status);
+        Assert.Null(reason);
+    }
+
+    [Fact]
+    public void Resolve_FailedRun_IsFailedWithExitCodeReason()
+    {
+        var execution = new CliExecution { Status = RunStatuses.Failed, ExitCode = 1 };
+
+        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Failed, status);
+        Assert.Equal("agent run failed (exit 1)", reason);
+    }
+
+    [Fact]
+    public void Resolve_FailedRunWithoutExitCode_OmitsExitFragment()
+    {
+        var execution = new CliExecution { Status = RunStatuses.Failed, ExitCode = null };
+
+        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Failed, status);
+        Assert.Equal("agent run failed", reason);
+    }
+
+    [Fact]
+    public void Resolve_BlankStatus_DescribesUnknown()
+    {
+        var execution = new CliExecution { Status = "", ExitCode = 2 };
+
+        var (status, reason) = CoreRunStepStatusMapper.Resolve(execution);
+
+        Assert.Equal(PipelineStepStatus.Failed, status);
+        Assert.Equal("agent run unknown (exit 2)", reason);
+    }
 }

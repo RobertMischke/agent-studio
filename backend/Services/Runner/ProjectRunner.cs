@@ -2161,8 +2161,9 @@ public class ProjectRunner
             // Key the CORE step off the deterministic run status, not the OS
             // exit code: a sentinel-detected / silent-completion run is a
             // completion even though the process kill returns exitCode = -1.
-            var coreStatus = CoreRunStepStatusMapper.From(execution);
-            var passed = coreStatus == PipelineStepStatus.Passed;
+            // Resolve binds the status AND its failure reason together so the
+            // call site cannot re-introduce an exit-code gate unguarded.
+            var (coreStatus, reason) = CoreRunStepStatusMapper.Resolve(execution);
 
             _pipelineLog.RecordStep(folder, new PipelineStepExecution
             {
@@ -2174,21 +2175,13 @@ public class ProjectRunner
                 CompletedAt = completedAt,
                 DurationMs = durationMs,
                 Verdict = execution.RunOutcome,
-                Reason = passed ? null : DescribeCoreFailure(execution),
+                Reason = reason,
             });
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to record CORE run-finish for {JobId}", jobId);
         }
-    }
-
-    private static string DescribeCoreFailure(CliExecution execution)
-    {
-        var status = string.IsNullOrWhiteSpace(execution.Status) ? "unknown" : execution.Status;
-        return execution.ExitCode is int code
-            ? $"agent run {status} (exit {code})"
-            : $"agent run {status}";
     }
 
     /// <summary>
