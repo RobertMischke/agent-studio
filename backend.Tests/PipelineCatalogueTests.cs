@@ -24,10 +24,12 @@ public class PipelineCatalogueTests
         Assert.Equal(1, p.Version);
         // Pre: the auto-mode loop guard (Ralph-loop early detection) leads,
         // followed by the opt-in orchestrator-prep step that replaced the
-        // standalone 1a-orchestrator-prep backlog lane.
-        Assert.Equal(2, p.Pre.Count);
+        // standalone 1a-orchestrator-prep backlog lane, then the deterministic
+        // reissue open-items check that foregrounds leftover items on a re-issue.
+        Assert.Equal(3, p.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, p.Pre[0].Id);
         Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, p.Pre[1].Id);
+        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, p.Pre[2].Id);
         Assert.Single(p.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, p.Core[0].Id);
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
@@ -89,6 +91,27 @@ public class PipelineCatalogueTests
         Assert.Equal(
             "claude-opus-4-1",
             PipelineStepConfigResolver.ResolveModel(withOverride, prep, "fallback-model"));
+    }
+
+    [Fact]
+    public void StandardPipeline_ReissueOpenItems_IsDeterministicDefaultOnPreStep_AfterPrep()
+    {
+        // The reissue open-items check ships as a deterministic (no model)
+        // Module pre-step that defaults ON - an unfinished re-issue is a
+        // correctness signal, not an opt-in pass. It runs after the loop guard
+        // and orchestrator-prep so it leads into the core run.
+        var p = PipelineCatalogue.Standard;
+        var step = p.Pre.First(s => s.Id == PipelineCatalogue.PreReissueOpenItemsStepId);
+        Assert.Equal(StepKind.Module, step.Kind);
+        Assert.Equal(StepRunMode.Sequential, step.RunMode);
+        Assert.True(step.Idempotent);
+        Assert.True(step.DefaultEnabled);
+        Assert.Null(step.Model);
+
+        var prepIndex = p.Pre.FindIndex(s => s.Id == PipelineCatalogue.PreOrchestratorPrepStepId);
+        var reissueIndex = p.Pre.FindIndex(s => s.Id == PipelineCatalogue.PreReissueOpenItemsStepId);
+        Assert.True(reissueIndex > prepIndex,
+            $"reissue open-items (idx {reissueIndex}) must come after orchestrator-prep (idx {prepIndex})");
     }
 
     [Fact]
@@ -264,13 +287,14 @@ public class PipelineCatalogueTests
             .ToList();
         Assert.Equal(expected, ro.AllSteps.Select(s => s.Id).ToList());
 
-        // The core agent run and both Pre steps (loop guard + orchestrator
-        // prep) are not git steps, so they remain.
+        // The core agent run and all Pre steps (loop guard + orchestrator prep
+        // + reissue open-items check) are not git steps, so they remain.
         Assert.Single(ro.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ro.Core[0].Id);
-        Assert.Equal(2, ro.Pre.Count);
+        Assert.Equal(3, ro.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, ro.Pre[0].Id);
         Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[1].Id);
+        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[2].Id);
 
         // Exactly the one git step was removed from Post.
         Assert.Equal(standard.Post.Count - 1, ro.Post.Count);

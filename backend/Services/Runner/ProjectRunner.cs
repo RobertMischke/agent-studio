@@ -673,6 +673,28 @@ public class ProjectRunner
 
             var prompt = RenderPrompt(plan, info);
 
+            // Reissue open-items pre-check (deterministic pre-pipeline step):
+            // when this run is an auto-review re-issue that still carries open
+            // items from the previous run, foreground those items at the head of
+            // the run prompt so the rerun resolves them first instead of
+            // restarting blind. Gated to fresh-start reruns (no user follow-up,
+            // not an epic planning run); the pure ReissueOpenItemsPreCheck owns
+            // the detection. The pipeline-step recording lands after spawn,
+            // alongside the loop guard.
+            ReissueOpenItemsPreCheck.PreCheckDecision? reissueOpenItems = null;
+            if (!isEpicPlanningRun && string.IsNullOrWhiteSpace(followupPrompt))
+            {
+                reissueOpenItems = EvaluateReissueOpenItems(info);
+                if (reissueOpenItems.Intervenes && reissueOpenItems.ForegroundBlock != null)
+                {
+                    prompt = reissueOpenItems.ForegroundBlock + prompt;
+                    var interventionKind = reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
+                        ? OrchestratorMessageKind.Steer
+                        : OrchestratorMessageKind.SoftIntervention;
+                    _chatLog.Append(info, interventionKind, $"[reissue-open-items] {reissueOpenItems.Note}");
+                }
+            }
+
             // Disk-backed pickup lock (ADR-0044). When the lock is configured
             // and an attempt to acquire it shows a foreign live owner, refuse
             // to spawn: another backend on the same workspace is already on
@@ -849,6 +871,12 @@ public class ProjectRunner
             // t=0 instead of "- -". EnsureRun starts a fresh record when the
             // prior run already completed (re-issue), so a restart is visible.
             RecordCoreRunStart(info, execution);
+
+            // Record the deterministic reissue open-items pre-step next to the
+            // loop guard so the Overview pipeline shows whether the orchestrator
+            // intervened on this re-issue. Only fires on an actual re-issue.
+            if (reissueOpenItems is { IsReissue: true })
+                RecordReissueOpenItemsPreStep(info, reissueOpenItems, execution.StartedAt);
 
             return RunOutcome.Started(execution);
         }
@@ -2057,6 +2085,119 @@ public class ProjectRunner
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to record loop-guard step for {JobId}", info.Id);
+        }
+    }
+
+    /// <summary>
+    /// Gather the deterministic inputs for the reissue open-items pre-check from
+    /// the job folder (re-issue tag, prior pipeline attempt, follow-up reason,
+    /// aspect concerns) and run the pure
+    /// <see cref="ReissueOpenItemsPreCheck.Evaluate"/>. Best-effort: a read
+    /// failure yields a no-op decision so a flaky folder never blocks the run.
+    /// </summary>
+    private ReissueOpenItemsPreCheck.PreCheckDecision EvaluateReissueOpenItems(TaskInfo info)
+    {
+        try
+        {
+            var hasReissueTag = info.Tags.Any(t =>
+                string.Equals(t, ReviewDecisionOrchestrator.ReissueTagId, StringComparison.OrdinalIgnoreCase));
+
+            // Read() returns the PRIOR run's record (this run's record is opened
+            // later in RecordCoreRunStart), so IsComplete here means "an earlier
+            // run finished" - i.e. we are starting a re-issued attempt.
+            var prior = _pipelineLog?.Read(info.FolderPath);
+
+            var followUpPath = Path.Combine(info.FolderPath, "orchestrator-follow-up.md");
+            var followUpText = File.Exists(followUpPath) ? File.ReadAllText(followUpPath) : string.Empty;
+
+            return ReissueOpenItemsPreCheck.Evaluate(new ReissueOpenItemsPreCheck.PreCheckInput
+            {
+                HasReissueTag = hasReissueTag,
+                PriorRunCompleted = prior?.IsComplete == true,
+                PriorRunCount = prior?.Attempt ?? 0,
+                FollowUpText = followUpText,
+                AspectConcernSummaries = GatherAspectConcernSummaries(info.FolderPath),
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Reissue open-items pre-check failed for {JobId}", info.Id);
+            return new ReissueOpenItemsPreCheck.PreCheckDecision
+            {
+                Action = ReissueOpenItemsPreCheck.PreCheckAction.None,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Lift the one-line concern/block summaries from the previous run's
+    /// <c>aspect-*.md</c> reports (pass verdicts and unreadable files are
+    /// skipped) so the pre-check can foreground them as open items.
+    /// </summary>
+    private static IReadOnlyList<string> GatherAspectConcernSummaries(string jobFolderPath)
+    {
+        var summaries = new List<string>();
+        foreach (var stepId in OrchestratorApi.Services.Pipeline.PipelineCatalogue.AspectStepIds)
+        {
+            var path = Path.Combine(jobFolderPath, stepId + ".md");
+            if (!File.Exists(path)) continue;
+            string text;
+            try { text = File.ReadAllText(path); }
+            catch { continue; }
+
+            var status = AspectVerdictParsing.ReadStatusFromReport(text);
+            if (status is not (AspectStatus.Concerns or AspectStatus.Block)) continue;
+
+            var fm = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(text);
+            if (fm.Ok && fm.Fields.TryGetValue("summary", out var summary) && !string.IsNullOrWhiteSpace(summary))
+                summaries.Add(summary.Trim());
+        }
+        return summaries;
+    }
+
+    /// <summary>
+    /// Record the reissue open-items pre-check as the pipeline's
+    /// <see cref="OrchestratorApi.Services.Pipeline.PipelineCatalogue.PreReissueOpenItemsStepId"/>
+    /// step: <see cref="PipelineStepStatus.Passed"/> with an <c>open-items</c>
+    /// verdict when it foregrounded items, <see cref="PipelineStepStatus.Failed"/>
+    /// with an <c>escalate</c> verdict past the bounce budget, and a clean
+    /// <see cref="PipelineStepStatus.Passed"/> with no verdict for a re-issue
+    /// that had nothing left open. Best-effort observability, never a
+    /// state-machine input.
+    /// </summary>
+    private void RecordReissueOpenItemsPreStep(
+        TaskInfo info, ReissueOpenItemsPreCheck.PreCheckDecision decision, DateTime startedAt)
+    {
+        if (_pipelineLog == null) return;
+        try
+        {
+            var (status, verdict) = decision.Action switch
+            {
+                ReissueOpenItemsPreCheck.PreCheckAction.Escalate
+                    => (PipelineStepStatus.Failed, (string?)"escalate"),
+                ReissueOpenItemsPreCheck.PreCheckAction.ForegroundOpenItems
+                    => (PipelineStepStatus.Passed, "open-items"),
+                _ => (PipelineStepStatus.Passed, null),
+            };
+            var summary = decision.HasOpenItems
+                ? $"{decision.OpenItems.Count} open item(s): " + string.Join("; ", decision.OpenItems.Take(3))
+                : null;
+            var now = DateTime.UtcNow;
+            _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+            {
+                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.PreReissueOpenItemsStepId,
+                Kind = StepKind.Module,
+                Status = status,
+                StartedAt = startedAt,
+                CompletedAt = now,
+                Verdict = verdict,
+                VerdictSummary = summary,
+                Reason = summary,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to record reissue open-items pre-step for {JobId}", info.Id);
         }
     }
 

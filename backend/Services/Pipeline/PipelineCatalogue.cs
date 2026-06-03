@@ -93,6 +93,21 @@ public static class PipelineCatalogue
     public const string PreOrchestratorPrepStepId = "pre-orchestrator-prep";
 
     /// <summary>
+    /// Deterministic pre-step that runs before the core agent run on a
+    /// re-issued card: it detects whether the run is a re-issue carrying open
+    /// items from the previous run (the auto-review follow-up reason, unchecked
+    /// checklist boxes, or aspect concern/block summaries) and, on a hit, has
+    /// <c>ProjectRunner</c> foreground those items into the run prompt + post an
+    /// orchestrator intervention note rather than letting the orchestrator
+    /// blindly restart. The decision logic lives in the pure
+    /// <see cref="OrchestratorApi.Services.Runner.ReissueOpenItemsPreCheck"/>;
+    /// the recording is best-effort observability, never a state-machine input.
+    /// It is deterministic (no LLM) and on by default - an unfinished re-issue
+    /// is a correctness signal, not an opt-in pass.
+    /// </summary>
+    public const string PreReissueOpenItemsStepId = "pre-reissue-open-items";
+
+    /// <summary>
     /// The five drift dimensions ship as opt-in <see cref="StepKind.Drift"/>
     /// post-steps (DRIFT Nachtrag): four LLM dimensions plus the rule-based
     /// code-pattern check. They default <c>DefaultEnabled = false</c> because a
@@ -234,6 +249,19 @@ public static class PipelineCatalogue
                     // Opt-in per project: prep is an extra pre-coding pass an
                     // operator turns on, so an absent override leaves it off.
                     DefaultEnabled = false,
+                },
+                new PipelineStep
+                {
+                    Id = PreReissueOpenItemsStepId,
+                    DisplayName = "Reissue open-items check",
+                    Kind = StepKind.Module,
+                    // Runs deterministically in the pre-bracket ahead of the core
+                    // run; foregrounds leftover open items on a re-issue.
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                    // Default-on: a re-issue that still has open items is a
+                    // correctness signal the orchestrator should not skip.
+                    DefaultEnabled = true,
                 },
             ],
             Core =
