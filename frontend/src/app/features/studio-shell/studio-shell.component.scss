@@ -1355,12 +1355,19 @@
 // restyle).
 .workspace__main--studio {
   background: var(--studio-bg-editor);
-  padding: 12px 12px 0;
+  // Detail panes sit flush against the editor content edges — no
+  // decorative outer inset under the tab bar or beside the rail. The
+  // panes previously cancelled a 12px side inset via negative margins
+  // (removed below), so both must move together.
+  padding: 0;
 
   .detail {
     gap: 0;
     height: 100%;
     background: transparent;
+    // Base .detail carries a 12px top padding; drop it so the first
+    // pane sits flush under the tab bar (no outer inset).
+    padding-top: 0;
   }
 
   .detail__header {
@@ -1389,8 +1396,6 @@
     padding-top: 0;
     flex: 1;
     min-height: 0;
-    margin-left: -12px;
-    margin-right: -12px;
   }
 
   .pane {
@@ -1429,8 +1434,11 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: minmax(0, 1fr);
+  // Super-columns sit flush against the editor content edges (tab bar
+  // above, activity rail to the side) — no decorative outer inset. The
+  // `gap` is the intentional inter-column spacing and stays put.
   gap: 12px;
-  padding: 12px;
+  padding: 0;
   align-items: stretch;
   background: var(--studio-bg-editor);
   height: 100%;
