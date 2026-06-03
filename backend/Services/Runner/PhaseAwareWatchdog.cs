@@ -30,18 +30,29 @@ public sealed record PhaseBudget(
         // means the CLI binary is wedged or the OS pipe is broken; past
         // 60 s the runner kills it.
         RunPhase.Spawning             => new PhaseBudget(SuspiciousSeconds: 30,  HungSeconds: 60),
-        // Anthropic's API init can legitimately take 30-60 s under load
-        // (especially when a `rate_limit_event allowed_warning` is in
-        // flight). Pattern analysis of 12+ recent hangs in May 2026
-        // showed `SessionInitializing` was the dominant kill phase at
-        // 31-33 s, well below any reasonable interpretation of "stuck".
-        // Widen the budget so transient API slowness no longer reads
-        // as a hung agent.
-        RunPhase.SessionInitializing  => new PhaseBudget(SuspiciousSeconds: 60,  HungSeconds: 120),
+        // Session init / `claude -r` resume is the slowest cold-start
+        // phase and produces NO stdout for the whole window: the CLI
+        // reads + replays a (possibly large) session JSONL, contacts the
+        // Anthropic API, and only then emits its first frame. The 2026-06
+        // mass-false-positive survey showed the old (60 s, 120 s) budget
+        // auto-cancelling healthy runs at 122 s while they were still
+        // legitimately resuming a big session - reading the session file
+        // on disk the whole time. Resume of a large session can take
+        // *minutes*, so the kill threshold must sit well past the longest
+        // realistic init. The stdout-independent session-file heartbeat
+        // (see ClaudeSessionHeartbeat wiring) is the primary liveness
+        // signal here; this wide budget is the backstop that still kills
+        // a genuinely wedged init that is also writing nothing to disk.
+        RunPhase.SessionInitializing  => new PhaseBudget(SuspiciousSeconds: 120, HungSeconds: 600),
         // After SessionStarted but before TurnStarted, the CLI has the
         // prompt and is contacting the model. The original "init then
-        // silence" hang sits here: the symptom we want to surface fast.
-        RunPhase.PromptConsumed       => new PhaseBudget(SuspiciousSeconds: 60,  HungSeconds: 180),
+        // silence" hang sits here, but the same API backpressure that
+        // stretches SessionInitializing stretches this window too, and
+        // the 2026-06 survey saw kills clustered at 183 s under the old
+        // (60 s, 180 s) budget. Widen the kill threshold to several
+        // minutes so a slow-but-alive turn-start no longer reads as hung;
+        // the early Suspicious warning still surfaces the stall loudly.
+        RunPhase.PromptConsumed       => new PhaseBudget(SuspiciousSeconds: 120, HungSeconds: 420),
         // Inside a turn we expect output deltas every few seconds; one
         // minute of silence between deltas is the upper bound, two
         // minutes triggers a kill.
@@ -146,8 +157,8 @@ public sealed class PhaseBudgetTable
 /// a known phase. The per-phase reasoning makes the chat meta message
 /// dramatically more useful: instead of "agent silent 60 s" the user
 /// sees "agent silent 60 s during ToolExecuting (allowed: 180 s) - the
-/// tool may legitimately be running" or "agent silent 60 s during
-/// PromptConsumed (allowed: 60 s) - we have not seen a turn start;
+/// tool may legitimately be running" or "agent silent 120 s during
+/// PromptConsumed (allowed: 120 s) - we have not seen a turn start;
 /// likely stuck on the API or the CLI's session DB".
 /// </para>
 /// </summary>

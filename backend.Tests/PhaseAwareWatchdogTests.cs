@@ -51,15 +51,28 @@ public class PhaseAwareWatchdogTests
     }
 
     [Fact]
-    public void PromptConsumed_StaysQuietUntil60s_ThenSuspiciousThenHungAt180s()
+    public void PromptConsumed_StaysQuietUntil120s_ThenSuspiciousThenHungAt420s()
     {
-        // The "init then silence" hang sits here. Budgets (60s, 180s).
+        // The "init then silence" hang sits here, but the same API
+        // backpressure that stretches SessionInitializing stretches this
+        // window too. The 2026-06 mass-false-positive survey saw kills
+        // clustered at 183 s under the old (60s, 180s) budget; the budget
+        // is now (120s, 420s). Locked so a regression cannot quietly
+        // re-tighten it.
         Assert.Equal(WatchdogState.Quiet,
             PhaseAwareWatchdog.DecideState(45, 100, RunPhase.PromptConsumed, Cfg));
-        Assert.Equal(WatchdogState.Suspicious,
+        // 65 s used to be Suspicious under the old 60 s threshold; now it is
+        // still only Quiet.
+        Assert.Equal(WatchdogState.Quiet,
             PhaseAwareWatchdog.DecideState(65, 100, RunPhase.PromptConsumed, Cfg));
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(125, 200, RunPhase.PromptConsumed, Cfg));
+        // 183 s - the reported false-positive kill point - is now merely
+        // Suspicious, never Hung.
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(183, 300, RunPhase.PromptConsumed, Cfg));
         Assert.Equal(WatchdogState.Hung,
-            PhaseAwareWatchdog.DecideState(185, 200, RunPhase.PromptConsumed, Cfg));
+            PhaseAwareWatchdog.DecideState(425, 500, RunPhase.PromptConsumed, Cfg));
     }
 
     [Fact]
@@ -172,24 +185,35 @@ public class PhaseAwareWatchdogTests
         var msg = PhaseAwareWatchdog.FormatBudgetReason(RunPhase.PromptConsumed, 70);
         Assert.Contains("phase=PromptConsumed", msg);
         Assert.Contains("silence=70s", msg);
-        Assert.Contains("allowed=60/180s", msg);
+        Assert.Contains("allowed=120/420s", msg);
     }
 
     [Fact]
-    public void SessionInitializing_BudgetIs60And120()
+    public void SessionInitializing_BudgetIs120And600()
     {
-        // Pattern analysis 2026-05-06: SessionInitializing was the
-        // dominant kill phase across 12+ recent live hangs, with kills
-        // landing at 31-33s under the old (30s, 60s) budget. Anthropic's
-        // API legitimately takes 30-60s to handshake under load (e.g.
-        // when a `rate_limit_event allowed_warning` is in flight). The
-        // budget is now (60s, 120s); locking it here so a future
-        // regression cannot quietly tighten it again.
+        // Pattern analysis 2026-05-06 originally moved this phase to
+        // (60s, 120s) after kills clustered at 31-33s. The 2026-06
+        // mass-false-positive survey then showed that budget *still* too
+        // tight: healthy `claude -r` resumes of large sessions emit NO
+        // stdout while they read+replay the session JSONL and contact the
+        // API, and the watchdog was auto-cancelling them at 122s. Resume
+        // of a big session can take *minutes*, so the kill threshold now
+        // sits at 600s, well past the longest realistic init; the
+        // stdout-independent session-file heartbeat is the primary
+        // liveness signal here (see ClaudeSessionHeartbeat wiring). Locked
+        // so a regression cannot quietly re-tighten it.
         Assert.Equal(WatchdogState.Quiet,
             PhaseAwareWatchdog.DecideState(45, 100, RunPhase.SessionInitializing, Cfg));
-        Assert.Equal(WatchdogState.Suspicious,
+        // 65s used to be Suspicious under the old 60s threshold; now Quiet.
+        Assert.Equal(WatchdogState.Quiet,
             PhaseAwareWatchdog.DecideState(65, 100, RunPhase.SessionInitializing, Cfg));
-        Assert.Equal(WatchdogState.Hung,
+        // 122s - the reported false-positive kill point - is now merely
+        // Suspicious, never Hung.
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(122, 383, RunPhase.SessionInitializing, Cfg));
+        Assert.Equal(WatchdogState.Suspicious,
             PhaseAwareWatchdog.DecideState(125, 200, RunPhase.SessionInitializing, Cfg));
+        Assert.Equal(WatchdogState.Hung,
+            PhaseAwareWatchdog.DecideState(605, 700, RunPhase.SessionInitializing, Cfg));
     }
 }

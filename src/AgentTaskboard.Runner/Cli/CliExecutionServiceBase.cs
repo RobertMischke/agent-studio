@@ -228,6 +228,29 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         => Array.Empty<CliRunEvent>();
 
     /// <summary>
+    /// Subclass hook: arm a side-channel liveness watcher for a freshly
+    /// spawned run. Default: no-op. Subclasses that have a stdout-independent
+    /// activity signal (Claude watches <c>~/.claude/projects/&lt;cwd&gt;/&lt;uuid&gt;.jsonl</c>
+    /// mtime) override this to construct a watcher and store it on
+    /// <see cref="ProcInfo.SessionLiveness"/>; the base class disposes it
+    /// in <see cref="MonitorProcessAsync"/> when the process exits.
+    ///
+    /// <para>
+    /// The watcher should reset the watchdog silence clock by raising a
+    /// <see cref="CliRunEvent.Heartbeat"/> via <see cref="RaiseRunEvent"/>
+    /// (Heartbeat is an activity signal in
+    /// <see cref="RunPhaseTransitions.IsActivitySignal"/>). For a resume
+    /// (<paramref name="resumeSession"/> true with a known
+    /// <paramref name="sessionName"/>) the session id is available at spawn,
+    /// so the watcher can arm immediately - the case that matters most for
+    /// SessionInitializing, where there is no stdout for the whole window.
+    /// For a fresh run the subclass typically arms once it captures the
+    /// CLI-assigned session id from the first stdout frame.
+    /// </para>
+    /// </summary>
+    protected virtual void StartSessionLiveness(string jobKey, ProcInfo info, bool resumeSession, string? sessionName) { }
+
+    /// <summary>
     /// Subclass hook: translate a single raw line read from the CLI's stdout
     /// or stderr into one or more user-visible buffer lines. Default: pass
     /// through unchanged. Used by <see cref="ClaudeCliService"/> to expand
@@ -427,6 +450,15 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // their own events from the read loop; the base class always
         // raises RunStarted so the runner's phase tracker can initialize.
         RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { TaskKey = jobKey });
+
+        // ADR-0030 follow-up: arm a stdout-independent liveness watcher so a
+        // run whose stdout pipe is block-buffered (the Node-on-Windows
+        // symptom) but is still appending to its on-disk session log does
+        // not read as silent and get auto-cancelled. Default no-op; Claude
+        // overrides to watch the per-session JSONL mtime. Best-effort: a
+        // failure here must never abort the spawn.
+        try { StartSessionLiveness(jobKey, info, resumeSession, sessionName); }
+        catch (Exception ex) { _logger.LogDebug(ex, "StartSessionLiveness hook threw for {JobId}", jobId); }
 
         _logger.LogInformation("Started {Cli} CLI for job {JobId} (PID {Pid}) in {Cwd}",
             CliType, jobId, process.Id, workingDirectory);
@@ -837,6 +869,13 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 _logger.LogDebug(ex, "ReadStream drain threw for {JobId}", jobKey);
             }
 
+            // Release the side-channel liveness watcher (if any) now that the
+            // process is gone: the session file will not change again, and we
+            // want the FileSystemWatcher handle freed promptly rather than at
+            // the 30-minute ProcInfo eviction.
+            try { info.SessionLiveness?.Dispose(); } catch { /* dispose path swallows */ }
+            info.SessionLiveness = null;
+
             // Drop the active-job entry as soon as the process is known to be
             // gone, before any subscriber notifications. Keeps the reaper file
             // tight and avoids killing the next process that gets the same PID.
@@ -892,7 +931,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(_ =>
             {
                 if (_processes.TryRemove(jobKey, out var removed))
+                {
                     removed.OutputLog.Dispose();
+                    try { removed.SessionLiveness?.Dispose(); } catch { }
+                }
             });
         }
         catch (Exception ex)
@@ -1317,6 +1359,15 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// </summary>
         public Task? StdoutReadTask { get; set; }
         public Task? StderrReadTask { get; set; }
+
+        /// <summary>
+        /// Optional side-channel liveness watcher armed by
+        /// <see cref="StartSessionLiveness"/> (Claude's per-session JSONL
+        /// mtime watcher). Disposed by <see cref="MonitorProcessAsync"/> on
+        /// process exit so the FileSystemWatcher handle is released promptly.
+        /// Null for CLIs without a stdout-independent activity signal.
+        /// </summary>
+        public IDisposable? SessionLiveness { get; set; }
 
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {

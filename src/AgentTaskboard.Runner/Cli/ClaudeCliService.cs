@@ -251,6 +251,52 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     }
 
     /// <summary>
+    /// ADR-0030 follow-up: arm the <see cref="ClaudeSessionHeartbeat"/> so a
+    /// run whose stdout pipe is block-buffered (the Node-on-Windows symptom)
+    /// but is still appending to its per-session JSONL is seen as alive
+    /// instead of being auto-cancelled for stdout silence. On a resume the
+    /// session UUID is known at spawn and the file already exists, so we can
+    /// watch it immediately - this is the case that matters most for
+    /// <see cref="RunPhase.SessionInitializing"/>, where Claude emits no
+    /// stdout for the whole (potentially multi-minute) resume window. For a
+    /// fresh run the UUID is not known until the first stdout frame; the
+    /// watcher is armed lazily from <see cref="OnOutputLine"/> once we capture
+    /// it (see <see cref="EnsureSessionLiveness"/>).
+    /// </summary>
+    protected override void StartSessionLiveness(string jobKey, ProcInfo info, bool resumeSession, string? sessionName)
+    {
+        if (resumeSession && IsCompatibleSessionName(sessionName))
+            EnsureSessionLiveness(info, sessionName!);
+    }
+
+    /// <summary>
+    /// Idempotently arm the per-session JSONL mtime watcher for a run. The
+    /// watcher raises a <see cref="CliRunEvent.Heartbeat"/> on every file
+    /// change, which the runner treats as an activity signal and uses to
+    /// reset the watchdog silence clock. Safe to call from both the spawn
+    /// thread (resume) and the read-loop thread (fresh-session UUID capture):
+    /// the first caller wins, later calls see a non-null watcher and return.
+    /// </summary>
+    private void EnsureSessionLiveness(ProcInfo info, string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return;
+        lock (info)
+        {
+            if (info.SessionLiveness != null) return;
+            var jobKey = info.Execution.TaskKey;
+            var heartbeat = new ClaudeSessionHeartbeat(
+                sessionId,
+                info.WorkingDirectory,
+                onActivity: () => RaiseRunEvent(jobKey, new CliRunEvent.Heartbeat { TaskKey = jobKey }),
+                logger: _logger);
+            info.SessionLiveness = heartbeat;
+            _logger.LogInformation(
+                "Claude session-liveness watcher armed for {JobKey} (session {Session}, watching {Path})",
+                jobKey, sessionId, heartbeat.WatchedPath ?? "<unresolved>");
+        }
+    }
+
+    /// <summary>
     /// Parse the cumulative <c>usage</c> block on the stream-json
     /// <c>result</c> frame via the shared <see cref="ClaudeUsageParser"/> and
     /// stash it on <see cref="CliExecutionServiceBase.ProcInfo.LastParsedUsage"/>.
@@ -596,6 +642,11 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
                 info.SessionName = uuid;
                 _logger.LogInformation("Captured Claude session id {Id} (marker={Marker})",
                     uuid, sessionMatch.Success);
+                // Fresh-run path: now that we know the CLI-assigned UUID, arm
+                // the side-channel liveness watcher so any later stdout
+                // buffering does not read as silence. No-op on resume - the
+                // watcher was already armed at spawn from the resume UUID.
+                EnsureSessionLiveness(info, uuid);
             }
         }
 
