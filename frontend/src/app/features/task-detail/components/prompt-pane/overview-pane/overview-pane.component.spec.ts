@@ -423,6 +423,57 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(guard.concernTooltip!.title).toBe('Loop check · Loop forming');
   });
 
+  it('promote affordance: shown only on a finished planning task across its finished lanes', async () => {
+    const fixture = await build(baseJob({ mode: 'planning', state: '4-auto-review' }));
+    const c = fixture.componentInstance;
+    expect(c.canPromote()).toBe(true);
+    for (const state of ['5-human-review', '6-completed']) {
+      fixture.componentRef.setInput('job', baseJob({ mode: 'planning', state }));
+      try { fixture.detectChanges(); } catch { /* ignore */ }
+      expect(c.canPromote()).toBe(true);
+    }
+  });
+
+  it('promote affordance: hidden on a planning task that has not finished', async () => {
+    const fixture = await build(baseJob({ mode: 'planning', state: '1-preparation' }));
+    const c = fixture.componentInstance;
+    expect(c.canPromote()).toBe(false);
+    for (const state of ['2-ready', '3-progress', '1b-needs-human-review']) {
+      fixture.componentRef.setInput('job', baseJob({ mode: 'planning', state }));
+      try { fixture.detectChanges(); } catch { /* ignore */ }
+      expect(c.canPromote()).toBe(false);
+    }
+  });
+
+  it('promote affordance: hidden on research tasks even when finished (research is read-only)', async () => {
+    const fixture = await build(baseJob({ mode: 'research', state: '6-completed' }));
+    expect(fixture.componentInstance.canPromote()).toBe(false);
+  });
+
+  it('promote affordance: hidden on coding tasks and on legacy payloads with no mode', async () => {
+    const fixture = await build(baseJob({ mode: 'coding', state: '6-completed' }));
+    const c = fixture.componentInstance;
+    expect(c.canPromote()).toBe(false);
+
+    // Legacy payloads omit `mode`; the affordance must stay hidden (read as coding).
+    fixture.componentRef.setInput('job', baseJob({ state: '6-completed' }));
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(c.canPromote()).toBe(false);
+  });
+
+  it('promote affordance: the promote button is in the DOM for a finished planning task, absent for research', async () => {
+    const fixture = await build(baseJob({ mode: 'planning', state: '5-human-review' }));
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="overview-promote-btn"]'),
+    ).not.toBeNull();
+
+    fixture.componentRef.setInput('job', baseJob({ mode: 'research', state: '5-human-review' }));
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="overview-promote-btn"]'),
+    ).toBeNull();
+  });
+
   it('session row was removed (component no longer exposes session-id helpers)', async () => {
     const fixture = await build(baseJob({ sessionName: 'c705779a-aaaa-bbbb-cccc-ddddeeeeffff' }));
     // The overview no longer surfaces session id in any row. The session

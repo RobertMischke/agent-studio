@@ -365,6 +365,59 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
+    /// Builds the pre-filled coding-task draft for "promote a finished
+    /// planning task" (see docs/research/planning-research-task-kinds-2026-05.md).
+    /// Returns null when the job is not found. Title + prompt body come from
+    /// the planning report (<c>status.md</c>); every image under the job's
+    /// <c>results/</c> and <c>attachments/</c> folders is listed (deduped by
+    /// file name) so the modal can copy them byte-for-byte. The returned
+    /// attachment <c>Url</c> is left blank here — the endpoint layer owns the
+    /// API route shape and fills it in.
+    /// </summary>
+    public PromoteToCodingResponse? BuildPromoteToCodingPlan(string jobId, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return null;
+
+        var dir = info.FolderPath;
+        var statusMd = ReadFileOrNull(Path.Combine(dir, "status.md"));
+
+        var attachments = new List<PromoteAttachmentRef>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        CollectPromotableImages(dir, "results", attachments, seen);
+        CollectPromotableImages(dir, "attachments", attachments, seen);
+
+        return new PromoteToCodingResponse
+        {
+            Title = PlanningPromotion.DeriveTitle(info.Title, statusMd, info.Id),
+            PromptMarkdown = PlanningPromotion.ExtractProposedTaskPrompt(statusMd),
+            Mode = TaskModes.Coding,
+            TargetState = TaskStates.Preparation,
+            WatchPath = info.WatchPath,
+            ProjectName = info.ProjectName,
+            Attachments = attachments,
+        };
+    }
+
+    private static readonly HashSet<string> PromotableImageExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp" };
+
+    private static void CollectPromotableImages(
+        string jobDir, string subDir, List<PromoteAttachmentRef> sink, HashSet<string> seen)
+    {
+        var folder = Path.Combine(jobDir, subDir);
+        if (!Directory.Exists(folder)) return;
+
+        foreach (var path in Directory.EnumerateFiles(folder, "*", SearchOption.TopDirectoryOnly).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            var name = Path.GetFileName(path);
+            if (!PromotableImageExtensions.Contains(Path.GetExtension(name))) continue;
+            if (!seen.Add(name)) continue;
+            sink.Add(new PromoteAttachmentRef { FileName = name, Source = subDir, Url = "" });
+        }
+    }
+
+    /// <summary>
     /// Whether this job shows any sign that code landed: a stamped
     /// auto-commit, or at least one run that moved repo HEAD (a non-trivial
     /// <c>before..after</c> SHA range in <c>session-events.jsonl</c>). Feeds

@@ -11,7 +11,8 @@ import {
   output,
   signal,
 } from '@angular/core';
-import type { CliType, TaskInfo } from '../../../../../models/task.model';
+import type { CliType, PromoteToCodingResponse, TaskInfo } from '../../../../../models/task.model';
+import { CreateTaskFormService, type PendingAttachment } from '../../../../board';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
 import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
@@ -88,6 +89,14 @@ interface PreviousRunVm {
   tooltip: StructuredTooltip | null;
 }
 
+/** Short unique id for a seeded create-modal attachment (mirrors the dialog's own). */
+function makeAttachmentId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  }
+  return Math.random().toString(36).slice(2, 14);
+}
+
 /** Title-case label for an aspect concern verdict, for the tooltip header. */
 function verdictTitle(verdict: string | null): string | null {
   switch ((verdict ?? '').toLowerCase()) {
@@ -159,6 +168,7 @@ export class OverviewPaneComponent {
   private readonly jobService = inject(TaskService);
   private readonly notifs = inject(NotificationService);
   private readonly modalStack = inject(ModalStackService);
+  private readonly createForm = inject(CreateTaskFormService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly timeline = this.runTimelinePoll.timeline;
@@ -183,6 +193,84 @@ export class OverviewPaneComponent {
 
   /** Visual identity (initial + colour) of the project, for the sub-line. */
   readonly identity = computed(() => projectIdentity(this.job().projectName));
+
+  /** In-flight guard for the promote-to-coding fetch (payload + images). */
+  readonly promoting = signal(false);
+
+  /**
+   * Lanes a planning task counts as "finished successfully" for the
+   * promote affordance — it has reached review or completion, not a
+   * failure / still-running lane. See
+   * docs/research/planning-research-task-kinds-2026-05.md.
+   */
+  private static readonly FINISHED_STATES = new Set([
+    '4-auto-review',
+    '5-human-review',
+    '6-completed',
+  ]);
+
+  /**
+   * "Promote to coding task" is offered only on a planning task whose latest
+   * run finished. Research tasks are read-only reports by design and never
+   * show it; coding tasks have nothing to promote to.
+   */
+  readonly canPromote = computed(() =>
+    this.job().mode === 'planning'
+    && OverviewPaneComponent.FINISHED_STATES.has(this.job().state),
+  );
+
+  /**
+   * Fetch the pre-fill draft for this planning task, pull each copyable image
+   * down as a blob (so the create modal can re-upload it byte-for-byte), then
+   * open the create-task modal seeded with that draft. The modal stays the
+   * single source of truth for the create UX.
+   */
+  promote(): void {
+    if (this.promoting() || !this.canPromote()) return;
+    const job = this.job();
+    this.promoting.set(true);
+    this.jobService.getPromoteToCoding(job.id, job.watchPath).subscribe({
+      next: (payload) => {
+        void this.fetchPromoteAttachments(payload).then((attachments) => {
+          this.createForm.openPromotePlanning(payload, attachments);
+          this.promoting.set(false);
+        });
+      },
+      error: () => {
+        this.promoting.set(false);
+        this.notifs.warning(
+          'Could not prepare a coding task from this planning report. Try again in a moment.',
+          'Promote failed',
+        );
+      },
+    });
+  }
+
+  /**
+   * Download each promote attachment as a File wrapped in a PendingAttachment.
+   * A single failed image is skipped (the rest still come along) rather than
+   * failing the whole promotion.
+   */
+  private async fetchPromoteAttachments(payload: PromoteToCodingResponse): Promise<PendingAttachment[]> {
+    const pending: PendingAttachment[] = [];
+    for (const ref of payload.attachments) {
+      try {
+        const res = await fetch(ref.url);
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        const file = new File([blob], ref.fileName, { type: blob.type || 'image/png' });
+        pending.push({
+          id: makeAttachmentId(),
+          file,
+          alt: ref.fileName,
+          previewUrl: URL.createObjectURL(blob),
+        });
+      } catch {
+        // Skip this image; keep the rest of the promotion intact.
+      }
+    }
+    return pending;
+  }
 
   /** Effective CLI + model the Agent block renders. The override wins when
    *  the parent provides one (optimistic state from the picker commit) so

@@ -583,6 +583,31 @@ export interface CreateJobRequest {
 }
 
 /**
+ * Payload from GET /api/tasks/{id}/promote-to-coding: a pre-filled coding-task
+ * draft derived from a finished planning task. The frontend seeds the existing
+ * create-task modal with these fields and re-uploads `attachments` byte-for-byte
+ * into the new task. See docs/research/planning-research-task-kinds-2026-05.md.
+ */
+export interface PromoteToCodingResponse {
+  title: string;
+  promptMarkdown: string;
+  mode: TaskMode;
+  targetState: string;
+  watchPath: string;
+  projectName: string;
+  attachments: PromoteAttachmentRef[];
+}
+
+/** One copyable image attachment from a promoted planning task. */
+export interface PromoteAttachmentRef {
+  fileName: string;
+  /** Source folder on the planning task: `results` or `attachments`. */
+  source: string;
+  /** Relative API URL serving the image bytes. */
+  url: string;
+}
+
+/**
  * One epic + its live sub-task rollup, from GET /api/epics. Progress is derived
  * from the sub-tasks' lanes server-side, so it always matches the board.
  */

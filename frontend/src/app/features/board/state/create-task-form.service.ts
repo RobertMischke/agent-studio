@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { CliType, CLI_TYPES, TaskKind, TaskMode, WatchPathEntry } from '../../../models/task.model';
+import { CliType, CLI_TYPES, PromoteToCodingResponse, TaskKind, TaskMode, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
@@ -147,6 +147,32 @@ export class CreateTaskFormService {
     this.newWatchPath = watchEntry.path;
     this.newPrompt = event.promptText;
     this.newTitle = deriveDraftTitle(event.promptText);
+    this.loadCreateModels(this.newCliType);
+    this.visible.set(true);
+  }
+
+  /**
+   * "Promote to coding task" from a finished planning task's Overview. The
+   * caller (overview-pane) has already fetched the pre-fill payload from
+   * `GET /promote-to-coding` and turned each copyable image into a
+   * `PendingAttachment` (blob -> File). We seed the dialog with that draft —
+   * title, prompt body, same project, mode=coding — and surface the images as
+   * already-attached chips. On Save the existing attachment-upload pipeline
+   * copies them byte-for-byte into the new task. See
+   * docs/research/planning-research-task-kinds-2026-05.md.
+   */
+  openPromotePlanning(payload: PromoteToCodingResponse, attachments: PendingAttachment[]): void {
+    this.newTitle = payload.title;
+    this.newPrompt = payload.promptMarkdown;
+    this.newWatchPath = payload.watchPath;
+    this.newMode = 'coding';
+    this.newKind = 'task';
+    this.newTargetState = (CreateTaskFormService.ALLOWED_TARGET_STATES as readonly string[]).includes(payload.targetState)
+      ? payload.targetState
+      : '1-preparation';
+    // Revoke any previews carried over from a prior open before replacing.
+    for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
+    this.newAttachments = attachments;
     this.loadCreateModels(this.newCliType);
     this.visible.set(true);
   }

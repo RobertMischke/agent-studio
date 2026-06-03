@@ -993,6 +993,55 @@ public record CreateJobRequest
 }
 
 /// <summary>
+/// Payload from <c>GET /api/tasks/{id}/promote-to-coding</c>: a fully
+/// pre-filled coding-task draft derived from a finished planning task.
+/// The frontend seeds the existing create-task modal with these fields so
+/// the modal stays the single source of truth for the create UX. Images
+/// are returned as fetchable references (not inline bytes); the modal
+/// re-uploads them byte-for-byte into the new task's <c>attachments/</c>
+/// on save. See docs/research/planning-research-task-kinds-2026-05.md.
+/// </summary>
+public record PromoteToCodingResponse
+{
+    /// <summary>Title for the new coding task (the planning task's title, or its report heading).</summary>
+    public string Title { get; init; } = "";
+
+    /// <summary>Prompt body, extracted from the report's <c>## Proposed task prompt</c> section.</summary>
+    public string PromptMarkdown { get; init; } = "";
+
+    /// <summary>Always <see cref="TaskModes.Coding"/> — the promotion target mode.</summary>
+    public string Mode { get; init; } = TaskModes.Coding;
+
+    /// <summary>Always <see cref="TaskStates.Preparation"/> so the user gets one review pass before pickup (decision 3).</summary>
+    public string TargetState { get; init; } = TaskStates.Preparation;
+
+    /// <summary>Watch path of the source planning task; the new task lands in the same project.</summary>
+    public string WatchPath { get; init; } = "";
+
+    /// <summary>Project name of the source planning task (display convenience).</summary>
+    public string ProjectName { get; init; } = "";
+
+    /// <summary>Every image under the planning task's <c>results/</c> and <c>attachments/</c> folders, deduped by file name.</summary>
+    public List<PromoteAttachmentRef> Attachments { get; init; } = [];
+}
+
+/// <summary>
+/// One copyable image attachment surfaced by
+/// <see cref="PromoteToCodingResponse"/>. The frontend fetches
+/// <see cref="Url"/> as a blob, then re-uploads it into the new task.
+/// </summary>
+public record PromoteAttachmentRef
+{
+    public string FileName { get; init; } = "";
+
+    /// <summary>Source folder: <c>results</c> or <c>attachments</c>.</summary>
+    public string Source { get; init; } = "";
+
+    /// <summary>Relative API URL that serves the image bytes from the source task.</summary>
+    public string Url { get; init; } = "";
+}
+
+/// <summary>
 /// One entry in the workspace-level tag registry. Stored as one element of
 /// the JSON array at <c>&lt;TaskRepository&gt;/tags.json</c> and surfaced via
 /// <c>GET /api/tags</c>. The id is the lookup key referenced from each

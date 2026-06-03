@@ -17,6 +17,7 @@ import type {
   ContinueMode,
   ContinueTaskResponse,
   ProjectSnapshot,
+  PromoteToCodingResponse,
 } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
@@ -534,6 +535,19 @@ export class TaskService {
 
   createJob(req: CreateJobRequest) {
     return this.http.post<{ id: string }>(`${this.baseUrl}/tasks`, req);
+  }
+
+  /**
+   * Pre-filled coding-task draft derived from a finished planning task. The
+   * detail view feeds this into the create-task modal (see
+   * CreateTaskFormService.openPromotePlanning). 400 when the source is not a
+   * planning task.
+   */
+  getPromoteToCoding(jobId: string, watchPath?: string) {
+    return this.http.get<PromoteToCodingResponse>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/promote-to-coding`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   // Tag registry + per-job tag mutation. Backlog-lane spec.

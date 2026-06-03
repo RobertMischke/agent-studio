@@ -100,6 +100,36 @@ public static class TaskCrudEndpoints
             return Results.Ok(WithRuntime(detail, router, runners, tokenLookup, verdictLookup));
         });
 
+        // Promote a finished planning task to a pre-filled coding task. Returns
+        // a fully-populated draft (title + prompt body from the report's
+        // `## Proposed task prompt` section, copyable image references,
+        // mode=coding, state=1-preparation) that the frontend feeds into the
+        // existing create-task modal. The modal stays the single source of
+        // truth for create UX; this endpoint only reads. See
+        // docs/research/planning-research-task-kinds-2026-05.md.
+        group.MapGet("/{jobId}/promote-to-coding", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info is null) return Results.NotFound();
+            if (TaskModes.Normalize(info.Mode) != TaskModes.Planning)
+                return Results.BadRequest(new { error = "Only planning tasks can be promoted to a coding task." });
+
+            var plan = scanner.BuildPromoteToCodingPlan(jobId, watchPath);
+            if (plan is null) return Results.NotFound();
+
+            var watchPathQuery = string.IsNullOrEmpty(plan.WatchPath)
+                ? ""
+                : $"?watchPath={Uri.EscapeDataString(plan.WatchPath)}";
+            var attachments = plan.Attachments
+                .Select(a => a with
+                {
+                    Url = $"/api/tasks/{Uri.EscapeDataString(jobId)}/{a.Source}/{Uri.EscapeDataString(a.FileName)}{watchPathQuery}"
+                })
+                .ToList();
+
+            return Results.Ok(plan with { Attachments = attachments });
+        });
+
         group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,
             TaskTransitionService transitions,
             CancellationToken ct) =>

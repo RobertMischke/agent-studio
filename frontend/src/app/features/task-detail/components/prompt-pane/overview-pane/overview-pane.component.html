@@ -37,6 +37,19 @@
         <span class="ov-subline__project-name">{{ job().projectName }}</span>
       </span>
     </div>
+
+    @if (canPromote()) {
+      <div class="ov-promote" data-testid="overview-promote">
+        <button type="button" class="ov-promote__btn"
+                data-testid="overview-promote-btn"
+                [disabled]="promoting()"
+                [appTooltip]="'Open the create-task modal pre-filled from this planning report — title, prompt body, and copied images. The new coding task lands in In Preparation.'"
+                (click)="promote()">
+          <span class="ov-promote__icon" aria-hidden="true">→</span>
+          {{ promoting() ? 'Preparing…' : 'Promote to coding task' }}
+        </button>
+      </div>
+    }
   </section>
 
   <!-- Status block -->
