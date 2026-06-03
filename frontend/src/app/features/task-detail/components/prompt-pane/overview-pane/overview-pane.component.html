@@ -281,14 +281,30 @@
           <div class="ov-pl-step"
                [class.ov-pl-step--disabled]="row.status === 'disabled'"
                [class.ov-pl-step--running]="row.status === 'running'"
+               [class.ov-pl-step--final-verdict]="row.kind === 'orchestrator'"
                [attr.data-step-id]="row.id"
                [attr.data-status]="row.status"
+               [attr.data-run-mode]="row.runMode"
                data-testid="overview-pipeline-step">
             <span class="ov-pl-step__status"
                   [appTooltip]="stepStatusLabel(row.status)"
                   aria-hidden="true">{{ stepStatusIcon(row.status) }}</span>
             <span class="ov-pl-step__kind">{{ stepKindLabel(row.kind) }}</span>
             <span class="ov-pl-step__name">{{ row.label }}</span>
+            @if (row.runMode === 'parallel') {
+              <span class="ov-pl-step__parallel-badge"
+                    data-testid="overview-pipeline-step-parallel"
+                    [appTooltip]="'Runs in parallel with the other aspect reviews (read-only pool)'">
+                Parallel
+              </span>
+            }
+            @if (row.kind === 'orchestrator') {
+              <span class="ov-pl-step__final-badge"
+                    data-testid="overview-pipeline-step-final-verdict"
+                    [appTooltip]="'The orchestrator&rsquo;s single final ruling, aggregated from the parallel aspect verdicts'">
+                Final verdict
+              </span>
+            }
             @if (row.status === 'running') {
               <span class="ov-pl-step__running-badge"
                     data-testid="overview-pipeline-step-running"

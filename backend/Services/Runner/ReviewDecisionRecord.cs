@@ -44,6 +44,13 @@ public static class ReviewDecisionLog
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
     };
 
+    // The auto-review read-only pool reviews several tasks concurrently, so
+    // Append / ReadAll can be hit from multiple threads at once. The journal is
+    // a single append-only file per project; serialise access through one
+    // process-wide lock so a concurrent append cannot interleave a line or have
+    // its OS file handle collide with a concurrent read.
+    private static readonly object FileLock = new();
+
     public static string DecisionsDir(string workspaceRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
@@ -62,7 +69,10 @@ public static class ReviewDecisionLog
         Directory.CreateDirectory(dir);
         var path = DecisionsFile(workspaceRoot, record.Project);
         var line = JsonSerializer.Serialize(record, Json);
-        File.AppendAllText(path, line + Environment.NewLine);
+        lock (FileLock)
+        {
+            File.AppendAllText(path, line + Environment.NewLine);
+        }
     }
 
     public static IReadOnlyList<ReviewDecisionRecord> ReadAll(string workspaceRoot, string project)
@@ -70,15 +80,18 @@ public static class ReviewDecisionLog
         var path = DecisionsFile(workspaceRoot, project);
         if (!File.Exists(path)) return Array.Empty<ReviewDecisionRecord>();
         var result = new List<ReviewDecisionRecord>();
-        foreach (var line in File.ReadLines(path))
+        lock (FileLock)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            try
+            foreach (var line in File.ReadLines(path))
             {
-                var rec = JsonSerializer.Deserialize<ReviewDecisionRecord>(line, Json);
-                if (rec != null) result.Add(rec);
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    var rec = JsonSerializer.Deserialize<ReviewDecisionRecord>(line, Json);
+                    if (rec != null) result.Add(rec);
+                }
+                catch (JsonException) { /* skip malformed lines; the file is append-only */ }
             }
-            catch (JsonException) { /* skip malformed lines; the file is append-only */ }
         }
         return result;
     }

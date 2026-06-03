@@ -26,6 +26,7 @@ import type {
   PipelineStepExecution,
   PipelineStepStatus,
   StepKind,
+  StepRunMode,
 } from '../../../../task-pipeline';
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
@@ -50,6 +51,12 @@ interface PipelineRowVm {
   id: string;
   label: string;
   kind: StepKind;
+  /**
+   * 'parallel' for the read-only aspect reviews that run concurrently in the
+   * orchestrator pool; 'sequential' for the core run and the single final
+   * verdict. Drives the "Parallel" badge so the two phases read as distinct.
+   */
+  runMode: StepRunMode;
   enabled: boolean;
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
@@ -510,6 +517,7 @@ export class OverviewPaneComponent {
         id: step.id,
         label,
         kind: step.kind,
+        runMode: step.runMode,
         enabled,
         status,
         model: e?.model ?? cfg?.model ?? step.model ?? null,

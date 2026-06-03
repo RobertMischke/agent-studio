@@ -469,6 +469,62 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(guard.concernTooltip!.title).toBe('Loop check · Loop forming');
   });
 
+  it('pipeline block: parallel aspects carry a parallel badge and the orchestrator decision renders as a separate final-verdict step', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'aspect-requirement-fit', displayName: 'Requirement fit', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+          { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+          { id: 'post-orchestrator-decision', displayName: 'Final verdict', kind: 'orchestrator', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: {
+        pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        steps: [
+          { stepId: 'aspect-requirement-fit', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
+          { stepId: 'aspect-code-quality', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
+          { stepId: 'post-orchestrator-decision', kind: 'orchestrator', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'accept', verdictSummary: 'All aspects passed; accepting.' },
+        ],
+      },
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const rows = c.pipelineRows();
+
+    // Aspect rows are flagged parallel so the template can badge them.
+    const aspects = rows.filter(r => r.kind === 'aspect');
+    expect(aspects.length).toBe(2);
+    expect(aspects.every(r => r.runMode === 'parallel')).toBe(true);
+
+    // The orchestrator decision is its own, separate row (Req 3).
+    const decision = rows.find(r => r.id === 'post-orchestrator-decision')!;
+    expect(decision.kind).toBe('orchestrator');
+    expect(decision.runMode).toBe('sequential');
+    expect(decision.verdict).toBe('accept');
+    expect(c.stepKindLabel(decision.kind)).toBe('Decision');
+
+    // The DOM carries the parallel badge on aspect rows and exactly one
+    // final-verdict chip on the orchestrator row.
+    const parallelBadges = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-parallel"]');
+    expect(parallelBadges.length).toBe(2);
+    const finalChips = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-final-verdict"]');
+    expect(finalChips.length).toBe(1);
+
+    // The decision row is marked so the template can visually separate it.
+    const decisionEl = fixture.nativeElement.querySelector('[data-step-id="post-orchestrator-decision"]') as HTMLElement | null;
+    expect(decisionEl).not.toBeNull();
+    expect(decisionEl!.classList.contains('ov-pl-step--final-verdict')).toBe(true);
+    expect(decisionEl!.getAttribute('data-run-mode')).toBe('sequential');
+  });
+
   it('promote affordance: shown only on a finished planning task across its finished lanes', async () => {
     const fixture = await build(baseJob({ mode: 'planning', state: '4-auto-review' }));
     const c = fixture.componentInstance;

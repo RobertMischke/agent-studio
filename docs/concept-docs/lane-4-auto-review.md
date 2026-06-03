@@ -6,6 +6,11 @@ Auto-review is the orchestrator's lane (the machine-icon column on the board). W
 
 For every job sitting in this lane, the orchestrator runs a short multi-aspect quality pass. Each aspect is a separate fast-model call against a tightly scoped slice of the evidence (requirement fit, code quality, documentation impact, tests and evidence). Each call writes its own `aspect-*.md` into the job folder so the result is replayable and inspectable. The orchestrator then folds the per-aspect verdicts into one decision and acts on it deterministically. The agent's own self-report is one input among several; the lane never blindly trusts a `[[TASK_DONE]]`.
 
+The pass has two clearly separated phases, and both are first-class rows in the Overview pipeline table:
+
+- **Parallel aspect reviews (read-only pool).** Aspect reviews read evidence and write only their own `aspect-*.md`; they touch no working tree. So they are admitted as **read-only slots** through `ParallelSlotPolicy` (ADR-0052), independent of the single coding seat that serialises file-mutating runs. Several tasks can therefore be in auto-review at the same time, bounded by `ReviewDecisionOrchestrator:MaxParallelReviews` (default 4). Each aspect row carries a "Parallel" badge.
+- **Orchestrator final verdict (one ruling).** After the aspects finish, the orchestrator makes exactly one final decision and records it as its own `post-orchestrator-decision` step (`Auto-review decision`). Its verdict is the aggregate of the aspect verdicts: `accept` (all pass) or `accept-with-concerns` -> `5-human-review`, `reissue` (any block) -> `3-progress`, `escalate` -> `5-human-review`. The row is rendered as a visually separated "Final verdict" step so the single ruling is never confused with the individual aspect checks.
+
 ## Three outcomes
 
 - **All aspects pass.** The job is promoted to `5-human-review` with no flags. You see a clean card and decide whether to accept it.
@@ -22,7 +27,7 @@ When the aggregate is genuinely empty — no run-window range produced commits a
 
 ## What to do when the lane stalls
 
-If a job sits in this lane longer than feels right: the multi-aspect pass is sequential, so a slow CLI quota or a stuck fast-model call can hold the whole lane up. The header shows the live status line ("Reviewing X. Last tick: A accept, B reissue, C escalate"). When that line stops updating for many minutes, glance at `logs/meta/<project>/observations.jsonl` for advisories or use the supervisor's pause/resume primitives to nudge it. The kill switch for the multi-aspect pass is `ReviewDecisionOrchestrator:AspectsEnabled`; flipping it off makes auto-review a passthrough.
+If a job sits in this lane longer than feels right: tasks now review concurrently in the read-only pool (bounded by `ReviewDecisionOrchestrator:MaxParallelReviews`), and the aspects within a single task run in parallel too, so the lane no longer head-of-line blocks on one slow task. What can still hold a task up is a slow CLI quota or a stuck fast-model call on that task's own aspect set. The header shows the live status line ("Reviewing X. Last tick: A accept, B reissue, C escalate"). When that line stops updating for many minutes, glance at `logs/meta/<project>/observations.jsonl` for advisories or use the supervisor's pause/resume primitives to nudge it. The kill switch for the multi-aspect pass is `ReviewDecisionOrchestrator:AspectsEnabled`; flipping it off makes auto-review a passthrough. Set `MaxParallelReviews` to `1` to force one-task-at-a-time review without disabling the aspects.
 
 ## Reference
 

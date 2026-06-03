@@ -89,6 +89,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     public const int MaxAutoReissueAttempts = 2;
 
+    /// <summary>
+    /// Default cap on concurrently-running DONE aspect-reviews in the read-only
+    /// parallel pool (ADR-0052). Mirrors the in-aspect WhenAll cap of 4. Override
+    /// with <c>ReviewDecisionOrchestrator:MaxParallelReviews</c>.
+    /// </summary>
+    public const int DefaultMaxParallelReviews = 4;
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _stateMachine;
     private readonly ITaskAccess _taskAccess;
@@ -115,6 +122,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     };
 
     private readonly Queue<DateTime> _callTimestamps = new();
+
+    // Guards _callTimestamps: the read-only review pool processes several DONE
+    // tasks concurrently, each charging the per-hour rate budget, so the
+    // sliding-window queue is mutated from multiple threads.
+    private readonly object _callTimestampsLock = new();
 
     /// <summary>
     /// CLI runner injection point. Tests substitute a deterministic stub.
@@ -309,11 +321,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
         var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
         var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
+        var maxParallelReviews = ParallelSlotPolicy.ClampMax(
+            _configuration.GetValue("ReviewDecisionOrchestrator:MaxParallelReviews", DefaultMaxParallelReviews));
         var aspects = ResolveAspectRunners();
 
         _statusSnapshot.BeginTick();
         try
         {
+            // DONE aspect-reviews write no repo files, so they are not bound to
+            // the sequential code-seat: collect them here and run them through a
+            // bounded read-only parallel pool below (Req 1 / ADR-0052). Every
+            // other kind stays sequential - they are cheap/deterministic and
+            // some mutate shared lane state, so parallelising them buys nothing.
+            var doneReviews = new List<(WatchPathEntry Entry, PendingDecision Pending)>();
+
             foreach (var entry in _scanner.GetWatchPaths())
             {
                 if (string.IsNullOrWhiteSpace(entry.Path)) continue;
@@ -323,6 +344,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 {
                     if (ct.IsCancellationRequested) return;
                     _statusSnapshot.RecordPending();
+
+                    if (pending.Kind == ReviewSignalKind.Done)
+                    {
+                        // Defer to the read-only parallel pool. The cheap
+                        // enabled-checks happen here so a disabled/no-aspect
+                        // project never occupies a slot.
+                        if (aspects.Count == 0 ||
+                            !_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
+                        {
+                            continue;
+                        }
+                        doneReviews.Add((entry, pending));
+                        continue;
+                    }
+
                     _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
 
                     try
@@ -359,33 +395,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             continue;
                         }
 
-                        if (pending.Kind == ReviewSignalKind.Done)
-                        {
-                            // DONE: run the multi-aspect pass. ADR-0025
-                            // slice 1: form an opinion across multiple
-                            // quality aspects rather than waving the job
-                            // through silently. Rate-limited only on the
-                            // sum of aspect calls, since the per-aspect
-                            // cost is small and tests substitute a stub.
-                            if (aspects.Count == 0 ||
-                                !_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
-                            {
-                                continue;
-                            }
-                            if (!RateLimitOk(maxPerHour))
-                            {
-                                _logger.LogInformation(
-                                    "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring DONE aspects for {JobId}",
-                                    maxPerHour, pending.Job.Id);
-                                return;
-                            }
-                            await ProcessDoneAsync(workspace, entry, pending, aspects, cliBinary, aspectModel,
-                                TimeSpan.FromSeconds(aspectTimeoutSeconds), ct);
-                            _statusSnapshot.RecordAspectsRun(aspects.Count);
-                            _callTimestamps.Enqueue(DateTime.UtcNow);
-                            continue;
-                        }
-
                         if (!RateLimitOk(maxPerHour))
                         {
                             _logger.LogInformation(
@@ -404,10 +413,101 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     }
                 }
             }
+
+            // Req 1: drain the collected DONE reviews through the read-only
+            // parallel pool. Runs after the sequential pass so the deterministic
+            // kinds above never wait behind a multi-aspect review.
+            await RunReadOnlyReviewPoolAsync(
+                workspace, doneReviews, aspects, cliBinary, aspectModel,
+                TimeSpan.FromSeconds(aspectTimeoutSeconds), maxPerHour, maxParallelReviews, ct);
         }
         finally
         {
             _statusSnapshot.EndTick();
+        }
+    }
+
+    /// <summary>
+    /// Drains the DONE aspect-reviews collected in one tick through a bounded
+    /// read-only parallel pool. ADR-0052: an aspect review writes no repo files,
+    /// so each task is a <see cref="TaskParallelism.ReadOnlyTask"/> candidate the
+    /// <see cref="ParallelSlotPolicy"/> admits without scope analysis, decoupled
+    /// from the sequential code-seat (<c>ProjectRunner._activeJobId</c>). The pool
+    /// is capped at <paramref name="maxParallel"/> concurrent reviews and shares
+    /// the per-hour rate budget: each admitted review charges one call, and once
+    /// the budget is spent the remaining reviews are left for the next tick.
+    /// </summary>
+    private async Task RunReadOnlyReviewPoolAsync(
+        string workspace,
+        IReadOnlyList<(WatchPathEntry Entry, PendingDecision Pending)> doneReviews,
+        IReadOnlyList<string> aspects,
+        string cliBinary,
+        string aspectModel,
+        TimeSpan perAspectTimeout,
+        int maxPerHour,
+        int maxParallel,
+        CancellationToken ct)
+    {
+        if (doneReviews.Count == 0) return;
+        var max = ParallelSlotPolicy.ClampMax(maxParallel);
+
+        var running = new List<(Task Task, RunningTask Slot)>();
+        try
+        {
+            foreach (var (entry, pending) in doneReviews)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                // Wait for a slot. For read-only candidates ParallelSlotPolicy
+                // admits as soon as one of the `max` slots is free, so the loop
+                // parks on WhenAny until a running review drains.
+                while (true)
+                {
+                    running.RemoveAll(r => r.Task.IsCompleted);
+                    var slots = running.Select(r => r.Slot).ToList();
+                    var admission = ParallelSlotPolicy.Decide(
+                        pending.Job.Id, TaskParallelism.ReadOnlyTask, slots, max);
+                    if (admission.Admitted) break;
+                    await Task.WhenAny(running.Select(r => r.Task));
+                }
+
+                // Share the per-hour budget across the whole pool: charge before
+                // launching, and stop admitting (but let in-flight reviews finish)
+                // once the budget is spent so we never exceed CallsPerHour.
+                if (!RateLimitOk(maxPerHour))
+                {
+                    _logger.LogInformation(
+                        "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring {Count} DONE review(s) to next tick",
+                        maxPerHour, doneReviews.Count - running.Count);
+                    break;
+                }
+                RecordRateLimitedCall();
+
+                var slot = new RunningTask(pending.Job.Id, TaskParallelism.ReadOnlyTask);
+                var task = Task.Run(async () =>
+                {
+                    _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
+                    try
+                    {
+                        await ProcessDoneAsync(workspace, entry, pending, aspects, cliBinary,
+                            aspectModel, perAspectTimeout, ct);
+                        _statusSnapshot.RecordAspectsRun(aspects.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "ReviewDecisionOrchestrator failed to process {Project}/{JobId}",
+                            entry.Name, pending.Job.Id);
+                    }
+                }, ct);
+                running.Add((task, slot));
+            }
+        }
+        finally
+        {
+            // Always await everything we launched, even on cancellation, so a
+            // review never outlives the tick that owns its status-snapshot frame.
+            await Task.WhenAll(running.Select(r => r.Task));
         }
     }
 
@@ -587,7 +687,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 project: entry.Name,
                 jobId: pending.Job.Id);
             response = parsedText;
-            _callTimestamps.Enqueue(DateTime.UtcNow);
+            RecordRateLimitedCall();
         }
         catch (Exception ex)
         {
@@ -1055,6 +1155,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
         }
 
+        // Final verdict step: the orchestrator's single ruling after the
+        // parallel aspects. Recorded on the post-move folder (the pipeline
+        // record travelled with the lane move) so the Overview pipeline shows
+        // it as the distinct "Auto-review decision" row below the aspects.
+        RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Passed,
+            report.Overall == AspectStatus.Concerns
+                ? DecisionVerdictAcceptWithConcerns
+                : DecisionVerdictAccept,
+            report.Overall == AspectStatus.Concerns
+                ? FormatConcernCount(report)
+                : "all aspects pass");
+
         // Provenance: the orchestrator (not a human) advanced this task
         // toward Completed. Stamp on the authoritative post-move path.
         ConcernTagWriter.MergeConcernTags(movedFolderPath, new[] { OrchestratorMovedTagId }, _logger);
@@ -1122,6 +1234,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // The aspect work is sunk; the next tick will retry.
             return;
         }
+
+        // Final verdict step: reissue. Recorded on the post-move folder so the
+        // Overview pipeline shows the orchestrator's ruling distinctly from the
+        // parallel aspect rows that drove it.
+        RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
+            DecisionVerdictReissue, "Multi-aspect block: " + AspectSummaryLine(report));
+
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
         // F29: keep the operator-facing reissue note short. The full
@@ -1239,6 +1358,53 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             CompletedAt = now,
             DurationMs = durationMs,
             Verdict = verdictToken,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
+    /// Verdict tokens stamped on the
+    /// <see cref="PipelineCatalogue.OrchestratorDecisionStepId"/> step. This is
+    /// the orchestrator's single final ruling, aggregated from the parallel
+    /// aspect verdicts (plus the lint gate): <c>accept</c> when every aspect
+    /// passed, <c>accept-with-concerns</c> when it advances despite non-blocking
+    /// concerns, <c>reissue</c> when it sends the task back to 2-ready, and
+    /// <c>escalate</c> when it hands the task to a human. The FE Overview
+    /// pipeline renders the token on the "Auto-review decision" row's pill.
+    /// </summary>
+    internal const string DecisionVerdictAccept = "accept";
+    internal const string DecisionVerdictAcceptWithConcerns = "accept-with-concerns";
+    internal const string DecisionVerdictReissue = "reissue";
+    internal const string DecisionVerdictEscalate = "escalate";
+
+    /// <summary>
+    /// Record the <see cref="PipelineCatalogue.OrchestratorDecisionStepId"/>
+    /// step with the orchestrator's single aggregated final verdict. This is
+    /// the step the Overview pipeline shows as the distinct "Auto-review
+    /// decision" row beneath the parallel aspect rows - the catalogue defines
+    /// it (<see cref="StepKind.Orchestrator"/>, depends on every aspect) but
+    /// nothing recorded an outcome before, so it stayed <c>Pending</c> forever.
+    /// Recorded on the job's post-move folder so the record lands where the
+    /// pipeline-execution.json now lives. No-op when the pipeline log is not
+    /// wired (stand-alone test path).
+    /// </summary>
+    private void RecordOrchestratorDecisionStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        string verdict,
+        string? reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.OrchestratorDecisionStepId,
+            Kind = StepKind.Orchestrator,
+            Status = status,
+            StartedAt = now,
+            CompletedAt = now,
+            DurationMs = 0,
+            Verdict = verdict,
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
         });
     }
@@ -1403,6 +1569,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
                 var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+                // Final verdict step: escalate (lint double-fail infinite-spin guard).
+                RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
+                    DecisionVerdictEscalate, reason);
                 _chatLog.AppendSupervisor(moved, "escalate",
                     $"Lint-scss post-step failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
                 // ADR-0049: timeline event on the original card, no wrapper card.
@@ -1432,6 +1601,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var moved2 = MoveReissueToReadyTop(current, entry, "lint-scss fail");
         if (moved2 == null) return;
+
+        // Final verdict step: reissue (lint-scss gate failed once).
+        RecordOrchestratorDecisionStep(moved2.FolderPath, PipelineStepStatus.Failed,
+            DecisionVerdictReissue, LintScssReissueReasonPrefix + $"stylelint exit {result.ExitCode}");
 
         var followUp = BuildLintScssFollowUp(result);
         await WriteFollowUpFileAsync(moved2, followUp, ct);
@@ -2195,9 +2368,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private bool RateLimitOk(int maxPerHour)
     {
-        var cutoff = DateTime.UtcNow - TimeSpan.FromHours(1);
-        while (_callTimestamps.Count > 0 && _callTimestamps.Peek() < cutoff) _callTimestamps.Dequeue();
-        return _callTimestamps.Count < maxPerHour;
+        lock (_callTimestampsLock)
+        {
+            var cutoff = DateTime.UtcNow - TimeSpan.FromHours(1);
+            while (_callTimestamps.Count > 0 && _callTimestamps.Peek() < cutoff) _callTimestamps.Dequeue();
+            return _callTimestamps.Count < maxPerHour;
+        }
+    }
+
+    /// <summary>
+    /// Charge one call against the per-hour rate budget. Thread-safe: the
+    /// read-only review pool records calls from several review threads at once.
+    /// </summary>
+    private void RecordRateLimitedCall()
+    {
+        lock (_callTimestampsLock)
+        {
+            _callTimestamps.Enqueue(DateTime.UtcNow);
+        }
     }
 
     /// <summary>
