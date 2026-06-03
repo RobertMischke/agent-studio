@@ -53,6 +53,67 @@ public sealed class RegressionRadarServiceTests
         Assert.Null(RegressionRadarService.ResolveCompanionPath("src/app/task.service.ts"));
     }
 
+    // --- ResolveCompanion (path + changed) ---
+
+    [Fact]
+    public void ResolveCompanion_DotNet_ParallelDir_MatchesByBasename()
+    {
+        // Regression: the test and its implementation live in parallel directory
+        // trees, so an exact full-path match never succeeds. The companion must
+        // be matched by filename and resolved to the actual changed impl path.
+        var nonSpecPaths = new[] { "backend/Services/Runner/PhaseAwareWatchdog.cs" };
+        var (companion, changed) = RegressionRadarService.ResolveCompanion(
+            "backend.Tests/PhaseAwareWatchdogTests.cs", nonSpecPaths);
+
+        Assert.True(changed);
+        Assert.Equal("backend/Services/Runner/PhaseAwareWatchdog.cs", companion);
+    }
+
+    [Fact]
+    public void ResolveCompanion_DotNet_NoMatchingImpl_NotChanged()
+    {
+        var nonSpecPaths = new[] { "backend/Services/Other.cs" };
+        var (companion, changed) = RegressionRadarService.ResolveCompanion(
+            "backend.Tests/PhaseAwareWatchdogTests.cs", nonSpecPaths);
+
+        Assert.False(changed);
+        Assert.Equal("PhaseAwareWatchdog.cs", companion);
+    }
+
+    [Fact]
+    public void ResolveCompanion_TypeScript_SubDir_MatchesExactPath()
+    {
+        var nonSpecPaths = new[] { "src/app/task.service.ts" };
+        var (companion, changed) = RegressionRadarService.ResolveCompanion(
+            "src/app/task.service.spec.ts", nonSpecPaths);
+
+        Assert.True(changed);
+        Assert.Equal("src/app/task.service.ts", companion);
+    }
+
+    [Fact]
+    public void ResolveCompanion_TypeScript_SameBasenameDifferentDir_NotChanged()
+    {
+        // A same-named impl in a different directory must NOT count for TS, where
+        // the companion path is known exactly.
+        var nonSpecPaths = new[] { "lib/task.service.ts" };
+        var (companion, changed) = RegressionRadarService.ResolveCompanion(
+            "src/app/task.service.spec.ts", nonSpecPaths);
+
+        Assert.False(changed);
+        Assert.Equal("src/app/task.service.ts", companion);
+    }
+
+    [Fact]
+    public void ResolveCompanion_NonSpec_ReturnsNull()
+    {
+        var (companion, changed) = RegressionRadarService.ResolveCompanion(
+            "src/app/task.service.ts", new[] { "src/app/task.service.ts" });
+
+        Assert.Null(companion);
+        Assert.False(changed);
+    }
+
     // --- StripSpecSuffix ---
 
     [Theory]
@@ -170,6 +231,50 @@ public sealed class RegressionRadarServiceTests
         Assert.Equal(0, result.AtRiskCount);
         Assert.Equal(0, result.DriftCount);
         Assert.Equal(SpecChangeCategory.Intended, result.OverallStatus);
+    }
+
+    [Fact]
+    public void ClassifyFiles_DotNetTestWithParallelImpl_IsIntended()
+    {
+        // Regression for the false-positive: a modified .NET test plus its impl in
+        // a parallel directory tree (the exact ASS-699 / ed131575 shape). Before
+        // the basename match this landed as At Risk because the full-path
+        // membership test could never succeed.
+        var allFiles = new List<GitFileChange>
+        {
+            new("M", "backend.Tests/PhaseAwareWatchdogTests.cs", 54, 0),
+            new("M", "backend/Services/Runner/PhaseAwareWatchdog.cs", 35, 0),
+        };
+
+        var service = new RegressionRadarService(null!, null!, null!, NullLogger<RegressionRadarService>.Instance);
+        var result = service.ClassifyFiles(allFiles, "aaa", "bbb", "test-job");
+
+        Assert.Equal(1, result.TotalSpecChanges);
+        Assert.Equal(1, result.IntendedCount);
+        Assert.Equal(0, result.AtRiskCount);
+        Assert.Equal(SpecChangeCategory.Intended, result.OverallStatus);
+
+        var entry = Assert.Single(result.Entries);
+        Assert.True(entry.CompanionChanged);
+        Assert.Equal("backend/Services/Runner/PhaseAwareWatchdog.cs", entry.CompanionPath);
+    }
+
+    [Fact]
+    public void ClassifyFiles_DotNetTestWithoutImpl_IsAtRisk()
+    {
+        var allFiles = new List<GitFileChange>
+        {
+            new("M", "backend.Tests/PhaseAwareWatchdogTests.cs", 54, 0),
+            new("M", "backend/Services/Runner/Unrelated.cs", 35, 0),
+        };
+
+        var service = new RegressionRadarService(null!, null!, null!, NullLogger<RegressionRadarService>.Instance);
+        var result = service.ClassifyFiles(allFiles, "aaa", "bbb", "test-job");
+
+        Assert.Equal(1, result.TotalSpecChanges);
+        Assert.Equal(0, result.IntendedCount);
+        Assert.Equal(1, result.AtRiskCount);
+        Assert.Equal(SpecChangeCategory.AtRisk, result.OverallStatus);
     }
 
     [Fact]

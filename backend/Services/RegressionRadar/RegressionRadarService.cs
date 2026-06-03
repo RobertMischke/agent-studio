@@ -88,8 +88,7 @@ public sealed class RegressionRadarService
         var entries = new List<SpecChangeEntry>();
         foreach (var spec in specFiles)
         {
-            var companion = ResolveCompanionPath(spec.Path);
-            var companionChanged = companion != null && nonSpecPaths.Contains(companion);
+            var (companion, companionChanged) = ResolveCompanion(spec.Path, nonSpecPaths);
             var category = Classify(spec, companion, companionChanged, specFiles);
             var reason = BuildReason(spec, category, companion, companionChanged);
 
@@ -210,7 +209,8 @@ public sealed class RegressionRadarService
     /// <summary>
     /// Given a spec file path, returns the likely companion implementation path.
     /// E.g. "src/app/task.service.spec.ts" -> "src/app/task.service.ts"
-    /// E.g. "backend.Tests/FooTests.cs" -> "backend/Services/Foo.cs" (heuristic)
+    /// E.g. "backend.Tests/FooTests.cs" -> "FooService.cs" (basename only; the
+    /// impl lives in a parallel directory tree, so callers must match by filename)
     /// </summary>
     internal static string? ResolveCompanionPath(string specPath)
     {
@@ -219,17 +219,50 @@ public sealed class RegressionRadarService
         if (tsMatch.Success)
             return $"{tsMatch.Groups[1].Value}.{tsMatch.Groups[3].Value}";
 
-        // .NET: FooTests.cs -> Foo.cs (same directory or parallel structure)
+        // .NET: FooTests.cs -> Foo.cs. Tests and implementation live in parallel
+        // directory trees (backend.Tests/ vs backend/), so we only know the
+        // filename, not the full path.
         var csMatch = Regex.Match(specPath, @"^(.+)Tests\.cs$", RegexOptions.IgnoreCase);
         if (csMatch.Success)
         {
             var baseName = Path.GetFileName(csMatch.Groups[1].Value);
-            // The companion is in a parallel directory structure; we return
-            // just the filename pattern so callers can do a contains-match
             return baseName + ".cs";
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Resolves a spec's companion implementation and whether it changed within
+    /// the same commit range. TypeScript/JS companions carry their own directory
+    /// and are matched by exact relative path. .NET companions are only known by
+    /// filename (test and impl live in parallel directory trees), so they are
+    /// matched by basename against the changed non-spec paths; when a match is
+    /// found the actual full path is returned so the reason text is precise.
+    /// </summary>
+    internal static (string? CompanionPath, bool CompanionChanged) ResolveCompanion(
+        string specPath, IReadOnlyCollection<string> nonSpecPaths)
+    {
+        var companion = ResolveCompanionPath(specPath);
+        if (companion == null)
+            return (null, false);
+
+        var companionHasDirectory =
+            companion.IndexOf('/') >= 0 || companion.IndexOf('\\') >= 0;
+
+        if (companionHasDirectory)
+        {
+            // TS/JS: exact relative-path membership.
+            var changed = nonSpecPaths.Any(p =>
+                string.Equals(p, companion, StringComparison.OrdinalIgnoreCase));
+            return (companion, changed);
+        }
+
+        // Bare basename (.NET parallel layout): match on filename so a same-named
+        // implementation in any directory counts as the companion change.
+        var matched = nonSpecPaths.FirstOrDefault(p =>
+            string.Equals(Path.GetFileName(p), companion, StringComparison.OrdinalIgnoreCase));
+        return (matched ?? companion, matched != null);
     }
 
     /// <summary>
