@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { CliType, CLI_TYPES, TaskKind, WatchPathEntry } from '../../../models/task.model';
+import { CliType, CLI_TYPES, TaskKind, TaskMode, WatchPathEntry } from '../../../models/task.model';
 import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-task-dialog/create-task-dialog.component';
 import { TaskService } from '../../../services/task.service';
@@ -47,6 +47,10 @@ export class CreateTaskFormService {
   newKind: TaskKind = 'task';
   /** Assignment way 1: optional parent epic id for a `kind=task` create. */
   newEpicId = '';
+  /** Execution mode (coding | planning | research). Defaults to coding. */
+  newMode: TaskMode = 'coding';
+  /** Web access. Default-by-mode lives in the picker (research = on, else off). */
+  newAllowWebAccess = false;
   newCliType: CliType = readDefaultCliPref();
   newModel: string = readDefaultModelPref(readDefaultCliPref());
   newAttachments: PendingAttachment[] = [];
@@ -182,6 +186,8 @@ export class CreateTaskFormService {
     this.newTargetState = '1-preparation';
     this.newKind = 'task';
     this.newEpicId = '';
+    this.newMode = 'coding';
+    this.newAllowWebAccess = false;
     this.newCliType = readDefaultCliPref();
     this.newModel = readDefaultModelPref(this.newCliType);
     this.availableModels.set([]);
@@ -218,6 +224,8 @@ export class CreateTaskFormService {
       kind: this.newKind,
       // Way 1 only applies to a task; an epic has no parent epic.
       epicId: this.newKind === 'task' && this.newEpicId ? this.newEpicId : undefined,
+      mode: this.newMode,
+      allowWebAccess: this.newAllowWebAccess,
     }).subscribe({
       next: (res) => {
         localStorage.setItem('lastCreateWatchPath', watchPath);

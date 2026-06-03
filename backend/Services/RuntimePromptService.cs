@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services;
 
@@ -18,6 +19,11 @@ public sealed partial class RuntimePromptService
     public const string EpicDecomposition = "epic-decomposition.md";
     public const string SummaryProtocol = "summary-protocol.md";
     public const string CommitMessage = "commit-message.md";
+    public const string ModeFramingReadOnly = "mode-framing-readonly.md";
+    public const string ModeFramingWeb = "mode-framing-web.md";
+
+    private static readonly IReadOnlyDictionary<string, string?> NoValues =
+        new Dictionary<string, string?>();
 
     private readonly IConfiguration _configuration;
     private readonly ILogger<RuntimePromptService> _logger;
@@ -37,6 +43,26 @@ public sealed partial class RuntimePromptService
             var key = match.Groups["key"].Value.Trim();
             return values.TryGetValue(key, out var value) ? value ?? string.Empty : match.Value;
         });
+    }
+
+    /// <summary>
+    /// Composes the per-mode framing block injected into runner prompts via the
+    /// <c>{{mode_framing}}</c> placeholder. Read-only modes (planning / research)
+    /// get the read-only block; web access (research default, or any mode the
+    /// user opted into) appends the web block. Coding with web off yields an
+    /// empty string so the rendered prompt is byte-identical to the pre-mode
+    /// behavior. A non-empty result ends with a blank-line separator so it slots
+    /// in front of the following section cleanly.
+    /// </summary>
+    public string RenderModeFraming(string? mode, bool allowWebAccess)
+    {
+        var parts = new List<string>();
+        if (TaskModes.IsReadOnly(mode))
+            parts.Add(Render(ModeFramingReadOnly, NoValues).Trim());
+        if (allowWebAccess)
+            parts.Add(Render(ModeFramingWeb, NoValues).Trim());
+        if (parts.Count == 0) return string.Empty;
+        return string.Join("\n\n", parts) + "\n\n";
     }
 
     private string Load(string templateName)

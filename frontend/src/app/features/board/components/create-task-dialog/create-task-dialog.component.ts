@@ -3,7 +3,7 @@ import { ModalStackService } from '../../../../services/modal-stack.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
-import type { CliType, TagRegistryEntry, TaskKind, WatchPathEntry } from '../../../../models/task.model';
+import type { CliType, TagRegistryEntry, TaskKind, TaskMode, WatchPathEntry } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
@@ -11,6 +11,7 @@ import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { TooltipDirective } from '../../../../components/tooltip';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { CreateEpicPickerComponent } from '../create-epic-picker/create-epic-picker.component';
+import { CreateModePickerComponent } from '../create-mode-picker/create-mode-picker.component';
 export interface PendingAttachment {
   id: string;
   file: File;
@@ -57,7 +58,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   selector: 'app-create-job-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent],
+  imports: [FormsModule, TooltipDirective, CliModelSelectorComponent, CreateEpicPickerComponent, CreateModePickerComponent],
   templateUrl: './create-task-dialog.component.html'
 })
 export class CreateTaskDialogComponent implements AfterViewInit {
@@ -81,6 +82,8 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   readonly isEpic = computed(() => this.newKind() === 'epic');
   /** Way 1: parent epic id for a `kind=task`. Hidden when kind=epic. */
   readonly newEpicId = model<string>('');
+  readonly newMode = model<TaskMode>('coding');
+  readonly newAllowWebAccess = model<boolean>(false);
 
   setKind(kind: TaskKind): void { this.newKind.set(kind); }
 

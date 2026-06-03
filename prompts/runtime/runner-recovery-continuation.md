@@ -10,7 +10,7 @@ User follow-up (latest direction on top of the task above):
 
 ---
 
-You are picking up this task. The previous CLI session was lost, so you do not have the conversation history; treat the task body above as your authoritative starting point and the follow-up (if present) as the user's latest direction on top of it. The task body is **not** background context - it is the work you are here to do.
+{{mode_framing}}You are picking up this task. The previous CLI session was lost, so you do not have the conversation history; treat the task body above as your authoritative starting point and the follow-up (if present) as the user's latest direction on top of it. The task body is **not** background context - it is the work you are here to do.
 
 Do **not** reply "I'll wait for your request" or "standing by". The user already gave you both the task and any follow-up. If you cannot proceed after reading the evidence, end with `[[TASK_BLOCKED:<reason>]]` and explain why.
 

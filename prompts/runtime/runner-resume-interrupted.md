@@ -4,7 +4,7 @@
 
 ---
 
-Resume this interrupted task. The previous CLI run did not finish; existing changes and evidence are intact, so continue from them rather than starting over.
+{{mode_framing}}Resume this interrupted task. The previous CLI run did not finish; existing changes and evidence are intact, so continue from them rather than starting over.
 
 Reconstruct context before continuing:
 

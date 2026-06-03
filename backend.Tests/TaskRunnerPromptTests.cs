@@ -377,6 +377,108 @@ public class TaskRunnerPromptTests
         Assert.Equal(expected, RunPlanner.ShouldUseResumePrompt(initialState, resume, sessionDropped));
     }
 
+    // ---- Per-mode prompt framing (planning/research read-only + web hint) ----
+
+    [Fact]
+    public void RenderModeFraming_CodingWithoutWeb_IsEmpty()
+    {
+        // Coding with web off is the legacy default; framing must stay empty so
+        // the rendered runner prompt is byte-identical to the pre-mode output.
+        Assert.Equal(string.Empty, Prompts().RenderModeFraming("coding", allowWebAccess: false));
+    }
+
+    [Theory]
+    [InlineData("planning")]
+    [InlineData("research")]
+    public void RenderModeFraming_ReadOnlyModes_CarryReadOnlyBlock(string mode)
+    {
+        var framing = Prompts().RenderModeFraming(mode, allowWebAccess: false);
+
+        Assert.Contains("Read-only run", framing);
+        Assert.Contains("do not write or modify source", framing, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("commit", framing, StringComparison.OrdinalIgnoreCase);
+        // Web hint must NOT leak in when web access is off.
+        Assert.DoesNotContain("Web access is enabled", framing);
+    }
+
+    [Fact]
+    public void RenderModeFraming_Research_AddsBothReadOnlyAndWebHint()
+    {
+        // Research is the read-only-with-web mode: it gets the read-only block
+        // and the web hint, read-only first.
+        var framing = Prompts().RenderModeFraming("research", allowWebAccess: true);
+
+        Assert.Contains("Read-only run", framing);
+        Assert.Contains("Web access is enabled", framing);
+        Assert.InRange(framing.IndexOf("Read-only run", StringComparison.Ordinal), 0,
+            framing.IndexOf("Web access is enabled", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RenderModeFraming_CodingWithWeb_AddsWebHintOnly()
+    {
+        // Decision 2: the web toggle is independent of the mode. A coding task
+        // with web opted in gets the web hint but no read-only constraint.
+        var framing = Prompts().RenderModeFraming("coding", allowWebAccess: true);
+
+        Assert.Contains("Web access is enabled", framing);
+        Assert.DoesNotContain("Read-only run", framing);
+    }
+
+    [Fact]
+    public void FreshStartTemplate_ReadOnlyMode_InjectsFramingAndKeepsGuardrails()
+    {
+        var prompts = Prompts();
+        var p = prompts.Render(RuntimePromptService.RunnerFreshStart, new Dictionary<string, string?>
+        {
+            ["prompt_path"] = "prompt.md",
+            ["job_folder"] = "job",
+            ["working_directory"] = "work",
+            ["repository_path"] = "repo",
+            ["title"] = "Investigate the slow board load",
+            ["prompt_text"] = "Profile the board and propose fixes.",
+            ["mode_framing"] = prompts.RenderModeFraming("planning", allowWebAccess: false)
+        });
+
+        Assert.Contains("Read-only run", p);
+        Assert.DoesNotContain("{{mode_framing}}", p);
+        // Standard guardrails survive the injection.
+        Assert.Contains("Do not scan for or pick up other tasks", p);
+        Assert.Contains("[[TASK_DONE]]", p);
+        // Read-only framing sits after the task body, before the run context.
+        var bodyIndex = p.IndexOf("Profile the board", StringComparison.Ordinal);
+        var framingIndex = p.IndexOf("Read-only run", StringComparison.Ordinal);
+        var contextIndex = p.IndexOf("Context for this run", StringComparison.Ordinal);
+        Assert.InRange(framingIndex, bodyIndex, contextIndex);
+    }
+
+    [Fact]
+    public void FreshStartTemplate_CodingMode_OmitsFramingWithoutLeftoverPlaceholder()
+    {
+        var prompts = Prompts();
+        var p = prompts.Render(RuntimePromptService.RunnerFreshStart, new Dictionary<string, string?>
+        {
+            ["prompt_path"] = "prompt.md",
+            ["job_folder"] = "job",
+            ["working_directory"] = "work",
+            ["repository_path"] = "repo",
+            ["title"] = "Implement the widget",
+            ["prompt_text"] = "Add the widget to the toolbar.",
+            ["mode_framing"] = prompts.RenderModeFraming("coding", allowWebAccess: false)
+        });
+
+        Assert.DoesNotContain("Read-only run", p);
+        Assert.DoesNotContain("Web access is enabled", p);
+        Assert.DoesNotContain("{{mode_framing}}", p);
+    }
+
+    [Fact]
+    public void ModeFramingSnippets_DoNotContainEmDashes()
+    {
+        var framing = Prompts().RenderModeFraming("research", allowWebAccess: true);
+        Assert.DoesNotContain("—", framing);
+    }
+
     private static RuntimePromptService Prompts()
     {
         var config = new ConfigurationBuilder()

@@ -121,6 +121,7 @@
       </div>
     </div>
 
+    <app-create-mode-picker [(mode)]="newMode" [(allowWebAccess)]="newAllowWebAccess" />
     <app-create-epic-picker
       [watchPath]="newWatchPath()"
       [show]="!isEpic()"

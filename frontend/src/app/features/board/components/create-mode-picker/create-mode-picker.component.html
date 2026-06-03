@@ -1,0 +1,26 @@
+<div class="field">
+  <span class="field__label">Mode</span>
+  <div class="create-type-picker" data-testid="create-mode">
+    @for (m of modeOptions; track m.value) {
+      <button type="button"
+              class="create-type-picker__btn"
+              [class.create-type-picker__btn--active]="mode() === m.value"
+              [attr.data-testid]="'create-mode-' + m.value"
+              [appTooltip]="m.hint"
+              (click)="setMode(m.value)">
+        <span aria-hidden="true">{{ m.icon }}</span> {{ m.label }}
+      </button>
+    }
+  </div>
+  <button type="button"
+          class="create-web-toggle"
+          role="switch"
+          [class.create-web-toggle--on]="allowWebAccess()"
+          [attr.aria-checked]="allowWebAccess()"
+          data-testid="create-web-access"
+          [appTooltip]="'Allow the agent to access the web during this task'"
+          (click)="toggleWebAccess()">
+    <span class="create-web-toggle__track" aria-hidden="true"><span class="create-web-toggle__thumb"></span></span>
+    <span class="create-web-toggle__text">🌐 Allow web access</span>
+  </button>
+</div>

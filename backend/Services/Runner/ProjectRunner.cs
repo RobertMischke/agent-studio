@@ -3038,7 +3038,8 @@ public class ProjectRunner
             ["title"] = string.IsNullOrWhiteSpace(info.Title) ? "(untitled)" : info.Title,
             ["working_directory"] = Entry.RootPath,
             ["repository_path"] = string.IsNullOrWhiteSpace(Entry.RepositoryPath) ? Entry.RootPath : Entry.RepositoryPath,
-            ["attachments_list"] = BuildAttachmentsList(info.FolderPath)
+            ["attachments_list"] = BuildAttachmentsList(info.FolderPath),
+            ["mode_framing"] = _prompts.RenderModeFraming(info.Mode, info.AllowWebAccess)
         };
         return _prompts.Render(plan.PromptTemplate, values);
     }

@@ -1215,6 +1215,43 @@
     .create-lane-picker__icon { font-size: 13px; line-height: 1; }
     .create-lane-picker__btn:hover { color: var(--studio-fg); background: rgba(255,255,255,0.06); }
     .create-lane-picker__btn--active { background: rgba(56,189,248,0.22); color: #bae6fd; }
+    /* Mode picker web-access toggle: a small switch beneath the Coding /
+       Planning / Research buttons. Shares the dialog's muted palette. */
+    .create-web-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--studio-fg-dim);
+      cursor: pointer;
+      font: inherit;
+    }
+    .create-web-toggle__track {
+      position: relative;
+      width: 34px;
+      height: 18px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.14);
+      transition: background 0.15s;
+      flex: 0 0 auto;
+    }
+    .create-web-toggle__thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #e5e7eb;
+      transition: transform 0.15s;
+    }
+    .create-web-toggle--on { color: var(--studio-fg); }
+    .create-web-toggle--on .create-web-toggle__track { background: rgba(56,189,248,0.6); }
+    .create-web-toggle--on .create-web-toggle__thumb { transform: translateX(16px); }
+    .create-web-toggle__text { font-size: 12px; }
     .create-tag-picker { display: flex; flex-wrap: wrap; gap: 6px; }
     .create-tag-picker__chip {
       background: rgba(255,255,255,0.04);

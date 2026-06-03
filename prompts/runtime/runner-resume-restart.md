@@ -4,7 +4,7 @@
 
 ---
 
-Re-read `prompt.md` at `{{prompt_path}}` carefully. The previous run on this session reported completion, and the user has now re-started the task. That almost always means the prompt was extended, refined, or partially redone.
+{{mode_framing}}Re-read `prompt.md` at `{{prompt_path}}` carefully. The previous run on this session reported completion, and the user has now re-started the task. That almost always means the prompt was extended, refined, or partially redone.
 
 Before doing anything else:
 

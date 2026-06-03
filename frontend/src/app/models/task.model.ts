@@ -30,6 +30,13 @@ import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orch
 export type TaskKind = 'task' | 'epic';
 
 /**
+ * Task execution mode. Mirrors backend `TaskModes`. `coding` is the default
+ * read-write mode; `planning` and `research` are read-only (no source writes),
+ * and `research` additionally permits web access by default.
+ */
+export type TaskMode = 'coding' | 'planning' | 'research';
+
+/**
  * F34 — structured cross-references between tasks, keyed by F33 stable keys
  * (e.g. `ATP-19`). Mirrors backend `TaskReferences`. Four relation kinds:
  * `dependsOn` (target must be complete before this is workable — a DAG edge),
@@ -562,6 +569,10 @@ export interface CreateJobRequest {
   kind?: TaskKind;
   /** Parent epic id (assignment way 1: created as a sub-task of this epic). */
   epicId?: string;
+  /** Execution mode. Defaults to `coding` server-side. */
+  mode?: TaskMode;
+  /** Web access. When omitted, defaults by mode (research = on, else off). */
+  allowWebAccess?: boolean;
 }
 
 /**

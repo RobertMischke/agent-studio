@@ -4,7 +4,7 @@
 
 ---
 
-Context for this run (read after the task above):
+{{mode_framing}}Context for this run (read after the task above):
 
 - Working directory: `{{working_directory}}`
 - Git repository for status/diff/commits: `{{repository_path}}`
