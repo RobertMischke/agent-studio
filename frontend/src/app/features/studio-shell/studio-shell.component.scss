@@ -688,6 +688,13 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  // Subtle nesting indent: shifts the project row AND its lane children one
+  // small step right of the workspace folder header, so the tree reads
+  // Workspace -> Project -> Lanes at a glance. Padding (not margin) keeps the
+  // wrapper full-width as a drag/drop hit area; because both the row and the
+  // lanes live inside it, the existing lane-under-project alignment is
+  // preserved.
+  padding-left: var(--studio-explorer-project-indent);
 
   // Drag source: fade the row so the user can read the highlighted
   // drop targets without the source pulling the eye.

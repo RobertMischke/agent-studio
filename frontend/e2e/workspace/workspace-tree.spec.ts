@@ -93,6 +93,33 @@ test.describe('F46: Explorer two-level workspace -> project tree', () => {
     expect(order).toBe('after');
   });
 
+  test('project rows are visibly indented under their workspace folder header', async ({ page }) => {
+    await gotoStudio(page);
+
+    const groups = page.locator(GROUP);
+    if ((await groups.count()) === 0 || (await page.locator(ROW).count()) === 0) {
+      test.skip(true, 'No groups/rows loaded - indent contract skipped.');
+      return;
+    }
+
+    // Mechanism: the project-row wrapper carries the subtle nesting indent
+    // (padding-left) so the row and its lane children shift right together.
+    const wrapperPad = await page.locator(ROW).first().evaluate(
+      (el) => Number.parseFloat(getComputedStyle(el).paddingLeft) || 0,
+    );
+    expect(wrapperPad).toBeGreaterThan(0);
+
+    // Visual result: the project row's chevron sits to the right of the
+    // workspace header's chevron, so the hierarchy reads at a glance.
+    const wsChev = groups.first().locator('.tree-row__chev').first();
+    const projChev = page.locator(ROW).first().locator('.tree-row__chev').first();
+    const wsBox = await wsChev.boundingBox();
+    const projBox = await projChev.boundingBox();
+    expect(wsBox).toBeTruthy();
+    expect(projBox).toBeTruthy();
+    expect(projBox!.x).toBeGreaterThan(wsBox!.x + 6);
+  });
+
   test('a workspace folder header collapses its project rows', async ({ page }) => {
     await gotoStudio(page);
 

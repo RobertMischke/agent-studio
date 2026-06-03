@@ -323,6 +323,14 @@
   --studio-explorer-row-name-x:
     calc(var(--studio-explorer-row-glyph-x) + var(--studio-explorer-row-glyph) + var(--studio-explorer-row-gap)); // 54px
 
+  // Subtle nesting step for the project subtree (project row + its lane
+  // children) under its workspace folder header. Applied as padding-left on
+  // the `.studio-tree-project` wrapper, so the row and its lanes shift right
+  // together and the lane-under-project alignment stays intact. One small
+  // step (12px) reads as "project is a child of this workspace" without the
+  // heavier full-column indent the lane children already use.
+  --studio-explorer-project-indent: var(--studio-spacing-3); // 12px
+
   // ---------------------------------------------------------------------------
   // Density tokens — row padding, row gap, section gap, min row height.
   //
