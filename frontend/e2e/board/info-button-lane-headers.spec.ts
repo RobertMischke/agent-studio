@@ -205,6 +205,20 @@ test.describe('Info button on lane headers (selective placement)', () => {
     const body = page.getByTestId('info-button-body-lane-4-auto-review');
     await expect(body).toContainText(/multi-aspect/i);
 
+    // Regression guard: the lane `.column` carries `contain: layout paint`,
+    // which makes it the containing block for the overlay's `position:
+    // fixed`. Before the portal-to-body fix the modal landed thousands of
+    // px down the scrolled lane and was clipped off-screen. Assert the
+    // centered panel sits inside the viewport.
+    const box = await modal.boundingBox();
+    expect(box).not.toBeNull();
+    const vp = page.viewportSize();
+    expect(vp).not.toBeNull();
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(vp!.height + 1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(vp!.width + 1);
+
     await page.setViewportSize({ width: 1400, height: 900 });
     await page.screenshot({ path: `${SCREENSHOT_DIR}/01-auto-review-modal.png`, fullPage: false });
 

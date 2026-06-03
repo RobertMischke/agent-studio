@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, ViewEncapsulation, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewEncapsulation, inject, input, output } from '@angular/core';
 import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 
 /**
@@ -46,7 +46,7 @@ import { StudioIconComponent } from '../studio-icon/studio-icon.component';
   templateUrl: './dialog.component.html',
   styleUrl: './dialog.component.scss',
 })
-export class DialogComponent {
+export class DialogComponent implements OnInit, OnDestroy {
   readonly eyebrow = input<string | null>(null);
   readonly title = input('');
   /** Optional one-line caption under the title. */
@@ -67,6 +67,39 @@ export class DialogComponent {
    */
   readonly size = input<'sm' | 'md'>('md');
   readonly testid = input<string | null>(null);
+
+  /**
+   * Relocate this dialog's host element to `<body>` on init.
+   *
+   * The overlay is `position: fixed`, but a fixed element is positioned
+   * relative to the nearest ancestor that establishes a containing block
+   * for fixed descendants — `transform`, `filter`, or `contain:
+   * layout/paint` all do this. When the dialog renders inline inside such
+   * an ancestor (e.g. the lane `.column`, which carries `contain: layout
+   * paint` for scroll perf), the overlay is positioned against that tall,
+   * scrolled box and then clipped off-screen by its `overflow: hidden`
+   * parents instead of covering the viewport. Hosting at `<body>` escapes
+   * both the containing block and the clipping. Off by default so the
+   * many in-flow dialog callers are unaffected.
+   */
+  readonly portalToBody = input(false);
+
+  private readonly host = inject(ElementRef).nativeElement as HTMLElement;
+
+  ngOnInit(): void {
+    if (this.portalToBody()) {
+      document.body.appendChild(this.host);
+    }
+  }
+
+  ngOnDestroy(): void {
+    // The host was moved out of its declared @if view, so remove it
+    // explicitly; Angular's own teardown reads the live parent and skips
+    // the already-detached node, so there is no double removal.
+    if (this.portalToBody()) {
+      this.host.remove();
+    }
+  }
 
   readonly closeRequest = output<void>();
   readonly backdropClick = output<void>();
