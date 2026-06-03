@@ -24,7 +24,7 @@ const STICKY_TAB_KEY = 'board:__all__';
 
 /** Empty-but-valid GroupedJobs payload (mirrors the service signal default). */
 const EMPTY_GROUPED = {
-  backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [],
+  backlog: [], preparation: [], orchestratorPrep: [],
   ready: [], progress: [], failedPickup: [], review: [], autoReview: [],
   humanReview: [], completed: [], archive: [],
 };

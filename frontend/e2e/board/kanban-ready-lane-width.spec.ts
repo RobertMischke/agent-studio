@@ -80,7 +80,6 @@ function fixtureGrouped(): Record<string, unknown[]> {
     backlog: [],
     preparation: [jobInfo({ id: 'fx-prep-1', title: 'In preparation', state: '1-preparation' })],
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready,
     progress: [
       jobInfo({

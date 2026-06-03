@@ -3,9 +3,11 @@ import { startLongTaskRecorder } from '../helpers/timing';
 
 /**
  * Robustness regression for the post-ADR-0025/0026/0028/0029 lane
- * catalog (Backlog / In Preparation / Orch Prep / Needs Clar / Human
- * Ready / In Progress / Failed Pickup / Auto Review / Human Review /
- * Completed / Archive).
+ * catalog (Backlog / In Preparation / Orch Prep / Human Ready / In
+ * Progress / Failed Pickup / Auto Review / Human Review / Completed /
+ * Archive). The 1b-needs-human-review bounce lane was retired (its
+ * "Human decision needed" concept was obsoleted), so it is no longer
+ * part of the catalog.
  *
  * The user reported two layout-perf symptoms:
  *
@@ -26,7 +28,7 @@ import { startLongTaskRecorder } from '../helpers/timing';
  * Mocks: API-stubbed so the test is independent of whatever live state
  * the running backend is in. The fixture seeds N=30 jobs into
  * 4-auto-review (the densest lane in practice) and >=1 job into every
- * hide-when-empty lane so the full 10-lane catalog is materialised.
+ * hide-when-empty lane so the full 9-lane catalog is materialised.
  *
  * Selectors: lanes are addressed by their `data-testid` regardless of
  * whether they are expanded (`lane-<state>`) or collapsed into a rail
@@ -41,7 +43,6 @@ const LANE_STATES = [
   '0-backlog',
   '1-preparation',
   '1a-orchestrator-prep',
-  '1b-needs-human-review',
   '2-ready',
   '3-progress',
   '4-auto-review',
@@ -102,7 +103,6 @@ function fixtureGrouped(): Record<string, unknown[]> {
     backlog: [jobInfo({ id: 'fx-backlog-1', title: 'Backlog item', state: '0-backlog' })],
     preparation: [jobInfo({ id: 'fx-prep-1', title: 'In preparation', state: '1-preparation' })],
     orchestratorPrep: [jobInfo({ id: 'fx-orch-prep-1', title: 'Orch prep candidate', state: '1a-orchestrator-prep' })],
-    needsHumanReview: [jobInfo({ id: 'fx-needs-clar-1', title: 'Needs clarification', state: '1b-needs-human-review' })],
     ready: [
       jobInfo({ id: 'fx-ready-1', title: 'Ready human', state: '2-ready', order: 1 }),
       jobInfo({ id: 'fx-ready-intake-1', title: 'Ready intake (orch)', state: '2-ready', order: 2 }),

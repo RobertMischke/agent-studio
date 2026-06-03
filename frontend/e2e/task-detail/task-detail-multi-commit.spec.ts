@@ -105,7 +105,7 @@ async function installRoutes(page: Page) {
     route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
-        preparation: [], orchestratorPrep: [], needsHumanReview: [],
+        preparation: [], orchestratorPrep: [],
         ready: [], progress: [], failedPickup: [],
         autoReview: [], humanReview: [], completed: [], archive: []
       })

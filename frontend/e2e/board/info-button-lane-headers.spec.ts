@@ -108,7 +108,6 @@ async function installMocks(page: Page, jobs: JobInfoStub[]): Promise<void> {
         backlog: jobs.filter(j => j.state === '0-backlog'),
         preparation: jobs.filter(j => j.state === '1-preparation'),
         orchestratorPrep: [],
-        needsHumanReview: [],
         ready: jobs.filter(j => j.state === '2-ready'),
         progress: jobs.filter(j => j.state === '3-progress'),
         failedPickup: [],

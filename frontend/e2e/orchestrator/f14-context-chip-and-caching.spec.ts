@@ -85,7 +85,7 @@ async function stubProjectsAndJobs(page: Page) {
   });
   await page.route(/\/api\/jobs\/grouped(?:\?.*)?$/, async (route) => {
     const emptyLanes = {
-      backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [],
+      backlog: [], preparation: [], orchestratorPrep: [],
       ready: [], progress: [], failedPickup: [], autoReview: [], humanReview: [],
       review: [], completed: [], archive: []
     };

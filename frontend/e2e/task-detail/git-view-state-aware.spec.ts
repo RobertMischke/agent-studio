@@ -111,7 +111,6 @@ async function installRoutes(
       body: JSON.stringify({
         preparation: [],
         orchestratorPrep: [],
-        needsHumanReview: [],
         ready: [],
         progress: [],
         failedPickup: [],

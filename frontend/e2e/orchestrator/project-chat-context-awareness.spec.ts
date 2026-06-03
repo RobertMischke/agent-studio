@@ -128,7 +128,7 @@ async function stubProjectsAndJobs(page: Page) {
   });
 
   const emptyLanes = {
-    backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [],
+    backlog: [], preparation: [], orchestratorPrep: [],
     ready: [], progress: [], failedPickup: [], autoReview: [], humanReview: [],
     review: [], completed: [], archive: []
   };

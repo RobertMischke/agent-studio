@@ -148,7 +148,6 @@ function makeFixture(N: number) {
     backlog: jobs.filter(j => j.state === '0-backlog'),
     preparation: jobs.filter(j => j.state === '1-preparation'),
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready: jobs.filter(j => j.state === '2-ready'),
     progress: jobs.filter(j => j.state === '3-progress'),
     failedPickup: [],
@@ -389,7 +388,7 @@ function makeUnifiedDiff(filePath: string) {
 async function installDetailRoutes(page: import('@playwright/test').Page, chatLines: number) {
   const detailJob = makeDetailJob('3-progress');
   const grouped = {
-    backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [],
+    backlog: [], preparation: [], orchestratorPrep: [],
     ready: [], progress: [detailJob], failedPickup: [],
     autoReview: [], humanReview: [], review: [], completed: [], archive: [],
   };

@@ -61,7 +61,7 @@ const PROJECTS: Array<{ name: string; backlog: number; progress: number; review:
 
 function buildGrouped() {
   const grouped: Record<string, ReturnType<typeof makeJob>[]> = {
-    backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [],
+    backlog: [], preparation: [], orchestratorPrep: [],
     ready: [], progress: [], failedPickup: [], review: [], autoReview: [],
     humanReview: [], completed: [], archive: [],
   };

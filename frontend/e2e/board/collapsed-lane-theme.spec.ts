@@ -65,7 +65,6 @@ const GROUPED = {
   backlog: [],
   preparation: [],
   orchestratorPrep: [],
-  needsHumanReview: [],
   ready: [makeJob('ready-1', '2-ready', 1)],
   progress: [makeJob('prog-1', '3-progress', 1), makeJob('prog-2', '3-progress', 2)],
   failedPickup: [],

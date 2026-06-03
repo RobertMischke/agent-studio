@@ -181,7 +181,7 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        preparation: [], orchestratorPrep: [], needsHumanReview: [], ready: [],
+        preparation: [], orchestratorPrep: [], ready: [],
         progress: [], failedPickup: [], autoReview: [], humanReview: [],
         completed: [], archive: [],
       }),

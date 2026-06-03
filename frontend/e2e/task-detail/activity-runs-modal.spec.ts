@@ -102,7 +102,6 @@ async function installRoutes(page: Page, runs: object[]): Promise<void> {
       body: JSON.stringify({
         preparation: [],
         orchestratorPrep: [],
-        needsHumanReview: [],
         ready: [],
         progress: [],
         failedPickup: [],

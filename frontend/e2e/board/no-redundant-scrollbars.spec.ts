@@ -59,7 +59,6 @@ function fixtureGrouped(): Record<string, unknown[]> {
     backlog: [],
     preparation: makeLane('1-preparation', CARDS_PER_LANE),
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready: makeLane('2-ready', CARDS_PER_LANE),
     progress: makeLane('3-progress', CARDS_PER_LANE),
     failedPickup: [],

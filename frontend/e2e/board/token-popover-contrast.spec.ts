@@ -68,7 +68,6 @@ const GROUPED = {
   backlog: [],
   preparation: [],
   orchestratorPrep: [],
-  needsHumanReview: [],
   ready: [makeJob()],
   progress: [],
   failedPickup: [],

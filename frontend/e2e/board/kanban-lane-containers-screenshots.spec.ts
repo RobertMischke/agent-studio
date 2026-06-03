@@ -52,7 +52,6 @@ function fixtureGrouped(): Record<string, unknown[]> {
     ],
     preparation: [jobInfo({ id: 'fx-prep-1', title: 'Drafting orchestrator note', state: '1-preparation' })],
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready: [
       jobInfo({ id: 'fx-ready-1', title: 'Ready: pickup verification', state: '2-ready' }),
       jobInfo({ id: 'fx-ready-2', title: 'Ready: review banner copy', state: '2-ready', order: 2 })

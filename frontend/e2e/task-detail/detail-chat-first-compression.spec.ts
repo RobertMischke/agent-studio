@@ -129,7 +129,7 @@ async function installFixtureRoutes(page: Page, state: string) {
     route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
-        preparation: [], orchestratorPrep: [], needsHumanReview: [],
+        preparation: [], orchestratorPrep: [],
         ready: [], progress: [], failedPickup: [],
         autoReview: [], humanReview: [], completed: [], archive: []
       })

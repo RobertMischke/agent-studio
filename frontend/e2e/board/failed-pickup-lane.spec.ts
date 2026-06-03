@@ -56,7 +56,6 @@ function fixtureGrouped(failedCount: number): Record<string, unknown[]> {
   return {
     preparation: [jobInfo({ id: 'fx-prep-1', title: 'Drafting', state: '1-preparation' })],
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready: [jobInfo({ id: 'fx-ready-1', title: 'Ready', state: '2-ready' })],
     progress: [jobInfo({ id: 'fx-progress-1', title: 'Live', state: '3-progress' })],
     failedPickup,

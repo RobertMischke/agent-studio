@@ -73,7 +73,6 @@ const GROUPED_PAYLOAD = {
   backlog: [],
   preparation: [],
   orchestratorPrep: [],
-  needsHumanReview: [],
   ready: [],
   progress: [RUNNING_JOB, ...IDLE_JOBS, WARN_ISSUE_JOB],
   failedPickup: [],
