@@ -485,18 +485,14 @@ export class App implements OnInit, OnDestroy {
     const grouped = this.displayGrouped();
     // ADR-0025: seven lanes. The robot icon is the orchestrator's machine
     // pass; the eye icon is the user's "needs me" lane.
-    // ADR-0026: 1a-orchestrator-prep is always rendered (rail at level 0);
     // 1b-needs-human-review is hide-when-empty.
+    // Orchestrator prep is no longer a backlog lane: it now runs in-place on
+    // 1-preparation as the optional pipeline step `pre-orchestrator-prep`
+    // (see PipelineCatalogue), so the retired 1a lane is not rendered.
     // Backlog-lane spec: 0-backlog leads the focus list when populated.
     const lanes = [
       { state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] },
       { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
-      {
-        state: '1a-orchestrator-prep',
-        title: 'Orch Prep',
-        icon: '🤖',
-        jobs: grouped.orchestratorPrep,
-      },
     ];
     if (grouped.needsHumanReview.length > 0) {
       lanes.push({
@@ -531,8 +527,7 @@ export class App implements OnInit, OnDestroy {
   /**
    * Board lane groups. Three contiguous containers map the workflow:
    *
-   *  - backlog: 0-backlog, 1-preparation, 1a-orchestrator-prep,
-   *             1b-needs-human-review, 2-ready
+   *  - backlog: 0-backlog, 1-preparation, 1b-needs-human-review, 2-ready
    *  - active:  3-progress, 4-auto-review
    *  - decide:  5-human-review, 6-completed, 7-archive ("Done & Decide" -
    *             the user-owned tail of the pipeline; sign-off plus the
@@ -543,8 +538,10 @@ export class App implements OnInit, OnDestroy {
    */
   readonly laneGroups = computed(() => {
     const grouped = this.displayGrouped();
-    // ADR-0026: orchestrator-prep + needs-human-review join the backlog
-    // bucket. The bounce lane only renders when at least one job lives there.
+    // needs-human-review joins the backlog bucket. The bounce lane only
+    // renders when at least one job lives there. Orchestrator prep is no
+    // longer a backlog lane — it runs in-place on 1-preparation as the
+    // optional `pre-orchestrator-prep` pipeline step (see PipelineCatalogue).
     //
     // Order inside the Backlog super-column (top → bottom): the most
     // actionable lanes come first so the user reading the column from the
@@ -554,9 +551,8 @@ export class App implements OnInit, OnDestroy {
     //
     //   1. 2-ready      "Ready"              — pick-up candidates
     //   2. 1b-needs-human-review (if any)    — needs clarification
-    //   3. 1a-orchestrator-prep              — agent is preparing
-    //   4. 1-preparation                     — in human preparation
-    //   5. 0-backlog                         — fresh inbox / triage
+    //   3. 1-preparation                     — in human preparation
+    //   4. 0-backlog                         — fresh inbox / triage
     const readySplit = splitReadyByPhase(grouped.ready);
     const backlogLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [];
     backlogLanes.push({
@@ -581,12 +577,6 @@ export class App implements OnInit, OnDestroy {
         jobs: grouped.needsHumanReview,
       });
     }
-    backlogLanes.push({
-      state: '1a-orchestrator-prep',
-      title: 'Orch Prep',
-      icon: '🤖',
-      jobs: grouped.orchestratorPrep,
-    });
     backlogLanes.push({
       state: '1-preparation',
       title: 'In Preparation',
@@ -674,7 +664,6 @@ export class App implements OnInit, OnDestroy {
    */
   readonly studioLaneOptions: readonly { state: string; label: string }[] = [
     { state: '1-preparation',         label: 'Preparation' },
-    { state: '1a-orchestrator-prep',  label: 'Orch Prep' },
     { state: '1b-needs-human-review', label: 'Needs Clarification' },
     { state: '2-ready',               label: 'Ready' },
     { state: '3-progress',            label: 'In Progress' },

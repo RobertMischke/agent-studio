@@ -92,12 +92,14 @@ export interface SortableLaneMeta {
 /**
  * Lanes surfaced in the project-settings sort-strategy section, in board
  * order. The internal `3a-failed-pickup` lane is intentionally omitted — it
- * is a short-lived bounce lane the operator does not curate by hand.
+ * is a short-lived bounce lane the operator does not curate by hand. The
+ * retired `1a-orchestrator-prep` lane is likewise omitted — prep now runs
+ * in-place on 1-preparation as the optional `pre-orchestrator-prep`
+ * pipeline step (see PipelineCatalogue), so there is no lane to sort.
  */
 export const SORTABLE_LANES: readonly SortableLaneMeta[] = [
   { state: '0-backlog', label: 'Backlog', icon: '🗒️' },
   { state: '1-preparation', label: 'In Preparation', icon: '📋' },
-  { state: '1a-orchestrator-prep', label: 'Orch Prep', icon: '🤖' },
   { state: '1b-needs-human-review', label: 'Needs Clarification', icon: '🚩' },
   { state: '2-ready', label: 'Ready', icon: '📦' },
   { state: '3-progress', label: 'In Progress', icon: '🔵' },

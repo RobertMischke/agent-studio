@@ -507,7 +507,14 @@ export interface GroupedJobs {
   /** Triage staging area; default landing for new jobs, never auto-picked. */
   backlog: TaskInfo[];
   preparation: TaskInfo[];
-  /** ADR-0026 lane: orchestrator-prep (1a-orchestrator-prep). */
+  /**
+   * Retired 1a-orchestrator-prep lane. Orchestrator prep now runs in-place on
+   * 1-preparation as the optional `pre-orchestrator-prep` pipeline step (see
+   * PipelineCatalogue); the board no longer renders this lane. The field stays
+   * so the frontend keeps parsing the grouped payload (same retired-lane
+   * pattern as `failedPickup`), and the backend boot-migrates any stray 1a
+   * cards back to 1-preparation. Always empty after a clean boot.
+   */
   orchestratorPrep: TaskInfo[];
   /** ADR-0026 lane: needs-human-review (1b-needs-human-review). Hide-when-empty. */
   needsHumanReview: TaskInfo[];

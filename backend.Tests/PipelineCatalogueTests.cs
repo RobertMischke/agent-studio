@@ -22,10 +22,12 @@ public class PipelineCatalogueTests
         var p = PipelineCatalogue.Standard;
         Assert.Equal(PipelineCatalogue.StandardPipelineId, p.Id);
         Assert.Equal(1, p.Version);
-        // Pre: the auto-mode loop guard surfaces the StuckLoopGuard breaker in
-        // the pipeline table (Ralph-loop early detection).
-        var preStep = Assert.Single(p.Pre);
-        Assert.Equal(PipelineCatalogue.LoopGuardStepId, preStep.Id);
+        // Pre: the auto-mode loop guard (Ralph-loop early detection) leads,
+        // followed by the opt-in orchestrator-prep step that replaced the
+        // standalone 1a-orchestrator-prep backlog lane.
+        Assert.Equal(2, p.Pre.Count);
+        Assert.Equal(PipelineCatalogue.LoopGuardStepId, p.Pre[0].Id);
+        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, p.Pre[1].Id);
         Assert.Single(p.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, p.Core[0].Id);
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
@@ -44,13 +46,49 @@ public class PipelineCatalogueTests
         // row ("frueh markiert"). It is deterministic (no model) and on by
         // default - the StuckLoopGuard breaker is a safety net, not opt-in.
         var p = PipelineCatalogue.Standard;
-        var guard = Assert.Single(p.Pre);
+        var guard = p.Pre[0];
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, guard.Id);
         Assert.Equal(StepKind.Module, guard.Kind);
         Assert.True(guard.Idempotent);
         Assert.True(guard.DefaultEnabled);
         Assert.Null(guard.Model);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, p.AllSteps.First().Id);
+    }
+
+    [Fact]
+    public void StandardPipeline_OrchestratorPrep_IsOptInParallelPreStep_ModelResolvedPerProject()
+    {
+        // ARCH: orchestrator-prep moved out of the 1a-orchestrator-prep backlog
+        // lane into an optional, parallelisable pre-coding pipeline step. It is
+        // a deterministic Module (no LLM today) that defaults OFF (opt-in per
+        // project) and carries no hardcoded model, so the runtime resolves the
+        // project's selected model via PipelineStepConfigResolver.
+        var p = PipelineCatalogue.Standard;
+        var prep = p.Pre.First(s => s.Id == PipelineCatalogue.PreOrchestratorPrepStepId);
+        Assert.Equal(StepKind.Module, prep.Kind);
+        Assert.Equal(StepRunMode.Parallel, prep.RunMode); // must not block throughput
+        Assert.True(prep.Idempotent);
+        Assert.False(prep.DefaultEnabled); // opt-in
+        Assert.Null(prep.Model); // resolved per project, not hardcoded
+
+        // Project model selection flows through when the step itself sets none.
+        var settings = new ProjectSettings { OrchestratorModel = "claude-sonnet-4-5" };
+        Assert.Equal(
+            "claude-sonnet-4-5",
+            PipelineStepConfigResolver.ResolveModel(settings, prep, "fallback-model"));
+        // A per-step override still wins over the project model.
+        var withOverride = new ProjectSettings
+        {
+            OrchestratorModel = "claude-sonnet-4-5",
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.PreOrchestratorPrepStepId] = new() { Enabled = true, Model = "claude-opus-4-1" },
+            },
+        };
+        Assert.True(PipelineStepConfigResolver.IsEnabled(withOverride, prep));
+        Assert.Equal(
+            "claude-opus-4-1",
+            PipelineStepConfigResolver.ResolveModel(withOverride, prep, "fallback-model"));
     }
 
     [Fact]
@@ -226,11 +264,13 @@ public class PipelineCatalogueTests
             .ToList();
         Assert.Equal(expected, ro.AllSteps.Select(s => s.Id).ToList());
 
-        // The core agent run and the loop guard are not git steps, so they remain.
+        // The core agent run and both Pre steps (loop guard + orchestrator
+        // prep) are not git steps, so they remain.
         Assert.Single(ro.Core);
         Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ro.Core[0].Id);
-        Assert.Single(ro.Pre);
+        Assert.Equal(2, ro.Pre.Count);
         Assert.Equal(PipelineCatalogue.LoopGuardStepId, ro.Pre[0].Id);
+        Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[1].Id);
 
         // Exactly the one git step was removed from Post.
         Assert.Equal(standard.Post.Count - 1, ro.Post.Count);

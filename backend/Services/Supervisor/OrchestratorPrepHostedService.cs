@@ -1,53 +1,81 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Pipeline;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Supervisor;
 
 /// <summary>
-/// ADR-0026 orchestrator-prep loop. Per project, pulls eligible jobs out of
-/// <c>1-preparation</c> into <c>1a-orchestrator-prep</c>, runs the pure-rule
-/// engine in <see cref="OrchestratorPrepRules"/> against the prompt, and
-/// then either ships the task to <c>2-ready</c>, bounces it to
-/// <c>1b-needs-human-review</c>, or leaves it in <c>1a-orchestrator-prep</c>
-/// with an iteration counter incremented.
+/// ADR-0026 orchestrator-prep loop, reshaped into the optional
+/// <see cref="PipelineCatalogue.PreOrchestratorPrepStepId"/> pre-coding step.
+/// Per project, it runs the pure-rule engine in
+/// <see cref="OrchestratorPrepRules"/> in-place on the head
+/// <c>1-preparation</c> card and then either admits it straight to
+/// <c>2-ready</c> (accept), bounces it to <c>1b-needs-human-review</c>, or
+/// leaves it in <c>1-preparation</c> with an iteration counter incremented.
+/// The standalone <c>1a-orchestrator-prep</c> backlog lane is gone: prep is no
+/// longer a lane the operator sees, it is the <c>pre-orchestrator-prep</c>
+/// pipeline step that runs in the active flow before the coding run.
 ///
-/// <para>Off by default. Enable with <c>Orchestrator:PrepEnabled = true</c>.
-/// Rate-limited via <c>Orchestrator:PrepCallsPerHour</c> (default 30).</para>
+/// <para>Off by default. The global kill switch stays
+/// <c>Orchestrator:PrepEnabled = true</c>; on top of that the step is opt-in
+/// per project via the <c>pre-orchestrator-prep</c>
+/// <see cref="ProjectSettings.PipelineSteps"/> override (the step's
+/// <see cref="PipelineStep.DefaultEnabled"/> is false), resolved by
+/// <see cref="PipelineStepConfigResolver"/>. Rate-limited via
+/// <c>Orchestrator:PrepCallsPerHour</c> (default 30).</para>
 ///
-/// <para>The loop runs in parallel with the runner's pickup tick. Preparation
-/// is its own pipeline phase and does not start a coding CLI; it only reads
-/// jobs in <c>1-preparation</c> / <c>1a-orchestrator-prep</c> and writes
-/// verdicts into <c>2-ready</c> / <c>1b-needs-human-review</c>. ADR-0001's
-/// boundary (one coding CLI per project at a time) is unchanged - that
-/// invariant is enforced inside <see cref="OrchestratorApi.Services.Runner.ProjectRunner.TickAsync"/>
-/// via the active-job latch, not here. The runner consumes from
-/// <c>2-ready</c> on its own tick, so state mutations written by this
-/// service are picked up without explicit coordination. Review-decision
-/// processing (ADR-0025) and intake checks run in parallel for the same
-/// reason: distinct lanes, single-state-machine authority.</para>
+/// <para>The loop runs decoupled from the runner's pickup tick and never
+/// holds the coding latch, so it does not block throughput
+/// (<see cref="StepRunMode.Parallel"/>). Preparation is its own pipeline phase
+/// and does not start a coding CLI; it only reads jobs in
+/// <c>1-preparation</c> and writes verdicts into <c>2-ready</c> /
+/// <c>1b-needs-human-review</c>. ADR-0001's boundary (one coding CLI per
+/// project at a time) is unchanged - that invariant is enforced inside
+/// <see cref="OrchestratorApi.Services.Runner.ProjectRunner.TickAsync"/> via
+/// the active-job latch, not here. The runner consumes from <c>2-ready</c> on
+/// its own tick, so state mutations written by this service are picked up
+/// without explicit coordination.</para>
 ///
-/// <para>This first slice is heuristic-only (no LLM calls). The clarity
-/// score in <see cref="OrchestratorPrepRules.ScoreClarity"/> is auditable
-/// and cheap; a fast-model upgrade is a follow-up slice that does not
-/// change the lane shape or the autonomy gating.</para>
+/// <para>Every decision is recorded as a <see cref="StepKind.Module"/> step in
+/// the job's <c>pipeline-execution.json</c> with the resolved per-project
+/// model and a verdict, so the prep pass surfaces in the pipeline table with
+/// status + duration. This slice is heuristic-only (no LLM calls); the clarity
+/// score in <see cref="OrchestratorPrepRules.ScoreClarity"/> is auditable and
+/// cheap, and a fast-model upgrade is a follow-up slice that does not change
+/// the step shape or the autonomy gating.</para>
 /// </summary>
 public sealed class OrchestratorPrepHostedService : BackgroundService
 {
+    /// <summary>
+    /// Last-resort model when neither the per-step override nor the project
+    /// <see cref="ProjectSettings.OrchestratorModel"/> sets one. Prep is a
+    /// cheap pass, so this fallback is a small model; the project's selection
+    /// still wins via <see cref="PipelineStepConfigResolver.ResolveModel(ProjectSettings?, PipelineStep, string)"/>.
+    /// </summary>
+    public const string PrepFallbackModel = "claude-haiku-4-5";
+
+    /// <summary>The catalogue prep step, resolved once for config + recording.</summary>
+    private static readonly PipelineStep PrepStep =
+        PipelineCatalogue.Standard.Pre.First(s => s.Id == PipelineCatalogue.PreOrchestratorPrepStepId);
+
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _states;
     private readonly ProjectSettingsService _settings;
     private readonly OrchestratorChatLog _chatLog;
+    private readonly PipelineExecutionLog _pipelineLog;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OrchestratorPrepHostedService> _logger;
 
     private readonly Queue<DateTime> _callTimestamps = new();
+    private bool _migratedStrayLane;
 
     public OrchestratorPrepHostedService(
         TaskScannerService scanner,
         TaskStateMachine states,
         ProjectSettingsService settings,
         OrchestratorChatLog chatLog,
+        PipelineExecutionLog pipelineLog,
         IConfiguration configuration,
         ILogger<OrchestratorPrepHostedService> logger)
     {
@@ -55,6 +83,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         _states = states;
         _settings = settings;
         _chatLog = chatLog;
+        _pipelineLog = pipelineLog;
         _configuration = configuration;
         _logger = logger;
     }
@@ -64,6 +93,12 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         var intervalSeconds = _configuration.GetValue("Orchestrator:PrepTickSeconds", 60);
 
         try { await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken); } catch (OperationCanceledException) { return; }
+
+        // One-shot rescue of any card still parked in the retired
+        // 1a-orchestrator-prep lane back to 1-preparation, so removing the lane
+        // from the board never orphans an in-flight card. Runs regardless of
+        // PrepEnabled - the lane is gone whether or not prep is turned on.
+        MigrateStrayPrepLaneCards();
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -108,71 +143,159 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
 
     private void ProcessProject(string projectName, string watchPath, int maxIterations, int queueFloor, int maxPerHour)
     {
-        var level = _settings.Get(projectName).AutonomyLevel ?? 2;
+        var settings = _settings.Get(projectName);
+        var level = settings.AutonomyLevel ?? 2;
         if (level == 0) return; // manual: never moves a task forward
+
+        // Optional per project: prep is the opt-in pre-orchestrator-prep
+        // pipeline step (DefaultEnabled = false). When the project has not
+        // turned it on, the loop is a no-op and cards rest in 1-preparation
+        // until a human readies them.
+        if (!PipelineStepConfigResolver.IsEnabled(settings, PrepStep)) return;
 
         var allJobs = _scanner.ScanAllJobs().Where(j => j.WatchPath == watchPath).ToList();
         var prep = allJobs.Where(j => j.State == TaskStates.Preparation).OrderBy(j => j.Order).ToList();
-        var orchPrep = allJobs.Where(j => j.State == TaskStates.OrchestratorPrep).OrderBy(j => j.Order).ToList();
         var ready = allJobs.Where(j => j.State == TaskStates.Ready).OrderBy(j => j.Order).ToList();
 
-        // 1) Refill: when 2-ready is below the floor, pull the next eligible
-        //    1-preparation job into 1a-orchestrator-prep so the prep loop has
-        //    something to iterate on. Skipped at level 0 (already returned).
-        if (ready.Count < queueFloor && orchPrep.Count == 0 && prep.Count > 0)
+        // Backpressure: only feed the active flow when 2-ready is below the
+        // floor, and only the head 1-preparation card per tick. Prep runs
+        // in-place (no 1a-orchestrator-prep hop) - accept admits to 2-ready,
+        // bounce routes to 1b-needs-human-review, iterate leaves the card at
+        // the head of 1-preparation to be re-evaluated next tick. This keeps
+        // prep before the coding run without ever blocking pickup throughput.
+        if (ready.Count >= queueFloor || prep.Count == 0) return;
+        if (!RateLimitOk(maxPerHour))
         {
-            var head = prep.First();
-            var moved = _states.MoveJob(head.Id, TaskStates.OrchestratorPrep, head.WatchPath);
-            if (moved.Status == MoveJobStatus.Success)
-            {
-                _logger.LogInformation(
-                    "OrchestratorPrep pulled {JobId} into {Lane} for project {Project} (queue floor {Floor})",
-                    head.Id, TaskStates.OrchestratorPrep, projectName, queueFloor);
-                _chatLog.Append(head, OrchestratorMessageKind.Decision,
-                    $"orchestrator-prep: refill (queue at {ready.Count}, floor {queueFloor}); pulled into {TaskStates.OrchestratorPrep}");
-            }
+            _logger.LogInformation(
+                "OrchestratorPrep rate limit reached ({MaxPerHour}/h); skipping this tick", maxPerHour);
+            return;
         }
 
-        // 2) Decide on each task currently in 1a-orchestrator-prep.
-        foreach (var job in orchPrep)
+        var job = prep.First();
+        var promptText = ReadPromptText(job);
+        var prevText = "";
+        var nextText = "";
+        // Heuristic neighbour-context: previous = last ready, next = next ready.
+        // Both are best-effort; missing files don't break the score.
+        try
         {
-            if (!RateLimitOk(maxPerHour))
+            var prevJob = ready.LastOrDefault();
+            if (prevJob != null) prevText = ReadPromptText(prevJob);
+            var nextJob = ready.FirstOrDefault();
+            if (nextJob != null) nextText = ReadPromptText(nextJob);
+        }
+        catch { /* best-effort */ }
+
+        var iteration = ReadIteration(job);
+        var input = new OrchestratorPrepRules.PrepInput
+        {
+            PromptText = promptText,
+            Slug = job.Id,
+            Iteration = iteration,
+            MaxIterations = level == 1 ? 1 : maxIterations,
+            AutonomyLevel = level,
+            PrevPromptText = prevText,
+            NextPromptText = nextText,
+        };
+
+        var startedAt = DateTime.UtcNow;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var decision = OrchestratorPrepRules.Decide(input);
+        sw.Stop();
+        _callTimestamps.Enqueue(DateTime.UtcNow);
+
+        RecordPrepStep(job, settings, decision, startedAt, sw.Elapsed);
+        ApplyDecision(job, decision, iteration);
+    }
+
+    /// <summary>
+    /// Record the prep decision as the <c>pre-orchestrator-prep</c> step in the
+    /// job's pipeline-execution log: status from the verdict, the resolved
+    /// per-project model, and the wall-clock duration. Surfaces prep in the
+    /// pipeline table. Hold takes no action on the card, so it is not recorded
+    /// (avoids rewriting the file every tick on a held card).
+    /// </summary>
+    private void RecordPrepStep(
+        TaskInfo job,
+        ProjectSettings settings,
+        OrchestratorPrepRules.PrepDecision decision,
+        DateTime startedAt,
+        TimeSpan elapsed)
+    {
+        if (decision.Verdict == OrchestratorPrepRules.Verdict.Hold) return;
+
+        var status = decision.Verdict switch
+        {
+            OrchestratorPrepRules.Verdict.Accept => PipelineStepStatus.Passed,
+            OrchestratorPrepRules.Verdict.Bounce => PipelineStepStatus.Failed,
+            OrchestratorPrepRules.Verdict.Iterate => PipelineStepStatus.Running,
+            _ => PipelineStepStatus.Pending,
+        };
+        var model = PipelineStepConfigResolver.ResolveModel(settings, PrepStep, PrepFallbackModel);
+
+        try
+        {
+            var pipeline = PipelineCatalogue.ForMode(job.Mode);
+            // Attach to the in-flight run when the core / aspect stages already
+            // created one; otherwise begin a fresh record so the step is not a
+            // silent no-op while the card is still in preparation.
+            _pipelineLog.EnsureRun(job.FolderPath, pipeline, job.ProjectName, job.Id);
+            _pipelineLog.RecordStep(job.FolderPath, new PipelineStepExecution
             {
-                _logger.LogInformation(
-                    "OrchestratorPrep rate limit reached ({MaxPerHour}/h); skipping further work this tick", maxPerHour);
-                return;
+                StepId = PipelineCatalogue.PreOrchestratorPrepStepId,
+                Kind = StepKind.Module,
+                Model = model,
+                Status = status,
+                StartedAt = startedAt,
+                CompletedAt = startedAt + elapsed,
+                DurationMs = (long)elapsed.TotalMilliseconds,
+                Verdict = decision.Verdict.ToString().ToLowerInvariant(),
+                VerdictSummary = decision.Note
+                    ?? (decision.Verdict == OrchestratorPrepRules.Verdict.Bounce
+                        ? $"bounce: {decision.BounceReason}"
+                        : $"clarity {decision.Clarity:F2}"),
+                Reason = decision.Verdict == OrchestratorPrepRules.Verdict.Bounce
+                    ? decision.BounceReason.ToString()
+                    : null,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OrchestratorPrep failed to record pipeline step for {JobId}", job.Id);
+        }
+    }
+
+    /// <summary>
+    /// One-shot rescue: move any card left in the retired
+    /// <c>1a-orchestrator-prep</c> lane back to <c>1-preparation</c> so the
+    /// removed lane never strands an in-flight card. Idempotent - once a card
+    /// is moved out there is nothing left for the next boot to do. Public for
+    /// tests; guarded so it runs at most once per process.
+    /// </summary>
+    public void MigrateStrayPrepLaneCards()
+    {
+        if (_migratedStrayLane) return;
+        _migratedStrayLane = true;
+
+        try
+        {
+            var stray = _scanner.ScanAllJobs()
+                .Where(j => j.State == TaskStates.OrchestratorPrep)
+                .ToList();
+            foreach (var job in stray)
+            {
+                var moved = _states.MoveJob(job.Id, TaskStates.Preparation, job.WatchPath);
+                if (moved.Status == MoveJobStatus.Success)
+                {
+                    _logger.LogInformation(
+                        "OrchestratorPrep migrated stray card {JobId} from {OldLane} back to {NewLane} (lane retired)",
+                        job.Id, TaskStates.OrchestratorPrep, TaskStates.Preparation);
+                }
             }
-
-            var promptText = ReadPromptText(job);
-            var prevText = "";
-            var nextText = "";
-            // Heuristic neighbour-context: previous = last completed, next = next ready.
-            // Both are best-effort; missing files don't break the score.
-            try
-            {
-                var prevJob = ready.LastOrDefault();
-                if (prevJob != null) prevText = ReadPromptText(prevJob);
-                var nextJob = ready.FirstOrDefault();
-                if (nextJob != null) nextText = ReadPromptText(nextJob);
-            }
-            catch { /* best-effort */ }
-
-            var iteration = ReadIteration(job);
-            var input = new OrchestratorPrepRules.PrepInput
-            {
-                PromptText = promptText,
-                Slug = job.Id,
-                Iteration = iteration,
-                MaxIterations = level == 1 ? 1 : maxIterations,
-                AutonomyLevel = level,
-                PrevPromptText = prevText,
-                NextPromptText = nextText,
-            };
-
-            var decision = OrchestratorPrepRules.Decide(input);
-            _callTimestamps.Enqueue(DateTime.UtcNow);
-
-            ApplyDecision(job, decision, iteration);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OrchestratorPrep stray-lane migration failed");
         }
     }
 

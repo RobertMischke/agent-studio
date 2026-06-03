@@ -69,6 +69,30 @@ public static class PipelineCatalogue
     public const string LoopGuardStepId = "pre-loop-guard";
 
     /// <summary>
+    /// Optional, parallelisable pre-coding step that surfaces the ADR-0026
+    /// orchestrator-prep pass (prompt-clarity scoring / accept-bounce-iterate)
+    /// in the pipeline table. It replaces the standalone
+    /// <c>1a-orchestrator-prep</c> backlog lane: prep now runs in-place on
+    /// <c>1-preparation</c> cards inside
+    /// <c>OrchestratorApi.Services.Supervisor.OrchestratorPrepHostedService</c>
+    /// and admits accepted cards straight to <c>2-ready</c>, so the active flow
+    /// has prep before the coding run without a dedicated lane. It is a
+    /// <see cref="StepKind.Module"/> deterministic heuristic today (no LLM) yet
+    /// carries the resolved per-project model
+    /// (<see cref="PipelineStepConfigResolver.ResolveModel(ProjectSettings?, PipelineStep, string)"/>)
+    /// so it respects the project model selection rather than hardcoding one.
+    /// It runs decoupled from the coding latch (<see cref="StepRunMode.Parallel"/>)
+    /// so it never blocks throughput, and defaults
+    /// <c>DefaultEnabled = false</c> because prep is an opt-in pass an operator
+    /// turns on per project (mirrors the <c>Orchestrator:PrepEnabled</c> kill
+    /// switch). The recording lives in <c>OrchestratorPrepHostedService</c>:
+    /// <see cref="PipelineStepStatus.Passed"/> on accept,
+    /// <see cref="PipelineStepStatus.Failed"/> on bounce,
+    /// <see cref="PipelineStepStatus.Running"/> while it iterates.
+    /// </summary>
+    public const string PreOrchestratorPrepStepId = "pre-orchestrator-prep";
+
+    /// <summary>
     /// The five drift dimensions ship as opt-in <see cref="StepKind.Drift"/>
     /// post-steps (DRIFT Nachtrag): four LLM dimensions plus the rule-based
     /// code-pattern check. They default <c>DefaultEnabled = false</c> because a
@@ -196,6 +220,20 @@ public static class PipelineCatalogue
                     Kind = StepKind.Module,
                     RunMode = StepRunMode.Sequential,
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = PreOrchestratorPrepStepId,
+                    DisplayName = "Orchestrator prep",
+                    Kind = StepKind.Module,
+                    // Decoupled from the coding latch (runs on 1-preparation
+                    // cards in OrchestratorPrepHostedService), so it never
+                    // blocks the active flow into 3-progress.
+                    RunMode = StepRunMode.Parallel,
+                    Idempotent = true,
+                    // Opt-in per project: prep is an extra pre-coding pass an
+                    // operator turns on, so an absent override leaves it off.
+                    DefaultEnabled = false,
                 },
             ],
             Core =
