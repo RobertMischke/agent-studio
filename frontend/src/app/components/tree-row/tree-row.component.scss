@@ -12,7 +12,11 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 24px;
+  // Row height drives the vertical rhythm of the Explorer tree, and so the
+  // spacing between the stacked count badges (project totals + lane counts)
+  // down the sidebar's right edge. Bumped from 24px so the counts read with
+  // breathing room instead of crowding each other (operator polish).
+  height: 30px;
   padding-top: 0;
   // 16px right padding so count badges (e.g. `439`, `27`) get breathing
   // room from the sidebar's right edge instead of being painted flush
