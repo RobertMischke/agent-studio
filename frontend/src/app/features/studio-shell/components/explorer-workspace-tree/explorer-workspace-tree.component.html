@@ -73,35 +73,54 @@
       @if (!isCollapsed('ws:' + g.id)) {
         @for (p of g.projects; track p.name) {
           <div class="studio-tree-project"
-               [attr.draggable]="p.projectId ? 'true' : null"
+               [attr.draggable]="p.projectId && projectActions.renamingProjectId() !== p.projectId ? 'true' : null"
                [class.studio-tree-project--dragging]="projectDrag.draggingProjectName() === p.name"
                [class.studio-tree-project--moving]="!!p.projectId && projectDrag.movingProjectId() === p.projectId"
                [attr.data-project-name]="p.name"
                [attr.data-testid]="'studio-explorer-project-row-' + p.name"
                [appTooltip]="rowTitle(p)"
+               (contextmenu)="onProjectContextMenu($event, p)"
                (dragstart)="onDragStart($event, p)"
                (dragend)="onDragEnd()">
-            <!-- Label / chevron click toggles expand/collapse; double-click
-                 opens the board; the inline icon opens the Project Hub. -->
-            <app-tree-row level="root"
-                          [chevron]="isExpanded(p.name) ? 'expanded' : 'collapsed'"
-                          [glyphChar]="p.initial"
-                          [glyphColor]="p.color"
-                          [label]="p.name"
-                          [count]="p.totalJobs"
-                          [active]="p.isActive"
-                          [testid]="'studio-explorer-project-' + p.name"
-                          (chevronClick)="toggleExpanded.emit(p.name)"
-                          (selectRequest)="toggleExpanded.emit(p.name)"
-                          (secondary)="openBoardRequest.emit(p.name)">
-              <button type="button"
-                      class="studio-tree-row__hub-link"
-                      appTooltip="Open Project Hub"
-                      aria-label="Open Project Hub"
-                      (click)="openHubRequest.emit(p.name); $event.stopPropagation()">
-                <app-studio-icon name="grid" [size]="10"></app-studio-icon>
-              </button>
-            </app-tree-row>
+            @if (projectActions.renamingProjectId() === p.projectId) {
+              <!-- Inline rename: registry displayName only; PROJ id + storage
+                   stay put. Enter commits, Escape / blur cancels. -->
+              <div class="studio-explorer-tree__ws-rename">
+                <input #projectRenameInput
+                       type="text"
+                       class="studio-explorer-tree__ws-rename-input"
+                       [attr.data-testid]="'studio-explorer-project-rename-input-' + p.projectId"
+                       [value]="projectActions.renameDraft()"
+                       (input)="projectActions.renameDraft.set($any($event.target).value)"
+                       (keydown)="onProjectRenameKeydown($event)"
+                       (blur)="commitRenameProject()" />
+              </div>
+            } @else {
+              <!-- Label / chevron click toggles expand/collapse; double-click
+                   opens the board; the inline icon opens the Project Hub;
+                   right-click opens the project context menu. The visible label
+                   is the registry displayName (p.displayLabel) so a rename shows
+                   immediately; the row stays keyed by p.name everywhere else. -->
+              <app-tree-row level="root"
+                            [chevron]="isExpanded(p.name) ? 'expanded' : 'collapsed'"
+                            [glyphChar]="p.initial"
+                            [glyphColor]="p.color"
+                            [label]="p.displayLabel"
+                            [count]="p.totalJobs"
+                            [active]="p.isActive"
+                            [testid]="'studio-explorer-project-' + p.name"
+                            (chevronClick)="toggleExpanded.emit(p.name)"
+                            (selectRequest)="toggleExpanded.emit(p.name)"
+                            (secondary)="openBoardRequest.emit(p.name)">
+                <button type="button"
+                        class="studio-tree-row__hub-link"
+                        appTooltip="Open Project Hub"
+                        aria-label="Open Project Hub"
+                        (click)="openHubRequest.emit(p.name); $event.stopPropagation()">
+                  <app-studio-icon name="grid" [size]="10"></app-studio-icon>
+                </button>
+              </app-tree-row>
+            }
             @if (isExpanded(p.name)) {
               <div class="studio-tree-children">
                 <app-tree-row level="child" glyph="folder"
@@ -146,4 +165,16 @@
     ariaLabel="Workspace actions"
     (itemClick)="onWsContextMenuItemClick($event)"
     (closeRequest)="closeWsContextMenu()" />
+
+  <!-- Right-click surface for project rows. Text-only (project convention:
+       no icons): "Rename" opens the inline editor, "Delete project…" hands
+       the destructive two-stage confirm to the shell. -->
+  <app-menu
+    [open]="projectActions.contextMenu() !== null"
+    [items]="projectActions.contextMenuItems()"
+    [position]="projectActions.contextMenuPosition()"
+    testIdPrefix="studio-explorer-proj-ctx"
+    ariaLabel="Project actions"
+    (itemClick)="onProjectContextMenuItemClick($event)"
+    (closeRequest)="projectActions.closeContextMenu()" />
 </section>

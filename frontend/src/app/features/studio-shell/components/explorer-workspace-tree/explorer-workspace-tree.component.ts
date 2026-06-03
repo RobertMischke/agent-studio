@@ -22,6 +22,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../../components/menu';
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
+import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
 
 /** Per-lane working-set breakdown for a project's expandable child rows. */
 export interface ExplorerLaneCounts {
@@ -43,13 +44,17 @@ export interface ExplorerProjectRow {
 /** A project row decorated with its lane counts, ready to render. */
 export interface ExplorerProjectNode extends ExplorerProjectRow {
   lanes: ExplorerLaneCounts;
-  /** Registry id (PROJ-NNN) when this row matches a registry project; null
-   *  for the empty-registry "__all__" fallback and "__unassigned__" rows,
-   *  which have no workspace membership and are therefore not draggable. */
+  /** Registry id (PROJ-NNN) for matched rows; null for synthetic rows
+   *  ("__all__" / "__unassigned__"), which are not draggable. */
   projectId: string | null;
-  /** Owning registry workspace id for matched rows (the drag source's current
-   *  workspace, used to reject same-workspace drops); null when unmatched. */
+  /** Owning registry workspace id for matched rows (rejects same-workspace
+   *  drops); null when unmatched. */
   workspaceId: string | null;
+  /** Registry `displayName` for matched rows (falls back to `name`); the row
+   *  stays keyed by `name` so a rename never breaks grouping. */
+  displayLabel: string;
+  /** Registry short code for matched rows; the delete confirm accepts it. */
+  shortCode: string | null;
 }
 
 /** One workspace folder and the project rows that belong to it. */
@@ -67,27 +72,20 @@ function folderTail(path: string): string {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
+/** Canonicalise a storage path (unify slashes, drop trailing sep, lower-case)
+ *  for the rename-stable WatchPath==storageLocation join key. */
+function normalizeStorage(path: string): string {
+  return path.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
 /**
- * F46 — Explorer two-level workspace → project tree.
- *
- * The Explorer's original single "Workspace" header dates from F27, before
- * the F45 registry introduced real, multiple workspaces. This component
- * groups the shell's flat project rows under their owning registry
- * workspace so the sidebar reflects the workspace → project hierarchy.
- *
- * It is purely presentational over the data the shell already loads:
- * project rows (job-derived) joined to {@link RegistryWorkspaceListItem}s by
- * display name or storage-folder tail. Rows that match no registry project
- * fall into an "Unassigned" group; when the registry is empty (in-memory
- * mode / not yet loaded) it falls back to a single legacy folder so the
- * Explorer never goes blank.
- *
- * Project drag-and-drop, expand/collapse, row testids and BEM classes are
- * preserved verbatim from the shell. Colour / move / delete still live in the
- * Settings panel (F47 / F66 / ADR-0048); the one in-tree management affordance
- * is workspace rename, surfaced at the node itself via double-click and a
- * right-click "Rename" context menu so the operator does not have to know the
- * Settings panel exists. Both routes drive the same registry-only inline edit.
+ * F46 — Explorer two-level workspace → project tree. Purely presentational
+ * over the shell's flat project rows, joined to
+ * {@link RegistryWorkspaceListItem}s by storage path / display name / folder
+ * tail; unmatched rows fall into "Unassigned", and an empty registry falls
+ * back to one legacy folder so the tree never goes blank. In-tree management
+ * affordances (workspace + project rename, project delete) are surfaced at the
+ * node via double-click / right-click; all edits are registry-only.
  */
 @Component({
   selector: 'app-explorer-workspace-tree',
@@ -102,6 +100,10 @@ export class ExplorerWorkspaceTreeComponent {
   readonly projectRows = input<readonly ExplorerProjectRow[]>([]);
   readonly registryWorkspaces = input<readonly RegistryWorkspaceListItem[]>([]);
   readonly projectLanes = input<ReadonlyMap<string, ExplorerLaneCounts>>(new Map());
+  /** Row name → resolved storage path (from the host's WatchPaths). Lets the
+   *  workspace→project join key on storage instead of the mutable display
+   *  name, so a registry rename keeps the row under its workspace (F46 step 7). */
+  readonly projectStorageByName = input<ReadonlyMap<string, string>>(new Map());
   readonly expandedProjects = input<ReadonlySet<string>>(new Set());
   readonly showAllActive = input(false);
 
@@ -109,29 +111,25 @@ export class ExplorerWorkspaceTreeComponent {
   readonly toggleExpanded = output<string>();
   readonly openBoardRequest = output<string>();
   readonly openHubRequest = output<string>();
-  /**
-   * Emitted when a project row is dropped onto a (different, real) workspace
-   * folder. The shell persists it via PUT /api/projects/{projectId}
-   * `{ workspaceId }` and reloads the registry so the row re-homes under the
-   * new workspace. No job folder is touched on disk (ADR-0048).
-   */
+  /** Project row dropped onto a different real workspace; the shell PUTs
+   *  /api/projects/{projectId} `{ workspaceId }` and reloads (no folder move). */
   readonly projectDrop = output<{ projectId: string; targetWorkspaceId: string }>();
 
-  /**
-   * F46 — workspace-header inline rename. Double-clicking a (real) workspace
-   * header swaps it for a text input; committing emits this so the shell can
-   * PUT /api/workspaces/{id} and reload. The rename touches registry metadata
-   * only — no project folder is moved or renamed on disk.
-   *
-   * Project-row rename is intentionally NOT wired here: the rows are labelled
-   * and keyed by their job-derived name (not the registry displayName), so a
-   * registry rename would not change the visible label and would break the
-   * workspace→project grouping match. Renaming projects from the tree lands
-   * with the projectId-keyed display migration (F46 step 7).
-   */
+  /** F46 — workspace-header inline rename committed from the editor; the shell
+   *  PUTs /api/workspaces/{id} (registry metadata only, no folder move). */
   readonly renameWorkspace = output<{ id: string; displayName: string }>();
 
+  /** F46 step 7 — registry-only project rename committed from the inline editor
+   *  (shell PUTs `{ displayName }`; PROJ id + storage untouched). */
+  readonly renameProject = output<{ projectId: string; displayName: string }>();
+
+  /** F46 — destructive project delete from the right-click menu; the shell runs
+   *  the two-stage typed confirm + DELETE. `shortCode` lets the confirm accept
+   *  it as an alias for the display name. */
+  readonly deleteProject = output<{ projectId: string; displayName: string; shortCode: string | null }>();
+
   readonly projectDrag = inject(ProjectDragDropService);
+  readonly projectActions = inject(ExplorerProjectActionsService);
   private readonly sections = inject(ExplorerSectionsService);
   private readonly modalStack = inject(ModalStackService);
 
@@ -146,18 +144,9 @@ export class ExplorerWorkspaceTreeComponent {
     if (el) queueMicrotask(() => { el.focus(); el.select(); });
   });
 
-  /**
-   * Register the open rename input on the modal stack so Escape cancels it.
-   *
-   * Escape is arbitrated centrally by {@link ModalStackService}: a single
-   * capture-phase document listener invokes the topmost entry's close handler
-   * and then `stopImmediatePropagation()`. Always-mounted overlays (menu,
-   * info-button, concept-help, …) keep that stack non-empty even in the plain
-   * Explorer, so an inline input's own `(keydown)` Escape never fires — the
-   * stack top swallows the keystroke first. Pushing ourselves as the LIFO top
-   * while editing routes Escape to {@link cancelRename}; Enter is not arbitrated
-   * by the stack and still commits via the input's `(keydown)` binding.
-   */
+  // Push the open rename input onto the modal stack so Escape cancels it:
+  // always-mounted overlays keep the stack non-empty, so the input's own
+  // (keydown) Escape would otherwise be swallowed by the stack top first.
   private renameModalDispose: (() => void) | null = null;
   private readonly renameModalFx = effect(() => {
     const renaming = this.renamingWsId() !== null;
@@ -172,8 +161,33 @@ export class ExplorerWorkspaceTreeComponent {
     }
   });
 
+  private readonly projectRenameInputRef = viewChild<ElementRef<HTMLInputElement>>('projectRenameInput');
+  private readonly focusProjectRenameFx = effect(() => {
+    if (this.projectActions.renamingProjectId() === null) return;
+    const el = this.projectRenameInputRef()?.nativeElement;
+    if (el) queueMicrotask(() => { el.focus(); el.select(); });
+  });
+
+  // Project-row rename: same modal-stack Escape arbitration as the workspace one.
+  private projectRenameModalDispose: (() => void) | null = null;
+  private readonly projectRenameModalFx = effect(() => {
+    const renaming = this.projectActions.renamingProjectId() !== null;
+    if (renaming && !this.projectRenameModalDispose) {
+      this.projectRenameModalDispose = this.modalStack.push('explorer-project-rename', () => {
+        this.projectActions.cancelRename();
+        return true;
+      });
+    } else if (!renaming && this.projectRenameModalDispose) {
+      this.projectRenameModalDispose();
+      this.projectRenameModalDispose = null;
+    }
+  });
+
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.renameModalDispose?.());
+    inject(DestroyRef).onDestroy(() => {
+      this.renameModalDispose?.();
+      this.projectRenameModalDispose?.();
+    });
   }
 
   readonly totalProjectCount = computed(() => this.projectRows().length);
@@ -181,46 +195,65 @@ export class ExplorerWorkspaceTreeComponent {
   readonly groups = computed<ExplorerWorkspaceGroup[]>(() => {
     const rows = this.projectRows();
     const lanes = this.projectLanes();
+    const storageByName = this.projectStorageByName();
     const node = (
       r: ExplorerProjectRow,
       projectId: string | null,
       workspaceId: string | null,
+      displayLabel: string,
+      shortCode: string | null,
     ): ExplorerProjectNode => ({
       ...r,
       lanes: lanes.get(r.name) ?? ZERO_LANES,
       projectId,
       workspaceId,
+      displayLabel,
+      shortCode,
     });
 
     const workspaces = [...this.registryWorkspaces()].sort((a, b) => a.sortOrder - b.sortOrder);
     if (workspaces.length === 0) {
       return rows.length
-        ? [{ id: '__all__', displayName: 'Workspace', color: null, projects: rows.map(r => node(r, null, null)) }]
+        ? [{ id: '__all__', displayName: 'Workspace', color: null, projects: rows.map(r => node(r, null, null, r.name, null)) }]
         : [];
     }
 
     const byName = new Map(rows.map(r => [r.name, r] as const));
+    // Rename-stable join: a row's resolved storage path equals the registry
+    // `storageLocation` and never changes on a display rename, so match on it
+    // first. Fall back to the display-name / folder-tail joins for rows whose
+    // storage the host did not supply (legacy callers pass an empty map).
+    const byStorage = new Map<string, ExplorerProjectRow>();
+    for (const r of rows) {
+      const storage = storageByName.get(r.name);
+      if (storage) byStorage.set(normalizeStorage(storage), r);
+    }
     const used = new Set<string>();
     const groups: ExplorerWorkspaceGroup[] = [];
     for (const ws of workspaces) {
       const projects: ExplorerProjectNode[] = [];
       for (const rp of ws.projects) {
-        const match = byName.get(rp.displayName) ?? byName.get(folderTail(rp.storageLocation));
+        const match =
+          byStorage.get(normalizeStorage(rp.storageLocation)) ??
+          byName.get(rp.displayName) ??
+          byName.get(folderTail(rp.storageLocation));
         if (match && !used.has(match.name)) {
           used.add(match.name);
           // Carry the registry id + owning workspace so the drag source knows
-          // what to reassign and which workspace drop is a no-op.
-          projects.push(node(match, rp.id, ws.id));
+          // what to reassign and which workspace drop is a no-op; carry the
+          // registry display name + short code so the row renders the live
+          // label and the delete confirm can accept the short code.
+          projects.push(node(match, rp.id, ws.id, rp.displayName, rp.shortCode));
         }
       }
-      projects.sort((a, b) => a.name.localeCompare(b.name));
+      projects.sort((a, b) => a.displayLabel.localeCompare(b.displayLabel));
       groups.push({ id: ws.id, displayName: ws.displayName, color: ws.color, projects });
     }
 
     const leftover = rows
       .filter(r => !used.has(r.name))
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map(r => node(r, null, null));
+      .map(r => node(r, null, null, r.name, null));
     if (leftover.length) {
       groups.push({ id: '__unassigned__', displayName: 'Unassigned', color: null, projects: leftover });
     }
@@ -235,13 +268,9 @@ export class ExplorerWorkspaceTreeComponent {
     this.sections.setCollapsed(key, collapsed);
   }
 
-  /**
-   * Toggle a workspace folder's collapsed state from the live service value
-   * rather than the tree-row's `[chevron]` input. A double-click (used to open
-   * inline rename) fires two click events faster than the row re-renders, so
-   * both clicks would otherwise read the same stale value and collapse the
-   * folder instead of netting back to its prior state.
-   */
+  // Toggle from the live service value, not the row's [chevron] input: a
+  // double-click fires two clicks before the row re-renders, so both would read
+  // the same stale value and collapse instead of netting back.
   onWsHeaderToggle(g: ExplorerWorkspaceGroup): void {
     const key = 'ws:' + g.id;
     this.setCollapsed(key, !this.isCollapsed(key));
@@ -251,24 +280,15 @@ export class ExplorerWorkspaceTreeComponent {
     return this.expandedProjects().has(name);
   }
 
-  /**
-   * F46 — enter inline-rename for a workspace header. The synthetic groups
-   * (the empty-registry "__all__" fallback and the "__unassigned__" bucket)
-   * are not real registry workspaces, so double-clicking them is a no-op.
-   */
+  /** Enter inline-rename for a real workspace header (synthetic groups no-op). */
   startRenameWorkspace(g: ExplorerWorkspaceGroup): void {
     if (g.id === '__all__' || g.id === '__unassigned__') return;
     this.renameDraft.set(g.displayName);
     this.renamingWsId.set(g.id);
   }
 
-  /**
-   * Right-click "Rename" context menu on a workspace header. Double-click is
-   * the fast path but undiscoverable, so the menu makes the same registry-only
-   * rename visible. Viewport-relative coordinates feed `<app-menu>`'s absolute
-   * positioning; synthetic groups have no real registry record to rename, so we
-   * let the browser's native menu through for them instead.
-   */
+  /** Right-click "Rename" menu on a workspace header (viewport coords for
+   *  `<app-menu>`); synthetic groups fall through to the native menu. */
   readonly wsContextMenu = signal<{ id: string; x: number; y: number } | null>(null);
 
   readonly wsContextMenuItems = computed<readonly MenuItem[]>(() =>
@@ -298,13 +318,66 @@ export class ExplorerWorkspaceTreeComponent {
     if (g) this.startRenameWorkspace(g);
   }
 
+  /** Right-click menu on a project row; only registry-backed rows (PROJ id)
+   *  get it, unmatched rows fall through to the native menu. */
+  onProjectContextMenu(event: MouseEvent, p: ExplorerProjectNode): void {
+    if (!p.projectId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.projectActions.openContextMenu({
+      projectId: p.projectId,
+      name: p.name,
+      displayName: p.displayLabel,
+      shortCode: p.shortCode,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  onProjectContextMenuItemClick(ev: MenuItemClickEvent): void {
+    const ctx = this.projectActions.contextMenu();
+    this.projectActions.closeContextMenu();
+    if (!ctx) return;
+    if (ev.id === 'rename') {
+      this.projectActions.startRename(ctx.projectId, ctx.displayName);
+    } else if (ev.id === 'delete') {
+      this.deleteProject.emit({ projectId: ctx.projectId, displayName: ctx.displayName, shortCode: ctx.shortCode });
+    }
+  }
+
+  onProjectRenameKeydown(ev: KeyboardEvent): void {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      this.commitRenameProject();
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      this.projectActions.cancelRename();
+    }
+  }
+
+  /** Commit the inline rename, emitting {@link renameProject} on a real change. */
+  commitRenameProject(): void {
+    const projectId = this.projectActions.renamingProjectId();
+    if (projectId === null) return;
+    const current = this.findProjectNode(projectId)?.displayLabel ?? '';
+    const result = this.projectActions.commitRename(current);
+    if (result) this.renameProject.emit(result);
+  }
+
+  private findProjectNode(projectId: string): ExplorerProjectNode | undefined {
+    for (const g of this.groups()) {
+      const found = g.projects.find(p => p.projectId === projectId);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
   cancelRename(): void {
     this.renamingWsId.set(null);
   }
 
-  /** Enter commits, Escape cancels. Bound to the raw `keydown` rather than the
-   *  `keydown.enter` / `keydown.escape` pseudo-events because the latter's
-   *  Escape filter did not fire reliably for this input. */
+  // Raw keydown (not keydown.enter/.escape pseudo-events: the Escape filter
+  // did not fire reliably here). Enter commits, Escape cancels.
   onRenameKeydown(ev: KeyboardEvent): void {
     if (ev.key === 'Enter') {
       ev.preventDefault();
@@ -315,11 +388,8 @@ export class ExplorerWorkspaceTreeComponent {
     }
   }
 
-  /**
-   * Commit the draft name. No-op when blank or unchanged; otherwise emits
-   * {@link renameWorkspace} for the shell to persist. Closing edit mode first
-   * makes the blur that follows Enter/Escape a no-op (renamingWsId is null).
-   */
+  /** Commit the draft name (no-op when blank/unchanged); closing edit mode
+   *  first makes the blur that follows Enter/Escape a no-op. */
   commitRename(): void {
     const id = this.renamingWsId();
     if (id === null) return;
@@ -330,14 +400,12 @@ export class ExplorerWorkspaceTreeComponent {
     this.renameWorkspace.emit({ id, displayName: value });
   }
 
-  /** True when dropping the dragged project on this workspace folder would
-   *  actually move it (real workspace, not the source's current one). */
+  /** True when dropping the dragged project here would actually move it. */
   canDropOnWorkspace(targetWorkspaceId: string): boolean {
     return this.projectDrag.canDropOnWorkspace(targetWorkspaceId);
   }
 
-  /** Hover-title for a project row. Drop targets are workspace folders now,
-   *  so the affordance points the user at the gesture rather than the row. */
+  /** Hover-title for a project row pointing at the drag-to-move gesture. */
   rowTitle(p: ExplorerProjectNode): string {
     return p.projectId
       ? 'Drag onto a workspace folder to move this project there'
@@ -356,9 +424,8 @@ export class ExplorerWorkspaceTreeComponent {
     this.projectDrag.onWorkspaceDragOver(event, g.id);
   }
 
-  /** Only clear the hover highlight when the pointer leaves the whole group
-   *  wrapper — moving between the header and a child row fires dragleave on
-   *  the inner element and would otherwise flicker the highlight off. */
+  // Clear the highlight only when leaving the whole wrapper, else moving
+  // between header and child rows flickers it off.
   onWorkspaceDragLeave(event: DragEvent, g: ExplorerWorkspaceGroup): void {
     const related = event.relatedTarget as Node | null;
     const wrapper = event.currentTarget as HTMLElement | null;

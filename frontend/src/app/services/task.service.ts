@@ -496,6 +496,19 @@ export class TaskService {
   }
 
   /**
+   * F46 — destructive project delete. The backend removes the on-disk
+   * project storage (every lane + task), drops the matching WatchPaths
+   * entry, then removes the registry record — deterministically and
+   * without leaving an orphan folder behind. Returns the deleted record's
+   * id / displayName / storageLocation so the UI can surface a toast and
+   * purge any stale tabs keyed by the old project name.
+   */
+  deleteRegistryProject(projId: string) {
+    return this.http.delete<{ deletedId: string; displayName: string; storageLocation: string }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projId)}`);
+  }
+
+  /**
    * Create a new (empty) workspace. The backend slugs the name into a
    * folder under `{TaskRepository}/projects/{slug}`, materialises the
    * directory, and appends a `WatchPathEntry` to `appsettings.Local.json`.

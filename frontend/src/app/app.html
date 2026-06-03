@@ -17,6 +17,8 @@
       <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
       <app-studio-shell data-testid="studio-shell-root"
                         [knownProjectNames]="projectNames()"
+                        [projectWatchPaths]="watchPaths()"
+                        (projectDeleted)="loadWatchPaths()"
                         (chatToggle)="toggleOrchestratorChat()"
                         (addTaskRequested)="openCreate()"
                         (openUsageSheet)="usageSheet.toggle()"

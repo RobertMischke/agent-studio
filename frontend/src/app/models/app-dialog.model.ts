@@ -28,10 +28,23 @@ export interface ConfirmDialogOptions {
   cancelLabel?: string;
   /** Visual flavour. `danger` is the default for delete-style flows. */
   kind?: ConfirmDialogKind;
+  /**
+   * Type-to-confirm gate. When non-empty, the dialog renders a text input
+   * and keeps the confirm button disabled until the trimmed input matches
+   * one of these values (case-insensitive). Used by the destructive
+   * project-delete flow so the operator must re-type the project name or
+   * its short code before the second confirmation can complete.
+   */
+  requireTypedValues?: string[];
+  /** Label shown above the type-to-confirm input. */
+  requireTypedPrompt?: string;
 }
 
-export interface ConfirmDialogState extends Required<Omit<ConfirmDialogOptions, 'detail'>> {
+export interface ConfirmDialogState
+  extends Required<Omit<ConfirmDialogOptions, 'detail' | 'requireTypedValues' | 'requireTypedPrompt'>> {
   detail: string | null;
+  requireTypedValues: string[] | null;
+  requireTypedPrompt: string | null;
 }
 
 export interface NotificationOptions {

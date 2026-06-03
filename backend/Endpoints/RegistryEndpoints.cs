@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Configuration;
 using OrchestratorApi.Services.Registry;
 
 namespace OrchestratorApi.Endpoints;
@@ -151,6 +152,45 @@ public static class RegistryEndpoints
             catch (KeyNotFoundException ex) { return Results.NotFound(new { error = ex.Message }); }
             catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
             catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+        });
+
+        // F46 — destructive project delete. Removes the on-disk project
+        // storage (every lane + task), drops the matching WatchPaths entry so
+        // no ghost picker row survives, then removes the registry record.
+        // Storage is deleted first so a failure aborts before any metadata is
+        // touched — never leaving an orphan folder behind a dangling pointer.
+        app.MapDelete(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}",
+            (string projId, ProjectRegistry projects, WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
+        {
+            var log = loggerFactory.CreateLogger("ProjectDelete");
+            var record = projects.FindById(projId);
+            if (record == null)
+                return Results.NotFound(new { error = $"Unknown projectId '{projId}'" });
+
+            var storageResult = workspaceManagement.DeleteProjectStorage(record.StorageLocation);
+            if (storageResult.Outcome == WorkspaceManagementOutcome.BadRequest)
+            {
+                log.LogError(
+                    "project-delete-storage-failed id={Id} storage={Storage} error={Error}",
+                    record.Id, record.StorageLocation, storageResult.Error);
+                return Results.Problem(
+                    storageResult.Error ?? "Failed to delete project storage.",
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            try { projects.Delete(projId); }
+            catch (KeyNotFoundException) { /* already removed; idempotent success */ }
+
+            log.LogInformation(
+                "project-deleted id={Id} displayName={DisplayName} storage={Storage}",
+                record.Id, record.DisplayName, record.StorageLocation);
+
+            return Results.Ok(new
+            {
+                deletedId = record.Id,
+                displayName = record.DisplayName,
+                storageLocation = record.StorageLocation,
+            });
         });
     }
 }

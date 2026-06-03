@@ -12,6 +12,23 @@
     @if (confirm.detail) {
       <p class="app-dialog__detail" data-testid="confirm-dialog-detail">{{ confirm.detail }}</p>
     }
+    @if (confirm.requireTypedValues) {
+      <label class="app-dialog__typed">
+        @if (confirm.requireTypedPrompt) {
+          <span class="app-dialog__typed-label"
+                data-testid="confirm-dialog-typed-prompt">{{ confirm.requireTypedPrompt }}</span>
+        }
+        <input #typedInput
+               type="text"
+               class="app-dialog__typed-input"
+               autocomplete="off"
+               autocapitalize="off"
+               spellcheck="false"
+               data-testid="confirm-dialog-typed-input"
+               [value]="typedDraft()"
+               (input)="typedDraft.set($any($event.target).value)" />
+      </label>
+    }
     <div footer>
       <button class="btn btn--ghost"
               type="button"
@@ -22,6 +39,7 @@
               [class.btn--danger]="confirm.kind === 'danger'"
               [class.btn--primary]="confirm.kind === 'primary'"
               type="button"
+              [disabled]="!typedConfirmSatisfied()"
               data-testid="confirm-dialog-confirm"
               (click)="onAccept()">{{ confirm.confirmLabel }}</button>
     </div>

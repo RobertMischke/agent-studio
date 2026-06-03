@@ -53,6 +53,8 @@ export class ConfirmDialogService {
       confirmLabel: options.confirmLabel ?? 'Confirm',
       cancelLabel: options.cancelLabel ?? 'Cancel',
       kind: options.kind ?? 'danger',
+      requireTypedValues: options.requireTypedValues?.length ? options.requireTypedValues : null,
+      requireTypedPrompt: options.requireTypedPrompt ?? null,
     };
     this.active.set(state);
 

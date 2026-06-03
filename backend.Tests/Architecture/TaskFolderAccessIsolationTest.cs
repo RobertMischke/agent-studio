@@ -87,16 +87,27 @@ public class TaskFolderAccessIsolationTest
             // owns folder creates and field edits; TaskScannerService owns
             // reads; TaskTransitionService combines a move with its side
             // effects (auto-commit, runner-active-state clear).
-            ["backend/Services/Jobs/TaskStateMachine.cs"] =
+            // (The Services/Jobs -> Services/Tasks rename moved these four
+            // files; the whitelist tracks their current home.)
+            ["backend/Services/Tasks/TaskStateMachine.cs"] =
                 "Single-state-machine authority for folder moves and deletes.",
-            ["backend/Services/Jobs/TaskMutationService.cs"] =
+            ["backend/Services/Tasks/TaskMutationService.cs"] =
                 "Owns folder creates and per-job field edits.",
-            ["backend/Services/Jobs/TaskScannerService.cs"] =
+            ["backend/Services/Tasks/TaskScannerService.cs"] =
                 "Owns reads against the job-folder tree.",
-            ["backend/Services/Jobs/TaskTransitionService.cs"] =
+            ["backend/Services/Tasks/TaskTransitionService.cs"] =
                 "Combines folder moves with auto-commit and runner-active-state side effects.",
+            ["backend/Services/Tasks/Merge/MergeService.cs"] =
+                "Merge archives the secondary task folder and prunes its mirror; structural moves owned here.",
             ["backend/Services/TaskWatcherService.cs"] =
                 "FileSystemWatcher feeding the scanner; needs raw lane paths.",
+
+            // Project-level (not lane-level) deletion: removes a whole
+            // <TaskRepository>/projects/<key> folder when a registry project
+            // is deleted via DELETE /api/projects/{PROJ-NNN}. Operates on the
+            // project root, not individual lane folders.
+            ["backend/Services/Configuration/WorkspaceManagementService.cs"] =
+                "Owns project-storage folder lifecycle (create on workspace add, recursive delete on project delete).",
 
             // Tier 2 (boot): the crash-recovery sweep walks 3-progress
             // before the in-memory store boots. Explicitly carved out in

@@ -311,6 +311,36 @@ public sealed class ProjectRegistry
     public ProjectRecord SetArchived(string id, bool archived)
         => MutateLocked(id, p => p with { Archived = archived }, archived ? "archived" : "unarchived");
 
+    /// <summary>
+    /// F46 — permanently remove a project record from the registry and
+    /// return the removed record so the caller can act on its
+    /// <see cref="ProjectRecord.StorageLocation"/>. Throws
+    /// <see cref="KeyNotFoundException"/> when the id is unknown. This drops
+    /// the metadata row only; deleting the on-disk project storage is the
+    /// caller's responsibility (see <c>WorkspaceManagementService</c>) so the
+    /// metadata authority stays decoupled from the filesystem authority.
+    /// </summary>
+    public ProjectRecord Delete(string id)
+    {
+        EnsureLoaded();
+        lock (_gate)
+        {
+            var idx = _state.Projects.FindIndex(p =>
+                string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (idx < 0) throw new KeyNotFoundException($"Unknown projectId: {id}");
+            var removed = _state.Projects[idx];
+            _state = _state with
+            {
+                Projects = [.. _state.Projects.Where((_, i) => i != idx)],
+            };
+            PersistLocked();
+            _logger.LogInformation(
+                "project-registry-deleted id={Id} displayName={DisplayName} storage={Storage}",
+                removed.Id, removed.DisplayName, removed.StorageLocation);
+            return removed;
+        }
+    }
+
     private ProjectRecord MutateLocked(string id, Func<ProjectRecord, ProjectRecord> update, string op)
     {
         EnsureLoaded();

@@ -997,31 +997,7 @@ export class App implements OnInit, OnDestroy {
     this.nowMsTickHandle = setInterval(() => this.nowMs.set(Date.now()), 1000);
     this.refresh();
     this.jobService.startLiveUpdates();
-    this.jobService.getWatchPaths().subscribe({
-      next: (entries) => {
-        this.watchPaths.set(entries);
-        if (entries.length > 0) this.createJobForm.newWatchPath = entries[0].path;
-
-        // Purge stale project names that survived a registry rename in
-        // localStorage (board filter) and persisted tabs.
-        const validNames = new Set(entries.map(e => e.name));
-        this.boardFilters.purgeStaleProjects(validNames);
-        this.studioTabState.purgeStaleProjectTabs(validNames);
-
-        // The deep-link hash listener can fire before watch paths are
-        // known (e.g. on a hard reload of `#/projects/<slug>`); resolving
-        // the slug → project name needs the watch-path list, so re-apply
-        // once entries are available.
-        this.applyProjectShellHash();
-      },
-      error: (err) => {
-        this.errorDialog.show(err, {
-          title: 'Failed to load projects',
-          fallbackMessage: 'Failed to load projects',
-          source: 'Project list',
-        });
-      },
-    });
+    this.loadWatchPaths();
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
     this.clientService.refresh();
@@ -1321,6 +1297,46 @@ export class App implements OnInit, OnDestroy {
   onEpicOverviewOpenTask(event: { jobId: string; watchPath: string }): void {
     this.epicOverview.closeOverview();
     this.onOpenJobDetailFromSheet(event);
+  }
+
+  /**
+   * Load (or reload) the backend WatchPaths into `watchPaths`. Runs once at
+   * boot and again whenever a project is deleted from the studio shell — the
+   * deleted project's WatchPaths entry is gone server-side, so re-pulling here
+   * drops its name from `projectNames()` (no ghost picker / tree row) and the
+   * job refresh clears its now-empty board. Also re-purges stale board filters
+   * and persisted tabs against the surviving name set.
+   */
+  loadWatchPaths(): void {
+    this.jobService.getWatchPaths().subscribe({
+      next: (entries) => {
+        this.watchPaths.set(entries);
+        if (entries.length > 0) this.createJobForm.newWatchPath = entries[0].path;
+
+        // Purge stale project names that survived a registry rename / delete in
+        // localStorage (board filter) and persisted tabs.
+        const validNames = new Set(entries.map(e => e.name));
+        this.boardFilters.purgeStaleProjects(validNames);
+        this.studioTabState.purgeStaleProjectTabs(validNames);
+
+        // The deep-link hash listener can fire before watch paths are
+        // known (e.g. on a hard reload of `#/projects/<slug>`); resolving
+        // the slug → project name needs the watch-path list, so re-apply
+        // once entries are available.
+        this.applyProjectShellHash();
+
+        // Refresh the board so a deleted project's jobs disappear right away
+        // rather than on the next live-update tick.
+        this.jobService.refresh(true);
+      },
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Failed to load projects',
+          fallbackMessage: 'Failed to load projects',
+          source: 'Project list',
+        });
+      },
+    });
   }
 
   openCreate(targetState?: string) {

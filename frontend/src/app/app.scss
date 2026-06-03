@@ -1056,6 +1056,36 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .app-dialog__typed {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0;
+    }
+    .app-dialog__typed-label {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--studio-fg-dim);
+    }
+    .app-dialog__typed-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--studio-bg-input, var(--studio-bg-hover));
+      border: 1px solid var(--studio-border);
+      color: var(--studio-fg);
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+    .app-dialog__typed-input:focus {
+      outline: none;
+      border-color: color-mix(in srgb, var(--studio-accent-6) 85%, transparent);
+    }
+    .btn[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .app-dialog__actions {
       display: flex;
       justify-content: flex-end;

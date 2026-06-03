@@ -226,6 +226,89 @@ public sealed class WorkspaceManagementService
     }
 
     /// <summary>
+    /// F46 — destructive project deletion support behind the registry
+    /// <c>DELETE /api/projects/{PROJ-NNN}</c> endpoint. Removes the on-disk
+    /// project storage folder at <paramref name="storageLocation"/>
+    /// (recursively, including every lane and task) and drops any
+    /// <c>WatchPaths</c> entry whose resolved path points at it, so the
+    /// project leaves both the kanban and the project picker with no ghost
+    /// row. Unlike <see cref="Delete"/> this does not guard on emptiness —
+    /// the caller has already gated the action behind a typed two-stage
+    /// confirmation.
+    ///
+    /// <para><b>Ordering (no orphan folders):</b> the folder is deleted
+    /// first. If that fails the method aborts before touching any metadata,
+    /// so a configuration pointer is never left aimed at a half-deleted
+    /// folder. The registry record itself is removed separately by the
+    /// caller after this returns.</para>
+    /// </summary>
+    public WorkspaceManagementResult DeleteProjectStorage(string? storageLocation)
+    {
+        var target = (storageLocation ?? "").Trim();
+        if (string.IsNullOrEmpty(target))
+        {
+            return WorkspaceManagementResult.BadRequest("storageLocation is required.");
+        }
+
+        var normalizedTarget = NormalizePath(target);
+        var folderRemoved = false;
+        if (Directory.Exists(target))
+        {
+            try
+            {
+                Directory.Delete(target, recursive: true);
+                folderRemoved = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "project-storage-delete-failed path={Path}", target);
+                return WorkspaceManagementResult.BadRequest(
+                    $"Could not delete project folder: {ex.Message}");
+            }
+        }
+
+        // Drop any WatchPaths entry resolving to this folder so the project
+        // stops surfacing as a known-project ghost row after the registry
+        // record is gone. Entries are matched by resolved Path; the raw JSON
+        // array is keyed by Name, so we resolve, then remove by Name.
+        var match = _scanner.GetWatchPaths().FirstOrDefault(e =>
+            string.Equals(NormalizePath(e.Path), normalizedTarget, StringComparison.OrdinalIgnoreCase));
+        if (match != null)
+        {
+            lock (FileLock)
+            {
+                var root = ReadOrCreateRoot();
+                if (root["WatchPaths"] is JsonArray array)
+                {
+                    for (int i = array.Count - 1; i >= 0; i--)
+                    {
+                        if (array[i] is not JsonObject obj) continue;
+                        var nodeName = obj["Name"]?.GetValue<string>() ?? "";
+                        if (string.Equals(nodeName, match.Name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            array.RemoveAt(i);
+                        }
+                    }
+                    root["WatchPaths"] = array;
+                    WriteAtomic(root);
+                    ReloadConfiguration();
+                }
+            }
+        }
+
+        _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        _logger.LogInformation(
+            "project-storage-deleted path={Path} folderRemoved={Removed} watchPathRemoved={WatchPath}",
+            target, folderRemoved, match?.Name ?? "(none)");
+
+        return WorkspaceManagementResult.Ok(
+            match ?? new WatchPathEntry { Name = "", Path = target, RootPath = "" });
+    }
+
+    private static string NormalizePath(string? p) =>
+        string.IsNullOrWhiteSpace(p) ? "" : p.Replace('\\', '/').TrimEnd('/').ToLowerInvariant();
+
+    /// <summary>
     /// Counts every job folder under each lane of the workspace path.
     /// Mirrors the lane walk in
     /// <see cref="TaskScannerService.ScanAllJobsRaw"/> so the answer

@@ -14,7 +14,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { TaskInfo, RegistryWorkspaceListItem } from '../../models/task.model';
+import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../models/task.model';
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
@@ -101,6 +101,13 @@ export class StudioShellComponent {
    * that don't pass it keep their job-derived behaviour.
    */
   readonly knownProjectNames = input<readonly string[]>([]);
+
+  /** Backend WatchPaths feeding the rename-stable `projectStorageByName` join
+   *  (a row's storage == registry `storageLocation`, stable across rename). */
+  readonly projectWatchPaths = input<readonly WatchPathEntry[]>([]);
+
+  /** Emitted after a delete so the host re-pulls WatchPaths + refreshes. */
+  readonly projectDeleted = output<void>();
 
   private readonly featureFlags = inject(FeatureFlagsService);
   private readonly tabState = inject(StudioTabStateService);
@@ -680,6 +687,15 @@ export class StudioShellComponent {
       .sort((a, b) => a.name.localeCompare(b.name));
   });
 
+  /** Row name → resolved storage path for the tree's rename-stable join. */
+  readonly projectStorageByName = computed<ReadonlyMap<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const wp of this.projectWatchPaths()) {
+      if (wp.name && wp.path) map.set(wp.name, wp.path);
+    }
+    return map;
+  });
+
   /** Project name driving the currently open Board tab (or null when none). */
   readonly activeBoardProject = computed<string | null>(() => {
     const tab = this.activeTab();
@@ -902,6 +918,63 @@ export class StudioShellComponent {
       error: (err: unknown) => {
         this.registryWorkspaceBusyId.set(null);
         this.registryWorkspacesError.set(this.errMsg(err));
+      },
+    });
+  }
+
+  /** F46 step 7 — registry-only project rename (ADR-0042): PROJ id + on-disk
+   *  storage untouched, so tasks/IDs/keys stay intact; reload shows it at once. */
+  onTreeRenameProject(e: { projectId: string; displayName: string }): void {
+    this.runProjectPatch(e.projectId, { displayName: e.displayName });
+  }
+
+  /**
+   * F46 — destructive project delete from the tree's right-click menu, guarded
+   * by two confirm stages (plain danger, then a type-to-confirm gate). Only
+   * after both pass do we DELETE /api/projects/{projId}; the backend removes
+   * storage folder + WatchPaths entry + registry record atomically (no orphan).
+   */
+  async onTreeDeleteProject(e: { projectId: string; displayName: string; shortCode: string | null }): Promise<void> {
+    const label = e.displayName || e.projectId;
+    const stageOne = await this.confirmDialog.confirm({
+      title: 'Delete this project?',
+      message: 'This permanently deletes the project and all of its tasks from disk. This cannot be undone.',
+      detail: `${label} (${e.projectId})`,
+      confirmLabel: 'Continue',
+      cancelLabel: 'Cancel',
+      kind: 'danger',
+    });
+    if (!stageOne) return;
+
+    const typedValues = e.shortCode ? [e.displayName, e.shortCode] : [e.displayName];
+    const hint = e.shortCode
+      ? `Type the project name "${e.displayName}" or its code "${e.shortCode}" to confirm.`
+      : `Type the project name "${e.displayName}" to confirm.`;
+    const stageTwo = await this.confirmDialog.confirm({
+      title: 'Confirm permanent deletion',
+      message: 'Last step. Re-type the project to delete it and its entire storage folder.',
+      requireTypedValues: typedValues,
+      requireTypedPrompt: hint,
+      confirmLabel: 'Delete project',
+      cancelLabel: 'Cancel',
+      kind: 'danger',
+    });
+    if (!stageTwo) return;
+
+    this.registryProjectBusyId.set(e.projectId);
+    this.jobService.deleteRegistryProject(e.projectId).subscribe({
+      next: (res) => {
+        this.registryProjectBusyId.set(null);
+        this.reloadRegistryWorkspaces();
+        // Host's WatchPaths reload purges stale board/hub tabs for the gone row.
+        this.projectDeleted.emit();
+        this.notifications.success(`Project "${res?.displayName ?? label}" deleted.`);
+      },
+      error: (err: unknown) => {
+        this.registryProjectBusyId.set(null);
+        const msg = this.errMsg(err);
+        this.registryWorkspacesError.set(msg);
+        this.notifications.error(`Failed to delete project "${label}": ${msg}`);
       },
     });
   }

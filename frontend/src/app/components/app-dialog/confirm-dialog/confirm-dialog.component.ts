@@ -44,7 +44,27 @@ export class ConfirmDialogComponent {
   readonly state = this.service.active;
   readonly hasOpen = computed(() => this.state() !== null);
 
+  /** Live value of the type-to-confirm input (empty when not required). */
+  readonly typedDraft = signal('');
+
+  /**
+   * True when the dialog has no type-to-confirm gate, or the trimmed input
+   * matches one of the required values (case-insensitive). Drives both the
+   * confirm button's disabled state and the Enter-to-confirm guard so a
+   * destructive delete cannot complete until the operator re-types the
+   * project name or short code.
+   */
+  readonly typedConfirmSatisfied = computed(() => {
+    const s = this.state();
+    const required = s?.requireTypedValues;
+    if (!required || required.length === 0) return true;
+    const typed = this.typedDraft().trim().toLowerCase();
+    if (typed.length === 0) return false;
+    return required.some(v => v.trim().toLowerCase() === typed);
+  });
+
   @ViewChild('confirmBtn') private confirmBtnRef?: ElementRef<HTMLButtonElement>;
+  @ViewChild('typedInput') private typedInputRef?: ElementRef<HTMLInputElement>;
 
   /** Tracks the previously-focused element so we can restore focus on close. */
   private previousFocus = signal<HTMLElement | null>(null);
@@ -56,7 +76,15 @@ export class ConfirmDialogComponent {
       if (open) {
         const active = (document.activeElement as HTMLElement | null) ?? null;
         this.previousFocus.set(active);
-        queueMicrotask(() => this.confirmBtnRef?.nativeElement.focus());
+        // Reset the type-to-confirm input for each fresh prompt, then focus
+        // it when present (so the operator can type immediately); otherwise
+        // focus the confirm button as before.
+        this.typedDraft.set('');
+        queueMicrotask(() => {
+          const input = this.typedInputRef?.nativeElement;
+          if (input) input.focus();
+          else this.confirmBtnRef?.nativeElement.focus();
+        });
         if (!this.modalStackDispose) {
           this.modalStackDispose = this.modalStack.push('confirm-dialog', () => this.service.cancel());
         }
@@ -81,6 +109,7 @@ export class ConfirmDialogComponent {
   }
 
   onAccept(): void {
+    if (!this.typedConfirmSatisfied()) return;
     this.service.accept();
   }
 
@@ -103,6 +132,9 @@ export class ConfirmDialogComponent {
     if (target?.tagName === 'TEXTAREA') return;
     event.preventDefault();
     event.stopPropagation();
+    // A type-to-confirm gate must be satisfied before Enter completes the
+    // prompt — otherwise the operator could blow past the safety input.
+    if (!this.typedConfirmSatisfied()) return;
     this.service.accept();
   }
 }
