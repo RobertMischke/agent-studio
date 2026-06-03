@@ -50,6 +50,10 @@ public class TaskRunnerService : BackgroundService
     private readonly PickupLockFile? _pickupLock;
     private readonly TimelineLog? _timeline;
     private readonly OrchestratorApi.Services.Pipeline.PipelineExecutionLog? _pipelineLog;
+    // Forwarded to each ProjectRunner. DI injects the registered singleton; the
+    // step is default-OFF per project, so a wired-but-disabled step changes
+    // nothing. Null only when a test fixture builds the service directly.
+    private readonly OrchestratorApi.Services.Runner.PostAbortReviewStepService? _postAbortReview;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -99,7 +103,8 @@ public class TaskRunnerService : BackgroundService
         PickupLockFile? pickupLock = null,
         TimelineLog? timeline = null,
         OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
-        HumanReviewEscalation? humanReviewEscalation = null)
+        HumanReviewEscalation? humanReviewEscalation = null,
+        OrchestratorApi.Services.Runner.PostAbortReviewStepService? postAbortReview = null)
     {
         _config = config;
         _logger = logger;
@@ -130,6 +135,7 @@ public class TaskRunnerService : BackgroundService
         _pickupLock = pickupLock;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _postAbortReview = postAbortReview;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -232,7 +238,8 @@ public class TaskRunnerService : BackgroundService
                 pickupLockOwner: BuildPickupLockOwner(entry.Name),
                 timeline: _timeline,
                 pipelineLog: _pipelineLog,
-                humanReviewEscalation: _humanReviewEscalation);
+                humanReviewEscalation: _humanReviewEscalation,
+                postAbortReview: _postAbortReview);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);

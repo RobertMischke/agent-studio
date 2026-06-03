@@ -251,6 +251,39 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void AbortReviewStep_IsOptInOrchestratorStep_NotInLinearPostBracket()
+    {
+        // The "Abbruch-Review" step is abort-triggered, so it must NOT sit in
+        // the always-runs Post bracket (otherwise a generic post-step executor
+        // would run it on every clean completion). It is exposed as a
+        // standalone definition that defaults OFF (opt-in per project) and is
+        // model-resolvable like the other LLM steps.
+        var step = PipelineCatalogue.AbortReviewStep;
+        Assert.Equal(PipelineCatalogue.PostAbortReviewStepId, step.Id);
+        Assert.Equal(StepKind.Orchestrator, step.Kind);
+        Assert.True(step.Idempotent);
+        Assert.False(step.DefaultEnabled); // opt-in
+
+        // Absent from every section of both pipelines.
+        Assert.DoesNotContain(PipelineCatalogue.Standard.AllSteps, s => s.Id == PipelineCatalogue.PostAbortReviewStepId);
+        Assert.DoesNotContain(PipelineCatalogue.ReadOnly.AllSteps, s => s.Id == PipelineCatalogue.PostAbortReviewStepId);
+
+        // Opt-in gate + per-project model resolution use the same resolver as
+        // the other steps: default off, but a project override turns it on.
+        Assert.False(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        var settings = new ProjectSettings
+        {
+            OrchestratorModel = "claude-sonnet-4-5",
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.PostAbortReviewStepId] = new() { Enabled = true, Model = "claude-opus-4-1" },
+            },
+        };
+        Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
+        Assert.Equal("claude-opus-4-1", PipelineStepConfigResolver.ResolveModel(settings, step, "fallback"));
+    }
+
+    [Fact]
     public void Get_ReturnsStandardForCanonicalId_NullForUnknown()
     {
         Assert.NotNull(PipelineCatalogue.Get(PipelineCatalogue.StandardPipelineId));

@@ -251,6 +251,9 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ILintScssRunner,
     OrchestratorApi.Services.Pipeline.LintScssRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Review.CodeReviewStepService>();
+// Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
+// Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
+builder.Services.AddSingleton<OrchestratorApi.Services.Runner.PostAbortReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddHostedService<ReviewDecisionOrchestrator>();
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/post-abort-review-output.schema.json",
+  "title": "PostAbortReviewOutputContract",
+  "description": "Result of the abort-review step (ADR-0032 decider zone). Written to {jobFolder}/contracts/post-abort-review-output.json. Mirrors backend/Services/Runner/PostAbortReviewStepService.cs::PostAbortReviewOutputContract. The model supplies the verdict (recommendation/legitimateAbort/confidence/reasoning); the binding 'action' is computed by the pure PostAbortReviewDecider from the recommendation plus the remaining rerun budget. A null/unparseable verdict (parsed=false) fails closed to action=human-review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "jobId", "createdAt", "parsed", "action", "rerunBudgetRemaining"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as it appears in WatchPaths and runner status."
+    },
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slug-form job id of the task whose run aborted."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the review step started."
+    },
+    "parsed": {
+      "type": "boolean",
+      "description": "True when a verdict was recovered from the model reply. False means the reply was empty/unparseable and the step failed closed."
+    },
+    "legitimateAbort": {
+      "type": ["boolean", "null"],
+      "description": "Model judgement (legitimer_abbruch): whether the abort was a genuine dead end. Null when parsed=false."
+    },
+    "recommendation": {
+      "type": ["string", "null"],
+      "enum": ["rerun", "stronger-reissue", "human-review", "accept", null],
+      "description": "Model's recommended next action (empfehlung). Null when parsed=false."
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Model self-rated confidence in [0,1]. Null when parsed=false."
+    },
+    "reasoning": {
+      "type": ["string", "null"],
+      "description": "One short justification (begruendung) from the model. Null when parsed=false."
+    },
+    "action": {
+      "type": "string",
+      "enum": ["rerun", "rerun-stronger", "human-review", "accept"],
+      "description": "Binding next action chosen by the code-side decider. Escalates to human-review when the model recommended it OR the rerun budget is exhausted OR parsed=false."
+    },
+    "rerunBudgetRemaining": {
+      "type": "integer",
+      "description": "Automatic reruns this job had left when the decision was made."
+    },
+    "rawReply": {
+      "type": ["string", "null"],
+      "description": "Trimmed raw model reply captured for audit. Null when the model returned nothing."
+    }
+  }
+}

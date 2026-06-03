@@ -153,6 +153,47 @@ public static class PipelineCatalogue
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
 
     /// <summary>
+    /// The "Abbruch-Review" (post-abort review) step id. Unlike every other
+    /// catalogue step this one is <em>abort-triggered</em>, not part of the
+    /// linear post-bracket: it runs only after a non-clean CLI run end
+    /// (watchdog timeout, non-zero exit, unexpected stop), so it is exposed as
+    /// the standalone <see cref="AbortReviewStep"/> definition rather than
+    /// inserted into <see cref="TaskPipeline.Post"/>. It defaults
+    /// <see cref="PipelineStep.DefaultEnabled"/> = false because it is an extra
+    /// LLM pass an operator turns on per project via the same
+    /// <see cref="ProjectSettings.PipelineSteps"/> override mechanism the drift
+    /// and aspect steps use. When it runs, <c>ProjectRunner</c> records a
+    /// <see cref="StepKind.Orchestrator"/> step execution (verdict + reasoning)
+    /// into <c>pipeline-execution.json</c> so it surfaces in the Overview
+    /// pipeline view like the auto-review aspects.
+    /// Implemented by <c>PostAbortReviewStepService</c>; the rule-engine
+    /// decision is owned by <c>PostAbortReviewDecider</c>.
+    /// </summary>
+    public const string PostAbortReviewStepId = "post-abort-review";
+
+    /// <summary>
+    /// Standalone definition for the abort-triggered <see cref="PostAbortReviewStepId"/>
+    /// step. Kept off the static Post list (it does not run in the normal
+    /// post-bracket) but defined here so the per-project config resolver and
+    /// the runtime step-execution recorder share one id, display name, default
+    /// (opt-in / off), and model-resolution path.
+    /// </summary>
+    public static PipelineStep AbortReviewStep { get; } = new()
+    {
+        Id = PostAbortReviewStepId,
+        DisplayName = "Abort review",
+        // An orchestrator-style decision step: it consumes evidence and chooses
+        // rerun / reissue / accept / human-review, the same shape as the
+        // auto-review decision step, so it reuses StepKind.Orchestrator rather
+        // than introducing a new kind the frontend would have to learn.
+        Kind = StepKind.Orchestrator,
+        RunMode = StepRunMode.Sequential,
+        Idempotent = true,
+        // Opt-in per project: an extra LLM pass the operator turns on.
+        DefaultEnabled = false,
+    };
+
+    /// <summary>
     /// Steps whose work mutates the git tree (worktree create, commit + push,
     /// merge / integration, teardown). Today the only catalogue git step is the
     /// commit-attribution slot; future worktree / merge steps add their ids here.

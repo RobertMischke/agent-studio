@@ -78,6 +78,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet implemented.
 - **Notes:** Counter does not auto-reset on backend restart. The 24-hour window starts at the first fire, not at midnight.
 
+### abort-review.rerun-per-job
+
+- **Kind:** Post-Guard
+- **Where:** [`backend/Services/Runner/PostAbortReview.cs`](../backend/Services/Runner/PostAbortReview.cs) (`PostAbortReviewDecider.Decide`), invoked from `ProjectRunner.OnCliFinished` on a non-clean run end and surfaced through `PostAbortReviewStepService`.
+- **Re-entry trigger:** A CLI run ends non-clean (watchdog timeout, non-zero exit, unexpected stop). The abort-review agent judges the abort illegitimate and recommends `rerun` or `stronger-reissue`, which re-spawns the CLI for the same job instead of escalating.
+- **Budget:** `PostAbortReviewDecider.DefaultRerunBudget` (default 2 automatic reruns per job).
+- **Action when budget exhausted:** `PostAbortAction.EscalateHuman` — route the job to `5-human-review`. A null/unparseable verdict (CLI failure) fails closed to the same escalation regardless of remaining budget.
+- **Breaker test:** [`backend.Tests/Architecture/AbortReviewRerunBreakerTest.cs`](../backend.Tests/Architecture/AbortReviewRerunBreakerTest.cs)
+- **Last fired:** Not yet implemented in production (step is default-OFF per project via `PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.AbortReviewStep)`).
+- **Notes:** The decider is pure (ADR-0032): the agent only classifies (`legitimate`, `recommendation`, `confidence`, `reason`); the binding action is computed in code from the recommendation plus the remaining budget. The budget counts down across reruns of the same job; the terminal state is always escalation, so the loop cannot run unbounded. `accept`/`human-review` recommendations bypass the budget (accept continues, human-review escalates immediately).
+
 ## Candidates (LLM-proposed, human-reviewed)
 
 This section mirrors `loop-inventory.md.candidates` once the weekly `LoopDiscoveryTest` starts running. Items move from candidates to **Entries** above only after a human review confirms the loop is real and assigns a budget + test. Empty for now.

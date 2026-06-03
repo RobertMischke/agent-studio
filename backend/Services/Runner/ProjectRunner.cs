@@ -54,6 +54,16 @@ public class ProjectRunner
     private readonly HumanReviewEscalation _humanReviewEscalation;
     private readonly AgentMessageBusBridge? _bus;
     private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
+    // "Intelligente Abbruch-Bewertung" (ADR-0032): the LLM abort-review step.
+    // Optional + default-OFF per project. When null (every existing
+    // construction site / test fixture) or disabled, OnCliFinishedAsync keeps
+    // its byte-identical fixed terminal route to human review. When wired AND
+    // enabled, a non-clean run end consults the step before escalating.
+    private readonly PostAbortReviewStepService? _postAbortReview;
+    // Per-job count of automatic abort-review reruns already spent. The
+    // breaker: budget remaining = DefaultRerunBudget - used. Cleared when the
+    // job leaves the loop (accepted, moved to review, or escalated).
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _abortReviewRerunsUsed = new();
     private string _mode = "manual";
     // The human-readable reason recorded the last time _mode changed, plus
     // when the change happened. Surfaced via ProjectRunnerStatus so the
@@ -198,7 +208,8 @@ public class ProjectRunner
         PickupLockOwner? pickupLockOwner = null,
         OrchestratorApi.Services.Tasks.TimelineLog? timeline = null,
         OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
-        HumanReviewEscalation? humanReviewEscalation = null)
+        HumanReviewEscalation? humanReviewEscalation = null,
+        PostAbortReviewStepService? postAbortReview = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -234,6 +245,7 @@ public class ProjectRunner
         _pickupLockOwner = pickupLockOwner;
         _timeline = timeline;
         _pipelineLog = pipelineLog;
+        _postAbortReview = postAbortReview;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -2701,6 +2713,27 @@ public class ProjectRunner
                     return;
                 }
 
+                // Intelligente Abbruch-Bewertung (ADR-0032): before the fixed
+                // terminal route to human review, let the abort-review step
+                // (default-OFF per project) judge whether the abort was
+                // legitimate. A rerun/accept verdict short-circuits the
+                // escalation; an escalate verdict, a disabled step, an
+                // unwired service, or a review failure all fall through to
+                // the existing human-review route below unchanged.
+                if (action.Kind == OutcomeActionKind.NotifyUserAndStop
+                    && activeInfo != null
+                    && ShouldRouteIssueToHumanReview(action.IssueKind)
+                    && _postAbortReview != null
+                    && OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.IsEnabled(
+                        _projectSettings.Get(ProjectName),
+                        OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep))
+                {
+                    var handled = await TryRunAbortReviewAsync(
+                        activeInfo, jobId, jobKey, cliType, execution, action,
+                        liveOutputSnapshot, commitsDuringRun, headShaAfter, usage);
+                    if (handled) return;
+                }
+
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
                     && ShouldRouteIssueToHumanReview(action.IssueKind))
@@ -2790,6 +2823,9 @@ public class ProjectRunner
                 var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, Entry.Path, CancellationToken.None);
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
+                    // The job made it out of the run loop; forget any spent
+                    // abort-review rerun budget so a future run starts fresh.
+                    _abortReviewRerunsUsed.TryRemove(jobId, out _);
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
                     if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
                     // Fire-and-forget Haiku summary on successful completion.
@@ -2980,6 +3016,240 @@ public class ProjectRunner
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
         _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
+
+    /// <summary>
+    /// Runs the abort-review step for a non-clean run end and applies its
+    /// binding action. Returns true when the step handled the run (a rerun
+    /// was scheduled, or the run was accepted into review); false when the
+    /// step escalates to human review or fails - in which case the caller
+    /// falls through to the existing human-review route. Never throws: any
+    /// failure inside the step fails closed to false (escalate).
+    /// </summary>
+    private async Task<bool> TryRunAbortReviewAsync(
+        TaskInfo activeInfo,
+        string jobId,
+        string jobKey,
+        string cliType,
+        CliExecution execution,
+        OutcomeAction action,
+        List<CliOutputLine> liveOutputSnapshot,
+        int commitsDuringRun,
+        string? headShaAfter,
+        SessionUsage? usage)
+    {
+        var review = _postAbortReview;
+        if (review == null) return false;
+
+        var settings = _projectSettings.Get(ProjectName);
+        var used = _abortReviewRerunsUsed.TryGetValue(jobId, out var u) ? u : 0;
+        var budgetRemaining = Math.Max(0, PostAbortReviewDecider.DefaultRerunBudget - used);
+        var model = OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ResolveModel(
+            settings,
+            OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
+            runtimeDefault: execution.Model ?? activeInfo.Model ?? "claude-haiku-4-5");
+
+        var phase = _phaseByJob.TryGetValue(jobKey, out var snap) ? snap.Phase.ToString() : RunPhase.Unknown.ToString();
+        var request = new PostAbortReviewRequest(
+            Project: ProjectName,
+            JobId: jobId,
+            JobFolderPath: activeInfo.FolderPath,
+            TaskTitle: activeInfo.Title ?? string.Empty,
+            TaskBody: ReadTaskBodyBestEffort(activeInfo.FolderPath),
+            AbortReason: action.MetaMessage ?? ToIssueTopic(action.IssueKind),
+            AbortPhase: phase,
+            CliOutputTail: BuildCliOutputTail(liveOutputSnapshot),
+            ToolCallsLiveness: BuildToolCallsLiveness(activeInfo.FolderPath),
+            GitState: $"{commitsDuringRun} commit(s) during run; HEAD={headShaAfter ?? "unknown"}",
+            TranscriptUsage: BuildTranscriptUsage(usage),
+            CliType: cliType,
+            Model: model)
+        {
+            RerunBudgetRemaining = budgetRemaining,
+        };
+
+        PostAbortReviewStepReport report;
+        try
+        {
+            report = await review.RunAsync(request, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "abort-review step crashed for {JobId}; falling back to human review", jobId);
+            return false;
+        }
+
+        RecordAbortReviewStep(activeInfo.FolderPath, report);
+        var recToken = report.Verdict is null
+            ? "unparseable"
+            : PostAbortReviewStepService.RecommendationToken(report.Verdict.Recommendation);
+        _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+            $"[abort-review] {recToken} -> {PostAbortReviewStepService.ActionToken(report.Action)} " +
+            $"(budget left: {budgetRemaining}). {report.Verdict?.Reasoning}".TrimEnd());
+
+        switch (report.Action)
+        {
+            case PostAbortAction.Rerun:
+            case PostAbortAction.RerunWithStrongerFraming:
+                _abortReviewRerunsUsed[jobId] = used + 1;
+                // Release the active-job latch so the re-issue can claim it,
+                // then schedule on the thread pool so OnCliFinished returns
+                // promptly (mirrors the ReissueWithStrongerFraming path).
+                _activeJobId = null;
+                _activeCliType = null;
+                NotifyStatus();
+                var stronger = report.Action == PostAbortAction.RerunWithStrongerFraming;
+                var retryPrompt = BuildAbortReviewRerunPrompt(activeInfo, report, stronger);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt, 0, ContinueModes.Continue, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "abort-review rerun failed for {JobId}", jobId);
+                    }
+                });
+                return true;
+
+            case PostAbortAction.AcceptAndContinue:
+                _abortReviewRerunsUsed.TryRemove(jobId, out _);
+                CompletionMarker.Write(activeInfo.FolderPath, new CompletionMarker
+                {
+                    TargetState = TaskStates.AutoReview,
+                    ExecutionStatus = execution.Status,
+                    AgentOutcome = "abort-review-accept"
+                }, _logger);
+                var move = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, Entry.Path, CancellationToken.None);
+                if (move.Status == MoveJobStatus.Success)
+                {
+                    var movedInfo = _scanner.FindJob(jobId, Entry.Path);
+                    if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "abort-review accept could not move {JobId} to review: {Status} {Message}",
+                        jobId, move.Status, move.Message);
+                }
+                return true;
+
+            default: // EscalateHuman (model said so, budget exhausted, or unparseable)
+                _abortReviewRerunsUsed.TryRemove(jobId, out _);
+                return false;
+        }
+    }
+
+    /// <summary>Records the abort-review verdict + decided action into
+    /// <c>pipeline-execution.json</c> so the job-detail pipeline view can
+    /// render the step like the auto-review aspects (req 4). Best-effort.</summary>
+    private void RecordAbortReviewStep(string jobFolderPath, PostAbortReviewStepReport report)
+    {
+        if (_pipelineLog == null) return;
+        try
+        {
+            var parsed = report.Verdict != null;
+            var reasoning = report.Verdict?.Reasoning;
+            _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+            {
+                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.PostAbortReviewStepId,
+                Kind = StepKind.Orchestrator,
+                Model = report.Model,
+                Status = parsed ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
+                StartedAt = report.StartedAt,
+                CompletedAt = report.StartedAt.AddMilliseconds(report.DurationMs),
+                DurationMs = report.DurationMs,
+                Verdict = parsed
+                    ? PostAbortReviewStepService.RecommendationToken(report.Verdict!.Recommendation)
+                    : "unparseable",
+                VerdictSummary = $"action={PostAbortReviewStepService.ActionToken(report.Action)}" +
+                    (string.IsNullOrWhiteSpace(reasoning) ? string.Empty : $"; {reasoning}"),
+                Reason = parsed ? null : "CLI failure / unparseable reply; failed closed to human review",
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "abort-review pipeline-step record failed for {Folder}", jobFolderPath);
+        }
+    }
+
+    /// <summary>
+    /// Builds the follow-up prompt for an abort-review rerun. A plain rerun
+    /// continues the task; a stronger reissue adds explicit framing that the
+    /// previous abort was judged illegitimate and the work must be completed.
+    /// </summary>
+    private static string BuildAbortReviewRerunPrompt(TaskInfo info, PostAbortReviewStepReport report, bool stronger)
+    {
+        var reason = report.Verdict?.Reasoning;
+        var head = stronger
+            ? "The previous run was aborted, but an automated review judged the abort illegitimate and re-issued the task with stronger framing. "
+              + "Do not stop early. Drive the task to a real, verifiable result and only stop when the work is genuinely complete or genuinely blocked. "
+            : "The previous run was aborted, but an automated review judged the abort recoverable and re-issued the task. Continue the work to completion. ";
+        return head
+             + (string.IsNullOrWhiteSpace(reason) ? string.Empty : $"Review note: {reason!.Trim()} ")
+             + "If a long-running operation (dev server, build, test wait, poll loop) is expected, narrate progress so the watchdog can tell you are alive. "
+             + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].\n\n"
+             + $"Task: {info.Title}";
+    }
+
+    /// <summary>Best-effort read of the task prompt body for abort-review
+    /// context. Returns a bounded excerpt; never throws.</summary>
+    private string ReadTaskBodyBestEffort(string jobFolderPath)
+    {
+        try
+        {
+            var promptPath = Path.Combine(jobFolderPath, "prompt.md");
+            if (!File.Exists(promptPath)) return string.Empty;
+            var text = File.ReadAllText(promptPath);
+            const int max = 4000;
+            return text.Length <= max ? text : text.Substring(0, max) + "\n... (truncated)";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "abort-review prompt.md read failed for {Folder}", jobFolderPath);
+            return string.Empty;
+        }
+    }
+
+    /// <summary>Joins the tail of the live CLI output for abort-review evidence.</summary>
+    private static string BuildCliOutputTail(List<CliOutputLine> lines, int maxLines = 60)
+    {
+        if (lines == null || lines.Count == 0) return "(no CLI output captured)";
+        var start = Math.Max(0, lines.Count - maxLines);
+        return string.Join("\n", lines.Skip(start).Select(l => l.Text));
+    }
+
+    /// <summary>Tails <c>logs/tool-calls.jsonl</c> so the model can judge
+    /// whether a tool call started shortly before the abort and never
+    /// returned (a live long-op) vs. a genuine stall. Best-effort.</summary>
+    private string BuildToolCallsLiveness(string jobFolderPath, int maxLines = 12)
+    {
+        try
+        {
+            var path = Path.Combine(TaskPaths.LogsDir(jobFolderPath), "tool-calls.jsonl");
+            if (!File.Exists(path)) return "(no tool-calls.jsonl on disk)";
+            var all = File.ReadAllLines(path);
+            if (all.Length == 0) return "(tool-calls.jsonl is empty)";
+            var start = Math.Max(0, all.Length - maxLines);
+            return string.Join("\n", all.Skip(start));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "abort-review tool-calls.jsonl read failed for {Folder}", jobFolderPath);
+            return "(tool-calls.jsonl unreadable)";
+        }
+    }
+
+    /// <summary>Renders the last session usage rollup as a one-line summary.</summary>
+    private static string BuildTranscriptUsage(SessionUsage? usage)
+    {
+        if (usage == null) return "(no session usage captured)";
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(usage.Tokens)) parts.Add($"tokens: {usage.Tokens}");
+        if (!string.IsNullOrWhiteSpace(usage.Requests)) parts.Add($"requests: {usage.Requests}");
+        if (!string.IsNullOrWhiteSpace(usage.Changes)) parts.Add($"changes: {usage.Changes}");
+        return parts.Count == 0 ? "(no session usage captured)" : string.Join("; ", parts);
+    }
 
     /// <summary>
     /// Appends a clearly-visible separator line into <c>logs/cli-output.log</c>

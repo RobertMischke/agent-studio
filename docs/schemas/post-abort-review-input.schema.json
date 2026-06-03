@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/post-abort-review-input.schema.json",
+  "title": "PostAbortReviewInputContract",
+  "description": "Typed evidence the orchestrator hands the abort-review LLM step (ADR-0032 agent zone) after a non-clean CLI run end. Written to {jobFolder}/contracts/post-abort-review-input.json. Mirrors backend/Services/Runner/PostAbortReviewStepService.cs::PostAbortReviewInputContract. Every field is pre-rendered by the runner so the step does no job-folder reading of its own.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "jobId", "createdAt", "abortReason", "abortPhase", "cliOutputTail", "toolCallsLiveness", "gitState", "transcriptUsage", "taskTitle", "taskBody", "rerunBudgetRemaining", "model", "cliType"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as it appears in WatchPaths and runner status."
+    },
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slug-form job id of the task whose run aborted."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the review step started."
+    },
+    "abortReason": {
+      "type": "string",
+      "description": "Why the run ended non-clean, e.g. 'watchdog timeout after 120s of silence', 'exit code 1', 'unexpected stop'."
+    },
+    "abortPhase": {
+      "type": "string",
+      "description": "Run phase at the abort, e.g. PromptConsumed or ToolExecuting, taken from the phase-aware watchdog's RunPhase tracking."
+    },
+    "cliOutputTail": {
+      "type": "string",
+      "description": "Tail of cli-output.log captured at the abort, used to judge what the agent was doing."
+    },
+    "toolCallsLiveness": {
+      "type": "string",
+      "description": "Human-readable liveness summary derived from logs/tool-calls.jsonl: last tool, its kind, and how long before the abort it fired. Distinguishes 'stuck inside a live long-running tool call' from 'silent with no in-flight work'."
+    },
+    "gitState": {
+      "type": "string",
+      "description": "Summary of the run's git effect: commits made, diff stat (+added/-removed), and whether the working tree is clean."
+    },
+    "transcriptUsage": {
+      "type": "string",
+      "description": "Session transcript usage summary (token counts / message counts) so the model can gauge whether the run did substantive work."
+    },
+    "taskTitle": {
+      "type": "string",
+      "description": "Title of the task being worked, for goal context."
+    },
+    "taskBody": {
+      "type": "string",
+      "description": "The task prompt/goal (prompt.md body)."
+    },
+    "rerunBudgetRemaining": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Automatic reruns this job has left. Surfaced to the model for context; the binding budget rule is applied by the code-side decider, not the model."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Resolved model used for the review pass."
+    },
+    "cliType": {
+      "type": "string",
+      "minLength": 1,
+      "description": "CLI type used for the review pass (e.g. claude, codex)."
+    }
+  }
+}
