@@ -97,6 +97,8 @@ public class TaskFolderAccessIsolationTest
                 "Owns reads against the job-folder tree.",
             ["backend/Services/Tasks/TaskTransitionService.cs"] =
                 "Combines folder moves with auto-commit and runner-active-state side effects.",
+            ["backend/Services/Tasks/TaskLayoutMigrator.cs"] =
+                "F45 restscope boot migration: moves lane folders into jobs/<bucket>/<key> and deletes the emptied lanes.",
             ["backend/Services/Tasks/Merge/MergeService.cs"] =
                 "Merge archives the secondary task folder and prunes its mirror; structural moves owned here.",
             ["backend/Services/TaskWatcherService.cs"] =
