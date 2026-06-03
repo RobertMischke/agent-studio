@@ -50,12 +50,6 @@ interface ProjectSidebarRow {
   isActive: boolean;
 }
 
-interface ProjectLaneCounts {
-  backlog: number;
-  active: number;
-  review: number;
-  archive: number;
-}
 
 /** Brand swatches per CLI — matches the status-bar glyph colours so the
  *  Sidebar CLI panel reads the same on first glance. */
@@ -579,35 +573,6 @@ export class StudioShellComponent {
 
   /** All jobs, grouped under their project for the Explorer panel. */
   readonly grouped = this.jobService.grouped;
-
-  /** Per-project lane breakdown for the Explorer tree's child rows. */
-  readonly projectLanes = computed<Map<string, ProjectLaneCounts>>(() => {
-    const grouped = this.grouped();
-    const out = new Map<string, ProjectLaneCounts>();
-    const bump = (name: string, key: keyof ProjectLaneCounts) => {
-      const cur = out.get(name) ?? { backlog: 0, active: 0, review: 0, archive: 0 };
-      cur[key] += 1;
-      out.set(name, cur);
-    };
-    const visit = (lane: TaskInfo[] | undefined, key: keyof ProjectLaneCounts) => {
-      if (!lane) return;
-      for (const job of lane) bump(job.projectName ?? '', key);
-    };
-    visit(grouped.backlog, 'backlog');
-    visit(grouped.preparation, 'backlog');
-    visit(grouped.orchestratorPrep, 'backlog');
-    visit(grouped.needsHumanReview, 'review');
-    visit(grouped.ready, 'backlog');
-    visit(grouped.progress, 'active');
-    visit(grouped.failedPickup, 'active');
-    visit(grouped.codeNotComplete, 'active');
-    visit(grouped.review, 'review');
-    visit(grouped.autoReview, 'review');
-    visit(grouped.humanReview, 'review');
-    visit(grouped.completed, 'archive');
-    visit(grouped.archive, 'archive');
-    return out;
-  });
 
   /**
    * Short label for the active tab, used as the leaf of the titlebar

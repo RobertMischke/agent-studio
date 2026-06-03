@@ -24,14 +24,6 @@ import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
 
-/** Per-lane working-set breakdown for a project's expandable child rows. */
-export interface ExplorerLaneCounts {
-  backlog: number;
-  active: number;
-  review: number;
-  archive: number;
-}
-
 /** Flat project row as computed by the shell (`ProjectSidebarRow`). */
 export interface ExplorerProjectRow {
   name: string;
@@ -41,9 +33,8 @@ export interface ExplorerProjectRow {
   isActive: boolean;
 }
 
-/** A project row decorated with its lane counts, ready to render. */
+/** A project row decorated with its registry metadata, ready to render. */
 export interface ExplorerProjectNode extends ExplorerProjectRow {
-  lanes: ExplorerLaneCounts;
   /** Registry id (PROJ-NNN) for matched rows; null for synthetic rows
    *  ("__all__" / "__unassigned__"), which are not draggable. */
   projectId: string | null;
@@ -64,8 +55,6 @@ export interface ExplorerWorkspaceGroup {
   color: string | null;
   projects: ExplorerProjectNode[];
 }
-
-const ZERO_LANES: ExplorerLaneCounts = { backlog: 0, active: 0, review: 0, archive: 0 };
 
 function folderTail(path: string): string {
   const parts = path.split(/[\\/]+/).filter(Boolean);
@@ -99,7 +88,6 @@ function normalizeStorage(path: string): string {
 export class ExplorerWorkspaceTreeComponent {
   readonly projectRows = input<readonly ExplorerProjectRow[]>([]);
   readonly registryWorkspaces = input<readonly RegistryWorkspaceListItem[]>([]);
-  readonly projectLanes = input<ReadonlyMap<string, ExplorerLaneCounts>>(new Map());
   /** Row name → resolved storage path (from the host's WatchPaths). Lets the
    *  workspace→project join key on storage instead of the mutable display
    *  name, so a registry rename keeps the row under its workspace (F46 step 7). */
@@ -194,7 +182,6 @@ export class ExplorerWorkspaceTreeComponent {
 
   readonly groups = computed<ExplorerWorkspaceGroup[]>(() => {
     const rows = this.projectRows();
-    const lanes = this.projectLanes();
     const storageByName = this.projectStorageByName();
     const node = (
       r: ExplorerProjectRow,
@@ -204,7 +191,6 @@ export class ExplorerWorkspaceTreeComponent {
       shortCode: string | null,
     ): ExplorerProjectNode => ({
       ...r,
-      lanes: lanes.get(r.name) ?? ZERO_LANES,
       projectId,
       workspaceId,
       displayLabel,

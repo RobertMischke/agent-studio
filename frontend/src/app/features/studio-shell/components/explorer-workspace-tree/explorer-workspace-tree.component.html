@@ -122,26 +122,18 @@
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
+              <!-- F46 follow-up: per-lane children dropped. A project now links
+                   only to its Board (kanban) and its Project View (hub); lanes
+                   stay reachable from the board itself. -->
               <div class="studio-tree-children">
-                <app-tree-row level="child" glyph="folder"
-                              label="backlog"
-                              [count]="p.lanes.backlog"
-                              (selectRequest)="openBoardRequest.emit(p.name)" />
-                <app-tree-row level="child" glyph="play"
-                              label="active"
-                              [count]="p.lanes.active"
-                              (selectRequest)="openBoardRequest.emit(p.name)" />
-                <app-tree-row level="child" glyph="eye"
-                              label="human review"
-                              [count]="p.lanes.review"
-                              (selectRequest)="openBoardRequest.emit(p.name)" />
                 <app-tree-row level="child" glyph="grid"
-                              label="Project Hub"
-                              (selectRequest)="openHubRequest.emit(p.name)" />
-                <app-tree-row level="child" glyph="archive"
-                              label="archive"
-                              [count]="p.lanes.archive"
+                              label="Board"
+                              [testid]="'studio-explorer-project-board-' + p.name"
                               (selectRequest)="openBoardRequest.emit(p.name)" />
+                <app-tree-row level="child" glyph="layout"
+                              label="Project View"
+                              [testid]="'studio-explorer-project-view-' + p.name"
+                              (selectRequest)="openHubRequest.emit(p.name)" />
               </div>
             }
           </div>
