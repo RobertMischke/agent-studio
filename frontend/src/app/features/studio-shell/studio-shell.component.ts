@@ -793,6 +793,28 @@ export class StudioShellComponent {
     this.tabState.open({ kind: 'hub', projectName });
   }
 
+  /**
+   * Explorer "Backlog" link for a single project (ASS-658). Scopes the
+   * board filter to that project so the triage overlay narrows to it, then
+   * opens the backlog screen. Mutually exclusive with the epic overlay.
+   */
+  openProjectBacklog(projectName: string): void {
+    this.boardFilters.setSoleProject(projectName);
+    if (this.epicOverview.open()) this.epicOverview.closeOverview();
+    if (!this.backlogTriage.open()) this.backlogTriage.openTriage();
+  }
+
+  /**
+   * Explorer "Epics" link for a single project (ASS-658). Scopes the board
+   * filter to that project so the epic overview narrows to it, then opens
+   * the overview screen. Mutually exclusive with the backlog overlay.
+   */
+  openProjectEpics(projectName: string): void {
+    this.boardFilters.setSoleProject(projectName);
+    if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
+    if (!this.epicOverview.open()) this.epicOverview.openOverview();
+  }
+
   selectTab(key: string): void {
     this.tabState.select(key);
   }

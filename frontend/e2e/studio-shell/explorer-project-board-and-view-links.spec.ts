@@ -1,11 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * ASS-606/607/620/621/657 follow-up: a project node in the Workspaces
- * Explorer no longer breaks out into per-lane children (backlog / active /
- * human review / archive). Expanding a project now reveals exactly two
- * links — "Board" (the project's kanban) and "Project View" (the hub).
- * Lanes stay reachable from the board itself.
+ * ASS-658/ASS-597: a project node in the Workspaces Explorer exposes exactly
+ * four project-scoped links — "Board" (the kanban), "Project Hub", "Backlog"
+ * (triage) and "Epics" (overview). The retired per-lane children (active /
+ * human review / archive) stay gone, and Backlog / Epics open scoped to the
+ * clicked project rather than the global rollup.
  *
  * Runs against the live backend's project list; short-circuits when the
  * configured board has no projects.
@@ -38,8 +38,8 @@ async function expandFirstProject(page: Page): Promise<{ row: ReturnType<Page['l
   return { row, name };
 }
 
-test.describe('Explorer · project links to Board + Project View only', () => {
-  test('expanded project shows exactly Board and Project View, no lane rows', async ({ page }) => {
+test.describe('Explorer · project links to Board / Project Hub / Backlog / Epics', () => {
+  test('expanded project shows exactly the four project links, no lane rows', async ({ page }) => {
     await gotoStudio(page);
     const expanded = await expandFirstProject(page);
     if (!expanded) {
@@ -49,21 +49,25 @@ test.describe('Explorer · project links to Board + Project View only', () => {
     const { row, name } = expanded;
     const children = row.locator('.studio-tree-children');
 
-    // Exactly two child rows.
+    // Exactly four child rows.
     const rows = children.locator('.tree-row');
-    await expect(rows).toHaveCount(2);
+    await expect(rows).toHaveCount(4);
 
-    // They are Board + Project View, addressable by their stable testids.
+    // Each is addressable by its stable testid.
     await expect(page.getByTestId(`studio-explorer-project-board-${name}`)).toBeVisible();
-    await expect(page.getByTestId(`studio-explorer-project-view-${name}`)).toBeVisible();
+    await expect(page.getByTestId(`studio-explorer-project-hub-${name}`)).toBeVisible();
+    await expect(page.getByTestId(`studio-explorer-project-backlog-${name}`)).toBeVisible();
+    await expect(page.getByTestId(`studio-explorer-project-epics-${name}`)).toBeVisible();
 
     // The retired per-lane labels must not appear under the project node.
     const childText = (await children.innerText()).toLowerCase();
-    for (const gone of ['backlog', 'active', 'human review', 'archive', 'project hub']) {
+    for (const gone of ['active', 'human review', 'archive', 'project view']) {
       expect(childText).not.toContain(gone);
     }
     expect(childText).toContain('board');
-    expect(childText).toContain('project view');
+    expect(childText).toContain('project hub');
+    expect(childText).toContain('backlog');
+    expect(childText).toContain('epics');
   });
 
   test('"Board" opens the project kanban', async ({ page }) => {
@@ -79,14 +83,26 @@ test.describe('Explorer · project links to Board + Project View only', () => {
     await expect(page.getByTestId('studio-titlebar-active-tab')).not.toHaveText('Project Hub', { timeout: 5_000 });
   });
 
-  test('"Project View" opens the Project Hub', async ({ page }) => {
+  test('"Project Hub" opens the Project Hub', async ({ page }) => {
     await gotoStudio(page);
     const expanded = await expandFirstProject(page);
     if (!expanded) {
-      test.skip(true, 'No projects loaded — Project-View-link contract skipped.');
+      test.skip(true, 'No projects loaded — Project-Hub-link contract skipped.');
       return;
     }
-    await page.getByTestId(`studio-explorer-project-view-${expanded.name}`).click();
+    await page.getByTestId(`studio-explorer-project-hub-${expanded.name}`).click();
     await expect(page.getByTestId('studio-titlebar-active-tab')).toHaveText('Project Hub', { timeout: 5_000 });
+  });
+
+  test('"Backlog" opens the backlog triage screen', async ({ page }) => {
+    await gotoStudio(page);
+    const expanded = await expandFirstProject(page);
+    if (!expanded) {
+      test.skip(true, 'No projects loaded — Backlog-link contract skipped.');
+      return;
+    }
+    await page.getByTestId(`studio-explorer-project-backlog-${expanded.name}`).click();
+    await expect(page).toHaveURL(/#\/backlog/, { timeout: 5_000 });
+    await expect(page.getByTestId('studio-ab-backlog')).toHaveClass(/studio-ab__btn--active/, { timeout: 5_000 });
   });
 });

@@ -99,6 +99,10 @@ export class ExplorerWorkspaceTreeComponent {
   readonly toggleExpanded = output<string>();
   readonly openBoardRequest = output<string>();
   readonly openHubRequest = output<string>();
+  /** Project-scoped backlog triage open for the named project (ASS-658). */
+  readonly openBacklogRequest = output<string>();
+  /** Project-scoped epic overview open for the named project (ASS-658). */
+  readonly openEpicsRequest = output<string>();
   /** Project row dropped onto a different real workspace; the shell PUTs
    *  /api/projects/{projectId} `{ workspaceId }` and reloads (no folder move). */
   readonly projectDrop = output<{ projectId: string; targetWorkspaceId: string }>();

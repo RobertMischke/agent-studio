@@ -122,18 +122,27 @@
               </app-tree-row>
             }
             @if (isExpanded(p.name)) {
-              <!-- F46 follow-up: per-lane children dropped. A project now links
-                   only to its Board (kanban) and its Project View (hub); lanes
-                   stay reachable from the board itself. -->
+              <!-- ASS-658/ASS-597: per-project links are exactly four, all
+                   project-scoped — Board (kanban), Project Hub, Backlog
+                   (triage), and Epics (overview). Per-lane children stay
+                   retired; lanes are reachable from the board itself. -->
               <div class="studio-tree-children">
                 <app-tree-row level="child" glyph="grid"
                               label="Board"
                               [testid]="'studio-explorer-project-board-' + p.name"
                               (selectRequest)="openBoardRequest.emit(p.name)" />
                 <app-tree-row level="child" glyph="layout"
-                              label="Project View"
-                              [testid]="'studio-explorer-project-view-' + p.name"
+                              label="Project Hub"
+                              [testid]="'studio-explorer-project-hub-' + p.name"
                               (selectRequest)="openHubRequest.emit(p.name)" />
+                <app-tree-row level="child" glyph="list"
+                              label="Backlog"
+                              [testid]="'studio-explorer-project-backlog-' + p.name"
+                              (selectRequest)="openBacklogRequest.emit(p.name)" />
+                <app-tree-row level="child" glyph="book"
+                              label="Epics"
+                              [testid]="'studio-explorer-project-epics-' + p.name"
+                              (selectRequest)="openEpicsRequest.emit(p.name)" />
               </div>
             }
           </div>
