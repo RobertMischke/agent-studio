@@ -82,13 +82,6 @@
     </div>
   </section>
 
-  <!-- Completion-loop attempt-cycle indicator (ADR-0049 / ASS-566): a
-       compact "Attempt N/M + latest verdict + reason" surface so the
-       operator sees the retry-until-truly-done loop at a glance. The full
-       reopen->retry->verdict cycle lives in the Timeline tab. Self-renders
-       (and hides) off the shared task-timeline poll snapshot. -->
-  <app-completion-loop-indicator />
-
   <!-- Agent block -->
   <section class="ov-section" data-testid="overview-agent">
     <h3 class="ov-section__title">Agent</h3>
@@ -239,8 +232,10 @@
        model used, tokens and cost, plus the task total. Configuration of
        which steps run and on which model lives in project Settings; this
        block is the read-only "what ran, on which model, what did it cost"
-       view the feature spec asks for. -->
-  @if (hasPipeline()) {
+       view the feature spec asks for. The completion loop (verdict / attempt
+       / re-open counters) is consolidated into this section's header as a
+       strip rather than a separate block — it is the pipeline's outcome. -->
+  @if (hasPipelineSection()) {
     <section class="ov-section" data-testid="overview-pipeline">
       <h3 class="ov-section__title"
           [appTooltip]="'Pre / core / post processing steps for this task. Per-step model and enable/disable are configured in project Settings.'">
@@ -258,6 +253,14 @@
         }
       </h3>
 
+      <!-- Completion-loop attempt-cycle strip (ADR-0049 / ASS-566): latest
+           verdict + Attempt N/M + re-open counter + gap, consolidated under
+           the Pipeline title. Self-renders (and hides) off the shared
+           task-timeline poll. The full reopen->retry->verdict story lives
+           in the Timeline tab. -->
+      <app-completion-loop-indicator />
+
+      @if (hasPipeline()) {
       <div class="ov-pipeline" data-testid="overview-pipeline-steps">
         @for (row of pipelineRows(); track row.id) {
           <div class="ov-pl-step"
@@ -362,6 +365,7 @@
             }
           </div>
         </div>
+      }
       }
     </section>
   }

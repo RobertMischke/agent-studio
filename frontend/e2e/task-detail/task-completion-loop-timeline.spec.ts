@@ -8,7 +8,8 @@ import { createJob } from '../helpers/jobs';
  * The orchestrator retries a task until it is truly done, feeding the
  * specific gap into the next attempt. This spec proves the two operator-
  * facing surfaces that make the loop legible:
- *   - the Overview "Completion Loop" indicator (Attempt N/M + latest verdict);
+ *   - the Overview attempt-cycle strip, consolidated into the Pipeline
+ *     section header (Attempt N/M + latest verdict + re-open counter);
  *   - the Timeline tab (prominent final verdict banner + full reopen->retry
  *     ->verdict event story).
  *
@@ -79,6 +80,9 @@ test.describe('Task completion loop — Overview indicator + Timeline tab', () =
       // Overview is the default tab — the attempt-cycle indicator must be live.
       const loop = page.getByTestId('overview-completion-loop');
       await expect(loop).toBeVisible({ timeout: 10_000 });
+      // Consolidated into the Pipeline section header (no separate block): the
+      // loop strip renders inside the Pipeline section, not as its own block.
+      await expect(page.getByTestId('overview-pipeline').getByTestId('overview-completion-loop')).toBeVisible();
       await expect(page.getByTestId('overview-loop-verdict')).toHaveAttribute('data-verdict', 'escalated');
       await expect(page.getByTestId('overview-loop-attempt')).toContainText('3 / 3');
       await expect(page.getByTestId('overview-loop-reopens')).toContainText('2');

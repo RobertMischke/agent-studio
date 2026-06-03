@@ -1,25 +1,20 @@
 :host {
-  // The indicator is one section among the Overview body's flex-column
-  // children; contents lets the <section> sit as a direct sibling so the
-  // parent's vertical rhythm applies unchanged.
+  // The strip is consolidated into the Pipeline section: contents lets the
+  // wrapper sit as a direct flex child of that <section> so the parent's
+  // vertical rhythm applies unchanged.
   display: contents;
 }
 
-.loop-section {
+// Compact strip directly under the Pipeline title. No own heading — the
+// "Pipeline" section title covers it; this is the pipeline's completion
+// verdict, not a separate block.
+.loop-strip {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-
-  &__title {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--studio-fg-strong);
-    margin: 0;
-    padding-bottom: 1px;
-    border-bottom: 1px solid var(--studio-border);
-  }
+  gap: 3px;
+  padding-bottom: 3px;
+  margin-bottom: 1px;
+  border-bottom: 1px dashed var(--studio-border);
 }
 
 .loop {
@@ -28,7 +23,6 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    padding-top: 2px;
   }
 
   &__verdict {
@@ -84,6 +78,13 @@
     color: var(--studio-fg-dim);
   }
 
+  &__when {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--studio-fg-muted);
+    cursor: help;
+  }
+
   &__reason {
     display: flex;
     align-items: baseline;
@@ -108,18 +109,5 @@
     flex: 1 1 auto;
     color: var(--studio-fg);
     word-break: break-word;
-  }
-
-  &__when {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--studio-fg-dim);
-  }
-
-  &__dim {
-    color: var(--studio-fg-muted);
-    font-size: 11px;
   }
 }

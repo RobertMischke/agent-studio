@@ -1,7 +1,10 @@
 @if (hasCompletionLoop()) {
   @let loop = completionLoop();
-  <section class="loop-section" data-testid="overview-completion-loop">
-    <h3 class="loop-section__title">Completion Loop</h3>
+  <!-- Consolidated into the Pipeline section header (no own titled block):
+       the completion loop is the pipeline's outcome, so its verdict /
+       attempt / reopen counters render as a strip under the Pipeline
+       title instead of a separate wide block above it. -->
+  <div class="loop-strip" data-testid="overview-completion-loop">
     <div class="loop__head">
       <span class="loop__verdict"
             [class]="'loop__verdict--' + verdictTone(loop.latestVerdict)"
@@ -22,6 +25,12 @@
           re-opened {{ loop.reopenCount }}×
         </span>
       }
+      @if (loop.at) {
+        <span class="loop__when" data-testid="overview-loop-when"
+              [appTooltip]="formatAbsoluteTime(loop.at)">
+          {{ formatRelativeTime(loop.at) }}
+        </span>
+      }
     </div>
     @if (loop.reason; as reason) {
       <div class="loop__reason" data-testid="overview-loop-reason">
@@ -29,11 +38,5 @@
         <span class="loop__reason-text">{{ reason }}</span>
       </div>
     }
-    @if (loop.at) {
-      <div class="loop__when" data-testid="overview-loop-when">
-        <span>{{ formatRelativeTime(loop.at) }}</span>
-        <span class="loop__dim">({{ formatAbsoluteTime(loop.at) }})</span>
-      </div>
-    }
-  </section>
+  </div>
 }

@@ -18,6 +18,7 @@ import { RunTimelinePollService } from '../../../../polling/services/run-timelin
 import { CompletionLoopIndicatorComponent } from '../../../../task-timeline';
 import { AgentWorkSummaryPollService } from '../../../../polling/services/agent-work-summary-poll.service';
 import { TaskPipelinePollService } from '../../../../polling/services/task-pipeline-poll.service';
+import { TaskTimelinePollService } from '../../../../polling/services/task-timeline-poll.service';
 import type {
   PipelineExecutionRecord,
   PipelineStep,
@@ -150,6 +151,7 @@ export class OverviewPaneComponent {
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly agentWorkPoll = inject(AgentWorkSummaryPollService);
   private readonly pipelinePoll = inject(TaskPipelinePollService);
+  private readonly timelinePoll = inject(TaskTimelinePollService);
   private readonly clients = inject(ClientService);
   private readonly jobService = inject(TaskService);
   private readonly notifs = inject(NotificationService);
@@ -433,6 +435,17 @@ export class OverviewPaneComponent {
   });
 
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
+
+  /**
+   * True once the completion loop has produced at least one verdict. Read
+   * from the shared timeline poll (same instance the consolidated
+   * completion-loop strip binds to) so the Pipeline section can render even
+   * when only loop activity — and no pipeline execution — exists yet.
+   */
+  readonly hasCompletionLoop = computed(() => this.timelinePoll.completionLoop().hasActivity);
+
+  /** Render the Pipeline section when there are steps or completion-loop activity. */
+  readonly hasPipelineSection = computed(() => this.hasPipeline() || this.hasCompletionLoop());
 
   /** Task-total tokens + cost across all recorded steps. */
   readonly pipelineTotal = computed(() => {
