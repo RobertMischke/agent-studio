@@ -528,6 +528,91 @@ export class OverviewPaneComponent {
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
 
   /**
+   * The single core "Agent execution" row, used to surface the run count and
+   * its details popover. The catalogue carries exactly one `core` step
+   * (`core-agent-run`); null before the pipeline catalogue loads.
+   */
+  private readonly agentExecutionRow = computed<PipelineRowVm | null>(
+    () => this.pipelineRows().find(r => r.kind === 'core') ?? null,
+  );
+
+  /**
+   * Execution count for the core Agent-execution row. Read from the same
+   * `RunTimeline.runCount` that drives the Overview "Runs" value, with the
+   * Agent Work call count as a fallback, so the row can never drift from the
+   * numbers shown elsewhere on the tab. 0 when no run has happened yet, which
+   * keeps the row in its existing dash state.
+   */
+  readonly agentRunCount = computed<number>(() => {
+    const tl = this.timeline();
+    if (tl && tl.runCount > 0) return tl.runCount;
+    return this.agentWork()?.calls ?? 0;
+  });
+
+  /** "1 run" / "N runs" label for the count badge. */
+  readonly agentRunCountLabel = computed<string>(() => {
+    const n = this.agentRunCount();
+    return n === 1 ? '1 run' : `${n} runs`;
+  });
+
+  /**
+   * Runs that had to reconstruct context after a failed session resume —
+   * counted from the run-timeline intents, falling back to the Agent Work
+   * `recovered` flag when the timeline is unavailable.
+   */
+  private readonly recoveredRunCount = computed<number>(() => {
+    const recovery = this.runs().filter(r => r.intent === 'recovery').length;
+    if (recovery > 0) return recovery;
+    return this.agentWork()?.recovered ? 1 : 0;
+  });
+
+  /** First run start, preferring the run-timeline over the agent-work rollup. */
+  private readonly agentRunFirstAt = computed<string | null>(() => {
+    const tl = this.timeline();
+    if (tl?.firstStartedAt) return tl.firstStartedAt;
+    const runs = this.runs();
+    if (runs.length > 0 && runs[0].startedAt) return runs[0].startedAt;
+    return this.agentWork()?.startedAt ?? null;
+  });
+
+  /** Latest run activity, preferring the run-timeline over the agent-work rollup. */
+  private readonly agentRunLastAt = computed<string | null>(() => {
+    const tl = this.timeline();
+    if (tl?.lastActivityAt) return tl.lastActivityAt;
+    return this.agentWork()?.lastTouchAt ?? null;
+  });
+
+  /**
+   * Structured popover for the Agent-execution run-count badge: run count,
+   * recovered count, CLI / model / session summary, first-run and
+   * last-activity stamps, plus a pointer to the Timeline tab for the full
+   * story. Null when no run has happened so the badge — which is only
+   * rendered for count > 0 — never carries an empty tooltip.
+   */
+  readonly agentRunTooltip = computed<StructuredTooltip | null>(() => {
+    const count = this.agentRunCount();
+    if (count <= 0) return null;
+    const lines: string[] = [`Runs: ${count}`];
+    const recovered = this.recoveredRunCount();
+    if (recovered > 0) lines.push(`Recovered: ${recovered}`);
+    const cli = this.effectiveCliType();
+    if (cli) lines.push(`CLI: ${this.cliTypeLabel(cli)}`);
+    const model = this.agentExecutionRow()?.model ?? this.effectiveModel();
+    if (model) lines.push(`Model: ${model}`);
+    const session = this.job().sessionName ?? this.agentWork()?.currentSessionId ?? null;
+    if (session) lines.push(`Session: ${session}`);
+    const first = this.agentRunFirstAt();
+    if (first) lines.push(`First run: ${this.formatAbsoluteTime(first)}`);
+    const last = this.agentRunLastAt();
+    if (last) lines.push(`Last activity: ${this.formatAbsoluteTime(last)}`);
+    lines.push('See the Timeline tab for the full run history.');
+    return {
+      title: count === 1 ? 'Agent execution · 1 run' : `Agent execution · ${count} runs`,
+      body: lines.join('\n'),
+    };
+  });
+
+  /**
    * True once the completion loop has produced at least one verdict. Read
    * from the shared timeline poll (same instance the consolidated
    * completion-loop strip binds to) so the Pipeline section can render even

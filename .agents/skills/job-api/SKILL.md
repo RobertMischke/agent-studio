@@ -172,7 +172,7 @@ const path = `/api/jobs/${encodeURIComponent(jobId)}/state` +
 Common targets:
 - `6-completed` (logically completed; physically lands under `7-archive`)
 - `2-ready` (re-queue / reissue)
-- `1b-needs-human-review` (parking lot for "I need your call")
+- `5-human-review` (parking lot for "I need your call")
 - `7-archive` (drop without ceremony)
 
 The full template is in [`scripts/move-state.js`](scripts/move-state.js).

@@ -693,6 +693,13 @@ public class TaskStateMachine
             MigrateNumberedLane(watchPath, "5-completed", TaskStates.Completed);
             MigrateNumberedLane(watchPath, "4-review", TaskStates.AutoReview);
 
+            // Retired lane: the former 1b-needs-human-review bounce lane was
+            // removed (the "Human decision needed" concept was obsoleted). Move
+            // any card still parked there into 2-ready so removing the lane
+            // never orphans an in-flight task. Genuine human-decision markers
+            // are then herded to 5-human-review by the runner's pickup sweep.
+            MigrateNumberedLane(watchPath, "1b-needs-human-review", TaskStates.Ready);
+
             // Create state folders
             foreach (var state in TaskStates.All)
             {

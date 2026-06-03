@@ -9,7 +9,6 @@ full form below. Source: `backend/Models/JobModels.cs::JobStates`.
 | `0-backlog` | `Backlog` | Long-term ideas; not yet prepared |
 | `1-preparation` | `Preparation` | Being prepared by an agent (orchestrator-prep) |
 | `1a-orchestrator-prep` | `OrchestratorPrep` | Orchestrator is preparing the task |
-| `1b-needs-human-review` | `NeedsHumanReview` | Needs human attention before it can be queued |
 | `2-ready` | `Ready` | Queued; runner picks from here in auto mode |
 | `3-progress` | `Progress` | Actively running; max one per project |
 | `3a-failed-pickup` | `FailedPickup` | Failed to start (spawn-failed, orphan, empty) |

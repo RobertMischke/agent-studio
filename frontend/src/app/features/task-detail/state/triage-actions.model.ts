@@ -73,11 +73,6 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     SEND_TO_BACKLOG,
     FORCE_TO_READY,
   ],
-  '1b-needs-human-review': [
-    SEND_TO_PREP,
-    SEND_TO_BACKLOG,
-    FORCE_TO_READY,
-  ],
   '2-ready': [
     { id: 'run-now',     label: 'Run now',      variant: 'primary',   intent: { kind: 'start' } },
     { id: 'move-to-top', label: 'Move to top',  variant: 'secondary', intent: { kind: 'moveToTop' } },
@@ -106,7 +101,6 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     { id: 'mark-done',          label: 'Send to Complete',                          variant: 'primary',   intent: { kind: 'move', targetState: '6-completed' } },
     { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)',                variant: 'secondary', intent: { kind: 'move', targetState: '2-ready' } },
     SEND_TO_BACKLOG,
-    { id: 'need-clarification', label: 'Need clarification (→ Needs Human Review)', variant: 'secondary', intent: { kind: 'move', targetState: '1b-needs-human-review' } },
   ],
   '6-completed': [
     // "Archive & Next" mirrors the review lanes' Complete-and-advance primary:
@@ -125,7 +119,6 @@ export const LANE_LABELS: Record<string, string> = {
   '0-backlog':              'Backlog',
   '1-preparation':          'Preparation',
   '1a-orchestrator-prep':   'Orchestrator Prep',
-  '1b-needs-human-review':  'Needs Clarification',
   '2-ready':                'Ready',
   '3-progress':             'In Progress',
   '3b-code-not-complete':   'Code not complete',

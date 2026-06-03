@@ -53,7 +53,9 @@ public static class OrchestratorPrepRules
         /// <summary>Stay in <c>1a-orchestrator-prep</c>; rewrite prompt; increment iteration.</summary>
         Iterate,
 
-        /// <summary>Move to <c>1b-needs-human-review</c>. Carries a typed reason.</summary>
+        /// <summary>Admit to <c>2-ready</c> (the retired 1b-needs-human-review
+        /// lane is gone). Carries a typed reason. A human-decision-needed marker
+        /// is herded onward to 5-human-review by the runner's pickup sweep.</summary>
         Bounce,
 
         /// <summary>Stay in <c>1-preparation</c>. Returned at autonomy 0.</summary>
@@ -71,9 +73,10 @@ public static class OrchestratorPrepRules
 
         /// <summary>
         /// The card carries the <see cref="TaskSlugs.HumanDecisionNeededPrefix"/>
-        /// marker: it exists for a human to decide, so the prep loop parks it
-        /// in <c>1b-needs-human-review</c> without running the clarity bands or
-        /// the autonomy gating. A semantic marker, not a heuristic threshold.
+        /// marker: it exists for a human to decide, so the prep loop bounces it
+        /// without running the clarity bands or the autonomy gating. The runner's
+        /// pickup sweep then routes the marker to <c>5-human-review</c>. A
+        /// semantic marker, not a heuristic threshold.
         /// </summary>
         HumanDecisionNeededMarker,
     }
@@ -158,11 +161,12 @@ public static class OrchestratorPrepRules
 
         // Semantic-marker override. A card whose slug carries the
         // human-decision-needed prefix exists for a person to decide; the
-        // automation must not reason about it at all. Bounce it to
-        // 1b-needs-human-review unconditionally - this overrides the "level 4
-        // never bounces" doctrine on purpose, because the marker is an explicit
-        // intent, not a clarity heuristic. Checked first so no autonomy branch
-        // (including the level-0 hold and the cap-exit accept) can swallow it.
+        // automation must not reason about it at all. Bounce it unconditionally
+        // - this overrides the "level 4 never bounces" doctrine on purpose,
+        // because the marker is an explicit intent, not a clarity heuristic.
+        // Checked first so no autonomy branch (including the level-0 hold and
+        // the cap-exit accept) can swallow it. The bounce admits to 2-ready,
+        // where the runner's pickup sweep routes the marker to 5-human-review.
         if (TaskSlugs.IsHumanDecisionNeeded(input.Slug))
         {
             return new PrepDecision
@@ -170,7 +174,7 @@ public static class OrchestratorPrepRules
                 Verdict = Verdict.Bounce,
                 Clarity = clarity,
                 BounceReason = BounceReason.HumanDecisionNeededMarker,
-                Note = "human-decision-needed marker: parking in 1b-needs-human-review for a human decision",
+                Note = "human-decision-needed marker: bouncing for a human decision (routed to 5-human-review)",
             };
         }
 

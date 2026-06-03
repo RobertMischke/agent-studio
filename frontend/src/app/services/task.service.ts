@@ -94,7 +94,9 @@ export interface CodeReviewRunResponse {
 
 type LaneKey = keyof GroupedJobs;
 // ADR-0025: state strings use the new seven-lane order.
-// ADR-0026: 1a-orchestrator-prep + 1b-needs-human-review join the catalog.
+// ADR-0026: 1a-orchestrator-prep joins the catalog. The 1b-needs-human-review
+// bounce lane has been retired (its "Human decision needed" concept was
+// obsoleted; the backend boot-migrates stray 1b folders to 2-ready).
 // ADR-0051 drain-era plumbing: 3a-failed-pickup is retired (no live path
 // populates it, board no longer renders it). The mapping stays so a
 // historical folder still parses into its group while the boot drain empties
@@ -103,7 +105,6 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
   '0-backlog': 'backlog',
   '1-preparation': 'preparation',
   '1a-orchestrator-prep': 'orchestratorPrep',
-  '1b-needs-human-review': 'needsHumanReview',
   '2-ready': 'ready',
   '3-progress': 'progress',
   '3a-failed-pickup': 'failedPickup',
@@ -171,7 +172,6 @@ export class TaskService {
     backlog: [],
     preparation: [],
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready: [],
     progress: [],
     failedPickup: [],

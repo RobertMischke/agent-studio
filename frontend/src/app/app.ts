@@ -485,7 +485,6 @@ export class App implements OnInit, OnDestroy {
     const grouped = this.displayGrouped();
     // ADR-0025: seven lanes. The robot icon is the orchestrator's machine
     // pass; the eye icon is the user's "needs me" lane.
-    // 1b-needs-human-review is hide-when-empty.
     // Orchestrator prep is no longer a backlog lane: it now runs in-place on
     // 1-preparation as the optional pipeline step `pre-orchestrator-prep`
     // (see PipelineCatalogue), so the retired 1a lane is not rendered.
@@ -494,19 +493,11 @@ export class App implements OnInit, OnDestroy {
       { state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] },
       { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
     ];
-    if (grouped.needsHumanReview.length > 0) {
-      lanes.push({
-        state: '1b-needs-human-review',
-        title: 'Needs Clar',
-        icon: '🚩',
-        jobs: grouped.needsHumanReview,
-      });
-    }
     lanes.push(
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
     );
-    // 3b-code-not-complete: hide-when-empty park lane (same rule as 1b).
+    // 3b-code-not-complete: hide-when-empty park lane.
     if ((grouped.codeNotComplete ?? []).length > 0) {
       lanes.push({
         state: '3b-code-not-complete',
@@ -527,7 +518,7 @@ export class App implements OnInit, OnDestroy {
   /**
    * Board lane groups. Three contiguous containers map the workflow:
    *
-   *  - backlog: 0-backlog, 1-preparation, 1b-needs-human-review, 2-ready
+   *  - backlog: 0-backlog, 1-preparation, 2-ready
    *  - active:  3-progress, 4-auto-review
    *  - decide:  5-human-review, 6-completed, 7-archive ("Done & Decide" -
    *             the user-owned tail of the pipeline; sign-off plus the
@@ -538,10 +529,9 @@ export class App implements OnInit, OnDestroy {
    */
   readonly laneGroups = computed(() => {
     const grouped = this.displayGrouped();
-    // needs-human-review joins the backlog bucket. The bounce lane only
-    // renders when at least one job lives there. Orchestrator prep is no
-    // longer a backlog lane — it runs in-place on 1-preparation as the
-    // optional `pre-orchestrator-prep` pipeline step (see PipelineCatalogue).
+    // Orchestrator prep is no longer a backlog lane — it runs in-place on
+    // 1-preparation as the optional `pre-orchestrator-prep` pipeline step
+    // (see PipelineCatalogue).
     //
     // Order inside the Backlog super-column (top → bottom): the most
     // actionable lanes come first so the user reading the column from the
@@ -550,9 +540,8 @@ export class App implements OnInit, OnDestroy {
     // of backlog items.
     //
     //   1. 2-ready      "Ready"              — pick-up candidates
-    //   2. 1b-needs-human-review (if any)    — needs clarification
-    //   3. 1-preparation                     — in human preparation
-    //   4. 0-backlog                         — fresh inbox / triage
+    //   2. 1-preparation                     — in human preparation
+    //   3. 0-backlog                         — fresh inbox / triage
     const readySplit = splitReadyByPhase(grouped.ready);
     const backlogLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [];
     backlogLanes.push({
@@ -567,14 +556,6 @@ export class App implements OnInit, OnDestroy {
         title: 'Orch Intake',
         icon: '🛂',
         jobs: readySplit.intake,
-      });
-    }
-    if (grouped.needsHumanReview.length > 0) {
-      backlogLanes.push({
-        state: '1b-needs-human-review',
-        title: 'Needs Clar',
-        icon: '🚩',
-        jobs: grouped.needsHumanReview,
       });
     }
     backlogLanes.push({
@@ -592,9 +573,9 @@ export class App implements OnInit, OnDestroy {
     const activeLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
     ];
-    // 3b-code-not-complete is a hide-when-empty park lane (same rule as
-    // 1b-needs-human-review): the runner moves a task here when it exhausts its
-    // auto-pickup retry budget without reaching review, and keeps auto-mode
+    // 3b-code-not-complete is a hide-when-empty park lane: the runner moves a
+    // task here when it exhausts its auto-pickup retry budget without reaching
+    // review, and keeps auto-mode
     // running. It sits at 3-progress / before review so the operator sees stuck
     // work next to what is actively running.
     if ((grouped.codeNotComplete ?? []).length > 0) {
@@ -664,7 +645,6 @@ export class App implements OnInit, OnDestroy {
    */
   readonly studioLaneOptions: readonly { state: string; label: string }[] = [
     { state: '1-preparation',         label: 'Preparation' },
-    { state: '1b-needs-human-review', label: 'Needs Clarification' },
     { state: '2-ready',               label: 'Ready' },
     { state: '3-progress',            label: 'In Progress' },
     { state: '4-auto-review',         label: 'Auto Review' },

@@ -75,19 +75,22 @@ public class TaskStateMachineMigrationTests : IDisposable
     }
 
     [Fact]
-    public void Migrate_CreatesAdr0026Lanes_OrchestratorPrepAndNeedsHumanReview()
+    public void Migrate_CreatesAdr0026Lane_OrchestratorPrep()
     {
-        // ADR-0026 is purely additive: no rename, no migration of existing
-        // jobs. The boot-time pass simply creates the two new lane folders
-        // alongside the existing chain so the move endpoint can accept them
-        // and the kanban can render them. Idempotent on a second call.
+        // ADR-0026's surviving lane (1a-orchestrator-prep) is created on boot
+        // so the move endpoint can accept it and the kanban can render it. The
+        // sibling 1b-needs-human-review lane was retired (see
+        // Migrate_RetiredNeedsHumanReviewLane_MovesStrayCardsToReady).
+        // Idempotent on a second call.
         var (machine, _) = BuildMachine();
         machine.EnsureStateFoldersAndMigrate();
 
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)),
             "expected 1a-orchestrator-prep folder to be created on boot");
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview)),
-            "expected 1b-needs-human-review folder to be created on boot");
+
+        // The retired lane is NOT recreated on boot.
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, "1b-needs-human-review")),
+            "the retired 1b-needs-human-review lane must not be created on boot");
 
         // Existing lanes still present.
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Preparation)));
@@ -97,7 +100,32 @@ public class TaskStateMachineMigrationTests : IDisposable
         // Idempotent: calling again does not alter the workspace state.
         machine.EnsureStateFoldersAndMigrate();
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview)));
+    }
+
+    [Fact]
+    public void Migrate_RetiredNeedsHumanReviewLane_MovesStrayCardsToReady()
+    {
+        // The 1b-needs-human-review bounce lane was retired. A card still
+        // parked in the legacy folder must be migrated into 2-ready on boot so
+        // removing the lane never orphans an in-flight task, and the emptied
+        // legacy folder is deleted.
+        var legacyLane = Path.Combine(_watchPath, "1b-needs-human-review");
+        var cardDir = Path.Combine(legacyLane, "stranded-card");
+        Directory.CreateDirectory(cardDir);
+        File.WriteAllText(Path.Combine(cardDir, "job.json"),
+            "{\"id\":\"stranded-card\",\"title\":\"Stranded\",\"state\":\"1b-needs-human-review\",\"order\":1,\"agent\":\"claude\"}");
+
+        var (machine, _) = BuildMachine();
+        machine.EnsureStateFoldersAndMigrate();
+
+        Assert.False(Directory.Exists(legacyLane),
+            "the emptied legacy 1b-needs-human-review folder should be removed");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stranded-card")),
+            "the stray card should land in 2-ready");
+
+        // Idempotent: a second boot finds no legacy lane and rewrites nothing.
+        machine.EnsureStateFoldersAndMigrate();
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stranded-card")));
     }
 
     [Fact]

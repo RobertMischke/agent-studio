@@ -71,7 +71,6 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Theory]
     [InlineData(TaskStates.Preparation)]
     [InlineData(TaskStates.OrchestratorPrep)]
-    [InlineData(TaskStates.NeedsHumanReview)]
     [InlineData(TaskStates.AutoReview)]
     [InlineData(TaskStates.HumanReview)]
     [InlineData(TaskStates.Completed)]

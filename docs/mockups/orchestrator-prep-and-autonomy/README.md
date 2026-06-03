@@ -4,6 +4,8 @@ Design exploration. **A click-dummy plus a taxonomy.** Goal: settle the lane sha
 
 This folder is the spec the implementation refers back to. ADR-0026 adopts it.
 
+> **Retired lane (post-adoption).** The `1b-needs-human-review` bounce lane described throughout this mockup was later **retired** (the "Human decision needed" concept was obsoleted). The surviving `1a-orchestrator-prep` lane and the autonomy scale stand; prep now admits actionable cards straight to `2-ready`, and genuine human-decision cases are escalated to `5-human-review`. Read every `1b-needs-human-review` reference below as historical. See ADR-0026's amended status.
+
 ## What this adds
 
 A new lane between "human writes the task" and "queue picks it up": the orchestrator inspects every task before it becomes executable, and either sharpens it, hands it to the runner, or bounces it back to a human-review lane for clarification. The bounce vs. accept decision is gated by a per-project autonomy scale (0..4). At the top of the scale the orchestrator never bounces and the queue cannot stall on ambiguity. At the bottom it never moves anything forward without a human click.

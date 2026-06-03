@@ -505,7 +505,7 @@ public class ProjectRunner
 
         // Pickup gating ends here. The picker below considers 3-progress and
         // 2-ready only; jobs sitting in 1-preparation, 1a-orchestrator-prep,
-        // 1b-needs-human-review, 4-auto-review, or 5-human-review do NOT
+        // 4-auto-review, or 5-human-review do NOT
         // block this tick. Those lanes are owned by their own background
         // services (OrchestratorPrepHostedService, IntakeHostedService,
         // ReviewDecisionOrchestrator) and run in parallel with the runner.
@@ -525,9 +525,9 @@ public class ProjectRunner
         if (nextJob == null)
         {
             // Only when no in-flight 3-progress folder needs resuming: sweep
-            // any human-decision-needed card out of 2-ready into 1b before the
-            // ready picker runs. Placed after the progress pickup so its scan
-            // does not perturb the mtime-ordered resume walk above.
+            // any human-decision-needed card out of 2-ready into 5-human-review
+            // before the ready picker runs. Placed after the progress pickup so
+            // its scan does not perturb the mtime-ordered resume walk above.
             RelocateStrayHumanDecisionCards();
             nextJob = GetNextReadyJob();
         }
@@ -3229,7 +3229,7 @@ public class ProjectRunner
     /// <remarks>
     /// Filters strictly on <c>State == 2-ready</c>. Jobs sitting in
     /// <c>1-preparation</c>, <c>1a-orchestrator-prep</c>,
-    /// <c>1b-needs-human-review</c>, <c>4-auto-review</c>, or
+    /// <c>4-auto-review</c>, or
     /// <c>5-human-review</c> have no influence here - those lanes are
     /// processed by their own background services in parallel with the
     /// runner. The single-state-machine rule (ADR-0001) is preserved by
@@ -3244,9 +3244,9 @@ public class ProjectRunner
                         && j.State == TaskStates.Ready
                         && AgentTypes.IsAutoPickupEligible(j.Agent)
                         // Hard safety net for the human-decision-needed marker:
-                        // never auto-run such a card even if the 2-ready->1b
-                        // relocation sweep failed to move it. Running it just
-                        // NOOP-burns a CLI and trips the infra breaker.
+                        // never auto-run such a card even if the 2-ready->
+                        // 5-human-review relocation sweep failed to move it.
+                        // Running it just NOOP-burns a CLI and trips the breaker.
                         && !TaskSlugs.IsHumanDecisionNeeded(j.Id)
                         && IsPickupAllowed(j, intakeEnabled))
             .OrderBy(j => j.Order)
@@ -3255,14 +3255,16 @@ public class ProjectRunner
 
     /// <summary>
     /// Relocate any <see cref="TaskSlugs.HumanDecisionNeededPrefix"/> card that
-    /// has come to rest in <c>2-ready</c> into <c>1b-needs-human-review</c>
-    /// before the pickup selection runs. Such a card is a marker for a human
-    /// call, not a unit of agent work: auto-picking it spawns a CLI run the
-    /// agent correctly NOOPs (exit=1 after a few seconds), which burns tokens
-    /// and trips the cross-slug infra circuit breaker into a manual demotion.
-    /// The orchestrator-prep loop keeps these out of the 1-preparation side
-    /// (see <see cref="OrchestratorPrepRules"/>); this is the 2-ready-side
-    /// guard for cards that arrived here by a manual drop or a legacy spawn.
+    /// has come to rest in <c>2-ready</c> into <c>5-human-review</c> before the
+    /// pickup selection runs. Such a card is a marker for a human call, not a
+    /// unit of agent work: auto-picking it spawns a CLI run the agent correctly
+    /// NOOPs (exit=1 after a few seconds), which burns tokens and trips the
+    /// cross-slug infra circuit breaker into a manual demotion. The retired
+    /// 1b-needs-human-review lane used to hold these; with that lane gone, the
+    /// move goes through <see cref="HumanReviewEscalation"/> so the card lands
+    /// in 5-human-review with a verdict + status stub (the
+    /// <c>HumanReviewVerdictDriftTest</c> requires every system move into the
+    /// lane to use this funnel).
     /// </summary>
     private void RelocateStrayHumanDecisionCards()
     {
@@ -3283,25 +3285,28 @@ public class ProjectRunner
 
         foreach (var job in stray)
         {
-            var move = _states.MoveJob(job.Id, TaskStates.NeedsHumanReview, Entry.Path);
+            var reason = "Human-decision marker: this card exists for a person to decide, not for an agent to run.";
+            var move = _humanReviewEscalation.Escalate(
+                job.Id, Entry.Path, ProjectName,
+                HumanReviewEscalationCategories.HumanDecisionNeeded, reason);
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
                     "[taskboard] human-decision-needed card {JobId} on {Project} could not be moved 2-ready -> {Target}: {Status} {Message}; it stays parked and is skipped by pickup",
-                    job.Id, ProjectName, TaskStates.NeedsHumanReview, move.Status, move.Message);
+                    job.Id, ProjectName, TaskStates.HumanReview, move.Status, move.Message);
                 continue;
             }
 
             _logger.LogInformation(
                 "[taskboard] routed human-decision-needed card {JobId} on {Project} from 2-ready -> {Target} (never auto-run: it is a human-decision marker)",
-                job.Id, ProjectName, TaskStates.NeedsHumanReview);
+                job.Id, ProjectName, TaskStates.HumanReview);
 
             try
             {
                 var moved = _scanner.FindJob(job.Id, Entry.Path);
                 if (moved != null)
                     _chatLog.AppendSupervisor(moved, "human-decision-routed",
-                        "Routed to 1b-needs-human-review: this card is a human-decision marker, so the runner will not spawn a CLI run for it.");
+                        "Routed to 5-human-review: this card is a human-decision marker, so the runner will not spawn a CLI run for it.");
             }
             catch (Exception ex)
             {

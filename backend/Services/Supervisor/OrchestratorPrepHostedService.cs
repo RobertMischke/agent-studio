@@ -10,8 +10,8 @@ namespace OrchestratorApi.Services.Supervisor;
 /// <see cref="PipelineCatalogue.PreOrchestratorPrepStepId"/> pre-coding step.
 /// Per project, it runs the pure-rule engine in
 /// <see cref="OrchestratorPrepRules"/> in-place on the head
-/// <c>1-preparation</c> card and then either admits it straight to
-/// <c>2-ready</c> (accept), bounces it to <c>1b-needs-human-review</c>, or
+/// <c>1-preparation</c> card and then either admits it to <c>2-ready</c>
+/// (accept or bounce - the retired 1b-needs-human-review lane is gone), or
 /// leaves it in <c>1-preparation</c> with an iteration counter incremented.
 /// The standalone <c>1a-orchestrator-prep</c> backlog lane is gone: prep is no
 /// longer a lane the operator sees, it is the <c>pre-orchestrator-prep</c>
@@ -29,8 +29,8 @@ namespace OrchestratorApi.Services.Supervisor;
 /// holds the coding latch, so it does not block throughput
 /// (<see cref="StepRunMode.Parallel"/>). Preparation is its own pipeline phase
 /// and does not start a coding CLI; it only reads jobs in
-/// <c>1-preparation</c> and writes verdicts into <c>2-ready</c> /
-/// <c>1b-needs-human-review</c>. ADR-0001's boundary (one coding CLI per
+/// <c>1-preparation</c> and writes verdicts into <c>2-ready</c>.
+/// ADR-0001's boundary (one coding CLI per
 /// project at a time) is unchanged - that invariant is enforced inside
 /// <see cref="OrchestratorApi.Services.Runner.ProjectRunner.TickAsync"/> via
 /// the active-job latch, not here. The runner consumes from <c>2-ready</c> on
@@ -159,10 +159,11 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
 
         // Backpressure: only feed the active flow when 2-ready is below the
         // floor, and only the head 1-preparation card per tick. Prep runs
-        // in-place (no 1a-orchestrator-prep hop) - accept admits to 2-ready,
-        // bounce routes to 1b-needs-human-review, iterate leaves the card at
-        // the head of 1-preparation to be re-evaluated next tick. This keeps
-        // prep before the coding run without ever blocking pickup throughput.
+        // in-place (no 1a-orchestrator-prep hop) - accept and bounce both admit
+        // to 2-ready (the retired 1b-needs-human-review lane is gone), iterate
+        // leaves the card at the head of 1-preparation to be re-evaluated next
+        // tick. This keeps prep before the coding run without ever blocking
+        // pickup throughput.
         if (ready.Count >= queueFloor || prep.Count == 0) return;
         if (!RateLimitOk(maxPerHour))
         {
@@ -311,9 +312,14 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
 
             case OrchestratorPrepRules.Verdict.Bounce:
                 WriteBounceMetadata(job, decision);
-                _states.MoveJob(job.Id, TaskStates.NeedsHumanReview, job.WatchPath);
+                // The 1b-needs-human-review bounce lane has been retired. Admit
+                // the card to 2-ready instead: a normally-unclear task gets an
+                // agent attempt (it can still emit NEEDS_INPUT), and an explicit
+                // human-decision-needed marker is herded onward to 5-human-review
+                // by the runner's pickup sweep (RelocateStrayHumanDecisionCards).
+                _states.MoveJob(job.Id, TaskStates.Ready, job.WatchPath);
                 _chatLog.Append(job, OrchestratorMessageKind.GiveUp,
-                    $"orchestrator-prep: bounce ({decision.BounceReason}); clarity {decision.Clarity:F2}; -> {TaskStates.NeedsHumanReview}");
+                    $"orchestrator-prep: bounce ({decision.BounceReason}); clarity {decision.Clarity:F2}; -> {TaskStates.Ready}");
                 break;
 
             case OrchestratorPrepRules.Verdict.Iterate:

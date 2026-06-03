@@ -137,8 +137,8 @@ public class TaskFolderAccessIsolationTest
     /// </summary>
     internal static readonly Regex LanePathConstruction = new(
         @"Path\.Combine\([^;]*?(?:" +
-        @"TaskStates\.(?:Backlog|Preparation|OrchestratorPrep|NeedsHumanReview|Ready|Progress|FailedPickup|AutoReview|HumanReview|Completed|Archive)\b" +
-        @"|""(?:0-backlog|1-preparation|1a-orchestrator-prep|1b-needs-human-review|2-ready|3-progress|3a-failed-pickup|4-auto-review|5-human-review|6-completed|7-archive)""" +
+        @"TaskStates\.(?:Backlog|Preparation|OrchestratorPrep|Ready|Progress|FailedPickup|AutoReview|HumanReview|Completed|Archive)\b" +
+        @"|""(?:0-backlog|1-preparation|1a-orchestrator-prep|2-ready|3-progress|3a-failed-pickup|4-auto-review|5-human-review|6-completed|7-archive)""" +
         @")",
         RegexOptions.Compiled);
 

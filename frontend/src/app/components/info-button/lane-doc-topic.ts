@@ -15,7 +15,6 @@ const LANE_DOC_TOPIC: Record<string, string> = {
   '0-backlog': 'lane-0-backlog',
   '1-preparation': 'lane-1-preparation',
   '1a-orchestrator-prep': 'lane-1a-orchestrator-prep',
-  '1b-needs-human-review': 'lane-1b-needs-human-review',
   '2-ready': 'lane-2-ready',
   '2-ready-intake': 'lane-2-ready',
   '3-progress': 'lane-3-progress',

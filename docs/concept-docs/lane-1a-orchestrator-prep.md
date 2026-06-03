@@ -4,4 +4,4 @@ The `1a-orchestrator-prep` lane is the orchestrator's own workspace for refining
 
 ## What to expect
 
-Cards here are mid-refinement by an automated step, not waiting on you. A card normally leaves on its own once intake finishes: forward to `2-ready` when the task is well-formed, or sideways to `1b-needs-human-review` when the refinement hits a decision that needs a person. If a card lingers here, the intake step is still working or has stalled — check the activity log rather than moving the card by hand, which would fight the orchestrator.
+Cards here are mid-refinement by an automated step, not waiting on you. A card normally leaves on its own once intake finishes: forward to `2-ready` when the task is well-formed, or escalated to `5-human-review` when the refinement hits a decision that needs a person. If a card lingers here, the intake step is still working or has stalled — check the activity log rather than moving the card by hand, which would fight the orchestrator.

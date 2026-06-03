@@ -72,7 +72,6 @@ function laneLabelFor(state: string): string {
   switch (state) {
     case '1-preparation':          return 'Preparation';
     case '1a-orchestrator-prep':   return 'Orchestrator Prep';
-    case '1b-needs-human-review':  return 'Needs Human Review';
     case '2-ready':                return 'Ready';
     case '3-progress':             return 'In Progress';
     case '4-review':               return 'Review';

@@ -165,10 +165,11 @@ public class OrchestratorPrepRulesTests
     [Fact]
     public void HumanDecisionNeededSlug_BouncesAtLevel4_OverridingNeverBounces()
     {
-        // A card minted explicitly for a human decision must park in
-        // 1b-needs-human-review no matter how clear the prompt looks or how
-        // high the autonomy is. The slug prefix is a semantic marker, so it
-        // overrides the "level 4 never bounces" doctrine. AC#3 of the
+        // A card minted explicitly for a human decision must bounce no matter
+        // how clear the prompt looks or how high the autonomy is (the bounce
+        // admits to 2-ready, where the runner's pickup sweep then herds the
+        // marker to 5-human-review). The slug prefix is a semantic marker, so
+        // it overrides the "level 4 never bounces" doctrine. AC#3 of the
         // human-decision-needed routing bug.
         var decision = OrchestratorPrepRules.Decide(new OrchestratorPrepRules.PrepInput
         {

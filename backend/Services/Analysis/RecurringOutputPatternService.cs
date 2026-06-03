@@ -58,7 +58,6 @@ public sealed class RecurringOutputPatternService
         TaskStates.Progress,
         TaskStates.AutoReview,
         TaskStates.HumanReview,
-        TaskStates.NeedsHumanReview,
         TaskStates.Completed,
     };
 

@@ -34,7 +34,6 @@ function emptyGrouped(): GroupedJobs {
     backlog: [],
     preparation: [],
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready: [],
     progress: [],
     failedPickup: [],

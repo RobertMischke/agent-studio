@@ -30,8 +30,10 @@ namespace OrchestratorApi.Tests.Architecture;
 /// forces the author through the funnel.
 /// </para>
 ///
-/// <para>Moves into <c>1b-needs-human-review</c> (<c>TaskStates.NeedsHumanReview</c>)
-/// are a different lane with a different contract and are intentionally NOT matched.</para>
+/// <para>The funnel also covers the runner's stray human-decision-needed
+/// relocation, which used to move cards into the now-retired
+/// <c>1b-needs-human-review</c> lane and now routes them to <c>5-human-review</c>
+/// through <c>HumanReviewEscalation</c> like every other system escalation.</para>
 /// </summary>
 public class HumanReviewVerdictDriftTest
 {
@@ -53,9 +55,9 @@ public class HumanReviewVerdictDriftTest
     /// target the human-review lane, by either the typed constant
     /// <c>TaskStates.HumanReview</c> or the raw lane literal
     /// <c>"5-human-review"</c>. The <c>TaskStates\.HumanReview</c> branch is
-    /// dot-anchored so it never matches <c>TaskStates.NeedsHumanReview</c>
-    /// (the 1b lane), and the <c>MoveAsync|MoveJob</c> prefix keeps plain
-    /// state comparisons / downstream-lane arrays from matching.
+    /// dot- and word-boundary-anchored so it only matches the exact constant,
+    /// and the <c>MoveAsync|MoveJob</c> prefix keeps plain state comparisons /
+    /// downstream-lane arrays from matching.
     /// </summary>
     internal static readonly Regex HumanReviewMove = new(
         @"\b(?:MoveAsync|MoveJob)\s*\([^;]*?(?:TaskStates\.HumanReview\b|""5-human-review"")",
@@ -93,7 +95,7 @@ public class HumanReviewVerdictDriftTest
     }
 
     [Fact]
-    public void HumanReviewMoveRegex_MatchesLaneMoves_AndIgnoresComparisonsAnd1b()
+    public void HumanReviewMoveRegex_MatchesLaneMoves_AndIgnoresComparisons()
     {
         // Moves into 5-human-review - must match.
         Assert.Matches(HumanReviewMove,
@@ -106,8 +108,6 @@ public class HumanReviewVerdictDriftTest
         // Not a move - plain state comparison and downstream-lane arrays.
         Assert.DoesNotMatch(HumanReviewMove, "if (job.State == TaskStates.HumanReview) {}");
         Assert.DoesNotMatch(HumanReviewMove, "var lanes = new[] { \"4-auto-review\", \"5-human-review\" };");
-        // The 1b lane is a different contract.
-        Assert.DoesNotMatch(HumanReviewMove, "var move = _states.MoveJob(job.Id, TaskStates.NeedsHumanReview, Entry.Path);");
     }
 
     private static List<Violation> ScanForViolations(string repoRoot, Regex pattern)

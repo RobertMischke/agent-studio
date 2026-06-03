@@ -336,8 +336,8 @@ public static class LifecyclePhases
 
     /// <summary>
     /// The phases each filesystem state is allowed to carry. States not in
-    /// this map (preparation, the orchestrator-prep / needs-human-review
-    /// lanes, the two review lanes, completed, archive) carry no phase: the
+    /// this map (preparation, the orchestrator-prep lane, the two review
+    /// lanes, completed, archive) carry no phase: the
     /// state already says enough. Keeping this small dictionary avoids a
     /// scatter of <c>switch</c> statements when the migration tests and
     /// future frontend lane projection both need to know "is this phase
@@ -355,7 +355,7 @@ public static class LifecyclePhases
     /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>
     /// section 10: a job with no <c>phase</c> renders in the default lane of
     /// its state. Returns null for states that carry no phase (preparation,
-    /// the orchestrator-prep / needs-human-review lanes, the review lanes,
+    /// the orchestrator-prep lane, the review lanes,
     /// completed, archive).
     /// </summary>
     public static string? DefaultFor(string state, string? executionStatus, TaskSummaryStatus summaryStatus)
@@ -1223,7 +1223,8 @@ public record ProjectSettings
     /// <c>0</c> manual, <c>1</c> cautious, <c>2</c> balanced (default),
     /// <c>3</c> confident, <c>4</c> fully-auto. Governs whether the
     /// orchestrator-prep loop accepts borderline tasks, iterates, or
-    /// bounces them to <c>1b-needs-human-review</c>. Null means "use the
+    /// escalates them to <c>5-human-review</c> (the retired
+    /// <c>1b-needs-human-review</c> lane is gone). Null means "use the
     /// default (balanced, level 2)". The setting is consulted on each
     /// pickup tick; mid-iteration policy switches do not happen.
     /// </summary>
@@ -2139,9 +2140,10 @@ public static class TaskSlugs
     /// <summary>
     /// Prefix the orchestrator stamps on a card that exists only so a human
     /// can make a call the automation must not. Such a card is never
-    /// machine-actionable: the prep rules bounce it to
-    /// <see cref="TaskStates.NeedsHumanReview"/> regardless of autonomy level,
-    /// and the runner refuses to auto-pick it out of
+    /// machine-actionable: the runner's pickup sweep herds it to
+    /// <see cref="TaskStates.HumanReview"/> regardless of autonomy level (the
+    /// former 1b-needs-human-review bounce lane was retired), and the runner
+    /// refuses to auto-pick it out of
     /// <see cref="TaskStates.Ready"/> (which would NOOP-burn a CLI run and
     /// trip the cross-slug infra circuit breaker).
     /// </summary>
@@ -2166,17 +2168,17 @@ public static class TaskStates
 
     public const string Preparation = "1-preparation";
 
-    // ADR-0026: orchestrator-prep + needs-human-review lanes are *additive*
-    // (no rename of the existing 1-preparation -> 2-ready -> ... chain).
-    // The sort keys 1a- and 1b- slot between 1- and 2- both on disk and in
-    // the kanban: ASCII '-' (45) is less than 'a' (97), and '1' is less
-    // than '2'. Visible kanban order: Prep -> OrchPrep -> NeedsClar -> Ready -> ...
+    // ADR-0026: the orchestrator-prep lane is *additive* (no rename of the
+    // existing 1-preparation -> 2-ready -> ... chain). The 1a- sort key slots
+    // between 1- and 2- both on disk and in the kanban: ASCII '-' (45) is less
+    // than 'a' (97), and '1' is less than '2'.
+    //
+    // The former 1b-needs-human-review bounce lane has been retired: the
+    // "Human decision needed" concept was obsoleted. Prep now admits actionable
+    // cards straight to 2-ready, and genuine "a human must decide" cases are
+    // escalated to 5-human-review by the orchestrator / the human-review funnel.
+    // Boot migration in TaskStateMachine moves any stray 1b folder to 2-ready.
     public const string OrchestratorPrep = "1a-orchestrator-prep";
-
-    // 1b-needs-human-review is the bounce lane the orchestrator-prep loop
-    // writes to at autonomy <= 3 when a task is genuinely-unclear. Hidden
-    // when empty in the UI (same rule as failed-pickup and 5-human-review).
-    public const string NeedsHumanReview = "1b-needs-human-review";
 
     public const string Ready = "2-ready";
     public const string Progress = "3-progress";
@@ -2185,7 +2187,7 @@ public static class TaskStates
     // that previously vanished into 7-archive. The pickup-loud-not-archive
     // contract: a folder that crossed the resume window without a completion
     // sentinel lands here, never silently in 7-archive. Hide-when-empty in
-    // the UI (same rule as 1b-needs-human-review and 5-human-review). The
+    // the UI (same rule as 5-human-review). The
     // additive 3a- sort key keeps existing folders, code references, and
     // tests valid: ASCII '-' (45) < 'a' (97) so 3-progress sorts before
     // 3a-...; '3' < '4' so 3a- sorts before 4-auto-review. Populated by
@@ -2202,7 +2204,7 @@ public static class TaskStates
     // Additive lane (no boot migration): the 3b- sort key slots between
     // 3a-failed-pickup and 4-auto-review on disk and in the kanban (ASCII '-'
     // (45) < 'a' (97), and '3' < '4'). Hide-when-empty in the UI (same rule as
-    // 1b-needs-human-review and 5-human-review). Auto-pickup never reaches into
+    // 5-human-review). Auto-pickup never reaches into
     // this lane: the picker only enumerates 3-progress.
     public const string CodeNotComplete = "3b-code-not-complete";
 
@@ -2218,7 +2220,7 @@ public static class TaskStates
     public const string Archive = "7-archive";
 
     public static readonly string[] All =
-        [Backlog, Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, FailedPickup, CodeNotComplete, AutoReview, HumanReview, Completed, Archive];
+        [Backlog, Preparation, OrchestratorPrep, Ready, Progress, FailedPickup, CodeNotComplete, AutoReview, HumanReview, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()
@@ -2257,6 +2259,9 @@ public static class TaskStates
         "4-review" => AutoReview,
         "5-completed" => Completed,
         "6-archive" => Archive,
+        // Retired lane: any job still tagged with the removed 1b state lands
+        // in 2-ready (the destination the lane was manually emptied into).
+        "1b-needs-human-review" => Ready,
         _ => Preparation
     };
 

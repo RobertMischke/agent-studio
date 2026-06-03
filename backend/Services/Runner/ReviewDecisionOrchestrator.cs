@@ -653,8 +653,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         // Branch 2: a reissued Codex NOOP that came back as another
         // sentinel-only NOOP without any tool/file activity is not
-        // recoverable by another sharpened prompt. Route it back to the
-        // early human-review lane so it is not picked again automatically.
+        // recoverable by another sharpened prompt. Escalate it to
+        // 5-human-review so it is not picked again automatically.
         var noProgressEvidence = InspectNoOpProgressSinceLastRecovery(pending);
         if (prior > 0
             && noProgressEvidence.SawNoOpRecoveryReissue
@@ -666,8 +666,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var reason =
                 $"Escalated: {count} consecutive NOOPs without progress. " +
                 "The latest retry emitted only [[TASK_NOOP]] after NOOP recovery, with 0 tool calls and 0 file changes.";
-            await EscalateNoOpAsync(workspace, entry, pending, reason, ct,
-                targetState: TaskStates.NeedsHumanReview);
+            await EscalateNoOpAsync(workspace, entry, pending, reason, ct);
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator escalated {Project}/{JobId} after {NoOpCount} consecutive NOOPs without progress: toolCalls={ToolCalls} fileChanges={FileChanges} agentSubstanceChars={AgentSubstanceChars}",
                 entry.Name, pending.Job.Id, count, noProgressEvidence.ToolCalls,
@@ -733,20 +732,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WatchPathEntry entry,
         PendingDecision pending,
         string reason,
-        CancellationToken ct,
-        string targetState = TaskStates.HumanReview)
+        CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {targetState}.");
+            $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {TaskStates.HumanReview}.");
 
-        var move = _stateMachine.MoveJob(current.Id, targetState, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator: failed to move {JobId} to {TargetState} after NOOP escalate: {Status} {Message}",
-                current.Id, targetState, move.Status, move.Message);
+                current.Id, TaskStates.HumanReview, move.Status, move.Message);
         }
 
         // ADR-0049: escalation records the event on the original card's
@@ -1908,16 +1906,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         // ADR-0049: the orchestrator could not decide this 4-auto-review
-        // task unattended. It flips the *original* card to
-        // 1b-needs-human-review and records one orchestrator_escalated
-        // event on that card's timeline - the timeline is the explanation.
-        // No sibling human-decision-needed-<slug> card is spawned: the
-        // wrapper-card pattern (ASS-30) is the bug this ADR ends.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.NeedsHumanReview, entry.Path);
+        // task unattended. It flips the *original* card to 5-human-review
+        // (a genuine "a human must decide" case) and records one
+        // orchestrator_escalated event on that card's timeline - the timeline
+        // is the explanation. No sibling human-decision-needed-<slug> card is
+        // spawned: the wrapper-card pattern (ASS-30) is the bug this ADR ends.
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to needs-human-review after escalate: {Status} {Message}",
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after escalate: {Status} {Message}",
                 current.Id, move.Status, move.Message);
             return Task.CompletedTask;
         }
@@ -1928,10 +1926,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // the chat-log auto-creates its parent folder on write — so a
         // stale path resurrects the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.NeedsHumanReview };
+        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
-            $"Auto-review escalated \"{title}\" to 1b-needs-human-review for human attention. Reason: {verdict.Reason}.");
+            $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
 
         EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
             TimelineActors.Orchestrator, verdict.Reason,

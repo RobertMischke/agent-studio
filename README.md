@@ -92,7 +92,7 @@ What the application currently provides.
 
 ![Board overview](docs/images/board-overview.png)
 
-The lanes (`0-backlog`, `1-preparation`, `1a-orchestrator-prep`, `1b-needs-human-review`, `2-ready`, `3-progress`, `4-auto-review` / `5-human-review`, `6-completed`, `7-archive`) are driven directly off the filesystem state. Each card carries up to thirteen chip types: task type, state, phase, execution, pending intent, auto-loop, review verdict, agent, model, token spend (with hover popover), git pill, last commit, last activity. The header strip shows free-text search, faceted filters across owner / project / type / tag with URL deep-links, lane collapse, and per-container focus mode. Drag-and-drop is optimistic with a snapshot-revert path.
+The lanes (`0-backlog`, `1-preparation`, `1a-orchestrator-prep`, `2-ready`, `3-progress`, `4-auto-review` / `5-human-review`, `6-completed`, `7-archive`) are driven directly off the filesystem state. Each card carries up to thirteen chip types: task type, state, phase, execution, pending intent, auto-loop, review verdict, agent, model, token spend (with hover popover), git pill, last commit, last activity. The header strip shows free-text search, faceted filters across owner / project / type / tag with URL deep-links, lane collapse, and per-container focus mode. Drag-and-drop is optimistic with a snapshot-revert path.
 
 ### Detail panel: prompt + protocol + live git + triage
 

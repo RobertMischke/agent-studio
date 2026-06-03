@@ -75,7 +75,6 @@ export function flattenGrouped(grouped: GroupedJobs): TaskInfo[] {
     grouped.backlog,
     grouped.preparation,
     grouped.orchestratorPrep,
-    grouped.needsHumanReview,
     grouped.ready,
     grouped.progress,
     grouped.failedPickup,

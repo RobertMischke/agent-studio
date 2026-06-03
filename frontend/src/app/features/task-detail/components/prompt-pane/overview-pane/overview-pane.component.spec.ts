@@ -12,6 +12,52 @@ import { OverviewPaneComponent } from './overview-pane.component';
 import type { TaskInfo } from '../../../../../models/task.model';
 import type { AgentWorkSummary } from '../../../../session-events';
 import type { TaskPipelineResponse } from '../../../../task-pipeline';
+import type { RunRecord, RunTimeline } from '../../../../run-timeline';
+
+/** A pipeline catalogue + execution with a single core Agent-execution row. */
+function agentPipeline(coreModel: string | null = 'claude-opus-4-8'): TaskPipelineResponse {
+  return {
+    pipeline: {
+      id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+      pre: [], core: [], post: [],
+      allSteps: [
+        { id: 'core-agent-run', displayName: 'Agent execution', kind: 'core', runMode: 'sequential', dependsOn: [], idempotent: false, stub: false },
+        { id: 'aspect-code-quality', displayName: 'Code quality', kind: 'aspect', runMode: 'parallel', dependsOn: [], idempotent: true, stub: false },
+      ],
+    },
+    execution: {
+      pipelineId: 'standard-task-pipeline', pipelineVersion: 1, jobId: 'test-1', project: 'test',
+      startedAt: new Date().toISOString(), completedAt: null,
+      steps: [
+        { stepId: 'core-agent-run', kind: 'core', model: coreModel ?? undefined, status: 'running', startedAt: new Date().toISOString(), completedAt: null, durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
+      ],
+    },
+    cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+    config: {},
+  };
+}
+
+function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
+  return {
+    index: 0, intent: 'start', startedAt: new Date().toISOString(), endedAt: null,
+    status: 'completed', cli: 'claude', exitCode: 0, durationSeconds: 12,
+    inputSessionId: null, capturedSessionId: null, resumed: false, reason: null,
+    userFollowup: null, lineStart: null, lineEnd: null,
+    headShaBefore: null, headShaAfter: null, contextRef: null,
+    ...overrides,
+  };
+}
+
+function runTimeline(runCount: number, runs: RunRecord[] = [], extra: Partial<RunTimeline> = {}): RunTimeline {
+  return {
+    runCount,
+    firstStartedAt: runs[0]?.startedAt ?? null,
+    lastActivityAt: runs[runs.length - 1]?.startedAt ?? null,
+    hasActiveRun: false,
+    runs,
+    ...extra,
+  };
+}
 
 function baseJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
@@ -472,6 +518,99 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(
       fixture.nativeElement.querySelector('[data-testid="overview-promote-btn"]'),
     ).toBeNull();
+  });
+
+  it('agent-execution row: run count is read from the run-timeline (same source as the Overview Runs value)', async () => {
+    const runs = [
+      runRecord({ index: 0, intent: 'start' }),
+      runRecord({ index: 1, intent: 'continue' }),
+      runRecord({ index: 2, intent: 'recovery' }),
+    ];
+    const fixture = await build(
+      baseJob({ state: '3-progress', sessionName: 'sess-xyz', cliType: 'claude', model: 'claude-opus-4-8' }),
+    );
+    TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());
+    TestBed.inject(RunTimelinePollService).timeline.set(runTimeline(34, runs));
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    expect(c.agentRunCount()).toBe(34);
+    expect(c.agentRunCountLabel()).toBe('34 runs');
+
+    const tip = c.agentRunTooltip()!;
+    expect(tip).not.toBeNull();
+    expect(tip.title).toBe('Agent execution · 34 runs');
+    expect(tip.body).toContain('Runs: 34');
+    expect(tip.body).toContain('Recovered: 1');
+    expect(tip.body).toContain('Model: claude-opus-4-8');
+    expect(tip.body).toContain('Session: sess-xyz');
+    expect(tip.body).toContain('See the Timeline tab');
+
+    // The badge renders only on the core row, as a focusable <button>.
+    const badge = fixture.nativeElement.querySelector('[data-testid="overview-pipeline-agent-runs"]') as HTMLElement | null;
+    expect(badge).not.toBeNull();
+    expect(badge!.tagName).toBe('BUTTON');
+    expect(badge!.textContent?.trim()).toBe('34 runs');
+    expect(badge!.getAttribute('data-run-count')).toBe('34');
+    expect(badge!.getAttribute('aria-label')).toContain('34 runs');
+  });
+
+  it('agent-execution row: falls back to the Agent Work call count when the run-timeline is empty', async () => {
+    const fixture = await build(
+      baseJob({ state: '3-progress' }),
+      {
+        calls: 5, recovered: true, toolCalls: 0, toolCounts: [],
+        startedAt: new Date().toISOString(), lastTouchAt: new Date().toISOString(),
+        currentSessionId: 'sess-aw',
+      },
+    );
+    TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    expect(c.agentRunCount()).toBe(5);
+    expect(c.agentRunCountLabel()).toBe('5 runs');
+    // Recovered flag (no run-timeline intents available) still surfaces as 1.
+    expect(c.agentRunTooltip()!.body).toContain('Recovered: 1');
+    expect(c.agentRunTooltip()!.body).toContain('Session: sess-aw');
+  });
+
+  it('agent-execution row: a single run reads as "1 run"', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());
+    TestBed.inject(RunTimelinePollService).timeline.set(runTimeline(1, [runRecord()]));
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    expect(c.agentRunCount()).toBe(1);
+    expect(c.agentRunCountLabel()).toBe('1 run');
+    expect(c.agentRunTooltip()!.title).toBe('Agent execution · 1 run');
+  });
+
+  it('agent-execution row: no runs keeps the dash state — no badge, no tooltip', async () => {
+    const fixture = await build(baseJob({ state: '2-ready' }));
+    TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    expect(c.agentRunCount()).toBe(0);
+    expect(c.agentRunTooltip()).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="overview-pipeline-agent-runs"]'),
+    ).toBeNull();
+  });
+
+  it('agent-execution row: the badge is bound to the core row only (aspect rows never carry it)', async () => {
+    const fixture = await build(baseJob({ state: '3-progress' }));
+    TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());
+    TestBed.inject(RunTimelinePollService).timeline.set(runTimeline(7, [runRecord()]));
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const badges = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-agent-runs"]');
+    // Exactly one core row exists, so exactly one badge — never on the aspect row.
+    expect(badges.length).toBe(1);
+    const coreRow = badges[0].closest('[data-testid="overview-pipeline-step"]');
+    expect(coreRow?.getAttribute('data-step-id')).toBe('core-agent-run');
   });
 
   it('session row was removed (component no longer exposes session-id helpers)', async () => {

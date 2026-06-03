@@ -117,7 +117,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Escalate_FlipsOriginalToNeedsHumanReview_WritesSupervisorBanner_NoWrapperCard()
+    public async Task Escalate_FlipsOriginalToHumanReview_WritesSupervisorBanner_NoWrapperCard()
     {
         SeedReviewJobWithNeedsInput("auth-rewrite", "use OAuth or magic-link?");
         var orchestrator = BuildOrchestrator(
@@ -126,16 +126,16 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // ADR-0049: an orchestrator that cannot decide unattended flips the
-        // *original* card to 1b-needs-human-review; the legacy auto-review
-        // folder must no longer hold the job.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview, "auth-rewrite")));
+        // *original* card to 5-human-review (the retired 1b-needs-human-review
+        // lane is gone); the legacy auto-review folder must no longer hold the job.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "auth-rewrite")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "auth-rewrite")));
 
-        var log = ReadCliLog(TaskStates.NeedsHumanReview, "auth-rewrite");
+        var log = ReadCliLog(TaskStates.HumanReview, "auth-rewrite");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("strategic call", log);
-        Assert.Contains("1b-needs-human-review", log);
+        Assert.Contains("5-human-review", log);
 
         // ADR-0049: no sibling human-decision-needed-<slug> wrapper card is
         // spawned - the wrapper-card pattern (ASS-30) is the bug this ADR ends.
@@ -298,7 +298,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task NoOp_AfterNoProgressReissue_EscalatesToNeedsHumanReview()
+    public async Task NoOp_AfterNoProgressReissue_EscalatesToHumanReview()
     {
         SeedReviewJobWithDoubleNoProgressNoOp("double-noop",
             title: "Implement no-op recovery guard",
@@ -320,13 +320,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.NeedsHumanReview, "double-noop")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "double-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "double-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "double-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "double-noop")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "double-noop")));
 
-        var log = ReadCliLog(TaskStates.NeedsHumanReview, "double-noop");
+        var log = ReadCliLog(TaskStates.HumanReview, "double-noop");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("Escalated: 2 consecutive NOOPs without progress", log);
@@ -1015,8 +1014,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // ADR-0049: the escalate event travels with the original card, which
-        // is now in 1b-needs-human-review (not 5-human-review).
-        var events = ReadTimeline(TaskStates.NeedsHumanReview, "escalate-timeline");
+        // is now in 5-human-review (the retired 1b-needs-human-review lane is gone).
+        var events = ReadTimeline(TaskStates.HumanReview, "escalate-timeline");
         var escalate = Assert.Single(
             events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
         Assert.Equal(TimelineActors.Orchestrator, escalate.Actor);

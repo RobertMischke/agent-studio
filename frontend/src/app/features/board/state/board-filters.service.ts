@@ -144,7 +144,6 @@ export class BoardFiltersService {
       backlog: filterJobs(grouped.backlog ?? []),
       preparation: filterJobs(grouped.preparation),
       orchestratorPrep: filterJobs(grouped.orchestratorPrep ?? []),
-      needsHumanReview: filterJobs(grouped.needsHumanReview ?? []),
       ready: filterJobs(grouped.ready),
       progress: filterJobs(grouped.progress),
       failedPickup: filterJobs(grouped.failedPickup ?? []),
@@ -161,7 +160,6 @@ export class BoardFiltersService {
     return (
       (g.preparation?.length ?? 0)
       + (g.orchestratorPrep?.length ?? 0)
-      + (g.needsHumanReview?.length ?? 0)
       + (g.backlog?.length ?? 0)
       + (g.ready?.length ?? 0)
       + (g.progress?.length ?? 0)
@@ -178,7 +176,6 @@ export class BoardFiltersService {
     return (
       (g.preparation?.length ?? 0)
       + (g.orchestratorPrep?.length ?? 0)
-      + (g.needsHumanReview?.length ?? 0)
       + (g.backlog?.length ?? 0)
       + (g.ready?.length ?? 0)
       + (g.progress?.length ?? 0)

@@ -98,14 +98,12 @@ export class DetailHeaderComponent {
   /**
    * Lane dropdown options surfaced in the detail header. The order mirrors
    * the kanban left-to-right flow so picking a target reads like "advance"
-   * vs "send back". `1b-needs-human-review` is an orchestrator-managed lane —
-   * listed but unusual to pick by hand, hence the discreet label. The retired
-   * `1a-orchestrator-prep` lane is omitted: prep now runs in-place on
-   * 1-preparation as the optional `pre-orchestrator-prep` pipeline step.
+   * vs "send back". The retired `1a-orchestrator-prep` lane is omitted: prep
+   * now runs in-place on 1-preparation as the optional `pre-orchestrator-prep`
+   * pipeline step.
    */
   readonly laneOptions: readonly { state: string; label: string }[] = [
     { state: '1-preparation',         label: 'Preparation' },
-    { state: '1b-needs-human-review', label: 'Needs Clarification' },
     { state: '2-ready',               label: 'Ready' },
     { state: '3-progress',            label: 'In Progress' },
     { state: '4-auto-review',         label: 'Auto Review' },

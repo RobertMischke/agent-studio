@@ -66,11 +66,9 @@ public static class TaskCrudEndpoints
                 // default landing for new jobs.
                 Backlog = SortLane(TaskStates.Backlog),
                 Preparation = SortLane(TaskStates.Preparation),
-                // ADR-0026: orchestrator-prep + needs-human-review lanes.
-                // Empty by default; clients render NeedsHumanReview only when
-                // it has at least one job (hide-when-empty rule).
+                // ADR-0026: orchestrator-prep lane (hide-when-empty). The
+                // 1b-needs-human-review bounce lane has been retired.
                 OrchestratorPrep = SortLane(TaskStates.OrchestratorPrep),
-                NeedsHumanReview = SortLane(TaskStates.NeedsHumanReview),
                 Ready = SortLane(TaskStates.Ready),
                 Progress = SortLane(TaskStates.Progress),
                 // ADR-0028: 3a-failed-pickup is a hide-when-empty lane that

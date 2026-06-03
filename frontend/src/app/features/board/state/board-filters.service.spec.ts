@@ -40,7 +40,6 @@ function makeGrouped(jobs: TaskInfo[]): GroupedJobs {
     backlog: byState('0-backlog'),
     preparation: byState('1-preparation'),
     orchestratorPrep: [],
-    needsHumanReview: [],
     ready: byState('2-ready'),
     progress: byState('3-progress'),
     failedPickup: [],

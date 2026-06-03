@@ -19,7 +19,8 @@ namespace OrchestratorApi.Tests;
 /// <c>human-decision-needed-*</c> card is a marker for a human call, never a
 /// unit of agent work. If it comes to rest in <c>2-ready</c> the runner must
 /// (a) never auto-pick it (<see cref="ProjectRunner.GetNextReadyJob"/>) and
-/// (b) relocate it to <c>1b-needs-human-review</c> before the pickup
+/// (b) relocate it to <c>5-human-review</c> (through the HumanReviewEscalation
+/// funnel, since the 1b-needs-human-review lane was retired) before the pickup
 /// selection runs. Without this guard the card is picked, the agent NOOPs,
 /// exit=1 fires within a few seconds, and the cross-slug infra circuit
 /// breaker demotes the project to manual.
@@ -68,7 +69,7 @@ public sealed class ProjectRunnerHumanDecisionRoutingTests : IDisposable
     }
 
     [Fact]
-    public void RelocateStrayHumanDecisionCards_MovesReadyCardTo1b()
+    public void RelocateStrayHumanDecisionCards_MovesReadyCardToHumanReview()
     {
         WriteJob(TaskStates.Ready, "human-decision-needed-bug-card-delete-button", order: 1);
         WriteJob(TaskStates.Ready, "real-work", order: 2);
@@ -77,11 +78,11 @@ public sealed class ProjectRunnerHumanDecisionRoutingTests : IDisposable
         InvokeRelocateSweep(runner);
 
         var hdnInReady = Path.Combine(_watchPath, TaskStates.Ready, "human-decision-needed-bug-card-delete-button");
-        var hdnIn1b = Path.Combine(_watchPath, TaskStates.NeedsHumanReview, "human-decision-needed-bug-card-delete-button");
+        var hdnInHumanReview = Path.Combine(_watchPath, TaskStates.HumanReview, "human-decision-needed-bug-card-delete-button");
         var realInReady = Path.Combine(_watchPath, TaskStates.Ready, "real-work");
 
         Assert.False(Directory.Exists(hdnInReady), "human-decision-needed card should have left 2-ready");
-        Assert.True(Directory.Exists(hdnIn1b), "human-decision-needed card should have landed in 1b-needs-human-review");
+        Assert.True(Directory.Exists(hdnInHumanReview), "human-decision-needed card should have landed in 5-human-review");
         Assert.True(Directory.Exists(realInReady), "the real-work card must stay in 2-ready untouched");
     }
 
@@ -94,7 +95,7 @@ public sealed class ProjectRunnerHumanDecisionRoutingTests : IDisposable
         InvokeRelocateSweep(runner);
 
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "real-work")));
-        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.NeedsHumanReview)));
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.HumanReview)));
     }
 
     // ===== Helpers =====

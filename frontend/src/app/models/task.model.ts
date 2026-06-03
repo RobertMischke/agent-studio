@@ -530,8 +530,6 @@ export interface GroupedJobs {
    * cards back to 1-preparation. Always empty after a clean boot.
    */
   orchestratorPrep: TaskInfo[];
-  /** ADR-0026 lane: needs-human-review (1b-needs-human-review). Hide-when-empty. */
-  needsHumanReview: TaskInfo[];
   ready: TaskInfo[];
   progress: TaskInfo[];
   /**

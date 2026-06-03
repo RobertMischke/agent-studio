@@ -297,6 +297,16 @@
                 Running
               </span>
             }
+            @if (row.kind === 'core' && agentRunCount() > 0) {
+              <button type="button"
+                      class="ov-pl-step__runs"
+                      data-testid="overview-pipeline-agent-runs"
+                      [attr.data-run-count]="agentRunCount()"
+                      [appTooltip]="agentRunTooltip()"
+                      [attr.aria-label]="'Agent execution ran ' + agentRunCountLabel() + ' — focus or hover for run details'">
+                {{ agentRunCountLabel() }}
+              </button>
+            }
             @if (row.verdict) {
               <span class="ov-pl-step__verdict"
                     [class.ov-pl-step__verdict--concern]="row.concernTooltip"

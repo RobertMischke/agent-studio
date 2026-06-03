@@ -177,7 +177,6 @@ export class TaskSelectionService {
       case '0-backlog':              return g.backlog ?? [];
       case '1-preparation':          return g.preparation ?? [];
       case '1a-orchestrator-prep':   return g.orchestratorPrep ?? [];
-      case '1b-needs-human-review':  return g.needsHumanReview ?? [];
       case '2-ready':                return g.ready ?? [];
       case '3-progress':             return g.progress ?? [];
       case '3a-failed-pickup':       return g.failedPickup ?? [];

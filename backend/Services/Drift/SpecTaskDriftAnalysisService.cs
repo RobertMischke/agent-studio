@@ -69,7 +69,6 @@ public sealed class SpecTaskDriftAnalysisService
     {
         TaskStates.Preparation,
         TaskStates.OrchestratorPrep,
-        TaskStates.NeedsHumanReview,
         TaskStates.Ready,
         TaskStates.Progress,
         TaskStates.AutoReview,

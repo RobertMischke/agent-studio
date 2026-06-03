@@ -17,8 +17,8 @@ namespace OrchestratorApi.Tests;
 /// <list type="bullet">
 /// <item>Re-evaluation of a single card with a clean status returns <c>ok</c>.</item>
 /// <item>A card whose prompt asks for code but carries no commit is <c>not-really-done</c>
-/// and is bounced to <c>1b-needs-human-review</c> with a <c>quality_loop_reopened</c>
-/// timeline event.</item>
+/// and is reopened to <c>2-ready</c> with a <c>quality_loop_reopened</c>
+/// timeline event (the retired 1b-needs-human-review lane is gone).</item>
 /// <item>An async whole-project audit walks every completed/archive card, reports
 /// per-card verdicts, and finishes within the test's small bound.</item>
 /// </list>
@@ -66,7 +66,7 @@ public class CompletedLaneAuditServiceTests : IDisposable
     }
 
     [Fact]
-    public void ReEvaluate_PromptAsksForCodeButNoCommit_FlipsToNeedsHumanReview()
+    public void ReEvaluate_PromptAsksForCodeButNoCommit_ReopensToReady()
     {
         var (audit, scanner, _, _) = Build();
         WriteJob(TaskStates.Completed, "shaky-card", "Shaky Card",
@@ -78,11 +78,11 @@ public class CompletedLaneAuditServiceTests : IDisposable
 
         Assert.Equal(ReEvaluateStatus.Success, outcome.Status);
         Assert.Equal(AuditVerdicts.NotReallyDone, outcome.Response!.Verdict);
-        Assert.Equal(TaskStates.NeedsHumanReview, outcome.Response.NewState);
+        Assert.Equal(TaskStates.Ready, outcome.Response.NewState);
 
         var moved = scanner.FindJob("shaky-card", _watchPath);
         Assert.NotNull(moved);
-        Assert.Equal(TaskStates.NeedsHumanReview, moved!.State);
+        Assert.Equal(TaskStates.Ready, moved!.State);
 
         // Quality-loop event landed on the moved folder's timeline.
         var timelinePath = TaskPaths.TimelineLog(moved.FolderPath);

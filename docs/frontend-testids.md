@@ -42,7 +42,7 @@ Each `<section class="lane-group">` carries:
 
 | Group id  | Visible label   | States it contains                                                                  |
 |-----------|-----------------|-------------------------------------------------------------------------------------|
-| `backlog` | Backlog         | `2-ready`, `2-ready-intake`?, `1b-needs-human-review`?, `1a-orchestrator-prep`, `1-preparation`, `0-backlog` |
+| `backlog` | Backlog         | `2-ready`, `2-ready-intake`?, `1a-orchestrator-prep`, `1-preparation`, `0-backlog` |
 | `active`  | Active          | `3-progress`, `4-auto-review`                                                       |
 | `decide`  | Done & Decide   | `5-human-review`, `6-completed`, `7-archive`                                        |
 

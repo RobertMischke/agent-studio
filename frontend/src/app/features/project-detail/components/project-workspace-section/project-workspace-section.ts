@@ -49,7 +49,7 @@ export class ProjectWorkspaceSectionComponent implements OnInit {
     const proj = this.projectName();
     const lanes: readonly (readonly TaskInfo[] | undefined)[] = [
       grouped.backlog, grouped.preparation, grouped.orchestratorPrep,
-      grouped.needsHumanReview, grouped.ready, grouped.progress,
+      grouped.ready, grouped.progress,
       grouped.failedPickup, grouped.review, grouped.autoReview,
       grouped.humanReview, grouped.completed, grouped.archive,
     ];

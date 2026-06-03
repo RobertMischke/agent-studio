@@ -61,13 +61,13 @@ Probes targeting this workspace should:
 
 ```sh
 # Clear lane state (board view)
-rm -rf agent-taskboard-workspace/projects/playwright-test/{0-backlog,1-preparation,1a-orchestrator-prep,1b-needs-human-review,2-ready,3-progress,3a-failed-pickup,4-auto-review,5-human-review,6-completed,7-archive}/*
+rm -rf agent-taskboard-workspace/projects/playwright-test/{0-backlog,1-preparation,1a-orchestrator-prep,2-ready,3-progress,3a-failed-pickup,4-auto-review,5-human-review,6-completed,7-archive}/*
 
 # Clear deliverables
 rm -rf test-repos/playwright-test/App/scratch/*
 
 # Optional: re-init the lane skeleton
-mkdir -p agent-taskboard-workspace/projects/playwright-test/{0-backlog,1-preparation,1a-orchestrator-prep,1b-needs-human-review,2-ready,3-progress,3a-failed-pickup,4-auto-review,5-human-review,6-completed,7-archive}
+mkdir -p agent-taskboard-workspace/projects/playwright-test/{0-backlog,1-preparation,1a-orchestrator-prep,2-ready,3-progress,3a-failed-pickup,4-auto-review,5-human-review,6-completed,7-archive}
 ```
 
 ## When you might want a NEW probe project

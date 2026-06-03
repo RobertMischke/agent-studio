@@ -33,7 +33,6 @@ public sealed class LaneSortStrategyTests : IDisposable
     [InlineData(TaskStates.Backlog)]
     [InlineData(TaskStates.Preparation)]
     [InlineData(TaskStates.OrchestratorPrep)]
-    [InlineData(TaskStates.NeedsHumanReview)]
     [InlineData(TaskStates.Ready)]
     [InlineData(TaskStates.Progress)]
     [InlineData(TaskStates.FailedPickup)]

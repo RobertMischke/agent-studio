@@ -222,7 +222,6 @@ export class PromptPaneComponent {
       case '0-backlog':            return 'Backlog';
       case '1-preparation':        return 'In Preparation';
       case '1a-orchestrator-prep': return 'Orchestrator Prep';
-      case '1b-needs-human-review': return 'Needs Human Review';
       case '2-ready':              return 'Ready';
       case '3-progress':           return 'In Progress';
       case '4-auto-review':        return 'Auto Review';

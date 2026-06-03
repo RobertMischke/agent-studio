@@ -19,8 +19,7 @@ namespace OrchestratorApi.Tests;
 /// <c>parallel-review-preparation-progress-pickup</c> task: the runner's
 /// per-project pickup tick consumes only <c>3-progress</c> and
 /// <c>2-ready</c>. Jobs sitting in the preparation lanes
-/// (<c>1-preparation</c>, <c>1a-orchestrator-prep</c>,
-/// <c>1b-needs-human-review</c>) or the review lanes
+/// (<c>1-preparation</c>, <c>1a-orchestrator-prep</c>) or the review lanes
 /// (<c>4-auto-review</c>, <c>5-human-review</c>) are processed by their
 /// own background services and do NOT block pickup. ADR-0001's
 /// single-coding-CLI-per-project rule is enforced separately by the
@@ -67,7 +66,6 @@ public sealed class ParallelLanesPickupTests : IDisposable
         // Saturate every parallel lane.
         WriteJob(TaskStates.Preparation, "prep-A");
         WriteJob(TaskStates.OrchestratorPrep, "orch-prep-A");
-        WriteJob(TaskStates.NeedsHumanReview, "needs-human-A");
         WriteJob(TaskStates.AutoReview, "auto-review-A");
         WriteJob(TaskStates.HumanReview, "human-review-A");
         WriteJob(TaskStates.Completed, "completed-A");
@@ -96,7 +94,6 @@ public sealed class ParallelLanesPickupTests : IDisposable
     {
         WriteJob(TaskStates.Preparation, "prep-A");
         WriteJob(TaskStates.OrchestratorPrep, "orch-prep-A");
-        WriteJob(TaskStates.NeedsHumanReview, "needs-human-A");
         WriteJob(TaskStates.AutoReview, "auto-review-A");
         WriteJob(TaskStates.HumanReview, "human-review-A");
 

@@ -82,10 +82,12 @@ public sealed class CompletedLaneAuditService
         var newState = job.State;
         if (verdict == AuditVerdicts.NotReallyDone)
         {
-            var outcome = _states.MoveJob(jobId, TaskStates.NeedsHumanReview, watchPath);
+            // Reopen for another pass at 2-ready (the retired 1b-needs-human-review
+            // lane is gone; QualityLoopReopened always means a re-attempt now).
+            var outcome = _states.MoveJob(jobId, TaskStates.Ready, watchPath);
             if (outcome.Status == MoveJobStatus.Success)
             {
-                newState = TaskStates.NeedsHumanReview;
+                newState = TaskStates.Ready;
                 var refreshed = _scanner.FindJob(jobId, watchPath);
                 var folder = refreshed?.FolderPath ?? job.FolderPath;
                 AppendQualityLoopReopened(folder, job, diagnostics, actorEmail);
@@ -193,7 +195,9 @@ public sealed class CompletedLaneAuditService
 
                 if (verdict == AuditVerdicts.NotReallyDone)
                 {
-                    var outcome = _states.MoveJob(jobId, TaskStates.NeedsHumanReview, watchPath);
+                    // Reopen for another pass at 2-ready (the retired
+                    // 1b-needs-human-review lane is gone).
+                    var outcome = _states.MoveJob(jobId, TaskStates.Ready, watchPath);
                     if (outcome.Status == MoveJobStatus.Success)
                     {
                         var refreshed = _scanner.FindJob(jobId, watchPath);
@@ -312,7 +316,7 @@ public sealed class CompletedLaneAuditService
         var details = new Dictionary<string, string>
         {
             ["fromState"] = job.State,
-            ["toState"] = TaskStates.NeedsHumanReview,
+            ["toState"] = TaskStates.Ready,
             ["diagnosticCount"] = diagnostics.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
         var hardFails = diagnostics.Where(d => d.Level == AuditSignalLevels.Fail).ToList();

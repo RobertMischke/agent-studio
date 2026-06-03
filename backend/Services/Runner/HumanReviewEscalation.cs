@@ -18,6 +18,11 @@ public static class HumanReviewEscalationCategories
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
 
+    /// <summary>A card carrying the human-decision-needed marker: it exists for
+    /// a person to decide, never for an agent to run. Routed to 5-human-review
+    /// after the retired 1b-needs-human-review lane was removed.</summary>
+    public const string HumanDecisionNeeded = "human-decision-needed";
+
     /// <summary>Retroactive category for cards parked in 5-human-review before
     /// the escalation funnel existed (boot-time backfill).</summary>
     public const string UnknownLegacy = "unknown-legacy";

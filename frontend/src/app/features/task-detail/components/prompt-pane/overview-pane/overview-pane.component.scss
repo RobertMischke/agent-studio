@@ -499,6 +499,33 @@
     animation: ov-pulse 1.3s ease-in-out infinite;
   }
 
+  // Run-count badge on the core Agent-execution row. Carries the run count
+  // (same source as the Overview "Runs" value) and a details popover on
+  // hover/focus. A real <button> so it is keyboard-reachable — the popover
+  // must not be mouse-only.
+  &__runs {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 999px;
+    cursor: help;
+    font-family: inherit;
+    color: var(--studio-fg-strong);
+    background: color-mix(in srgb, var(--studio-accent-4) 18%, var(--studio-bg-elevated));
+    border: 1px solid color-mix(in srgb, var(--studio-accent-4) 40%, transparent);
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent-4);
+      outline-offset: 1px;
+    }
+  }
+
   &__status {
     flex: 0 0 auto;
     font-size: 12px;

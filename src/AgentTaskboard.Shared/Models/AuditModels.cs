@@ -7,8 +7,9 @@ namespace OrchestratorApi.Models;
 /// + <see cref="OrchestratorApi.Models.TaskStates.Archive"/>, runs cheap
 /// heuristics against the prompt/status/commits, and flips
 /// <see cref="NotReallyDone"/> verdicts back into
-/// <see cref="OrchestratorApi.Models.TaskStates.NeedsHumanReview"/> with a
-/// <c>quality_loop_reopened</c> timeline event.
+/// <see cref="OrchestratorApi.Models.TaskStates.Ready"/> with a
+/// <c>quality_loop_reopened</c> timeline event (the retired
+/// 1b-needs-human-review lane previously held these reopened cards).
 /// </summary>
 public static class AuditVerdicts
 {

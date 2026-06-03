@@ -100,7 +100,6 @@ export interface SortableLaneMeta {
 export const SORTABLE_LANES: readonly SortableLaneMeta[] = [
   { state: '0-backlog', label: 'Backlog', icon: '🗒️' },
   { state: '1-preparation', label: 'In Preparation', icon: '📋' },
-  { state: '1b-needs-human-review', label: 'Needs Clarification', icon: '🚩' },
   { state: '2-ready', label: 'Ready', icon: '📦' },
   { state: '3-progress', label: 'In Progress', icon: '🔵' },
   { state: '4-auto-review', label: 'Auto Review', icon: '🤖' },

@@ -35,7 +35,6 @@ export const LANE_LABELS: Record<string, string> = {
   '0-backlog':              'Backlog',
   '1-preparation':          'Preparation',
   '1a-orchestrator-prep':   'Orchestrator Prep',
-  '1b-needs-human-review':  'Needs Clarification',
   '2-ready':                'Ready',
   '3-progress':             'In Progress',
   '3b-code-not-complete':   'Code not complete',
