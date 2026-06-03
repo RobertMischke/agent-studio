@@ -104,6 +104,53 @@
     &--drift    { background: var(--severity-high); }
   }
 
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    font-size: 0.72rem;
+    color: var(--studio-fg-muted, rgba(255, 255, 255, 0.4));
+  }
+
+  &__meta-item {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &__meta-sha {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--studio-bg-hover, rgba(255, 255, 255, 0.05));
+    color: var(--studio-fg-dim, rgba(255, 255, 255, 0.55));
+    cursor: default;
+  }
+
+  &__details-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    margin-bottom: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--studio-fg-dim, rgba(255, 255, 255, 0.6));
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 500;
+    text-align: left;
+
+    &:hover {
+      background: var(--studio-bg-hover, rgba(255, 255, 255, 0.04));
+      color: var(--studio-fg-strong, rgba(255, 255, 255, 0.87));
+    }
+  }
+
   &__entries {
     display: flex;
     flex-direction: column;

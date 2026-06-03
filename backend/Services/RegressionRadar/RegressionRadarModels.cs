@@ -53,4 +53,8 @@ public sealed record RegressionRadarResult
     public List<SpecChangeEntry> Entries { get; init; } = [];
     /// <summary>Non-null when the analysis could not run (no repo, no commits, etc.).</summary>
     public string? Error { get; init; }
+    /// <summary>UTC timestamp when this analysis was generated.</summary>
+    public DateTime GeneratedAt { get; init; }
+    /// <summary>Wall-clock time the analysis took to produce, in milliseconds.</summary>
+    public long DurationMs { get; init; }
 }

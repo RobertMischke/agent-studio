@@ -1,6 +1,9 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.RegressionRadar;
+using OrchestratorApi.Services.Tasks;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -183,5 +186,43 @@ public sealed class RegressionRadarServiceTests
 
         Assert.Equal(0, result.TotalSpecChanges);
         Assert.Equal(SpecChangeCategory.Intended, result.OverallStatus);
+    }
+
+    // --- Analyze: metadata stamping ---
+
+    [Fact]
+    public void Analyze_StampsGeneratedAtAndDurationMs()
+    {
+        // Even on the error path (job not found) the analysis is timestamped and
+        // timed so the UI can show "generated in N ms · when".
+        var workspace = Path.Combine(Path.GetTempPath(), "regression-radar-meta-" + Guid.NewGuid().ToString("N"));
+        var watchPath = Path.Combine(workspace, "projects", "demo");
+        foreach (var state in TaskStates.All)
+            Directory.CreateDirectory(Path.Combine(watchPath, state));
+        try
+        {
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = workspace,
+                ["WatchPaths:0:Name"] = "demo",
+                ["WatchPaths:0:Path"] = watchPath,
+                ["WatchPaths:0:RootPath"] = watchPath,
+                ["WatchPaths:0:RepositoryPath"] = watchPath,
+            }).Build();
+            var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+            var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+
+            var service = new RegressionRadarService(null!, null!, scanner, NullLogger<RegressionRadarService>.Instance);
+            var before = DateTime.UtcNow;
+            var result = service.Analyze("does-not-exist", watchPath);
+
+            Assert.Equal("Job not found", result.Error);
+            Assert.True(result.DurationMs >= 0);
+            Assert.InRange(result.GeneratedAt, before.AddSeconds(-2), DateTime.UtcNow.AddSeconds(2));
+        }
+        finally
+        {
+            try { Directory.Delete(workspace, recursive: true); } catch { /* best-effort */ }
+        }
     }
 }

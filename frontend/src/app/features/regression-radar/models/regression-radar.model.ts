@@ -24,4 +24,8 @@ export interface RegressionRadarResult {
   headSha: string | null;
   entries: SpecChangeEntry[];
   error: string | null;
+  /** UTC ISO timestamp of when the analysis was generated. */
+  generatedAt: string;
+  /** Wall-clock time the analysis took to produce, in milliseconds. */
+  durationMs: number;
 }

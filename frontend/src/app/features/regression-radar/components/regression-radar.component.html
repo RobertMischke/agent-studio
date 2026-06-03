@@ -55,8 +55,35 @@
       }
     </div>
 
-    <div class="radar__entries">
-      @for (entry of result()!.entries; track entry.path) {
+    <div class="radar__meta" data-testid="regression-radar-meta">
+      @if (shaRange(); as range) {
+        <span class="radar__meta-item radar__meta-sha"
+              [appTooltip]="fullShaRange()"
+              data-testid="regression-radar-sha-range">{{ range }}</span>
+      }
+      @if (durationLabel(); as dur) {
+        <span class="radar__meta-item"
+              [appTooltip]="generatedAtTooltip()"
+              data-testid="regression-radar-duration">
+          generated in {{ dur }}@if (generatedAtLabel(); as ago) { · {{ ago }} }
+        </span>
+      }
+    </div>
+
+    <button type="button"
+            class="radar__details-toggle"
+            (click)="toggleDetails()"
+            [attr.aria-expanded]="detailsOpen()"
+            data-testid="regression-radar-details-toggle">
+      <span class="radar__entry-chevron"
+            [class.radar__entry-chevron--open]="detailsOpen()"></span>
+      {{ detailsOpen() ? 'Hide' : 'Show' }}
+      {{ result()!.totalSpecChanges }} spec change{{ result()!.totalSpecChanges === 1 ? '' : 's' }}
+    </button>
+
+    @if (detailsOpen()) {
+    <div class="radar__entries" data-testid="regression-radar-entries">
+      @for (entry of sortedEntries(); track entry.path) {
         <div class="radar__entry"
              [class]="'radar__entry--' + categoryIcon(entry)"
              data-testid="radar-entry">
@@ -112,5 +139,6 @@
         </div>
       }
     </div>
+    }
   </div>
 }

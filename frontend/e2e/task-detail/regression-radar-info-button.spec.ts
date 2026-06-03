@@ -36,6 +36,8 @@ function makeRadarResult() {
     baselineSha: 'aaaa111',
     headSha: 'bbbb222',
     error: null,
+    generatedAt: '2026-06-03T09:00:00Z',
+    durationMs: 420,
     entries: [
       {
         path: 'frontend/src/app/services/task.service.spec.ts',
@@ -280,6 +282,46 @@ test.describe('Regression radar info-button', () => {
 
     if (RESULTS_DIR) {
       await page.screenshot({ path: path.join(RESULTS_DIR, 'radar-info-modal.png'), fullPage: true });
+    }
+  });
+
+  test('is compact by default: metadata shown, entries hidden until expanded', async ({ page }) => {
+    await installRoutes(page, '5-human-review');
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+
+    await dismissErrorDialog(page);
+
+    const radar = page.getByTestId('regression-radar');
+    await expect(radar).toBeVisible({ timeout: 10_000 });
+
+    // Metadata row: SHA range + generation duration are visible in the compact view.
+    await expect(radar.getByTestId('regression-radar-sha-range')).toHaveText('aaaa111..bbbb222');
+    await expect(radar.getByTestId('regression-radar-duration')).toContainText('generated in 420 ms');
+
+    // Compact default: the per-file entry list is collapsed (not rendered).
+    await expect(radar.getByTestId('regression-radar-entries')).toHaveCount(0);
+
+    const toggle = radar.getByTestId('regression-radar-details-toggle');
+    await expect(toggle).toContainText('Show 2 spec changes');
+
+    if (RESULTS_DIR) {
+      await radar.scrollIntoViewIfNeeded();
+      await radar.screenshot({ path: path.join(RESULTS_DIR, 'radar-compact-default.png') });
+    }
+
+    // Expand: entries appear, most-severe first (Drift before Intended).
+    await toggle.click();
+    await expect(toggle).toContainText('Hide 2 spec changes');
+
+    const entries = radar.getByTestId('regression-radar-entries');
+    await expect(entries).toBeVisible();
+    const rows = radar.getByTestId('radar-entry');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('LegacyFlowTests.cs');
+
+    if (RESULTS_DIR) {
+      await radar.scrollIntoViewIfNeeded();
+      await radar.screenshot({ path: path.join(RESULTS_DIR, 'radar-expanded.png') });
     }
   });
 });

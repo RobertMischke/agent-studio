@@ -41,6 +41,20 @@ public sealed class RegressionRadarService
 
     public RegressionRadarResult Analyze(string jobId, string? watchPath)
     {
+        var generatedAt = DateTime.UtcNow;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = AnalyzeCore(jobId, watchPath);
+        sw.Stop();
+
+        _logger.LogDebug(
+            "Regression radar for {JobId} generated in {DurationMs} ms ({Total} spec changes, error={Error})",
+            jobId, sw.ElapsedMilliseconds, result.TotalSpecChanges, result.Error ?? "none");
+
+        return result with { GeneratedAt = generatedAt, DurationMs = sw.ElapsedMilliseconds };
+    }
+
+    private RegressionRadarResult AnalyzeCore(string jobId, string? watchPath)
+    {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null)
             return new RegressionRadarResult { Error = "Job not found" };
