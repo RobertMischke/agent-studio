@@ -108,6 +108,13 @@ export interface TaskInfo {
    * or by an epic's decomposition run (way 3).
    */
   epicId?: string | null;
+  /**
+   * Execution mode. Mirrors backend `TaskInfo.Mode` (default `coding`).
+   * Older payloads may omit it, so callers treat absent as `coding`.
+   */
+  mode?: TaskMode;
+  /** Whether the agent may use the web during this task. Mirrors backend `AllowWebAccess`. */
+  allowWebAccess?: boolean;
   useOwnSession: boolean | null;
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;

@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskCardComponent } from './task-card.component';
 import type { TaskInfo, ClientSummary } from '../../../../models/task.model';
-import { buildEffectiveModelChip } from './task-card-view-model';
+import { buildEffectiveModelChip, buildModeBadge } from './task-card-view-model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -389,6 +389,76 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__issue-pill--high');
   });
 
+  // ── Mode badge (planning / research recognizable at a glance) ──────────
+
+  it('renders a mode pill naming the mode for a planning card', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({ state: '2-ready', mode: 'planning' }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.modeBadge()?.mode).toBe('planning');
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-mode"]') as HTMLElement | null;
+    expect(pill).not.toBeNull();
+    expect(pill?.getAttribute('data-mode')).toBe('planning');
+    expect(pill?.className).toContain('task-card__mode-pill--planning');
+    expect(pill?.textContent).toContain('Planning');
+  });
+
+  it('renders a research mode pill', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({ state: '2-ready', mode: 'research' }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="task-card-mode"]') as HTMLElement | null;
+    expect(pill?.getAttribute('data-mode')).toBe('research');
+    expect(pill?.textContent).toContain('Research');
+  });
+
+  it('stays quiet for coding cards and cards with no mode set', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+
+    fixture.componentRef.setInput('job', makeJob({ state: '2-ready', mode: 'coding' }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.modeBadge()).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-mode"]')).toBeNull();
+
+    // Older payload with no mode field at all → still quiet.
+    fixture.componentRef.setInput('job', makeJob({ state: '2-ready', mode: undefined }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.modeBadge()).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-mode"]')).toBeNull();
+  });
+
   // ── Commit-attribution surface (AC#3, AC#4, AC#6) ──────────────────────
 
   async function renderCard(job: TaskInfo) {
@@ -666,6 +736,31 @@ describe('buildEffectiveModelChip', () => {
     expect(chip.source).toBe('default');
     expect(chip.cliLabel).toBe('Claude Code');
     expect(chip.tooltip.body).toContain('Claude Code');
+  });
+});
+
+describe('buildModeBadge', () => {
+  it('returns a planning badge with the picker glyph and a mode-naming tooltip', () => {
+    const badge = buildModeBadge('planning');
+    expect(badge?.mode).toBe('planning');
+    expect(badge?.label).toBe('Planning');
+    expect(badge?.icon).toBe('🗺️');
+    expect(badge?.tooltip).toContain('Planning mode');
+    expect(badge?.tooltip).toContain('read-only');
+  });
+
+  it('returns a research badge', () => {
+    const badge = buildModeBadge('research');
+    expect(badge?.mode).toBe('research');
+    expect(badge?.label).toBe('Research');
+    expect(badge?.icon).toBe('🔍');
+    expect(badge?.tooltip).toContain('Research mode');
+    expect(badge?.tooltip).toContain('web access');
+  });
+
+  it('returns null for coding and for an absent mode (older payloads)', () => {
+    expect(buildModeBadge('coding')).toBeNull();
+    expect(buildModeBadge(undefined)).toBeNull();
   });
 });
 

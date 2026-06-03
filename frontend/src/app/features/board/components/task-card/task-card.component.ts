@@ -18,6 +18,7 @@ import {
   buildExecutionBadge,
   buildHumanReviewBadge,
   buildLoopTooltip,
+  buildModeBadge,
   buildOutcomeIssueBadge,
   buildOwnerChip,
   buildPendingTooltip,
@@ -107,6 +108,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private stopPolling: (() => void) | null = null;
 
   readonly taskTypeChip = computed(() => buildTaskTypeChip(this.job().taskType));
+
+  /**
+   * Mode badge (planning / research). Null for coding so the board stays quiet
+   * for the default mode; planning and research cards become recognizable at a
+   * glance. See {@link buildModeBadge}.
+   */
+  readonly modeBadge = computed(() => buildModeBadge(this.job().mode));
 
   readonly tagChips = computed(() => buildTagChips(this.job().tags, this.tagRegistry.byId()));
 

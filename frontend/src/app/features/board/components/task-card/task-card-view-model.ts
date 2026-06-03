@@ -1,9 +1,9 @@
-import type { TaskInfo, ClientSummary, CliType, TagRegistryEntry, EpicRollup, AutoLoopSnapshot, PendingIntent } from '../../../../models/task.model';
+import type { TaskInfo, ClientSummary, CliType, TagRegistryEntry, EpicRollup, AutoLoopSnapshot, PendingIntent, TaskMode } from '../../../../models/task.model';
 import type { TaskCommitInfo } from '../../../../features/git';
 import type { StructuredTooltip } from '../../../../components/tooltip';
 import type { MenuItem } from '../../../../components/menu';
 import type { AutoReviewStatusView } from '../../../../services/auto-review-status.store';
-import { cliTypeIcon, cliTypeLabel, shortModelName } from '../../../../services/format.util';
+import { cliTypeIcon, cliTypeLabel, shortModelName, taskModeIcon, taskModeLabel } from '../../../../services/format.util';
 import { shouldShowFailureToast } from '../../../task-detail/services/run-outcome.util';
 
 export interface TaskTypeChip {
@@ -35,6 +35,35 @@ export function buildTaskTypeChip(taskType: TaskInfo['taskType']): TaskTypeChip 
     return { kind: 'feature', label: 'Feature', icon: '✨', tooltip: 'Task type: Feature' };
   }
   return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
+}
+
+export interface ModeBadge {
+  mode: TaskMode;
+  label: string;
+  icon: string;
+  tooltip: string;
+}
+
+const MODE_TOOLTIP: Record<Exclude<TaskMode, 'coding'>, string> = {
+  planning: 'Planning mode: read-only. The agent investigates and produces a plan without writing source.',
+  research: 'Research mode: read-only with web access. The agent gathers information and reports findings.',
+};
+
+/**
+ * Mode badge for the card. Only non-coding modes get a badge so that the board
+ * stays quiet for the common case (coding is the default) while planning and
+ * research cards are immediately recognizable. Glyphs come from `format.util`
+ * so they match the create-dialog mode picker. Returns null for coding or when
+ * the field is absent (older payloads).
+ */
+export function buildModeBadge(mode: TaskInfo['mode']): ModeBadge | null {
+  if (mode !== 'planning' && mode !== 'research') return null;
+  return {
+    mode,
+    label: taskModeLabel(mode),
+    icon: taskModeIcon(mode),
+    tooltip: MODE_TOOLTIP[mode],
+  };
 }
 
 export function buildCommitTooltip(commit: TaskInfo['commit']): StructuredTooltip | string {

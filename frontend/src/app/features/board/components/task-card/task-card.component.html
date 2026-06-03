@@ -80,6 +80,15 @@
     }
   </h3>
   <div class="task-card__badges">
+    @if (modeBadge(); as mb) {
+      <span class="task-card__mode-pill"
+            [class]="'task-card__mode-pill--' + mb.mode"
+            data-testid="task-card-mode"
+            [attr.data-mode]="mb.mode"
+            [appTooltip]="mb.tooltip">
+        <span class="task-card__mode-glyph" aria-hidden="true">{{ mb.icon }}</span> {{ mb.label }}
+      </span>
+    }
     @if (taskTypeChip(); as tt) {
       <span class="task-card__type-pill"
             [class]="'task-card__type-pill--' + tt.kind"

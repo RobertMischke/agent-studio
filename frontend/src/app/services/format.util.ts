@@ -1,4 +1,4 @@
-import { CliType } from '../models/task.model';
+import { CliType, TaskMode } from '../models/task.model';
 
 /**
  * Pure formatting helpers used by both the board and detail views.
@@ -105,6 +105,25 @@ export function cliTypeIcon(t: CliType): string {
     case 'claude':  return '✴️';
     case 'codex':   return '🌀';
     case 'gemini':  return '♊';
+  }
+}
+
+// Single source of truth for the per-mode glyphs shown on kanban cards.
+// Kept in sync with the create-dialog mode picker so a card's badge matches
+// the icon the user chose at create time (💻 coding / 🗺️ planning / 🔍 research).
+export function taskModeIcon(mode: TaskMode): string {
+  switch (mode) {
+    case 'planning': return '🗺️';
+    case 'research': return '🔍';
+    case 'coding':   return '💻';
+  }
+}
+
+export function taskModeLabel(mode: TaskMode): string {
+  switch (mode) {
+    case 'planning': return 'Planning';
+    case 'research': return 'Research';
+    case 'coding':   return 'Coding';
   }
 }
 
