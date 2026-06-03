@@ -2316,6 +2316,20 @@ public class ProjectRunner
             // cannot re-introduce an exit-code gate unguarded.
             var (coreStatus, reason, verdict) = CoreRunStepStatusMapper.Resolve(execution);
 
+            // Observability for bug ASS-2: surface the exact moment a
+            // contradictory success-class verdict is dropped because the
+            // deterministic status was not Passed. The run self-reported
+            // success/noop but the classifier did not call it "completed"
+            // (a watchdog/kill or crash) - the corrupt/legacy-record signal
+            // that used to render as a red Failed icon next to a green SUCCESS
+            // badge. Logged at Warning because the divergence is worth a look.
+            if (verdict == null && execution.RunOutcome != null)
+            {
+                _logger.LogWarning(
+                    "CORE step verdict reconciled away for {JobId}: status={CoreStatus} dropped contradictory run outcome {RunOutcome} (exit {ExitCode})",
+                    jobId, coreStatus, execution.RunOutcome, execution.ExitCode);
+            }
+
             _pipelineLog.RecordStep(folder, new PipelineStepExecution
             {
                 StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
