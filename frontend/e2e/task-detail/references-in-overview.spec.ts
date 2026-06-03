@@ -68,7 +68,7 @@ async function openOverview(page: Page, id: string, watchPath: string): Promise<
   });
 }
 
-test.describe('Cross-references — compact inside Overview', () => {
+test.describe('Cross-references - compact inside Overview', () => {
   let watchPath: string;
   let subjectId: string;
   const targetIds: string[] = [];
