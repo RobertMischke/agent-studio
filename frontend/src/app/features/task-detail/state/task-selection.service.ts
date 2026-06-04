@@ -331,6 +331,61 @@ export class TaskSelectionService {
   }
 
   /**
+   * Studio-shell reload survival: hydrate `selected` from a persisted
+   * task tab's `taskKey` (`<watchPath>::<id>`) without needing the board
+   * to have loaded `jobs()` first. Used by the shell's active-tab→selection
+   * sync effect so that on a cold reload the restored active task tab
+   * paints its detail instead of the "No task selected" placeholder.
+   *
+   * Mirrors `openDetail`'s URL contract (`?job=&watchPath=`) so a reload
+   * landing on a task tab keeps the deep-link honest; on fetch failure it
+   * strips those params (preserving any hash overlay).
+   */
+  openDetailByTaskKey(taskKey: string): void {
+    const sep = taskKey.lastIndexOf('::');
+    if (sep < 0) return;
+    const watchPath = taskKey.slice(0, sep);
+    const jobId = taskKey.slice(sep + 2);
+    if (!jobId || !watchPath) return;
+    history.replaceState(null, '', `?job=${encodeURIComponent(jobId)}&watchPath=${encodeURIComponent(watchPath)}`);
+    const token = ++this.openDetailToken;
+    this.jobService.getDetail(jobId, watchPath).subscribe({
+      next: (detail) => {
+        if (token !== this.openDetailToken) return;
+        this.selected.set(detail);
+        this.triageLaneState = detail.info.state;
+      },
+      error: () => {
+        if (token !== this.openDetailToken) return;
+        this.clearJobParamsFromUrl();
+      },
+    });
+  }
+
+  /**
+   * Studio-shell tab switch away from a task (board / project / hub / diff
+   * / activity tab becomes active): drop the selection and strip the stale
+   * `?job=` param so a subsequent F5 restores the *current* view rather than
+   * re-opening the last task detail. Unlike `closeDetail`, this preserves
+   * any hash-based overlay route in the URL.
+   */
+  clearSelectionForTabSwitch(): void {
+    this.openDetailToken++;
+    this.selected.set(null);
+    this.triageLaneState = null;
+    this.pager.clear();
+    this.clearJobParamsFromUrl();
+  }
+
+  /** Strip only `job`/`watchPath` query params, preserving path + hash. */
+  private clearJobParamsFromUrl(): void {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('job');
+    url.searchParams.delete('watchPath');
+    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  /**
    * Reload-survival: hydrate `selected` from `?job=<id>&watchPath=<wp>`
    * on app boot. If the detail fetch fails (job was deleted while the
    * tab was closed), strip the query so the URL stops referencing a

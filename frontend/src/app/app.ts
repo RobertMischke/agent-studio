@@ -221,6 +221,16 @@ export class App implements OnInit, OnDestroy {
    *  an auto-advance and toast accordingly. */
   private triageLaneState: string | null = null;
   /**
+   * Whether the studio active tab the active-tab→selection effect last saw
+   * was a task. Lets that effect distinguish "user navigated away FROM a task
+   * tab" (strip the stale `?job=`, even if the detail fetch is still in flight)
+   * from "cold boot landed on a non-task tab that carries a `?job=` deep link"
+   * (leave it for `restoreFromUrl`). Without it, a fast task→board switch made
+   * before the detail resolved would keep the stale param and let the late
+   * fetch yank the user back onto the task — the very F5 symptom, mid-session.
+   */
+  private studioActiveTabWasTask = false;
+  /**
    * Read-only "Verbose Debug" overlay state opened from the orchestrator
    * side sheet's bug button. The protocol pane has its own copy that lives
    * inside the task chat workbench and reuses the live polling services;
@@ -913,6 +923,49 @@ export class App implements OnInit, OnDestroy {
           this.studioTabState.open({ kind: 'task', taskKey: selected.info.taskKey });
         } else {
           this.studioTabState.select(key);
+        }
+      });
+    });
+
+    // Studio-shell active-tab → selection sync (F5/reload fix). Makes the
+    // active studio tab the single source of truth for `selectedJob()` and
+    // the `?job=` URL param, so a reload restores the *current* view:
+    //
+    //   - Active tab is a task  → ensure `selectedJob` holds that task
+    //     (re-hydrating from the persisted tab on a cold reload, so the
+    //     task case paints its detail instead of "No task selected"; and
+    //     covering in-session selectTab() which only flips the active key).
+    //   - Active tab is NOT a task (board / project / hub / diff / activity)
+    //     → drop any lingering selection and strip the stale `?job=` param.
+    //     Without this, switching task→board leaves `?job=` in the URL and
+    //     the next F5 re-opens the task detail instead of the board.
+    //
+    // Only `activeTab()` is tracked; `selectedJob()` is read untracked so
+    // the effect reacts to tab changes (not to the selection updates it and
+    // the mirror effect above make), avoiding a feedback loop.
+    //
+    // The non-task branch strips `?job=` when we either still hold a selection
+    // OR just came from a task tab (`studioActiveTabWasTask`). The latter
+    // catches a task→board switch made before the detail fetch resolved:
+    // without it the stale param would survive and the in-flight fetch would
+    // re-select the task (mid-session replay of the F5 bug). A cold boot that
+    // lands on a non-task tab carrying a `?job=` deep link is *not* "coming
+    // from a task", so the param is preserved for `restoreFromUrl`.
+    effect(() => {
+      if (!this.featureFlags.vsCodeLayout()) return;
+      const tab = this.studioTabState.activeTab();
+      untracked(() => {
+        const selected = this.selectedJob();
+        if (tab?.kind === 'task') {
+          this.studioActiveTabWasTask = true;
+          if (selected?.info.taskKey === tab.taskKey) return;
+          this.jobSelection.openDetailByTaskKey(tab.taskKey);
+        } else {
+          const cameFromTask = this.studioActiveTabWasTask;
+          this.studioActiveTabWasTask = false;
+          if (selected || cameFromTask) {
+            this.jobSelection.clearSelectionForTabSwitch();
+          }
         }
       });
     });
