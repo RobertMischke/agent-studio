@@ -458,6 +458,25 @@
       width: min(1080px, 96vw);
     }
     /*
+     * Orchestrator feed: a content-heavy three-column overlay (global
+     * scope banner + per-project filters / stream / detail). It wants
+     * real estate so the three columns don't crush together, and a fixed
+     * height so each column scrolls internally instead of the whole panel
+     * growing past the viewport. Padding gives the feed breathing room
+     * inside the panel; the child feed stretches to fill the panel height.
+     */
+    .overlay__panel--orch-feed {
+      width: min(1180px, 96vw);
+      height: min(880px, 90vh);
+      padding: var(--studio-spacing-5);
+      display: flex;
+      flex-direction: column;
+    }
+    .overlay__panel--orch-feed > app-orchestrator-feed {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    /*
      * The project-page shell renders full-bleed instead of as a centred
      * dialog. It owns the whole viewport so the left rail can reach the
      * edges and the content area gets real estate to grow into. The

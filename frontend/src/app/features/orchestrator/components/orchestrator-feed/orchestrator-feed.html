@@ -1,20 +1,34 @@
 <section class="orch-feed" data-testid="orchestrator-feed">
   <header class="orch-feed__head">
     <div class="orch-feed__title-block">
-      <h2 class="orch-feed__title">Orchestrator feed</h2>
+      <div class="orch-feed__title-row">
+        <h2 class="orch-feed__title">Orchestrator feed</h2>
+        <span class="orch-feed__scope orch-feed__scope--project" data-testid="orchestrator-feed-scope">
+          Project scope
+        </span>
+      </div>
       <p class="orch-feed__sub">{{ projectName() }} · {{ entries().length }} {{ entries().length === 1 ? 'entry' : 'entries' }}</p>
     </div>
-    <button class="orch-feed__refresh" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh">
+    <button type="button" class="orch-feed__refresh" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh">
       {{ loading() ? '...' : 'Refresh' }}
     </button>
   </header>
   @if (error()) {
-    <div class="orch-feed__error">{{ error() }}</div>
+    <div class="orch-feed__error" role="alert">{{ error() }}</div>
   }
+
+  <!--
+    Global scope. The orchestrator "brain" is a singleton that spans every
+    watched project; it is rendered here as a clearly-labelled banner so it
+    reads as a separate scope from the per-project feed below, not as a row
+    of the project's own filters. (Scope-separation requirement, ASS-693.)
+  -->
+  <section class="orch-feed__global" aria-label="Global orchestrator scope">
+    <app-global-orchestrator-card />
+  </section>
 
   <div class="orch-feed__grid">
     <aside class="orch-feed__filters" aria-label="Feed filters">
-      <app-global-orchestrator-card />
       <app-token-summary-block [projectName]="projectName()" />
 
       <div class="orch-feed__filter-group">
@@ -46,10 +60,12 @@
                     [class.orch-feed__entry--observation]="entry.kind === 'observation'"
                     [class.orch-feed__entry--intervention]="entry.kind === 'intervention'"
                     (click)="selectEntry(entry)">
-              <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
-              <span class="orch-feed__topic">{{ entry.topic }}</span>
+              <div class="orch-feed__entry-top">
+                <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
+                <span class="orch-feed__topic">{{ entry.topic }}</span>
+                <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
+              </div>
               <span class="orch-feed__summary">{{ entry.summary }}</span>
-              <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
               @if (entry.tokenUsage; as tu) {
                 <span class="orch-feed__tokens" [appTooltip]="tokenTooltip(tu)">
                   {{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}

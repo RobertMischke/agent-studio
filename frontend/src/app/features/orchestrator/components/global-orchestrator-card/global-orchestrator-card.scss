@@ -1,35 +1,54 @@
-:host { display: block; margin: 0 0 24px; }
+// Colours read from the Tier-2 semantic theme tokens so the card is legible
+// on both the dark (Mocha) and light shells. The card formerly hardcoded
+// purple/slate hex + white-alpha text that washed out to near-invisible on
+// the light theme. The violet accent (the orchestrator's identity colour)
+// is kept but expressed through the accent-4 token + color-mix tints so the
+// tint flips with the theme instead of staying a fixed dark wash.
+:host { display: block; margin: 0 0 var(--studio-spacing-5); }
 
 .global-orch {
-  padding: 18px 22px;
-  border: 1px solid rgba(196, 181, 253, 0.22);
+  padding: var(--studio-spacing-4) var(--studio-spacing-5);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-4) 32%, var(--studio-border));
   border-radius: 12px;
   background:
-    radial-gradient(circle at top left, rgba(139, 92, 246, 0.12), transparent 60%),
-    rgba(15, 23, 42, 0.45);
+    radial-gradient(circle at top left,
+      color-mix(in srgb, var(--studio-accent-4) 14%, transparent), transparent 60%),
+    var(--studio-bg-elevated);
 }
 .global-orch__head {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--studio-spacing-3);
+  margin-bottom: var(--studio-spacing-3);
+  flex-wrap: wrap;
+}
+.global-orch__badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--studio-accent-4-strong);
+  background: color-mix(in srgb, var(--studio-accent-4) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-4) 40%, transparent);
 }
 .global-orch__role {
   font-size: 1.0rem;
   font-weight: 700;
-  color: #e9d5ff;
+  color: var(--studio-fg-strong);
   letter-spacing: 0.01em;
 }
 .global-orch__scope {
   font-size: 0.82rem;
-  color: rgba(255,255,255,0.55);
+  color: var(--studio-fg-dim);
 }
 
 .global-orch__voice {
-  margin: 0 0 16px;
+  margin: 0 0 var(--studio-spacing-4);
   font-size: 1.0rem;
   line-height: 1.55;
-  color: #f1f5f9;
+  color: var(--studio-fg);
   font-style: italic;
   cursor: help;
 }
@@ -37,27 +56,26 @@
 .global-orch__meta {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 6px 16px;
+  gap: 6px var(--studio-spacing-4);
   margin: 0;
   font-size: 0.86rem;
 }
 .global-orch__meta > div { display: contents; }
 .global-orch__meta dt {
-  color: rgba(255,255,255,0.50);
+  color: var(--studio-fg-muted);
 }
 .global-orch__meta dd {
   margin: 0;
-  color: #e2e8f0;
+  color: var(--studio-fg);
   font-family: var(--font-mono, monospace);
   word-break: break-all;
 }
-.global-orch__error { color: #fda4af; }
+.global-orch__error { color: var(--notify-error-icon-fg); }
 
 .global-orch__loading,
 .global-orch__empty {
   margin: 0;
-  color: rgba(255,255,255,0.55);
+  color: var(--studio-fg-dim);
   font-size: 0.88rem;
   line-height: 1.5;
 }
-  

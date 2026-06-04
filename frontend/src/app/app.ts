@@ -1593,6 +1593,7 @@ export class App implements OnInit, OnDestroy {
   }
   private applyProjectShellHash(): void {
     this.projectOverlays.syncShellFromHash(this.watchPaths());
+    this.projectOverlays.syncFeedFromHash(this.watchPaths());
   }
 
   // Cycle 9g: workspace overlay open/close + URL-hash sync delegated to

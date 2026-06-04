@@ -11,7 +11,7 @@ import {
  * sync for the four per-project overlays that stack above the kanban
  * shell:
  *
- *   - orchestrator-feed (per-project log)          no hash
+ *   - orchestrator-feed (per-project log)          `#/project/<slug>/feed`
  *   - project-shell     (full project window)      `#/projects/<slug>[/<rail>]`
  *   - analysis-report   (drill-down on one report) no hash
  *
@@ -39,15 +39,89 @@ export class ProjectOverlaysService {
     || this.analysisReportFocus() !== null);
 
   private readonly shellHashPrefix = '#/projects/';
+  // Singular `#/project/` (no trailing `s`) so the feed anchor cannot be
+  // confused with the plural `#/projects/` project-shell prefix above.
+  private readonly feedHashPrefix = '#/project/';
+  private readonly feedHashSuffix = '/feed';
+  /**
+   * True when the visible feed was reached via a deep-link hash, so a
+   * back/forward navigation that drops the hash closes it. A feed opened
+   * by a button (toolbar / hub) or stacked over the project-shell
+   * (`openFeedFromShell`) survives unrelated hash churn — without this
+   * flag a shell-hash reconciliation would yank the stacked feed shut.
+   */
+  private openedFeedViaHash = false;
 
-  // ---------- orch-feed ----------
+  // ---------- orch-feed (URL-deep-linked) ----------
 
+  /**
+   * Open the per-project orchestrator feed and stamp a deep-link hash
+   * (`#/project/<slug>/feed`) so a bookmark or reload reproduces the
+   * open feed. Mirrors the project-shell anchor contract; pushState does
+   * not fire `hashchange`, so callers re-run `syncFeedFromHash` on the
+   * next watch-path resolution to keep the slug → name mapping honest.
+   */
   openOrchFeed(name: string): void {
     this.orchFeedProject.set(name);
+    this.openedFeedViaHash = false;
+    const slug = toProjectSlug(name);
+    if (!slug) return;
+    const target = `${this.feedHashPrefix}${slug}${this.feedHashSuffix}`;
+    if (window.location.hash !== target) {
+      try {
+        history.pushState(null, '', window.location.pathname + window.location.search + target);
+      } catch { /* ignore */ }
+    }
   }
 
   closeOrchFeed(): void {
     this.orchFeedProject.set(null);
+    this.openedFeedViaHash = false;
+    if (this.isFeedHash(window.location.hash)) {
+      try {
+        history.pushState(null, '', window.location.pathname + window.location.search);
+      } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Reconcile the orch-feed signal with the URL hash. Accepts
+   * `#/project/<slug>/feed`. Slug → name resolution requires the
+   * workspace watch-paths; if they have not loaded yet we leave the
+   * signal alone — call again when they do (the shell re-runs this on
+   * `/api/watch-paths` success, same as the project-shell sync).
+   */
+  syncFeedFromHash(watchPaths: readonly { name: string }[]): void {
+    const hash = window.location.hash;
+    if (!this.isFeedHash(hash)) {
+      // Only a hash-opened feed closes when its hash is dropped; a
+      // button-opened or shell-stacked feed survives unrelated churn.
+      if (this.openedFeedViaHash && this.orchFeedProject() !== null) {
+        this.orchFeedProject.set(null);
+        this.openedFeedViaHash = false;
+      }
+      return;
+    }
+    const slug = decodeURIComponent(
+      hash.slice(this.feedHashPrefix.length, hash.length - this.feedHashSuffix.length)
+    ).toLowerCase();
+    if (!slug) return;
+    if (watchPaths.length === 0) return;
+    const match = watchPaths.find(wp => toProjectSlug(wp.name) === slug);
+    if (!match) {
+      if (this.openedFeedViaHash && this.orchFeedProject() !== null) {
+        this.orchFeedProject.set(null);
+        this.openedFeedViaHash = false;
+      }
+      return;
+    }
+    if (this.orchFeedProject() !== match.name) this.orchFeedProject.set(match.name);
+    this.openedFeedViaHash = true;
+  }
+
+  private isFeedHash(hash: string): boolean {
+    return hash.startsWith(this.feedHashPrefix) && hash.endsWith(this.feedHashSuffix)
+      && hash.length > this.feedHashPrefix.length + this.feedHashSuffix.length;
   }
 
   // ---------- project-shell (URL-deep-linked) ----------

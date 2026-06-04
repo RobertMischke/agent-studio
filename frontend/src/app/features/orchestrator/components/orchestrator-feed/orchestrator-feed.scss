@@ -1,45 +1,84 @@
+// All colours read from the Tier-2 semantic theme tokens so the feed stays
+// WCAG-AA legible on both the dark (Mocha) and light shells. The component
+// previously hardcoded slate/zinc hex values that only read on dark; on the
+// light theme they collapsed into low-contrast grey-on-grey.
 :host { display: block; min-height: 0; height: 100%; }
+
 .orch-feed {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--studio-spacing-3);
   min-height: 0;
   height: 100%;
-  color: #e2e8f0;
+  color: var(--studio-fg);
 }
+
 .orch-feed__head {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(148,163,184,.18);
+  gap: var(--studio-spacing-4);
+  // Right inset clears the overlay's absolutely-positioned close button
+  // so the Refresh action never sits under the ×.
+  padding-right: var(--studio-spacing-6);
+  padding-bottom: var(--studio-spacing-3);
+  border-bottom: 1px solid var(--studio-border);
 }
 .orch-feed__title-block { flex: 1; min-width: 0; }
-.orch-feed__title { margin: 0; color: #f8fafc; font-size: 18px; font-weight: 650; }
-.orch-feed__sub { margin: 3px 0 0; color: #94a3b8; font-size: 13px; }
+.orch-feed__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  flex-wrap: wrap;
+}
+.orch-feed__title { margin: 0; color: var(--studio-fg-strong); font-size: 18px; font-weight: 650; }
+.orch-feed__sub { margin: 3px 0 0; color: var(--studio-fg-dim); font-size: 13px; }
+
+// Scope chips make the two scopes on this surface explicit: the feed below
+// is project-scoped, the global card above spans every watched project.
+.orch-feed__scope {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.orch-feed__scope--project {
+  color: var(--studio-accent-3-strong);
+  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
+  border-color: color-mix(in srgb, var(--studio-accent-3) 38%, transparent);
+}
+
 .orch-feed__refresh {
   margin-left: auto;
-  background: rgba(148,163,184,.10);
-  color: #cbd5e1;
-  border: 1px solid rgba(148,163,184,.22);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  border: 1px solid var(--studio-border-strong);
   border-radius: 6px;
   padding: 6px 11px;
   font-size: 12px;
   cursor: pointer;
 }
-.orch-feed__refresh:hover:not(:disabled) { background: rgba(148,163,184,.16); }
+.orch-feed__refresh:hover:not(:disabled) { background: var(--studio-bg-selected); }
 .orch-feed__refresh:disabled { opacity: .5; cursor: progress; }
+
 .orch-feed__error {
-  color: #fda4af;
-  background: rgba(244,63,94,.10);
-  border: 1px solid rgba(244,63,94,.25);
-  padding: 8px 10px;
+  color: var(--notify-error-icon-fg);
+  background: var(--notify-error-tint);
+  border: 1px solid var(--notify-error-border);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
   border-radius: 7px;
+  font-size: 13px;
 }
+
+.orch-feed__global { flex: 0 0 auto; }
+
 .orch-feed__grid {
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr) minmax(290px, 34%);
-  gap: 12px;
+  grid-template-columns: minmax(200px, 230px) minmax(0, 1fr) minmax(280px, 340px);
+  gap: var(--studio-spacing-3);
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -48,14 +87,19 @@
 .orch-feed__detail {
   min-height: 0;
   overflow: auto;
-  border: 1px solid rgba(148,163,184,.16);
+  border: 1px solid var(--studio-border);
   border-radius: 8px;
-  background: rgba(15,23,42,.36);
+  background: var(--studio-bg-editor);
 }
-.orch-feed__filters { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.orch-feed__filters {
+  padding: var(--studio-spacing-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-3);
+}
 .orch-feed__filter-group h3 {
-  margin: 10px 0 7px;
-  color: #94a3b8;
+  margin: var(--studio-spacing-2) 0 var(--studio-spacing-1);
+  color: var(--studio-fg-dim);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .06em;
@@ -64,22 +108,29 @@
   width: 100%;
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--studio-spacing-2);
   align-items: center;
+  min-height: var(--studio-row-min-h-interactive);
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #bac2de;
-  padding: 7px 8px;
+  color: var(--studio-fg-dim);
+  padding: 7px var(--studio-spacing-2);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
 }
-.orch-feed__filter:hover,
-.orch-feed__filter--active { background: rgba(125,211,252,.12); color: #f8fafc; }
+.orch-feed__filter:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+.orch-feed__filter--active {
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+  font-weight: 600;
+}
+.orch-feed__filter strong { color: var(--studio-fg); }
+
 .orch-feed__list {
   list-style: none;
-  padding: 8px;
+  padding: var(--studio-spacing-2);
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -87,117 +138,140 @@
 }
 .orch-feed__entry {
   width: 100%;
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  gap: 7px 9px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
   text-align: left;
-  border: 1px solid rgba(148,163,184,.14);
-  border-left: 3px solid rgba(148,163,184,.30);
+  border: 1px solid var(--studio-border);
+  border-left: 3px solid var(--studio-fg-muted);
   border-radius: 7px;
-  background: rgba(30,41,59,.56);
-  color: #cbd5e1;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg);
   padding: 9px 10px;
   cursor: pointer;
   font: inherit;
 }
-.orch-feed__entry:hover,
-.orch-feed__entry--selected { background: rgba(51,65,85,.78); border-color: rgba(125,211,252,.28); }
-.orch-feed__entry--decision { border-left-color: #c4b5fd; }
-.orch-feed__entry--action { border-left-color: #7dd3fc; }
-.orch-feed__entry--observation { border-left-color: #94a3b8; }
-.orch-feed__entry--intervention { border-left-color: #facc15; }
-.orch-feed__summary {
-  grid-column: 1 / -1;
-  color: #f8fafc;
+.orch-feed__entry:hover { background: var(--studio-bg-hover); }
+.orch-feed__entry--selected {
+  background: var(--studio-bg-selected);
+  border-color: var(--studio-border-strong);
+}
+.orch-feed__entry--decision { border-left-color: var(--severity-pending); }
+.orch-feed__entry--action { border-left-color: var(--studio-accent-3); }
+.orch-feed__entry--observation { border-left-color: var(--studio-fg-muted); }
+.orch-feed__entry--intervention { border-left-color: var(--studio-accent-warn); }
+
+.orch-feed__entry-top {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  min-width: 0;
+}
+.orch-feed__entry-top .orch-feed__topic {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orch-feed__entry-top .orch-feed__ts { margin-left: auto; flex: 0 0 auto; }
+
+.orch-feed__summary {
+  color: var(--studio-fg-strong);
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .orch-feed__kind {
+  flex: 0 0 auto;
   font-weight: 700;
-  color: #dbeafe;
+  color: var(--studio-fg-strong);
   font-size: 12px;
 }
 .orch-feed__topic {
+  flex: 0 1 auto;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(148,163,184,.10);
-  color: #bac2de;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-dim);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
 }
 .orch-feed__ts,
 .orch-feed__tokens {
-  color: #94a3b8;
+  color: var(--studio-fg-muted);
   font-size: 11px;
   white-space: nowrap;
 }
-.orch-feed__tokens { grid-column: 3 / -1; justify-self: end; cursor: help; }
+.orch-feed__tokens { align-self: flex-start; cursor: help; }
 .orch-feed__empty {
-  color: #94a3b8;
-  padding: 20px;
+  color: var(--studio-fg-dim);
+  padding: var(--studio-spacing-5);
   font-size: 13px;
 }
+
 .orch-feed__detail {
-  padding: 12px;
+  padding: var(--studio-spacing-3);
 }
 .orch-feed__detail-head {
   display: flex;
-  gap: 8px;
+  gap: var(--studio-spacing-2);
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: var(--studio-spacing-2);
 }
-.orch-feed__detail h3 { margin: 0 0 10px; color: #f8fafc; font-size: 16px; line-height: 1.35; }
+.orch-feed__detail h3 { margin: 0 0 10px; color: var(--studio-fg-strong); font-size: 16px; line-height: 1.35; }
 .orch-feed__meta {
   display: grid;
   gap: 6px;
-  margin: 0 0 12px;
+  margin: 0 0 var(--studio-spacing-3);
 }
-.orch-feed__meta div { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 8px; }
-.orch-feed__meta dt { color: #64748b; }
-.orch-feed__meta dd { margin: 0; color: #cbd5e1; min-width: 0; overflow-wrap: anywhere; }
+.orch-feed__meta div { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: var(--studio-spacing-2); }
+.orch-feed__meta dt { color: var(--studio-fg-muted); }
+.orch-feed__meta dd { margin: 0; color: var(--studio-fg); min-width: 0; overflow-wrap: anywhere; }
 .orch-feed__detail-section {
-  border-top: 1px solid rgba(148,163,184,.14);
-  padding-top: 10px;
-  margin-top: 10px;
+  border-top: 1px solid var(--studio-border);
+  padding-top: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-2);
 }
-.orch-feed__detail-section h4 { margin: 0 0 5px; color: #f8fafc; font-size: 12px; }
-.orch-feed__detail-section p { margin: 0; color: #cbd5e1; font-size: 13px; }
+.orch-feed__detail-section h4 { margin: 0 0 5px; color: var(--studio-fg-strong); font-size: 12px; }
+.orch-feed__detail-section p { margin: 0; color: var(--studio-fg); font-size: 13px; }
+
 .orch-feed__override {
-  margin-top: 8px;
+  margin-top: var(--studio-spacing-2);
   background: transparent;
-  border: 1px dashed rgba(249,226,175,.38);
-  color: #fcd34d;
+  border: 1px dashed color-mix(in srgb, var(--studio-accent-warn) 45%, transparent);
+  color: var(--studio-accent-warn-strong);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 12px;
   cursor: pointer;
 }
-.orch-feed__override:hover { background: rgba(249,226,175,.08); }
+.orch-feed__override:hover { background: color-mix(in srgb, var(--studio-accent-warn) 10%, transparent); }
 .orch-feed__override-form {
-  margin-top: 8px;
+  margin-top: var(--studio-spacing-2);
   display: flex;
   flex-direction: column;
   gap: 7px;
-  padding: 8px;
-  border: 1px solid rgba(249,226,175,.40);
+  padding: var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 45%, transparent);
   border-radius: 7px;
-  background: rgba(249,226,175,.06);
+  background: color-mix(in srgb, var(--studio-accent-warn) 8%, transparent);
 }
 .orch-feed__override-input {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(0,0,0,.30);
-  color: #cdd6f4;
-  border: 1px solid rgba(255,255,255,.10);
+  background: var(--studio-bg-surface);
+  color: var(--studio-fg);
+  border: 1px solid var(--studio-border-strong);
   border-radius: 6px;
-  padding: 7px 8px;
+  padding: 7px var(--studio-spacing-2);
   font-family: inherit;
   font-size: 13px;
   resize: vertical;
 }
-.orch-feed__override-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.orch-feed__override-actions { display: flex; gap: var(--studio-spacing-2); justify-content: flex-end; }
 .orch-feed__override-cancel,
 .orch-feed__override-submit {
   border-radius: 6px;
@@ -207,14 +281,14 @@
   border: 1px solid transparent;
 }
 .orch-feed__override-cancel {
-  background: rgba(255,255,255,.06);
-  color: #cdd6f4;
-  border-color: rgba(255,255,255,.12);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  border-color: var(--studio-border-strong);
 }
 .orch-feed__override-submit {
-  background: rgba(249,226,175,.24);
-  color: #fef3c7;
-  border-color: rgba(249,226,175,.50);
+  background: color-mix(in srgb, var(--studio-accent-warn) 24%, transparent);
+  color: var(--studio-accent-warn-strong);
+  border-color: color-mix(in srgb, var(--studio-accent-warn) 50%, transparent);
   font-weight: 700;
 }
 .orch-feed__override-submit:disabled,
