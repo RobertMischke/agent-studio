@@ -31,6 +31,21 @@ namespace OrchestratorApi.Services.Pipeline;
 /// </summary>
 public static class PipelineStepConfigResolver
 {
+    public const string ModelSourceStep = "step";
+    public const string ModelSourceProject = "project";
+    public const string ModelSourceGlobal = "global";
+    public const string ModelSourceCatalogue = "catalogue";
+    public const string ModelSourceRuntime = "runtime";
+
+    public sealed record ModelResolution(
+        string Model,
+        string Source,
+        string? StepOverride,
+        string? ProjectOverride,
+        string? GlobalDefault,
+        string? CatalogueDefault,
+        string RuntimeDefault);
+
     /// <summary>Prefixes the catalogue uses; stripped to support bare-suffix lookup.</summary>
     private static readonly string[] StepIdPrefixes = { "aspect-", "post-", "pre-" };
 
@@ -88,13 +103,13 @@ public static class PipelineStepConfigResolver
     /// Resolve the model for a step addressed by id, with no catalogue
     /// step in hand (the aspect runner only knows the bare aspect id).
     /// </summary>
-    public static string ResolveModel(ProjectSettings? settings, string stepId, string runtimeDefault)
+    public static string ResolveModel(
+        ProjectSettings? settings,
+        string stepId,
+        string runtimeDefault,
+        string? globalDefault = null)
     {
-        var stepModel = Lookup(settings, stepId)?.Model;
-        if (!string.IsNullOrWhiteSpace(stepModel)) return stepModel!.Trim();
-        var projectModel = settings?.OrchestratorModel;
-        if (!string.IsNullOrWhiteSpace(projectModel)) return projectModel!.Trim();
-        return runtimeDefault;
+        return ResolveModelWithSource(settings, stepId, runtimeDefault, globalDefault).Model;
     }
 
     /// <summary>
@@ -102,15 +117,65 @@ public static class PipelineStepConfigResolver
     /// default <see cref="PipelineStep.Model"/> between the project
     /// override and the project orchestrator model.
     /// </summary>
-    public static string ResolveModel(ProjectSettings? settings, PipelineStep step, string runtimeDefault)
+    public static string ResolveModel(
+        ProjectSettings? settings,
+        PipelineStep step,
+        string runtimeDefault,
+        string? globalDefault = null)
     {
-        var stepOverride = Lookup(settings, step.Id)?.Model;
-        if (!string.IsNullOrWhiteSpace(stepOverride)) return stepOverride!.Trim();
-        if (!string.IsNullOrWhiteSpace(step.Model)) return step.Model!.Trim();
-        var projectModel = settings?.OrchestratorModel;
-        if (!string.IsNullOrWhiteSpace(projectModel)) return projectModel!.Trim();
-        return runtimeDefault;
+        return ResolveModelWithSource(settings, step, runtimeDefault, globalDefault).Model;
     }
+
+    public static ModelResolution ResolveModelWithSource(
+        ProjectSettings? settings,
+        string stepId,
+        string runtimeDefault,
+        string? globalDefault = null)
+    {
+        return ResolveModelCore(
+            stepOverride: Lookup(settings, stepId)?.Model,
+            catalogueDefault: null,
+            projectOverride: settings?.OrchestratorModel,
+            globalDefault: globalDefault,
+            runtimeDefault: runtimeDefault);
+    }
+
+    public static ModelResolution ResolveModelWithSource(
+        ProjectSettings? settings,
+        PipelineStep step,
+        string runtimeDefault,
+        string? globalDefault = null)
+    {
+        return ResolveModelCore(
+            stepOverride: Lookup(settings, step.Id)?.Model,
+            catalogueDefault: step.Model,
+            projectOverride: settings?.OrchestratorModel,
+            globalDefault: globalDefault,
+            runtimeDefault: runtimeDefault);
+    }
+
+    private static ModelResolution ResolveModelCore(
+        string? stepOverride,
+        string? catalogueDefault,
+        string? projectOverride,
+        string? globalDefault,
+        string runtimeDefault)
+    {
+        var runtime = string.IsNullOrWhiteSpace(runtimeDefault) ? "" : runtimeDefault.Trim();
+        var step = Normalize(stepOverride);
+        var project = Normalize(projectOverride);
+        var global = Normalize(globalDefault);
+        var catalogue = Normalize(catalogueDefault);
+
+        if (step is not null) return new(step, ModelSourceStep, step, project, global, catalogue, runtime);
+        if (project is not null) return new(project, ModelSourceProject, null, project, global, catalogue, runtime);
+        if (global is not null) return new(global, ModelSourceGlobal, null, null, global, catalogue, runtime);
+        if (catalogue is not null) return new(catalogue, ModelSourceCatalogue, null, null, null, catalogue, runtime);
+        return new(runtime, ModelSourceRuntime, null, null, null, null, runtime);
+    }
+
+    private static string? Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// Resolve the per-step run condition for a step addressed by id. Returns

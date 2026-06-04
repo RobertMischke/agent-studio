@@ -1350,7 +1350,8 @@ public record ProjectSettings
     /// code-defined steps - it does not add or reorder steps, because the
     /// runtime maps each step id to a concrete service. Resolution order
     /// for <c>model</c> is step -&gt; <see cref="OrchestratorModel"/> -&gt;
-    /// runtime default; for <c>mode</c> it is step -&gt; built-in default.
+    /// global default -&gt; runtime default; for <c>mode</c> it is step -&gt;
+    /// built-in default.
     /// Persisted in <c>project-settings.json</c>.
     /// </summary>
     public Dictionary<string, PipelineStepSetting>? PipelineSteps { get; init; }
@@ -1524,9 +1525,10 @@ public record PipelineStepSetting
     /// <summary>
     /// Model id that runs this step's LLM call (uses the shared CLI+model
     /// selector vocabulary). Null falls back to the project
-    /// <see cref="ProjectSettings.OrchestratorModel"/> and then the runtime
-    /// default. Only meaningful for steps that invoke an LLM (the aspect
-    /// post-steps); deterministic tool steps ignore it.
+    /// <see cref="ProjectSettings.OrchestratorModel"/>, then the global
+    /// default model, then the runtime default. Only meaningful for steps that
+    /// invoke an LLM (the aspect and drift post-steps); deterministic tool
+    /// steps ignore it.
     /// </summary>
     public string? Model { get; init; }
 

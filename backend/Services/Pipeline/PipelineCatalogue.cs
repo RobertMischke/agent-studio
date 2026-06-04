@@ -259,6 +259,7 @@ public static class PipelineCatalogue
                 Kind = StepKind.Aspect,
                 RunMode = StepRunMode.Parallel,
                 Idempotent = true,
+                PromptTemplate = def.PromptTemplate,
             });
         }
 
@@ -314,6 +315,7 @@ public static class PipelineCatalogue
                     Kind = StepKind.Core,
                     RunMode = StepRunMode.Sequential,
                     Idempotent = false,
+                    PromptTemplate = "prompt.md",
                 },
             ],
             Post =

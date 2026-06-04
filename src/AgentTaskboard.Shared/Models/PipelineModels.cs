@@ -20,7 +20,7 @@ public sealed record TaskPipeline
     public string Id { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
     /// <summary>Schema version. Bumped when the wire shape changes.</summary>
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = 2;
     public List<PipelineStep> Pre { get; init; } = [];
     public List<PipelineStep> Core { get; init; } = [];
     public List<PipelineStep> Post { get; init; } = [];
@@ -50,6 +50,13 @@ public sealed record PipelineStep
     /// step -> job -> project -> client default.
     /// </summary>
     public string? Model { get; init; }
+    /// <summary>
+    /// Prompt template or prompt source that shapes this step. For LLM-backed
+    /// steps this is the runtime prompt file; for the core run this can point
+    /// at the task prompt. Null means the step is deterministic or its prompt is
+    /// generated inline by the runtime.
+    /// </summary>
+    public string? PromptTemplate { get; init; }
     public string? CliType { get; init; }
     public int? TimeoutMs { get; init; }
     /// <summary>
