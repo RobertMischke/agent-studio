@@ -1,5 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { contrastRatio } from '../helpers/contrast';
+import { setTheme, dismissDevErrorDialog, sampleColours } from '../helpers/theme';
 
 /**
  * Workspace token timeline view (`#/workspace/tokens`). One central
@@ -21,7 +24,7 @@ import { mkdirSync } from 'node:fs';
  * - Hovering a chart segment reveals the cell-detail popover.
  */
 
-const SCREENSHOT_DIR = 'test-results';
+const SCREENSHOT_DIR = process.env.OVERLAY_SHOT_DIR ?? 'test-results';
 
 interface FakeCell {
   project: string;
@@ -186,6 +189,7 @@ test.describe('Workspace token timeline', () => {
     const view = page.getByTestId('workspace-token-timeline');
     await expect(view).toBeVisible();
     await expect(page.getByTestId('wtt-chart')).toBeVisible();
+    await dismissDevErrorDialog(page);
 
     // The default 24 h window should render cells from the stubbed payload.
     await expect(page.getByTestId('wtt-win-24h')).toHaveClass(/wtt__win-btn--active/);
@@ -245,4 +249,35 @@ test.describe('Workspace token timeline', () => {
       path: `${SCREENSHOT_DIR}/workspace-token-timeline-24h-closeup.png`,
     });
   });
+
+  // The CLI-usage timeline overlay used fixed dark-theme colours and washed
+  // out on the light theme. After the Tier-2 token conversion its chrome must
+  // clear WCAG AA on BOTH themes; the SVG chart's flip is shown by the shots.
+  for (const theme of ['dark', 'light'] as const) {
+    test(`timeline chrome stays legible (${theme} theme)`, async ({ page }) => {
+      await setTheme(page, theme);
+      const view = page.getByTestId('workspace-token-timeline');
+      await expect(view).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByTestId('wtt-chart')).toBeVisible();
+      await dismissDevErrorDialog(page);
+
+      const samples: Array<{ what: string; selector: string }> = [
+        { what: 'title', selector: '.wtt__title' },
+        { what: 'subtitle', selector: '.wtt__sub' },
+        { what: 'active window button', selector: '.wtt__win-btn--active' },
+        { what: 'legend chip', selector: '.wtt__chip' },
+        { what: 'table cell', selector: '.wtt__tab td' },
+      ];
+      for (const { what, selector } of samples) {
+        const { color, bg } = await sampleColours(page, selector);
+        const ratio = contrastRatio(color, bg);
+        expect(
+          ratio,
+          `${what} contrast ${ratio.toFixed(2)} (${color} on ${bg}) [${theme}]`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+
+      await view.screenshot({ path: join(SCREENSHOT_DIR, `workspace-token-timeline-${theme}.png`) });
+    });
+  }
 });

@@ -1,6 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import { mkdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { contrastRatio } from '../helpers/contrast';
+import { setTheme, dismissDevErrorDialog, sampleColours } from '../helpers/theme';
 
 /**
  * Per-task screenshot strip + lightbox + workspace reel.
@@ -23,7 +25,7 @@ import { join } from 'node:path';
  *   3. Reel groups entries by hour bucket.
  */
 
-const SCREENSHOT_DIR = 'test-results';
+const SCREENSHOT_DIR = process.env.OVERLAY_SHOT_DIR ?? 'test-results';
 
 // 1x1 PNGs encoded inline so the <img> tags actually resolve. The
 // bytes vary between three colours so the deliverable screenshot
@@ -284,6 +286,7 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
 
     await page.goto(`http://localhost:4010/?job=${encodeURIComponent(TASK_JOB_ID)}&watchPath=${encodeURIComponent(TASK_WATCH_PATH)}`);
     await page.waitForLoadState('domcontentloaded');
+    await dismissDevErrorDialog(page);
 
     // F38 dedup: the screenshot strip used to render twice (once in the
     // protocol pane body, once in the prompt pane's Evidence tab).
@@ -295,6 +298,7 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
     await evidenceTab.click();
     const strip = page.getByTestId('evidence-view').getByTestId('screenshot-strip');
     await expect(strip).toBeVisible({ timeout: 7_000 });
+    await dismissDevErrorDialog(page);
 
     const thumbs = strip.locator('[data-testid="screenshot-thumb"]');
     await expect(thumbs).toHaveCount(3);
@@ -344,6 +348,7 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
     const overlay = page.getByTestId('workspace-screenshots-overlay');
     await expect(overlay).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('workspace-screenshots')).toBeVisible();
+    await dismissDevErrorDialog(page);
 
     // Two distinct hour buckets in the stub payload.
     const buckets = page.getByTestId('wss-bucket');
@@ -363,6 +368,45 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
 
     await page.screenshot({ path: join(SCREENSHOT_DIR, 'visual-evidence-reel-lightbox.png'), fullPage: false });
   });
+
+  // The visual-evidence reel + strip captions used fixed dark-theme colours and
+  // washed out on the light theme. After the Tier-2 token conversion the reel
+  // header, window toggle, bucket titles and thumbnail captions must clear
+  // WCAG AA on BOTH themes. (The lightbox is intentionally always-dark and is
+  // exercised by the cases above, not here.)
+  for (const theme of ['dark', 'light'] as const) {
+    test(`reel + strip captions stay legible (${theme} theme)`, async ({ page }) => {
+      await stubScreenshotApis(page, buildJobScreenshots(), buildWorkspaceScreenshots());
+      await stubJobDetailForTask(page);
+
+      await page.goto('http://localhost:4010/#/workspace/screenshots');
+      await page.waitForLoadState('domcontentloaded');
+      await setTheme(page, theme);
+
+      await expect(page.getByTestId('workspace-screenshots')).toBeVisible({ timeout: 5_000 });
+      await dismissDevErrorDialog(page);
+      await expect(page.locator('.strip__caption-spec').first()).toBeVisible({ timeout: 5_000 });
+
+      const samples: Array<{ what: string; selector: string }> = [
+        { what: 'reel title', selector: '.wss__title' },
+        { what: 'reel subtitle', selector: '.wss__sub' },
+        { what: 'active window button', selector: '.wss__win-btn--active' },
+        { what: 'bucket title', selector: '.wss__bucket-title' },
+        { what: 'caption spec', selector: '.strip__caption-spec' },
+        { what: 'caption timestamp', selector: '.strip__caption-ts' },
+      ];
+      for (const { what, selector } of samples) {
+        const { color, bg } = await sampleColours(page, selector);
+        const ratio = contrastRatio(color, bg);
+        expect(
+          ratio,
+          `${what} contrast ${ratio.toFixed(2)} (${color} on ${bg}) [${theme}]`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+
+      await page.screenshot({ path: join(SCREENSHOT_DIR, `visual-evidence-reel-${theme}.png`), fullPage: false });
+    });
+  }
 });
 
 /**

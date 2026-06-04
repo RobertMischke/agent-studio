@@ -1,6 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { contrastRatio } from '../helpers/contrast';
+import { setTheme, dismissDevErrorDialog, sampleColours } from '../helpers/theme';
 
 /**
  * Workspace executive-summary overlay (`#/workspace/summary`).
@@ -195,6 +197,72 @@ test.describe('Workspace executive summary overlay', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'executive-summary-overlay.png'), fullPage: false });
   });
 
+  // Regression guard for the light-theme contrast bug: the overlay content
+  // (headline, decision titles, severity pills, project names, the window
+  // toggle) used fixed dark-theme hex and washed out on the light backdrop.
+  // After the systemic Tier-2 token conversion, every text run must clear
+  // WCAG AA against whatever surface paints behind it — on BOTH themes.
+  for (const theme of ['dark', 'light'] as const) {
+    test(`overlay text stays legible (${theme} theme)`, async ({ page }) => {
+      await page.route('**/api/workspace/summary*', async (route) => {
+        const url = new URL(route.request().url());
+        const windowHours = Number(url.searchParams.get('windowHours') ?? '24');
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(buildSummary(windowHours)),
+        });
+      });
+
+      await page.goto('http://localhost:4010/#/workspace/summary');
+      await page.waitForLoadState('domcontentloaded');
+      await setTheme(page, theme);
+
+      await expect(page.getByTestId('workspace-summary')).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByTestId('wsm-headline')).toContainText('projects active');
+
+      await dismissDevErrorDialog(page);
+
+      // Body text → 4.5:1. Pills carry bold ≥14px text on a tinted fill, which
+      // is WCAG "large text" → 3:1; we still hold them to 4.5 since the strong
+      // accent tokens are picked to clear it on both themes.
+      const samples: Array<{ what: string; selector: string; min: number }> = [
+        { what: 'headline', selector: '[data-testid="wsm-headline"]', min: 4.5 },
+        { what: 'decision title', selector: '.wsm__decision-title', min: 4.5 },
+        { what: 'project name', selector: '.wsm__project-name', min: 4.5 },
+        { what: 'commit sha', selector: '.wsm__commit-sha', min: 4.5 },
+        { what: 'window toggle (active)', selector: '.wsm__win-btn--active', min: 4.5 },
+      ];
+
+      for (const { what, selector, min } of samples) {
+        const { color, bg } = await sampleColours(page, selector);
+        const ratio = contrastRatio(color, bg);
+        expect(
+          ratio,
+          `${what} contrast ${ratio.toFixed(2)} (${color} on ${bg}) [${theme}]`,
+        ).toBeGreaterThanOrEqual(min);
+      }
+
+      // Every severity pill (High / Warn / Info — orange is the hardest case on
+      // light) must clear AA on its own tinted fill, not just the first one.
+      const sevCount = await page.locator('.wsm__sev').count();
+      for (let i = 0; i < sevCount; i++) {
+        const label = (await page.locator('.wsm__sev').nth(i).innerText()).trim();
+        const { color, bg } = await sampleColours(page, '.wsm__sev', i);
+        const ratio = contrastRatio(color, bg);
+        expect(
+          ratio,
+          `severity pill "${label}" contrast ${ratio.toFixed(2)} (${color} on ${bg}) [${theme}]`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+
+      await page.screenshot({
+        path: join(SHOT_DIR, `executive-summary-overlay-${theme}.png`),
+        fullPage: false,
+      });
+    });
+  }
+
   test('window toggle re-queries the endpoint', async ({ page }) => {
     const requested: number[] = [];
     await page.route('**/api/workspace/summary*', async (route) => {
@@ -211,6 +279,7 @@ test.describe('Workspace executive summary overlay', () => {
     await page.goto('http://localhost:4010/#/workspace/summary');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByTestId('workspace-summary')).toBeVisible({ timeout: 5_000 });
+    await dismissDevErrorDialog(page);
 
     await page.getByTestId('wsm-win-6h').click();
     await expect.poll(() => requested.includes(6)).toBe(true);

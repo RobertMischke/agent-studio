@@ -5,7 +5,7 @@
   flex-direction: column;
   gap: 16px;
   padding: 16px;
-  color: #cdd6f4;
+  color: var(--studio-fg);
 }
 
 .wsm__head {
@@ -19,16 +19,17 @@
 .wsm__title {
   margin: 0 0 4px 0;
   font-size: 1.25rem;
+  color: var(--studio-fg-strong);
 }
 
 .wsm__sub {
   margin: 0;
-  color: #a6adc8;
+  color: var(--studio-fg-dim);
   font-size: 0.92rem;
 }
 
 .wsm__sub-range {
-  color: #cdd6f4;
+  color: var(--studio-fg);
   font-variant-numeric: tabular-nums;
 }
 
@@ -42,7 +43,7 @@
 .wsm__win {
   display: inline-flex;
   gap: 0;
-  border: 1px solid rgba(180, 190, 254, 0.3);
+  border: 1px solid var(--studio-border-strong);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -50,20 +51,20 @@
 .wsm__win-btn {
   background: transparent;
   border: 0;
-  color: #cdd6f4;
+  color: var(--studio-fg);
   font: inherit;
   font-size: 0.84rem;
   padding: 6px 10px;
   cursor: pointer;
 
-  &--active { background: rgba(137, 180, 250, 0.25); }
-  &:hover { background: rgba(137, 180, 250, 0.15); }
+  &--active { background: color-mix(in srgb, var(--studio-accent-3) 25%, transparent); }
+  &:hover { background: color-mix(in srgb, var(--studio-accent-3) 15%, transparent); }
 }
 
 .wsm__refresh {
-  background: rgba(30, 30, 46, 0.6);
-  border: 1px solid rgba(180, 190, 254, 0.3);
-  color: #cdd6f4;
+  background: var(--studio-bg-hover);
+  border: 1px solid var(--studio-border-strong);
+  color: var(--studio-fg);
   padding: 5px 10px;
   border-radius: 6px;
   cursor: pointer;
@@ -73,9 +74,9 @@
 .wsm__headline {
   margin: 0;
   font-size: 1rem;
-  color: #f5e0dc;
-  background: rgba(137, 180, 250, 0.12);
-  border: 1px solid rgba(180, 190, 254, 0.25);
+  color: var(--studio-fg-strong);
+  background: color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-3) 25%, transparent);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -83,8 +84,8 @@
 .wsm__placeholder {
   padding: 24px;
   text-align: center;
-  color: #a6adc8;
-  border: 1px dashed rgba(180, 190, 254, 0.25);
+  color: var(--studio-fg-dim);
+  border: 1px dashed var(--studio-border-strong);
   border-radius: 8px;
 }
 
@@ -97,7 +98,7 @@
 .wsm__block-title {
   margin: 0;
   font-size: 0.95rem;
-  color: #bac2de;
+  color: var(--studio-fg-dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -123,9 +124,9 @@
   gap: 8px;
   flex-wrap: wrap;
   padding: 5px 8px;
-  border: 1px solid rgba(180, 190, 254, 0.15);
+  border: 1px solid var(--studio-border);
   border-radius: 6px;
-  background: rgba(17, 17, 27, 0.5);
+  background: var(--studio-bg-hover);
 }
 
 .wsm__sev {
@@ -136,10 +137,15 @@
   border-radius: 4px;
   flex: none;
 
-  &--info { background: rgba(137, 180, 250, 0.25); color: #89b4fa; }
-  &--warn { background: rgba(249, 226, 175, 0.2); color: #f9e2af; }
-  &--high { background: rgba(250, 179, 135, 0.22); color: #fab387; }
-  &--critical { background: rgba(243, 139, 168, 0.25); color: #f38ba8; }
+  // Each pill is a pale 22%-tint fill carrying same-hue text. The bare "strong"
+  // 700-shade pigments are too light on their own tint to clear WCAG-AA on the
+  // light theme (e.g. amber-700 lands ~2.9:1), so every pill nudges its text
+  // toward --studio-fg-strong: that darkens it on light and lightens it on dark
+  // (the token flips), keeping the hue recognisable while clearing AA on both.
+  &--info     { background: color-mix(in srgb, var(--studio-accent-3) 22%, transparent);    color: color-mix(in srgb, var(--studio-accent-3-strong) 62%, var(--studio-fg-strong)); }
+  &--warn     { background: color-mix(in srgb, var(--studio-accent-warn) 22%, transparent); color: color-mix(in srgb, var(--studio-accent-warn-strong) 62%, var(--studio-fg-strong)); }
+  &--high     { background: color-mix(in srgb, var(--studio-accent) 22%, transparent);      color: color-mix(in srgb, var(--studio-accent-strong) 62%, var(--studio-fg-strong)); }
+  &--critical { background: color-mix(in srgb, var(--studio-accent-6) 22%, transparent);    color: color-mix(in srgb, var(--studio-accent-6-strong) 62%, var(--studio-fg-strong)); }
 }
 
 .wsm__decision-title { flex: 1 1 auto; }
@@ -149,7 +155,7 @@
 .wsm__crash-time,
 .wsm__move-time,
 .wsm__commit-meta {
-  color: #a6adc8;
+  color: var(--studio-fg-dim);
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
@@ -157,9 +163,9 @@
 /* ---------- per-project ---------- */
 
 .wsm__project {
-  border: 1px solid rgba(180, 190, 254, 0.18);
+  border: 1px solid var(--studio-border);
   border-radius: 8px;
-  background: rgba(17, 17, 27, 0.5);
+  background: var(--studio-bg-hover);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -177,10 +183,11 @@
 .wsm__project-name {
   margin: 0;
   font-size: 1rem;
+  color: var(--studio-fg-strong);
 }
 
 .wsm__project-stats {
-  color: #a6adc8;
+  color: var(--studio-fg-dim);
   font-size: 0.82rem;
 }
 
@@ -197,19 +204,19 @@
 
 .wsm__move-job,
 .wsm__open-title,
-.wsm__crash-summary { color: #cdd6f4; }
+.wsm__crash-summary { color: var(--studio-fg); }
 
-.wsm__move-arrow { color: #a6adc8; }
+.wsm__move-arrow { color: var(--studio-fg-dim); }
 
 .wsm__commit-sha {
-  color: #94e2d5;
+  color: var(--studio-accent-3-strong);
   font-size: 0.8rem;
 }
 
 .wsm__commit-subject { flex: 1 1 auto; }
 
 .wsm__crash-kind {
-  color: #f38ba8;
+  color: var(--severity-high);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;

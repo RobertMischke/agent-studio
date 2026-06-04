@@ -80,6 +80,7 @@
   // (e.g. running/active/failed pills) so the pigment stays WCAG-AA legible
   // on the theme's surface. Dark theme picks lighter shades so text reads
   // on Mocha base; the light-theme block below flips them to darker shades.
+  --studio-accent-strong:         var(--color-orange-300);
   --studio-accent-3-strong:       var(--color-blue-300);
   --studio-accent-success-strong: var(--color-green-300);
   --studio-accent-warn-strong:    var(--color-yellow-300);
@@ -431,6 +432,7 @@
   // tinted-on-white pill clears WCAG-AA. The accent base (--studio-accent-3)
   // intentionally stays single-value across themes; the strong variant is
   // the one components reach for when they need readable text.
+  --studio-accent-strong:         var(--color-orange-700);
   --studio-accent-3-strong:       var(--color-blue-700);
   --studio-accent-success-strong: var(--color-green-700);
   --studio-accent-warn-strong:    var(--color-amber-700);
