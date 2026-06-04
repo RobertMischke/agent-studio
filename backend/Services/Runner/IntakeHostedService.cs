@@ -64,6 +64,8 @@ public sealed class IntakeHostedService : BackgroundService
                 var scanner = scope.ServiceProvider.GetRequiredService<TaskScannerService>();
                 var intake = scope.ServiceProvider.GetRequiredService<IntakeRunner>();
 
+                var escalation = scope.ServiceProvider.GetRequiredService<HumanReviewEscalation>();
+
                 var allSettings = settings.GetAll();
                 var enabledProjects = scanner.GetWatchPaths()
                     .Where(p => allSettings.TryGetValue(p.Name, out var s)
@@ -79,7 +81,7 @@ public sealed class IntakeHostedService : BackgroundService
                 foreach (var entry in enabledProjects)
                 {
                     if (stoppingToken.IsCancellationRequested) break;
-                    ProcessProject(scanner, intake, entry, stoppingToken);
+                    ProcessProject(scanner, intake, escalation, entry, stoppingToken);
                 }
             }
             catch (OperationCanceledException) { break; }
@@ -93,7 +95,7 @@ public sealed class IntakeHostedService : BackgroundService
         }
     }
 
-    private void ProcessProject(TaskScannerService scanner, IntakeRunner intake, WatchPathEntry entry, CancellationToken stoppingToken)
+    private void ProcessProject(TaskScannerService scanner, IntakeRunner intake, HumanReviewEscalation escalation, WatchPathEntry entry, CancellationToken stoppingToken)
     {
         // Drain every 2-ready job that has not yet been intaked, oldest first,
         // up to the per-tick cap. A null phase counts as human-ready under the
@@ -109,12 +111,57 @@ public sealed class IntakeHostedService : BackgroundService
             if (stoppingToken.IsCancellationRequested) break;
             try
             {
-                intake.RunForJob(candidate.Id, entry.Path);
+                var verdict = intake.RunForJob(candidate.Id, entry.Path);
+
+                // Done-precheck routing (prompt requirement 5): a card the prompt
+                // declares already finished is not executed. Route it to
+                // 5-human-review for a person to confirm-and-complete instead of
+                // leaving it parked in intake-blocked.
+                if (verdict.Outcome == IntakeOutcome.AlreadyDone)
+                    RouteAlreadyDone(escalation, candidate.Id, entry.Path, entry.Name, verdict.Reason, _logger);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Intake run for {JobId} in {Project} failed", candidate.Id, entry.Name);
             }
+        }
+    }
+
+    /// <summary>
+    /// Done-precheck routing for an already-done card. The orchestrator never
+    /// auto-completes (the human owns the final <c>6-completed</c> move), so the
+    /// card is routed to <c>5-human-review</c> through the
+    /// <see cref="HumanReviewEscalation"/> funnel under the
+    /// <see cref="HumanReviewEscalationCategories.HumanDecisionNeeded"/> category —
+    /// it exists for a person to confirm-and-complete, never for an agent to run.
+    /// Going through the funnel (rather than a raw state move) guarantees the move
+    /// records an orchestrator verdict + status stub, which the
+    /// <c>HumanReviewVerdictDriftTest</c> mechanically enforces. Best-effort: a
+    /// failed move leaves the card in intake-blocked (the pickup gate already
+    /// keeps the runner off it). Extracted and internal so the routing is
+    /// unit-testable without the BackgroundService loop.
+    /// </summary>
+    internal static void RouteAlreadyDone(
+        HumanReviewEscalation escalation, string jobId, string watchPath, string project, string reason, ILogger logger)
+    {
+        try
+        {
+            var outcome = escalation.Escalate(
+                jobId, watchPath, project,
+                HumanReviewEscalationCategories.HumanDecisionNeeded,
+                reason);
+            if (outcome.Status == MoveJobStatus.Success)
+                logger.LogInformation(
+                    "Intake done-precheck: routed already-done card {JobId} in {Project} to 5-human-review for confirm-and-complete.",
+                    jobId, project);
+            else
+                logger.LogWarning(
+                    "Intake done-precheck: routing {JobId} in {Project} to 5-human-review did not complete: {Status} {Message}",
+                    jobId, project, outcome.Status, outcome.Message);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Intake done-precheck: routing {JobId} in {Project} to 5-human-review threw", jobId, project);
         }
     }
 

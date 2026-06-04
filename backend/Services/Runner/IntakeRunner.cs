@@ -29,7 +29,15 @@ public enum IntakeOutcome
     /// Surfaced for a human to confirm-and-complete rather than run; the pickup
     /// gate keeps the coding runner off the card (same as any non-Pass verdict).
     /// </summary>
-    AlreadyDone
+    AlreadyDone,
+    /// <summary>
+    /// Consistency-check: the card's own metadata is incoherent or
+    /// self-contradictory — an empty goal/title, a reference pointing at itself,
+    /// or a card that declares it is <c>blockedBy</c> something while sitting in
+    /// the 2-ready pickup queue. Surfaced for a human to fix before the coding
+    /// runner is allowed near it.
+    /// </summary>
+    Inconsistent
 }
 
 /// <summary>One verdict produced by an intake check.</summary>
@@ -115,6 +123,12 @@ public sealed class IntakeRunner
         var done = CheckAlreadyDone(prompt);
         if (done != null) return done;
 
+        // Consistency-check: a card whose own metadata is incoherent (empty
+        // goal, self-reference, blocked-while-ready) is surfaced before the
+        // duplicate / clarity / split heuristics — those assume a coherent card.
+        var inconsistent = CheckConsistency(target);
+        if (inconsistent != null) return inconsistent;
+
         var dup = CheckDuplicate(target, existingPeers);
         if (dup != null) return dup;
 
@@ -129,6 +143,89 @@ public sealed class IntakeRunner
             Outcome = IntakeOutcome.Pass,
             Reason = "Prompt looks executable: scope is bounded, no duplicates detected, no out-of-scope language."
         };
+    }
+
+    /// <summary>
+    /// Context-load (prompt requirement 4): determine and record the context a
+    /// card carries. Resolves its cross-references against the known-task set and
+    /// its prompt attachments against the files on disk, splitting each into
+    /// resolved vs. missing, and captures its tags. Pure so the resolution rules
+    /// are unit-testable; <see cref="RunForJob"/> supplies the disk-derived
+    /// inputs (peer scan + attachment file list). The manifest is recorded in the
+    /// <c>lifecycle.json</c> sidecar — informational, it does not gate pickup.
+    /// </summary>
+    public static ContextManifest BuildContextManifest(
+        TaskInfo target,
+        string? promptMarkdown,
+        IReadOnlyList<TaskInfo> knownTasks,
+        IReadOnlyCollection<string> attachmentFilesOnDisk)
+    {
+        var manifest = new ContextManifest
+        {
+            Tags = target.Tags is { Count: > 0 } ? new List<string>(target.Tags) : []
+        };
+
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in knownTasks)
+        {
+            if (!string.IsNullOrWhiteSpace(t.TaskKey)) known.Add(t.TaskKey.Trim());
+            if (!string.IsNullOrWhiteSpace(t.Id)) known.Add(t.Id.Trim());
+        }
+
+        foreach (var (kind, refTarget) in (target.References ?? new TaskReferences()).Enumerate())
+        {
+            var edge = $"{kind}:{refTarget}";
+            if (known.Contains(refTarget.Trim())) manifest.ResolvedReferences.Add(edge);
+            else manifest.MissingReferences.Add(edge);
+        }
+
+        var onDisk = new HashSet<string>(attachmentFilesOnDisk, StringComparer.OrdinalIgnoreCase);
+        foreach (var att in ExtractAttachmentPaths(promptMarkdown))
+        {
+            var fileName = att.Length > AttachmentPrefix.Length ? att[AttachmentPrefix.Length..] : att;
+            if (onDisk.Contains(att) || onDisk.Contains(fileName)) manifest.ResolvedAttachments.Add(att);
+            else manifest.MissingAttachments.Add(att);
+        }
+
+        return manifest;
+    }
+
+    private const string AttachmentPrefix = "attachments/";
+
+    private static readonly System.Text.RegularExpressions.Regex AttachmentRef =
+        new(@"attachments/[A-Za-z0-9._\-/]+", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    // Pull "attachments/<path>" tokens out of the prompt (bare or inside a
+    // markdown link), de-duplicated and stripped of trailing markdown
+    // punctuation. Conservative on purpose: only the explicit attachments/
+    // convention counts, so prose that merely says "attachments" is ignored.
+    private static IEnumerable<string> ExtractAttachmentPaths(string? prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) yield break;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in AttachmentRef.Matches(prompt))
+        {
+            var path = m.Value.TrimEnd('.', ')', ']', ',', '!', '?');
+            if (path.Length > AttachmentPrefix.Length && seen.Add(path)) yield return path;
+        }
+    }
+
+    private static IReadOnlyCollection<string> ReadAttachmentFileNames(string folderPath)
+    {
+        try
+        {
+            var dir = Path.Combine(folderPath, "attachments");
+            if (!Directory.Exists(dir)) return Array.Empty<string>();
+            return Directory.GetFiles(dir)
+                .Select(Path.GetFileName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Select(n => n!)
+                .ToList();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
     }
 
     /// <summary>
@@ -156,6 +253,10 @@ public sealed class IntakeRunner
                             || j.State == TaskStates.Completed))
             .ToList();
 
+        // Context-load: resolve references + prompt attachments against what is
+        // actually available, so the verdict and sidecar carry the card's context.
+        var context = BuildContextManifest(info, prompt, peers, ReadAttachmentFileNames(info.FolderPath));
+
         // Stamp intake-running first so observers see the in-flight state. A
         // restart between this stamp and the verdict write leaves the card in
         // intake-running, which the next tick re-runs and resolves.
@@ -163,18 +264,18 @@ public sealed class IntakeRunner
         EmitChat(info, "running", $"Intake check started by {ParticipantIntakeFor(info.ProjectName)}.");
 
         var verdict = Evaluate(info, prompt, peers);
-        ApplyVerdict(info, verdict);
+        ApplyVerdict(info, verdict, context);
         return verdict;
     }
 
     /// <summary>Apply a precomputed verdict to a job (used by tests and by RunForJob).</summary>
-    public void ApplyVerdict(TaskInfo info, IntakeVerdict verdict)
+    public void ApplyVerdict(TaskInfo info, IntakeVerdict verdict, ContextManifest? context = null)
     {
         var phase = verdict.Outcome == IntakeOutcome.Pass
             ? LifecyclePhases.IntakePassed
             : LifecyclePhases.IntakeBlocked;
         WritePhase(info, phase);
-        WriteLifecycleSidecar(info, verdict, phase);
+        WriteLifecycleSidecar(info, verdict, phase, context);
         var tag = verdict.Outcome.ToString().ToLowerInvariant();
         EmitChat(info, tag, $"Intake {tag}: {verdict.Reason}");
         // Job-lifecycle bus event: the substate transition is meaningful
@@ -199,24 +300,26 @@ public sealed class IntakeRunner
         _mutations.SetJobPhase(info.FolderPath, phase);
     }
 
-    private void WriteLifecycleSidecar(TaskInfo info, IntakeVerdict verdict, string phase)
+    private void WriteLifecycleSidecar(TaskInfo info, IntakeVerdict verdict, string phase, ContextManifest? context)
     {
         try
         {
             var path = Path.Combine(info.FolderPath, "lifecycle.json");
+            var now = _time.GetUtcNow().UtcDateTime;
             var snapshot = new LifecycleSnapshot
             {
                 Phase = phase,
-                PhaseEnteredAt = _time.GetUtcNow().UtcDateTime,
+                PhaseEnteredAt = now,
                 BlockingReason = verdict.Outcome == IntakeOutcome.Pass ? null : verdict.Reason,
+                Context = context,
                 IntakeChecks =
                 [
                     new LifecycleCheck
                     {
                         Name = "intake-v1",
                         Status = verdict.Outcome == IntakeOutcome.Pass ? "passed" : "failed",
-                        StartedAt = _time.GetUtcNow().UtcDateTime,
-                        FinishedAt = _time.GetUtcNow().UtcDateTime,
+                        StartedAt = now,
+                        FinishedAt = now,
                         Detail = verdict.Reason
                     }
                 ]
@@ -302,6 +405,78 @@ public sealed class IntakeRunner
                 Details = [matched]
             };
         }
+        return null;
+    }
+
+    // Whole-title placeholders that mean the goal was never actually written.
+    // Matched against the entire trimmed title (case-insensitive), never as a
+    // substring, so a genuine title that merely contains one of these words
+    // ("Add a title bar") is not misread as a placeholder.
+    private static readonly HashSet<string> PlaceholderTitles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "", "untitled", "title", "tbd", "todo", "new task", "task", "wip", "draft", "placeholder"
+    };
+
+    /// <summary>
+    /// Consistency-check (prompt requirement 3): is the card coherent —
+    /// goal / references / state contradiction-free? Deterministic and
+    /// peer-independent so it never false-positives on an incomplete peer set:
+    /// it only flags issues that are wrong regardless of which other tasks
+    /// exist.
+    /// <list type="bullet">
+    ///   <item><b>Goal present</b>: a placeholder / empty title has no goal.</item>
+    ///   <item><b>No self-reference</b>: a reference edge pointing at the card's
+    ///   own key is a contradiction.</item>
+    ///   <item><b>Not blocked-while-ready</b>: intake only runs on 2-ready cards,
+    ///   so a non-empty <c>blockedBy</c> contradicts being queued for pickup.</item>
+    /// </list>
+    /// Prompt completeness is covered by <see cref="CheckClarity"/>; tag / context
+    /// completeness is recorded by the context-load manifest
+    /// (<see cref="BuildContextManifest"/>), so the four facets the prompt lists
+    /// (goal / prompt / references / tags) are each accounted for.
+    /// </summary>
+    private static IntakeVerdict? CheckConsistency(TaskInfo target)
+    {
+        var title = (target.Title ?? string.Empty).Trim();
+        if (PlaceholderTitles.Contains(title))
+        {
+            return new IntakeVerdict
+            {
+                Outcome = IntakeOutcome.Inconsistent,
+                Reason = "Card has no real title, so the goal is incomplete. Add a descriptive title before running.",
+                Details = ["title"]
+            };
+        }
+
+        var refs = target.References ?? new TaskReferences();
+
+        var selfKey = TaskReferenceValidator.NormalizeKey(target.TaskKey);
+        if (selfKey.Length > 0)
+        {
+            foreach (var (kind, refTarget) in refs.Enumerate())
+            {
+                if (string.Equals(TaskReferenceValidator.NormalizeKey(refTarget), selfKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new IntakeVerdict
+                    {
+                        Outcome = IntakeOutcome.Inconsistent,
+                        Reason = $"References are contradictory: the card references itself ({selfKey}) under '{kind}'. Remove the self-reference.",
+                        Details = [kind, refTarget]
+                    };
+                }
+            }
+        }
+
+        if (refs.BlockedBy.Count > 0)
+        {
+            return new IntakeVerdict
+            {
+                Outcome = IntakeOutcome.Inconsistent,
+                Reason = $"Card is queued in 2-ready but declares it is blockedBy [{string.Join(", ", refs.BlockedBy)}]; resolve or clear the block before it can run.",
+                Details = refs.BlockedBy.ToArray()
+            };
+        }
+
         return null;
     }
 

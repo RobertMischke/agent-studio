@@ -551,9 +551,12 @@ export class App implements OnInit, OnDestroy {
       jobs: readySplit.humanReady,
     });
     if (readySplit.intake.length > 0) {
+      // Own "Preparation" lane: only pushed (so only rendered) while the
+      // orchestrator-prep/intake loop is actually working a card, so the lane
+      // is hidden whenever nothing is mid-preparation.
       backlogLanes.push({
         state: '2-ready-intake',
-        title: 'Orch Intake',
+        title: 'Preparation',
         icon: '🛂',
         jobs: readySplit.intake,
       });

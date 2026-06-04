@@ -394,6 +394,30 @@ Only tasks in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start
 
 Successful CLI runs move from `3-progress` to `4-auto-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation. The pre-ADR-0025 single `4-review` lane is migrated automatically on backend boot via `JobStateMachine.EnsureStateFoldersAndMigrate`.
 
+### Orchestrator intake / Preparation step
+
+Intake is the orchestrator's **Preparation** step: an opt-in, per-project check (`ProjectSettings.IntakeEnabled`) that vets every `2-ready` card before the coding runner is allowed near it. It runs in `IntakeHostedService` (a 20s background loop) against `IntakeRunner`, and is the substrate behind the board's "Preparation" lane.
+
+- **Parallel, no code seat.** Intake is read-only-like — it never takes the single-active-run coding seat — so a tick drains *every* awaiting card in a project at once (oldest first, capped at `IntakeHostedService.MaxIntakePerProjectPerTick = 16`), not one per tick. The single-active-run boundary applies to `3-progress`, not to intake. This is what makes Preparation parallel-executable.
+- **Substate, not a lane move.** Intake never moves the folder out of `2-ready`. It stamps a `phase` substate in `job.json` (`LifecyclePhases`, Ready-group): `human-ready` (or null = awaiting), `intake-running`, `intake-passed`, `intake-blocked`. A `lifecycle.json` sidecar (`LifecycleSnapshot`) records the verdict, the `intake-v1` check, and the context-load `ContextManifest`. Cards already stamped running/passed/blocked are skipped so a tick never re-runs a settled verdict.
+- **UI.** The frontend renders an ephemeral `2-ready-intake` lane titled **Preparation** that is only visible when at least one card carries an intake substate (`readySplit.intake.length > 0`); it stays hidden otherwise. `human-ready` cards render in the normal Ready lane. The `2-ready` state key on disk is unchanged.
+
+`IntakeRunner.Evaluate` is a pure outcome function returning the first non-Pass `IntakeOutcome` (else Pass), in order: blocked → already-done → consistency → duplicate → clarity → split. The outcomes:
+
+| `IntakeOutcome` | Meaning | Resulting phase |
+| --- | --- | --- |
+| `Pass` | Executable; pickup gate opens. | `intake-passed` |
+| `NeedsClarification` | Prompt too thin to run safely. | `intake-blocked` |
+| `DuplicateCandidate` | Near-duplicate of a `2-ready` / recent review/completed card. | `intake-blocked` |
+| `NeedsSplit` | Prompt bundles several independent units of work. | `intake-blocked` |
+| `Blocked` | Hard out-of-scope / non-goal request. | `intake-blocked` |
+| `AlreadyDone` | Done-precheck: the prompt declares the work already finished. | `intake-blocked`, then routed (see below) |
+| `Inconsistent` | Consistency-check: card metadata is self-contradictory (empty goal/title, self-reference, or `blockedBy` set while queued in `2-ready`). | `intake-blocked` |
+
+- **Consistency-check** (`CheckConsistency`) is peer-independent so it never false-positives on an incomplete peer scan: it only flags issues wrong regardless of which other tasks exist (placeholder/empty title, reference-to-self, blocked-while-ready). Prompt completeness is covered by `CheckClarity`; tag/reference completeness is recorded by the context manifest — together the four facets the spec lists (goal / prompt / references / tags) are each accounted for.
+- **Context-load** (`IntakeRunner.BuildContextManifest`) resolves the card's cross-references against the known-task set and its `attachments/...` prompt tokens against files on disk, splitting each into resolved vs. missing, and captures its tags. Recorded in `LifecycleSnapshot.Context`; informational only — it does not gate pickup.
+- **Done-precheck routing.** When intake returns `AlreadyDone`, `IntakeHostedService.RouteAlreadyDone` routes the card to `5-human-review` through the mandatory `HumanReviewEscalation` funnel (`HumanDecisionNeeded` category) for a person to confirm-and-complete. The orchestrator never auto-completes to `6-completed`. Going through the funnel (never a raw `MoveJob(... "5-human-review")`) is enforced by `HumanReviewVerdictDriftTest`. Routing is best-effort: a failed move leaves the card in `intake-blocked`, where the pickup gate already keeps the runner off it.
+
 ### Task organization rule: API first
 
 Agents must organize tasks through the application API, not by directly creating, moving, deleting, or reordering folders in `agent-taskboard-workspace/projects/<projectKey>/`. This applies to **every agent surface**: the orchestrator-managed CLI runs, direct-from-VS-Code Codex / Claude Code / Copilot / Gemini sessions, and any ad-hoc shell session a human or LLM drives.

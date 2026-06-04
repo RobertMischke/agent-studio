@@ -182,6 +182,127 @@ public class IntakeRunnerTests : IDisposable
         Assert.Equal(IntakeOutcome.AlreadyDone, v.Outcome);
     }
 
+    // ---- Consistency-check matrix (requirement 3) ----------------------------
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Untitled")]
+    [InlineData("TBD")]
+    [InlineData("new task")]
+    public void Evaluate_PlaceholderOrEmptyTitle_FlagsInconsistent(string title)
+    {
+        var target = new TaskInfo { Id = "no-goal", Title = title, State = TaskStates.Ready };
+
+        var v = IntakeRunner.Evaluate(
+            target, "A prompt long enough to clear the clarity probe comfortably.", Array.Empty<TaskInfo>());
+
+        Assert.Equal(IntakeOutcome.Inconsistent, v.Outcome);
+        Assert.Contains("title", v.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Evaluate_SelfReferentialReference_FlagsInconsistent()
+    {
+        var target = new TaskInfo
+        {
+            Id = "self-ref",
+            TaskKey = "ATP-7",
+            Title = "Add the rollup card",
+            State = TaskStates.Ready,
+            References = new TaskReferences { RelatedTo = ["ATP-7"] }
+        };
+
+        var v = IntakeRunner.Evaluate(
+            target, "Add the rollup card to the header. Done when the chip is visible.", Array.Empty<TaskInfo>());
+
+        Assert.Equal(IntakeOutcome.Inconsistent, v.Outcome);
+        Assert.Contains("ATP-7", v.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_BlockedByWhileQueuedReady_FlagsInconsistent()
+    {
+        // A card sitting in 2-ready (pickup queue) that still declares it is
+        // blockedBy something is contradictory: it should not be runnable yet.
+        var target = new TaskInfo
+        {
+            Id = "blocked-ready",
+            TaskKey = "ATP-8",
+            Title = "Wire the export button",
+            State = TaskStates.Ready,
+            References = new TaskReferences { BlockedBy = ["ATP-3"] }
+        };
+
+        var v = IntakeRunner.Evaluate(
+            target, "Wire the export button to the report endpoint. Done when a CSV downloads.", Array.Empty<TaskInfo>());
+
+        Assert.Equal(IntakeOutcome.Inconsistent, v.Outcome);
+        Assert.Contains("ATP-3", v.Reason);
+    }
+
+    [Fact]
+    public void Evaluate_CoherentCardWithNonBlockingReferences_PassesConsistency()
+    {
+        // dependsOn / relatedTo / supersedes edges to OTHER tasks are normal and
+        // must not trip the consistency check — only self-reference and
+        // blockedBy-while-ready do.
+        var target = new TaskInfo
+        {
+            Id = "coherent",
+            TaskKey = "ATP-9",
+            Title = "Add the rollup card",
+            State = TaskStates.Ready,
+            References = new TaskReferences { DependsOn = ["ATP-1"], RelatedTo = ["ATP-2"] }
+        };
+
+        var v = IntakeRunner.Evaluate(
+            target, "Add the rollup card to the header. Done when the chip shows totals.", Array.Empty<TaskInfo>());
+
+        Assert.NotEqual(IntakeOutcome.Inconsistent, v.Outcome);
+        Assert.Equal(IntakeOutcome.Pass, v.Outcome);
+    }
+
+    // ---- Context-load matrix (requirement 4) ---------------------------------
+
+    [Fact]
+    public void BuildContextManifest_ResolvesKnownReferences_AndFlagsMissing()
+    {
+        var target = new TaskInfo
+        {
+            Id = "ctx",
+            TaskKey = "ATP-20",
+            Title = "Add the rollup card",
+            Tags = ["ui", "metrics"],
+            References = new TaskReferences { DependsOn = ["ATP-1"], RelatedTo = ["ATP-404"] }
+        };
+        var known = new List<TaskInfo>
+        {
+            new() { Id = "dep", TaskKey = "ATP-1", Title = "the dependency" }
+        };
+
+        var manifest = IntakeRunner.BuildContextManifest(target, "no attachments here", known, Array.Empty<string>());
+
+        Assert.Contains("dependsOn:ATP-1", manifest.ResolvedReferences);
+        Assert.Contains("relatedTo:ATP-404", manifest.MissingReferences);
+        Assert.Equal(new[] { "ui", "metrics" }, manifest.Tags);
+        Assert.False(manifest.IsComplete);
+    }
+
+    [Fact]
+    public void BuildContextManifest_ClassifiesAttachmentsByDiskPresence()
+    {
+        var target = new TaskInfo { Id = "att", Title = "Wire the importer" };
+        var prompt = "Follow the design in attachments/spec.md and the icon attachments/missing.png.";
+
+        var manifest = IntakeRunner.BuildContextManifest(
+            target, prompt, Array.Empty<TaskInfo>(), new[] { "spec.md" });
+
+        Assert.Contains("attachments/spec.md", manifest.ResolvedAttachments);
+        Assert.Contains("attachments/missing.png", manifest.MissingAttachments);
+        Assert.False(manifest.IsComplete);
+    }
+
     // ---- RunForJob integration: phase transitions + sidecar ------------------
 
     [Fact]
@@ -272,6 +393,28 @@ public class IntakeRunnerTests : IDisposable
         Assert.NotNull(sidecar);
         Assert.Equal("failed", sidecar!.IntakeChecks[0].Status);
         Assert.NotNull(sidecar.BlockingReason);
+    }
+
+    [Fact]
+    public void RunForJob_RecordsContextManifestInSidecar()
+    {
+        // Context-load runs as part of RunForJob and records the resolved /
+        // missing attachments into the lifecycle sidecar so the board can see
+        // what context the card carries.
+        WriteJob(TaskStates.Ready, "ctx-card", phase: LifecyclePhases.HumanReady,
+            promptMd: "Implement the importer per attachments/spec.md; the icon is attachments/missing.png. Done when imports succeed.");
+        var attachmentsDir = Path.Combine(_watchPath, TaskStates.Ready, "ctx-card", "attachments");
+        Directory.CreateDirectory(attachmentsDir);
+        File.WriteAllText(Path.Combine(attachmentsDir, "spec.md"), "# Spec");
+
+        var runner = BuildRunner();
+        runner.RunForJob("ctx-card");
+
+        var sidecar = ReadLifecycleJson("ctx-card");
+        Assert.NotNull(sidecar);
+        Assert.NotNull(sidecar!.Context);
+        Assert.Contains("attachments/spec.md", sidecar.Context!.ResolvedAttachments);
+        Assert.Contains("attachments/missing.png", sidecar.Context.MissingAttachments);
     }
 
     [Fact]

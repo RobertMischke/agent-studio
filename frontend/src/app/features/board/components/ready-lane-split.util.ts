@@ -20,11 +20,11 @@ export interface ReadyLaneSplit {
   /** Human Ready: cards the user has marked ready, no intake verdict yet. */
   humanReady: TaskInfo[];
   /**
-   * Orchestrator Intake: cards the orchestrator-intake loop is processing
+   * Preparation: cards the orchestrator preparation/intake loop is processing
    * (`intake-running`), has flagged for human attention (`intake-blocked`),
    * or has approved for pickup (`intake-passed`). Bundling the three lets
-   * the UI render Intake as one column with phase-aware chips on cards;
-   * the lane stays empty when no project has intake enabled.
+   * the UI render Preparation as one column with phase-aware chips on cards;
+   * the lane stays empty (and so is hidden) when no card is mid-preparation.
    */
   intake: TaskInfo[];
 }
@@ -66,9 +66,9 @@ export function splitReadyByPhase(jobs: readonly TaskInfo[]): ReadyLaneSplit {
 export function readyPhaseLabel(phase: string | null | undefined): string | null {
   switch (phase) {
     case READY_PHASES.humanReady: return 'Ready';
-    case READY_PHASES.intakeRunning: return 'Intake running';
-    case READY_PHASES.intakeBlocked: return 'Intake blocked';
-    case READY_PHASES.intakePassed: return 'Intake passed';
+    case READY_PHASES.intakeRunning: return 'Preparing';
+    case READY_PHASES.intakeBlocked: return 'Prep blocked';
+    case READY_PHASES.intakePassed: return 'Prep passed';
     default: return null;
   }
 }

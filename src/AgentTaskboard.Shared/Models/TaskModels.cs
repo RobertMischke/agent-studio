@@ -412,6 +412,41 @@ public record LifecycleSnapshot
     public List<LifecycleCheck> IntakeChecks { get; init; } = [];
     /// <summary>Post-processing checks scheduled or run for this job, in pipeline order.</summary>
     public List<LifecycleCheck> PostProcessingChecks { get; init; } = [];
+    /// <summary>
+    /// Context-load manifest produced by intake (resolved/missing cross-references
+    /// and prompt attachments). Null when intake has not run or recorded no
+    /// context. Informational: the board and a future LLM context-gathering pass
+    /// can read what context the card carries and what is still outstanding.
+    /// </summary>
+    public ContextManifest? Context { get; init; }
+}
+
+/// <summary>
+/// Result of the intake <b>context-load</b> step: the cross-references and
+/// prompt attachments discovered for a card, each split into the ones that
+/// resolve to a known task / on-disk file and the ones still missing, plus the
+/// card's tags. Recorded in <see cref="LifecycleSnapshot.Context"/>. Purely
+/// informational — missing context does not by itself gate pickup; the typed
+/// intake verdict owns the gate. The shape is deterministic so the context-load
+/// step is unit-testable and can later be enriched by a model call without
+/// changing the sidecar contract.
+/// </summary>
+public record ContextManifest
+{
+    /// <summary>Reference edges (formatted <c>kind:target</c>) that resolved to a known task in scope.</summary>
+    public List<string> ResolvedReferences { get; init; } = [];
+    /// <summary>Reference edges (formatted <c>kind:target</c>) with no matching known task in scope.</summary>
+    public List<string> MissingReferences { get; init; } = [];
+    /// <summary>Attachment paths referenced by the prompt that exist on disk.</summary>
+    public List<string> ResolvedAttachments { get; init; } = [];
+    /// <summary>Attachment paths referenced by the prompt with no file on disk.</summary>
+    public List<string> MissingAttachments { get; init; } = [];
+    /// <summary>The card's tags, surfaced as part of the loaded context.</summary>
+    public List<string> Tags { get; init; } = [];
+
+    /// <summary>True when every referenced task and attachment was resolved.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsComplete => MissingReferences.Count == 0 && MissingAttachments.Count == 0;
 }
 
 /// <summary>One scheduled or completed check inside a <see cref="LifecycleSnapshot"/>.</summary>

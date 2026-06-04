@@ -289,6 +289,42 @@ public class OrchestratorIntakeTests : IDisposable
         }
     }
 
+    // ---- Done-precheck routing (requirement 5) -------------------------------
+
+    [Fact]
+    public void RouteAlreadyDone_AlreadyDoneCard_RoutesToHumanReviewThroughFunnel()
+    {
+        // A card whose prompt declares the work already done is not executed:
+        // it is routed to 5-human-review through the HumanReviewEscalation funnel
+        // (HumanDecisionNeeded) so a person confirms-and-completes. The
+        // orchestrator never auto-moves to 6-completed.
+        WriteJob(TaskStates.Ready, "done-card", "Add the rollup card",
+            "This rollup card is already implemented on main and merged. No work needed.");
+        var (intake, scanner) = BuildIntake();
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        // workspaceRoot=null: the decision-journal append is skipped (no
+        // TaskRepository configured for this temp watch path) but the move +
+        // status.md stub still run, which is what this test pins. The sync
+        // Escalate path never touches the transition service, so null! is safe.
+        var escalation = new HumanReviewEscalation(
+            states, null!, workspaceRoot: null, NullLogger<HumanReviewEscalation>.Instance);
+
+        var verdict = intake.RunForJob("done-card", _watchPath);
+        Assert.Equal(IntakeOutcome.AlreadyDone, verdict.Outcome);
+
+        IntakeHostedService.RouteAlreadyDone(
+            escalation, "done-card", _watchPath, "test", verdict.Reason,
+            NullLogger<IntakeHostedService>.Instance);
+
+        // Folder physically moved out of 2-ready into 5-human-review, and the
+        // escalation wrote a status.md stub so the card is explainable.
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "done-card")),
+            "the already-done card must leave 2-ready");
+        var parked = Path.Combine(_watchPath, TaskStates.HumanReview, "done-card");
+        Assert.True(Directory.Exists(parked), "the already-done card must land in 5-human-review");
+        Assert.True(File.Exists(Path.Combine(parked, "status.md")), "a status.md stub must be written");
+    }
+
     // ---- helpers -------------------------------------------------------------
 
     private (IntakeRunner intake, TaskScannerService scanner) BuildIntake()
