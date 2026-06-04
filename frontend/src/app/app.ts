@@ -1076,7 +1076,7 @@ export class App implements OnInit, OnDestroy {
     const applyHash = () => {
       this.workspaceOverlays.syncFromHash();
       this.applyProjectShellHash();
-      this.backlogTriage.syncFromHash();
+      this.backlogTriage.syncFromHash(this.currentBacklogScopeProject());
       this.epicOverview.syncFromHash();
     };
     applyHash();
@@ -1346,6 +1346,18 @@ export class App implements OnInit, OnDestroy {
     this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed);
   }
 
+  private currentBacklogScopeProject(): string | null {
+    const tab = this.studioTabState.activeTab();
+    if (tab?.kind === 'board' && tab.projectName !== '__all__') return tab.projectName;
+    if (tab?.kind === 'hub') return tab.projectName;
+    if (tab?.kind === 'task' || tab?.kind === 'activity') {
+      const job = this.jobService.jobs().find((j) => j.taskKey === tab.taskKey);
+      if (job?.projectName) return job.projectName;
+    }
+    const active = [...this.activeProjects()];
+    return active.length === 1 ? active[0] : null;
+  }
+
   onBacklogNewTask(): void { this.openCreate('0-backlog'); }
   toggleBacklogTriage(): void {
     if (this.backlogTriage.open()) {
@@ -1354,7 +1366,7 @@ export class App implements OnInit, OnDestroy {
     } else {
       // The two full-screen overlays are mutually exclusive.
       if (this.epicOverview.open()) this.epicOverview.closeOverview();
-      this.backlogTriage.openTriage();
+      this.backlogTriage.openTriage(this.currentBacklogScopeProject());
     }
   }
 

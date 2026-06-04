@@ -4,7 +4,8 @@ import { Injectable, signal } from '@angular/core';
 export type BacklogSortMode = 'newest' | 'oldest' | 'by-type';
 
 const STORAGE_KEY = 'atp.backlog.sortMode';
-const HASH_ROUTE = '#/backlog';
+const ROUTE_PATH = '/backlog';
+const HASH_ROUTE = `#${ROUTE_PATH}`;
 
 function isBacklogSortMode(value: unknown): value is BacklogSortMode {
   return value === 'newest' || value === 'oldest' || value === 'by-type';
@@ -18,6 +19,34 @@ function readPersistedSort(): BacklogSortMode {
   } catch {
     return 'newest';
   }
+}
+
+function normaliseProjectName(projectName: string | null | undefined): string | null {
+  const trimmed = projectName?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function hashSegments(hash: string): string[] {
+  return hash.replace(/^#/, '').split('&').filter(Boolean);
+}
+
+function isBacklogSegment(segment: string): boolean {
+  return segment === ROUTE_PATH || segment.startsWith(`${ROUTE_PATH}?`);
+}
+
+function buildBacklogSegment(projectName: string | null): string {
+  if (!projectName) return ROUTE_PATH;
+  const params = new URLSearchParams();
+  params.set('project', projectName);
+  return `${ROUTE_PATH}?${params.toString()}`;
+}
+
+function projectFromBacklogSegment(segment: string | undefined): string | null {
+  if (!segment) return null;
+  const queryIndex = segment.indexOf('?');
+  if (queryIndex < 0) return null;
+  const params = new URLSearchParams(segment.slice(queryIndex + 1));
+  return normaliseProjectName(params.get('project'));
 }
 
 /**
@@ -37,18 +66,25 @@ export class BacklogTriageService {
   readonly scopedProject = signal<string | null>(null);
   readonly sortMode = signal<BacklogSortMode>(readPersistedSort());
 
-  /** Push `#/backlog` and flip the overlay open. Idempotent. */
+  /** Push `#/backlog?project=...` and flip the overlay open. Idempotent. */
   openTriage(projectName: string | null = null): void {
-    this.scopedProject.set(projectName);
+    const scope = normaliseProjectName(projectName);
+    this.scopedProject.set(scope);
     if (typeof window !== 'undefined') {
       const hash = window.location.hash || '';
-      if (!hash.startsWith(HASH_ROUTE)) {
-        const others = hash.replace(/^#/, '')
-          .split('&')
-          .filter(s => s && !s.startsWith('/backlog'));
-        const next = ['/backlog', ...others].filter(Boolean).join('&');
+      const nextBacklog = buildBacklogSegment(scope);
+      let replaced = false;
+      const nextSegments = hashSegments(hash).map(segment => {
+        if (!isBacklogSegment(segment)) return segment;
+        replaced = true;
+        return nextBacklog;
+      });
+      if (!replaced) nextSegments.unshift(nextBacklog);
+      const nextHash = nextSegments.join('&');
+      const target = window.location.pathname + window.location.search + `#${nextHash}`;
+      if (target !== window.location.pathname + window.location.search + hash) {
         try {
-          history.pushState(null, '', window.location.pathname + window.location.search + `#${next}`);
+          history.pushState(null, '', target);
         } catch {
           /* ignore */
         }
@@ -62,9 +98,7 @@ export class BacklogTriageService {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash || '';
       if (hash.startsWith(HASH_ROUTE) || hash.includes('/backlog')) {
-        const others = hash.replace(/^#/, '')
-          .split('&')
-          .filter(s => s && !s.startsWith('/backlog'));
+        const others = hashSegments(hash).filter(s => !isBacklogSegment(s));
         const next = others.join('&');
         const target = next
           ? window.location.pathname + window.location.search + `#${next}`
@@ -76,6 +110,7 @@ export class BacklogTriageService {
         }
       }
     }
+    this.scopedProject.set(null);
     if (this.open()) this.open.set(false);
   }
 
@@ -83,9 +118,13 @@ export class BacklogTriageService {
   syncFromHash(projectName: string | null = null): void {
     if (typeof window === 'undefined') return;
     const hash = window.location.hash || '';
-    const onBacklog = hash.startsWith(HASH_ROUTE)
-      || hash.split('&').some(s => s === '/backlog' || s.startsWith('/backlog?'));
-    if (onBacklog && !this.open()) this.scopedProject.set(projectName);
+    const backlogSegment = hashSegments(hash).find(isBacklogSegment);
+    const onBacklog = hash.startsWith(HASH_ROUTE) || backlogSegment !== undefined;
+    if (onBacklog) {
+      this.scopedProject.set(projectFromBacklogSegment(backlogSegment) ?? normaliseProjectName(projectName));
+    } else {
+      this.scopedProject.set(null);
+    }
     if (onBacklog !== this.open()) this.open.set(onBacklog);
   }
 

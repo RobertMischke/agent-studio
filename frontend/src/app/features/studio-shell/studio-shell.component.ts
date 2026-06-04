@@ -749,7 +749,7 @@ export class StudioShellComponent {
     } else {
       // The two full-screen overlays are mutually exclusive.
       if (this.epicOverview.open()) this.epicOverview.closeOverview();
-      this.backlogTriage.openTriage();
+      this.backlogTriage.openTriage(this.activeProjectName());
     }
   }
 
@@ -776,13 +776,15 @@ export class StudioShellComponent {
   );
 
   /**
-   * Backlog count under the active filter (project + type + tag + owner).
+   * Backlog count under the contextual project (plus type + tag + owner).
    * Drives the activity-bar Backlog badge so the operator can see at a
    * glance how many tasks are waiting on triage.
    */
-  readonly backlogCount = computed(
-    () => this.boardFilters.filteredGrouped().backlog?.length ?? 0,
-  );
+  readonly backlogCount = computed(() => {
+    const projectName = this.activeProjectName();
+    if (!projectName) return 0;
+    return this.boardFilters.filteredGroupedForProject(projectName).backlog?.length ?? 0;
+  });
 
   openTask(job: TaskInfo): void {
     this.tabState.open({ kind: 'task', taskKey: job.taskKey });
@@ -801,9 +803,10 @@ export class StudioShellComponent {
    * opens the backlog screen. Mutually exclusive with the epic overlay.
    */
   openProjectBacklog(projectName: string): void {
+    this.openBoard(projectName);
     this.boardFilters.setSoleProject(projectName);
     if (this.epicOverview.open()) this.epicOverview.closeOverview();
-    if (!this.backlogTriage.open()) this.backlogTriage.openTriage();
+    this.backlogTriage.openTriage(projectName);
   }
 
   /**
