@@ -120,18 +120,67 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.componentInstance.agentUsage()).toBeNull();
   });
 
-  it('empty-state copy depends on lane: ready vs running vs completed', async () => {
+  it('tokens & performance: section is hidden (no placeholder) when no token/duration data exists', async () => {
     const fixture = await build(baseJob({ state: '2-ready' }));
     const c = fixture.componentInstance;
-    expect(c.tokensEmptyMessage()).toMatch(/Run not started/i);
+    expect(c.hasOrchestratorTokens()).toBe(false);
+    expect(c.agentUsage()).toBeNull();
+    expect(c.runCount()).toBe(0);
+    expect(c.totalDuration()).toBe(0);
+    expect(c.hasTokensOrPerformance()).toBe(false);
+    // The whole section is absent — and the old empty-state placeholder is gone.
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens-empty"]')).toBeNull();
+  });
 
-    fixture.componentRef.setInput('job', baseJob({ state: '3-progress' }));
-    try { fixture.detectChanges(); } catch { /* ignore */ }
-    expect(c.tokensEmptyMessage()).toMatch(/in progress/i);
+  it('tokens & performance: a CLI footer (lastUsage) alone makes the section render', async () => {
+    const fixture = await build(baseJob({
+      state: '4-auto-review',
+      lastUsage: { at: new Date().toISOString(), tokens: '12.4k', changes: null, requests: null },
+    }));
+    const c = fixture.componentInstance;
+    expect(c.hasTokensOrPerformance()).toBe(true);
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).not.toBeNull();
+  });
 
-    fixture.componentRef.setInput('job', baseJob({ state: '6-completed' }));
+  it('tokens & performance: a recorded run alone makes the section render with a Runs row but no Runs:0', async () => {
+    const fixture = await build(baseJob({ state: '6-completed' }));
+    TestBed.inject(RunTimelinePollService).timeline.set(
+      runTimeline(2, [runRecord({ durationSeconds: 10 }), runRecord({ durationSeconds: 5 })]),
+    );
     try { fixture.detectChanges(); } catch { /* ignore */ }
-    expect(c.tokensEmptyMessage()).toMatch(/No token activity recorded/i);
+    const c = fixture.componentInstance;
+    expect(c.runCount()).toBe(2);
+    expect(c.hasTokensOrPerformance()).toBe(true);
+    const perf = fixture.nativeElement.querySelector('[data-testid="overview-tokens-perf"]');
+    expect(perf).not.toBeNull();
+    expect(perf.textContent).toContain('Runs');
+    expect(perf.textContent).toContain('Total Duration');
+  });
+
+  it('tokens & performance: a killed run with only a CORE-step duration still renders (duration, no Runs row)', async () => {
+    // ASS-665/675: no run rows, but the CORE pipeline step persisted elapsed
+    // time. The section must still appear and surface the duration even though
+    // the run-timeline carries no run count.
+    const fixture = await build(baseJob({ state: '5-human-review' }));
+    const pipe = agentPipeline();
+    pipe.execution!.steps[0] = {
+      ...pipe.execution!.steps[0],
+      status: 'failed',
+      durationMs: 1_215_900,
+      completedAt: new Date().toISOString(),
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    const c = fixture.componentInstance;
+    expect(c.runCount()).toBe(0);
+    expect(c.totalDuration()).toBeCloseTo(1215.9, 1);
+    expect(c.hasTokensOrPerformance()).toBe(true);
+    const perf = fixture.nativeElement.querySelector('[data-testid="overview-tokens-perf"]');
+    expect(perf).not.toBeNull();
+    expect(perf.textContent).toContain('Total Duration');
+    // No run recorded -> no Runs row (never "Runs: 0").
+    expect(perf.textContent).not.toContain('Runs');
   });
 
   it('agent-work block surfaces call count + tool counts from the poll service', async () => {

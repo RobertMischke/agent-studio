@@ -472,21 +472,6 @@ export class OverviewPaneComponent {
     return lu;
   });
 
-  /**
-   * Wording for the empty state. Honest about *why* there is no data
-   * depending on lane state, instead of a blanket "No token data".
-   */
-  readonly tokensEmptyMessage = computed(() => {
-    const state = this.job().state;
-    if (state === '1-preparation' || state === '1a-orchestrator-prep' || state === '2-ready') {
-      return 'Run not started yet. Token activity will appear here once the agent reports usage.';
-    }
-    if (state === '3-progress') {
-      return 'Run in progress. Token activity will appear here once the agent reports a footer.';
-    }
-    return 'No token activity recorded for this task. The agent did not report a CLI footer and the orchestrator made no LLM calls attributed to this job.';
-  });
-
   readonly lastRunRecord = computed<RunRecord | null>(() => {
     const r = this.runs();
     return r.length > 0 ? r[r.length - 1] : null;
@@ -514,6 +499,22 @@ export class OverviewPaneComponent {
     }
     return total;
   });
+
+  /** Recorded run count, from the run-timeline. 0 before the first run. */
+  readonly runCount = computed<number>(() => this.timeline()?.runCount ?? 0);
+
+  /**
+   * Whether the "Tokens & Performance" section has anything worth showing:
+   * orchestrator tokens, a CLI-footer reading, a recorded run, or any
+   * elapsed time. When all four are absent the section is hidden entirely
+   * rather than rendering a placeholder (the empty-state text was removed).
+   */
+  readonly hasTokensOrPerformance = computed<boolean>(() =>
+    this.hasOrchestratorTokens()
+    || this.agentUsage() !== null
+    || this.runCount() > 0
+    || this.totalDuration() > 0,
+  );
 
   /**
    * Per-step pipeline rows for the Overview pipeline block. Joins the

@@ -240,11 +240,11 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
     }
   });
 
-  test('empty state is lane-specific (ready vs completed)', async ({ page }) => {
+  test('no token/duration data hides the whole Tokens & Performance section (no placeholder)', async ({ page }) => {
     const watchPath = await pickWatchPath();
-    // 1-preparation is one of the lanes whose empty message asserts
-    // "Run not started" — same wording as 2-ready, and the runner won't
-    // grab it during the spec.
+    // 1-preparation keeps the runner off the folder, so the task records no
+    // runs, no duration, and no token activity — the empty case that must
+    // hide the section entirely rather than show a placeholder.
     const job = await createJob({
       title: `overview-tokens-empty-${Date.now()}`,
       watchPath,
@@ -265,11 +265,11 @@ test.describe('Overview tab — tokens fallback + session row removed', () => {
       await expect(overviewTab).toBeVisible({ timeout: 15_000 });
       await overviewTab.click();
 
-      // Ready lane: "Run not started yet" wording, not the old flat message.
-      const empty = page.getByTestId('overview-tokens-empty');
-      await expect(empty).toBeVisible();
-      await expect(empty).toContainText(/Run not started/i);
-      await expect(empty).not.toContainText('No token data recorded yet.');
+      // The Overview tab is up, but the Tokens & Performance section — and the
+      // old placeholder — are both absent because there is nothing to show.
+      await expect(page.getByTestId('overview-tab')).toBeVisible();
+      await expect(page.getByTestId('overview-tokens')).toHaveCount(0);
+      await expect(page.getByTestId('overview-tokens-empty')).toHaveCount(0);
     } finally {
       await api(
         `/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`,

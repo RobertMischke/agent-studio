@@ -153,7 +153,10 @@
     </div>
   </section>
 
-  <!-- Token / Performance block -->
+  <!-- Token / Performance block. Rendered only when there is token or
+       performance data to show; an empty task hides the whole section
+       rather than displaying a placeholder. -->
+  @if (hasTokensOrPerformance()) {
   <section class="ov-section" data-testid="overview-tokens">
     <h3 class="ov-section__title">Tokens &amp; Performance</h3>
 
@@ -230,16 +233,14 @@
       </div>
     }
 
-    @if (!hasOrchestratorTokens() && !agentUsage()) {
-      <div class="ov-empty" data-testid="overview-tokens-empty">{{ tokensEmptyMessage() }}</div>
-    }
-
-    @if (timeline(); as tl) {
-      <div class="ov-grid ov-grid--perf">
-        <div class="ov-row">
-          <span class="ov-label">Runs</span>
-          <span class="ov-value ov-value--mono">{{ tl.runCount }}</span>
-        </div>
+    @if (runCount() > 0 || totalDuration() > 0) {
+      <div class="ov-grid ov-grid--perf" data-testid="overview-tokens-perf">
+        @if (runCount() > 0) {
+          <div class="ov-row">
+            <span class="ov-label">Runs</span>
+            <span class="ov-value ov-value--mono">{{ runCount() }}</span>
+          </div>
+        }
         @if (totalDuration() > 0) {
           <div class="ov-row">
             <span class="ov-label">Total Duration</span>
@@ -249,6 +250,7 @@
       </div>
     }
   </section>
+  }
 
   <!-- Pipeline block: ordered pre/core/post steps with per-step status,
        model used, tokens and cost, plus the task total. Configuration of
