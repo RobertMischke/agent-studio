@@ -158,6 +158,7 @@ export class ScreenshotStripComponent {
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);
   private lightboxStackDispose: (() => void) | null = null;
+  private readonly preloadedUrls = new Set<string>();
 
   constructor() {
     // Lightbox open/close drives the modal-stack registration. The strip
@@ -175,12 +176,31 @@ export class ScreenshotStripComponent {
         this.lightboxStackDispose = null;
       }
     });
+    effect(() => {
+      const activeIndex = this.activeIndex();
+      const screenshots = this.screenshots();
+      if (activeIndex < 0 || screenshots.length < 2) return;
+
+      this.preloadNeighbour(activeIndex - 1, screenshots);
+      this.preloadNeighbour(activeIndex + 1, screenshots);
+    });
     this.destroyRef.onDestroy(() => {
       if (this.lightboxStackDispose) {
         this.lightboxStackDispose();
         this.lightboxStackDispose = null;
       }
     });
+  }
+
+  private preloadNeighbour(index: number, screenshots: TaskScreenshot[]): void {
+    const normalized = (index + screenshots.length) % screenshots.length;
+    const url = screenshots[normalized]?.url;
+    if (!url || this.preloadedUrls.has(url) || typeof Image === 'undefined') return;
+
+    this.preloadedUrls.add(url);
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
   }
 }
 

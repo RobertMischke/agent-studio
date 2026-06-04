@@ -47,8 +47,10 @@
               (click)="prev(); $event.stopPropagation()"
               aria-label="Previous">‹</button>
       <figure class="lightbox__figure" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-        <img class="lightbox__img" [src]="c.url" [alt]="c.caption"
-             data-testid="screenshot-lightbox-image" />
+        <div class="lightbox__stage" data-testid="screenshot-lightbox-stage">
+          <img class="lightbox__img" [src]="c.url" [alt]="c.caption"
+               data-testid="screenshot-lightbox-image" />
+        </div>
         <figcaption class="lightbox__caption">
           <div class="lightbox__caption-main">
             <span class="lightbox__caption-spec" data-testid="screenshot-lightbox-caption">{{ c.caption }}</span>
