@@ -115,6 +115,19 @@ public static class TaskRunnerEndpoints
             return Results.Ok(AgentWorkSummaryReader.Read(info));
         });
 
+        // Drill-down companion to agent-work-summary: the same tool-calls.jsonl
+        // folded into per-tool groups, each carrying the individual calls
+        // (started argument paired with the completed outcome) so the Overview
+        // tab's Agent Work block can show *what* the agent did - the command /
+        // file / pattern of each call - in a grouped, expandable view, not just
+        // a per-tool count. Read-only; tolerant of missing / torn logs.
+        group.MapGet("/{jobId}/agent-work-detail", (string jobId, string? watchPath, TaskScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            return Results.Ok(AgentWorkSummaryReader.ReadDetail(info));
+        });
+
         // The per-job task plan that drives the plan strip above the activity
         // log: the agent's own TodoWrite / update_plan items with derived
         // sub-actions and a soft-estimate band. Folded from

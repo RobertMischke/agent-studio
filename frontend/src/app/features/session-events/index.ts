@@ -4,4 +4,7 @@ export type {
   SessionEventsResponse,
   AgentWorkSummary,
   AgentWorkToolCount,
+  AgentWorkDetail,
+  AgentWorkToolGroup,
+  AgentWorkCall,
 } from './models/session-events.model';

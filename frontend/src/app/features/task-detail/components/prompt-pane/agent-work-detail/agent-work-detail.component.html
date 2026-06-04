@@ -1,0 +1,67 @@
+<button
+  type="button"
+  class="awd-toggle"
+  data-testid="agent-work-detail-toggle"
+  [attr.aria-expanded]="open()"
+  (click)="toggleOpen()">
+  <span class="awd-toggle__chevron" [class.awd-toggle__chevron--open]="open()">▸</span>
+  <span>{{ open() ? 'Hide tool detail' : 'Show tool detail' }}</span>
+</button>
+
+@if (open()) {
+  <div class="awd-body" data-testid="agent-work-detail-body">
+    @if (loading()) {
+      <p class="awd-note" data-testid="agent-work-detail-loading">Loading…</p>
+    } @else if (failed()) {
+      <p class="awd-note awd-note--error" data-testid="agent-work-detail-error">
+        Could not load tool detail.
+      </p>
+    } @else if (!hasGroups()) {
+      <p class="awd-note" data-testid="agent-work-detail-empty">No tool calls recorded.</p>
+    } @else {
+      <ul class="awd-groups">
+        @for (group of groups(); track group.tool) {
+          <li class="awd-group" data-testid="agent-work-detail-group">
+            <button
+              type="button"
+              class="awd-group__head"
+              [attr.aria-expanded]="isExpanded(group.tool)"
+              (click)="toggleGroup(group.tool)">
+              <span class="awd-group__chevron"
+                    [class.awd-group__chevron--open]="isExpanded(group.tool)">▸</span>
+              <span class="awd-group__name">{{ group.tool }}</span>
+              <span class="awd-group__count">{{ group.count }}</span>
+            </button>
+
+            @if (isExpanded(group.tool)) {
+              <ul class="awd-calls" data-testid="agent-work-detail-calls">
+                @for (call of group.calls; track $index) {
+                  <li class="awd-call"
+                      [class.awd-call--error]="call.isError"
+                      [appTooltip]="callTooltip(call)"
+                      tooltipPosition="top"
+                      data-testid="agent-work-detail-call">
+                    <span class="awd-call__status"
+                          [class.awd-call__status--error]="call.isError"
+                          [class.awd-call__status--pending]="!call.completed">
+                      @if (call.isError) { ✕ } @else if (!call.completed) { · } @else { ✓ }
+                    </span>
+                    <span class="awd-call__arg">{{ argPreview(call) }}</span>
+                    @if (call.ts) {
+                      <span class="awd-call__time">{{ callTime(call.ts) }}</span>
+                    }
+                  </li>
+                }
+                @if (group.count > group.calls.length) {
+                  <li class="awd-call awd-call--more">
+                    +{{ group.count - group.calls.length }} earlier (truncated)
+                  </li>
+                }
+              </ul>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </div>
+}

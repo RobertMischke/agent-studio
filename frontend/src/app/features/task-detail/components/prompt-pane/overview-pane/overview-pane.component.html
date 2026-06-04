@@ -482,6 +482,12 @@
               </span>
             </div>
           }
+
+          @if (aw.toolCalls > 0) {
+            <app-agent-work-detail
+              [jobId]="job().id"
+              [watchPath]="job().watchPath" />
+          }
         }
       </div>
     </section>

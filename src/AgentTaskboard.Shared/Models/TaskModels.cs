@@ -610,6 +610,58 @@ public record AgentWorkToolCount
 }
 
 /// <summary>
+/// Drill-down companion to <see cref="AgentWorkSummary"/>: the same
+/// <c>logs/tool-calls.jsonl</c> rows folded into per-tool groups, each
+/// carrying the individual calls so the Overview tab can show *what* the
+/// agent did (the command / file / pattern in each call's argument), not
+/// just how many times. Folded by <c>AgentWorkSummaryReader.ReadDetail</c>;
+/// missing log yields an empty list. Groups are ordered by count descending
+/// to match the summary chips.
+/// </summary>
+public record AgentWorkDetail
+{
+    /// <summary>Per-tool groups, most-used first.</summary>
+    public List<AgentWorkToolGroup> Groups { get; init; } = [];
+    /// <summary>Total <c>kind=started</c> tool-call rows across all groups (uncapped).</summary>
+    public int TotalCalls { get; init; }
+}
+
+/// <summary>One tool type (Bash / Read / Edit / …) and the calls made with it.</summary>
+public record AgentWorkToolGroup
+{
+    public string Tool { get; init; } = "";
+    /// <summary>Full started count for this tool (may exceed <see cref="Calls"/>.Count when capped).</summary>
+    public int Count { get; init; }
+    /// <summary>
+    /// The individual calls, oldest first. Capped to the most recent N per
+    /// group so a pathological job cannot produce an unbounded payload;
+    /// <see cref="Count"/> is the honest total.
+    /// </summary>
+    public List<AgentWorkCall> Calls { get; init; } = [];
+}
+
+/// <summary>
+/// One agent tool invocation: the <c>started</c> row's argument (the
+/// command/file/pattern that says *what* was done) paired with the
+/// <c>completed</c> row's outcome when one was observed. A still-open call
+/// (in-flight or crashed before completion) leaves <see cref="Completed"/>
+/// false and the result fields null.
+/// </summary>
+public record AgentWorkCall
+{
+    /// <summary>Timestamp of the <c>started</c> row.</summary>
+    public DateTime? Ts { get; init; }
+    /// <summary>The started row's argument: shell command, file path, grep pattern, etc. May be empty.</summary>
+    public string? Argument { get; init; }
+    /// <summary>True once a matching <c>completed</c> row was seen.</summary>
+    public bool Completed { get; init; }
+    /// <summary>From the completed row: true when the tool reported an error.</summary>
+    public bool? IsError { get; init; }
+    /// <summary>From the completed row: the first line of the tool result, when captured.</summary>
+    public string? ResultFirstLine { get; init; }
+}
+
+/// <summary>
 /// The per-job task plan the plan strip renders above the activity log. Folded
 /// by <c>PlanReader</c> from <c>logs/plan-snapshots.jsonl</c> (the agent's own
 /// TodoWrite / update_plan frames) and <c>logs/tool-calls.jsonl</c>. Read-only

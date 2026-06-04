@@ -47,3 +47,35 @@ export interface AgentWorkToolCount {
   tool: string;
   count: number;
 }
+
+/**
+ * Drill-down companion to `AgentWorkSummary`: the same `tool-calls.jsonl`
+ * rows folded into per-tool groups, each carrying the individual calls so
+ * the Overview tab can show *what* the agent did (command / file / pattern)
+ * in a grouped, expandable view. Mirrors backend `AgentWorkDetail`.
+ */
+export interface AgentWorkDetail {
+  groups: AgentWorkToolGroup[];
+  /** Total started tool-call rows across all groups (uncapped). */
+  totalCalls: number;
+}
+
+export interface AgentWorkToolGroup {
+  tool: string;
+  /** Full started count; may exceed `calls.length` when the call list is capped. */
+  count: number;
+  calls: AgentWorkCall[];
+}
+
+export interface AgentWorkCall {
+  /** ISO timestamp of the started row. */
+  ts: string | null;
+  /** Shell command, file path, grep pattern, etc. May be empty. */
+  argument: string | null;
+  /** True once a matching completed row was observed. */
+  completed: boolean;
+  /** From the completed row: true when the tool reported an error. */
+  isError: boolean | null;
+  /** From the completed row: first line of the tool result, when captured. */
+  resultFirstLine: string | null;
+}

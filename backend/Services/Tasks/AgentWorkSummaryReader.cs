@@ -52,6 +52,88 @@ internal static class AgentWorkSummaryReader
         };
     }
 
+    /// <summary>
+    /// Drill-down companion to <see cref="Read"/>: folds the same
+    /// <c>logs/tool-calls.jsonl</c> into per-tool groups, each carrying the
+    /// individual calls (started argument paired with the completed outcome)
+    /// so the Overview tab can show *what* the agent did, not just a count.
+    /// Single-pass and tolerant like <see cref="Read"/>; a torn line is
+    /// skipped, a missing file yields an empty detail. The per-group call
+    /// list is capped at <paramref name="maxCallsPerGroup"/> (most recent
+    /// kept) so a pathological job cannot produce an unbounded payload; the
+    /// group's <c>Count</c> stays the honest uncapped total.
+    /// </summary>
+    public static AgentWorkDetail ReadDetail(TaskInfo info, int maxCallsPerGroup = 250)
+    {
+        var toolPath = ToolCallsLogPath(info.FolderPath);
+        if (!File.Exists(toolPath)) return new AgentWorkDetail();
+
+        // Preserve first-seen order of tools; within a tool, calls in
+        // chronological (file) order. Open calls (started without a matching
+        // completed yet) are tracked per tool so the next completed row of the
+        // same tool pairs with the most recent open one.
+        var order = new List<string>();
+        var byTool = new Dictionary<string, List<MutableCall>>(StringComparer.OrdinalIgnoreCase);
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var total = 0;
+
+        foreach (var raw in ReadAllLinesSafe(toolPath))
+        {
+            ToolCallRow? row;
+            try { row = JsonSerializer.Deserialize<ToolCallRow>(raw, ParseOpts); }
+            catch { continue; }
+            if (row == null) continue;
+            var name = string.IsNullOrWhiteSpace(row.Tool) ? "(unknown)" : row.Tool!.Trim();
+
+            if (string.Equals(row.Kind, "started", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!byTool.TryGetValue(name, out var list))
+                {
+                    list = new List<MutableCall>();
+                    byTool[name] = list;
+                    order.Add(name);
+                }
+                list.Add(new MutableCall { Ts = row.Ts, Argument = row.Argument });
+                counts[name] = counts.TryGetValue(name, out var c) ? c + 1 : 1;
+                total++;
+            }
+            else if (string.Equals(row.Kind, "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                if (byTool.TryGetValue(name, out var list))
+                {
+                    // Attach to the most recent still-open call of this tool.
+                    for (var i = list.Count - 1; i >= 0; i--)
+                    {
+                        if (list[i].Completed) continue;
+                        list[i].Completed = true;
+                        list[i].IsError = row.IsError;
+                        list[i].ResultFirstLine = row.FirstLine;
+                        break;
+                    }
+                }
+            }
+        }
+
+        var groups = order
+            .Select(tool => new AgentWorkToolGroup
+            {
+                Tool = tool,
+                Count = counts.TryGetValue(tool, out var c) ? c : byTool[tool].Count,
+                Calls = CapMostRecent(byTool[tool], maxCallsPerGroup)
+                    .Select(m => m.ToRecord())
+                    .ToList(),
+            })
+            .OrderByDescending(g => g.Count)
+            .ThenBy(g => g.Tool, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new AgentWorkDetail { Groups = groups, TotalCalls = total };
+    }
+
+    /// <summary>Keep the most recent <paramref name="max"/> calls, preserving chronological order.</summary>
+    private static IEnumerable<MutableCall> CapMostRecent(List<MutableCall> calls, int max)
+        => calls.Count <= max ? calls : calls.Skip(calls.Count - max);
+
     private static string ToolCallsLogPath(string jobFolder)
         => Path.Combine(TaskPaths.LogsDir(jobFolder), "tool-calls.jsonl");
 
@@ -129,5 +211,29 @@ internal static class AgentWorkSummaryReader
         public DateTime? Ts { get; init; }
         public string? Kind { get; init; }
         public string? Tool { get; init; }
+        // Detail-only fields. The summary path ignores them; ReadDetail pairs
+        // the started argument with the completed outcome.
+        public string? Argument { get; init; }
+        public bool? IsError { get; init; }
+        public string? FirstLine { get; init; }
+    }
+
+    /// <summary>Mutable accumulator for one call while pairing started/completed rows.</summary>
+    private sealed class MutableCall
+    {
+        public DateTime? Ts { get; init; }
+        public string? Argument { get; init; }
+        public bool Completed { get; set; }
+        public bool? IsError { get; set; }
+        public string? ResultFirstLine { get; set; }
+
+        public AgentWorkCall ToRecord() => new()
+        {
+            Ts = Ts,
+            Argument = Argument,
+            Completed = Completed,
+            IsError = IsError,
+            ResultFirstLine = ResultFirstLine,
+        };
     }
 }

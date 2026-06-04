@@ -57,7 +57,11 @@ import type {
 } from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { ExecutiveSummaryResponse } from '../features/summary';
-import type { AgentWorkSummary, SessionEventsResponse } from '../features/session-events';
+import type {
+  AgentWorkSummary,
+  AgentWorkDetail,
+  SessionEventsResponse,
+} from '../features/session-events';
 import type { TaskPlanView } from '../features/plan-strip/plan.model';
 import type { RegressionRadarResult } from '../features/regression-radar';
 import { ErrorDialogService } from './error-dialog.service';
@@ -929,6 +933,20 @@ export class TaskService {
   getAgentWorkSummary(jobId: string, watchPath?: string) {
     return this.http.get<AgentWorkSummary>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/agent-work-summary`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Drill-down companion to {@link getAgentWorkSummary}: the same
+   * tool-calls.jsonl rows folded into per-tool groups, each carrying the
+   * individual calls (command / file / pattern + outcome) so the Overview
+   * tab can show *what* the agent did, not just a count. Fetched lazily on
+   * first expand.
+   */
+  getAgentWorkDetail(jobId: string, watchPath?: string) {
+    return this.http.get<AgentWorkDetail>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/agent-work-detail`,
       this.withWatchPath(watchPath),
     );
   }

@@ -128,4 +128,136 @@ public class AgentWorkSummaryReaderTests
         }
         finally { Directory.Delete(folder, true); }
     }
+
+    [Fact]
+    public void ReadDetail_EmptyFolder_ReturnsEmptyDetail()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "agent-work-detail-empty-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var info = MakeJob(folder);
+            var detail = AgentWorkSummaryReader.ReadDetail(info);
+            Assert.Empty(detail.Groups);
+            Assert.Equal(0, detail.TotalCalls);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
+    public void ReadDetail_GroupsByTool_PairsCompletedOutcome_AndKeepsArguments()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "agent-work-detail-fold-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var info = MakeJob(folder);
+            var logsDir = TaskPaths.LogsDir(folder);
+
+            // Two Reads (one with a captured first line + error), one Bash with
+            // a command, and one still-open Edit (started, never completed).
+            var toolLines = new[]
+            {
+                "{\"ts\":\"2026-05-28T19:05:00Z\",\"kind\":\"started\",\"tool\":\"Read\",\"argument\":\"/a.txt\"}",
+                "{\"ts\":\"2026-05-28T19:05:01Z\",\"kind\":\"completed\",\"tool\":\"Read\",\"isError\":false,\"firstLine\":\"line one\"}",
+                "{\"ts\":\"2026-05-28T19:06:00Z\",\"kind\":\"started\",\"tool\":\"Read\",\"argument\":\"/b.txt\"}",
+                "{\"ts\":\"2026-05-28T19:06:02Z\",\"kind\":\"completed\",\"tool\":\"Read\",\"isError\":true,\"firstLine\":\"boom\"}",
+                "{\"ts\":\"2026-05-28T19:07:00Z\",\"kind\":\"started\",\"tool\":\"Bash\",\"argument\":\"npm test\"}",
+                "{\"ts\":\"2026-05-28T19:07:09Z\",\"kind\":\"completed\",\"tool\":\"Bash\",\"isError\":false,\"firstLine\":\"PASS\"}",
+                "{\"ts\":\"2026-05-28T19:08:00Z\",\"kind\":\"started\",\"tool\":\"Edit\",\"argument\":\"/c.cs\"}",
+            };
+            File.WriteAllLines(Path.Combine(logsDir, "tool-calls.jsonl"), toolLines, Encoding.UTF8);
+
+            var detail = AgentWorkSummaryReader.ReadDetail(info);
+
+            Assert.Equal(4, detail.TotalCalls);
+            // Read (2) first, then Bash (1) / Edit (1) alpha-tied.
+            Assert.Collection(detail.Groups,
+                read =>
+                {
+                    Assert.Equal("Read", read.Tool);
+                    Assert.Equal(2, read.Count);
+                    Assert.Collection(read.Calls,
+                        c1 =>
+                        {
+                            Assert.Equal("/a.txt", c1.Argument);
+                            Assert.True(c1.Completed);
+                            Assert.False(c1.IsError);
+                            Assert.Equal("line one", c1.ResultFirstLine);
+                        },
+                        c2 =>
+                        {
+                            Assert.Equal("/b.txt", c2.Argument);
+                            Assert.True(c2.Completed);
+                            Assert.True(c2.IsError);
+                            Assert.Equal("boom", c2.ResultFirstLine);
+                        });
+                },
+                bash =>
+                {
+                    Assert.Equal("Bash", bash.Tool);
+                    Assert.Equal(1, bash.Count);
+                    Assert.Equal("npm test", bash.Calls[0].Argument);
+                    Assert.True(bash.Calls[0].Completed);
+                },
+                edit =>
+                {
+                    Assert.Equal("Edit", edit.Tool);
+                    Assert.Equal(1, edit.Count);
+                    // Started but never completed -> still open, no result.
+                    Assert.Equal("/c.cs", edit.Calls[0].Argument);
+                    Assert.False(edit.Calls[0].Completed);
+                    Assert.Null(edit.Calls[0].IsError);
+                });
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
+    public void ReadDetail_CapsCallsPerGroup_ButKeepsHonestCount()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "agent-work-detail-cap-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var info = MakeJob(folder);
+            var logsDir = TaskPaths.LogsDir(folder);
+
+            // 5 Bash starts; cap at 3 keeps the 3 most recent in order.
+            var lines = Enumerable.Range(0, 5)
+                .Select(i => $"{{\"ts\":\"2026-05-28T19:0{i}:00Z\",\"kind\":\"started\",\"tool\":\"Bash\",\"argument\":\"cmd-{i}\"}}")
+                .ToArray();
+            File.WriteAllLines(Path.Combine(logsDir, "tool-calls.jsonl"), lines, Encoding.UTF8);
+
+            var detail = AgentWorkSummaryReader.ReadDetail(info, maxCallsPerGroup: 3);
+
+            Assert.Equal(5, detail.TotalCalls);
+            var group = Assert.Single(detail.Groups);
+            Assert.Equal(5, group.Count);
+            Assert.Equal(3, group.Calls.Count);
+            // Most recent 3, chronological: cmd-2, cmd-3, cmd-4.
+            Assert.Equal(new[] { "cmd-2", "cmd-3", "cmd-4" }, group.Calls.Select(c => c.Argument));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
+    public void ReadDetail_SkipsTornLines()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "agent-work-detail-torn-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var info = MakeJob(folder);
+            var logsDir = TaskPaths.LogsDir(folder);
+            var content =
+                "﻿{\"ts\":\"2026-05-28T19:05:00Z\",\"kind\":\"started\",\"tool\":\"Read\",\"argument\":\"/a\"}\n" +
+                "{ broken row \n" +
+                "{\"ts\":\"2026-05-28T19:06:00Z\",\"kind\":\"started\",\"tool\":\"Read\",\"argument\":\"/b\"}\n";
+            File.WriteAllText(Path.Combine(logsDir, "tool-calls.jsonl"), content, Encoding.UTF8);
+
+            var detail = AgentWorkSummaryReader.ReadDetail(info);
+            Assert.Equal(2, detail.TotalCalls);
+            var group = Assert.Single(detail.Groups);
+            Assert.Equal("Read", group.Tool);
+            Assert.Equal(2, group.Count);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
 }

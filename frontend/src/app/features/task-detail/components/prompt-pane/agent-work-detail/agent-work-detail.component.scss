@@ -1,0 +1,140 @@
+:host {
+  display: block;
+  margin-top: 2px;
+}
+
+.awd-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+  font-weight: 500;
+
+  &:hover { color: var(--studio-fg); }
+
+  &__chevron {
+    display: inline-block;
+    font-size: 9px;
+    transition: transform 0.12s ease;
+
+    &--open { transform: rotate(90deg); }
+  }
+}
+
+.awd-body {
+  margin-top: 4px;
+}
+
+.awd-note {
+  margin: 2px 0;
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+
+  &--error { color: var(--severity-high); }
+}
+
+.awd-groups,
+.awd-calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.awd-group {
+  border-top: 1px solid var(--studio-border);
+
+  &:first-child { border-top: none; }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 3px 2px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--studio-fg);
+    font-size: 11.5px;
+    text-align: left;
+
+    &:hover { background: var(--studio-bg-hover); }
+  }
+
+  &__chevron {
+    display: inline-block;
+    font-size: 9px;
+    color: var(--studio-fg-dim);
+    transition: transform 0.12s ease;
+
+    &--open { transform: rotate(90deg); }
+  }
+
+  &__name { font-weight: 600; }
+
+  &__count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--studio-fg-dim);
+  }
+}
+
+.awd-calls {
+  padding: 1px 0 4px 16px;
+}
+
+.awd-call {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 2px;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: default;
+
+  &:hover { background: var(--studio-bg-hover); }
+
+  &__status {
+    flex: none;
+    width: 11px;
+    text-align: center;
+    font-size: 9px;
+    color: var(--severity-pass);
+
+    &--error { color: var(--severity-high); }
+    &--pending { color: var(--studio-fg-dim); }
+  }
+
+  &__arg {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--studio-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__time {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--studio-fg-dim);
+  }
+
+  &--error .awd-call__arg { color: var(--severity-high); }
+
+  &--more {
+    color: var(--studio-fg-dim);
+    font-style: italic;
+    font-size: 10px;
+    cursor: default;
+  }
+}
