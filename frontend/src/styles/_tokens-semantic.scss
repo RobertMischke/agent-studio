@@ -282,6 +282,18 @@
   --studio-modal-padding-body-sm: var(--studio-spacing-4); // 16px
 
   // ---------------------------------------------------------------------------
+  // Modal width tiers — responsive, not fixed. A modal should use the room a
+  // wide monitor offers instead of stranding empty gutters left/right, while a
+  // small viewport still shrinks to a safe inset. Each tier is `min(<vw>, cap)`:
+  // the viewport term lets it grow, the px cap keeps content-heavy panels from
+  // sprawling on ultrawide displays. The default `<app-dialog>` width (520px)
+  // stays compact for confirm/error/form dialogs; content modals (concept-doc
+  // reader, tag manager, future consolidated overlays) opt into `lg` so long
+  // prose, tables, and non-wrapping diffs read without a horizontal scroll.
+  // ---------------------------------------------------------------------------
+  --studio-modal-width-lg: min(90vw, 880px);
+
+  // ---------------------------------------------------------------------------
   // Layout sizes
   // ---------------------------------------------------------------------------
   --studio-activitybar-w: 48px;

@@ -284,6 +284,47 @@ test.describe('Regression radar info-button', () => {
     }
   });
 
+  test('concept-doc modal is responsive: grows on a wide viewport, shrinks on a narrow one', async ({ page }) => {
+    await installRoutes(page, '5-human-review');
+
+    // --- Wide viewport: the modal should claim much more than the old fixed
+    //     520px column (token cap is min(90vw, 880px) -> ~880px at 1600px). ---
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const radar = page.getByTestId('regression-radar');
+    await expect(radar).toBeVisible({ timeout: 10_000 });
+    await radar.getByTestId('info-button-regression-radar').click();
+
+    const modal = page.getByTestId('info-button-modal-regression-radar');
+    await expect(modal).toBeVisible();
+
+    const wideBox = await modal.boundingBox();
+    expect(wideBox).not.toBeNull();
+    // Far wider than the legacy 520px panel, and near the 880px cap.
+    expect(wideBox!.width).toBeGreaterThan(820);
+    expect(wideBox!.width).toBeLessThanOrEqual(890);
+
+    if (RESULTS_DIR) {
+      await page.screenshot({ path: path.join(RESULTS_DIR, 'radar-info-modal-wide-1600.png'), fullPage: false });
+    }
+
+    // --- Narrow viewport: the same modal collapses toward ~90vw instead of
+    //     overflowing, proving the width is responsive rather than fixed. ---
+    await page.setViewportSize({ width: 720, height: 900 });
+    const narrowBox = await modal.boundingBox();
+    expect(narrowBox).not.toBeNull();
+    // ~90vw of 720 = 648; comfortably under the wide-viewport width and the cap.
+    expect(narrowBox!.width).toBeLessThan(wideBox!.width);
+    expect(narrowBox!.width).toBeLessThanOrEqual(0.92 * 720);
+    expect(narrowBox!.width).toBeGreaterThan(560);
+
+    if (RESULTS_DIR) {
+      await page.screenshot({ path: path.join(RESULTS_DIR, 'radar-info-modal-narrow-720.png'), fullPage: false });
+    }
+  });
+
   test('is compact by default: metadata shown, entries hidden until expanded', async ({ page }) => {
     await installRoutes(page, '5-human-review');
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);

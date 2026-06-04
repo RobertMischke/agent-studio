@@ -31,6 +31,11 @@
   font-size: 13px;
   outline: none;
 
+  /* Responsive width tier: grows with the viewport up to the token cap so a
+     content-heavy modal uses the available room instead of a fixed narrow
+     column. An explicit inline `[style.width.px]` still overrides this. */
+  &--w-lg { width: var(--studio-modal-width-lg); }
+
   &--danger  { border-top: 3px solid var(--severity-high); }
   &--primary { border-top: 3px solid var(--studio-accent); }
 

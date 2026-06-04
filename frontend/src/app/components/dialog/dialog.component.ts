@@ -53,8 +53,16 @@ export class DialogComponent implements OnInit, OnDestroy {
   readonly subtitle = input<string | null>(null);
   /** ARIA role — `alertdialog` for confirms/errors, `dialog` for forms. */
   readonly role = input<'dialog' | 'alertdialog'>('dialog');
-  /** Optional width override (px). Default 520. */
+  /** Optional exact width override (px). Wins over `widthTier`. Default 520. */
   readonly width = input<number | null>(null);
+  /**
+   * Responsive width tier. `md` (default) keeps the compact 520px panel for
+   * confirm / error / form dialogs. `lg` switches to `--studio-modal-width-lg`
+   * (`min(90vw, 880px)`) so content-heavy modals grow with the viewport and
+   * shrink on small screens instead of stranding empty gutters. An explicit
+   * `[width]` px override still takes precedence over the tier.
+   */
+  readonly widthTier = input<'md' | 'lg'>('md');
   /** Hides the close button when set to `false`. */
   readonly closable = input(true);
   /** Visual variant — drives accent stripe colour. */
