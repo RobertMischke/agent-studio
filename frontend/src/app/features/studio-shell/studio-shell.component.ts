@@ -53,6 +53,12 @@ interface ProjectSidebarRow {
   isActive: boolean;
 }
 
+/** Canonicalise project storage paths so titlebar workspace lookup survives
+ * slash style, trailing separator, and case differences. */
+function normalizeStorage(path: string): string {
+  return path.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
 
 /** Brand swatches per CLI — matches the status-bar glyph colours so the
  *  Sidebar CLI panel reads the same on first glance. */
@@ -614,10 +620,11 @@ export class StudioShellComponent {
     const projectName = this.currentProjectName();
     if (!projectName) return null;
     const storage = this.projectStorageByName().get(projectName);
+    const normalizedStorage = storage ? normalizeStorage(storage) : null;
     for (const ws of this.registryWorkspaces()) {
       const matched = ws.projects.some(p =>
         p.displayName === projectName ||
-        (!!storage && p.storageLocation === storage)
+        (!!normalizedStorage && normalizeStorage(p.storageLocation) === normalizedStorage)
       );
       if (matched) return ws.displayName;
     }

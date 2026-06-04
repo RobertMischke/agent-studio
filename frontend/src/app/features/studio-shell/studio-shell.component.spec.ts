@@ -134,3 +134,69 @@ describe('StudioShellComponent workspace-delete gating', () => {
     });
   });
 });
+
+describe('StudioShellComponent titlebar breadcrumb', () => {
+  function project(id: string): RegistryProjectSummary {
+    return {
+      id,
+      displayName: id,
+      shortCode: id,
+      workspaceId: 'ws-1',
+      color: null,
+      cliDefault: null,
+      modelDefault: null,
+      sortOrder: 0,
+      storageLocation: `C:/proj/${id}`,
+      archived: false,
+      createdAt: '2026-01-01T00:00:00Z',
+    };
+  }
+
+  function workspace(over: Partial<RegistryWorkspaceListItem>): RegistryWorkspaceListItem {
+    return {
+      id: 'ws-1',
+      displayName: 'Workspace One',
+      sortOrder: 0,
+      isDefault: false,
+      color: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      projects: [],
+      ...over,
+    };
+  }
+
+  it('resolves the concrete workspace by normalized project storage path', () => {
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    const component = fixture.componentInstance;
+
+    fixture.componentRef.setInput('knownProjectNames', ['Agent Task Processor']);
+    fixture.componentRef.setInput('projectWatchPaths', [{
+      name: 'Agent Task Processor',
+      path: 'C:\\Projects\\Agent-Taskboard\\',
+      rootPath: 'C:\\Projects\\Agent-Taskboard\\',
+    }]);
+    component.registryWorkspaces.set([workspace({
+      id: 'ws-product',
+      displayName: 'Product Lab',
+      projects: [{
+        ...project('PROJ-ATP'),
+        displayName: 'Renamed Registry Label',
+        storageLocation: 'c:/projects/agent-taskboard',
+        workspaceId: 'ws-product',
+      }],
+    })]);
+
+    component.openBoard('Agent Task Processor');
+
+    expect(component.activeWorkspaceName()).toBe('Product Lab');
+  });
+});
