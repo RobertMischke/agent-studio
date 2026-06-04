@@ -97,6 +97,32 @@ public static class TaskGitEndpoints
             return Results.Ok(aggregate);
         });
 
+        group.MapGet("/{jobId}/commits/files", (
+            string jobId, string? watchPath,
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git,
+            TaskMutationService mutations) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
+
+            var files = git.GetAggregateCommitFiles(jobId, watchPath, JobCommitShas(info));
+            return Results.Ok(new { files });
+        });
+
+        group.MapGet("/{jobId}/commits/diff", (
+            string jobId, string? path, string? watchPath,
+            TaskScannerService scanner, TaskSessionLog sessions, GitService git,
+            TaskMutationService mutations) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
+
+            var diff = git.GetAggregateCommitDiff(jobId, watchPath, JobCommitShas(info), path);
+            return Results.Ok(new { diff });
+        });
+
         // File list for one of the job's commits. Validates the SHA is
         // actually a known commit on this job before calling git so the
         // endpoint can't be coaxed into showing arbitrary repo history.
@@ -293,5 +319,19 @@ public static class TaskGitEndpoints
         var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
             (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
         return aggregate.Commits.Any(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyList<string> JobCommitShas(TaskInfo info)
+    {
+        if (info.Commits.Count > 0)
+        {
+            return info.Commits
+                .Select(c => c.Sha)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return info.Commit?.Sha is { Length: > 0 } sha ? [sha] : [];
     }
 }

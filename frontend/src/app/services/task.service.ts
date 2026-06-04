@@ -832,6 +832,29 @@ export class TaskService {
   }
 
   /**
+   * Aggregated file list across every commit attributed to this task. This is
+   * the default review view when a task carries a commit chain.
+   */
+  getJobCommitFilesAggregate(jobId: string, watchPath?: string) {
+    return this.http.get<{ files: GitFileChange[] }>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/files`,
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Aggregated diff across every commit attributed to this task, optionally
+   * scoped to one path. The backend concatenates only the task-owned commits.
+   */
+  getJobCommitDiffAggregate(jobId: string, path: string | null, watchPath?: string) {
+    const opts = path ? this.withWatchPathAndPath(watchPath, path) : this.withWatchPath(watchPath);
+    return this.http.get<{ diff: string }>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/commits/diff`,
+      opts,
+    );
+  }
+
+  /**
    * File list for a specific commit in this task's commit chain. Validates
    * server-side that the SHA actually belongs to this job, so the endpoint
    * cannot be coaxed into showing arbitrary repository history.

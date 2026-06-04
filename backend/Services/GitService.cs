@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
@@ -845,6 +846,80 @@ public class GitService
             : $"show --pretty=format: {sha} -- \"{path.Replace("\"", "\\\"")}\"";
         var (output, err, code) = RunGit(root, args);
         return code == 0 ? output : err;
+    }
+
+    /// <summary>
+    /// Aggregated file list for a curated set of task commits. Unlike a broad
+    /// <c>first^..last</c> range, this includes only the SHAs the task actually
+    /// owns, so manual attribution/exclusion cannot pull unrelated history into
+    /// the review pane.
+    /// </summary>
+    public List<GitFileChange> GetAggregateCommitFiles(string jobId, string? watchPath, IEnumerable<string> shas)
+    {
+        var filesByPath = new Dictionary<string, (string Status, int Added, int Removed)>(StringComparer.Ordinal);
+
+        foreach (var sha in NormalizeCommitShas(shas))
+        {
+            foreach (var file in GetCommitFiles(jobId, watchPath, sha))
+            {
+                var status = SimplifyAggregatedStatus(file.Status);
+                if (filesByPath.TryGetValue(file.Path, out var existing))
+                {
+                    filesByPath[file.Path] = (
+                        CombineAggregatedStatus(existing.Status, status),
+                        existing.Added + file.Added,
+                        existing.Removed + file.Removed);
+                }
+                else
+                {
+                    filesByPath[file.Path] = (status, file.Added, file.Removed);
+                }
+            }
+        }
+
+        return filesByPath
+            .Select(kv => new GitFileChange(kv.Value.Status, kv.Key, kv.Value.Added, kv.Value.Removed))
+            .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Aggregated patch text for a curated set of task commits. Patches are
+    /// concatenated commit-by-commit rather than computed as a broad range, so
+    /// the result remains exact even when the task's attributed commits are not
+    /// contiguous in repository history.
+    /// </summary>
+    public string GetAggregateCommitDiff(string jobId, string? watchPath, IEnumerable<string> shas, string? path)
+    {
+        var parts = new StringBuilder();
+        foreach (var sha in NormalizeCommitShas(shas))
+        {
+            var diff = GetCommitDiff(jobId, watchPath, sha, path);
+            if (string.IsNullOrWhiteSpace(diff)) continue;
+            if (parts.Length > 0) parts.AppendLine();
+            parts.Append(diff.TrimEnd());
+            parts.AppendLine();
+        }
+        return parts.ToString();
+    }
+
+    private static IEnumerable<string> NormalizeCommitShas(IEnumerable<string> shas) =>
+        (shas ?? [])
+            .Where(s => !string.IsNullOrWhiteSpace(s) && IsLikelyShaOrRef(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private static string SimplifyAggregatedStatus(string status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return "?";
+        var first = status[0];
+        return first is 'A' or 'D' or 'M' ? first.ToString() : "M";
+    }
+
+    private static string CombineAggregatedStatus(string existing, string next)
+    {
+        if (existing == next) return existing;
+        if ((existing == "A" && next == "D") || (existing == "D" && next == "A")) return "M";
+        return "M";
     }
 
     /// <summary>
