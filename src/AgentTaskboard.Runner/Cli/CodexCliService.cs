@@ -208,9 +208,9 @@ public sealed class CodexCliService : CliExecutionServiceBase
     internal static string BuildSystemPromptPrefix(bool isWindows)
     {
         const string sentinelLine =
-            "Orchestrator note: end your reply with one of `[[TASK_DONE]]`, " +
+            "Orchestrator note: end your reply with exactly one of `[[TASK_DONE]]`, " +
             "`[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, or " +
-            "`[[TASK_NOOP]]` on its own line. The orchestrator parses this token; " +
+            "`[[TASK_NOOP]]` as the final line. The orchestrator parses this token; " +
             "without it the run lands in auto-review as missing-terminal-sentinel.";
 
         if (!isWindows)

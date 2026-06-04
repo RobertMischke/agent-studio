@@ -265,9 +265,10 @@ public static class AgentOutcomeAnalyzer
     }
 
     // Sentinel format: [[TASK_<KEYWORD>]] or [[TASK_<KEYWORD>:reason text]].
-    // Kept loose on whitespace and case so a model that emits the marker on
-    // its own line, indented, or in mixed case still matches. The actual
-    // keyword set is small and explicit.
+    // Kept loose on whitespace, separators, and case so a model that emits
+    // the marker as `[[ TASK DONE ]]`, `[[TASK-DONE]]`, or with spaces around
+    // the reason separator still matches. The actual keyword set is small and
+    // explicit.
     //
     // Public so callers that need to scan a buffer for live decision sentinels
     // (the continuous-decision scanner, post-run policy, supervisor parsing)
@@ -275,7 +276,7 @@ public static class AgentOutcomeAnalyzer
     // philosophy on a single sentinel regex; this is the single source of truth
     // referenced from AGENTS.md and docs/agent-task-contract.md.
     public static readonly Regex SentinelRegex = new(
-        @"\[\[TASK_(?<keyword>DONE|BLOCKED|NEEDS_INPUT|NOOP)(?::(?<reason>[^\]]*))?\]\]",
+        @"\[\[\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static (AgentOutcomeKind Kind, string Keyword, string? Reason, string Summary)? FindLastSentinel(string agentText)
@@ -284,7 +285,7 @@ public static class AgentOutcomeAnalyzer
         var matches = SentinelRegex.Matches(agentText);
         if (matches.Count == 0) return null;
         var last = matches[^1];
-        var keyword = last.Groups["keyword"].Value.ToUpperInvariant();
+        var keyword = Regex.Replace(last.Groups["keyword"].Value, @"[\s_-]+", "_").ToUpperInvariant();
         var reason = last.Groups["reason"].Success ? last.Groups["reason"].Value.Trim() : null;
         if (string.IsNullOrWhiteSpace(reason)) reason = null;
         return keyword switch
@@ -298,7 +299,7 @@ public static class AgentOutcomeAnalyzer
     }
 
     private static readonly Regex DonePattern = new(
-        @"\b(committ?ed|merged|landed|shipped|deployed|fixed|resolved|implemented|completed|finished|done|ready for review)\b",
+        @"\b(committ?ed|merged|landed|shipped|deployed|fixed|resolved|implemented|completed|finished|done|ready for review|verification|tests?\s+(?:run|passed|green)|changed|updated|added|created|wrote)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex BlockedPattern = new(
@@ -322,7 +323,7 @@ public static class AgentOutcomeAnalyzer
         var endsWithQuestion = tail.TrimEnd().EndsWith("?", StringComparison.Ordinal);
         if (endsWithQuestion || NeedsInputPattern.IsMatch(tail))
             return (AgentOutcomeKind.NeedsInput, "Agent appears to be waiting for input (heuristic).");
-        if (DonePattern.IsMatch(TailLines(agentText, 2)))
+        if (DonePattern.IsMatch(TailLines(agentText, 8)))
             return (AgentOutcomeKind.Done, "Agent text suggests the task is done (heuristic).");
         if (BlockedPattern.IsMatch(tail))
             return (AgentOutcomeKind.Blocked, "Agent text suggests the task is blocked (heuristic).");

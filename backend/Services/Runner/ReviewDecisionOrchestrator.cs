@@ -374,12 +374,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
                         if (pending.Kind == ReviewSignalKind.NoCompletionSignal)
                         {
-                            // No terminal sentinel arrived. Fully
-                            // deterministic, like NOOP: reissue demanding a
-                            // sentinel until the shared budget is spent, then
-                            // escalate. Never a fast-model call, never an
-                            // accept-as-done.
-                            await ProcessNoCompletionSignalAsync(workspace, entry, pending, maxReissues, ct);
+                            // No terminal sentinel arrived. Ask the
+                            // review-decision model to classify the real
+                            // reply first (ASS-684); fall back to the
+                            // deterministic sentinel-demanding reissue only
+                            // if the model is unavailable or malformed.
+                            await ProcessNoCompletionSignalAsync(
+                                workspace, entry, pending, cliBinary, model,
+                                maxPerHour, maxReissues, ct);
                             _statusSnapshot.RecordReissue();
                             continue;
                         }

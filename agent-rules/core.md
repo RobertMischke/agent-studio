@@ -4,6 +4,9 @@
 - Do **not** write to `status.md`. The application regenerates that file from your CLI output after every run; anything you put there is lost on the next run.
 - Put screenshots, helper files, and artifacts in `results/`. Put logs in `logs/`.
 - Keep commits small with descriptive messages (Conventional Commits preferred).
+- End every final reply with exactly one terminal sentinel on its own line:
+  `[[TASK_DONE]]`, `[[TASK_BLOCKED:<short reason>]]`,
+  `[[TASK_NEEDS_INPUT:<short reason>]]`, or `[[TASK_NOOP]]`.
 
 Working directory hygiene:
 

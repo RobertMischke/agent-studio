@@ -19,19 +19,19 @@ namespace OrchestratorApi.Services.Runner;
 public static class ReviewDecisionParsing
 {
     private static readonly Regex NeedsInputRegex = new(
-        @"\[\[TASK_NEEDS_INPUT(?::(?<reason>[^\]]*))?\]\]",
+        @"\[\[\s*TASK[\s_-]*NEEDS[\s_-]*INPUT\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex NoOpRegex = new(
-        @"\[\[TASK_NOOP(?::(?<reason>[^\]]*))?\]\]",
+        @"\[\[\s*TASK[\s_-]*NOOP\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex BlockedRegex = new(
-        @"\[\[TASK_BLOCKED(?::(?<reason>[^\]]*))?\]\]",
+        @"\[\[\s*TASK[\s_-]*BLOCKED\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex DoneRegex = new(
-        @"\[\[TASK_DONE\]\]",
+        @"\[\[\s*TASK[\s_-]*DONE\s*\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex DecisionRegex = new(
