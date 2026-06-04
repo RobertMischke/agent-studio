@@ -63,15 +63,25 @@ async function waitForTaskIndexed(id: string, watchPath: string): Promise<void> 
   throw new Error(`Task ${id} never became visible to GET /api/tasks/{id}`);
 }
 
+/** Records every POST .../move issued while the page is live. */
+function trackMoveRequests(page: import('@playwright/test').Page): { count: () => number } {
+  let moves = 0;
+  page.on('request', req => {
+    if (req.method() === 'POST' && /\/api\/tasks\/[^/]+\/move/.test(req.url())) moves += 1;
+  });
+  return { count: () => moves };
+}
+
 /**
  * The studio detail view's lane control must be visibly discoverable as a
  * dropdown: a clear chevron and border on the lane chip, hover/focus
- * feedback, the full canonical lane catalogue in the menu, the same
- * transition the kanban board uses, and full keyboard reachability. The
- * control lives in the slim tab-bar header (`studio-lane-select`) because
- * the studio shell hides the projected <app-detail-header>. The companion
- * `detail-lane-dropdown` spec covers the move plumbing; this spec covers
- * the affordance contract.
+ * feedback, and full keyboard reachability. The control lives in the slim
+ * tab-bar header (`studio-lane-select`) because the studio shell hides the
+ * projected <app-detail-header>. It is a NAVIGATION control: it pages the
+ * detail view through the chosen lane and never moves the current task
+ * (moving lives in the ⋯ context menu). This spec covers the affordance
+ * contract + the navigation-not-move guarantee; the companion
+ * `detail-lane-dropdown` spec covers the page-to-peer behaviour.
  */
 test.describe('Detail view — status dropdown (discoverability)', () => {
   test('control is visually distinct as a dropdown', async ({ page }) => {
@@ -116,7 +126,7 @@ test.describe('Detail view — status dropdown (discoverability)', () => {
     }
   });
 
-  test('dropdown lists every canonical lane', async ({ page }) => {
+  test('dropdown lists the navigable lanes and hides orchestrator-owned lanes', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const id = uid();
     const created = await createTask({
@@ -137,66 +147,58 @@ test.describe('Detail view — status dropdown (discoverability)', () => {
         Array.from((el as HTMLSelectElement).options).map(o => o.value)
       );
 
-      // The lanes the dropdown is meant to expose. The header may include
-      // additional lanes — the task list is the floor, not the ceiling.
-      const required = [
-        '1-preparation', '1a-orchestrator-prep', '2-ready', '3-progress',
-        '4-auto-review', '5-human-review', '6-completed', '7-archive',
-      ];
+      // The lanes the user can page through. The header may include additional
+      // lanes (e.g. the current lane if it is non-standard) — this list is the
+      // floor, not the ceiling.
+      const required = ['1-preparation', '2-ready', '5-human-review', '6-completed', '7-archive'];
       for (const lane of required) {
-        expect(values, `lane ${lane} should be in the dropdown`).toContain(lane);
+        expect(values, `lane ${lane} should be navigable in the dropdown`).toContain(lane);
       }
+
+      // In Progress / Auto Review are orchestrator-owned and never selectable
+      // (neither as a navigation target nor as a move target).
+      expect(values, '3-progress must not be a navigation target').not.toContain('3-progress');
+      expect(values, '4-auto-review must not be a navigation target').not.toContain('4-auto-review');
     } finally {
       await deleteTask(created.id, wp.path);
     }
   });
 
-  test('selecting a lane fires the same transition as the board', async ({ page }) => {
+  test('selecting a lane navigates and never issues a move request', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const id = uid();
     const created = await createTask({
       id,
-      title: `status-dropdown-transition ${id}`,
+      title: `status-dropdown-nav ${id}`,
       watchPath: wp.path,
       targetState: '1-preparation',
     });
 
     try {
       await waitForTaskIndexed(created.id, wp.path);
+      const moves = trackMoveRequests(page);
       await page.goto(`/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(wp.path)}`);
 
       const select = page.getByTestId('studio-lane-select');
       await expect(select).toBeVisible({ timeout: 10_000 });
       await expect(select).toHaveValue('1-preparation');
 
-      // Watch for the exact backend move call the board issues.
-      const movePromise = page.waitForRequest(req =>
-        /\/api\/tasks\/[^/]+\/move/.test(req.url()) && req.method() === 'POST'
-      );
+      // Pick a different lane. Whether or not that lane has peers to page to,
+      // the one thing that must NOT happen is a backend move of THIS task.
+      await select.selectOption('6-completed');
 
-      await select.selectOption('4-auto-review');
+      // Give any (erroneous) move request a chance to fire, then assert none did.
+      await page.waitForTimeout(1_000);
+      expect(moves.count(), 'lane dropdown must not move the task').toBe(0);
 
-      const moveReq = await movePromise;
-      const body = moveReq.postDataJSON() as { targetState?: string };
-      expect(body.targetState).toBe('4-auto-review');
-
-      await expect.poll(
-        async () => (await getTask(created.id, wp.path)).info.state,
-        { timeout: 10_000 },
-      ).toBe('4-auto-review');
-
-      // We deliberately do NOT assert the dropdown's post-move value here:
-      // a cross-lane move can trigger the shell's triage auto-advance, which
-      // hops to the next peer in the original lane and may close the panel
-      // if no peer exists. The move contract is already proven by
-      // `body.targetState` + the backend poll; post-move dropdown reflection
-      // is covered by detail-lane-dropdown.spec.ts.
+      // The task is still where it was — the dropdown is navigation, not a move.
+      expect((await getTask(created.id, wp.path)).info.state).toBe('1-preparation');
     } finally {
       await deleteTask(created.id, wp.path);
     }
   });
 
-  test('keyboard: focus, arrows change the lane', async ({ page }) => {
+  test('keyboard: control is focusable and arrows never move the task', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const id = uid();
     const created = await createTask({
@@ -208,6 +210,7 @@ test.describe('Detail view — status dropdown (discoverability)', () => {
 
     try {
       await waitForTaskIndexed(created.id, wp.path);
+      const moves = trackMoveRequests(page);
       await page.goto(`/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(wp.path)}`);
 
       const select = page.getByTestId('studio-lane-select');
@@ -216,23 +219,17 @@ test.describe('Detail view — status dropdown (discoverability)', () => {
 
       // Direct focus via JS — Tab order in the tab-bar header passes through
       // many controls and is brittle to layout changes; what we actually need
-      // to assert is that the control accepts keyboard focus at all, and
-      // that arrow keys cycle the value.
+      // to assert is that the control accepts keyboard focus at all, and that
+      // arrow keys drive navigation rather than a destructive move.
       await select.focus();
       await expect(select).toBeFocused();
 
-      // Native <select> + ArrowDown moves to the next option. From 2-ready
-      // the next option in the header catalogue is 3-progress.
+      // Native <select> + ArrowDown selects the next option, which fires the
+      // navigation handler. It must never move the task on disk.
       await page.keyboard.press('ArrowDown');
-
-      await expect.poll(
-        async () => (await getTask(created.id, wp.path)).info.state,
-        { timeout: 10_000 },
-      ).toBe('3-progress');
-
-      // See the transition test above: we do not re-read the dropdown value
-      // here because the cross-lane move can trigger auto-advance and close
-      // the detail panel, which is orthogonal to the keyboard contract.
+      await page.waitForTimeout(1_000);
+      expect(moves.count(), 'arrow-key lane selection must not move the task').toBe(0);
+      expect((await getTask(created.id, wp.path)).info.state).toBe('2-ready');
     } finally {
       await deleteTask(created.id, wp.path);
     }

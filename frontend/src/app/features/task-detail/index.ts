@@ -11,6 +11,7 @@
 export { TaskDetailComponent } from './task-detail';
 export { TaskSelectionService } from './state/task-selection.service';
 export { TriageController } from './state/triage-controller.service';
+export { LanePagerService } from './state/lane-pager.service';
 export {
   overflowActionsFor,
   primaryActionFor,

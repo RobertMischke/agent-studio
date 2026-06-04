@@ -273,7 +273,11 @@ test.describe('Detail view - lane pager', () => {
         resp.request().method() === 'POST'
         && resp.url().includes(`/api/tasks/${encodeURIComponent(order[3])}/move`)
       , { timeout: 30_000 });
-      await page.getByTestId('detail-state-select').selectOption('6-completed');
+      // Lane moves now live in the ⋯ overflow context menu, not the lane
+      // dropdown (the dropdown only pages through lanes). 0-backlog offers
+      // "Move to Completed" there.
+      await page.getByTestId('triage-overflow-btn').click();
+      await page.getByTestId('triage-overflow-item-move-to-completed').click();
       await moveResponse;
 
       await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[4])}`), { timeout: 20_000 });
@@ -361,7 +365,8 @@ test.describe('Detail view - lane pager', () => {
       const startPos = Number(posStr);
       const startTotal = Number(totalStr);
 
-      // Triage three of the five fixtures in a row via the lane dropdown.
+      // Triage three of the five fixtures in a row via the ⋯ overflow context
+      // menu (lane moves moved there; the dropdown now only pages lanes).
       // The pager must keep the same numeric position while the total drops
       // by one each time, and the panel must land on the next captured slug
       // each time without the user touching prev/next.
@@ -372,7 +377,8 @@ test.describe('Detail view - lane pager', () => {
           resp.request().method() === 'POST'
           && resp.url().includes(`/api/tasks/${encodeURIComponent(movingId)}/move`)
         , { timeout: 30_000 });
-        await page.getByTestId('detail-state-select').selectOption('6-completed');
+        await page.getByTestId('triage-overflow-btn').click();
+        await page.getByTestId('triage-overflow-item-move-to-completed').click();
         await moveResp;
         await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(order[i + 1])}`), { timeout: 20_000 });
         await expect(count).toHaveText(`${startPos} / ${startTotal - (i + 1)}`, { timeout: 15_000 });

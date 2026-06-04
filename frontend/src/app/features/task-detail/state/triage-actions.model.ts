@@ -128,6 +128,21 @@ export const LANE_LABELS: Record<string, string> = {
   '7-archive':              'Archive',
 };
 
+/**
+ * Lanes the orchestrator owns: a job lands here because the runner picked
+ * it up (3-progress) or the auto-reviewer is judging it (4-auto-review),
+ * never because an operator chose to park it there. They are therefore not
+ * valid manual move targets — `overflowActionsFor` strips any move action
+ * pointing at them so neither the context menu nor the (model-fed) studio
+ * overflow offers them. The lane dropdowns drop them from their nav options
+ * separately (they are navigation-only and these lanes are not pageable
+ * targets either).
+ */
+export const ORCHESTRATOR_CONTROLLED_LANES: ReadonlySet<string> = new Set([
+  '3-progress',
+  '4-auto-review',
+]);
+
 export function laneActionsFor(state: string): TriageButton[] {
   return LANE_ACTIONS[state] ?? [];
 }
@@ -149,7 +164,9 @@ export function primaryActionFor(state: string): TriageButton | null {
  */
 export function overflowActionsFor(state: string): TriageButton[] {
   const list = laneActionsFor(state);
-  const rest = primaryActionFor(state) ? list.slice(1) : list.slice();
+  const rest = (primaryActionFor(state) ? list.slice(1) : list.slice()).filter(
+    b => b.intent.kind !== 'move' || !ORCHESTRATOR_CONTROLLED_LANES.has(b.intent.targetState),
+  );
 
   // Edit / Delete form the trailing "safety net" cluster. Hold any that the
   // lane already lists aside so the Move entries land before them — otherwise

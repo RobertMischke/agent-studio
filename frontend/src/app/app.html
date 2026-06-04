@@ -156,7 +156,7 @@
             @if (slimPagerTotal() > 0) {
               <span class="studio-tab-action studio-tab-action--counter"
                     data-testid="studio-task-pager-position"
-                    aria-live="polite">{{ slimPagerPosition() }} / {{ slimPagerTotal() }}</span>
+                    aria-live="polite">{{ slimPagerPosition() > 0 ? slimPagerPosition() : '—' }} / {{ slimPagerTotal() }}</span>
             }
             <button type="button"
                     class="studio-tab-action studio-tab-action--icon"
@@ -165,18 +165,17 @@
                     (click)="onTriageNext(detail.info)">›</button>
             <span class="studio-tab-actions-sep" aria-hidden="true"></span>
             <select class="studio-tab-action studio-tab-action--lane-select"
-                    [class]="'studio-tab-action studio-tab-action--lane-select state--' + detail.info.state"
-                    [value]="detail.info.state"
-                    [disabled]="updateClient.mutationsBlocked()"
+                    [class]="'studio-tab-action studio-tab-action--lane-select state--' + studioPagerLaneState()"
+                    [value]="studioPagerLaneState()"
                     data-testid="studio-lane-select"
-                    aria-label="Change task lane"
-                    [appTooltip]="'Change lane'"
+                    aria-label="Page through lane"
+                    [appTooltip]="'Select which lane to page through'"
                     (change)="onStudioLaneChange(detail.info, $event)">
               @for (lane of studioLaneOptions; track lane.state) {
-                <option [value]="lane.state" [selected]="lane.state === detail.info.state">{{ lane.label }}</option>
+                <option [value]="lane.state" [selected]="lane.state === studioPagerLaneState()">{{ lane.label }}</option>
               }
-              @if (!isStandardLane(detail.info.state)) {
-                <option [value]="detail.info.state" [selected]="true">{{ stateLabel(detail.info.state) }}</option>
+              @if (!isStandardLane(studioPagerLaneState())) {
+                <option [value]="studioPagerLaneState()" [selected]="true">{{ stateLabel(studioPagerLaneState()) }}</option>
               }
             </select>
             @if (studioTriageHasActions()) {
@@ -307,7 +306,7 @@
                                   (fileSaved)="onFileSaved()"
                                   (projectChanged)="onProjectChanged($event)"
                                   (deleteRequested)="onDeleteFromDetail(detail.info)"
-                                  (stateChangeRequested)="onStateChangeFromDetail(detail.info, $event.targetState)"
+                                  (navigateLaneRequested)="onNavigateLane($event)"
                                   (triageMoveRequested)="onTriageMove(detail.info, $event)"
                                   (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
                                   (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
@@ -606,7 +605,7 @@
                               (fileSaved)="onFileSaved()"
                               (projectChanged)="onProjectChanged($event)"
                               (deleteRequested)="onDeleteFromDetail(detail.info)"
-                              (stateChangeRequested)="onStateChangeFromDetail(detail.info, $event.targetState)"
+                              (navigateLaneRequested)="onNavigateLane($event)"
                               (triageMoveRequested)="onTriageMove(detail.info, $event)"
                               (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
                               (triageDeleteRequested)="onTriageDelete(detail.info, $event)"

@@ -149,7 +149,9 @@ export class TaskDetailComponent implements OnDestroy {
   }
   readonly projectChanged = output<string>();
   readonly deleteRequested = output<void>();
-  readonly stateChangeRequested = output<{ targetState: string }>();
+  /** Lane dropdown navigation (ASS-661): parent re-points the pager at the
+   *  chosen lane. Navigation-only — the open task is never moved here. */
+  readonly navigateLaneRequested = output<string>();
   /** Lane-move requested via the triage panel. Parent runs the API call so
    *  it can advance to the next peer on success. */
   readonly triageMoveRequested = output<{ targetState: string; actionId: string }>();
@@ -184,6 +186,11 @@ export class TaskDetailComponent implements OnDestroy {
   readonly pagerCanPrev = this.lanePager.canPrev;
   readonly pagerCanNext = this.lanePager.canNext;
   readonly pagerLaneLabel = this.lanePager.laneLabel;
+  /** Lane the pager iterates (snapshot lane, fallback to the open job's
+   *  state). Drives the header's navigation-only lane dropdown. */
+  readonly pagerLaneState = computed(
+    () => this.lanePager.snapshot()?.lane ?? this.detail().info.state,
+  );
 
   readonly editingPrompt = signal(false);
 
@@ -271,7 +278,6 @@ export class TaskDetailComponent implements OnDestroy {
   readonly editingTitle = signal(false);
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
-  readonly changingState = signal(false);
   readonly movingToTop = signal(false);
   /** Stable id of the triage button currently in flight (null when idle). */
   readonly triageActingId = signal<string | null>(null);
@@ -395,32 +401,6 @@ export class TaskDetailComponent implements OnDestroy {
     if (!this.isRunning() && this.setupExpandedDuringRun()) {
       this.setupExpandedDuringRun.set(false);
     }
-  });
-
-  /** Clear the lane-dropdown pending flag once the parent has re-fetched the
-   *  detail and the new `state` arrives. Without this the select stays
-   *  disabled forever after a successful move. The watch is on the raw
-   *  state string so it also fires for moves the parent triggered via
-   *  drag-and-drop on the kanban behind the open detail view. */
-  private lastObservedState: string | null = null;
-  private lastObservedJobKeyForChangingState: string | null = null;
-  private resetChangingStateOnUpdate = effect(() => {
-    const state = this.detail().info.state;
-    const taskKey = this.detail().info.taskKey;
-    const stateChanged = this.lastObservedState !== null && state !== this.lastObservedState;
-    // After a lane-pager auto-advance the panel lands on a new job whose
-    // state may happen to match the previous one (e.g. triaging a 2-ready
-    // lane: every advance shows another 2-ready job). The dropdown's
-    // "changing" flag belongs to the action on the OLD job and must clear
-    // when we switch, otherwise the next dropdown click is disabled.
-    const jobSwitched =
-      this.lastObservedJobKeyForChangingState !== null &&
-      taskKey !== this.lastObservedJobKeyForChangingState;
-    if ((stateChanged || jobSwitched) && this.changingState()) {
-      this.changingState.set(false);
-    }
-    this.lastObservedState = state;
-    this.lastObservedJobKeyForChangingState = taskKey;
   });
 
   private detailEffect = effect(() => {
@@ -1080,17 +1060,12 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   /**
-   * Forwarded from the detail-header lane dropdown. The parent owns the
-   * actual move (so the board's optimistic-paint / detail re-fetch stay in
-   * the same place as drag-and-drop moves on the kanban). We only flip the
-   * local "changing" flag for the disabled-while-pending UX; the parent
-   * resolves it by re-feeding `[detail]` after the move settles.
+   * Forwarded from the detail-header lane dropdown. Navigation-only: the
+   * parent re-points the pager at `lane` and opens a task in it. The open
+   * task is never moved (lane moves live in the overflow context menu).
    */
-  onStateChange(targetState: string) {
-    if (this.changingState()) return;
-    if (targetState === this.detail().info.state) return;
-    this.changingState.set(true);
-    this.stateChangeRequested.emit({ targetState });
+  onNavigateLane(lane: string) {
+    this.navigateLaneRequested.emit(lane);
   }
 
   /**

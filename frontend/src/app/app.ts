@@ -41,6 +41,7 @@ import {
   TaskDetailComponent,
   TaskSelectionService,
   TriageController,
+  LanePagerService,
   overflowActionsFor,
   primaryActionFor,
   type TriageButton,
@@ -202,6 +203,7 @@ export class App implements OnInit, OnDestroy {
    * TaskDetailComponent ViewChild (`clearTriageActing`).
    */
   private readonly jobSelection = inject(TaskSelectionService);
+  private readonly lanePager = inject(LanePagerService);
   readonly selectedJob = this.jobSelection.selected;
   readonly triageToast = this.jobSelection.triageToast;
 
@@ -628,30 +630,42 @@ export class App implements OnInit, OnDestroy {
   readonly triageLanePeers = this.jobSelection.triageLanePeers;
 
   /** Position (1-based) + total used by the slim-tab pager next to the
-   *  prev/next arrows. The user pointed out the pager had no number — now
-   *  it reads "2 / 26" when the user is on the second card in a 26-card
-   *  lane. Falls back to "0 / 0" when there's no selected job. */
+   *  prev/next arrows. Reads the lane-pager SNAPSHOT (not the live lane
+   *  peers) so the count stays stable when the open task is moved to a
+   *  different lane via the overflow menu (ASS-661 req 4): the snapshot's
+   *  lane is fixed at capture, and `advanceAfterMutation` drops the moved
+   *  task + advances within that same lane, so the pager never jumps to
+   *  the destination lane's count. 0 (rendered "—") when the open task has
+   *  left the captured iteration. */
   readonly slimPagerPosition = computed<number>(() => {
+    const snap = this.lanePager.snapshot();
     const job = this.selectedJob();
-    const peers = this.triageLanePeers();
-    if (!job || peers.length === 0) return 0;
-    const idx = peers.findIndex((p) => p.taskKey === job.info.taskKey);
+    if (!snap || !job) return 0;
+    const idx = snap.jobs.findIndex((j) => j.taskKey === job.info.taskKey);
     return idx >= 0 ? idx + 1 : 0;
   });
-  readonly slimPagerTotal = computed<number>(() => this.triageLanePeers().length);
+  readonly slimPagerTotal = computed<number>(() => this.lanePager.total());
+
+  /** Lane the pager iterates (snapshot lane, fallback to the open job's
+   *  state). Drives the slim header's navigation-only lane dropdown — it
+   *  shows which lane Prev/Next pages through, not the open job's live
+   *  state (the two diverge after an external lane change). */
+  readonly studioPagerLaneState = computed<string>(
+    () => this.lanePager.snapshot()?.lane ?? this.selectedJob()?.info.state ?? '',
+  );
 
   /**
    * Lane options for the slim studio header's lane dropdown. The studio
    * shell hides the projected <app-detail-header> (which owns the kanban
-   * detail's own lane select), so this surfaces the same arbitrary-lane
-   * move in the tab-bar header the user actually sees. Order/labels mirror
-   * DetailHeaderComponent.laneOptions so both views read the same.
+   * detail's own lane select), so this surfaces the navigation-only lane
+   * picker in the tab-bar header the user actually sees. Order/labels mirror
+   * DetailHeaderComponent.laneOptions: the orchestrator-controlled lanes
+   * (3-progress, 4-auto-review) are omitted — they are not manual navigation
+   * targets, matching the context menu that refuses them as move targets.
    */
   readonly studioLaneOptions: readonly { state: string; label: string }[] = [
     { state: '1-preparation',         label: 'Preparation' },
     { state: '2-ready',               label: 'Ready' },
-    { state: '3-progress',            label: 'In Progress' },
-    { state: '4-auto-review',         label: 'Auto Review' },
     { state: '5-human-review',        label: 'Review' },
     { state: '6-completed',           label: 'Completed' },
     { state: '7-archive',             label: 'Archive' },
@@ -665,12 +679,22 @@ export class App implements OnInit, OnDestroy {
     return fmtStateLabel(state);
   }
 
-  /** Slim-header lane dropdown change → reuse the detail-view move flow. */
+  /**
+   * Slim-header lane dropdown change → navigation only (ASS-661). Re-points
+   * the pager at the chosen lane and opens a task in it; the current task is
+   * never moved (lane moves live in the overflow context menu). Re-syncs the
+   * native control to the real pager lane afterward: `navigateToLane`
+   * captures the snapshot synchronously, so by the microtask the lane signal
+   * reflects the landed lane; when navigation is declined (empty lane) it
+   * stays put, snapping the <select> back off the user's transient pick.
+   */
   onStudioLaneChange(info: TaskInfo, event: Event): void {
     const target = event.target as HTMLSelectElement;
     const next = target.value;
-    if (!next || next === info.state) return;
-    this.onStateChangeFromDetail(info, next);
+    const current = this.studioPagerLaneState() || info.state;
+    queueMicrotask(() => { target.value = this.studioPagerLaneState() || info.state; });
+    if (!next || next === current) return;
+    this.jobSelection.navigateToLane(next);
   }
 
   // Cycle 10a: form state (newTitle/newPrompt/newCliType/etc.) lives in
@@ -1254,8 +1278,10 @@ export class App implements OnInit, OnDestroy {
   onDeleteFromDetail(info: TaskInfo) {
     this.boardMutations.deleteFromDetail(info);
   }
-  onStateChangeFromDetail(info: TaskInfo, targetState: string) {
-    this.boardMutations.changeStateFromDetail(info, targetState);
+  /** Lane dropdown navigation forwarded from the kanban detail view
+   *  (navigation-only; the open task is never moved here). */
+  onNavigateLane(lane: string) {
+    this.jobSelection.navigateToLane(lane);
   }
   onArchiveAll() {
     this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed);

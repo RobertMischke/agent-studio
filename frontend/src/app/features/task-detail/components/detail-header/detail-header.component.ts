@@ -42,8 +42,15 @@ export class DetailHeaderComponent {
   readonly editingTitle = input(false);
   readonly titleDraft = input<string>('');
   readonly savingTitle = input(false);
-  readonly changingState = input(false);
   readonly movingToTop = input(false);
+  /**
+   * State of the lane the pager iterates (the snapshot's lane, falling back
+   * to the open job's state). Drives the lane dropdown's selected value:
+   * the dropdown is navigation-only, so it reflects "which lane Prev/Next
+   * pages through", not necessarily the open job's live state (the two can
+   * diverge after an external lane change).
+   */
+  readonly pagerLaneState = input<string>('');
   /** Lane pager position (1-based). 0 means no pager snapshot active. */
   readonly pagerPosition = input(0);
   /** Lane pager total. 0 hides the pager. */
@@ -72,7 +79,12 @@ export class DetailHeaderComponent {
    * confirm dialog + pager-aware advance stay in charge of destructive ops.
    */
   readonly deleteRequested = output<void>();
-  readonly stateChange = output<string>();
+  /**
+   * Lane chosen in the dropdown. Navigation-only (ASS-661): the parent
+   * re-points the pager at this lane and opens a task in it; the current
+   * task is never moved. Lane moves now live in the overflow context menu.
+   */
+  readonly navigateLane = output<string>();
   readonly moveToTop = output<void>();
   readonly pagerPrev = output<void>();
   readonly pagerNext = output<void>();
@@ -96,17 +108,16 @@ export class DetailHeaderComponent {
   });
 
   /**
-   * Lane dropdown options surfaced in the detail header. The order mirrors
-   * the kanban left-to-right flow so picking a target reads like "advance"
-   * vs "send back". The retired `1a-orchestrator-prep` lane is omitted: prep
-   * now runs in-place on 1-preparation as the optional `pre-orchestrator-prep`
-   * pipeline step.
+   * Lane dropdown options. The dropdown is navigation-only: each entry is a
+   * lane the pager can step through, in kanban left-to-right order. The
+   * orchestrator-controlled lanes (`3-progress`, `4-auto-review`) are omitted
+   * — they are not manual navigation targets, matching the context menu that
+   * also refuses them as move targets. The retired `1a-orchestrator-prep`
+   * lane is omitted too (prep runs in-place on 1-preparation now).
    */
   readonly laneOptions: readonly { state: string; label: string }[] = [
     { state: '1-preparation',         label: 'Preparation' },
     { state: '2-ready',               label: 'Ready' },
-    { state: '3-progress',            label: 'In Progress' },
-    { state: '4-auto-review',         label: 'Auto Review' },
     { state: '5-human-review',        label: 'Review' },
     { state: '6-completed',           label: 'Completed' },
     { state: '7-archive',             label: 'Archive' },
@@ -121,11 +132,26 @@ export class DetailHeaderComponent {
    *  from a different lane first; after that the button surfaces. */
   readonly canMoveToTop = computed(() => this.info().state === '2-ready');
 
+  /** Lane the dropdown shows as selected (pager lane, fallback to job state). */
+  readonly selectedLane = computed(() => this.pagerLaneState() || this.info().state);
+
   onStateSelect(event: Event) {
     const target = event.target as HTMLSelectElement;
     const next = target.value;
-    if (!next || next === this.info().state) return;
-    this.stateChange.emit(next);
+    const current = this.selectedLane();
+    // Navigation-only: re-sync the native control to the lane the pager
+    // actually iterates after we (maybe) navigate. `navigateLane` triggers
+    // a synchronous snapshot re-capture in the parent, so by the time this
+    // microtask runs `selectedLane()` already reflects the landed lane; when
+    // navigation is declined (empty lane) it stays on `current`, so either
+    // way the <select> snaps back to the real pager lane instead of the
+    // user's transient pick.
+    queueMicrotask(() => {
+      const el = this.stateSelectEl?.nativeElement;
+      if (el) el.value = this.selectedLane();
+    });
+    if (!next || next === current) return;
+    this.navigateLane.emit(next);
   }
 
   // --- triage cluster (primary + overflow) --------------------------------
@@ -234,22 +260,17 @@ export class DetailHeaderComponent {
   @ViewChild('stateSelect') private stateSelectEl?: ElementRef<HTMLSelectElement>;
 
   /**
-   * Force the lane dropdown's DOM value to follow `info().taskKey` even when
-   * the bound state string did not change. Without this, an auto-advance
-   * from one job to another inside the SAME lane (e.g. triaging 2-ready)
-   * leaves the user's last `selectOption` choice on screen because
-   * Angular's [value] binding skips the DOM write when its previous value
-   * was identical. The effect runs only on job switch; same-job state
-   * updates already flow through the existing [value] binding.
+   * Keep the lane dropdown's DOM value pinned to the pager lane. Angular's
+   * [value] binding skips the DOM write when the bound string is unchanged
+   * between two jobs in the same lane (e.g. paging through 2-ready), which
+   * would otherwise leave a user's transient `selectOption` choice on screen.
+   * The effect re-asserts the value on every selected-lane change.
    */
-  private lastSyncedJobKey: string | null = null;
-  private syncStateSelectOnJobSwitch = effect(() => {
-    const info = this.info();
-    if (this.lastSyncedJobKey === info.taskKey) return;
-    this.lastSyncedJobKey = info.taskKey;
+  private syncStateSelect = effect(() => {
+    const lane = this.selectedLane();
     const el = this.stateSelectEl?.nativeElement;
-    if (el && el.value !== info.state) {
-      queueMicrotask(() => { if (el) el.value = info.state; });
+    if (el && el.value !== lane) {
+      queueMicrotask(() => { if (el) el.value = lane; });
     }
   });
 

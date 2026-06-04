@@ -5,6 +5,7 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
 import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { LanePagerService } from './lane-pager.service';
+import { laneLabelFor } from './triage-actions.model';
 import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
 
 /**
@@ -249,6 +250,30 @@ export class TaskSelectionService {
         });
       },
     });
+  }
+
+  /**
+   * Lane dropdown navigation (ASS-661): re-point the pager at `state` and
+   * open a task in it. The dropdown is navigation-only — it never moves the
+   * current task; it only chooses which lane Prev/Next pages through.
+   *
+   *   - Empty lane  → toast and stay put (the snapshot keeps its lane).
+   *   - Current task already lives in `state` → anchor on it (no jump).
+   *   - Otherwise   → open the lane's first task.
+   *
+   * `openDetail` captures a fresh snapshot for the landed task's lane
+   * synchronously, so callers that read the pager-lane signal right after
+   * this returns see the new lane (used to re-sync the native <select>).
+   */
+  navigateToLane(state: string): void {
+    const peers = this.peersForLane(state);
+    if (peers.length === 0) {
+      this.showTriageToast(`No tasks in ${laneLabelFor(state)}.`);
+      return;
+    }
+    const sel = this.selected();
+    const onCurrent = sel && peers.find(p => p.taskKey === sel.info.taskKey);
+    this.openDetail(onCurrent ?? peers[0]);
   }
 
   /**
