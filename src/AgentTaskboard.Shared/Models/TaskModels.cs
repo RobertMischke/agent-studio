@@ -1331,6 +1331,87 @@ public record ProjectSettings
 }
 
 /// <summary>
+/// Run-condition vocabulary for <see cref="PipelineStepCondition.When"/>. A
+/// step's condition decides whether it executes for a given task run, on top
+/// of the enabled flag. <see cref="Always"/> is the default (run whenever the
+/// step is enabled); <see cref="Never"/> keeps the override around without
+/// firing. The remaining tokens gate on the run outcome or the task's own
+/// classification.
+/// </summary>
+public static class PipelineStepConditions
+{
+    /// <summary>Run whenever the step is enabled (default).</summary>
+    public const string Always = "always";
+
+    /// <summary>Keep the override but never run the step.</summary>
+    public const string Never = "never";
+
+    /// <summary>Run only when the run ended in an abort/stop outcome.</summary>
+    public const string OnAbort = "on-abort";
+
+    /// <summary>Run only when the CLI process exited with a non-zero code.</summary>
+    public const string OnNonzeroExit = "on-nonzero-exit";
+
+    /// <summary>Run only when at least one review aspect failed.</summary>
+    public const string OnAspectFail = "on-aspect-fail";
+
+    /// <summary>
+    /// Run only for a matching <see cref="TaskInfo.TaskType"/> (the condition
+    /// value names the task type, e.g. <c>bug</c>).
+    /// </summary>
+    public const string TaskType = "task-type";
+
+    /// <summary>
+    /// Run only when the task carries a matching tag (the condition value names
+    /// the tag).
+    /// </summary>
+    public const string Tag = "tag";
+
+    /// <summary>Every known condition token, in display order.</summary>
+    public static readonly IReadOnlyList<string> All =
+    [
+        Always, Never, OnAbort, OnNonzeroExit, OnAspectFail, TaskType, Tag,
+    ];
+
+    /// <summary>Tokens whose semantics require a non-empty <see cref="PipelineStepCondition.Value"/>.</summary>
+    public static readonly IReadOnlyList<string> ValueBearing = [TaskType, Tag];
+
+    public static bool IsKnown(string? when) =>
+        when != null && All.Contains(when, StringComparer.OrdinalIgnoreCase);
+
+    public static bool RequiresValue(string? when) =>
+        when != null && ValueBearing.Contains(when, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Lower-cases and trims a token to its canonical form. Returns null for a
+    /// null/blank/unknown token so callers can treat it as "no condition".
+    /// </summary>
+    public static string? Normalize(string? when)
+    {
+        if (string.IsNullOrWhiteSpace(when)) return null;
+        var trimmed = when.Trim();
+        foreach (var known in All)
+        {
+            if (string.Equals(known, trimmed, StringComparison.OrdinalIgnoreCase)) return known;
+        }
+        return null;
+    }
+}
+
+/// <summary>
+/// Per-step run condition: a <see cref="When"/> token from
+/// <see cref="PipelineStepConditions"/> plus an optional <see cref="Value"/>
+/// used by the value-bearing tokens (<c>task-type</c>, <c>tag</c>). A null or
+/// <see cref="PipelineStepConditions.Always"/> condition means "run whenever
+/// the step is enabled".
+/// </summary>
+public record PipelineStepCondition
+{
+    public string When { get; init; } = PipelineStepConditions.Always;
+    public string? Value { get; init; }
+}
+
+/// <summary>
 /// Per-step project override stored in <see cref="ProjectSettings.PipelineSteps"/>.
 /// Every field is nullable: null means "no override, use the pipeline /
 /// runtime default" so a partial entry (e.g. only a model choice) leaves
@@ -1361,6 +1442,14 @@ public record PipelineStepSetting
     /// post-steps); deterministic tool steps ignore it.
     /// </summary>
     public string? Model { get; init; }
+
+    /// <summary>
+    /// Run condition gating whether this step executes for a given task run.
+    /// Null (or an <see cref="PipelineStepConditions.Always"/> condition) means
+    /// "run whenever the step is enabled". Only honoured for steps the runtime
+    /// evaluates conditions for (today: the abort-review step).
+    /// </summary>
+    public PipelineStepCondition? Condition { get; init; }
 }
 
 public static class LaneSortStrategies
@@ -1713,6 +1802,14 @@ public record SetPipelineStepRequest
     public bool? Enabled { get; init; }
     public string? Mode { get; init; }
     public string? Model { get; init; }
+
+    /// <summary>
+    /// Run condition for this step (see <see cref="PipelineStepConditions"/>).
+    /// Null leaves the condition on its built-in default; an
+    /// <see cref="PipelineStepConditions.Always"/> condition is treated as "no
+    /// override" and clears any stored condition.
+    /// </summary>
+    public PipelineStepCondition? Condition { get; init; }
 }
 
 /// <summary>

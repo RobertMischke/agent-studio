@@ -136,7 +136,33 @@ export interface PipelineCatalogueStep {
    * post-steps ship `false` (opt-in, expensive); every other step is `true`.
    */
   defaultEnabled: boolean;
+  /**
+   * Whether the runtime evaluates a per-step run condition for this step.
+   * Only the abort-review step honours conditions today, so it is the only
+   * row that renders the condition control.
+   */
+  supportsCondition: boolean;
 }
+
+/**
+ * Per-step run condition: a `when` token plus an optional `value` used by the
+ * value-bearing tokens (`task-type`, `tag`). An absent condition (or `always`)
+ * means "run whenever the step is enabled".
+ */
+export interface PipelineStepCondition {
+  when: PipelineStepConditionToken;
+  value?: string | null;
+}
+
+/** Run-condition vocabulary, mirrors backend `PipelineStepConditions`. */
+export type PipelineStepConditionToken =
+  | 'always'
+  | 'never'
+  | 'on-abort'
+  | 'on-nonzero-exit'
+  | 'on-aspect-fail'
+  | 'task-type'
+  | 'tag';
 
 /** Envelope of `GET /api/projects/pipeline-catalogue`. */
 export interface PipelineCatalogue {
@@ -154,6 +180,7 @@ export interface PipelineStepSetting {
   enabled?: boolean | null;
   mode?: string | null;
   model?: string | null;
+  condition?: PipelineStepCondition | null;
 }
 
 /** Full response envelope of the pipeline read endpoint. */

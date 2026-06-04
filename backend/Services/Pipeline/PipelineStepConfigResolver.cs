@@ -113,6 +113,40 @@ public static class PipelineStepConfigResolver
     }
 
     /// <summary>
+    /// Resolve the per-step run condition for a step addressed by id. Returns
+    /// null when the project set no condition (interpreted as "always run").
+    /// </summary>
+    public static PipelineStepCondition? ResolveCondition(ProjectSettings? settings, string stepId)
+        => Lookup(settings, stepId)?.Condition;
+
+    /// <summary>
+    /// Resolve the per-step run condition for a catalogue step. Returns null
+    /// when the project set no condition (interpreted as "always run").
+    /// </summary>
+    public static PipelineStepCondition? ResolveCondition(ProjectSettings? settings, PipelineStep step)
+        => Lookup(settings, step.Id)?.Condition;
+
+    /// <summary>
+    /// Whether a catalogue step should actually run for this task run: the step
+    /// must be enabled (honouring its <see cref="PipelineStep.DefaultEnabled"/>)
+    /// and its configured run condition must match the run facts in
+    /// <paramref name="ctx"/>. A step with no condition runs whenever enabled.
+    /// </summary>
+    public static bool ShouldRun(ProjectSettings? settings, PipelineStep step, PipelineStepConditionContext ctx)
+        => IsEnabled(settings, step)
+           && PipelineStepConditionEvaluator.Matches(ResolveCondition(settings, step), ctx);
+
+    /// <summary>
+    /// Whether a step addressed by id should run for this task run. Uses the
+    /// id-only enablement default (absent override = on), so prefer the
+    /// <see cref="ShouldRun(ProjectSettings?, PipelineStep, PipelineStepConditionContext)"/>
+    /// overload for opt-in steps whose default-off lives on the catalogue step.
+    /// </summary>
+    public static bool ShouldRun(ProjectSettings? settings, string stepId, PipelineStepConditionContext ctx)
+        => IsEnabled(settings, stepId)
+           && PipelineStepConditionEvaluator.Matches(ResolveCondition(settings, stepId), ctx);
+
+    /// <summary>
     /// Resolve the gate mode for a step. Project override wins; otherwise
     /// the caller-supplied built-in default (today
     /// <see cref="PostStepConfigResolver.BuiltInDefault"/>).

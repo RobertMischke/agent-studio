@@ -267,8 +267,9 @@ public class ProjectSettingsService
 
             var normalizedModel = string.IsNullOrWhiteSpace(setting?.Model) ? null : setting!.Model!.Trim();
             var normalizedMode = string.IsNullOrWhiteSpace(setting?.Mode) ? null : setting!.Mode!.Trim().ToLowerInvariant();
+            var normalizedCondition = NormalizeCondition(setting?.Condition);
             var isEmpty = setting is null
-                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null);
+                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null && normalizedCondition is null);
 
             if (isEmpty)
             {
@@ -281,12 +282,31 @@ public class ProjectSettingsService
                     Enabled = setting!.Enabled,
                     Mode = normalizedMode,
                     Model = normalizedModel,
+                    Condition = normalizedCondition,
                 };
             }
             _cache[projectName] = current with { PipelineSteps = map.Count == 0 ? null : map };
             Persist();
         }
         _logger.LogInformation("Pipeline step '{StepId}' config updated for project {Project}", stepId, projectName);
+    }
+
+    /// <summary>
+    /// Canonicalize a step condition for storage. A null/blank/unknown token,
+    /// or an explicit <see cref="PipelineStepConditions.Always"/>, collapses to
+    /// null ("no override, always run"). Value-bearing tokens keep a trimmed
+    /// value; a value-bearing token with no value also collapses to null since
+    /// it can never match.
+    /// </summary>
+    private static PipelineStepCondition? NormalizeCondition(PipelineStepCondition? condition)
+    {
+        var when = PipelineStepConditions.Normalize(condition?.When);
+        if (when is null || when == PipelineStepConditions.Always) return null;
+
+        var value = string.IsNullOrWhiteSpace(condition?.Value) ? null : condition!.Value!.Trim();
+        if (PipelineStepConditions.RequiresValue(when) && value is null) return null;
+
+        return new PipelineStepCondition { When = when, Value = PipelineStepConditions.RequiresValue(when) ? value : null };
     }
 
     /// <summary>

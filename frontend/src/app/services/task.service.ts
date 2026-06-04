@@ -53,6 +53,7 @@ import type {
   TaskPipelineResponse,
   PipelineCatalogue,
   PipelineStepSetting,
+  PipelineStepCondition,
 } from '../features/task-pipeline';
 import type { TaskScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { ExecutiveSummaryResponse } from '../features/summary';
@@ -1362,7 +1363,13 @@ export class TaskService {
    */
   setProjectPipelineStep(
     projectName: string,
-    step: { stepId: string; enabled?: boolean | null; mode?: string | null; model?: string | null },
+    step: {
+      stepId: string;
+      enabled?: boolean | null;
+      mode?: string | null;
+      model?: string | null;
+      condition?: PipelineStepCondition | null;
+    },
   ) {
     return this.http.put<{ stepId: string; pipelineSteps: Record<string, PipelineStepSetting> }>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-step`,

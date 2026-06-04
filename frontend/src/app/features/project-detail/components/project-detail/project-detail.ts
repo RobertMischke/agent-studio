@@ -6,8 +6,19 @@ import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
-import { OrchestratorRunner_KnownModels, PipelineStep_KnownModels, PipelineStep_GateModes } from './project-detail.models';
-import type { PipelineCatalogueStep, PipelineStepSetting } from '../../../../features/task-pipeline';
+import {
+  OrchestratorRunner_KnownModels,
+  PipelineStep_KnownModels,
+  PipelineStep_GateModes,
+  PipelineStep_Conditions,
+  PipelineStep_ConditionValueTokens,
+} from './project-detail.models';
+import type {
+  PipelineCatalogueStep,
+  PipelineStepSetting,
+  PipelineStepCondition,
+  PipelineStepConditionToken,
+} from '../../../../features/task-pipeline';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
@@ -162,6 +173,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly pipelineOverrides = signal<Record<string, PipelineStepSetting>>({});
   readonly pipelineStepModels = PipelineStep_KnownModels;
   readonly pipelineGateModes = PipelineStep_GateModes;
+  readonly pipelineConditions = PipelineStep_Conditions;
   /** Per-step write in flight; disables that row's controls until the PUT resolves. */
   readonly pipelineStepBusy: Record<string, boolean> = {};
 
@@ -173,8 +185,16 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
    */
   readonly pipelineRows = computed(() => {
     const overrides = this.pipelineOverrides();
+    const drafts = this.pipelineConditionDraft();
     return this.pipelineCatalogue().map(step => {
       const ov = overrides[step.id];
+      // A draft (an in-progress condition edit not yet persisted - e.g. a
+      // value-bearing token whose value the user is still typing) shadows the
+      // persisted condition so the value input can appear before there is
+      // anything to save.
+      const draft = drafts[step.id];
+      const conditionWhen = draft?.when ?? ov?.condition?.when ?? '';
+      const conditionValue = draft?.value ?? ov?.condition?.value ?? '';
       return {
         id: step.id,
         displayName: step.displayName,
@@ -182,12 +202,24 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         usesModel: step.usesModel,
         supportsMode: step.supportsMode,
         canDisable: step.canDisable,
+        supportsCondition: step.supportsCondition,
         enabled: ov?.enabled ?? step.defaultEnabled,
         model: ov?.model ?? '',
         mode: ov?.mode ?? '',
+        condition: conditionWhen,
+        conditionValue,
+        conditionNeedsValue: PipelineStep_ConditionValueTokens.includes(conditionWhen),
       };
     });
   });
+
+  /**
+   * In-progress condition edits, keyed by step id. Shadows the persisted
+   * condition in `pipelineRows` so a value-bearing token (task-type / tag)
+   * can show its value input before a value has been entered and persisted.
+   * Cleared once a write resolves so the row falls back to persisted truth.
+   */
+  readonly pipelineConditionDraft = signal<Record<string, { when: string; value: string }>>({});
 
   /**
    * Mode buttons. The four runner modes are: manual (off), auto-single
@@ -517,33 +549,113 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * The condition <select> changed. A non-value token (always / never /
+   * on-abort / ...) persists immediately. A value-bearing token (task-type /
+   * tag) only persists once a value exists - until then we keep a draft so the
+   * value input appears. Picking the empty option clears the condition.
+   */
+  onStepConditionChange(stepId: string, when: string): void {
+    const existingValue = this.pipelineConditionDraft()[stepId]?.value
+      ?? this.pipelineOverrides()[stepId]?.condition?.value ?? '';
+
+    if (!when) {
+      this.setConditionDraft(stepId, { when: '', value: existingValue });
+      this.writeStep(stepId, { condition: null });
+      return;
+    }
+
+    if (PipelineStep_ConditionValueTokens.includes(when)) {
+      this.setConditionDraft(stepId, { when, value: existingValue });
+      if (existingValue.trim()) {
+        this.writeStep(stepId, { condition: { when: when as PipelineStepConditionToken, value: existingValue.trim() } });
+      }
+      return;
+    }
+
+    this.setConditionDraft(stepId, { when, value: '' });
+    this.writeStep(stepId, { condition: { when: when as PipelineStepConditionToken } });
+  }
+
+  /**
+   * The condition value input is being typed (task-type / tag). Updates the
+   * draft only so the field stays responsive; the write happens on commit
+   * (blur / Enter) to avoid a PUT per keystroke.
+   */
+  onStepConditionValueInput(stepId: string, value: string): void {
+    const when = this.pipelineConditionDraft()[stepId]?.when
+      ?? this.pipelineOverrides()[stepId]?.condition?.when ?? '';
+    this.setConditionDraft(stepId, { when, value });
+  }
+
+  /**
+   * Commit the typed condition value (blur / Enter). Persists the token +
+   * value; an empty value collapses the condition to null on the backend.
+   */
+  onStepConditionValueCommit(stepId: string): void {
+    const draft = this.pipelineConditionDraft()[stepId];
+    const ov = this.pipelineOverrides()[stepId];
+    const when = draft?.when ?? ov?.condition?.when ?? '';
+    const value = (draft?.value ?? ov?.condition?.value ?? '').trim();
+    if (!when || !PipelineStep_ConditionValueTokens.includes(when)) return;
+    this.writeStep(stepId, {
+      condition: value ? { when: when as PipelineStepConditionToken, value } : null,
+    });
+  }
+
+  private setConditionDraft(stepId: string, draft: { when: string; value: string }): void {
+    this.pipelineConditionDraft.update(m => ({ ...m, [stepId]: draft }));
+  }
+
+  private clearConditionDraft(stepId: string): void {
+    this.pipelineConditionDraft.update(m => {
+      if (!(stepId in m)) return m;
+      const next = { ...m };
+      delete next[stepId];
+      return next;
+    });
+  }
+
+  /**
    * Merge one changed facet onto the step's current override and PUT the
    * whole step (the backend replaces the entry, so unchanged facets must
    * be resent). `enabled` is sent as null when the step is on so an
    * all-default step clears its entry instead of leaving a dead one.
-   * Empty model/mode normalise to null = inherit the built-in default.
+   * Empty model/mode normalise to null = inherit the built-in default. A
+   * `condition` of null clears it; undefined leaves the stored one untouched.
    */
-  private writeStep(stepId: string, patch: { enabled?: boolean; model?: string; mode?: string }): void {
+  private writeStep(
+    stepId: string,
+    patch: { enabled?: boolean; model?: string; mode?: string; condition?: PipelineStepCondition | null },
+  ): void {
     const cur = this.pipelineOverrides()[stepId] ?? {};
-    const enabled = patch.enabled ?? (cur.enabled !== false);
+    const defaultEnabled = this.pipelineCatalogue().find(s => s.id === stepId)?.defaultEnabled ?? true;
+    const enabled = patch.enabled ?? (cur.enabled ?? defaultEnabled);
     const model = (patch.model ?? cur.model ?? '').trim();
     const mode = (patch.mode ?? cur.mode ?? '').trim();
+    const condition = patch.condition !== undefined ? patch.condition : (cur.condition ?? null);
 
     this.pipelineStepBusy[stepId] = true;
     this.jobService.setProjectPipelineStep(this.projectName(), {
       stepId,
-      enabled: enabled ? null : false,
+      // Only persist `enabled` when it differs from the step's built-in
+      // default; otherwise send null so an at-default step does not leave a
+      // dead override. This matters for opt-in steps (abort-review, drift)
+      // whose default is off: enabling them must store true, not clear it.
+      enabled: enabled === defaultEnabled ? null : enabled,
       model: model || null,
       mode: mode || null,
+      condition: condition ?? null,
     }).subscribe({
       next: (res) => {
         this.pipelineStepBusy[stepId] = false;
         this.pipelineOverrides.set(res.pipelineSteps ?? {});
+        this.clearConditionDraft(stepId);
       },
       error: () => {
         this.pipelineStepBusy[stepId] = false;
         // Re-read so the controls snap back to the persisted truth.
         this.refreshPipelineOverrides();
+        this.clearConditionDraft(stepId);
       }
     });
   }

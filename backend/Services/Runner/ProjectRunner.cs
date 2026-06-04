@@ -2720,13 +2720,27 @@ public class ProjectRunner
                 // escalation; an escalate verdict, a disabled step, an
                 // unwired service, or a review failure all fall through to
                 // the existing human-review route below unchanged.
+                //
+                // The step now also honours its per-project run condition: this
+                // is the abort path (Aborted = true) with the run's exit code
+                // and the task's own type/tags in scope, so a project can scope
+                // abort-review to e.g. only non-zero exits or only bug tasks.
+                var abortConditionContext = new OrchestratorApi.Services.Pipeline.PipelineStepConditionContext
+                {
+                    Aborted = true,
+                    ExitCode = execution.ExitCode,
+                    AnyAspectFailed = false,
+                    TaskType = activeInfo?.TaskType,
+                    Tags = activeInfo?.Tags,
+                };
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
                     && ShouldRouteIssueToHumanReview(action.IssueKind)
                     && _postAbortReview != null
-                    && OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.IsEnabled(
+                    && OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
-                        OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep))
+                        OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
+                        abortConditionContext))
                 {
                     var handled = await TryRunAbortReviewAsync(
                         activeInfo, jobId, jobKey, cliType, execution, action,

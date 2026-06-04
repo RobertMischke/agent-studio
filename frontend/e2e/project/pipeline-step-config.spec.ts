@@ -21,11 +21,16 @@ import { api } from '../helpers/api';
  */
 
 interface WatchPath { name: string; path: string }
-interface PipelineStepSetting { enabled?: boolean | null; mode?: string | null; model?: string | null }
+interface PipelineStepCondition { when: string; value?: string | null }
+interface PipelineStepSetting { enabled?: boolean | null; mode?: string | null; model?: string | null; condition?: PipelineStepCondition | null }
 interface ProjectSettingsProjection { pipelineSteps?: Record<string, PipelineStepSetting> }
 
 const STEP = 'aspect-code-quality';
 const HAIKU = 'claude-haiku-4-5';
+// The abort-review step: opt-in (default off) and the one step whose run
+// condition the runtime evaluates, so it is the only row exposing the
+// condition control.
+const ABORT_STEP = 'post-abort-review';
 
 const SCREENSHOT_DIR = (() => {
   const fromEnv = process.env.JOB_RESULTS_DIR || process.env.PROJECT_SHELL_RESULTS_DIR;
@@ -36,6 +41,7 @@ const SCREENSHOT_DIR = (() => {
 let projectName = '';
 let projectSlug = '';
 let originalOverride: PipelineStepSetting | null = null;
+let originalAbortOverride: PipelineStepSetting | null = null;
 
 function slugFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -45,12 +51,16 @@ function enc(name: string): string {
   return encodeURIComponent(name);
 }
 
-async function getStepOverride(): Promise<PipelineStepSetting | undefined> {
+async function getOverride(stepId: string): Promise<PipelineStepSetting | undefined> {
   const all = await api<Record<string, ProjectSettingsProjection>>('/api/projects/settings');
-  return all[projectName]?.pipelineSteps?.[STEP];
+  return all[projectName]?.pipelineSteps?.[stepId];
 }
 
-async function setStep(body: { stepId: string; enabled?: boolean | null; mode?: string | null; model?: string | null }): Promise<void> {
+async function getStepOverride(): Promise<PipelineStepSetting | undefined> {
+  return getOverride(STEP);
+}
+
+async function setStep(body: { stepId: string; enabled?: boolean | null; mode?: string | null; model?: string | null; condition?: PipelineStepCondition | null }): Promise<void> {
   await api(`/api/projects/${enc(projectName)}/pipeline-step`, {
     method: 'PUT',
     body: JSON.stringify(body),
@@ -65,16 +75,24 @@ test.beforeAll(async () => {
   projectName = preferred.name;
   projectSlug = slugFor(projectName);
   originalOverride = (await getStepOverride()) ?? null;
+  originalAbortOverride = (await getOverride(ABORT_STEP)) ?? null;
 });
 
 test.afterAll(async () => {
   if (!projectName) return;
-  // Restore the step to its pre-test state (clear if it had no override).
+  // Restore the steps to their pre-test state (clear if they had no override).
   await setStep({
     stepId: STEP,
     enabled: originalOverride?.enabled ?? null,
     model: originalOverride?.model ?? null,
     mode: originalOverride?.mode ?? null,
+  });
+  await setStep({
+    stepId: ABORT_STEP,
+    enabled: originalAbortOverride?.enabled ?? null,
+    model: originalAbortOverride?.model ?? null,
+    mode: originalAbortOverride?.mode ?? null,
+    condition: originalAbortOverride?.condition ?? null,
   });
 });
 
@@ -125,4 +143,49 @@ test('settings: disabling a step persists enabled=false and line-through styling
 
   await section.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03-step-disabled.png'), fullPage: true });
+});
+
+test('settings: abort-review exposes a run-condition control that persists', async ({ page }) => {
+  // Start from a clean abort-review override (opt-in step, default off).
+  await setStep({ stepId: ABORT_STEP, enabled: null, model: null, mode: null, condition: null });
+
+  await page.goto(`/#/projects/${projectSlug}/settings`);
+  await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
+
+  const section = page.getByTestId('project-detail-pipeline');
+  await expect(section).toBeVisible();
+
+  // The abort-review row renders (appended to the catalogue) and starts off.
+  const row = page.getByTestId(`pipeline-step-row-${ABORT_STEP}`);
+  await expect(row).toBeVisible();
+  const toggle = page.getByTestId(`pipeline-step-enabled-${ABORT_STEP}`);
+  await expect(toggle).not.toBeChecked();
+
+  // Enabling an opt-in step must persist enabled=true (not clear the override).
+  await toggle.check();
+  await expect.poll(async () => (await getOverride(ABORT_STEP))?.enabled).toBe(true);
+
+  // The condition select is now live and defaults to "always" (empty value).
+  const condition = page.getByTestId(`pipeline-step-condition-${ABORT_STEP}`);
+  await expect(condition).toBeVisible();
+  await expect(condition).toHaveValue('');
+
+  // A non-value condition persists immediately.
+  await condition.selectOption('on-nonzero-exit');
+  await expect.poll(async () => (await getOverride(ABORT_STEP))?.condition?.when).toBe('on-nonzero-exit');
+
+  await section.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '04-condition-nonzero-exit.png'), fullPage: true });
+
+  // A value-bearing condition reveals a value input; it persists token + value.
+  await condition.selectOption('task-type');
+  const value = page.getByTestId(`pipeline-step-condition-value-${ABORT_STEP}`);
+  await expect(value).toBeVisible();
+  await value.fill('bug');
+  await value.blur();
+  await expect.poll(async () => (await getOverride(ABORT_STEP))?.condition?.when).toBe('task-type');
+  await expect.poll(async () => (await getOverride(ABORT_STEP))?.condition?.value).toBe('bug');
+
+  await section.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-condition-task-type.png'), fullPage: true });
 });

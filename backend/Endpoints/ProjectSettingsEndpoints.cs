@@ -117,7 +117,30 @@ public static class ProjectSettingsEndpoints
                 // defaults on. The Settings UI uses this to render the toggle's
                 // initial state when the project has no explicit override.
                 defaultEnabled = s.DefaultEnabled,
+                // Run conditions are only evaluated by the abort-review gate
+                // this slice; the linear steps ignore them, so the UI hides the
+                // condition control for every step here.
+                supportsCondition = false,
             }).ToList();
+
+            // The abort-triggered review step lives off the linear AllSteps list
+            // (it only fires after a non-clean run end) but is configurable
+            // through the same per-project override mechanism. It is the one step
+            // whose run condition the runtime actually evaluates, so it is the
+            // only catalogue entry with supportsCondition = true.
+            var abort = PipelineCatalogue.AbortReviewStep;
+            steps.Add(new
+            {
+                id = abort.Id,
+                displayName = abort.DisplayName,
+                kind = abort.Kind.ToString(),
+                usesModel = true,
+                supportsMode = false,
+                canDisable = true,
+                defaultEnabled = abort.DefaultEnabled,
+                supportsCondition = true,
+            });
+
             return Results.Ok(new { pipelineId = pipeline.Id, steps });
         });
 
@@ -132,20 +155,47 @@ public static class ProjectSettingsEndpoints
                 return Results.BadRequest(new { error = "stepId is required" });
 
             // Reject step ids the catalogue does not know so a typo fails loud
-            // instead of writing dead config that never reaches a real step.
+            // instead of writing dead config that never reaches a real step. The
+            // abort-review step lives off the linear AllSteps list but is a valid
+            // configurable target, so accept it explicitly.
             var known_step = PipelineCatalogue.Standard.AllSteps
-                .Any(s => string.Equals(s.Id, req.StepId, StringComparison.OrdinalIgnoreCase));
+                    .Any(s => string.Equals(s.Id, req.StepId, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(PipelineCatalogue.AbortReviewStep.Id, req.StepId, StringComparison.OrdinalIgnoreCase);
             if (!known_step)
                 return Results.BadRequest(new { error = $"Unknown pipeline step '{req.StepId}'" });
 
             if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
                 return Results.BadRequest(new { error = $"Unsupported mode '{req.Mode}' (expected off / warn / fail)" });
 
+            // Validate any run condition: the token must be known, value-bearing
+            // tokens need a value, and the condition must target a step the
+            // runtime actually evaluates conditions for (today: abort-review).
+            // An "always" / blank condition is a no-op and is left to normalize
+            // away in the service.
+            if (req.Condition is { } condition && !string.IsNullOrWhiteSpace(condition.When))
+            {
+                var when = PipelineStepConditions.Normalize(condition.When);
+                if (when is null)
+                    return Results.BadRequest(new { error = $"Unsupported condition '{condition.When}'" });
+
+                if (when != PipelineStepConditions.Always)
+                {
+                    var conditionCapable = string.Equals(
+                        PipelineCatalogue.AbortReviewStep.Id, req.StepId, StringComparison.OrdinalIgnoreCase);
+                    if (!conditionCapable)
+                        return Results.BadRequest(new { error = $"Step '{req.StepId}' does not support run conditions" });
+
+                    if (PipelineStepConditions.RequiresValue(when) && string.IsNullOrWhiteSpace(condition.Value))
+                        return Results.BadRequest(new { error = $"Condition '{when}' requires a value" });
+                }
+            }
+
             settings.SetPipelineStep(projectName, req.StepId, new PipelineStepSetting
             {
                 Enabled = req.Enabled,
                 Mode = req.Mode,
                 Model = req.Model,
+                Condition = req.Condition,
             });
             return Results.Ok(new
             {

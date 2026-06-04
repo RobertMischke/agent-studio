@@ -295,6 +295,31 @@
                 </select>
               }
 
+              @if (step.supportsCondition) {
+                <select class="proj-detail__pl-condition"
+                        [attr.data-testid]="'pipeline-step-condition-' + step.id"
+                        [appTooltip]="'When this step runs. Always runs whenever enabled; the other options gate it on the run outcome (abort / non-zero exit / aspect fail) or the task type / tag.'"
+                        [disabled]="!step.enabled || pipelineStepBusy[step.id]"
+                        [ngModel]="step.condition"
+                        (ngModelChange)="onStepConditionChange(step.id, $event)">
+                  @for (opt of pipelineConditions; track opt.id) {
+                    <option [value]="opt.id">{{ opt.label }}</option>
+                  }
+                </select>
+                @if (step.conditionNeedsValue) {
+                  <input type="text"
+                         class="proj-detail__pl-condition-value"
+                         [attr.data-testid]="'pipeline-step-condition-value-' + step.id"
+                         [appTooltip]="'The ' + (step.condition === 'tag' ? 'tag' : 'task type') + ' this step is scoped to. Leave empty to clear the condition.'"
+                         [placeholder]="step.condition === 'tag' ? 'tag name' : 'bug / feature / chore'"
+                         [disabled]="!step.enabled || pipelineStepBusy[step.id]"
+                         [ngModel]="step.conditionValue"
+                         (ngModelChange)="onStepConditionValueInput(step.id, $event)"
+                         (change)="onStepConditionValueCommit(step.id)"
+                         (keyup.enter)="onStepConditionValueCommit(step.id)">
+                }
+              }
+
               @if (step.canDisable) {
                 <label class="proj-detail__pl-toggle"
                        [appTooltip]="step.enabled ? 'Step runs for this project. Click to skip it.' : 'Step is skipped for this project. Click to enable.'">

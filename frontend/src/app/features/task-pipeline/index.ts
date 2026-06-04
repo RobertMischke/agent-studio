@@ -13,5 +13,7 @@ export type {
   PipelineCatalogueStep,
   PipelineCatalogue,
   PipelineStepSetting,
+  PipelineStepCondition,
+  PipelineStepConditionToken,
   TaskPipelineResponse,
 } from './models/task-pipeline.model';

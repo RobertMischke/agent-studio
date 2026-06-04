@@ -4,6 +4,8 @@
 
 **Date.** 2026-05-30.
 
+**Implementation status (2026-06-04).** A first vertical slice landed: **per-step run conditions** plus making the **abort-review** step a first-class, per-project-configurable catalogue step. Conditions are modelled as `PipelineStepSetting.Condition` (`{ when, value? }`) over a fixed vocabulary (`always`, `never`, `on-abort`, `on-nonzero-exit`, `on-aspect-fail`, `task-type`, `tag`), evaluated by `PipelineStepConditionEvaluator` and gated through `PipelineStepConfigResolver.ShouldRun`. Persistence is the existing per-project `project-settings.json` `PipelineSteps` map (this slice does not yet introduce the versioned `.metadata/pipelines/` definitions of [section 6.2](#62-pipeline_definitions-source-of-truth--versioned-json)). The abort-review gate in `ProjectRunner` now runs through `ShouldRun`, and the Project Settings pipeline section exposes a condition control on the abort-review row. Backend unit coverage in `backend.Tests/PipelineStepConditionTests.cs`; e2e in `frontend/e2e/project/pipeline-step-config.spec.ts`. Deferred to follow-up slices: the manual (human-gate) step type, user-authored LLM steps (prompt + CLI/model), the drag-reorder editor, the "only after step X" dependency condition, versioned definitions + analytics DB, and wiring conditions into gates other than abort-review.
+
 ---
 
 ## 1. Summary

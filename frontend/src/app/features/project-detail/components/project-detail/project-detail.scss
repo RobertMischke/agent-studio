@@ -602,7 +602,9 @@
   font-size: 0.85rem;
 }
 .proj-detail__pl-model,
-.proj-detail__pl-mode {
+.proj-detail__pl-mode,
+.proj-detail__pl-condition,
+.proj-detail__pl-condition-value {
   flex: 0 0 auto;
   background: rgba(0,0,0,0.30);
   color: #cdd6f4;
@@ -613,8 +615,12 @@
 }
 .proj-detail__pl-model { min-width: 150px; }
 .proj-detail__pl-mode { min-width: 86px; }
+.proj-detail__pl-condition { min-width: 150px; }
+.proj-detail__pl-condition-value { min-width: 120px; }
 .proj-detail__pl-model:disabled,
-.proj-detail__pl-mode:disabled { opacity: 0.5; cursor: not-allowed; }
+.proj-detail__pl-mode:disabled,
+.proj-detail__pl-condition:disabled,
+.proj-detail__pl-condition-value:disabled { opacity: 0.5; cursor: not-allowed; }
 .proj-detail__pl-toggle {
   flex: 0 0 auto;
   display: inline-flex;
