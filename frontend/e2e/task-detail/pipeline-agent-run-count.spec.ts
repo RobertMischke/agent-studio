@@ -276,6 +276,7 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
   });
 
   test('core row shows the run count and a focus/hover popover with run details', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 560 });
     await installRoutes(page, '3-progress', multiRunTimeline());
     await openDetail(page);
 
@@ -308,6 +309,23 @@ test.describe('Pipeline Agent-execution run count + details popover', () => {
     expect(box!.y).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(vp!.width + 1);
     expect(box!.y + box!.height).toBeLessThanOrEqual(vp!.height + 1);
+
+    // The Overview pane itself is scrollable at this height; the tooltip is
+    // fixed to the viewport, so it stays readable while the pane scrolls.
+    const promptBody = page.getByTestId('pane-prompt').locator('.pane__body');
+    await expect.poll(async () =>
+      promptBody.evaluate(el => el.scrollHeight > el.clientHeight),
+    ).toBe(true);
+    await promptBody.evaluate((el) => {
+      el.scrollTop = Math.min(32, el.scrollHeight - el.clientHeight);
+    });
+    await expect(tip).toBeVisible();
+    const scrolledBox = await tip.boundingBox();
+    expect(scrolledBox).not.toBeNull();
+    expect(scrolledBox!.x).toBeGreaterThanOrEqual(0);
+    expect(scrolledBox!.y).toBeGreaterThanOrEqual(0);
+    expect(scrolledBox!.x + scrolledBox!.width).toBeLessThanOrEqual(vp!.width + 1);
+    expect(scrolledBox!.y + scrolledBox!.height).toBeLessThanOrEqual(vp!.height + 1);
 
     // Blur hides it; hover (mouse) re-opens it — both affordances work.
     await page.locator('body').click({ position: { x: 2, y: 2 } });

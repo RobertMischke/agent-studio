@@ -782,16 +782,17 @@ describe('OverviewPaneComponent (smoke)', () => {
   });
 
   it('agent-execution row: run count is read from the run-timeline (same source as the Overview Runs value)', async () => {
+    const lastEndedAt = '2026-06-02T09:12:00Z';
     const runs = [
-      runRecord({ index: 0, intent: 'start' }),
-      runRecord({ index: 1, intent: 'continue' }),
-      runRecord({ index: 2, intent: 'recovery' }),
+      runRecord({ index: 0, intent: 'start', startedAt: '2026-06-02T08:00:00Z', endedAt: '2026-06-02T08:12:00Z' }),
+      runRecord({ index: 1, intent: 'continue', startedAt: '2026-06-02T08:30:00Z', endedAt: '2026-06-02T08:45:00Z' }),
+      runRecord({ index: 2, intent: 'recovery', startedAt: '2026-06-02T09:00:00Z', endedAt: lastEndedAt }),
     ];
     const fixture = await build(
       baseJob({ state: '3-progress', sessionName: 'sess-xyz', cliType: 'claude', model: 'claude-opus-4-8' }),
     );
     TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());
-    TestBed.inject(RunTimelinePollService).timeline.set(runTimeline(34, runs));
+    TestBed.inject(RunTimelinePollService).timeline.set(runTimeline(34, runs, { lastActivityAt: null }));
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
     const c = fixture.componentInstance;
@@ -805,6 +806,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(tip.body).toContain('Recovered: 1');
     expect(tip.body).toContain('Model: claude-opus-4-8');
     expect(tip.body).toContain('Session: sess-xyz');
+    expect(tip.body).toContain(`Last activity: ${c.formatAbsoluteTime(lastEndedAt)}`);
     expect(tip.body).toContain('See the Timeline tab');
 
     // The badge renders only on the core row, as a focusable <button>.

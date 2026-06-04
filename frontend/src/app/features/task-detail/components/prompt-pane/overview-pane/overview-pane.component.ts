@@ -714,6 +714,11 @@ export class OverviewPaneComponent {
   private readonly agentRunLastAt = computed<string | null>(() => {
     const tl = this.timeline();
     if (tl?.lastActivityAt) return tl.lastActivityAt;
+    const runs = this.runs();
+    if (runs.length > 0) {
+      const latest = [...runs].reverse().find(r => r.endedAt || r.startedAt);
+      if (latest) return latest.endedAt ?? latest.startedAt;
+    }
     return this.agentWork()?.lastTouchAt ?? null;
   });
 
