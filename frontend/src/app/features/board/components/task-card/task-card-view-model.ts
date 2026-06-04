@@ -512,8 +512,7 @@ export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: stri
 export function buildPhaseBadge(phase: TaskInfo['phase']): PhaseBadge | null {
   switch (phase ?? null) {
     case 'human-ready':
-      return { label: 'Ready', tone: 'human-ready',
-               tooltip: 'The user marked this task ready. Orchestrator intake will check it before the coding runner picks it up.' };
+      return null;
     case 'intake-running':
       return { label: 'Intake running', tone: 'intake-running',
                tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' };
@@ -584,7 +583,7 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
   if (!summaryState) return null;
   switch (summaryState.status) {
     case 'generating':
-      return { label: 'auto-reviewing', tone: 'generating',
+      return { label: 'summarizing', tone: 'generating',
                tooltip: 'Orchestrator is summarizing the run output (Haiku). The card will become quiet once status.md has been written.' };
     case 'ready':
       return { label: 'Reviewed', tone: 'ready',
@@ -623,11 +622,7 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
   }
 
   if (!status?.lastTickAt) {
-    return {
-      label: 'review pending',
-      tone: 'queued',
-      tooltip: 'This task is in Auto Review. The global auto-review status has not loaded yet.'
-    };
+    return null;
   }
 
   const ageMs = nowMs - Date.parse(status.lastTickAt);
@@ -639,11 +634,7 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
     };
   }
 
-  return {
-    label: 'queued for review',
-    tone: 'queued',
-    tooltip: `Auto-review is alive. Last tick saw ${status.pending ?? 0} candidate(s); this task is waiting in 4-auto-review.`
-  };
+  return null;
 }
 
 // Lanes that sit in the "Done & Decide" super-column and carry an orchestrator
