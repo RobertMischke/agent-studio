@@ -43,6 +43,36 @@
     overflow-wrap: anywhere;
   }
 
+  &__actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    cursor: default;
+  }
+
+  &__action {
+    min-height: 28px;
+    padding: 0 var(--studio-spacing-3);
+    border: 1px solid rgba(127, 132, 156, 0.5);
+    border-radius: 3px;
+    background: rgba(24, 24, 37, 0.85);
+    color: #cdd6f4;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover {
+      background: #313244;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #89dceb;
+      outline-offset: 2px;
+    }
+  }
+
   &__close {
     position: absolute;
     top: 16px;

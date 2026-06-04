@@ -41,6 +41,19 @@
         <figcaption class="media-lightbox__caption"
                     data-testid="media-lightbox-caption">{{ media.alt }}</figcaption>
       }
+      @if (media.actions.length > 0) {
+        <div class="media-lightbox__actions" data-testid="media-lightbox-actions">
+          @for (action of media.actions; track action.id) {
+            <button type="button"
+                    class="media-lightbox__action"
+                    [attr.data-testid]="'media-lightbox-action-' + action.id"
+                    [appTooltip]="action.tooltip"
+                    (click)="runAction(action); $event.stopPropagation()">
+              {{ action.label }}
+            </button>
+          }
+        </div>
+      }
     </figure>
 
     <div class="media-lightbox__hint"

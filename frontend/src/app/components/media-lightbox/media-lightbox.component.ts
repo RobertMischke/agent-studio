@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { MediaLightboxService } from '../../services/media-lightbox.service';
 import { ModalStackService } from '../../services/modal-stack.service';
+import { TooltipDirective } from '../tooltip';
 
 /**
  * Single-instance image lightbox. Mounted once at the app shell so every
@@ -30,6 +31,7 @@ import { ModalStackService } from '../../services/modal-stack.service';
   selector: 'app-media-lightbox',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [TooltipDirective],
   templateUrl: './media-lightbox.component.html',
   styleUrl: './media-lightbox.component.scss',
 })
@@ -102,5 +104,9 @@ export class MediaLightboxComponent {
 
   close(): void {
     this.lightbox.close();
+  }
+
+  async runAction(action: { run: () => void | Promise<void> }): Promise<void> {
+    await action.run();
   }
 }

@@ -28,6 +28,7 @@ import { Injectable, computed, signal } from '@angular/core';
 export interface MediaLightboxRequest {
   readonly src: string;
   readonly alt?: string | null;
+  readonly actions?: ReadonlyArray<MediaLightboxActionRequest>;
 }
 
 export interface MediaLightboxGalleryRequest {
@@ -36,9 +37,21 @@ export interface MediaLightboxGalleryRequest {
   readonly index?: number;
 }
 
+export interface MediaLightboxActionRequest {
+  readonly id: string;
+  readonly label: string;
+  readonly tooltip?: string | null;
+  readonly run: () => void | Promise<void>;
+}
+
+export interface MediaLightboxAction extends MediaLightboxActionRequest {
+  readonly tooltip: string;
+}
+
 export interface MediaLightboxImage {
   readonly src: string;
   readonly alt: string;
+  readonly actions: readonly MediaLightboxAction[];
 }
 
 /** Backwards-compatible shape for the current image. */
@@ -102,7 +115,13 @@ export class MediaLightboxService {
 function normalise(req: MediaLightboxRequest | null | undefined): MediaLightboxImage | null {
   const src = (req?.src ?? '').trim();
   if (!src) return null;
-  return { src, alt: (req?.alt ?? '').toString() };
+  const actions = (req?.actions ?? [])
+    .filter((action) => !!action.id && !!action.label)
+    .map((action) => ({
+      ...action,
+      tooltip: (action.tooltip ?? '').toString(),
+    }));
+  return { src, alt: (req?.alt ?? '').toString(), actions };
 }
 
 function clamp(value: number, min: number, max: number): number {
