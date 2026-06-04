@@ -32,12 +32,14 @@ namespace OrchestratorApi.Services.Runner;
 public sealed record ModelPrice(
     string ModelId,
     decimal InputPerMillion,
-    decimal OutputPerMillion)
+    decimal OutputPerMillion,
+    decimal? CacheReadPerMillionOverride = null,
+    decimal? CacheWritePerMillionOverride = null)
 {
-    /// <summary>10% of base input rate per Anthropic's published policy.</summary>
-    public decimal CacheReadPerMillion => InputPerMillion * 0.10m;
-    /// <summary>125% of base input rate (5-minute cache writes).</summary>
-    public decimal CacheWritePerMillion => InputPerMillion * 1.25m;
+    /// <summary>Defaults to 10% of base input rate per Anthropic's published policy.</summary>
+    public decimal CacheReadPerMillion => CacheReadPerMillionOverride ?? InputPerMillion * 0.10m;
+    /// <summary>Defaults to 125% of base input rate for Anthropic 5-minute cache writes.</summary>
+    public decimal CacheWritePerMillion => CacheWritePerMillionOverride ?? InputPerMillion * 1.25m;
 }
 
 /// <summary>
@@ -59,10 +61,10 @@ public static class TokenPricing
     /// <summary>
     /// Curated price table. Models not listed return null prices; the
     /// caller renders the token amounts but suppresses the cost line.
-    /// We deliberately do not include Codex / Copilot / Gemini: those
-    /// CLIs consume the user's OpenAI / GitHub / Google subscriptions
-    /// with their own pricing models that are not directly comparable
-    /// to Anthropic's per-token rates.
+    /// We include API-priced OpenAI Codex models when an official model
+    /// page lists text-token rates, but the UI still labels these as
+    /// theoretical API-price estimates. CLI subscription billing remains
+    /// separate from this comparison value.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, ModelPrice> Catalog =
         new Dictionary<string, ModelPrice>(StringComparer.OrdinalIgnoreCase)
@@ -73,7 +75,11 @@ public static class TokenPricing
             ["claude-opus-4-5"]   = new("claude-opus-4-5",   5.00m, 25.00m),
             ["claude-sonnet-4-6"] = new("claude-sonnet-4-6", 3.00m, 15.00m),
             ["claude-sonnet-4-5"] = new("claude-sonnet-4-5", 3.00m, 15.00m),
-            ["claude-haiku-4-5"]  = new("claude-haiku-4-5",  1.00m,  5.00m)
+            ["claude-haiku-4-5"]  = new("claude-haiku-4-5",  1.00m,  5.00m),
+            // OpenAI GPT-5-Codex API page: $1.25/M input, $0.125/M cached input,
+            // $10/M output. OpenAI does not list a separate cache-write rate,
+            // so cache-write tokens are compared at normal input-token price.
+            ["gpt-5-codex"]       = new("gpt-5-codex",       1.25m, 10.00m, 0.125m, 1.25m)
         };
 
     /// <summary>

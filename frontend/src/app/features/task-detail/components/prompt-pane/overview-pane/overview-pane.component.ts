@@ -22,6 +22,8 @@ import { TaskPipelinePollService } from '../../../../polling/services/task-pipel
 import { TaskTimelinePollService } from '../../../../polling/services/task-timeline-poll.service';
 import type {
   PipelineExecutionRecord,
+  PipelineCostSummary,
+  PipelineStepCost,
   PipelineStep,
   PipelineStepExecution,
   PipelineStepStatus,
@@ -81,10 +83,37 @@ interface PipelineRowVm {
   startedAt: string | null;
   /** ISO end stamp; null while running or before the step is reached. */
   completedAt: string | null;
+  tokenUsageSource: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
   totalTokens: number;
+  inputCostUsd: number;
+  outputCostUsd: number;
+  cacheReadCostUsd: number;
+  cacheCreationCostUsd: number;
   costUsd: number;
   /** False -> the model is not in the price table, render cost as n/a. */
   costKnown: boolean;
+  tokenTooltip: StructuredTooltip | null;
+  costTooltip: StructuredTooltip | null;
+}
+
+interface PipelineTotalVm {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  totalTokens: number;
+  totalInputCostUsd: number;
+  totalOutputCostUsd: number;
+  totalCacheReadCostUsd: number;
+  totalCacheCreationCostUsd: number;
+  totalCostUsd: number;
+  anyModelUnknown: boolean;
+  tokenTooltip: StructuredTooltip | null;
+  costTooltip: StructuredTooltip | null;
 }
 
 /**
@@ -217,6 +246,9 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
   tool:         'A deterministic tooling step that runs after the agent finishes.',
   drift:        'An opt-in drift-analysis pass that runs after auto-review.',
 };
+
+const API_PRICE_DISCLAIMER =
+  'API price estimate only. Actual CLI billing uses the subscription or plan, not these API rates.';
 
 /**
  * Build the always-present step-name explanation tooltip: the step's display
@@ -639,6 +671,8 @@ export class OverviewPaneComponent {
       const label = step.displayName || step.id;
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
+      const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
+      const costTooltip = this.buildStepCostTooltip(label, c ?? null);
       return {
         id: step.id,
         label,
@@ -653,9 +687,20 @@ export class OverviewPaneComponent {
         durationMs: e?.durationMs ?? 0,
         startedAt: e?.startedAt ?? null,
         completedAt: e?.completedAt ?? null,
+        tokenUsageSource: c?.tokenUsageSource ?? e?.tokenUsageSource ?? null,
+        inputTokens: c?.inputTokens ?? 0,
+        outputTokens: c?.outputTokens ?? 0,
+        cacheReadTokens: c?.cacheReadTokens ?? 0,
+        cacheCreationTokens: c?.cacheCreationTokens ?? 0,
         totalTokens: c?.totalTokens ?? 0,
+        inputCostUsd: c?.inputCostUsd ?? 0,
+        outputCostUsd: c?.outputCostUsd ?? 0,
+        cacheReadCostUsd: c?.cacheReadCostUsd ?? 0,
+        cacheCreationCostUsd: c?.cacheCreationCostUsd ?? 0,
         costUsd: c?.costUsd ?? 0,
         costKnown: c ? c.modelKnown : true,
+        tokenTooltip,
+        costTooltip,
       };
     });
   });
@@ -764,10 +809,24 @@ export class OverviewPaneComponent {
   readonly hasPipelineSection = computed(() => this.hasPipeline() || this.hasCompletionLoop());
 
   /** Task-total tokens + cost across all recorded steps. */
-  readonly pipelineTotal = computed(() => {
+  readonly pipelineTotal = computed<PipelineTotalVm | null>(() => {
     const c = this.pipelinePoll.pipeline()?.cost ?? null;
     if (c == null) return null;
-    return { totalTokens: c.totalTokens, totalCostUsd: c.totalCostUsd, anyModelUnknown: c.anyModelUnknown };
+    return {
+      totalInputTokens: c.totalInputTokens,
+      totalOutputTokens: c.totalOutputTokens,
+      totalCacheReadTokens: c.totalCacheReadTokens,
+      totalCacheCreationTokens: c.totalCacheCreationTokens,
+      totalTokens: c.totalTokens,
+      totalInputCostUsd: c.totalInputCostUsd,
+      totalOutputCostUsd: c.totalOutputCostUsd,
+      totalCacheReadCostUsd: c.totalCacheReadCostUsd,
+      totalCacheCreationCostUsd: c.totalCacheCreationCostUsd,
+      totalCostUsd: c.totalCostUsd,
+      anyModelUnknown: c.anyModelUnknown,
+      tokenTooltip: this.buildTotalTokenTooltip(c),
+      costTooltip: this.buildTotalCostTooltip(c),
+    };
   });
 
   /** True once at least one step has a recorded execution. */

@@ -62,9 +62,21 @@ public class TokenPricingTests
     }
 
     [Fact]
+    public void Estimate_Gpt5CodexPrices_MatchOpenAiApiListed()
+    {
+        var c = TokenPricing.Estimate("gpt-5-codex", 1_000_000, 100_000, 1_000_000, 1_000_000);
+        Assert.True(c.ModelKnown);
+        Assert.Equal(1.25m, c.InputUsd);
+        Assert.Equal(1.00m, c.OutputUsd);
+        Assert.Equal(0.125m, c.CacheReadUsd);
+        Assert.Equal(1.25m, c.CacheWriteUsd);
+        Assert.Equal(3.625m, c.Total);
+    }
+
+    [Fact]
     public void Estimate_UnknownModel_ReturnsZeroAndModelKnownFalse()
     {
-        var c = TokenPricing.Estimate("gpt-5", 1_000_000, 100_000, 0, 0);
+        var c = TokenPricing.Estimate("gpt-5.unknown", 1_000_000, 100_000, 0, 0);
         Assert.False(c.ModelKnown);
         Assert.Equal(0m, c.Total);
     }
