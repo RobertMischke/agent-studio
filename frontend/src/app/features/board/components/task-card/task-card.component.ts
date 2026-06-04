@@ -29,7 +29,6 @@ import {
   buildTokenBubble,
   cardNeedsAttention,
   commitChainVariant,
-  formatStateLabel,
   formatTokens,
   EPIC_ASSIGN_PREFIX,
   EPIC_DETACH_ID,
@@ -192,8 +191,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
-
-  stateLabel(): string { return formatStateLabel(this.job().state); }
 
   phaseBadge() { return buildPhaseBadge(this.job().phase); }
 

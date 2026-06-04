@@ -416,7 +416,6 @@
       gap: 8px;
       margin-bottom: 10px;
     }
-    .task-card__state-pill,
     .task-card__execution-pill,
     .task-card__pending-pill,
     .task-card__waiting-pill,
@@ -630,10 +629,6 @@
       color: var(--studio-accent-6-strong);
       background: color-mix(in srgb, var(--studio-accent-6) 16%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-6) 40%, transparent);
-    }
-    .task-card__state-pill {
-      background: rgba(255,255,255,0.06);
-      color: var(--studio-fg-dim);
     }
     /* Human-decision pill (Done & Decide column). The attention variant
        reuses the failure accent (--studio-accent-6) shared with the failed
