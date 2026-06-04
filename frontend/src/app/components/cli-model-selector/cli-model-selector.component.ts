@@ -96,10 +96,26 @@ export class CliModelSelectorComponent {
 
   readonly pickerOpen = signal<boolean>(false);
 
+  /**
+   * Viewport-relative coordinates for the popover. The popover renders in the
+   * browser top layer (native Popover API) so it can never be clipped by an
+   * ancestor's `overflow`, paint containment, or transform - the failure mode
+   * that left the picker cut off in the epic detail pane. Top-layer elements
+   * are positioned against the viewport, so we compute `left`/`top` from the
+   * trigger's bounding rect and flip below when there is no room above.
+   */
+  readonly pickerPos = signal<{ left: number; top: number }>({ left: 0, top: 0 });
+
   private readonly modalStack = inject(ModalStackService);
   private readonly catalogStore = inject(CliCatalogStore);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
+  private repositionAttached = false;
+  private readonly reposition = () => this.position();
+
+  /** Gap between the trigger and the popover edge, and minimum viewport inset. */
+  private static readonly GAP = 6;
+  private static readonly VIEWPORT_PAD = 8;
 
   /** Draft state initialised when the picker opens. */
   readonly draftCliType = signal<CliType | null>(null);
@@ -153,12 +169,32 @@ export class CliModelSelectorComponent {
   });
 
   @ViewChild('triggerBtn') private triggerBtnRef?: ElementRef<HTMLButtonElement>;
+  @ViewChild('pickerEl') private pickerElRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('backdropEl') private backdropElRef?: ElementRef<HTMLDivElement>;
 
   constructor() {
     effect(() => {
       const open = this.pickerOpen();
-      if (open) this.acquireModalStack();
-      else this.releaseModalStack();
+      if (open) {
+        this.acquireModalStack();
+        // The popover elements are added by the `@if` in the same change
+        // detection pass; show + position them on the next microtask once
+        // they exist in the DOM.
+        queueMicrotask(() => this.showAndPosition());
+      } else {
+        this.hidePopovers();
+        this.releaseModalStack();
+      }
+    });
+
+    // The popover's height changes as the model catalog loads (loading hint ->
+    // pills -> error). Re-run positioning so a flip decision made against the
+    // stale height never leaves the popover off-screen.
+    effect(() => {
+      this.draftAvailableModels();
+      this.loadingCatalog();
+      this.catalogError();
+      if (this.pickerOpen()) queueMicrotask(() => this.position());
     });
   }
 
@@ -178,6 +214,7 @@ export class CliModelSelectorComponent {
   }
 
   closePicker(): void {
+    this.hidePopovers();
     this.pickerOpen.set(false);
     this.releaseModalStack();
     queueMicrotask(() => this.triggerBtnRef?.nativeElement.focus());
@@ -281,6 +318,88 @@ export class CliModelSelectorComponent {
     this.draftModel.set(def ? def.id : '');
   }
 
+  // ---------------------------------------------------------------------------
+  // Top-layer popover lifecycle + positioning
+  // ---------------------------------------------------------------------------
+
+  private showAndPosition(): void {
+    if (!this.pickerOpen()) return;
+    // Backdrop first, picker second: top-layer stacking is insertion-ordered,
+    // so the picker paints above the transparent click-catching backdrop.
+    this.showPopover(this.backdropElRef?.nativeElement);
+    this.showPopover(this.pickerElRef?.nativeElement);
+    this.attachReposition();
+    this.position();
+  }
+
+  private position(): void {
+    const picker = this.pickerElRef?.nativeElement;
+    const trigger = this.triggerBtnRef?.nativeElement;
+    if (!picker || !trigger) return;
+    const a = trigger.getBoundingClientRect();
+    const r = picker.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const { GAP, VIEWPORT_PAD: PAD } = CliModelSelectorComponent;
+
+    // Left-aligned with the trigger (matches the historical anchor), clamped so
+    // a trigger near the right edge never pushes the popover off-screen.
+    let left = a.left;
+    left = clamp(left, PAD, Math.max(PAD, vw - PAD - r.width));
+
+    // Prefer opening above the trigger (the established direction for the chat
+    // composer + status bar); flip below when there is no room above.
+    let top = a.top - GAP - r.height;
+    if (top < PAD) top = a.bottom + GAP;
+    top = clamp(top, PAD, Math.max(PAD, vh - PAD - r.height));
+
+    this.pickerPos.set({ left: Math.round(left), top: Math.round(top) });
+  }
+
+  private showPopover(el?: HTMLElement | null): void {
+    if (!el) return;
+    const api = el as HTMLElement & { showPopover?: () => void };
+    if (typeof api.showPopover !== 'function') return;
+    if (el.matches?.(':popover-open')) return;
+    try {
+      api.showPopover();
+    } catch {
+      /* unsupported / already-open state - the fixed-position CSS fallback still renders it */
+    }
+  }
+
+  private hidePopovers(): void {
+    this.detachReposition();
+    this.hidePopover(this.pickerElRef?.nativeElement);
+    this.hidePopover(this.backdropElRef?.nativeElement);
+  }
+
+  private hidePopover(el?: HTMLElement | null): void {
+    if (!el) return;
+    const api = el as HTMLElement & { hidePopover?: () => void };
+    if (typeof api.hidePopover !== 'function') return;
+    if (!el.matches?.(':popover-open')) return;
+    try {
+      api.hidePopover();
+    } catch {
+      /* not open - ignore */
+    }
+  }
+
+  private attachReposition(): void {
+    if (this.repositionAttached) return;
+    this.repositionAttached = true;
+    window.addEventListener('scroll', this.reposition, true);
+    window.addEventListener('resize', this.reposition);
+  }
+
+  private detachReposition(): void {
+    if (!this.repositionAttached) return;
+    this.repositionAttached = false;
+    window.removeEventListener('scroll', this.reposition, true);
+    window.removeEventListener('resize', this.reposition);
+  }
+
   private acquireModalStack(): void {
     if (this.modalStackDispose !== null) return;
     this.modalStackDispose = this.modalStack.pushUntilDestroyed(
@@ -312,4 +431,9 @@ function buildBadgeText(cliType: CliType | null, model: string | null): string {
   const cli = cliType ? fmtCliTypeLabel(cliType) : 'no CLI';
   const mTrim = model && model.trim() ? model.trim() : 'CLI default';
   return `${cli} · ${mTrim}`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) return min;
+  return Math.min(Math.max(value, min), max);
 }

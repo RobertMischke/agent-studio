@@ -56,17 +56,30 @@
 // Configure-agent picker popover.
 // =============================================================================
 
+// Both the backdrop and the picker render in the browser top layer via the
+// native Popover API (`popover="manual"`), so they escape any ancestor
+// `overflow` / paint-containment / transform that would otherwise clip them
+// (the epic-detail-pane bug). The rules below also neutralise the UA popover
+// defaults (inset: 0, margin: auto, border, padding, fit-content sizing) so
+// the JS-computed `left`/`top` drive placement.
+
 .cli-model-picker__backdrop {
   position: fixed;
   inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  padding: 0;
   z-index: 90;
   background: transparent;
+  overflow: hidden;
 }
 
 .cli-model-picker {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
+  position: fixed;
+  inset: auto;
+  margin: 0;
   z-index: 100;
   min-width: 280px;
   max-width: 340px;
