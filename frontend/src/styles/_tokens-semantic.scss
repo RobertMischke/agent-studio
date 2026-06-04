@@ -114,6 +114,13 @@
   --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 28%, transparent),
                        0 4px 12px color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
 
+  // Commit attribution rows on task cards. These rows sit on a low-alpha
+  // success tint, so the SHA foreground must use the strong success pigment
+  // instead of the base accent. Light theme flips the same tokens below.
+  --studio-commit-bg:     color-mix(in srgb, var(--studio-accent-success) 12%, var(--studio-bg-elevated));
+  --studio-commit-border: color-mix(in srgb, var(--studio-accent-success) 34%, transparent);
+  --studio-commit-fg:     var(--studio-accent-success-strong);
+
   // Text to use ON an accent fill (a brand-orange button etc.). Tuned for dark
   // text on the saturated accent in both themes.
   --studio-on-accent: var(--color-grey-950);
@@ -487,6 +494,11 @@
   --studio-bg-running: color-mix(in srgb, var(--studio-accent-3) 10%, var(--studio-bg-elevated));
   --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 35%, transparent),
                        0 4px 12px color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
+
+  // Commit attribution rows need darker green text on the white shell. The
+  // tint stays subtle while the foreground uses the WCAG-AA strong pigment.
+  --studio-commit-bg:     color-mix(in srgb, var(--studio-accent-success) 9%, var(--studio-bg-elevated));
+  --studio-commit-border: color-mix(in srgb, var(--studio-accent-success) 36%, transparent);
 
   // Severity — darker variants for readable pills + verdict-banner stripe.
   --severity-pass:    var(--color-green-600);

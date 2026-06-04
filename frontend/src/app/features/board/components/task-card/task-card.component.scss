@@ -868,10 +868,10 @@
       margin: 0 0 6px;
       padding: 4px 8px;
       border-radius: 10px;
-      background: rgba(16, 185, 129, 0.10);
-      border: 1px solid rgba(16, 185, 129, 0.25);
+      background: var(--studio-commit-bg);
+      border: 1px solid var(--studio-commit-border);
       font-size: 11px;
-      color: #86efac;
+      color: var(--studio-commit-fg);
     }
     .task-card__commit-row {
       display: grid;
@@ -890,7 +890,7 @@
     }
     .task-card__commit-files { color: var(--studio-fg-dim); white-space: nowrap; }
     .task-card__commit-more {
-      color: #86efac;
+      color: var(--studio-commit-fg);
       font-weight: 600;
       cursor: default;
     }
