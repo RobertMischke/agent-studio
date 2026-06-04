@@ -647,6 +647,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    // The name carries the "what does this step do" explanation tooltip;
+    // the help cursor signals it is hoverable.
+    cursor: help;
   }
 
   &__verdict {

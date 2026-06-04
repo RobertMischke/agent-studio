@@ -651,6 +651,85 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decisionEl!.getAttribute('data-run-mode')).toBe('sequential');
   });
 
+  it('pipeline block: every step row carries a "what happens here" explanation tooltip keyed by step id', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    type Step = NonNullable<TaskPipelineResponse['pipeline']['allSteps']>[number];
+    const mkStep = (id: string, displayName: string, kind: Step['kind']): Step =>
+      ({ id, displayName, kind, runMode: 'sequential', dependsOn: [], idempotent: true, stub: false });
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          mkStep('pre-loop-guard', 'Loop check', 'module'),
+          mkStep('pre-orchestrator-prep', 'Orchestrator prep', 'module'),
+          mkStep('pre-reissue-open-items', 'Reissue open-items check', 'module'),
+          mkStep('core-agent-run', 'Agent execution', 'core'),
+          mkStep('aspect-requirement-fit', 'Requirement fit', 'aspect'),
+          mkStep('aspect-code-quality', 'Code quality', 'aspect'),
+          mkStep('aspect-documentation-impact', 'Documentation impact', 'aspect'),
+          mkStep('aspect-tests-and-evidence', 'Tests and evidence', 'aspect'),
+          mkStep('post-git-commit-attribution', 'Git commit attribution', 'tool'),
+          mkStep('post-lint-scss', 'Frontend stylelint', 'tool'),
+          mkStep('post-regression-radar', 'Regression radar', 'tool'),
+          mkStep('post-orchestrator-decision', 'Auto-review decision', 'orchestrator'),
+          mkStep('post-drift-adr-code', 'Drift: ADR / Code', 'drift'),
+        ],
+      },
+      execution: null,
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const rows = fixture.componentInstance.pipelineRows();
+
+    // Every row has an explanation whose title is the step's display label and
+    // whose body is non-empty (no bare rows).
+    for (const row of rows) {
+      expect(row.explanation).toBeTruthy();
+      expect(row.explanation.title).toBe(row.label);
+      expect(row.explanation.body.length).toBeGreaterThan(0);
+    }
+
+    const byId = (id: string) => rows.find(r => r.id === id)!;
+    expect(byId('pre-loop-guard').explanation.body).toContain('loop guard');
+    expect(byId('core-agent-run').explanation.body).toContain('coding seat');
+    expect(byId('aspect-requirement-fit').explanation.body).toContain('acceptance criteria');
+    expect(byId('post-git-commit-attribution').explanation.body).toContain('git commits');
+    expect(byId('post-regression-radar').explanation.body).toContain('spec-change');
+    expect(byId('post-orchestrator-decision').explanation.body).toContain('final ruling');
+    expect(byId('post-drift-adr-code').explanation.body).toContain('off by default');
+
+    // The DOM renders the tooltip-bearing name span once per step.
+    const names = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-name"]');
+    expect(names.length).toBe(rows.length);
+  });
+
+  it('pipeline block: an unknown step id falls back to a per-kind explanation rather than rendering bare', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          { id: 'post-future-experimental', displayName: 'Future step', kind: 'tool', runMode: 'sequential', dependsOn: [], idempotent: true, stub: false },
+        ],
+      },
+      execution: null,
+      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const row = fixture.componentInstance.pipelineRows()[0];
+    expect(row.explanation.title).toBe('Future step');
+    // Falls back to the StepKind ('tool') copy.
+    expect(row.explanation.body).toContain('tooling step');
+  });
+
   it('promote affordance: shown only on a finished planning task across its finished lanes', async () => {
     const fixture = await build(baseJob({ mode: 'planning', state: '4-auto-review' }));
     const c = fixture.componentInstance;

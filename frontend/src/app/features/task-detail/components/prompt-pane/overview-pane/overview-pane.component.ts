@@ -69,6 +69,12 @@ interface PipelineRowVm {
    * verdict never grows a misleading tooltip.
    */
   concernTooltip: StructuredTooltip | null;
+  /**
+   * Always-present "what does this step do" tooltip shown on hovering the
+   * step name. Keyed by step id with a per-kind fallback so a future
+   * catalogue step still explains itself rather than rendering bare.
+   */
+  explanation: StructuredTooltip;
   /** Recorded wall-clock duration of the step in ms; 0 when not yet run. */
   durationMs: number;
   /** ISO start stamp from the execution record; null until the step starts. */
@@ -155,6 +161,75 @@ function buildConcernTooltip(
   const kind = verdictTitle(verdict);
   if (!kind) return null;
   return { title: `${label} · ${kind}`, body: text };
+}
+
+/**
+ * Per-step "what happens here" copy, keyed by the stable catalogue step id
+ * (see backend PipelineCatalogue). Surfaced as the hover tooltip on every
+ * pipeline-step name so the operator can learn what each pre / core / aspect /
+ * tool / decision / drift step actually does without leaving the Overview.
+ */
+const PIPELINE_STEP_EXPLANATIONS: Record<string, string> = {
+  'pre-loop-guard':
+    'Auto-mode loop guard. Before the agent runs, a deterministic check makes sure the same task is not being re-issued in circles: it flags a forming loop while still under budget and trips the circuit-breaker once the iteration or token limit is hit, pausing for the user.',
+  'pre-orchestrator-prep':
+    'Opt-in prompt-readiness pass. Scores the task prompt for clarity while it is still in Preparation and either admits it to Ready or bounces it back for refinement. Runs off the coding seat, so it never blocks throughput.',
+  'pre-reissue-open-items':
+    'Re-issue guard. On a re-issued run it detects open items left from the previous attempt (the auto-review follow-up reason, unchecked checklist boxes, aspect concerns) and foregrounds them into the run prompt so the agent finishes them instead of starting over.',
+  'core-agent-run':
+    'The actual CLI coding run. The agent works the task in the repository until it reports done, blocks, or asks for input. This is the single sequential coding seat; every pre- and post-step wraps around it.',
+  'aspect-requirement-fit':
+    'Parallel review aspect. Checks whether the work matches the prompt\'s acceptance criteria and whether anything landed that the prompt did not ask for.',
+  'aspect-code-quality':
+    'Parallel review aspect. Scans the diff and changed-file list for obvious regressions, dead code, missing tests, or type errors.',
+  'aspect-documentation-impact':
+    'Parallel review aspect. Checks whether the change needs documentation updates (AGENTS.md, ROADMAP, ADRs, cli-skills, docs) and whether they were made.',
+  'aspect-tests-and-evidence':
+    'Parallel review aspect. Checks whether the agent shipped tests that fail before and pass after the change, and whether screenshot or log evidence is present where the contract requires it.',
+  'post-git-commit-attribution':
+    'Determines which git commits belong to this task by matching commit author-dates against the run\'s wall-clock windows. The work runs on the lane transition ahead of this bracket, so the row shows as planned here.',
+  'post-lint-scss':
+    'Runs stylelint over the frontend SCSS tree after the run. Depending on the configured gate mode (off, warn, or fail) a failure can trigger a re-issue back to Ready.',
+  'post-regression-radar':
+    'Deterministic spec-change analysis. Diffs the run\'s commit range and classifies each changed spec as intended, at-risk, or drift. Reporting only: it never triggers a re-issue.',
+  'post-orchestrator-decision':
+    'The orchestrator\'s single final ruling. Aggregates the parallel aspect verdicts and decides re-issue, accept-as-done, or escalate. This is the step that moves the task out of auto-review.',
+  'post-drift-adr-code':
+    'Opt-in drift check (off by default). An LLM pass that looks for drift between the code and the decisions recorded in the ADRs.',
+  'post-drift-software-architecture':
+    'Opt-in drift check (off by default). An LLM pass that compares the code against the documented software-architecture intent.',
+  'post-drift-docs-marketing':
+    'Opt-in drift check (off by default). An LLM pass that checks whether docs and marketing copy still match what the software does.',
+  'post-drift-spec-task-job':
+    'Opt-in drift check (off by default). An LLM pass that checks whether specs, tasks, and jobs still agree with the implementation.',
+  'post-drift-code-pattern':
+    'Opt-in drift check (off by default). A rule-based scan for code-pattern drift, optionally enriched by an LLM verdict.',
+  'post-abort-review':
+    'Abort-triggered review (off by default). Runs only after a non-clean run end such as a watchdog timeout, non-zero exit, or unexpected stop: it reads the abort evidence and recommends rerun, a stronger re-issue, accept, or human review.',
+};
+
+/** Per-kind fallback copy for a step id not in the explicit catalogue map. */
+const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
+  module:       'A deterministic pre-processing step that runs before the agent.',
+  core:         'The core CLI agent run for this task.',
+  aspect:       'A read-only review aspect that runs in parallel after the agent finishes.',
+  orchestrator: 'An orchestrator decision step that aggregates verdicts and chooses the next move.',
+  tool:         'A deterministic tooling step that runs after the agent finishes.',
+  drift:        'An opt-in drift-analysis pass that runs after auto-review.',
+};
+
+/**
+ * Build the always-present step-name explanation tooltip: the step's display
+ * label as the title and the "what happens here" copy as the body, keyed by
+ * step id with a per-kind fallback so a new catalogue step still explains
+ * itself rather than rendering with no tooltip.
+ */
+function buildStepExplanation(stepId: string, label: string, kind: StepKind): StructuredTooltip {
+  const body =
+    PIPELINE_STEP_EXPLANATIONS[stepId.toLowerCase()] ??
+    PIPELINE_KIND_EXPLANATIONS[kind] ??
+    'A pipeline step.';
+  return { title: label, body };
 }
 
 @Component({
@@ -574,6 +649,7 @@ export class OverviewPaneComponent {
         model: e?.model ?? cfg?.model ?? step.model ?? null,
         verdict,
         concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
+        explanation: buildStepExplanation(step.id, label, step.kind),
         durationMs: e?.durationMs ?? 0,
         startedAt: e?.startedAt ?? null,
         completedAt: e?.completedAt ?? null,
