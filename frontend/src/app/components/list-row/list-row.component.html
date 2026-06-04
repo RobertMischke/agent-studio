@@ -1,0 +1,29 @@
+@if (interactive()) {
+  <button type="button"
+          class="list-row list-row--interactive"
+          [class.list-row--active]="active()"
+          [style.padding-left]="indent()"
+          [attr.data-testid]="testid()"
+          (click)="activated.emit()">
+    <ng-container [ngTemplateOutlet]="content" />
+  </button>
+} @else {
+  <div class="list-row"
+       [class.list-row--active]="active()"
+       [style.padding-left]="indent()"
+       [attr.data-testid]="testid()">
+    <ng-container [ngTemplateOutlet]="content" />
+  </div>
+}
+
+<!--
+  Slots are declared exactly once: duplicating <ng-content select="[lead]">
+  across the @if/@else branches makes Angular project into only the first
+  declared slot, so the static branch would render empty. Sharing one set via
+  ngTemplateOutlet keeps both wrappers projecting the same lead/label/trail.
+-->
+<ng-template #content>
+  <ng-content select="[lead]" />
+  <span class="list-row__label" [class.list-row__label--caps]="capitalize()">{{ label() }}</span>
+  <ng-content select="[trail]" />
+</ng-template>

@@ -766,16 +766,9 @@
   font-size: 12px;
 }
 
-// Option A from bug-explorer-open-tabs-alignment: Open-Tabs rows start
-// at the same x as the Workspace project glyph column, not the chevron.
-// We compose `--studio-explorer-row-glyph-x` (30px) so the indent stays
-// in lockstep with the workspace project geometry — moving the chev or
-// glyph widths in the semantic-tokens file shifts open-tabs in unison.
-.studio .studio-tree-row--open-tab {
-  padding-left: var(--studio-explorer-row-glyph-x);
-  font-size: 12px;
-}
-
+// Open-Tabs rows now render through <app-list-row> with its [indent] set to
+// `--studio-explorer-row-glyph-x` (30px), so they start at the same x as the
+// Workspace project glyph column and stay in lockstep with that geometry.
 .studio-tree-row__close {
   width: 18px;
   height: 18px;
@@ -830,8 +823,7 @@
   }
 }
 
-.studio-filters .studio-filter-pills,
-.studio-cli .studio-cli__row {
+.studio-filters .studio-filter-pills {
   padding: 0 12px;
 }
 
@@ -872,19 +864,8 @@
   }
 }
 
-.studio-cli__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 12px;
-  font-size: 12px;
-  color: var(--studio-fg);
-
-  &:hover {
-    background: var(--studio-bg-hover);
-  }
-}
-
+// CLI agent rows now render through <app-list-row>; only the leading glyph
+// styling stays panel-specific (round avatar tinted by CLI color).
 .studio-cli__glyph {
   width: 16px;
   height: 16px;
@@ -895,11 +876,6 @@
   font-weight: 700;
   color: #1a1a1a;
   flex-shrink: 0;
-}
-
-.studio-cli__name {
-  flex: 1;
-  text-transform: capitalize;
 }
 
 .studio-setting {
@@ -1483,42 +1459,11 @@
 // <app-menu> component. The `.studio-tab-ctx` / `.studio-tab-ctx-backdrop`
 // blocks previously here are dead — see src/app/components/menu/menu.component.scss.
 
-// Note: the BEM members below are nested under a second `.studio-tree-row`
-// declaration earlier in this file (around line 526). Keep that file's
-// `padding` rule out of here so the project (8px) and child (44px)
-// `padding-left` modifiers don't get clobbered by a shorthand reset.
+// The interactive `.studio-tree-row` row chrome (Open-tabs list) now renders
+// through <app-list-row>. Only the glyph + count members survive here because
+// the welcome-card project buttons (`.studio-welcome__project`) still borrow
+// their visuals.
 .studio-tree-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  // F-row-density: rows are interactive (click to open tab) so they keep
-  // a 22px floor that still clears desktop touch-target ergonomics in
-  // a sidebar context. Down from 24px to reclaim vertical pixels for the
-  // operator's tree.
-  height: 22px;
-  padding-top: 0;
-  // 16px right padding so count badges stay clear of the sidebar's
-  // right edge — applies to OPEN TABS / OPEN TASKS rows that still
-  // use the legacy studio-tree-row markup.
-  padding-right: 16px;
-  padding-bottom: 0;
-  // padding-left is owned by the &--project (8) and &--child (44)
-  // modifiers in the earlier block. Defaulting to 16 here was overriding
-  // those modifiers because shorthand `padding` resets all four sides.
-  font-size: 13px;
-  color: var(--studio-fg);
-  text-align: left;
-
-  &:hover {
-    background: var(--studio-bg-hover);
-  }
-
-  &--active {
-    background: var(--studio-bg-selected);
-    color: var(--studio-fg-strong);
-  }
-
   &__glyph {
     width: 16px;
     height: 16px;
@@ -1529,13 +1474,6 @@
     font-weight: 700;
     color: #1a1a1a;
     flex-shrink: 0;
-  }
-
-  &__name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   &__count {

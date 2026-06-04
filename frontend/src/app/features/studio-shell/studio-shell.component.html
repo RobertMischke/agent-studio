@@ -253,21 +253,22 @@
 
                   @if (!explorerSections.isCollapsed('open-tabs')) {
                   @for (t of tabs(); track tabKey(t)) {
-                    <button type="button"
-                            class="studio-tree-row studio-tree-row--open-tab"
-                            [class.studio-tree-row--active]="activeKey() === tabKey(t)"
-                            [appTaskStatusPopover]="tabJob(t)"
-                            [appTaskStatusPopoverOnlyTruncated]="false"
-                            [attr.data-testid]="'studio-explorer-open-tab-' + tabKey(t)"
-                            [attr.data-sticky]="isTabSticky(t) ? 'true' : null"
-                            (click)="selectTab(tabKey(t))">
-                      <span class="studio-tree-row__name" data-truncatable>{{ tabLabel(t) }}</span>
+                    <app-list-row
+                      [interactive]="true"
+                      [active]="activeKey() === tabKey(t)"
+                      [label]="tabLabel(t)"
+                      indent="var(--studio-explorer-row-glyph-x)"
+                      [testid]="'studio-explorer-open-tab-' + tabKey(t)"
+                      [appTaskStatusPopover]="tabJob(t)"
+                      [appTaskStatusPopoverOnlyTruncated]="false"
+                      [attr.data-sticky]="isTabSticky(t) ? 'true' : null"
+                      (activated)="selectTab(tabKey(t))">
                       @if (!isTabSticky(t)) {
-                        <span class="studio-tree-row__close"
+                        <span trail class="studio-tree-row__close"
                               (click)="closeTab(tabKey(t), $event)"
                               aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>
                       }
-                    </button>
+                    </app-list-row>
                   }
                   }
                 }
@@ -291,13 +292,12 @@
                   <app-empty-state>No tasks loaded yet.</app-empty-state>
                 } @else {
                   @for (row of cliRows(); track row.cli) {
-                    <div class="studio-cli__row">
-                      <span class="studio-cli__glyph" [style.background]="row.color" aria-hidden="true">
+                    <app-list-row [label]="row.cli" [capitalize]="true">
+                      <span lead class="studio-cli__glyph" [style.background]="row.color" aria-hidden="true">
                         {{ row.cli.charAt(0).toUpperCase() }}
                       </span>
-                      <span class="studio-cli__name">{{ row.cli }}</span>
-                      <app-count-badge [value]="row.count" />
-                    </div>
+                      <app-count-badge trail [value]="row.count" />
+                    </app-list-row>
                   }
                 }
                 <app-section-header title="Tools" [divider]="true" />
