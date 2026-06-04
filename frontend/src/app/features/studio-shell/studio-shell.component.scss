@@ -1326,10 +1326,14 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: minmax(0, 1fr);
-  // Super-columns sit flush against the editor content edges (tab bar
-  // above, activity rail to the side) — no decorative outer inset. The
-  // `gap` is the intentional inter-column spacing and stays put.
-  gap: 12px;
+  // BACKLOG / ACTIVE / DONE & DECIDE share ONE continuous pane instead of
+  // floating as three elevated cards over a gutter of editor surface. The
+  // grid gap is dropped to zero so no editor background shows between the
+  // super-columns; the per-column boundary is a single hairline divider
+  // (see `.lane-group + .lane-group` below). `--studio-bg-editor` already
+  // resolves to the clean pane tone (white on light, cleanest body tone on
+  // dark), so the board reads as a single surface, not a grey-on-grey stack.
+  gap: 0;
   padding: 0;
   align-items: stretch;
   background: var(--studio-bg-editor);
@@ -1340,11 +1344,22 @@
   .lane-group {
     display: flex;
     flex-direction: column;
-    background: var(--studio-bg-elevated);
-    border: 1px solid var(--studio-border);
-    border-radius: 6px;
+    // Transparent so the shared dashboard pane reads through; the elevated
+    // card surface + per-card border/radius are dropped so the three
+    // sections merge into one flush pane.
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     overflow: hidden;
     min-height: 0;
+  }
+
+  // Dezenter Trenner: a single hairline between adjacent super-columns
+  // replaces the grey gutter. It sits in the padding channel between the
+  // neighbouring lanes (lane-group__lanes has its own 4px inset), so the
+  // divider never touches a card edge.
+  .lane-group + .lane-group {
+    border-left: 1px solid var(--studio-border);
   }
 
   .lane-group__head {
