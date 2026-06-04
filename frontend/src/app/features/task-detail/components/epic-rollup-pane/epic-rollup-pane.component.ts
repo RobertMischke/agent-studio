@@ -23,10 +23,11 @@ const LANE_ORDER = Object.keys(LANE_LABELS);
  * Epic detail pane: shown in the task-detail view when the open card is an
  * epic (kind=epic). Two halves in one card:
  *
- *  - Edit: the epic's own properties - description (prompt.md, the planning
- *    brief that drives decomposition), cross-references, and model/CLI - are
- *    editable inline and persist through the same API endpoints the regular
- *    task-edit surfaces use. The title stays editable in the detail header.
+ *  - Edit: the epic's own properties - title, description (prompt.md, the
+ *    planning brief that drives decomposition), cross-references, and model/CLI
+ *    - are editable inline and persist through the same API endpoints the
+ *    regular task-edit surfaces use. The title routes through the host's
+ *    setJobTitle PUT, the same one the detail header / Overview hero use.
  *  - Status: the live sub-task progress from GET /api/epics/{id} as a
  *    full-width mini-board, grouped into the lane/state columns the sub-tasks
  *    currently sit in, so a glance shows where the epic's work stands.
@@ -56,6 +57,8 @@ export class EpicRollupPaneComponent {
 
   /** Bubbles a click on a sub-task so the host opens its detail. */
   readonly openSubTask = output<{ jobId: string; watchPath: string }>();
+  /** Edited epic title; the host persists it via the shared setJobTitle PUT. */
+  readonly saveTitle = output<string>();
   /** Edited description body; the host writes it to prompt.md via the API. */
   readonly saveDescription = output<string>();
   /** Fires after a successful reference write so the host can re-fetch. */
@@ -69,6 +72,10 @@ export class EpicRollupPaneComponent {
   readonly error = signal(false);
   /** Flips the description block between rendered view and the rich editor. */
   readonly editingDesc = signal(false);
+  /** Flips the title row between the rendered title and the inline input. */
+  readonly editingTitle = signal(false);
+  /** Working copy of the title while the inline input is open. */
+  readonly titleDraft = signal('');
 
   /** Completed share of the epic, 0-100, for the progress bar width. */
   readonly progressPct = computed(() => {
@@ -114,12 +121,32 @@ export class EpicRollupPaneComponent {
       });
     });
 
-    // Drop the open editor when the lane pager swaps to a different epic so we
-    // never show one epic's draft against another's description.
+    // Drop the open editors when the lane pager swaps to a different epic so we
+    // never show one epic's draft against another's description/title.
     effect(() => {
       this.epicId();
       this.editingDesc.set(false);
+      this.editingTitle.set(false);
     }, { allowSignalWrites: true });
+  }
+
+  beginEditTitle(): void {
+    const info = this.job();
+    this.titleDraft.set(info ? (info.title || info.id) : '');
+    this.editingTitle.set(true);
+  }
+
+  cancelEditTitle(): void {
+    this.editingTitle.set(false);
+  }
+
+  onTitleSave(): void {
+    const trimmed = this.titleDraft().trim();
+    this.editingTitle.set(false);
+    if (!trimmed) return;
+    const info = this.job();
+    if (info && trimmed === (info.title || info.id)) return;
+    this.saveTitle.emit(trimmed);
   }
 
   beginEditDesc(): void {

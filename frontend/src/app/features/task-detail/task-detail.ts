@@ -1172,6 +1172,12 @@ export class TaskDetailComponent implements OnDestroy {
     this.savingTitle.set(false);
   }
 
+  /** Inline title save from a child pane (e.g. the epic card) by value. */
+  saveTitleValue(title: string) {
+    this.titleDraft.set(title);
+    this.saveTitle();
+  }
+
   saveTitle() {
     const trimmed = this.titleDraft().trim();
     if (!trimmed || this.savingTitle()) return;

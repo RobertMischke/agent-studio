@@ -74,6 +74,44 @@
     color: var(--studio-fg);
   }
 
+  &__title-text {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--studio-fg);
+    cursor: text;
+  }
+
+  &__title-edit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--studio-spacing-1);
+  }
+
+  &__title-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--studio-border);
+    border-radius: 4px;
+    background: var(--studio-bg-editor);
+    color: var(--studio-fg);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.3;
+    padding: 4px 8px;
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent);
+      outline-offset: 1px;
+    }
+  }
+
+  &__title-actions {
+    display: flex;
+    gap: var(--studio-spacing-1);
+  }
+
   &__header {
     display: flex;
     align-items: baseline;

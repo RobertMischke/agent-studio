@@ -2,18 +2,18 @@
  * Acceptance for the editable Epic detail view (ASS-662 follow-up: "Epic view
  * editable — title + properties, Edit & Status screen"). When the open card in
  * the task detail is an epic (kind=epic), the epic pane is no longer a pure
- * status display: its own properties — description (prompt.md), cross-references
- * and model/CLI — are editable inline and persist through the same API the
- * regular task-edit surfaces use, while the sub-task-by-lane status board below
- * stays put. The title remains editable through the detail header.
+ * status display: its own properties — title, description (prompt.md),
+ * cross-references and model/CLI — are editable inline and persist through the
+ * same API the regular task-edit surfaces use, while the sub-task-by-lane
+ * status board below stays put.
  *
  * The test seeds one epic + two sub-tasks via the API, deep-links to the epic's
  * detail, and proves three things: (1) the editable details section AND the
  * status board both render (Edit & Status), (2) editing the description through
  * the inline editor persists to the backend and the rendered view follows, and
- * (3) renaming the epic via the Overview hero title persists. (The studio
- * shell hides the legacy kanban detail header, so the hero title in the
- * Overview tab is the canonical rename affordance.)
+ * (3) renaming the epic via the in-card title editor persists. (The studio
+ * shell hides the legacy kanban detail header, so the epic card carries its own
+ * inline title affordance, routing through the shared setJobTitle PUT.)
  *
  * Routes are `/api/tasks*`; this spec inlines the task API calls it needs so it
  * does not depend on the still-`/api/jobs` shared helpers/jobs.ts.
@@ -149,23 +149,23 @@ test.describe('Epic detail: editable title + properties (Edit & Status)', () => 
     await page.screenshot({ path: editShot, fullPage: false });
     await testInfo.attach('epic-detail-editable', { path: editShot, contentType: 'image/png' });
 
-    // --- Rename the epic via the Overview hero title ---------------------
-    // The studio shell hides the kanban detail header, so the canonical
-    // rename affordance is the Overview tab's hero title (it routes through
-    // the same setJobTitle PUT the rest of task-edit uses). Overview is the
-    // default-active tab, so the hero title is already on screen.
+    // --- Rename the epic inline in the epic card -------------------------
+    // The epic card is the dedicated Edit & Status surface, so the title is
+    // editable right here (above the description) and routes through the same
+    // setJobTitle PUT the rest of task-edit uses. The studio shell hides the
+    // legacy kanban detail header, so this in-card editor is the title
+    // affordance for the epic view.
     const newTitle = `${PREFIX}Renamed ${Date.now()}`;
-    const heroTitle = page.getByTestId('overview-title');
-    await expect(heroTitle).toBeVisible({ timeout: 10_000 });
-    await heroTitle.click();
-    const titleInput = page.getByTestId('overview-title-input');
+    await expect(pane.locator('[data-testid="epic-title-text"]')).toContainText('Checkout revamp', { timeout: 10_000 });
+    await pane.locator('[data-testid="epic-title-edit"]').click();
+    const titleInput = pane.locator('[data-testid="epic-title-input"]');
     await expect(titleInput).toBeVisible({ timeout: 10_000 });
     await titleInput.fill(newTitle);
-    await titleInput.press('Enter');
+    await pane.locator('[data-testid="epic-title-save"]').click();
 
     await expect.poll(async () => (await getDetail(epicId, watchPath)).info.title, { timeout: 10_000 })
       .toBe(newTitle);
-    await expect(page.getByTestId('overview-title')).toContainText(newTitle, { timeout: 10_000 });
+    await expect(pane.locator('[data-testid="epic-title-text"]')).toContainText(newTitle, { timeout: 10_000 });
 
     // Status board is untouched by the edits.
     await expect(pane.locator('[data-testid="epic-rollup-board"]')).toBeVisible();

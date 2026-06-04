@@ -1,6 +1,48 @@
 <section class="epic-rollup" data-testid="epic-rollup-pane">
   @if (job(); as info) {
     <div class="epic-rollup__details" data-testid="epic-details">
+      <div class="epic-rollup__field" data-testid="epic-title">
+        <div class="epic-rollup__field-head">
+          <span class="epic-rollup__field-label">Title</span>
+          @if (!editingTitle()) {
+            <button type="button"
+                    class="epic-rollup__field-action"
+                    data-testid="epic-title-edit"
+                    [appTooltip]="'Rename the epic'"
+                    (click)="beginEditTitle()">Edit</button>
+          }
+        </div>
+        @if (editingTitle()) {
+          <div class="epic-rollup__title-edit">
+            <input class="epic-rollup__title-input"
+                   data-testid="epic-title-input"
+                   type="text"
+                   [value]="titleDraft()"
+                   (input)="titleDraft.set($any($event.target).value)"
+                   (keydown.enter)="onTitleSave()"
+                   (keydown.escape)="cancelEditTitle()"
+                   maxlength="200"
+                   placeholder="Epic title" />
+            <div class="epic-rollup__title-actions">
+              <button type="button"
+                      class="epic-rollup__field-action"
+                      data-testid="epic-title-save"
+                      [disabled]="!titleDraft().trim()"
+                      (click)="onTitleSave()">Save</button>
+              <button type="button"
+                      class="epic-rollup__field-action epic-rollup__field-action--ghost"
+                      data-testid="epic-title-cancel"
+                      (click)="cancelEditTitle()">Cancel</button>
+            </div>
+          </div>
+        } @else {
+          <span class="epic-rollup__title-text"
+                data-testid="epic-title-text"
+                [appTooltip]="'Double-click or use Edit to rename'"
+                (dblclick)="beginEditTitle()">{{ info.title || info.id }}</span>
+        }
+      </div>
+
       <div class="epic-rollup__field" data-testid="epic-description">
         <div class="epic-rollup__field-head">
           <span class="epic-rollup__field-label">Description</span>
@@ -28,7 +70,7 @@
         } @else if (promptMarkdown()) {
           <app-markdown class="epic-rollup__markdown" [source]="promptMarkdown()" [dense]="true" />
         } @else {
-          <div class="epic-rollup__muted" data-testid="epic-description-empty">No description yet — click Edit to add one.</div>
+          <div class="epic-rollup__muted" data-testid="epic-description-empty">No description yet. Click Edit to add one.</div>
         }
       </div>
 
