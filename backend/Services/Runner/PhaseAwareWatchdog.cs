@@ -105,7 +105,11 @@ public sealed class PhaseBudgetTable
 {
     private readonly IReadOnlyDictionary<RunPhase, PhaseBudget> _budgets;
 
-    private PhaseBudgetTable(IReadOnlyDictionary<RunPhase, PhaseBudget> budgets) => _budgets = budgets;
+    private PhaseBudgetTable(IReadOnlyDictionary<RunPhase, PhaseBudget> budgets, PhaseBudget longOp)
+    {
+        _budgets = budgets;
+        LongOp = longOp;
+    }
 
     /// <summary>
     /// Resolve the budget for a phase, falling back to the hardcoded
@@ -114,8 +118,28 @@ public sealed class PhaseBudgetTable
     public PhaseBudget For(RunPhase phase) =>
         _budgets.TryGetValue(phase, out var b) ? b : PhaseBudget.For(phase);
 
+    /// <summary>
+    /// Silence budget applied (via <see cref="PhaseAwareWatchdog.EffectiveBudget"/>)
+    /// while the in-flight tool is a known long-running operation
+    /// (<see cref="LongRunningOperationDetector"/>) - a dev-server start,
+    /// build, test run, or poll loop. It only ever <em>widens</em> the phase
+    /// budget (the watchdog takes the max of the two), so a legitimate wait
+    /// on a server/compile is not killed as a hang while a genuinely wedged
+    /// run still hits the long-op ceiling. Override via
+    /// <c>Watchdog:LongOp:&lt;Suspicious|Hung&gt;Seconds</c>.
+    /// </summary>
+    public PhaseBudget LongOp { get; }
+
+    /// <summary>
+    /// Default long-op silence budget: an early visible Suspicious warning at
+    /// 5 min, kill backstop at 30 min. Wide enough to cover an Angular cold
+    /// compile plus a dev-server-up poll loop, bounded so a truly wedged
+    /// long-op is still terminated.
+    /// </summary>
+    public static PhaseBudget DefaultLongOp { get; } = new(SuspiciousSeconds: 300, HungSeconds: 1800);
+
     /// <summary>The hardcoded profile with no configuration overrides applied.</summary>
-    public static PhaseBudgetTable Default { get; } = new(BuildDefaults());
+    public static PhaseBudgetTable Default { get; } = new(BuildDefaults(), DefaultLongOp);
 
     private static Dictionary<RunPhase, PhaseBudget> BuildDefaults() =>
         Enum.GetValues<RunPhase>().ToDictionary(p => p, PhaseBudget.For);
@@ -132,17 +156,29 @@ public sealed class PhaseBudgetTable
     {
         var map = BuildDefaults();
         var section = cfg.GetSection("Watchdog:Phase");
-        if (!section.Exists()) return new PhaseBudgetTable(map);
-        foreach (var child in section.GetChildren())
+        if (section.Exists())
         {
-            if (!Enum.TryParse<RunPhase>(child.Key, ignoreCase: true, out var phase))
-                continue;
-            var baseline = map.TryGetValue(phase, out var b) ? b : PhaseBudget.For(phase);
-            map[phase] = new PhaseBudget(
-                SuspiciousSeconds: child.GetValue("SuspiciousSeconds", baseline.SuspiciousSeconds),
-                HungSeconds:       child.GetValue("HungSeconds", baseline.HungSeconds));
+            foreach (var child in section.GetChildren())
+            {
+                if (!Enum.TryParse<RunPhase>(child.Key, ignoreCase: true, out var phase))
+                    continue;
+                var baseline = map.TryGetValue(phase, out var b) ? b : PhaseBudget.For(phase);
+                map[phase] = new PhaseBudget(
+                    SuspiciousSeconds: child.GetValue("SuspiciousSeconds", baseline.SuspiciousSeconds),
+                    HungSeconds:       child.GetValue("HungSeconds", baseline.HungSeconds));
+            }
         }
-        return new PhaseBudgetTable(map);
+
+        var longOp = DefaultLongOp;
+        var longOpSection = cfg.GetSection("Watchdog:LongOp");
+        if (longOpSection.Exists())
+        {
+            longOp = new PhaseBudget(
+                SuspiciousSeconds: longOpSection.GetValue("SuspiciousSeconds", DefaultLongOp.SuspiciousSeconds),
+                HungSeconds:       longOpSection.GetValue("HungSeconds", DefaultLongOp.HungSeconds));
+        }
+
+        return new PhaseBudgetTable(map, longOp);
     }
 }
 
@@ -189,11 +225,29 @@ public static class PhaseAwareWatchdog
         RunPhase phase,
         WatchdogConfig config,
         PhaseBudgetTable budgets)
+        => DecideState(silenceSeconds, runAgeSeconds, phase, config, budgets, longOpActive: false);
+
+    /// <inheritdoc cref="DecideState(double,double,RunPhase,WatchdogConfig,PhaseBudgetTable)"/>
+    /// <param name="longOpActive">
+    /// True when the in-flight tool is a known long-running operation
+    /// (<see cref="LongRunningOperationDetector"/>). The phase budget is then
+    /// widened to <see cref="EffectiveBudget"/> - the max of the phase budget
+    /// and <see cref="PhaseBudgetTable.LongOp"/> - so a legitimate wait on a
+    /// dev-server/compile is not killed as a hang. It can only widen, never
+    /// tighten, the budget.
+    /// </param>
+    public static WatchdogState DecideState(
+        double silenceSeconds,
+        double runAgeSeconds,
+        RunPhase phase,
+        WatchdogConfig config,
+        PhaseBudgetTable budgets,
+        bool longOpActive)
     {
         if (!config.Enabled) return WatchdogState.Healthy;
         if (runAgeSeconds < config.WarmUpGraceSeconds) return WatchdogState.Healthy;
 
-        var budget = budgets.For(phase);
+        var budget = EffectiveBudget(phase, budgets, longOpActive);
         if (silenceSeconds >= budget.HungSeconds)       return WatchdogState.Hung;
         if (silenceSeconds >= budget.SuspiciousSeconds) return WatchdogState.Suspicious;
         // Quiet level still uses the global QuietSeconds for a soft
@@ -201,6 +255,24 @@ public static class PhaseAwareWatchdog
         // signal without adding diagnostic value.
         if (silenceSeconds >= config.QuietSeconds)      return WatchdogState.Quiet;
         return WatchdogState.Healthy;
+    }
+
+    /// <summary>
+    /// The silence budget actually used for a phase. With no long-op in
+    /// flight this is just <see cref="PhaseBudgetTable.For"/>. While a known
+    /// long-op runs, each field is the max of the phase budget and the
+    /// long-op budget - so the tolerance only ever widens, and a phase that
+    /// already tolerates more than the long-op budget (e.g. SessionInitializing)
+    /// keeps its wider value.
+    /// </summary>
+    public static PhaseBudget EffectiveBudget(RunPhase phase, PhaseBudgetTable budgets, bool longOpActive)
+    {
+        var budget = budgets.For(phase);
+        if (!longOpActive) return budget;
+        var lo = budgets.LongOp;
+        return new PhaseBudget(
+            SuspiciousSeconds: Math.Max(budget.SuspiciousSeconds, lo.SuspiciousSeconds),
+            HungSeconds:       Math.Max(budget.HungSeconds, lo.HungSeconds));
     }
 
     /// <summary>
@@ -213,8 +285,16 @@ public static class PhaseAwareWatchdog
 
     /// <inheritdoc cref="FormatBudgetReason(RunPhase,double)"/>
     public static string FormatBudgetReason(RunPhase phase, double silenceSeconds, PhaseBudgetTable budgets)
+        => FormatBudgetReason(phase, silenceSeconds, budgets, longOpActive: false);
+
+    /// <inheritdoc cref="FormatBudgetReason(RunPhase,double)"/>
+    /// <param name="longOpActive">When true the reported budget is the
+    /// widened <see cref="EffectiveBudget"/> and the string carries a
+    /// <c>long-op</c> tag so the chat note shows why the budget was wider.</param>
+    public static string FormatBudgetReason(RunPhase phase, double silenceSeconds, PhaseBudgetTable budgets, bool longOpActive)
     {
-        var budget = budgets.For(phase);
-        return $"phase={phase} silence={silenceSeconds:F0}s allowed={budget.SuspiciousSeconds:F0}/{budget.HungSeconds:F0}s";
+        var budget = EffectiveBudget(phase, budgets, longOpActive);
+        var longOpTag = longOpActive ? " long-op" : "";
+        return $"phase={phase}{longOpTag} silence={silenceSeconds:F0}s allowed={budget.SuspiciousSeconds:F0}/{budget.HungSeconds:F0}s";
     }
 }

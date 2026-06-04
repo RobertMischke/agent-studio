@@ -69,6 +69,12 @@ public class ProjectRunner
     // breaker: budget remaining = DefaultRerunBudget - used. Cleared when the
     // job leaves the loop (accepted, moved to review, or escalated).
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _abortReviewRerunsUsed = new();
+    // Per-job count of automatic completion-loop re-triggers already spent on
+    // transient (watchdog) aborts. The breaker: budget remaining =
+    // CompletionRetriggerDecider.DefaultBudget - used. Cleared when the job
+    // leaves the run loop (moved to review, or escalated to human review).
+    // Loop id completion.retrigger-transient-abort-per-job.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _completionRetriggerUsed = new();
     private string _mode = "manual";
     // The human-readable reason recorded the last time _mode changed, plus
     // when the change happened. Surfaced via ProjectRunnerStatus so the
@@ -1057,11 +1063,17 @@ public class ProjectRunner
         WatchdogState next;
         double silence;
         RunPhase? phase = null;
+        var longOpActive = false;
         if (_phaseByJob.TryGetValue(jobKey, out var phaseSnap))
         {
             phase = phaseSnap.Phase;
             silence = (now - phaseSnap.LastActivityAt).TotalSeconds;
-            next = PhaseAwareWatchdog.DecideState(silence, age, phaseSnap.Phase, _watchdogConfig, _phaseBudgets);
+            // ASS-665: a known long-op (ng serve / build / dev-server-wait /
+            // curl-poll-loop) legitimately produces no stdout while it runs.
+            // While such a tool is in flight, widen the silence budget so the
+            // wait is not mistaken for a hang.
+            longOpActive = LongRunningOperationDetector.IsLongRunningOperation(phaseSnap.LastToolCommand);
+            next = PhaseAwareWatchdog.DecideState(silence, age, phaseSnap.Phase, _watchdogConfig, _phaseBudgets, longOpActive);
         }
         else
         {
@@ -1079,8 +1091,8 @@ public class ProjectRunner
 
         var hungAtSeconds = phase is null
             ? _watchdogConfig.HungSeconds
-            : _phaseBudgets.For(phase.Value).HungSeconds;
-        var phaseTag = phase is null ? "" : $" [{PhaseAwareWatchdog.FormatBudgetReason(phase.Value, silence, _phaseBudgets)}]";
+            : PhaseAwareWatchdog.EffectiveBudget(phase.Value, _phaseBudgets, longOpActive).HungSeconds;
+        var phaseTag = phase is null ? "" : $" [{PhaseAwareWatchdog.FormatBudgetReason(phase.Value, silence, _phaseBudgets, longOpActive)}]";
         var title = string.IsNullOrWhiteSpace(info.Title) ? info.Id : info.Title;
         var cliLabel = string.IsNullOrWhiteSpace(info.CliType) ? cliType : info.CliType;
         switch (next)
@@ -1142,16 +1154,32 @@ public class ProjectRunner
     /// </summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RunPhaseSnapshot> _phaseByJob = new();
 
-    /// <summary>Last seen phase + UTC of last activity-classified event.</summary>
-    private sealed record RunPhaseSnapshot(RunPhase Phase, DateTime LastActivityAt);
+    /// <summary>
+    /// Last seen phase + UTC of last activity-classified event, plus the
+    /// command of the tool currently in flight. <see cref="LastToolCommand"/>
+    /// is set on <see cref="CliRunEvent.ToolStarted"/> and cleared on
+    /// <see cref="CliRunEvent.ToolCompleted"/>, so a non-null value means a
+    /// tool is actively running; the watchdog reads it to widen the silence
+    /// budget while that tool is a known long-op (ASS-665).
+    /// </summary>
+    private sealed record RunPhaseSnapshot(RunPhase Phase, DateTime LastActivityAt, string? LastToolCommand);
 
     /// <summary>Updates per-job phase + activity clock from a typed event.</summary>
     private void OnRunEventReceived(string jobKey, CliRunEvent evt)
     {
-        var prev = _phaseByJob.TryGetValue(jobKey, out var existing) ? existing : new RunPhaseSnapshot(RunPhase.Spawning, DateTime.UtcNow);
+        var prev = _phaseByJob.TryGetValue(jobKey, out var existing) ? existing : new RunPhaseSnapshot(RunPhase.Spawning, DateTime.UtcNow, null);
         var nextPhase = RunPhaseTransitions.Apply(prev.Phase, evt);
         var lastActivity = RunPhaseTransitions.IsActivitySignal(evt) ? DateTime.UtcNow : prev.LastActivityAt;
-        _phaseByJob[jobKey] = new RunPhaseSnapshot(nextPhase, lastActivity);
+        // Track the in-flight tool command so the watchdog can recognise a
+        // long-op (dev server / build / poll loop). Set when a tool starts,
+        // cleared when it completes; preserved across non-tool events.
+        var lastToolCommand = evt switch
+        {
+            CliRunEvent.ToolStarted s   => $"{s.ToolName} {s.Argument}".Trim(),
+            CliRunEvent.ToolCompleted   => null,
+            _                           => prev.LastToolCommand
+        };
+        _phaseByJob[jobKey] = new RunPhaseSnapshot(nextPhase, lastActivity, lastToolCommand);
 
         // Surface tool-call boundaries to disk so a post-mortem of a
         // watchdog kill can answer "what was the last tool the agent
@@ -2818,6 +2846,59 @@ public class ProjectRunner
                     if (handled) return;
                 }
 
+                // Completion-loop re-trigger (loop id
+                // completion.retrigger-transient-abort-per-job). A transient
+                // process abort (the watchdog killed the run) is a runner
+                // outcome, not an agent decision: instead of dead-ending the
+                // task in human-review, re-spawn the same job up to N times.
+                // This is the deterministic default-on fallback that runs only
+                // when the LLM abort-review step above did NOT handle the run
+                // (that step is default-OFF per project, so for most projects
+                // this is the only completion loop). Scoped to WatchdogTimeout
+                // - EnvironmentBlocker is unrecoverable and PermissionBlocked
+                // needs a human, so both still fall through to review below.
+                if (action.Kind == OutcomeActionKind.NotifyUserAndStop
+                    && activeInfo != null
+                    && CompletionRetriggerDecider.ShouldRetrigger(action.IssueKind, RemainingCompletionRetriggerBudget(jobId)))
+                {
+                    var used = _completionRetriggerUsed.TryGetValue(jobId, out var spent) ? spent : 0;
+                    _completionRetriggerUsed[jobId] = used + 1;
+                    var attemptNo = used + 1;
+                    var issueTopic = ToIssueTopic(action.IssueKind);
+
+                    _chatLog.Append(activeInfo, OrchestratorMessageKind.Reissue,
+                        $"Completion-loop: transient abort ({issueTopic}). Auto-restarting this run " +
+                        $"(attempt {attemptNo} of {CompletionRetriggerDecider.DefaultBudget}) instead of parking it in human review.");
+                    _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
+                    {
+                        Kind = OrchestratorLogKinds.Action,
+                        Topic = OrchestratorLogTopics.Watchdog,
+                        JobId = jobId,
+                        Summary = $"Completion-loop re-triggered \"{activeInfo.Title}\" after {issueTopic} (attempt {attemptNo}/{CompletionRetriggerDecider.DefaultBudget}).",
+                        Reasoning = "Transient process abort (watchdog/timeout) is a runner outcome, not an agent decision. Re-spawning the same job instead of escalating to human review; the budget converges to escalation."
+                    });
+
+                    // Release the active-job latch so the re-issue can claim
+                    // it, then schedule on the thread pool so OnCliFinished
+                    // returns promptly (mirrors the abort-review rerun path).
+                    _activeJobId = null;
+                    _activeCliType = null;
+                    NotifyStatus();
+                    var retryPrompt = BuildCompletionRetriggerPrompt(activeInfo);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt, 0, ContinueModes.Continue, CancellationToken.None);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "completion-loop retrigger failed for {JobId}", jobId);
+                        }
+                    });
+                    return;
+                }
+
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
                     && ShouldRouteIssueToHumanReview(action.IssueKind))
@@ -2830,6 +2911,10 @@ public class ProjectRunner
                         Summary = $"Routed \"{activeInfo.Title}\" to human review after {ToIssueTopic(action.IssueKind)}.",
                         Reasoning = action.MetaMessage
                     });
+                    // The job is leaving the run loop for human review; forget
+                    // any spent completion-loop budget so a future run starts
+                    // fresh (mirrors the abort-review reset).
+                    _completionRetriggerUsed.TryRemove(jobId, out _);
                     var move = await _humanReviewEscalation.EscalateAsync(
                         jobId, activeInfo.WatchPath, ProjectName,
                         ToEscalationCategory(action.IssueKind),
@@ -2908,8 +2993,10 @@ public class ProjectRunner
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     // The job made it out of the run loop; forget any spent
-                    // abort-review rerun budget so a future run starts fresh.
+                    // abort-review rerun + completion-loop re-trigger budgets
+                    // so a future run starts fresh.
                     _abortReviewRerunsUsed.TryRemove(jobId, out _);
+                    _completionRetriggerUsed.TryRemove(jobId, out _);
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
                     if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
                     // Fire-and-forget Haiku summary on successful completion.
@@ -3076,6 +3163,31 @@ public class ProjectRunner
         => issueKind is RunIssueKind.PermissionBlocked
                      or RunIssueKind.WatchdogTimeout
                      or RunIssueKind.EnvironmentBlocker;
+
+    /// <summary>Remaining completion-loop re-trigger budget for a job
+    /// (loop id completion.retrigger-transient-abort-per-job). Counts down
+    /// from <see cref="CompletionRetriggerDecider.DefaultBudget"/> as
+    /// transient aborts are re-triggered; reset when the job leaves the run
+    /// loop.</summary>
+    private int RemainingCompletionRetriggerBudget(string jobId)
+    {
+        var used = _completionRetriggerUsed.TryGetValue(jobId, out var c) ? c : 0;
+        return Math.Max(0, CompletionRetriggerDecider.DefaultBudget - used);
+    }
+
+    /// <summary>
+    /// Follow-up prompt for a completion-loop re-trigger after a transient
+    /// (watchdog) abort. Tells the agent the previous run was cut off by the
+    /// runner rather than by its own decision, and - tying back to the
+    /// watchdog long-op fix - asks it to narrate progress during any long
+    /// operation so a legitimate wait stays visibly alive.
+    /// </summary>
+    private static string BuildCompletionRetriggerPrompt(TaskInfo info)
+        => "The previous run for this task was cut off by the runner watchdog (a transient timeout), not by your own decision, "
+         + "so the work was never finished. Continue the task to completion. "
+         + "If you run a long operation (dev server, build, test wait, poll loop), narrate progress periodically so the watchdog can tell you are still alive. "
+         + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].\n\n"
+         + $"Task: {info.Title}";
 
     private static string ToIssueTopic(RunIssueKind issueKind) => issueKind switch
     {

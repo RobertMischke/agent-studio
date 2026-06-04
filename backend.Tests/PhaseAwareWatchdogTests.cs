@@ -189,6 +189,68 @@ public class PhaseAwareWatchdogTests
     }
 
     [Fact]
+    public void LongOp_WidensToolExecutingBudget_NotKilledAtPhaseCeiling()
+    {
+        // ASS-665: while a known long-op (ng serve / build / poll loop) is the
+        // in-flight tool, silence that would normally hit the ToolExecuting
+        // kill (1200s) must NOT kill - the long-op budget (default Hung=1800s)
+        // applies via Math.max. Without the long-op flag the same silence is
+        // Hung; with it, merely Suspicious.
+        Assert.Equal(WatchdogState.Hung,
+            PhaseAwareWatchdog.DecideState(1250, 1400, RunPhase.ToolExecuting, Cfg,
+                PhaseBudgetTable.Default, longOpActive: false));
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(1250, 1400, RunPhase.ToolExecuting, Cfg,
+                PhaseBudgetTable.Default, longOpActive: true));
+        // The long-op still has a ceiling: past 1800s it is killed.
+        Assert.Equal(WatchdogState.Hung,
+            PhaseAwareWatchdog.DecideState(1850, 2000, RunPhase.ToolExecuting, Cfg,
+                PhaseBudgetTable.Default, longOpActive: true));
+    }
+
+    [Fact]
+    public void LongOp_NeverReducesAWiderPhaseBudget()
+    {
+        // EffectiveBudget takes the max per field. SessionInitializing already
+        // tolerates Hung=600s; the long-op Suspicious is 300s (wider than the
+        // phase's 120s) but its Hung (1800s) is what matters here. A phase
+        // whose own budget is wider than the long-op in some field keeps the
+        // wider value - the long-op can only widen, never tighten.
+        var eff = PhaseAwareWatchdog.EffectiveBudget(RunPhase.SessionInitializing, PhaseBudgetTable.Default, longOpActive: true);
+        Assert.Equal(300, eff.SuspiciousSeconds);   // max(120, 300)
+        Assert.Equal(1800, eff.HungSeconds);        // max(600, 1800)
+
+        // With no long-op, EffectiveBudget is exactly the phase budget.
+        var plain = PhaseAwareWatchdog.EffectiveBudget(RunPhase.SessionInitializing, PhaseBudgetTable.Default, longOpActive: false);
+        Assert.Equal(120, plain.SuspiciousSeconds);
+        Assert.Equal(600, plain.HungSeconds);
+    }
+
+    [Fact]
+    public void PhaseBudgetTable_FromConfig_OverridesLongOpBudget()
+    {
+        var table = PhaseBudgetTable.FromConfig(ConfigFrom(
+            ("Watchdog:LongOp:HungSeconds", "3600")));
+        Assert.Equal(300, table.LongOp.SuspiciousSeconds);  // default kept
+        Assert.Equal(3600, table.LongOp.HungSeconds);       // overridden
+
+        // No section -> hardcoded long-op default (300/1800).
+        var def = PhaseBudgetTable.FromConfig(ConfigFrom());
+        Assert.Equal(300, def.LongOp.SuspiciousSeconds);
+        Assert.Equal(1800, def.LongOp.HungSeconds);
+    }
+
+    [Fact]
+    public void FormatBudgetReason_LongOp_TagsAndReportsWidenedBudget()
+    {
+        var msg = PhaseAwareWatchdog.FormatBudgetReason(RunPhase.ToolExecuting, 700,
+            PhaseBudgetTable.Default, longOpActive: true);
+        Assert.Contains("phase=ToolExecuting", msg);
+        Assert.Contains("long-op", msg);
+        Assert.Contains("allowed=300/1800s", msg);
+    }
+
+    [Fact]
     public void SessionInitializing_BudgetIs120And600()
     {
         // Pattern analysis 2026-05-06 originally moved this phase to
