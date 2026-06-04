@@ -9,6 +9,7 @@ namespace OrchestratorApi.Models;
 /// </summary>
 public sealed record EpicRollup(
     string Id,
+    string? Key,
     string Title,
     string ProjectName,
     string WatchPath,

@@ -114,10 +114,11 @@ public class EpicAssignmentTests : IDisposable
     [Fact]
     public void BuildRollup_EmptyEpic_HasZeroProgress()
     {
-        var epic = new TaskInfo { Id = "epic-a", Title = "Epic A", Kind = TaskKinds.Epic, State = TaskStates.Ready };
+        var epic = new TaskInfo { Id = "epic-a", Key = "ASS-1", Title = "Epic A", Kind = TaskKinds.Epic, State = TaskStates.Ready };
         var rollup = EpicEndpoints.BuildRollup(epic, new List<TaskInfo> { epic });
 
         Assert.Equal("epic-a", rollup.Id);
+        Assert.Equal("ASS-1", rollup.Key);
         Assert.Equal(0, rollup.SubTaskTotal);
         Assert.Equal(0, rollup.Completed);
         Assert.Equal(0, rollup.InProgress);

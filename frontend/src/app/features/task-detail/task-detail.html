@@ -28,6 +28,13 @@
     (pagerNext)="nextInLaneRequested.emit()"
     (triageAction)="onTriageAction($event)" />
 
+  @if (detail().info.epicId && detail().info.kind !== 'epic') {
+    <app-epic-membership-banner
+      [epicId]="detail().info.epicId!"
+      [watchPath]="detail().info.watchPath"
+      (openEpic)="openEpicRequested.emit($event)" />
+  }
+
   <app-command-deck
     [currentWatchPath]="detail().info.watchPath"
     [watchPaths]="watchPaths()"

@@ -77,7 +77,7 @@ public static class EpicEndpoints
         var open = Count(TaskStates.Backlog, TaskStates.Ready);
         var inProgress = subs.Count - completed - open;
         return new EpicRollup(
-            epic.Id, epic.Title, epic.ProjectName, epic.WatchPath, epic.State,
+            epic.Id, epic.Key, epic.Title, epic.ProjectName, epic.WatchPath, epic.State,
             subs.Count, completed, inProgress, open, byState,
             subs.OrderBy(s => s.Order)
                 .Select(s => new EpicSubTaskRef(s.Id, s.Title, s.State, s.Order))

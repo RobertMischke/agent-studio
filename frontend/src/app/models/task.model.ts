@@ -611,6 +611,8 @@ export interface PromoteAttachmentRef {
  */
 export interface EpicRollup {
   id: string;
+  /** Stable human key of the epic (e.g. "ASS-597"); null on epics minted before keys existed. */
+  key?: string | null;
   title: string;
   projectName: string;
   watchPath: string;

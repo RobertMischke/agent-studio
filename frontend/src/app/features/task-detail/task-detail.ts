@@ -48,6 +48,7 @@ import { CliOutputPollService } from '../polling/services/cli-output-poll.servic
 import { CommandDeckComponent } from './components/command-deck/command-deck.component';
 import { PromptPaneComponent } from './components/prompt-pane/prompt-pane.component';
 import { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-rollup-pane.component';
+import { EpicMembershipBannerComponent } from './components/epic-membership-banner/epic-membership-banner.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
 import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
@@ -71,6 +72,7 @@ import { TooltipDirective } from '../../components/tooltip';
     CommandDeckComponent,
     PromptPaneComponent,
     EpicRollupPaneComponent,
+    EpicMembershipBannerComponent,
     LogOverlayComponent,
     ProtocolPaneComponent,
     DetailHeaderComponent,
@@ -122,6 +124,10 @@ export class TaskDetailComponent implements OnDestroy {
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
   readonly fileSaved = output<void>();
+  /** Back-jump to the parent epic from the epic-membership banner. The host
+   *  routes this through the same getDetail + select flow used to open any
+   *  task by id (app.onOpenJobDetailFromSheet). */
+  readonly openEpicRequested = output<{ jobId: string; watchPath: string }>();
 
   /** Forwarded from the prompt-pane Evidence tab into the existing job
    *  service mutation endpoint; the protocol pane no longer hosts the
