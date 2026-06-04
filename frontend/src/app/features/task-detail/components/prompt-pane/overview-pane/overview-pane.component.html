@@ -29,6 +29,9 @@
         <span class="ov-lane-pill__dot" aria-hidden="true">●</span>
         {{ laneLabel(job().state) }}
       </span>
+      @if (phaseLabel(job().phase); as pl) {
+        <span class="ov-phase-chip ov-subline__phase" data-testid="overview-title-phase">{{ pl }}</span>
+      }
       <span class="ov-subline__sep" aria-hidden="true">·</span>
       <span class="ov-subline__project" data-testid="overview-title-project"
             [style.--project-color]="identity().color"
@@ -63,21 +66,6 @@
   <section class="ov-section" data-testid="overview-status">
     <h3 class="ov-section__title">Status</h3>
     <div class="ov-grid">
-      <div class="ov-row">
-        <span class="ov-label">Lane</span>
-        <span class="ov-value">
-          <span class="ov-lane-pill"
-                [class]="'ov-lane-pill state--' + job().state"
-                [attr.data-state]="job().state">
-            <span class="ov-lane-pill__dot" aria-hidden="true">●</span>
-            {{ laneLabel(job().state) }}
-          </span>
-          @if (phaseLabel(job().phase); as pl) {
-            <span class="ov-phase-chip">{{ pl }}</span>
-          }
-        </span>
-      </div>
-
       @if (failureInfo(); as reason) {
         <div class="ov-row ov-row--failure" data-testid="overview-failure-reason">
           <span class="ov-label">Failure</span>
@@ -108,7 +96,7 @@
   <section class="ov-section" data-testid="overview-agent">
     <h3 class="ov-section__title">Agent</h3>
     <div class="ov-grid">
-      <div class="ov-row">
+      <div class="ov-row ov-row--wide">
         <span class="ov-label">Model</span>
         <span class="ov-value">
           <app-cli-model-selector
@@ -445,7 +433,7 @@
           </div>
 
           @if (aw.toolCalls > 0) {
-            <div class="ov-row">
+            <div class="ov-row ov-row--wide">
               <span class="ov-label">Tools</span>
               <span class="ov-value"
                     [appTooltip]="toolCountsTooltip()"

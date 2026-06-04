@@ -54,15 +54,16 @@ test.describe('Row spacing compact density', () => {
       const statusBlock = page.getByTestId('overview-status');
       await expect(statusBlock).toBeVisible();
 
-      // 1) Each label/value row in Status is <= 34 px tall. Pre-density-pass
-      // the same Lane row (which carries the largest content — a lane pill
-      // padded 2 px + dot + label) sat at ~36-40 px; compact lands around
-      // 26-30 px. The cap keeps the row visibly tighter without flapping
-      // on content-driven height jitter.
+      // 1) Each label/value row in Status is <= 34 px tall. The lane chip now
+      // lives once in the title sub-line (the duplicate Status "Lane" row was
+      // removed), so a fresh task's Status block carries the timing rows
+      // (Last Activity, Created) — at least two. Pre-density-pass these sat at
+      // ~36-40 px; compact lands around 26-30 px. The cap keeps the row
+      // visibly tighter without flapping on content-driven height jitter.
       const rowHeights = await statusBlock.locator('.ov-row').evaluateAll(
         (els) => els.map((el) => Math.round((el as HTMLElement).getBoundingClientRect().height)),
       );
-      expect(rowHeights.length).toBeGreaterThanOrEqual(3);
+      expect(rowHeights.length).toBeGreaterThanOrEqual(2);
       for (const h of rowHeights) {
         expect(h, `Status row should be <= 34 px (got ${h}px). See density tokens in _tokens-semantic.scss`)
           .toBeLessThanOrEqual(34);
@@ -120,7 +121,7 @@ test.describe('Row spacing compact density', () => {
       const agent = page.getByTestId('overview-agent');
       const rows = status.locator('.ov-row');
       const count = await rows.count();
-      expect(count).toBeGreaterThanOrEqual(3);
+      expect(count).toBeGreaterThanOrEqual(2);
 
       const inspected = await rows.first().evaluate((el) => {
         const cs = window.getComputedStyle(el);
@@ -168,7 +169,7 @@ test.describe('Row spacing compact density', () => {
 
       const labels = page.locator('app-overview-pane [data-testid="overview-status"] .ov-label');
       const labelCount = await labels.count();
-      expect(labelCount).toBeGreaterThanOrEqual(3);
+      expect(labelCount).toBeGreaterThanOrEqual(2);
 
       // Pull computed color + font-size; assert text is rendered (non-zero
       // alpha + at least 10 px font-size). The full WCAG contrast check

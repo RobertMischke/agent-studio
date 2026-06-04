@@ -216,14 +216,31 @@
 }
 
 .ov-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--studio-row-gap);
+  // Responsive label/value packing. Pairs flow into as many columns as the
+  // pane width allows (auto-fit): on a wide pane two label/value pairs sit
+  // side by side — a four-column (label · value · label · value) read —
+  // collapsing to a single pair-column on a narrow pane. Space-dense without
+  // a media query, which is the whole point of the compact meta panel.
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--ov-pair-min, 220px), 1fr));
+  align-items: start;
+  column-gap: var(--studio-spacing-4);
+  row-gap: var(--studio-row-gap);
 
   &--perf {
     margin-top: 2px;
     padding-top: 2px;
     border-top: 1px dashed var(--studio-border);
+  }
+
+  // Children that must never be split across the pair-columns: the failure
+  // banner, the per-group "Source" sub-header, an explicitly wide row (Model
+  // selector, Tool chips), and the embedded agent-work detail element.
+  > .ov-row--wide,
+  > .ov-row--failure,
+  > .ov-row--source,
+  > app-agent-work-detail {
+    grid-column: 1 / -1;
   }
 }
 
