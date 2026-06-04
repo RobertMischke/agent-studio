@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { ChatRowComponent } from './chat-row.component';
+import { ChatRowComponent, type ChatRowInput } from './chat-row.component';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -46,5 +46,49 @@ describe('ChatRowComponent (smoke)', () => {
       console.warn('[smoke] ChatRowComponent TestBed setup skipped:', (e as Error).message);
       expect(ChatRowComponent).toBeTruthy();
     }
+  });
+});
+
+describe('ChatRowComponent markdown rendering', () => {
+  async function makeFixture(row: ChatRowInput) {
+    await TestBed.configureTestingModule({
+      imports: [ChatRowComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChatRowComponent);
+    fixture.componentRef.setInput('row', row);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders row bodies through the shared markdown view with GFM tables', async () => {
+    const fixture = await makeFixture({
+      id: 'orchestrator-table',
+      author: 'orchestrator',
+      kind: 'turn',
+      ts: '2026-01-01T00:00:00.000Z',
+      body:
+        '| Field | Value |\n' +
+        '|---|---|\n' +
+        '| ID | ASS-704 |\n\n' +
+        '- **Done**\n' +
+        '- [Docs](https://example.com)\n\n' +
+        '```ts\nconst ok = true;\n```',
+    });
+
+    const root = fixture.nativeElement as HTMLElement;
+    const row = root.querySelector('[data-row-id="orchestrator-table"]') as HTMLElement | null;
+
+    expect(row?.querySelector('table')).toBeTruthy();
+    expect(row?.querySelector('td')?.textContent?.trim()).toBe('ASS-704');
+    expect(row?.querySelector('ul')).toBeTruthy();
+    expect(row?.querySelector('strong')?.textContent).toBe('Done');
+    expect(row?.querySelector('a')?.getAttribute('href')).toBe('https://example.com');
+    expect(row?.querySelector('pre code')?.textContent).toContain('const ok = true;');
   });
 });
