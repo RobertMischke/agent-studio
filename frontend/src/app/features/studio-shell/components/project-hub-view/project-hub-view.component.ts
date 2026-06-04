@@ -4,6 +4,7 @@ import type { TaskInfo } from '../../../../models/task.model';
 import {
   ProjectShellComponent,
   ProjectDetailComponent,
+  ProjectSettingsPanelComponent,
   SecurityPanelComponent,
   UxuiPanelComponent,
   ProjectObservabilityPanelComponent,
@@ -54,6 +55,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   imports: [
     ProjectShellComponent,
     ProjectDetailComponent,
+    ProjectSettingsPanelComponent,
     SecurityPanelComponent,
     UxuiPanelComponent,
     ProjectTokenUsagePanelComponent,

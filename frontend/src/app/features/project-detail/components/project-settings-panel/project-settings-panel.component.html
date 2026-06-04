@@ -1,0 +1,100 @@
+<section class="ps-settings" data-testid="project-settings-panel">
+  <header class="ps-settings__head">
+    <div class="ps-settings__title-row">
+      <h2 class="ps-settings__title" data-testid="project-settings-title">Settings</h2>
+      <span class="ps-settings__chip">this project</span>
+    </div>
+    <p class="ps-settings__desc" data-testid="project-settings-desc">
+      Global defaults from Workspace settings, surfaced here so you can see what
+      this project inherits. Per-project overrides below win over them.
+    </p>
+  </header>
+
+  <section class="ps-settings__section" aria-labelledby="ps-settings-inherited">
+    <header class="ps-settings__section-head">
+      <h3 id="ps-settings-inherited" class="ps-settings__section-title">Workspace defaults</h3>
+      <p class="ps-settings__section-desc">
+        Inherited from the global Workspace settings. No per-project override
+        exists for these yet, so they are read-only — open the Workspace
+        settings to change the global value.
+      </p>
+    </header>
+
+    <div class="ps-settings__cards">
+      <article class="ps-settings__card" data-testid="project-settings-default-agent">
+        <div class="ps-settings__card-head">
+          <span class="ps-settings__card-icon" aria-hidden="true">◈</span>
+          <span class="ps-settings__card-title">Default agent</span>
+          <span class="ps-settings__badge" data-testid="project-settings-default-agent-inherited">Inherited</span>
+        </div>
+        <p class="ps-settings__card-desc">
+          The CLI and model new tasks start from unless a task overrides them.
+        </p>
+        <div class="ps-settings__card-value">
+          <app-cli-model-selector
+            [cliType]="defaultCli()"
+            [model]="defaultModel()"
+            [disabled]="true"
+            [disabledReason]="'Set in Workspace settings — this is the global default.'"
+            eyebrow="Workspace default"
+            triggerTestid="project-settings-default-agent-chip"
+            pickerTestidPrefix="project-settings-default-agent-picker" />
+        </div>
+        <button type="button"
+                class="ps-settings__link"
+                data-testid="project-settings-open-workspace"
+                [appTooltip]="'Open the global Workspace settings home.'"
+                (click)="openWorkspaceSettings()">Open Workspace settings →</button>
+      </article>
+
+      <article class="ps-settings__card" data-testid="project-settings-usage-caps">
+        <div class="ps-settings__card-head">
+          <span class="ps-settings__card-icon" aria-hidden="true">⚙</span>
+          <span class="ps-settings__card-title">Usage caps</span>
+          <span class="ps-settings__badge" data-testid="project-settings-usage-caps-inherited">Inherited</span>
+        </div>
+        <p class="ps-settings__card-desc">
+          Per-CLI per-window quota caps. The runner stops auto-pickup once usage
+          crosses these. Default cap <strong>{{ defaultCapPct() }}%</strong>.
+        </p>
+        @if (capRows().length > 0) {
+          <ul class="ps-settings__caps" data-testid="project-settings-caps-list">
+            @for (cli of capRows(); track cli.cliType) {
+              <li class="ps-settings__cap-cli" [attr.data-cli]="cli.cliType">
+                <span class="ps-settings__cap-name">
+                  <span class="ps-settings__cap-icon" aria-hidden="true">{{ cli.icon }}</span>
+                  {{ cli.label }}
+                </span>
+                <span class="ps-settings__cap-windows">
+                  @for (w of cli.windows; track w.windowLabel) {
+                    <span class="ps-settings__cap-window">{{ w.windowLabel }} · {{ w.capPct }}%</span>
+                  }
+                </span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="ps-settings__caps-empty" data-testid="project-settings-caps-empty">
+            Every window uses the default {{ defaultCapPct() }}% cap.
+          </p>
+        }
+        <button type="button"
+                class="ps-settings__link"
+                data-testid="project-settings-open-caps"
+                [appTooltip]="'Open the global usage-caps section to edit caps.'"
+                (click)="openUsageCaps()">Manage usage caps →</button>
+      </article>
+    </div>
+  </section>
+
+  <section class="ps-settings__section" aria-labelledby="ps-settings-overrides">
+    <header class="ps-settings__section-head">
+      <h3 id="ps-settings-overrides" class="ps-settings__section-title">Project overrides</h3>
+      <p class="ps-settings__section-desc">
+        Settings that apply only to this project and win over the global
+        defaults above.
+      </p>
+    </header>
+    <app-project-detail [projectName]="projectName()" view="settings" />
+  </section>
+</section>

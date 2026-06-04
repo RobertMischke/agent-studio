@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 import { CLIENT_ID } from './client-id.interceptor';
 import type { CliType } from '../models/task.model';
 import { CLI_TYPES, ClientDefaultsResponse } from '../models/task.model';
@@ -32,6 +32,18 @@ export class ClientDefaultsService {
 
   private static readonly STORAGE_DEFAULT_CLI = 'defaultCliType';
   private static readonly STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
+
+  /**
+   * Read the durable defaults from the backend without touching the
+   * localStorage cache. Used by read-only inheritance surfaces (e.g. the
+   * project Settings panel) that want the canonical global value the
+   * orchestrator sees, not the per-CLI localStorage mirror.
+   */
+  getDefaults(): Observable<ClientDefaultsResponse> {
+    return this.http.get<ClientDefaultsResponse>(
+      `/api/clients/${encodeURIComponent(CLIENT_ID)}/defaults`,
+    );
+  }
 
   /** Pull current defaults from the backend and seed localStorage. */
   async hydrate(): Promise<void> {

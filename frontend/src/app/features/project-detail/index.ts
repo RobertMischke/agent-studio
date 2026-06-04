@@ -7,6 +7,7 @@ export { ProjectOverlaysService } from './state/project-overlays.service';
 export { ProjectOverlaysComponent } from './components/project-overlays/project-overlays.component';
 export { ProjectDetailComponent } from './components/project-detail/project-detail';
 export { ProjectShellComponent } from './components/project-shell/project-shell.component';
+export { ProjectSettingsPanelComponent } from './components/project-settings-panel/project-settings-panel.component';
 export { AnalysisReportDrilldownComponent } from './components/analysis-report-drilldown/analysis-report-drilldown';
 export { AutonomySliderComponent } from './components/autonomy-slider/autonomy-slider';
 

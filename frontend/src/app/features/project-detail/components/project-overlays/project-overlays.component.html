@@ -104,11 +104,7 @@
         }
         @defer (when overlays.projectShellRail() === 'settings') {
           @if (overlays.projectShellRail() === 'settings') {
-            <app-project-detail
-              [projectName]="projShell"
-              view="settings"
-              (openFeed)="overlays.openFeedFromDetail($event)"
-              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+            <app-project-settings-panel [projectName]="projShell" />
           }
         }
         @defer (when overlays.projectShellRail() === 'orchestrator') {

@@ -92,11 +92,7 @@
   }
   @defer (when activeRail() === 'settings') {
     @if (activeRail() === 'settings') {
-      <app-project-detail
-        [projectName]="projectName()"
-        view="settings"
-        (openFeed)="openFeedFromDetail($event)"
-        (openReport)="openReport($event)" />
+      <app-project-settings-panel [projectName]="projectName()" />
     }
   }
   @defer (when activeRail() === 'orchestrator') {

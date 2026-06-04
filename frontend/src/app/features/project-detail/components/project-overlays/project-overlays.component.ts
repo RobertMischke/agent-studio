@@ -3,6 +3,7 @@ import { ProjectOverlaysService } from '../../state/project-overlays.service';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OrchestratorFeedComponent } from '../../../orchestrator';
 import { ProjectDetailComponent } from '../project-detail/project-detail';
+import { ProjectSettingsPanelComponent } from '../project-settings-panel/project-settings-panel.component';
 import { ProjectShellComponent } from '../project-shell/project-shell.component';
 import { SecurityPanelComponent } from '../security-panel/security-panel.component';
 import { UxuiPanelComponent } from '../uxui-panel/uxui-panel.component';
@@ -34,6 +35,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
   imports: [
     OrchestratorFeedComponent,
     ProjectDetailComponent,
+    ProjectSettingsPanelComponent,
     ProjectShellComponent,
     SecurityPanelComponent,
     UxuiPanelComponent,
