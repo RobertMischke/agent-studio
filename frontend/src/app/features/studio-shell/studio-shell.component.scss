@@ -107,7 +107,7 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    margin-left: 8px;
+    margin-left: 0;
     font-size: 12px;
     color: var(--studio-fg-dim);
     overflow: hidden;
@@ -124,12 +124,6 @@
     white-space: nowrap;
 
     &--ws { color: var(--studio-fg); }
-    &--leaf { color: var(--studio-fg); }
-
-    &--btn {
-      cursor: pointer;
-      &:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
-    }
   }
 
   &__crumb-caret {

@@ -605,34 +605,24 @@ export class StudioShellComponent {
   readonly grouped = this.jobService.grouped;
 
   /**
-   * Short label for the active tab, used as the leaf of the titlebar
-   * breadcrumb (Workspace › Project › <leaf>). Returns `null` for the
-   * generic "All projects" board where the breadcrumb stops at the
-   * workspace.
+   * Concrete workspace shown in the titlebar breadcrumb. The breadcrumb no
+   * longer exposes the generic create-workspace affordance or the active tab
+   * kind; the project picker beside it carries the current project and runner
+   * status.
    */
-  tabBreadcrumb(tab: StudioTab | null | undefined): string {
-    if (!tab) return '';
-    switch (tab.kind) {
-      case 'board':    return 'Board';
-      case 'hub':      return 'Project Hub';
-      case 'task': {
-        // taskKey on Windows looks like
-        // `C:\Projects\…\projects\agent-taskboard::<task-slug>`. The
-        // previous `split('/').pop()` didn't help on backslash paths
-        // and dumped the entire watch-path into the titlebar. Take the
-        // tail after the last `\`, `/`, or `::` and clamp to ~36 chars
-        // so the breadcrumb stays a single readable label.
-        const raw = tab.taskKey;
-        const tail = raw.split(/[\\/]|::/).filter(Boolean).pop() ?? raw;
-        const clipped = tail.length > 36 ? tail.slice(0, 33) + '…' : tail;
-        return `Task ${clipped}`;
-      }
-      case 'activity': return 'Activity';
-      case 'diff':     return 'Diff';
-      case 'welcome':  return 'Welcome';
-      default:         return '';
+  readonly activeWorkspaceName = computed<string | null>(() => {
+    const projectName = this.currentProjectName();
+    if (!projectName) return null;
+    const storage = this.projectStorageByName().get(projectName);
+    for (const ws of this.registryWorkspaces()) {
+      const matched = ws.projects.some(p =>
+        p.displayName === projectName ||
+        (!!storage && p.storageLocation === storage)
+      );
+      if (matched) return ws.displayName;
     }
-  }
+    return null;
+  });
 
   /** Project rows displayed in the titlebar pills + sidebar Explorer.
    *  A2 (2026-05-21): the visible "open jobs" counter excludes the
@@ -1205,6 +1195,8 @@ export class StudioShellComponent {
       }
       case 'welcome':
         return 'Welcome';
+      default:
+        return '';
     }
   }
 

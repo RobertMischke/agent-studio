@@ -78,9 +78,13 @@ test.describe('Explorer · project links to Board / Project Hub / Backlog / Epic
       return;
     }
     await page.getByTestId(`studio-explorer-project-board-${expanded.name}`).click();
-    // A project board tab becomes active; its breadcrumb leaf is the board,
-    // never "Project Hub".
-    await expect(page.getByTestId('studio-titlebar-active-tab')).not.toHaveText('Project Hub', { timeout: 5_000 });
+    await expect(page.getByRole('tab', { name: `${expanded.name} · Board` })).toHaveAttribute('aria-selected', 'true', { timeout: 5_000 });
+
+    const titlebar = page.getByTestId('studio-titlebar');
+    await expect(titlebar).not.toContainText('Agent Software Studio');
+    await expect(page.getByTestId('studio-titlebar-workspace')).toHaveCount(0);
+    await expect(page.getByTestId('studio-titlebar-active-tab')).toHaveCount(0);
+    await expect(page.getByTestId('studio-titlebar-crumbs')).not.toContainText('Board');
   });
 
   test('"Project Hub" opens the Project Hub', async ({ page }) => {
@@ -91,7 +95,7 @@ test.describe('Explorer · project links to Board / Project Hub / Backlog / Epic
       return;
     }
     await page.getByTestId(`studio-explorer-project-hub-${expanded.name}`).click();
-    await expect(page.getByTestId('studio-titlebar-active-tab')).toHaveText('Project Hub', { timeout: 5_000 });
+    await expect(page.getByRole('tab', { name: `${expanded.name} · Hub` })).toHaveAttribute('aria-selected', 'true', { timeout: 5_000 });
   });
 
   test('"Backlog" opens the backlog triage screen', async ({ page }) => {

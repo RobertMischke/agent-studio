@@ -125,15 +125,14 @@ test.describe('F27: Explorer-tree folder headers are all collapsible', () => {
     const hubLink = projectRow.locator('.studio-tree-row__hub-link').first();
     await expect(hubLink).toBeVisible();
     await hubLink.click();
-    // A new tab whose kind is 'hub' should appear in the tab strip.
-    // Verifying via the breadcrumb leaf which says "Project Hub".
-    await expect(page.getByTestId('studio-titlebar-active-tab')).toHaveText('Project Hub', { timeout: 5_000 });
+    const projectName = (await projectRow.getAttribute('data-project-name')) ?? '';
+    await expect(page.getByRole('tab', { name: `${projectName} · Hub` })).toHaveAttribute('aria-selected', 'true', { timeout: 5_000 });
     // Note: the row itself may auto-expand because activating a project
     // makes it the "current project" in the explorer tree (the studio
     // shell has an effect that mirrors active project → expanded). That
     // side-effect is unrelated to the click handler; the click itself
     // stopPropagation()s so the chevron-toggle path is not taken. The
-    // breadcrumb assertion above is the load-bearing check.
+    // active-tab assertion above is the load-bearing check.
   });
 
   test('Open-tabs header collapses the open-tabs list', async ({ page }) => {

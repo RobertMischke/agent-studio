@@ -4,36 +4,17 @@
      data-testid="app-root"
      data-studio="root">
   <!-- ============ Titlebar ============ -->
-  <header class="studio-titlebar">
-    <div class="studio-titlebar__brand">
-      <span class="studio-titlebar__logo" aria-hidden="true">A</span>
-      <span class="studio-titlebar__appname">Agent Software Studio</span>
-    </div>
-
-    <nav class="studio-titlebar__crumbs" aria-label="Breadcrumb">
-      <button type="button"
-              class="studio-titlebar__crumb studio-titlebar__crumb--ws studio-titlebar__crumb--btn"
-              data-testid="studio-titlebar-workspace"
-              appTooltip="Workspace — switch workspace flow lands in a follow-up slice"
-              (click)="onAddWorkspace()">
-        <span>Workspace</span>
-        <span class="studio-titlebar__crumb-caret" aria-hidden="true">▾</span>
-      </button>
-      <!-- The active project name lives ONLY on the picker chip to the
-           right (with glyph + count). Repeating it here as a breadcrumb
-           crumb was pure duplication. Keep the breadcrumb as Workspace
-           › <leaf>, where <leaf> is the tab kind (Board / Project Hub /
-           Task <slug>). -->
-      @if (activeTab(); as tab) {
-        @if (tab.kind !== 'board' || currentProjectName()) {
-          <span class="studio-titlebar__crumb-sep" aria-hidden="true">›</span>
-          <span class="studio-titlebar__crumb studio-titlebar__crumb--leaf"
-                data-testid="studio-titlebar-active-tab">{{ tabBreadcrumb(tab) }}</span>
-        }
+  <header class="studio-titlebar" data-testid="studio-titlebar">
+    <nav class="studio-titlebar__crumbs" aria-label="Breadcrumb" data-testid="studio-titlebar-crumbs">
+      @if (activeWorkspaceName(); as workspaceName) {
+        <span class="studio-titlebar__crumb studio-titlebar__crumb--ws"
+              data-testid="studio-titlebar-active-workspace">{{ workspaceName }}</span>
       }
     </nav>
 
-    <span class="studio-titlebar__separator">/</span>
+    @if (activeWorkspaceName()) {
+      <span class="studio-titlebar__separator">/</span>
+    }
 
     <!-- Project picker: single combo carrying ONLY the active selection.
          Click opens a dropdown with "All projects" + each project. This
@@ -651,6 +632,8 @@
                  [class.studio-tab--sticky]="isTabSticky(t)"
                  [class.studio-tab--dragging]="draggingTabKey() === tabKey(t)"
                  [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
+                 [attr.aria-selected]="activeKey() === tabKey(t) ? 'true' : 'false'"
+                 [attr.aria-label]="tabLabel(t)"
                  [attr.data-tab-key]="tabKey(t)"
                  [attr.data-sticky]="isTabSticky(t) ? 'true' : null"
                  (click)="selectTab(tabKey(t))"
