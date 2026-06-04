@@ -1,0 +1,41 @@
+@if (hasPrompt()) {
+  <span class="prompt-pop">
+    <button
+      type="button"
+      class="prompt-pop__trigger"
+      [class.prompt-pop__trigger--open]="open()"
+      data-testid="overview-prompt-trigger"
+      [attr.aria-expanded]="open()"
+      aria-label="Show task prompt"
+      [appTooltip]="'Show the task prompt (prompt.md) rendered as Markdown'"
+      (click)="toggle($event)">
+      <span class="prompt-pop__trigger-icon" aria-hidden="true">¶</span>
+      Prompt
+    </button>
+
+    @if (open()) {
+      <div
+        class="prompt-pop__panel"
+        role="dialog"
+        aria-label="Task prompt"
+        data-testid="overview-prompt-popover"
+        (click)="$event.stopPropagation()">
+        <header class="prompt-pop__head">
+          <h4 class="prompt-pop__title">Task prompt</h4>
+          <button
+            type="button"
+            class="prompt-pop__close"
+            data-testid="overview-prompt-popover-close"
+            aria-label="Close prompt"
+            (click)="close()">&times;</button>
+        </header>
+        <div class="prompt-pop__body" data-testid="overview-prompt-popover-body">
+          <app-markdown
+            [source]="markdown()"
+            [dense]="true"
+            [resolveImageSrc]="imageResolver()" />
+        </div>
+      </div>
+    }
+  </span>
+}

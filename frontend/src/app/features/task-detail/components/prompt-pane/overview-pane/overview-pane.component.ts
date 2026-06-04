@@ -35,6 +35,7 @@ import { ReferencesSectionComponent } from '../../references-section/references-
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { StructuredTooltip } from '../../../../../components/tooltip';
 import { RowComponent } from '../../../../../components/row/row.component';
+import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
 import {
   cliTypeIcon,
   cliTypeLabel,
@@ -160,12 +161,15 @@ function buildConcernTooltip(
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CliModelSelectorComponent, RegressionRadarComponent, ReferencesSectionComponent, TooltipDirective, RowComponent, CompletionLoopIndicatorComponent],
+  imports: [CliModelSelectorComponent, RegressionRadarComponent, ReferencesSectionComponent, TooltipDirective, RowComponent, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
 export class OverviewPaneComponent {
   readonly job = input.required<TaskInfo>();
+  /** Raw task prompt markdown (`promptMarkdown`), surfaced via the Prompt
+   *  popover next to the title. Empty/absent hides the trigger. */
+  readonly promptMarkdown = input<string | null | undefined>('');
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   readonly isRunning = input(false);
   /** Optimistic CLI + model values from the parent task-detail. The badge

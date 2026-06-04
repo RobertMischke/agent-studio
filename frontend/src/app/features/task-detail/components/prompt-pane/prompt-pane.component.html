@@ -18,6 +18,7 @@
         @if (job(); as info) {
           <app-overview-pane
             [job]="info"
+            [promptMarkdown]="markdown()"
             [availableModels]="availableModels()"
             [isRunning]="isRunning()"
             [cliTypeOverride]="cliTypeOverride()"
