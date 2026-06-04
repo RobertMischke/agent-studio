@@ -77,6 +77,33 @@
   padding: 0;
 }
 
+/* "Jump to latest" affordance. Sticks to the bottom of the scroll viewport
+ * (the nearest scrolling ancestor) and only shows once the user has
+ * deliberately scrolled up — i.e. when stick-to-bottom has released. */
+.conv__jump {
+  position: sticky;
+  bottom: 8px;
+  align-self: center;
+  z-index: 2;
+  margin-top: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  background: var(--studio-surface, #1f2430);
+  color: inherit;
+  font: inherit;
+  font-size: 11.5px;
+  box-shadow: 0 2px 8px color-mix(in srgb, black 30%, transparent);
+  cursor: pointer;
+}
+.conv__jump:hover {
+  background: color-mix(in srgb, currentColor 12%, var(--studio-surface, #1f2430));
+}
+.conv__jump:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
 .conv__row {
   display: flex;
   align-items: stretch;

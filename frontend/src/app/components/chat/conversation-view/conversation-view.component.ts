@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import { MarkdownViewComponent } from '../../markdown-view/markdown-view.component';
 import { ToolBurstChipComponent } from '../tool-burst-chip/tool-burst-chip.component';
+import { StickToBottomDirective } from '../stick-to-bottom.directive';
 import { TooltipDirective } from '../../tooltip';
 import type { StructuredTooltip } from '../../tooltip';
 import type {
@@ -171,7 +172,7 @@ function classifyMessageBody(body: string): ClassifiedBody {
   selector: 'app-conversation-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownViewComponent, ToolBurstChipComponent, TooltipDirective],
+  imports: [MarkdownViewComponent, ToolBurstChipComponent, TooltipDirective, StickToBottomDirective],
   templateUrl: './conversation-view.component.html',
   styleUrl: './conversation-view.component.scss',
 })

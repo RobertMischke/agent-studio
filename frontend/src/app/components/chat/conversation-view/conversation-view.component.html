@@ -1,6 +1,9 @@
 <section class="conv"
+         appStickToBottom
+         #stick="stickToBottom"
          [attr.data-variant]="variant()"
          [attr.data-running]="isRunning() ? 'true' : 'false'"
+         [attr.data-stuck]="stick.stuck() ? 'true' : 'false'"
          data-testid="conversation-view">
   <header class="conv__head">
     <div class="conv__head-titles">
@@ -289,5 +292,12 @@
         }
       }
     </ol>
+    @if (!stick.stuck()) {
+      <button type="button"
+              class="conv__jump"
+              data-testid="conversation-jump-latest"
+              [appTooltip]="'Jump to the latest entry and resume following'"
+              (click)="stick.scrollToBottom()">↓ Jump to latest</button>
+    }
   }
 </section>
