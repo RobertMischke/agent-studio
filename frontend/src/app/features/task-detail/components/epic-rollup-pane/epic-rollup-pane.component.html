@@ -1,6 +1,54 @@
 <section class="epic-rollup" data-testid="epic-rollup-pane">
+  @if (job(); as info) {
+    <div class="epic-rollup__details" data-testid="epic-details">
+      <div class="epic-rollup__field" data-testid="epic-description">
+        <div class="epic-rollup__field-head">
+          <span class="epic-rollup__field-label">Description</span>
+          @if (!editingDesc()) {
+            <button type="button"
+                    class="epic-rollup__field-action"
+                    data-testid="epic-description-edit"
+                    [disabled]="isRunning()"
+                    [appTooltip]="isRunning() ? 'Stop the run first to edit the description' : 'Edit the epic description'"
+                    (click)="beginEditDesc()">Edit</button>
+          } @else {
+            <button type="button"
+                    class="epic-rollup__field-action epic-rollup__field-action--ghost"
+                    data-testid="epic-description-cancel"
+                    (click)="cancelEditDesc()">Done</button>
+          }
+        </div>
+        @if (editingDesc()) {
+          <app-markdown-rich-editor [value]="promptMarkdown()"
+                                    [readOnly]="isRunning()"
+                                    [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this epic. Stop it first.' : null"
+                                    [jobId]="info.id"
+                                    [watchPath]="watchPath()"
+                                    (save)="onDescSave($event)" />
+        } @else if (promptMarkdown()) {
+          <app-markdown class="epic-rollup__markdown" [source]="promptMarkdown()" [dense]="true" />
+        } @else {
+          <div class="epic-rollup__muted" data-testid="epic-description-empty">No description yet — click Edit to add one.</div>
+        }
+      </div>
+
+      <app-references-section [info]="info" (changed)="referencesChanged.emit()" />
+
+      <div class="epic-rollup__field epic-rollup__field--row" data-testid="epic-agent">
+        <span class="epic-rollup__field-label">Model / CLI</span>
+        <app-cli-model-selector [cliType]="info.cliType ?? null"
+                                [model]="info.model ?? null"
+                                [availableModels]="availableModels()"
+                                [disabled]="isRunning()"
+                                triggerTestid="epic-model"
+                                pickerTestidPrefix="epic-model-picker"
+                                (commit)="agentConfigCommit.emit($event)" />
+      </div>
+    </div>
+  }
+
   <header class="epic-rollup__header">
-    <span class="epic-rollup__title">Epic — sub-tasks</span>
+    <span class="epic-rollup__title">Sub-tasks</span>
     @if (rollup(); as r) {
       <span class="epic-rollup__count" data-testid="epic-rollup-count">{{ r.completed }} / {{ r.subTaskTotal }} done</span>
     }

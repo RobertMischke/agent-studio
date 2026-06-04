@@ -1,7 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import type { EpicRollup, EpicSubTaskRef } from '../../../../models/task.model';
+import type { CliType, EpicRollup, EpicSubTaskRef, TaskInfo } from '../../../../models/task.model';
+import type { CliModelInfo } from '../../../cli';
 import { TaskService } from '../../../../services/task.service';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor/markdown-rich-editor';
+import { MarkdownViewComponent } from '../../../../components/markdown-view/markdown-view.component';
+import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
+import { ReferencesSectionComponent } from '../references-section/references-section.component';
 import { LANE_LABELS } from '../../state/lane-pager.service';
 
 /** One lane column in the epic mini-board: a state plus the sub-tasks that sit in it. */
@@ -15,18 +20,24 @@ export interface EpicLaneGroup {
 const LANE_ORDER = Object.keys(LANE_LABELS);
 
 /**
- * Epic rollup pane: shown in the task-detail view when the open card is an
- * epic (kind=epic). Renders the live sub-task progress from
- * GET /api/epics/{id} as a full-width mini-board: the sub-tasks are grouped
- * into the lane/state columns they currently sit in, so a glance shows where
- * the epic's work stands. Read-only apart from navigation - assignment happens
- * on the cards (way 2) or in the create dialog (way 1); clicking a sub-task
- * opens its detail.
+ * Epic detail pane: shown in the task-detail view when the open card is an
+ * epic (kind=epic). Two halves in one card:
+ *
+ *  - Edit: the epic's own properties - description (prompt.md, the planning
+ *    brief that drives decomposition), cross-references, and model/CLI - are
+ *    editable inline and persist through the same API endpoints the regular
+ *    task-edit surfaces use. The title stays editable in the detail header.
+ *  - Status: the live sub-task progress from GET /api/epics/{id} as a
+ *    full-width mini-board, grouped into the lane/state columns the sub-tasks
+ *    currently sit in, so a glance shows where the epic's work stands.
+ *
+ * Sub-task assignment is not done here - that happens on the cards (way 2) or
+ * in the create dialog (way 1); clicking a sub-task opens its detail.
  */
 @Component({
   selector: 'app-epic-rollup-pane',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, MarkdownRichEditorComponent, MarkdownViewComponent, CliModelSelectorComponent, ReferencesSectionComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './epic-rollup-pane.component.html',
   styleUrl: './epic-rollup-pane.component.scss',
@@ -34,14 +45,30 @@ const LANE_ORDER = Object.keys(LANE_LABELS);
 export class EpicRollupPaneComponent {
   readonly epicId = input.required<string>();
   readonly watchPath = input<string>('');
+  /** Full epic record - feeds the references section and the model/CLI picker. */
+  readonly job = input<TaskInfo | null>(null);
+  /** The epic's description (prompt.md body), already loaded by the parent. */
+  readonly promptMarkdown = input<string>('');
+  /** Model catalog snapshot forwarded to the CLI/model picker. */
+  readonly availableModels = input<readonly CliModelInfo[]>([]);
+  /** True while a CLI run is in flight: gates description + model edits. */
+  readonly isRunning = input(false);
 
   /** Bubbles a click on a sub-task so the host opens its detail. */
   readonly openSubTask = output<{ jobId: string; watchPath: string }>();
+  /** Edited description body; the host writes it to prompt.md via the API. */
+  readonly saveDescription = output<string>();
+  /** Fires after a successful reference write so the host can re-fetch. */
+  readonly referencesChanged = output<void>();
+  /** Atomic CLI + model commit forwarded to the host's sequenced PUTs. */
+  readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
 
   private readonly jobs = inject(TaskService);
   readonly rollup = signal<EpicRollup | null>(null);
   readonly loading = signal(false);
   readonly error = signal(false);
+  /** Flips the description block between rendered view and the rich editor. */
+  readonly editingDesc = signal(false);
 
   /** Completed share of the epic, 0-100, for the progress bar width. */
   readonly progressPct = computed(() => {
@@ -86,6 +113,27 @@ export class EpicRollupPaneComponent {
         error: () => { this.error.set(true); this.loading.set(false); },
       });
     });
+
+    // Drop the open editor when the lane pager swaps to a different epic so we
+    // never show one epic's draft against another's description.
+    effect(() => {
+      this.epicId();
+      this.editingDesc.set(false);
+    }, { allowSignalWrites: true });
+  }
+
+  beginEditDesc(): void {
+    if (this.isRunning()) return;
+    this.editingDesc.set(true);
+  }
+
+  cancelEditDesc(): void {
+    this.editingDesc.set(false);
+  }
+
+  onDescSave(content: string): void {
+    this.saveDescription.emit(content);
+    this.editingDesc.set(false);
   }
 
   /** "6-completed" -> "completed" for an unknown lane label fallback. */

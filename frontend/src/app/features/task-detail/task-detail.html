@@ -82,7 +82,14 @@
     <app-epic-rollup-pane
       [epicId]="detail().info.id"
       [watchPath]="detail().info.watchPath"
-      (openSubTask)="openEpicRequested.emit($event)" />
+      [job]="detail().info"
+      [promptMarkdown]="detail().promptMarkdown || ''"
+      [availableModels]="availableModels()"
+      [isRunning]="isRunning()"
+      (openSubTask)="openEpicRequested.emit($event)"
+      (saveDescription)="saveFileContent('prompt.md', $event)"
+      (referencesChanged)="fileSaved.emit()"
+      (agentConfigCommit)="onAgentConfigCommit($event)" />
   }
 
   <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
