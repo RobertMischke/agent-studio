@@ -54,6 +54,10 @@ public class TaskRunnerService : BackgroundService
     // step is default-OFF per project, so a wired-but-disabled step changes
     // nothing. Null only when a test fixture builds the service directly.
     private readonly OrchestratorApi.Services.Runner.PostAbortReviewStepService? _postAbortReview;
+    // Forwarded to each ProjectRunner for post-hoc Claude token reconstruction
+    // from session transcripts. DI injects the registered singleton; null only
+    // when a test fixture builds the service directly.
+    private readonly OrchestratorApi.Services.Cli.ClaudeSessionInspector? _sessionInspector;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -104,7 +108,8 @@ public class TaskRunnerService : BackgroundService
         TimelineLog? timeline = null,
         OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
-        OrchestratorApi.Services.Runner.PostAbortReviewStepService? postAbortReview = null)
+        OrchestratorApi.Services.Runner.PostAbortReviewStepService? postAbortReview = null,
+        OrchestratorApi.Services.Cli.ClaudeSessionInspector? sessionInspector = null)
     {
         _config = config;
         _logger = logger;
@@ -136,6 +141,7 @@ public class TaskRunnerService : BackgroundService
         _timeline = timeline;
         _pipelineLog = pipelineLog;
         _postAbortReview = postAbortReview;
+        _sessionInspector = sessionInspector;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -239,7 +245,8 @@ public class TaskRunnerService : BackgroundService
                 timeline: _timeline,
                 pipelineLog: _pipelineLog,
                 humanReviewEscalation: _humanReviewEscalation,
-                postAbortReview: _postAbortReview);
+                postAbortReview: _postAbortReview,
+                sessionInspector: _sessionInspector);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);

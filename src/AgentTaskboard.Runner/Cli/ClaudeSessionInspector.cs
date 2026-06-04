@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace OrchestratorApi.Services.Cli;
@@ -13,6 +14,23 @@ public record ClaudeSessionInfo(
     string? LastTurnAt,
     int TurnCount,
     string? Error);
+
+/// <summary>
+/// Cumulative token usage summed across every assistant turn in a Claude
+/// session transcript. Unlike <see cref="ClaudeSessionInfo"/> (which carries
+/// the latest turn's live snapshot), this aggregates the whole session so a
+/// run's total spend can be reconstructed after the fact - including for
+/// aborted / killed runs that never emit a terminal usage footer.
+/// </summary>
+public sealed record ClaudeSessionUsageAggregate(
+    string? Model,
+    long InputTokens,
+    long OutputTokens,
+    long CacheReadTokens,
+    long CacheCreationTokens,
+    long TotalTokens,
+    int TurnCount,
+    string? LastTurnAt);
 
 /// <summary>
 /// Reads telemetry directly from the Claude Code CLI's session JSONL file at
@@ -87,6 +105,105 @@ public sealed class ClaudeSessionInspector
             return new(sessionId, null, 0, 0, 0, 0, 0, null, 0, ex.Message);
         }
     }
+
+    /// <summary>
+    /// Reconstructs the cumulative token usage for a session by summing the
+    /// per-turn <c>message.usage</c> across every assistant frame in the
+    /// transcript. Returns null when the session file cannot be located or
+    /// read. Used for post-hoc token attribution (ASS-626 / ASS-665): the
+    /// Claude CLI never reports a terminal usage footer, and a killed run
+    /// loses even the final result frame, so the transcript is the only
+    /// durable record of what the run actually spent.
+    /// </summary>
+    public ClaudeSessionUsageAggregate? AggregateUsage(string sessionId, string workingDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return null;
+        var jsonl = ResolveSessionFile(sessionId, workingDirectory);
+        if (jsonl == null) return null;
+
+        try
+        {
+            using var stream = new FileStream(jsonl, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return AggregateUsageFromLines(EnumerateLines(reader));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to aggregate Claude session {SessionId}", sessionId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Pure aggregation over transcript lines: sums input / output / cache-read
+    /// / cache-creation tokens across all assistant turns that carry a usage
+    /// block. Kept static + side-effect-free so the summation can be locked
+    /// with fixture-based unit tests. Malformed JSON lines (including a
+    /// partially-written trailing line) are skipped.
+    /// </summary>
+    public static ClaudeSessionUsageAggregate AggregateUsageFromLines(IEnumerable<string> lines)
+    {
+        string? model = null;
+        long input = 0, output = 0, cacheRead = 0, cacheCreation = 0;
+        int turns = 0;
+        string? lastTs = null;
+
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            JsonDocument? doc;
+            try { doc = JsonDocument.Parse(line); } catch { continue; }
+            using var _ = doc;
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) continue;
+
+            var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+            if (type != "assistant") continue;
+            if (!root.TryGetProperty("message", out var msg) || msg.ValueKind != JsonValueKind.Object) continue;
+            if (!msg.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) continue;
+
+            turns++;
+            if (msg.TryGetProperty("model", out var m)) model = m.GetString() ?? model;
+            input         += ReadLong(u, "input_tokens");
+            output        += ReadLong(u, "output_tokens");
+            cacheRead     += ReadLong(u, "cache_read_input_tokens");
+            cacheCreation += ReadLong(u, "cache_creation_input_tokens");
+            if (root.TryGetProperty("timestamp", out var ts)) lastTs = ts.GetString() ?? lastTs;
+        }
+
+        return new ClaudeSessionUsageAggregate(
+            model, input, output, cacheRead, cacheCreation,
+            input + output + cacheRead + cacheCreation, turns, lastTs);
+    }
+
+    /// <summary>
+    /// Renders an aggregate as the unstructured footer string the frontend's
+    /// agent-usage block shows verbatim, e.g.
+    /// <c>13.5M tokens (in 47.5k, out 128k, cache-read 13.4M, cache-write 12k)</c>.
+    /// </summary>
+    public static string FormatUsageString(ClaudeSessionUsageAggregate a)
+    {
+        var parts = new List<string>
+        {
+            $"in {Compact(a.InputTokens)}",
+            $"out {Compact(a.OutputTokens)}"
+        };
+        if (a.CacheReadTokens > 0) parts.Add($"cache-read {Compact(a.CacheReadTokens)}");
+        if (a.CacheCreationTokens > 0) parts.Add($"cache-write {Compact(a.CacheCreationTokens)}");
+        return $"{Compact(a.TotalTokens)} tokens ({string.Join(", ", parts)})";
+    }
+
+    private static string Compact(long n)
+    {
+        if (n >= 1_000_000)
+            return (n / 1_000_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M";
+        if (n >= 1_000)
+            return (n / 1_000.0).ToString("0.#", CultureInfo.InvariantCulture) + "k";
+        return n.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static long ReadLong(JsonElement obj, string name)
+        => obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : 0L;
 
     private static IEnumerable<string> EnumerateLines(StreamReader reader)
     {

@@ -737,6 +737,49 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(coreRow?.getAttribute('data-step-id')).toBe('core-agent-run');
   });
 
+  it('total duration: sums the per-run durations when the run-timeline carries them', async () => {
+    const fixture = await build(baseJob({ state: '6-completed' }));
+    TestBed.inject(RunTimelinePollService).timeline.set(
+      runTimeline(2, [runRecord({ durationSeconds: 10 }), runRecord({ durationSeconds: 5 })]),
+    );
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(fixture.componentInstance.totalDuration()).toBe(15);
+  });
+
+  it('total duration: falls back to the persisted CORE step duration when a killed run left no run-row duration (ASS-665)', async () => {
+    // ASS-665: a run was killed mid-flight. Its exit marker never paired with a
+    // session-event, so the run-timeline carries no duration - but the CORE
+    // pipeline step persisted the real elapsed time (1215.9s). The Overview
+    // "Total Duration" stat must still surface it even though tokens / run rows
+    // are missing.
+    const fixture = await build(baseJob({ state: '5-human-review' }));
+    const pipe = agentPipeline();
+    pipe.execution!.steps[0] = {
+      ...pipe.execution!.steps[0],
+      status: 'failed',
+      durationMs: 1_215_900,
+      completedAt: new Date().toISOString(),
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    // No run-timeline set: runs() is empty, so the sum is 0 and the fallback runs.
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    const c = fixture.componentInstance;
+    expect(c.totalDuration()).toBeCloseTo(1215.9, 1);
+  });
+
+  it('total duration: run-row durations win over the CORE-step fallback when both exist', async () => {
+    const fixture = await build(baseJob({ state: '6-completed' }));
+    const pipe = agentPipeline();
+    pipe.execution!.steps[0] = { ...pipe.execution!.steps[0], status: 'passed', durationMs: 999_000 };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    TestBed.inject(RunTimelinePollService).timeline.set(
+      runTimeline(1, [runRecord({ durationSeconds: 7 })]),
+    );
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    // The real run duration (7s) is authoritative; the fallback is not used.
+    expect(fixture.componentInstance.totalDuration()).toBe(7);
+  });
+
   it('session row was removed (component no longer exposes session-id helpers)', async () => {
     const fixture = await build(baseJob({ sessionName: 'c705779a-aaaa-bbbb-cccc-ddddeeeeffff' }));
     // The overview no longer surfaces session id in any row. The session

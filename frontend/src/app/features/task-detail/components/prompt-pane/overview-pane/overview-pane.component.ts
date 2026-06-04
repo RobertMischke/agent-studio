@@ -503,6 +503,16 @@ export class OverviewPaneComponent {
     for (const r of this.runs()) {
       if (r.durationSeconds != null) total += r.durationSeconds;
     }
+    // Fall back to the persisted CORE agent-run step duration when no run row
+    // carried one. A killed run whose exit marker never paired with a
+    // session-event leaves runs() without a duration, but RecordCoreRunFinish
+    // writes the CORE step duration unconditionally on every finish - so the
+    // elapsed time is still shown even for aborted runs where tokens are
+    // missing (ASS-665: "duration always show").
+    if (total === 0) {
+      const coreMs = this.agentExecutionRow()?.durationMs ?? 0;
+      if (coreMs > 0) total = coreMs / 1000;
+    }
     return total;
   });
 

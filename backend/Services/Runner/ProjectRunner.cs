@@ -60,6 +60,11 @@ public class ProjectRunner
     // its byte-identical fixed terminal route to human review. When wired AND
     // enabled, a non-clean run end consults the step before escalating.
     private readonly PostAbortReviewStepService? _postAbortReview;
+    // Reads Claude session transcripts (~/.claude/projects) to reconstruct
+    // token usage post-hoc when the CLI never reported a footer (always, for
+    // Claude) or the run was killed before emitting one. Null in tests that
+    // construct the runner without it.
+    private readonly OrchestratorApi.Services.Cli.ClaudeSessionInspector? _sessionInspector;
     // Per-job count of automatic abort-review reruns already spent. The
     // breaker: budget remaining = DefaultRerunBudget - used. Cleared when the
     // job leaves the loop (accepted, moved to review, or escalated).
@@ -209,7 +214,8 @@ public class ProjectRunner
         OrchestratorApi.Services.Tasks.TimelineLog? timeline = null,
         OrchestratorApi.Services.Pipeline.PipelineExecutionLog? pipelineLog = null,
         HumanReviewEscalation? humanReviewEscalation = null,
-        PostAbortReviewStepService? postAbortReview = null)
+        PostAbortReviewStepService? postAbortReview = null,
+        OrchestratorApi.Services.Cli.ClaudeSessionInspector? sessionInspector = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -246,6 +252,7 @@ public class ProjectRunner
         _timeline = timeline;
         _pipelineLog = pipelineLog;
         _postAbortReview = postAbortReview;
+        _sessionInspector = sessionInspector;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -2277,6 +2284,56 @@ public class ProjectRunner
     }
 
     /// <summary>
+    /// Reconstructs Claude token usage from the session transcript and writes
+    /// it to the job's <c>lastUsage</c>. Best-effort and side-effect-light:
+    /// only persists when the aggregate found real tokens, and only the
+    /// unstructured footer string the Overview agent-usage block renders.
+    /// The transcript is read via <see cref="ClaudeSessionInspector"/> using
+    /// the project's working directory (the cwd Claude encodes its log folder
+    /// from) and the best-available session id for this run.
+    /// </summary>
+    private void TryRecordPostHocClaudeUsage(
+        string jobId, string? capturedSessionId, RunPlan? planSnapshot, TaskInfo? finishedInfo)
+    {
+        if (_sessionInspector == null) return;
+        try
+        {
+            // Prefer the id captured during this run (a fresh run, or the new
+            // fork id a --resume produced); fall back to the resume target,
+            // then the job's recorded session name. On a killed run the init
+            // frame - and thus the captured id - normally arrived before the
+            // kill, so capturedSessionId is usually present even here.
+            var sessionId = !string.IsNullOrWhiteSpace(capturedSessionId) ? capturedSessionId
+                : !string.IsNullOrWhiteSpace(planSnapshot?.SessionToResume) ? planSnapshot!.SessionToResume
+                : finishedInfo?.SessionName;
+            if (string.IsNullOrWhiteSpace(sessionId)) return;
+
+            var cwd = Entry.RootPath;
+            if (string.IsNullOrWhiteSpace(cwd)) return;
+
+            var agg = _sessionInspector.AggregateUsage(sessionId!, cwd!);
+            if (agg == null || agg.TotalTokens <= 0) return;
+
+            var synthetic = new SessionUsage
+            {
+                At = DateTime.UtcNow,
+                Tokens = OrchestratorApi.Services.Cli.ClaudeSessionInspector.FormatUsageString(agg),
+            };
+            if (_sessions.UpdateLastUsage(jobId, synthetic, Entry.Path))
+            {
+                _logger.LogInformation(
+                    "[token-posthoc] Reconstructed Claude usage for {JobId} from session {SessionId}: {Total} tokens over {Turns} turns (in={In} out={Out} cacheRead={CacheRead} cacheWrite={CacheWrite})",
+                    jobId, sessionId, agg.TotalTokens, agg.TurnCount,
+                    agg.InputTokens, agg.OutputTokens, agg.CacheReadTokens, agg.CacheCreationTokens);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[token-posthoc] Failed to reconstruct Claude usage for {JobId}", jobId);
+        }
+    }
+
+    /// <summary>
     /// Mark the CORE step terminal in pipeline-execution.json once the agent
     /// process exits: <see cref="PipelineStepStatus.Passed"/> when the run
     /// classified as <see cref="RunStatuses.Completed"/>,
@@ -2476,6 +2533,19 @@ public class ProjectRunner
                 GeminiCliService gemini => gemini.GetCapturedSessionId(jobKey),
                 _ => null
             };
+            // Post-hoc token reconstruction (ASS-626 / ASS-665): the Claude
+            // CLI never reports a terminal usage footer the way Copilot does,
+            // so `usage` above is always null for Claude - and a killed run
+            // loses even its final result frame. Read the per-turn usage
+            // straight from the session transcript and aggregate it into
+            // lastUsage so the Overview tab shows the real token spend instead
+            // of nothing, even when the run was aborted. Guarded on the footer
+            // being absent so we never clobber a real CLI-reported footer.
+            if (usage == null && cli is ClaudeCliService)
+            {
+                TryRecordPostHocClaudeUsage(jobId, capturedSessionId, planSnapshot, finishedInfo);
+            }
+
             // Capture the post-run HEAD SHA so the run's commit set can be
             // derived deterministically via git rev-list HeadShaBefore..After.
             // This must happen before any auto-commit hook fires (the hook
