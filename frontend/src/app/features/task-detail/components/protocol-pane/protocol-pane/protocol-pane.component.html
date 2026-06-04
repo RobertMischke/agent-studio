@@ -343,8 +343,6 @@
                 </div>
               </div>
 
-              <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
-
               @if (runsModalOpen()) {
                 <div class="runs-modal-backdrop"
                      data-testid="runs-modal"
@@ -385,31 +383,45 @@
                 (closeRequest)="closeGitViewer()" />
 
               @if (cliOutput().length > 0 || isRunning()) {
-                @if (showConversationView()) {
-                  <app-conversation-view [events]="nextGenChatEvents()"
-                                         [isRunning]="isRunning()"
-                                         variant="embedded"
-                                         (openTrace)="onConversationOpenTrace($event)"
-                                         (openFollowUp)="onOpenFollowup($event)"
-                                         (openVerboseDebug)="onConversationOpenVerboseDebug()" />
-                } @else {
-                  @if (featureFlags.nextGenChat() && nextGenChatTraceFallback()) {
-                    <div class="next-gen-chat-trace-banner"
-                         data-testid="next-gen-chat-trace-banner">
-                      <span aria-hidden="true">≣</span>
-                      Showing raw Trace.
-                      <button type="button"
-                              class="next-gen-chat-trace-banner__back"
-                              data-testid="next-gen-chat-trace-back"
-                              (click)="exitConversationTraceFallback()">Back to chat</button>
-                    </div>
+                @if (activityViewTabs().length > 1) {
+                  <app-pane-tabs variant="pill"
+                                 class="activity-view-toggle"
+                                 ariaLabel="Plan / Conversation / Trace"
+                                 [tabs]="activityViewTabs()"
+                                 [activeTabId]="activityView()"
+                                 (tabChange)="onActivityViewChange($event)" />
+                }
+                @switch (activityView()) {
+                  @case ('plan') {
+                    <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
                   }
-                  <app-activity-log-view [lines]="filteredCliOutput()"
-                                         [bodyMaxHeight]="'none'"
-                                         [isRunning]="isRunning()"
-                                         variant="embedded"
-                                         (applyComposeSuggestion)="onSteerOptionApply($event)"
-                                         (requestUploadScreenshot)="onSteerUploadRequest()" />
+                  @case ('conversation') {
+                    <app-conversation-view [events]="nextGenChatEvents()"
+                                           [isRunning]="isRunning()"
+                                           variant="embedded"
+                                           (openTrace)="onConversationOpenTrace($event)"
+                                           (openFollowUp)="onOpenFollowup($event)"
+                                           (openVerboseDebug)="onConversationOpenVerboseDebug()" />
+                  }
+                  @case ('trace') {
+                    @if (conversationAvailable()) {
+                      <div class="next-gen-chat-trace-banner"
+                           data-testid="next-gen-chat-trace-banner">
+                        <span aria-hidden="true">≣</span>
+                        Showing raw Trace.
+                        <button type="button"
+                                class="next-gen-chat-trace-banner__back"
+                                data-testid="next-gen-chat-trace-back"
+                                (click)="exitConversationTraceFallback()">Back to chat</button>
+                      </div>
+                    }
+                    <app-activity-log-view [lines]="filteredCliOutput()"
+                                           [bodyMaxHeight]="'none'"
+                                           [isRunning]="isRunning()"
+                                           variant="embedded"
+                                           (applyComposeSuggestion)="onSteerOptionApply($event)"
+                                           (requestUploadScreenshot)="onSteerUploadRequest()" />
+                  }
                 }
                 <input type="file"
                        #steerUpload

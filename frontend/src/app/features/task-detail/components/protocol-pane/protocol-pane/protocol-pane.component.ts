@@ -3,6 +3,7 @@ import {
   Component,
   OnDestroy,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -62,7 +63,15 @@ import {
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
+import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
 export type InspectorTab = 'protocol' | 'activity';
+
+/**
+ * Sub-view of the Activity tab: the agent's own task Plan, the next-gen
+ * Conversation renderer, or the raw Trace (legacy activity-log view). The
+ * segmented toggle above the panel body switches between them.
+ */
+export type ActivityView = 'plan' | 'conversation' | 'trace';
 
 /**
  * Transient interim-summary result shown while a job is running. Generated
@@ -152,6 +161,22 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly planPoll = inject(PlanPollService);
   private readonly nowTick = inject(NowTickService).now;
   private readonly jobs = inject(TaskService);
+
+  /** Tracks the job whose Activity sub-view override is currently held. */
+  private activityViewJobId: string | null = null;
+
+  constructor() {
+    // A fresh task opens at its default Activity sub-view (Plan when a plan
+    // exists). Clearing the explicit pick when the job changes keeps a Trace
+    // choice made on one task from leaking into the next.
+    effect(() => {
+      const id = this.detail().info.id;
+      if (id !== this.activityViewJobId) {
+        this.activityViewJobId = id;
+        this.activityViewOverride.set(null);
+      }
+    });
+  }
 
   /** Set after "Create follow-up" returns; used to render the success banner. */
   readonly followupCreated = signal<{ jobId: string; targetState: string } | null>(null);
@@ -643,13 +668,70 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly verboseDebugOpen = signal(false);
 
   /**
-   * Slice-1 host adapter for `Frontend:NextGenChat`. When the flag is on the
-   * Activity tab renders the new `app-conversation-view` against the
-   * `ConversationEvent[]` projection; the user can flip into `traceFallback`
-   * mode to fall back to the legacy `app-activity-log-view` for the same
-   * lines. Flag off keeps the off-state byte-stable.
+   * The Activity tab is a single panel with a [Plan] [Conversation] [Trace]
+   * toggle above it. `activityViewOverride` holds the user's explicit pick;
+   * when null the panel falls back to {@link defaultActivityView} (Plan when
+   * a plan exists, else Conversation when `Frontend:NextGenChat` is on, else
+   * the raw Trace). The constructor effect resets it per job.
+   *
+   * Trace is the legacy `app-activity-log-view`; Conversation is the next-gen
+   * `app-conversation-view` over the `ConversationEvent[]` projection. With
+   * the flag off the Conversation tab never appears, so the off-state renders
+   * exactly the raw Trace as before.
    */
-  readonly nextGenChatTraceFallback = signal(false);
+  private readonly activityViewOverride = signal<ActivityView | null>(null);
+
+  /** True once a usable task plan exists - mirrors `PlanStripComponent.visible`. */
+  readonly planAvailable = computed<boolean>(() => {
+    const p = this.plan();
+    return !!p && p.hasPlan && p.items.length > 0;
+  });
+
+  /** The Conversation sub-view only exists when the next-gen chat flag is on. */
+  readonly conversationAvailable = computed<boolean>(() => this.featureFlags.nextGenChat());
+
+  /** Sub-view shown when the user has not picked one explicitly. */
+  readonly defaultActivityView = computed<ActivityView>(() => {
+    if (this.planAvailable()) return 'plan';
+    if (this.conversationAvailable()) return 'conversation';
+    return 'trace';
+  });
+
+  /** Effective Activity sub-view: the user's pick if still valid, else the default. */
+  readonly activityView = computed<ActivityView>(() => {
+    const picked = this.activityViewOverride();
+    if (picked === 'plan' && !this.planAvailable()) return this.defaultActivityView();
+    if (picked === 'conversation' && !this.conversationAvailable()) return this.defaultActivityView();
+    return picked ?? this.defaultActivityView();
+  });
+
+  /** Segmented [Plan] [Conversation] [Trace] toggle above the panel body. */
+  readonly activityViewTabs = computed<PaneTabDef[]>(() => {
+    const tabs: PaneTabDef[] = [];
+    if (this.planAvailable()) {
+      tabs.push({ id: 'plan', label: 'Plan', emoji: '◆', testid: 'activity-view-tab-plan' });
+    }
+    if (this.conversationAvailable()) {
+      tabs.push({
+        id: 'conversation',
+        label: 'Conversation',
+        emoji: '💬',
+        testid: 'activity-view-tab-conversation',
+      });
+    }
+    tabs.push({ id: 'trace', label: 'Trace', emoji: '≣', testid: 'activity-view-tab-trace' });
+    return tabs;
+  });
+
+  setActivityView(view: ActivityView): void {
+    this.activityViewOverride.set(view);
+  }
+
+  onActivityViewChange(id: string): void {
+    if (id === 'plan' || id === 'conversation' || id === 'trace') {
+      this.setActivityView(id);
+    }
+  }
 
   /**
    * Projected conversation events for the next-gen chat renderer. Pure
@@ -687,18 +769,9 @@ export class ProtocolPaneComponent implements OnDestroy {
     });
   });
 
-  /**
-   * Predicate the template uses to decide which Activity tab body to render.
-   * Conversation view shows when the flag is on AND the user has not
-   * explicitly toggled the Trace fallback for the current view.
-   */
-  readonly showConversationView = computed(
-    () => this.featureFlags.nextGenChat() && !this.nextGenChatTraceFallback(),
-  );
-
   onConversationOpenTrace(range: RawLineRange | null): void {
     void range;
-    this.nextGenChatTraceFallback.set(true);
+    this.setActivityView('trace');
   }
 
   onConversationOpenVerboseDebug(): void {
@@ -706,7 +779,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   }
 
   exitConversationTraceFallback(): void {
-    this.nextGenChatTraceFallback.set(false);
+    this.setActivityView('conversation');
   }
 
   onVerboseDebugOpenTrace(range: RawLineRange): void {

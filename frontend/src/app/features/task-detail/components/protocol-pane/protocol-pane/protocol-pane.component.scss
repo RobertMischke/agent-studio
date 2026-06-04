@@ -995,3 +995,14 @@
   }
   &__back:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
 }
+
+/*
+ * Plan / Conversation / Trace segmented toggle that sits above the Activity
+ * panel body. The pane-tabs `pill` variant owns the chrome; the host just
+ * adds breathing room so it reads as a distinct control between the run
+ * header and the sub-view content.
+ */
+.activity-view-toggle {
+  display: block;
+  margin: 2px 0 8px;
+}
