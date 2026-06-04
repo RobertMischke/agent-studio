@@ -49,7 +49,7 @@ test.describe('Row spacing compact density', () => {
       await waitForJob(id, wp.path, () => true, { timeoutMs: 15_000 });
       await openTaskDirectly(page, id, wp.path);
 
-      // Wait for the Status block to mount (signals the first <app-row> is
+      // Wait for the Status block to mount (signals the first `.ov-row` is
       // rendered + has its computed styles applied).
       const statusBlock = page.getByTestId('overview-status');
       await expect(statusBlock).toBeVisible();
@@ -59,7 +59,7 @@ test.describe('Row spacing compact density', () => {
       // padded 2 px + dot + label) sat at ~36-40 px; compact lands around
       // 26-30 px. The cap keeps the row visibly tighter without flapping
       // on content-driven height jitter.
-      const rowHeights = await statusBlock.locator('app-row').evaluateAll(
+      const rowHeights = await statusBlock.locator('.ov-row').evaluateAll(
         (els) => els.map((el) => Math.round((el as HTMLElement).getBoundingClientRect().height)),
       );
       expect(rowHeights.length).toBeGreaterThanOrEqual(3);
@@ -102,7 +102,7 @@ test.describe('Row spacing compact density', () => {
     }
   });
 
-  test('app-row honours its variant token mapping', async ({ page }) => {
+  test('Overview rows are a fixed two-column grid sharing one value edge', async ({ page }) => {
     const wp = await pickWatchPath();
     const id = uid('variant');
     await createJob({ id, title: id, watchPath: wp.path, targetState: '1-preparation' });
@@ -111,34 +111,42 @@ test.describe('Row spacing compact density', () => {
       await waitForJob(id, wp.path, () => true, { timeoutMs: 15_000 });
       await openTaskDirectly(page, id, wp.path);
 
-      // Every <app-row> in Status renders with variant=compact. The
-      // overview pane scopes a further row-min-h override (16 px) on top
-      // of the global compact default (20 px) so its five sections stay
-      // scannable as more content lands; <app-row> inherits the local
-      // override via CSS variable cascade. This test asserts the host
-      // variant is wired correctly AND the override flows through.
+      // Overview rows (`.ov-row`) read the pane's local row-min-h override
+      // (16 px) on top of the global compact default via the CSS-variable
+      // cascade, and lay out as a fixed two-column grid (label | value). The
+      // label track is pinned to `--ov-label-col` so STATUS and AGENT values
+      // land on one shared second-column edge — the alignment this pane owns.
       const status = page.getByTestId('overview-status');
-      const hosts = status.locator('app-row');
-      const count = await hosts.count();
+      const agent = page.getByTestId('overview-agent');
+      const rows = status.locator('.ov-row');
+      const count = await rows.count();
       expect(count).toBeGreaterThanOrEqual(3);
 
-      const inspected = await hosts.first().evaluate((el) => {
+      const inspected = await rows.first().evaluate((el) => {
         const cs = window.getComputedStyle(el);
-        const inner = el.querySelector('.app-row') as HTMLElement | null;
-        const innerCs = inner ? window.getComputedStyle(inner) : null;
         return {
-          hostVariant: el.getAttribute('data-variant'),
+          display: cs.display,
           tokenRowMinH: cs.getPropertyValue('--studio-row-min-h').trim(),
-          tokenRowPadBlock: cs.getPropertyValue('--studio-row-pad-block').trim(),
-          innerMinHeight: innerCs ? innerCs.minHeight : '',
+          labelCol: cs.getPropertyValue('--ov-label-col').trim(),
+          minHeight: cs.minHeight,
         };
       });
 
-      expect(inspected.hostVariant).toBe('compact');
+      expect(inspected.display).toBe('grid');
       // Token resolves to the overview-pane local override (16px).
       expect(inspected.tokenRowMinH).toMatch(/16px/);
-      // Inner row picks up the token via min-height: var(--studio-row-min-h)
-      expect(inspected.innerMinHeight).toBe('16px');
+      expect(inspected.minHeight).toBe('16px');
+      // Fixed label column is the single source of truth for both sections.
+      expect(inspected.labelCol).toMatch(/100px/);
+
+      // STATUS and AGENT value cells must start at the same x.
+      const valueLeft = (loc: ReturnType<typeof page.getByTestId>) =>
+        loc.locator('.ov-value').first().evaluate(
+          (el) => Math.round((el as HTMLElement).getBoundingClientRect().left),
+        );
+      const statusValueLeft = await valueLeft(status);
+      const agentValueLeft = await valueLeft(agent);
+      expect(Math.abs(statusValueLeft - agentValueLeft)).toBeLessThanOrEqual(1);
     } finally {
       await deleteJob(id, wp.path);
     }
@@ -158,7 +166,7 @@ test.describe('Row spacing compact density', () => {
         document.documentElement.setAttribute('data-studio-theme', 'light');
       });
 
-      const labels = page.locator('app-overview-pane [data-testid="overview-status"] .app-row__label');
+      const labels = page.locator('app-overview-pane [data-testid="overview-status"] .ov-label');
       const labelCount = await labels.count();
       expect(labelCount).toBeGreaterThanOrEqual(3);
 

@@ -5,13 +5,17 @@
   // Agent, Tokens & Performance, Agent Work, Runs) are read together as a
   // scannable label/value list; the compact defaults were still leaving
   // ~26px per row, which scrolled out useful sections before the bottom of
-  // the panel. Tightening at the local-token level lets `.ov-row` and the
-  // `<app-row variant="compact">` instances inherit the smaller values
-  // without reaching into the global tokens.
+  // the panel. Tightening at the local-token level lets every `.ov-row`
+  // inherit the smaller values without reaching into the global tokens.
   --studio-section-gap: 6px;
   --studio-row-gap: 2px;
   --studio-row-pad-block: 1px;
   --studio-row-min-h: 16px;
+
+  // Single source of truth for the label column. STATUS, AGENT, and the
+  // token rows all read it through `.ov-row`'s grid template, so their
+  // values share one second-column edge by construction.
+  --ov-label-col: 100px;
 
   padding: 8px 16px;
   display: flex;
@@ -224,9 +228,14 @@
 }
 
 .ov-row {
-  display: flex;
+  // Fixed two-column grid (label | value). The label track is a hard width,
+  // so a long label (e.g. "Last Activity") can never grow and shove its value
+  // out of the shared second column — every row's value cell starts at the
+  // same edge across STATUS, AGENT, and the token blocks.
+  display: grid;
+  grid-template-columns: var(--ov-label-col) 1fr;
   align-items: center;
-  gap: 8px;
+  column-gap: var(--studio-spacing-2);
   min-height: var(--studio-row-min-h);
   padding-block: var(--studio-row-pad-block);
 
@@ -245,7 +254,9 @@
 }
 
 .ov-label {
-  flex: 0 0 100px;
+  // Grid column 1. Width comes from the `.ov-row` track; `min-width: 0`
+  // keeps a long label clipped to the fixed column instead of widening it.
+  min-width: 0;
   font-size: 11px;
   color: var(--studio-fg-dim);
   text-transform: uppercase;
@@ -254,7 +265,7 @@
 }
 
 .ov-value {
-  flex: 1 1 auto;
+  // Grid column 2. Inner flex lays out the value's chips/pills/text.
   font-size: 12.5px;
   color: var(--studio-fg);
   display: flex;

@@ -34,7 +34,6 @@ import { RegressionRadarComponent } from '../../../../regression-radar/component
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { StructuredTooltip } from '../../../../../components/tooltip';
-import { RowComponent } from '../../../../../components/row/row.component';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
 import {
   cliTypeIcon,
@@ -161,7 +160,7 @@ function buildConcernTooltip(
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CliModelSelectorComponent, RegressionRadarComponent, ReferencesSectionComponent, TooltipDirective, RowComponent, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent],
+  imports: [CliModelSelectorComponent, RegressionRadarComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
