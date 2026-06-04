@@ -34,10 +34,18 @@
                   [class.parch__status--accepted]="statusClass(d.status) === 'accepted'"
                   [class.parch__status--super]="statusClass(d.status) === 'superseded'"
                   [class.parch__status--depr]="statusClass(d.status) === 'deprecated'">
-              {{ d.status }}
+              {{ inlineStatus(d.status) }}
             </span>
             @if (d.date) {
               <span class="parch__date">{{ d.date }}</span>
+            }
+            @if (isLongStatus(d.status)) {
+              <span class="parch__note"
+                    [class.parch__note--accepted]="statusClass(d.status) === 'accepted'"
+                    [class.parch__note--super]="statusClass(d.status) === 'superseded'"
+                    [class.parch__note--depr]="statusClass(d.status) === 'deprecated'">
+                {{ d.status }}
+              </span>
             }
           </button>
           @if (openedId() === d.id) {

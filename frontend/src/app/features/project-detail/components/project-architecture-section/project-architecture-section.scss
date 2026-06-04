@@ -17,8 +17,16 @@
 .parch__btn {
   width: 100%;
   display: grid;
-  grid-template-columns: max-content 1fr max-content max-content;
-  gap: 12px;
+  // Header line: id · title · status-keyword · date. Long free-form status
+  // prose moves to a full-width second line (.parch__note) so the title
+  // keeps the row width instead of collapsing to one word per line, and the
+  // note wraps within the panel instead of clipping off the right edge.
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  grid-template-areas:
+    "id title status date"
+    "note note note note";
+  column-gap: 12px;
+  row-gap: 6px;
   align-items: baseline;
   padding: 7px 10px;
   background: rgba(255,255,255,0.03);
@@ -34,9 +42,12 @@
   border-color: rgba(196,181,253,0.55);
   background: rgba(196,181,253,0.08);
 }
-.parch__id { font-family: var(--font-mono, monospace); color: var(--studio-accent-4-strong); font-weight: 600; }
-.parch__title { color: var(--studio-fg); }
+.parch__id { grid-area: id; font-family: var(--font-mono, monospace); color: var(--studio-accent-4-strong); font-weight: 600; }
+.parch__title { grid-area: title; color: var(--studio-fg); min-width: 0; overflow-wrap: anywhere; }
 .parch__status {
+  grid-area: status;
+  justify-self: end;
+  white-space: nowrap;
   padding: 1px 8px;
   border-radius: 999px;
   background: rgba(255,255,255,0.05);
@@ -48,7 +59,27 @@
 .parch__status--accepted { background: rgba(166,227,161,0.15); color: var(--severity-pass); }
 .parch__status--super    { background: rgba(249,226,175,0.15); color: var(--studio-accent-warn); }
 .parch__status--depr     { background: rgba(243,139,168,0.15); color: var(--severity-high); }
-.parch__date { color: var(--studio-fg-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+.parch__date { grid-area: date; color: var(--studio-fg-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+
+// Full-width second line for long, free-form status prose. Wraps within the
+// row instead of clipping; a tinted left border carries the status colour.
+.parch__note {
+  grid-area: note;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 6px 10px;
+  border-left: 3px solid var(--studio-fg-muted);
+  border-radius: 0 4px 4px 0;
+  background: rgba(255,255,255,0.04);
+  color: var(--studio-fg-dim);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
+}
+.parch__note--accepted { border-left-color: var(--severity-pass); }
+.parch__note--super    { border-left-color: var(--studio-accent-warn); }
+.parch__note--depr     { border-left-color: var(--severity-high); }
 
 .parch__viewer {
   margin-top: 4px;

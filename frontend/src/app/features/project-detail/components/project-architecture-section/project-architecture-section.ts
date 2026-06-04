@@ -60,6 +60,33 @@ export class ProjectArchitectureSectionComponent {
     return 'other';
   }
 
+  /**
+   * The raw status is free-form prose (e.g. "Superseded in part by
+   * ADR-0007: …"). Long statuses are split into a compact keyword chip in
+   * the row header plus a full-width wrapping note below, so the title
+   * keeps the row width and never collapses to one word per line.
+   */
+  private static readonly LONG_STATUS_CHARS = 24;
+
+  isLongStatus(s: string): boolean {
+    return s.trim().length > ProjectArchitectureSectionComponent.LONG_STATUS_CHARS;
+  }
+
+  /** Short keyword for the inline chip when the full status is too long to sit inline. */
+  statusKeyword(s: string): string {
+    switch (this.statusClass(s)) {
+      case 'accepted': return 'Accepted';
+      case 'superseded': return 'Superseded';
+      case 'deprecated': return 'Deprecated';
+      default: return s.trim().split(/\s+/)[0] || s;
+    }
+  }
+
+  /** Inline chip text: the full status when short, otherwise just the keyword. */
+  inlineStatus(s: string): string {
+    return this.isLongStatus(s) ? this.statusKeyword(s) : s.trim();
+  }
+
   noteFor(id: string): string { return this.notes()[id] ?? ''; }
 
   onNoteInput(id: string, ev: Event) {
