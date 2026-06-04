@@ -111,6 +111,22 @@
   padding: 22px 24px;
   min-height: 240px;
 }
+
+/*
+ * Unified content-width contract. A single wrapper around the projected
+ * panel (and the placeholder header/empty state) caps every rail at one
+ * shared max width, left-aligned at the panel's padding edge, so the
+ * content's left edge and max width stay put as you tab between rails.
+ * Replaces the per-panel one-offs — project-detail used to cap itself at
+ * 760px + center while the data panels ran full-bleed, which made the
+ * left edge and column width jump rail to rail. The wrapper lives in this
+ * component's own template, so the cap reaches ng-content projected from
+ * the hub/overlay hosts (a .proj-shell__panel > * rule could not, because
+ * emulated view-encapsulation scopes it away from projected content).
+ */
+.proj-shell__panel-content {
+  max-width: var(--studio-panel-content-max);
+}
 .proj-shell__panel-head {
   padding-bottom: 12px;
   border-bottom: 1px solid #313244;

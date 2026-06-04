@@ -51,6 +51,18 @@
   --studio-border-strong: var(--alpha-white-10);
 
   // ---------------------------------------------------------------------------
+  // Layout — theme-independent sizing contracts
+  // ---------------------------------------------------------------------------
+  // Shared max content width for project-hub panels. Every rail (Overview,
+  // Architecture, Observability, Token Usage, Security, …) left-aligns its
+  // content at the panel's padding edge and caps at this width, so the left
+  // edge and max width stay put as you switch rails — instead of
+  // Overview/Architecture rendering a narrow centered column while the data
+  // panels run full-bleed. Sized above the ~1170px desktop (1512) panel so
+  // that baseline still fills; the cap mainly tames wide monitors.
+  --studio-panel-content-max: 1280px;
+
+  // ---------------------------------------------------------------------------
   // Scrim — backdrop behind modal / dialog overlays
   // ---------------------------------------------------------------------------
   --studio-scrim:         rgba(2, 6, 23, 0.65);

@@ -36,22 +36,24 @@
     <main class="proj-shell__panel"
           [attr.data-testid]="'project-shell-panel-' + activeRail()"
           [attr.data-rail-key]="activeRail()">
-      @if (hasCustomPanel()) {
-        <ng-content></ng-content>
-      } @else {
-        <header class="proj-shell__panel-head">
-          <h2 class="proj-shell__panel-title" data-testid="project-shell-panel-title">
-            <span aria-hidden="true">{{ activeItem().icon }}</span>
-            {{ activeItem().panelTitle }}
-          </h2>
-          <p class="proj-shell__panel-desc" data-testid="project-shell-panel-desc">
-            {{ activeItem().description }}
-          </p>
-        </header>
-        <div class="proj-shell__empty" data-testid="project-shell-panel-empty">
-          <p>{{ activeItem().empty }}</p>
-        </div>
-      }
+      <div class="proj-shell__panel-content">
+        @if (hasCustomPanel()) {
+          <ng-content></ng-content>
+        } @else {
+          <header class="proj-shell__panel-head">
+            <h2 class="proj-shell__panel-title" data-testid="project-shell-panel-title">
+              <span aria-hidden="true">{{ activeItem().icon }}</span>
+              {{ activeItem().panelTitle }}
+            </h2>
+            <p class="proj-shell__panel-desc" data-testid="project-shell-panel-desc">
+              {{ activeItem().description }}
+            </p>
+          </header>
+          <div class="proj-shell__empty" data-testid="project-shell-panel-empty">
+            <p>{{ activeItem().empty }}</p>
+          </div>
+        }
+      </div>
     </main>
   </div>
 </section>

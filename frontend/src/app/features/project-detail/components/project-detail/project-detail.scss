@@ -1,4 +1,8 @@
-:host { display: block; padding: 18px 20px; max-width: 760px; margin: 0 auto; }
+// Width now comes from the shared shell contract (.proj-shell__panel-content
+// + --studio-panel-content-max), and the panel card already provides padding,
+// so the host just needs to be a block. Previously capped at 760px + centered,
+// which made this rail drift from the full-bleed data panels.
+:host { display: block; }
 .proj-detail { display: flex; flex-direction: column; gap: 2px; }
 .proj-detail__head {
   display: flex;
