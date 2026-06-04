@@ -399,6 +399,33 @@ export interface TaskTagChip {
   tooltip: string;
 }
 
+const SUPPRESSED_CARD_TAG_TEXT = new Set([
+  'ready',
+  'reviewready',
+  'readytosignoff',
+  'autoreview',
+  'autoreviewing',
+  'humanreview',
+  'qas',
+  'qandas',
+  'questionsandanswers',
+]);
+
+function compactTagText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function isSuppressedCardTag(id: string, entry: TagRegistryEntry | undefined): boolean {
+  if (/^[a-z][a-z0-9-]*:concerns$/i.test(id)) return true;
+  if (/^review:unparseable$/i.test(id)) return true;
+  if (SUPPRESSED_CARD_TAG_TEXT.has(compactTagText(id))) return true;
+  return !!entry && SUPPRESSED_CARD_TAG_TEXT.has(compactTagText(entry.label));
+}
+
 /**
  * Tag chips on the card. Looks up label + colour from the workspace registry
  * map; tags whose id no longer exists render as a faint "ghost" chip with the
@@ -407,42 +434,9 @@ export interface TaskTagChip {
 export function buildTagChips(ids: readonly string[] | undefined, byId: Map<string, TagRegistryEntry>): TaskTagChip[] {
   const list = ids ?? [];
   if (list.length === 0) return [];
-  return list.map((id) => {
-    // A1 (2026-05-21): review:unparseable is a structurally different signal
-    // from {namespace}:concerns — the model didn't follow the verdict format,
-    // NOT a real quality concern. Render it as its own chip variant so the
-    // operator can sort/scan past "format violations" without conflating them
-    // with model-flagged issues.
-    if (id === 'review:unparseable') {
-      return {
-        id,
-        label: 'review:unparseable',
-        color: '#a5b4fc',
-        ghost: false,
-        concern: false,
-        unparseable: true,
-        tooltip: 'Auto-review could not parse the model\'s verdict (no [[ASPECT_VERDICT]] sentinel). NOT a quality concern; the model just did not follow the format. See aspect-*.md for the raw reply.'
-      };
-    }
-    // Auto-review concern tags use the `<namespace>:concerns` shape and are not
-    // in the registry by design (they are ephemeral findings, not curated
-    // taxonomy). The card renders them with a small ⚠ chip so the user sees the
-    // source aspect at a glance instead of a generic "unknown tag" ghost. See
-    // ADR-0025.
-    const concernMatch = /^([a-z][a-z0-9-]*):concerns$/i.exec(id);
-    if (concernMatch) {
-      const ns = concernMatch[1];
-      return {
-        id,
-        label: `${ns}:concerns`,
-        color: '#fbbf24',
-        ghost: false,
-        concern: true,
-        unparseable: false,
-        tooltip: `Auto-review aspect '${ns}' flagged concerns. Open the task and read aspect-*.md for details.`
-      };
-    }
+  return list.flatMap((id) => {
     const entry = byId.get(id);
+    if (isSuppressedCardTag(id, entry)) return [];
     if (entry) {
       return {
         id,
@@ -461,8 +455,8 @@ export function buildTagChips(ids: readonly string[] | undefined, byId: Map<stri
       ghost: true,
       concern: false,
       unparseable: false,
-      tooltip: `Unknown tag '${id}'; registry entry was removed`
-    };
+        tooltip: `Unknown tag '${id}'; registry entry was removed`
+      };
   });
 }
 
@@ -593,7 +587,7 @@ export function buildReviewBadge(summaryState: TaskInfo['summaryState']): Review
       return { label: 'auto-reviewing', tone: 'generating',
                tooltip: 'Orchestrator is summarizing the run output (Haiku). The card will become quiet once status.md has been written.' };
     case 'ready':
-      return { label: 'review ready', tone: 'ready',
+      return { label: 'Reviewed', tone: 'ready',
                tooltip: summaryState.bytesWritten ? `Auto-review wrote ${summaryState.bytesWritten} bytes to status.md.` : 'Auto-review finished.' };
     case 'failed':
       return { label: 'review failed', tone: 'failed',
@@ -665,7 +659,7 @@ export interface HumanReviewBadge { label: string; tone: 'attention' | 'accept';
  * used to render identically to a Completed card, hiding that a human still has
  * to act ("Failed-Cards sehen aus wie Done"). This pill makes the verdict
  * explicit: a loud red "Escalated" / "Needs rework" marker for action-required
- * verdicts, and a calm green "Ready to sign off" for an accepted card awaiting
+ * verdicts, and a calm green "Reviewed" marker for an accepted card awaiting
  * confirmation. Returns null for plain human review (no verdict yet) so
  * undecided cards stay quiet.
  */
@@ -686,7 +680,7 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
       };
     case 'accept':
       return {
-        label: 'Ready to sign off',
+        label: 'Reviewed',
         tone: 'accept',
         tooltip: 'Auto-review accepted this task. A human just needs to confirm and move it to Completed.'
       };
