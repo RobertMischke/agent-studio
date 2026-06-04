@@ -114,6 +114,32 @@
   --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 28%, transparent),
                        0 4px 12px color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
 
+  // Standard task-card surface (ASS-737). Board lanes, Backlog lane cards,
+  // and epic sub-task cards all render through <app-task-card>/<app-job-card>,
+  // so card chrome lives here instead of per-lane CSS. State colours are
+  // applied as a uniform border/ring around every side, never as a side rail.
+  --studio-card-bg:              var(--studio-bg-elevated);
+  --studio-card-border:          var(--studio-border-strong);
+  --studio-card-border-hover:    color-mix(in srgb, var(--studio-fg-dim) 32%, transparent);
+  --studio-card-shadow:          0 1px 2px var(--alpha-black-20);
+  --studio-card-shadow-hover:    0 2px 6px var(--alpha-black-20),
+                                 0 10px 24px var(--alpha-black-40);
+  --studio-card-radius:          12px;
+  --studio-card-padding:         var(--studio-spacing-4);
+  --studio-card-section-gap:     var(--studio-spacing-3);
+  --studio-card-title-size:      15px;
+  --studio-card-title-weight:    600;
+  --studio-card-title-lh:        1.35;
+  --studio-card-meta-size:       11px;
+  --studio-card-pill-height:     22px;
+  --studio-card-pill-padding-x:  var(--studio-spacing-2);
+  --studio-card-muted-bg:        color-mix(in srgb, var(--studio-fg-dim) 7%, var(--studio-bg-elevated));
+  --studio-card-muted-border:    color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
+  --studio-card-state-border:    color-mix(in srgb, var(--task-card-state-color, var(--studio-card-border)) 38%, var(--studio-card-border));
+  --studio-card-running-border:  color-mix(in srgb, var(--studio-accent-3) 58%, var(--studio-card-border));
+  --studio-card-attention-bg:    color-mix(in srgb, var(--studio-accent-6) 9%, var(--studio-bg-elevated));
+  --studio-card-attention-border: color-mix(in srgb, var(--studio-accent-6) 62%, var(--studio-card-border));
+
   // Commit attribution rows on task cards. These rows sit on a low-alpha
   // success tint, so the SHA foreground must use the strong success pigment
   // instead of the base accent. Light theme flips the same tokens below.
@@ -494,6 +520,21 @@
   --studio-bg-running: color-mix(in srgb, var(--studio-accent-3) 10%, var(--studio-bg-elevated));
   --shadow-running:    0 0 0 1px color-mix(in srgb, var(--studio-accent-3) 35%, transparent),
                        0 4px 12px color-mix(in srgb, var(--studio-accent-3) 12%, transparent);
+
+  // Standard task-card surface on the white shell. The same contract as dark:
+  // every state cue is a uniform border/ring around the whole card.
+  --studio-card-bg:              var(--studio-bg-surface);
+  --studio-card-border:          var(--studio-border);
+  --studio-card-border-hover:    var(--studio-border-strong);
+  --studio-card-shadow:          0 1px 2px var(--alpha-black-06);
+  --studio-card-shadow-hover:    0 2px 6px var(--alpha-black-10),
+                                 0 10px 22px var(--alpha-black-10);
+  --studio-card-muted-bg:        color-mix(in srgb, var(--studio-fg-muted) 6%, var(--studio-bg-surface));
+  --studio-card-muted-border:    color-mix(in srgb, var(--studio-fg-muted) 22%, transparent);
+  --studio-card-state-border:    color-mix(in srgb, var(--task-card-state-color, var(--studio-card-border)) 42%, var(--studio-card-border));
+  --studio-card-running-border:  color-mix(in srgb, var(--studio-accent-3) 62%, var(--studio-card-border));
+  --studio-card-attention-bg:    color-mix(in srgb, var(--studio-accent-6) 7%, var(--studio-bg-surface));
+  --studio-card-attention-border: color-mix(in srgb, var(--studio-accent-6) 58%, var(--studio-card-border));
 
   // Commit attribution rows need darker green text on the white shell. The
   // tint stays subtle while the foreground uses the WCAG-AA strong pigment.
