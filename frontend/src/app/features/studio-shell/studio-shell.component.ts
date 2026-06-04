@@ -18,7 +18,8 @@ import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
-import { PaneHeaderComponent } from '../../components/pane-header/pane-header.component';
+import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
+import { CountBadgeComponent } from '../../components/count-badge/count-badge.component';
 import { SegmentedControlComponent, SegmentedOption } from '../../components/segmented-control/segmented-control.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
@@ -79,7 +80,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, PaneHeaderComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',

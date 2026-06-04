@@ -1,0 +1,73 @@
+/*
+ * Section header — the one canonical sidebar group head. The look is the
+ * union of the two surfaces it replaced (`app-pane-header` section mode +
+ * `studio-explorer__group-head`): a compact uppercase label with a count
+ * pill and an optional leading chevron. Reads only studio tokens so it
+ * flips with the theme.
+ */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg);
+  width: 100%;
+  text-align: left;
+  user-select: none;
+
+  // Collapsible mode renders as a <button>; give it the flat-toggle
+  // affordance (hover wash + pointer) the static heading must not have.
+  &--btn {
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover {
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg-strong);
+    }
+  }
+
+  // Divider variant — top rule + spacing that separates a group from the
+  // one above it (formerly studio-explorer__group-head--mt).
+  &--divider {
+    margin-top: 12px;
+    border-top: 1px solid var(--studio-border);
+    padding-top: 10px;
+  }
+
+  &__chev {
+    display: inline-grid;
+    place-items: center;
+    width: 12px;
+    color: var(--studio-fg-muted);
+    flex-shrink: 0;
+  }
+
+  &__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    color: var(--studio-fg-muted);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

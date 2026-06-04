@@ -1,31 +1,3 @@
-@if (collapsible()) {
-  <!-- Collapsible section mode — the shared sidebar/explorer panel header
-       (absorbed from the former app-section-header). The whole row is the
-       collapse toggle; `aria-expanded` + the `studio-explorer-*` testids
-       are the contract the F27/F46 explorer specs assert on. -->
-  <button type="button"
-          class="section-header section-header--btn section-header--collapsible"
-          [class.section-header--collapsed]="collapsed()"
-          [attr.data-testid]="testid()"
-          [attr.aria-expanded]="!collapsed()"
-          (click)="onCollapseToggle($event)">
-    <span class="section-header__chev" aria-hidden="true">
-      <app-studio-icon
-        [name]="collapsed() ? 'chevronRight' : 'chevronDown'"
-        [size]="10"></app-studio-icon>
-    </span>
-    @if (icon(); as i) {
-      <span class="section-header__icon" aria-hidden="true">
-        <app-studio-icon [name]="i" [size]="12"></app-studio-icon>
-      </span>
-    }
-    <span class="section-header__title">{{ title() }}</span>
-    @if (count() !== null) {
-      <span class="section-header__count">{{ count() }}</span>
-    }
-    <ng-content select="[actions]"></ng-content>
-  </button>
-} @else {
 <header class="pane-header"
         [class]="modifier() ? 'pane-header pane-header--' + modifier() : 'pane-header'"
         [attr.data-testid]="testid()">
@@ -71,4 +43,3 @@
     </button>
   }
 </header>
-}

@@ -29,6 +29,6 @@
     <span class="tree-row__meta">{{ m }}</span>
   }
   @if (count() !== null) {
-    <span class="tree-row__count">{{ count() }}</span>
+    <app-count-badge [value]="count()" [tone]="active() ? 'active' : 'default'" />
   }
 </button>

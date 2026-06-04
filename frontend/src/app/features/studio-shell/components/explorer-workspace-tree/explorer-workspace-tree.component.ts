@@ -16,7 +16,7 @@ import type { RegistryWorkspaceListItem } from '../../../../models/task.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../../../components/empty-state/empty-state.component';
-import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
+import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
 import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import { TooltipDirective } from '../../../../components/tooltip';
 import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../../components/menu';
@@ -79,7 +79,7 @@ function normalizeStorage(path: string): string {
 @Component({
   selector: 'app-explorer-workspace-tree',
   standalone: true,
-  imports: [PaneHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent],
+  imports: [SectionHeaderComponent, TreeRowComponent, StudioIconComponent, EmptyStateComponent, TooltipDirective, MenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './explorer-workspace-tree.component.html',

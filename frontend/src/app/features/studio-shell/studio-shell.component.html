@@ -242,14 +242,15 @@
                 }
                 @if (tabs().length > 0) {
                   <!-- F27: Open tabs header is collapsible too — shares the
-                       app-pane-header section mode with the Workspaces header. -->
-                  <app-pane-header
+                       app-section-header collapsible mode with the
+                       Workspaces header. -->
+                  <app-section-header
                     [collapsible]="true"
                     [collapsed]="explorerSections.isCollapsed('open-tabs')"
                     title="Open tabs"
                     [count]="tabs().length"
+                    [divider]="true"
                     testid="studio-explorer-open-tabs-head"
-                    class="studio-explorer__group-head--mt"
                     (collapsedChange)="explorerSections.setCollapsed('open-tabs', $event)" />
 
                   @if (!explorerSections.isCollapsed('open-tabs')) {
@@ -287,7 +288,7 @@
             }
             @case ('cli') {
               <section class="studio-cli">
-                <div class="studio-explorer__group-head">Agents / CLI</div>
+                <app-section-header title="Agents / CLI" />
                 @if (cliRows().length === 0) {
                   <app-empty-state>No tasks loaded yet.</app-empty-state>
                 } @else {
@@ -297,11 +298,11 @@
                         {{ row.cli.charAt(0).toUpperCase() }}
                       </span>
                       <span class="studio-cli__name">{{ row.cli }}</span>
-                      <span class="studio-cli__count">{{ row.count }}</span>
+                      <app-count-badge [value]="row.count" />
                     </div>
                   }
                 }
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Tools</div>
+                <app-section-header title="Tools" [divider]="true" />
                 <button type="button" class="studio-button studio-button--ghost"
                         data-testid="studio-cli-open-usage"
                         (click)="openUsageSheet.emit()">
@@ -315,7 +316,7 @@
             }
             @case ('activity') {
               <section class="studio-activity">
-                <div class="studio-explorer__group-head">Orchestrator</div>
+                <app-section-header title="Orchestrator" />
                 <button type="button" class="studio-button studio-button--primary"
                         data-testid="studio-activity-open-orchestrator"
                         (click)="openOrchFeed.emit()">
@@ -329,7 +330,7 @@
                         (click)="openOrchSettings.emit()">
                   Open orchestrator settings
                 </button>
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Snapshots</div>
+                <app-section-header title="Snapshots" [divider]="true" />
                 <button type="button" class="studio-button studio-button--ghost"
                         (click)="openWorkspaceScreenshots.emit()">
                   Workspace screenshots
@@ -338,7 +339,7 @@
             }
             @case ('runbook') {
               <section class="studio-runbook">
-                <div class="studio-explorer__group-head">Runbook</div>
+                <app-section-header title="Runbook" />
                 <p class="studio-empty studio-empty--note">
                   The Runbook surface aggregates per-project ops content (auto-pickup config, project chat,
                   deployments). Click below for the live equivalent in the workspace overlay.
@@ -359,7 +360,7 @@
             }
             @case ('settings') {
               <section class="studio-settings">
-                <div class="studio-explorer__group-head">Appearance</div>
+                <app-section-header title="Appearance" />
                 <div class="studio-setting">
                   <span class="studio-setting__label" id="studio-setting-theme">Theme</span>
                   <app-segmented-control
@@ -368,7 +369,7 @@
                     [value]="theme()"
                     (valueChange)="setTheme($event)" />
                 </div>
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Layout</div>
+                <app-section-header title="Layout" [divider]="true" />
                 <div class="studio-setting">
                   <span class="studio-setting__label" id="studio-setting-activitybar">Activity bar</span>
                   <app-segmented-control
@@ -386,7 +387,7 @@
                     {{ chatRailOpen() ? 'On' : 'Off' }}
                   </button>
                 </div>
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Cards</div>
+                <app-section-header title="Cards" [divider]="true" />
                 <div class="studio-setting">
                   <span class="studio-setting__label">Density</span>
                   <button type="button"
@@ -397,7 +398,7 @@
                   </button>
                 </div>
 
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Updates</div>
+                <app-section-header title="Updates" [divider]="true" />
                 @if (updateClient.status(); as st) {
                   <div class="studio-update">
                     <div class="studio-update__row">
@@ -441,8 +442,8 @@
                   Open update history
                 </button>
 
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt"
-                     data-testid="settings-workspaces-head">Workspaces</div>
+                <app-section-header title="Workspaces" [divider]="true"
+                                    testid="settings-workspaces-head" />
                 <div class="studio-settings-workspaces"
                      data-testid="settings-workspaces"
                      [attr.aria-busy]="registryWorkspacesLoading() ? 'true' : null">

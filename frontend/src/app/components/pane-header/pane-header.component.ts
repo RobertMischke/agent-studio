@@ -2,21 +2,14 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } 
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
- * The single canonical panel-header control. Two render modes from one
- * component so the studio sidebar and the detail-view panes share one
- * chrome (this absorbed the former `app-section-header`):
+ * The detail-view pane header: icon + title + actions slot + maximize /
+ * hide buttons used by the prompt / protocol / git panes. The prompt
+ * pane's three-tab strip renders inside the projected `tabs` slot instead
+ * of the title; pass an empty title in that case and project the tabs.
  *
- *   - Pane mode (default): icon + title + actions slot + maximize / hide
- *     buttons used by the prompt / protocol / git panes. The prompt
- *     pane's three-tab strip renders inside the projected `tabs` slot
- *     instead of the title; pass an empty title in that case and project
- *     the tabs.
- *   - Collapsible section mode (`[collapsible]="true"`): a compact
- *     uppercase header used for the sidebar/explorer panel headers
- *     (Workspaces, Open tabs). The whole row is a toggle button — a
- *     leading chevron flips between `chevronDown` (expanded) and
- *     `chevronRight` (collapsed) and `collapsedChange` fires the flipped
- *     state so the parent can persist it (see ExplorerSectionsService).
+ * The sidebar/explorer collapsible group headers (Workspaces, Open tabs,
+ * Agents / CLI, …) live in the separate `app-section-header`; this
+ * component is pane chrome only.
  *
  * See docs/frontend-scss-quality.md "Wave C".
  */
@@ -51,21 +44,4 @@ export class PaneHeaderComponent {
 
   readonly maximize = output<void>();
   readonly hide = output<void>();
-
-  /**
-   * Collapsible section mode. When true the header renders the compact
-   * uppercase toggle (chevron + title + count + actions slot) used by the
-   * sidebar/explorer panel headers instead of the pane chrome above. The
-   * pane-mode maximize / hide buttons are not rendered in this mode.
-   */
-  readonly collapsible = input(false);
-  readonly collapsed = input(false);
-  /** Optional count badge shown after the title in section mode. */
-  readonly count = input<string | number | null>(null);
-  readonly collapsedChange = output<boolean>();
-
-  onCollapseToggle(ev: Event): void {
-    ev.stopPropagation();
-    this.collapsedChange.emit(!this.collapsed());
-  }
 }

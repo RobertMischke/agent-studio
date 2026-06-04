@@ -1,8 +1,8 @@
 <section class="studio-explorer-tree">
-  <!-- Panel header (F27 testid preserved): the shared collapsible panel
-       header (app-pane-header section mode). Collapses the whole tree and
-       hosts the "show all projects" affordance. -->
-  <app-pane-header
+  <!-- Panel header (F27 testid preserved): the shared collapsible section
+       header. Collapses the whole tree and hosts the "show all projects"
+       affordance. -->
+  <app-section-header
     [collapsible]="true"
     [collapsed]="isCollapsed('workspace')"
     title="Workspaces"
@@ -19,7 +19,7 @@
             (click)="showAll.emit(); $event.stopPropagation()">
       <app-studio-icon name="grid" [size]="11"></app-studio-icon>
     </button>
-  </app-pane-header>
+  </app-section-header>
 
   @if (!isCollapsed('workspace')) {
     @for (g of groups(); track g.id) {

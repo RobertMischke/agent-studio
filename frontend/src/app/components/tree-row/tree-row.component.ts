@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
+import { CountBadgeComponent } from '../count-badge/count-badge.component';
 
 /**
  * Reusable tree row used in the studio shell sidebar (Explorer
@@ -22,7 +23,7 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
   selector: 'app-tree-row',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StudioIconComponent],
+  imports: [StudioIconComponent, CountBadgeComponent],
   encapsulation: ViewEncapsulation.None,
   templateUrl: './tree-row.component.html',
   styleUrl: './tree-row.component.scss',

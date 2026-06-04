@@ -1,0 +1,43 @@
+@if (collapsible()) {
+  <!-- Collapsible mode — the whole row is the collapse toggle.
+       `aria-expanded` + the caller's testid are the contract the
+       F27/F46 explorer-collapse specs assert on. -->
+  <button type="button"
+          class="section-header section-header--btn section-header--collapsible"
+          [class.section-header--collapsed]="collapsed()"
+          [class.section-header--divider]="divider()"
+          [attr.data-testid]="testid()"
+          [attr.aria-expanded]="!collapsed()"
+          (click)="onCollapseToggle($event)">
+    <span class="section-header__chev" aria-hidden="true">
+      <app-studio-icon
+        [name]="collapsed() ? 'chevronRight' : 'chevronDown'"
+        [size]="10"></app-studio-icon>
+    </span>
+    @if (icon(); as i) {
+      <span class="section-header__icon" aria-hidden="true">
+        <app-studio-icon [name]="i" [size]="12"></app-studio-icon>
+      </span>
+    }
+    <span class="section-header__title">{{ title() }}</span>
+    @if (count() !== null) {
+      <app-count-badge [value]="count()" />
+    }
+    <ng-content select="[actions]"></ng-content>
+  </button>
+} @else {
+  <div class="section-header section-header--static"
+       [class.section-header--divider]="divider()"
+       [attr.data-testid]="testid()">
+    @if (icon(); as i) {
+      <span class="section-header__icon" aria-hidden="true">
+        <app-studio-icon [name]="i" [size]="12"></app-studio-icon>
+      </span>
+    }
+    <span class="section-header__title">{{ title() }}</span>
+    @if (count() !== null) {
+      <app-count-badge [value]="count()" />
+    }
+    <ng-content select="[actions]"></ng-content>
+  </div>
+}

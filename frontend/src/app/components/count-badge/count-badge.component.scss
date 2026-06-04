@@ -1,0 +1,27 @@
+/*
+ * Count badge — the one canonical count pill for the studio sidebar.
+ * Reads only studio tokens so it flips with the theme. ASS-707: the
+ * horizontal padding + min-width keep single- and multi-digit counts
+ * optically centred (no lopsided "9" vs "127").
+ */
+.count-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 14px;
+  padding: 0 6px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-muted);
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: 0;
+  flex-shrink: 0;
+
+  &--active {
+    background: var(--studio-accent);
+    color: var(--studio-on-accent);
+  }
+}

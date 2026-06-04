@@ -628,61 +628,9 @@
   }
 }
 
-.studio-explorer__group-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px 4px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--studio-fg);
-
-  &--mt {
-    margin-top: 12px;
-    border-top: 1px solid var(--studio-border);
-    padding-top: 10px;
-  }
-
-  // When the workspace group head is also the "All projects" trigger,
-  // it renders as a real button — flat outline, hover/active state.
-  &--btn {
-    width: 100%;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.12s ease, color 0.12s ease;
-
-    &:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
-  }
-
-  &--active {
-    background: var(--studio-bg-selected);
-    color: var(--studio-fg-strong);
-  }
-}
-
-.studio-explorer__chev {
-  display: inline-block;
-  width: 12px;
-  text-align: center;
-  font-size: 9px;
-  color: var(--studio-fg-muted);
-}
-
-.studio-explorer__count {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--studio-fg-muted);
-  background: var(--studio-bg-elevated);
-  padding: 0 6px;
-  border-radius: 10px;
-  text-transform: none;
-  letter-spacing: 0;
-}
+// Sidebar section heads (group heads + count pills) moved to the shared
+// app-section-header / app-count-badge components. The legacy
+// .studio-explorer__group-head / __chev / __count rules lived here.
 
 .studio-tree-project {
   display: flex;
@@ -952,12 +900,6 @@
 .studio-cli__name {
   flex: 1;
   text-transform: capitalize;
-}
-
-.studio-cli__count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--studio-fg-dim);
 }
 
 .studio-setting {

@@ -95,23 +95,9 @@
     font-family: var(--font-mono);
   }
 
-  &__count {
-    min-width: 18px;
-    height: 14px;
-    padding: 0 5px;
-    background: var(--studio-bg-elevated);
-    color: var(--studio-fg-dim);
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    display: grid;
-    place-items: center;
-  }
-
-  &--active &__count {
-    background: var(--studio-accent);
-    color: var(--studio-on-accent);
-  }
+  // Count badge is the shared <app-count-badge>; its active inversion is
+  // driven by the row's `active()` → `[tone]` binding, not a descendant
+  // selector here.
 }
 
 /*
