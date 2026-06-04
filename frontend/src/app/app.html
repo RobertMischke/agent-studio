@@ -18,6 +18,7 @@
       <app-studio-shell data-testid="studio-shell-root"
                         [knownProjectNames]="projectNames()"
                         [projectWatchPaths]="watchPaths()"
+                        [filterBadgeCount]="filterBadgeCount()"
                         (projectDeleted)="loadWatchPaths()"
                         (chatToggle)="toggleOrchestratorChat()"
                         (addTaskRequested)="openCreate()"

@@ -78,22 +78,20 @@ export class BoardFiltersService {
     this.activeTypeFilter().size > 0
     || this.activeTagFilter().size > 0
     || !!this.activeClientFilter()
-    || !!this.activeDependsOnFilter()
-    || this.activeProjects().size > 0);
+    || !!this.activeDependsOnFilter());
 
   readonly hasActiveFiltersOrSearch = computed(() =>
     this.searchQuery().trim().length > 0
     || this.activeClientFilter() !== null
     || this.activeDependsOnFilter() !== null
-    || this.activeProjects().size > 0
     || this.activeType() !== null
     || this.activeTagFilter().size > 0);
 
   readonly activeFilterCount = computed(() => {
     let n = 0;
+    if (this.searchQuery().trim().length > 0) n += 1;
     if (this.activeClientFilter()) n += 1;
     if (this.activeDependsOnFilter()) n += 1;
-    n += this.activeProjects().size;
     if (this.activeType()) n += 1;
     n += this.activeTagFilter().size;
     return n;

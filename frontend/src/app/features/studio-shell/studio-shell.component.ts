@@ -103,6 +103,13 @@ export class StudioShellComponent {
    *  (a row's storage == registry `storageLocation`, stable across rename). */
   readonly projectWatchPaths = input<readonly WatchPathEntry[]>([]);
 
+  /**
+   * Host-computed badge for the Filters activity-bar item. The host owns
+   * visibility state such as rail-forced compact cards, while this shell
+   * owns the rail button that renders the count.
+   */
+  readonly filterBadgeCount = input<number | null>(null);
+
   /** Emitted after a delete so the host re-pulls WatchPaths + refreshes. */
   readonly projectDeleted = output<void>();
 
@@ -718,7 +725,8 @@ export class StudioShellComponent {
   ];
 
   readonly activityBarBadgeCounts = computed<Record<string, number>>(() => ({
-    filters: this.boardFilters.activeFilterCount(),
+    filters: this.filterBadgeCount()
+      ?? this.boardFilters.activeFilterCount() + (this.uiPrefs.compactCards() ? 1 : 0),
   }));
 
   openBoard(projectName: string): void {

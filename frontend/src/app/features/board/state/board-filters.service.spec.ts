@@ -132,4 +132,24 @@ describe('BoardFiltersService project selection', () => {
       }
     }
   });
+
+  it('does not count project scope as an active filter', () => {
+    svc.selectProject('Agent Task Processor', false);
+
+    expect(svc.activeFilterCount()).toBe(0);
+    expect(svc.hasActiveFilters()).toBe(false);
+    expect(svc.hasActiveFiltersOrSearch()).toBe(false);
+  });
+
+  it('counts only real active filters and search text', () => {
+    svc.selectProject('Agent Task Processor', false);
+    svc.setSearchQuery('ready');
+    svc.setClientFilter('owner-1');
+    svc.onSetType('bug');
+    svc.toggleTagFilter('important');
+
+    expect(svc.activeFilterCount()).toBe(4);
+    expect(svc.hasActiveFilters()).toBe(true);
+    expect(svc.hasActiveFiltersOrSearch()).toBe(true);
+  });
 });
