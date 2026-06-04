@@ -95,17 +95,6 @@ public record TaskInfo
     /// without <c>commits</c> are surfaced as <c>[commit]</c> by the scanner.
     /// </summary>
     public List<TaskCommitInfo> Commits { get; init; } = [];
-    /// <summary>
-    /// Commits the deterministic attribution rule subtracted from this
-    /// task's commit set (e.g. crash-recovery commits naming another
-    /// task, submodule bumps, merge commits, operator-excluded entries).
-    /// Persisted as <c>excludedCommits</c> in <c>job.json</c>. Empty on
-    /// legacy job folders that pre-date the attribution step. Surfaced
-    /// in the protocol-pane "Git view" under a "(N excluded)" expander
-    /// so the operator can audit what was withheld and why.
-    /// </summary>
-    public List<TaskExcludedCommitInfo> ExcludedCommits { get; init; } = [];
-    /// <summary>
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to
     /// <see cref="DefaultClientIdentity.Id"/> for legacy jobs whose
@@ -1255,17 +1244,6 @@ public record GitCommitRequest
     public string Message { get; init; } = "";
 }
 
-/// <summary>
-/// Body for the operator "include commit" override
-/// (<c>POST /api/tasks/{id}/commits/{sha}/include</c>). Optional metadata for
-/// the add-from-recent case; the endpoint fills the rest from live git.
-/// </summary>
-public record IncludeCommitRequest
-{
-    public string? Message { get; init; }
-    public DateTime? At { get; init; }
-}
-
 public record ProjectSettings
 {
     /// <summary>When true, transition <c>3-progress → 4-auto-review</c> auto-commits and stamps the SHA on the job.</summary>
@@ -1946,11 +1924,9 @@ public record TaskCommitInfo
     /// </summary>
     public string? Attribution { get; init; }
     /// <summary>
-    /// Confidence of an automatic attribution (0..1). Null for
-    /// <see cref="CommitAttributionKinds.ManualAdd"/> /
-    /// <see cref="CommitAttributionKinds.ManualIncludeAfterExclude"/> and
-    /// for legacy entries. The frontend renders a small badge when this is
-    /// present so the operator can see where the system was uncertain.
+    /// Confidence of an automatic attribution (0..1). Null for legacy
+    /// entries. The frontend renders a small badge when this is present so
+    /// the operator can see where the system was uncertain.
     /// </summary>
     public double? Confidence { get; init; }
 }
@@ -1988,21 +1964,13 @@ public static class CommitAttributionKinds
 {
     /// <summary>The deterministic rule engine attributed this commit.</summary>
     public const string Automatic = "automatic";
-    /// <summary>Operator added a commit the rule engine missed.</summary>
-    public const string ManualAdd = "manual-add";
-    /// <summary>
-    /// Operator restored a commit that had been excluded (e.g. because the
-    /// rule engine flagged it as a crash-recovery for another task and the
-    /// operator confirmed it belongs here).
-    /// </summary>
-    public const string ManualIncludeAfterExclude = "manual-include-after-exclude";
     /// <summary>
     /// Legacy entry without explicit attribution (job.json pre-dates the
     /// attribution step). Treated as "trust the existing stamp" by readers.
     /// </summary>
     public const string Legacy = "legacy";
 
-    public static readonly string[] All = [Automatic, ManualAdd, ManualIncludeAfterExclude, Legacy];
+    public static readonly string[] All = [Automatic, Legacy];
 
     public static string Normalize(string? value)
     {
