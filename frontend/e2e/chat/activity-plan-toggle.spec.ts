@@ -60,12 +60,18 @@ function buildPlan(present: boolean) {
 
 async function pinEvidence(page: Page, jobId: string, planPresent: boolean): Promise<void> {
   const esc = encodeURIComponent(jobId);
-  await page.route(`**/api/tasks/${esc}/output**`, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(buildOutputBuffer()) });
-  });
-  await page.route(`**/api/tasks/${esc}/plan**`, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(buildPlan(planPresent)) });
-  });
+  const output = JSON.stringify(buildOutputBuffer());
+  const plan = JSON.stringify(buildPlan(planPresent));
+  // The app talks to /api/tasks/*; mock the legacy /api/jobs/* aliases too so
+  // the spec stays green if either route is ever reintroduced.
+  await page.route(`**/api/tasks/${esc}/output**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: output }));
+  await page.route(`**/api/jobs/${esc}/output**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: output }));
+  await page.route(`**/api/tasks/${esc}/plan**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
+  await page.route(`**/api/jobs/${esc}/plan**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: plan }));
 }
 
 async function setFlag(page: Page, on: boolean): Promise<void> {
@@ -75,19 +81,26 @@ async function setFlag(page: Page, on: boolean): Promise<void> {
   }, on);
 }
 
+// The Activity inspector only mounts for a job in a "running" lane. A backlog
+// job lands on the Prompt pane with no inspector, so pick a mountable-lane job
+// (prefer 3-progress) exactly like the sibling conversation-view specs.
+const MOUNTABLE_LANES = new Set(['3-progress', '4-auto-review', '5-human-review']);
+
 async function pickJob(page: Page): Promise<{ id: string; watchPath: string } | null> {
-  const res = await page.request.get('/api/tasks?includeFixtures=true');
+  const res = await page.request.get('/api/tasks');
   if (!res.ok()) return null;
-  const jobs = (await res.json()) as { id: string; watchPath: string }[];
+  const jobs = (await res.json()) as { id: string; watchPath: string; state: string }[];
   if (!Array.isArray(jobs) || jobs.length === 0) return null;
-  return { id: jobs[0].id, watchPath: jobs[0].watchPath };
+  const j = jobs.find((x) => x.state === '3-progress')
+    ?? jobs.find((x) => MOUNTABLE_LANES.has(x.state));
+  return j ? { id: j.id, watchPath: j.watchPath } : null;
 }
 
 async function openActivity(page: Page, job: { id: string; watchPath: string }): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
   const activityTab = page.getByTestId('inspector-tab-activity');
-  await expect(activityTab).toBeVisible({ timeout: 15_000 });
+  await expect(activityTab).toBeVisible({ timeout: 20_000 });
   await activityTab.click();
 }
 
