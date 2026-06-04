@@ -14,9 +14,9 @@
   </h3>
 
   @if (loading()) {
-    <p class="proj-detail__empty">Loading…</p>
+    <p class="studio-empty">Loading…</p>
   } @else if (!overview()) {
-    <p class="proj-detail__empty">No data.</p>
+    <p class="studio-empty">No data.</p>
   } @else {
     <div class="psec__meta" data-testid="project-security-meta">
       <div>
@@ -50,7 +50,7 @@
     </div>
 
     @if (overview()!.files.length === 0) {
-      <p class="proj-detail__empty">
+      <p class="studio-empty">
         No documents yet. Files live under
         <code>{{ overview()!.baseDir }}</code>.
         Use “New document” to start the archive.

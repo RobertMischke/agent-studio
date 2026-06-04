@@ -6,6 +6,7 @@
 @use 'styles/tokens-primitives';
 @use 'styles/tokens-semantic';
 @use 'styles/markdown-body';
+@use 'styles/empty-state';
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }

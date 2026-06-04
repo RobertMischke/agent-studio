@@ -146,17 +146,6 @@
   color: #a6adc8;
   font-size: 0.85rem;
 }
-.proj-shell__empty {
-  padding: 32px 20px;
-  text-align: center;
-  color: #6c7086;
-  font-size: 0.88rem;
-  border: 1px dashed #313244;
-  border-radius: 6px;
-  background: rgba(0,0,0,0.18);
-}
-.proj-shell__empty p { margin: 0; }
-
 @media (max-width: 720px) {
   .proj-shell__body { grid-template-columns: 1fr; }
   .proj-shell__rail { position: static; }

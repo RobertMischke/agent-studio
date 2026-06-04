@@ -31,11 +31,6 @@
       border: 1px solid rgba(248,113,113,0.40); background: rgba(248,113,113,0.10);
       color: var(--severity-high); font-size: 0.82rem;
     }
-    .prt__empty {
-      padding: 28px 20px; text-align: center; color: var(--studio-fg-muted);
-      border: 1px dashed var(--studio-bg-elevated); border-radius: 6px; background: rgba(0,0,0,0.18);
-    }
-    .prt__empty p { margin: 0 0 8px; }
     .prt__empty-detail { color: var(--studio-fg-muted); font-size: 0.80rem; }
     .prt__empty-detail code {
       background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 3px; color: var(--severity-pending);

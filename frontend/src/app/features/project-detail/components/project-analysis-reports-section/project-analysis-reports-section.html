@@ -63,9 +63,9 @@
 
   <h4 class="par__sub">History</h4>
   @if (loading() && reports().length === 0) {
-    <p class="proj-detail__empty">Loading…</p>
+    <p class="studio-empty">Loading…</p>
   } @else if (reports().length === 0) {
-    <p class="proj-detail__empty" data-testid="project-analysis-reports-empty">
+    <p class="studio-empty" data-testid="project-analysis-reports-empty">
       No reports yet. Click an inspection button above to produce the first one.
     </p>
   } @else {

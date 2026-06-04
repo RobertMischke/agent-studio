@@ -13,16 +13,16 @@
   </h3>
 
   @if (loading() && reports().length === 0) {
-    <p class="proj-detail__empty">Loading…</p>
+    <p class="studio-empty">Loading…</p>
   } @else if (!enabled()) {
-    <p class="proj-detail__empty" data-testid="project-meta-cycle-disabled">
+    <p class="studio-empty" data-testid="project-meta-cycle-disabled">
       The meta-cycle is off. Enable it via <code>Supervisor:MetaCycleEnabled</code>
       in <code>backend/appsettings.Local.json</code> and restart the backend, then
       opt this project in via per-project settings. Off by default; see
       <code>docs/mockups/orchestrator-meta-cycle/</code> for the full design.
     </p>
   } @else if (reports().length === 0) {
-    <p class="proj-detail__empty">
+    <p class="studio-empty">
       No cycles yet. The next pause + inspection runs after
       <code>{{ config()?.cycleLengthN ?? 2 }}</code> jobs reach
       <code>4-auto-review</code> or <code>5-human-review</code>.

@@ -538,8 +538,6 @@
 .proj-detail__entry-topic { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.05); font-family: var(--font-mono, monospace); font-size: 0.72rem; }
 .proj-detail__entry-ts { margin-left: auto; font-variant-numeric: tabular-nums; }
 
-.proj-detail__empty { color: var(--studio-fg-muted); font-style: italic; margin: 4px 0 0; font-size: 0.82rem; }
-
 .proj-detail__session dd code { font-size: 0.78rem; color: var(--studio-accent-4-strong); }
 .proj-detail__session-error { color: var(--severity-high); }
 .proj-detail__session-snap { margin: 6px 0; }

@@ -51,15 +51,6 @@
       font-size: 0.82rem;
     }
 
-    .obs__empty {
-      padding: 28px 20px;
-      text-align: center;
-      color: var(--studio-fg-muted);
-      border: 1px dashed var(--studio-bg-elevated);
-      border-radius: 6px;
-      background: rgba(0,0,0,0.18);
-    }
-    .obs__empty p { margin: 0 0 8px; }
     .obs__empty-detail { color: var(--studio-fg-muted); font-size: 0.80rem; }
     .obs__fixture-btn {
       margin-top: 10px;

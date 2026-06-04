@@ -73,7 +73,7 @@
           </ul>
         }
       } @else {
-        <p class="proj-detail__empty">Queue health is loading.</p>
+        <p class="studio-empty">Queue health is loading.</p>
       }
     </section>
   }
@@ -104,7 +104,7 @@
           <div><dt>Started</dt><dd>{{ formatTime(ex.startedAt) }}</dd></div>
         </dl>
       } @else {
-        <p class="proj-detail__empty">No active execution.</p>
+        <p class="studio-empty">No active execution.</p>
       }
     </section>
 
@@ -129,7 +129,7 @@
           </div>
         }
         @if (health.missingJobJson.length === 0 && health.duplicates.length === 0 && health.stateMismatches.length === 0) {
-          <p class="proj-detail__empty">The lane folders visible to the backend are structurally consistent.</p>
+          <p class="studio-empty">The lane folders visible to the backend are structurally consistent.</p>
         }
         @if (health.missingJobJson.length > 0) {
           <h4>Folders without job.json</h4>
@@ -467,7 +467,7 @@
           <pre class="proj-detail__session-pre">{{ os.bootReplyPreview }}</pre>
         </details>
       } @else {
-        <p class="proj-detail__empty">No orchestrator session is booted for this project.</p>
+        <p class="studio-empty">No orchestrator session is booted for this project.</p>
       }
     </section>
   }
@@ -476,7 +476,7 @@
     <section class="proj-detail__group">
       <h3>Recent orchestrator activity</h3>
       @if (recentEntries().length === 0) {
-        <p class="proj-detail__empty">No activity yet for this project.</p>
+        <p class="studio-empty">No activity yet for this project.</p>
       } @else {
         <ul class="proj-detail__entries">
           @for (entry of recentEntries(); track entry.ts) {

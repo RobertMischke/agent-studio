@@ -47,7 +47,7 @@
       <section class="psr-modal__section">
         <h4>README / AGENTS lookup</h4>
         @if (loading()) {
-          <p class="psr-modal__empty" data-testid="project-skill-readiness-loading">Checking…</p>
+          <p class="studio-empty" data-testid="project-skill-readiness-loading">Checking…</p>
         } @else if (error(); as e) {
           <p class="psr-modal__error" data-testid="project-skill-readiness-error">{{ e }}</p>
         } @else if (report(); as r) {
@@ -116,7 +116,7 @@
         <h4>Standard skills <span class="psr-modal__sublabel">suggested</span></h4>
         @if (catalog(); as c) {
           @if (c.standard.length === 0) {
-            <p class="psr-modal__empty">
+            <p class="studio-empty">
               No standard skills found. The task processor exposes skills under
               <code>.agents/skills/</code>; this list is empty when the runtime
               cannot resolve that tree.
@@ -142,7 +142,7 @@
         <h4>Project skills <span class="psr-modal__sublabel">selected</span></h4>
         @if (catalog(); as c) {
           @if (c.projectSpecific.length === 0) {
-            <p class="psr-modal__empty" data-testid="project-skill-readiness-project-empty">
+            <p class="studio-empty" data-testid="project-skill-readiness-project-empty">
               No project-specific skills configured for this project yet.
             </p>
           } @else {

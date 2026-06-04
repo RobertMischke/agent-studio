@@ -17,7 +17,7 @@
   </p>
 
   @if (loading() && !model() && !error()) {
-    <p class="proj-detail__empty" data-testid="project-drift-loading">Loading architecture map…</p>
+    <p class="studio-empty" data-testid="project-drift-loading">Loading architecture map…</p>
   }
 
   @if (error(); as e) {
@@ -31,7 +31,7 @@
   }
 
   @if (!error() && !loading() && !model()) {
-    <p class="proj-detail__empty" data-testid="project-drift-empty">
+    <p class="studio-empty" data-testid="project-drift-empty">
       No architecture model carried by any drift report yet.
       Run an architecture-aware drift action (for example
       <code>ADR / Code Drift</code>) to produce one. The marble surface
@@ -127,7 +127,7 @@
             Evidence ({{ row.element.evidenceRefs.length }})
           </summary>
           @if (row.element.evidenceRefs.length === 0) {
-            <p class="proj-detail__empty">No evidence references on this element.</p>
+            <p class="studio-empty">No evidence references on this element.</p>
           } @else {
             <ul data-testid="project-drift-evidence">
               @for (ref of row.element.evidenceRefs; track ref) {

@@ -81,13 +81,13 @@
         @if (overview()?.briefExists) {
           <p>{{ overview()?.briefSummary || 'Brief on file. Open the design folder to read.' }}</p>
         } @else {
-          <p class="ux-panel__empty">No brief.md yet.</p>
+          <p class="studio-empty">No brief.md yet.</p>
         }
       </article>
       <article class="ux-panel__ref-card ux-panel__ref-card--accepted" data-testid="uxui-ref-accepted">
         <h4>Accepted screenshots</h4>
         @if (acceptedRefs().length === 0) {
-          <p class="ux-panel__empty">No accepted variants yet.</p>
+          <p class="studio-empty">No accepted variants yet.</p>
         } @else {
           <ul class="ux-panel__ref-list">
             @for (r of acceptedRefs(); track r.fileName) {
@@ -104,7 +104,7 @@
       <article class="ux-panel__ref-card ux-panel__ref-card--external" data-testid="uxui-ref-external">
         <h4>External inspiration</h4>
         @if (externalRefs().length === 0) {
-          <p class="ux-panel__empty">No external references.</p>
+          <p class="studio-empty">No external references.</p>
         } @else {
           <ul class="ux-panel__ref-list">
             @for (r of externalRefs(); track r.fileName) {
@@ -121,7 +121,7 @@
       <article class="ux-panel__ref-card ux-panel__ref-card--rejected" data-testid="uxui-ref-rejected">
         <h4>Rejected alternatives</h4>
         @if (rejectedRefs().length === 0) {
-          <p class="ux-panel__empty">No rejected alternatives.</p>
+          <p class="studio-empty">No rejected alternatives.</p>
         } @else {
           <ul class="ux-panel__ref-list">
             @for (r of rejectedRefs(); track r.fileName) {
@@ -198,7 +198,7 @@
       </span>
     </header>
     @if (councilNotes().length === 0) {
-      <p class="ux-panel__empty" data-testid="uxui-council-empty">
+      <p class="studio-empty" data-testid="uxui-council-empty">
         No council notes recorded yet. Click "Run council review" to queue one.
       </p>
     } @else {

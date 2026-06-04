@@ -77,9 +77,9 @@
   @if (markdown()) {
     <pre class="ard__markdown" data-testid="analysis-report-markdown">{{ markdown() }}</pre>
   } @else if (loading()) {
-    <p class="ard__empty">Loading report body…</p>
+    <p class="studio-empty">Loading report body…</p>
   } @else {
-    <p class="ard__empty" data-testid="analysis-report-markdown-missing">
+    <p class="studio-empty" data-testid="analysis-report-markdown-missing">
       Markdown body is unavailable for this report. The structured record is shown above.
     </p>
   }

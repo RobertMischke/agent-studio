@@ -21,7 +21,7 @@
   </p>
 
   @if (loading() && !overview() && !error()) {
-    <p class="proj-detail__empty" data-testid="project-steering-docs-loading">Loading steering inventory…</p>
+    <p class="studio-empty" data-testid="project-steering-docs-loading">Loading steering inventory…</p>
   }
 
   @if (error(); as e) {
@@ -36,7 +36,7 @@
 
   @if (overview(); as ov) {
     @if (ov.sources.length === 0) {
-      <p class="proj-detail__empty" data-testid="project-steering-docs-empty">
+      <p class="studio-empty" data-testid="project-steering-docs-empty">
         No steering inventory available for this project. The base directory could not be resolved
         (no <code>repositoryPath</code>, <code>rootPath</code>, or watch path).
       </p>
@@ -65,7 +65,7 @@
             @if (openedId() === s.id) {
               <div class="psd__viewer" data-testid="project-steering-docs-viewer">
                 @if (!s.exists) {
-                  <p class="psd__empty">
+                  <p class="studio-empty">
                     File is missing at <code>{{ s.relPath }}</code> under <code>{{ ov.baseDir }}</code>.
                   </p>
                 } @else if (s.children && s.children.length > 0) {
@@ -95,9 +95,9 @@
                                 testId="project-steering-docs-content"
                                 [source]="fc.content" />
                 } @else if (fileLoading()) {
-                  <p class="psd__empty">Loading file…</p>
+                  <p class="studio-empty">Loading file…</p>
                 } @else if (fileError()) {
-                  <p class="psd__empty psd__empty--error" data-testid="project-steering-docs-file-error">{{ fileError() }}</p>
+                  <p class="studio-empty studio-empty--error" data-testid="project-steering-docs-file-error">{{ fileError() }}</p>
                 }
               </div>
             }
@@ -141,7 +141,7 @@
 
       <h4 class="psd__sub">Warnings</h4>
       @if (ov.warnings.length === 0) {
-        <p class="proj-detail__empty" data-testid="project-steering-docs-warnings-empty">
+        <p class="studio-empty" data-testid="project-steering-docs-warnings-empty">
           No drift heuristics tripped: every required source is present, no shim has grown
           past its contract, and no file is older than the staleness threshold.
         </p>

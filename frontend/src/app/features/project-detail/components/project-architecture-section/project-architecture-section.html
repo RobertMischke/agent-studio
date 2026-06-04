@@ -8,16 +8,16 @@
   </h3>
 
   @if (loading()) {
-    <p class="proj-detail__empty">Loading…</p>
+    <p class="studio-empty">Loading…</p>
   } @else if (!overview()) {
-    <p class="proj-detail__empty">No data.</p>
+    <p class="studio-empty">No data.</p>
   } @else if (!overview()!.exists) {
-    <p class="proj-detail__empty">
+    <p class="studio-empty">
       No <code>docs/architecture-decisions.md</code> found at
       <code>{{ overview()!.sourceFile }}</code>. Create one to start the archive.
     </p>
   } @else if (overview()!.decisions.length === 0) {
-    <p class="proj-detail__empty">
+    <p class="studio-empty">
       The ADR file exists but no <code>## ADR-NNNN</code> headings were parsed.
     </p>
   } @else {

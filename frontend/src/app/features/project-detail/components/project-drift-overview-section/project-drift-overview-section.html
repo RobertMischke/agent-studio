@@ -20,7 +20,7 @@
       </p>
 
       @if (loading() && !latest() && reports().length === 0 && !error()) {
-        <p class="proj-detail__empty" data-testid="project-drift-overview-loading">Loading drift reports…</p>
+        <p class="studio-empty" data-testid="project-drift-overview-loading">Loading drift reports…</p>
       }
 
       @if (error(); as e) {
@@ -54,7 +54,7 @@
       }
 
       @if (!error() && !loading() && reports().length === 0) {
-        <p class="proj-detail__empty" data-testid="project-drift-overview-empty">
+        <p class="studio-empty" data-testid="project-drift-overview-empty">
           No drift reports yet for this project.
           Run a comparison above to produce the first one;
           evidence-only reports are also fine while you wait for an agent verdict.
@@ -239,7 +239,7 @@
 
       <h4 class="pdov__sub">Report history</h4>
       @if (reports().length === 0) {
-        <p class="proj-detail__empty">No drift reports yet.</p>
+        <p class="studio-empty">No drift reports yet.</p>
       } @else {
         <ul class="pdov__history" data-testid="project-drift-overview-history">
           @for (r of reports(); track r.reportId) {
@@ -303,7 +303,7 @@
             @if (detail.markdown) {
               <pre class="pdov__report-md" data-testid="project-drift-overview-report-md">{{ detail.markdown }}</pre>
             } @else {
-              <p class="proj-detail__empty">No Markdown body recorded.</p>
+              <p class="studio-empty">No Markdown body recorded.</p>
             }
           </article>
         </section>
