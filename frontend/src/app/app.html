@@ -29,6 +29,10 @@
                         (toggleAuto)="onToggleAuto($event)">
         <app-status-bar studioStatusbar
           [projectNames]="projectNames()"
+          [usageOpen]="usageSheet.open()"
+          [orchestratorOpen]="orchSideSheet.open()"
+          [feedOpen]="orchFeedProject() !== null"
+          [settingsOpen]="workspaceSettingsOpen()"
           (toggleUsage)="usageSheet.toggle()"
           (toggleOrchestrator)="toggleOrchestratorChat()"
           (toggleFeed)="toggleOrchFeed()"
@@ -685,6 +689,10 @@
 
       <app-status-bar
         [projectNames]="projectNames()"
+        [usageOpen]="usageSheet.open()"
+        [orchestratorOpen]="orchSideSheet.open()"
+        [feedOpen]="orchFeedProject() !== null"
+        [settingsOpen]="workspaceSettingsOpen()"
         (toggleUsage)="usageSheet.toggle()"
         (toggleOrchestrator)="toggleOrchestratorChat()"
         (toggleFeed)="toggleOrchFeed()"

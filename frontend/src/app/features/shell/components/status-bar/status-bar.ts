@@ -36,6 +36,16 @@ export class StatusBarComponent implements OnInit {
 
   readonly projectNames = input<string[]>([]);
 
+  // Open-state of each overlay this bar can toggle. Bound to the panel's
+  // own `xOpen` signal by the shell so the trigger button shows a
+  // pressed/active state while its panel is visible (and `aria-pressed`
+  // reflects it). The bar stays presentational — the source of truth for
+  // "is the panel open" lives with the panel, not here.
+  readonly usageOpen = input(false);
+  readonly orchestratorOpen = input(false);
+  readonly feedOpen = input(false);
+  readonly settingsOpen = input(false);
+
   readonly toggleUsage = output<void>();
   readonly toggleOrchestrator = output<void>();
   readonly toggleFeed = output<void>();

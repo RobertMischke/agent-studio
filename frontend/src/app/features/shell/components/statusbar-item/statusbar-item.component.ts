@@ -29,6 +29,11 @@ export class StatusbarItemComponent {
   readonly tooltip = input('');
   /** Renders as a button (default true) vs read-only text chip. */
   readonly button = input(true);
+  /** Pressed/toggled state — bound to the open flag of the panel this
+   *  button opens, so the bar shows which overlay is currently visible.
+   *  Drives the `--active` class and `aria-pressed`. Read-only chips
+   *  ignore it. */
+  readonly active = input(false);
   readonly testid = input<string | null>(null);
   /** Animate the icon as a live indicator (e.g. the "● running" chip). */
   readonly pulsing = input(false);

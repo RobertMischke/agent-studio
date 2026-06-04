@@ -99,6 +99,16 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+// Pressed/toggled: the button's panel is currently open. Accent fill so a
+// glance at the bar shows which overlay is visible; the rule sits after
+// `:hover` so an active button keeps its accent on hover instead of
+// reverting to the translucent hover wash. Theme-aware via accent tokens.
+.statusbar__item--btn.statusbar__item--active,
+.statusbar__item--btn.statusbar__item--active:hover {
+  background: var(--studio-accent, #d97757);
+  color: var(--studio-on-accent, #1a1a1a);
+}
+.statusbar__item--active .statusbar__icon { color: inherit; }
 
 .statusbar__icon {
   display: inline-flex;

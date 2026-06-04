@@ -379,6 +379,14 @@ html[data-studio-theme='light'] {
   .statusbar__icon { color: #4a4a4a; }
   .statusbar__icon--pulse { color: #16a34a; }
   .statusbar__item--btn:hover { background: rgba(0,0,0,0.08); color: #1a1a1a; }
+  // Pressed/toggled overlay button: accent fill in light theme too. Needs
+  // to beat the light-theme hover rule above (same specificity), so it is
+  // declared after it and also pins the hover variant.
+  .statusbar__item--btn.statusbar__item--active,
+  .statusbar__item--btn.statusbar__item--active:hover {
+    background: var(--studio-accent, #d97757);
+    color: var(--studio-on-accent, #1a1a1a);
+  }
   .statusbar__sep { background: rgba(0,0,0,0.18); }
   .statusbar__caret { color: #4a4a4a; }
   // ---- Side sheets / dialogs ----

@@ -1,5 +1,7 @@
 @if (button()) {
   <button class="statusbar__item statusbar__item--btn"
+          [class.statusbar__item--active]="active()"
+          [attr.aria-pressed]="active()"
           [appTooltip]="tooltip()"
           [attr.data-testid]="testid()"
           (click)="activated.emit($event)">

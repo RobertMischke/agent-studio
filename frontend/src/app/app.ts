@@ -282,6 +282,9 @@ export class App implements OnInit, OnDestroy {
   readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
   readonly workspaceSummaryOpen = this.workspaceOverlays.summaryOpen;
   readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
+  /** True while the global Workspace-settings home is open in any section.
+   *  Drives the status-bar Settings button's pressed/active state. */
+  readonly workspaceSettingsOpen = this.workspaceOverlays.anyOpen;
   private hashListener: (() => void) | null = null;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
   private boardShortcutListener: ((ev: KeyboardEvent) => void) | null = null;

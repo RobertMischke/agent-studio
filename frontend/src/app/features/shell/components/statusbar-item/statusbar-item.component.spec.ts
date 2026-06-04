@@ -43,4 +43,29 @@ describe('StatusbarItemComponent (smoke)', () => {
       expect(StatusbarItemComponent).toBeTruthy();
     }
   });
+
+  it('reflects the active input as the pressed class + aria-pressed', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StatusbarItemComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StatusbarItemComponent);
+    fixture.componentRef.setInput('label', 'Usage');
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button.statusbar__item') as HTMLButtonElement;
+    expect(button).toBeTruthy();
+    expect(button.classList.contains('statusbar__item--active')).toBe(false);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    fixture.componentRef.setInput('active', true);
+    fixture.detectChanges();
+    expect(button.classList.contains('statusbar__item--active')).toBe(true);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
 });
