@@ -464,19 +464,34 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     const el = this.bodyRef()?.nativeElement;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    this.stickToBottom.set(distanceFromBottom <= 24);
+    const sticky = distanceFromBottom <= 24;
+    this.stickToBottom.set(sticky);
 
-    if (this.virtualised()) {
-      const total = this.rendered().length;
-      const rowH = Math.max(1, this.virtualRowHeightPx());
-      const buffer = this.virtualBufferRows();
-      const firstVisibleRow = Math.floor(el.scrollTop / rowH);
-      const visibleRows = Math.ceil(el.clientHeight / rowH);
-      const start = Math.max(0, firstVisibleRow - buffer);
-      const end = Math.min(total, firstVisibleRow + visibleRows + buffer);
-      this.visibleStart.set(start);
-      this.visibleEnd.set(end);
+    if (!this.virtualised()) return;
+    const total = this.rendered().length;
+    if (sticky) {
+      // At the bottom: the window is owned by virtualBoundsEffect, which
+      // pins it to the tail. Do NOT re-derive it from scrollTop here. The
+      // row-height estimate (virtualRowHeightPx) is much taller than short
+      // orchestrator turns, so a scroll-derived window would land a phantom
+      // bottom spacer under the freshly loaded tail and push it out of the
+      // viewport — the "content vanishes after load, reappears on scroll"
+      // bug (ASS-613 sibling). Scroll-anchoring reflow during the side-sheet
+      // open animation, async markdown growth, or the programmatic pin's own
+      // event all fire a scroll while sticky; keep the tail pinned for each.
+      const winSize = Math.max(50, this.visibleEnd() - this.visibleStart());
+      this.visibleEnd.set(total);
+      this.visibleStart.set(Math.max(0, total - winSize));
+      return;
     }
+    const rowH = Math.max(1, this.virtualRowHeightPx());
+    const buffer = this.virtualBufferRows();
+    const firstVisibleRow = Math.floor(el.scrollTop / rowH);
+    const visibleRows = Math.ceil(el.clientHeight / rowH);
+    const start = Math.max(0, firstVisibleRow - buffer);
+    const end = Math.min(total, firstVisibleRow + visibleRows + buffer);
+    this.visibleStart.set(start);
+    this.visibleEnd.set(end);
   }
 
   jumpToBottom(): void {

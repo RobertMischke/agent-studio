@@ -98,4 +98,44 @@ describe('ChatComponent virtualisation', () => {
     expect(c.topSpacerPx()).toBeGreaterThan(0);
     expect(c.bottomSpacerPx()).toBe(0);
   });
+
+  // Regression for the orchestrator-chat "content vanishes after load,
+  // reappears on scroll" bug. A scroll event firing while the view is
+  // sticky-at-bottom (scroll-anchoring reflow during the side-sheet open
+  // animation, async markdown growth, or the programmatic pin's own
+  // event) must NOT recompute the window from the row-height *estimate*.
+  // The estimate (120px) is much taller than short orchestrator turns, so
+  // the scroll-derived window lands a phantom bottom spacer under the
+  // freshly loaded tail and pushes it out of the viewport — blank until a
+  // manual scroll. While sticky the window stays pinned to the tail.
+  it('keeps the newest turn rendered when a scroll fires while sticky-at-bottom', async () => {
+    const fixture = await makeFixture(true);
+    // Defaults: 120px estimate, 20-row buffer — the production config.
+    const messages = Array.from({ length: 200 }, (_, i) => makeMessage(i));
+    fixture.componentRef.setInput('messages', messages);
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    // Initial sticky seed: tail pinned, no bottom spacer.
+    expect(c.visibleEnd()).toBe(200);
+    expect(c.bottomSpacerPx()).toBe(0);
+
+    // Real content is far shorter than 200 * 120px because the turns are
+    // one-liners. Simulate the scroll container parked at the true bottom.
+    const body = fixture.nativeElement.querySelector(
+      '[data-testid="chat-body"]'
+    ) as HTMLElement;
+    Object.defineProperty(body, 'clientHeight', { value: 600, configurable: true });
+    Object.defineProperty(body, 'scrollHeight', { value: 9000, configurable: true });
+    Object.defineProperty(body, 'scrollTop', { value: 8400, writable: true, configurable: true });
+
+    c.onBodyScroll();
+
+    // distanceFromBottom == 0 → still sticky; the tail must stay rendered.
+    expect(c.stickToBottom()).toBe(true);
+    expect(c.visibleEnd()).toBe(200);
+    expect(c.bottomSpacerPx()).toBe(0);
+    const windowed = c.windowedItems();
+    expect(windowed[windowed.length - 1].id).toBe('msg-199');
+  });
 });
