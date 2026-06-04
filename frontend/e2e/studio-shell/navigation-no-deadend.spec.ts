@@ -4,20 +4,28 @@ import { test, expect, type Page } from '@playwright/test';
  * Bug `human-decision-needed-bug-navigation-deadend-when-no-task-open`:
  * when every editor tab is closed, the studio shell used to render an
  * empty "Welcome" limbo with no clear way back to the board. The fix
- * adds three independent recovery paths that all converge on the
- * always-mounted sticky default board tab:
+ * keeps the editor surface anchored on the always-mounted sticky default
+ * board tab via two independent recovery paths:
  *
  *   1. The tab list always contains a sticky `board:__all__` tab that
  *      cannot be closed (no X button, close-* service ops preserve it).
  *      Closing every other tab leaves the sticky tab active.
- *   2. The activity bar carries a dedicated Board button at the top of
- *      the rail that re-activates the sticky tab from any other state.
- *   3. Ctrl+B (Cmd+B on macOS) globally focuses the sticky tab from
- *      any view that is not a text input.
+ *   2. Ctrl+B (Cmd+B on macOS) is a global board<->backlog-triage toggle:
+ *      from a plain tab it opens the triage screen, and pressing it again
+ *      closes triage and re-activates the sticky board. So Ctrl+B always
+ *      leads back to the board, regardless of the starting view (outside a
+ *      text input). NOTE: Ctrl+B was repurposed from a one-shot "focus the
+ *      board" shortcut into this toggle by the `feat(backlog): add dedicated
+ *      triage screen` change; the test below tracks that current contract.
  *
- * This spec exercises all three so a regression in any one of them
- * fails loudly. Each assertion maps directly to an acceptance bullet
- * in the bug ticket.
+ * The activity bar no longer carries a dedicated Board button (removed
+ * so the cross-project "All projects" board opens only via the grid
+ * button in the Explorer panel header). That entry point is covered by
+ * `activity-bar-board-removed.spec.ts`.
+ *
+ * This spec exercises both remaining paths so a regression in either one
+ * fails loudly. Each assertion maps directly to an acceptance bullet in
+ * the bug ticket.
  */
 
 const STICKY_TAB_KEY = 'board:__all__';
@@ -126,37 +134,7 @@ test.describe('studio-shell · navigation has no dead end', () => {
     await expect(page.getByTestId('studio-welcome')).toHaveCount(0);
   });
 
-  test('activity-bar Board button is always visible and activates the sticky tab', async ({ page }) => {
-    await bootStudio(page);
-
-    const boardBtn = page.getByTestId('studio-ab-board');
-    await expect(boardBtn).toBeVisible();
-    await expect(boardBtn).toHaveAttribute('title', /Open board/);
-
-    // Move active focus off the sticky tab via persistence so we can
-    // assert the button SWITCHES context (not just no-op).
-    await page.evaluate(() => {
-      const payload = {
-        v: 1,
-        tabs: [
-          { kind: 'board', projectName: '__all__', sticky: true },
-          { kind: 'task', taskKey: 'fake-jobkey-x' },
-        ],
-        activeKey: 'task:fake-jobkey-x',
-      };
-      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify(payload));
-    });
-    await page.reload();
-    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 15_000 });
-    await expect(tabBy(page, 'task:fake-jobkey-x')).toHaveClass(/studio-tab--active/);
-
-    // Click the Board button — sticky tab takes focus.
-    await page.getByTestId('studio-ab-board').click();
-    await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
-    await expect(tabBy(page, 'task:fake-jobkey-x')).not.toHaveClass(/studio-tab--active/);
-  });
-
-  test('Ctrl+B from any tab focuses the sticky board tab', async ({ page }) => {
+  test('Ctrl+B toggles through the backlog triage and back to the sticky board tab', async ({ page }) => {
     await bootStudio(page);
     await page.evaluate(() => {
       const payload = {
@@ -176,8 +154,19 @@ test.describe('studio-shell · navigation has no dead end', () => {
     // Fire Ctrl+B against the document body so the listener on `window`
     // catches it. Playwright's keyboard.press dispatches to the focused
     // element by default.
+    //
+    // Ctrl+B is a toggle. From a plain task tab the first press opens the
+    // backlog triage screen (it does NOT jump straight to the board).
     await page.locator('body').focus();
     await page.keyboard.press('Control+B');
+    await expect(page.getByTestId('backlog-triage-screen')).toBeVisible();
+    await expect(tabBy(page, STICKY_TAB_KEY)).not.toHaveClass(/studio-tab--active/);
+
+    // The second press closes triage and re-activates the sticky board, so
+    // Ctrl+B still always leads back to the board — no dead end.
+    await page.locator('body').focus();
+    await page.keyboard.press('Control+B');
+    await expect(page.getByTestId('backlog-triage-screen')).toHaveCount(0);
     await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
   });
 

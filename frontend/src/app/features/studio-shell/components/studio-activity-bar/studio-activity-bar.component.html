@@ -1,53 +1,8 @@
 <aside class="studio-activitybar" data-testid="studio-activity-bar">
-  <!-- Always-on Board button. The studio shell guarantees a sticky default
-       board tab is mounted; clicking this button focuses that tab so the
-       user can always get back to the kanban from any other view. Sits
-       above the panel toggles so it reads as a first-class destination,
-       not a sidebar toggle. -->
-  <button type="button"
-          class="studio-ab__btn studio-ab__btn--board"
-          [class.studio-ab__btn--active]="boardActive()"
-          appTooltip="Open board (Ctrl+B)"
-          data-testid="studio-ab-board"
-          (click)="openBoardRequest.emit()">
-    <svg class="studio-ab__svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
-         aria-hidden="true">
-      <rect x="3" y="4" width="5" height="16" rx="1" />
-      <rect x="10" y="4" width="5" height="11" rx="1" />
-      <rect x="17" y="4" width="4" height="7" rx="1" />
-    </svg>
-  </button>
-  <!-- Dedicated backlog triage destination. Sister to the Board button; the
-       triage screen (route #/backlog) opens via Ctrl+B as a toggle. The
-       badge counts 0-backlog jobs under the active project filter. -->
-  <button type="button"
-          class="studio-ab__btn studio-ab__btn--backlog"
-          [class.studio-ab__btn--active]="backlogActive()"
-          appTooltip="Open backlog triage (Ctrl+B)"
-          data-testid="studio-ab-backlog"
-          (click)="openBacklogRequest.emit()">
-    <span class="studio-ab__emoji" aria-hidden="true">📋</span>
-    @if (backlogCount() > 0) {
-      <span class="studio-ab__badge studio-ab__badge--count"
-            data-testid="studio-ab-backlog-badge"
-            [appTooltip]="backlogCount() + (backlogCount() === 1 ? ' backlog task' : ' backlog tasks')"
-            aria-hidden="true">{{ backlogCount() }}</span>
-    }
-  </button>
-  <!-- Epic overview destination. Hidden when no epics exist (hide-when-empty),
-       so it never adds clutter for projects that don't use epics. Opens the
-       read-only rollup screen at route #/epics. -->
-  @if (hasEpics()) {
-    <button type="button"
-            class="studio-ab__btn studio-ab__btn--epics"
-            [class.studio-ab__btn--active]="epicsActive()"
-            appTooltip="Open epic overview"
-            data-testid="studio-ab-epics"
-            (click)="openEpicsRequest.emit()">
-      <span class="studio-ab__emoji" aria-hidden="true">🧩</span>
-    </button>
-  }
+  <!-- Panel toggles lead the rail so the Explorer sits at the very top of
+       the activity bar (its first-class destination). The cross-project
+       "All projects" board is no longer reachable from here — it opens
+       only via the grid button in the Explorer panel header. -->
   @for (item of items(); track item.key) {
     <button type="button"
             class="studio-ab__btn"
@@ -86,6 +41,36 @@
               [attr.data-testid]="'studio-ab-badge-' + item.key"
               aria-hidden="true">{{ count }}</span>
       }
+    </button>
+  }
+  <!-- Dedicated backlog triage destination. The triage screen (route
+       #/backlog) opens via Ctrl+B as a toggle. The badge counts 0-backlog
+       jobs under the active project filter. -->
+  <button type="button"
+          class="studio-ab__btn studio-ab__btn--backlog"
+          [class.studio-ab__btn--active]="backlogActive()"
+          appTooltip="Open backlog triage (Ctrl+B)"
+          data-testid="studio-ab-backlog"
+          (click)="openBacklogRequest.emit()">
+    <span class="studio-ab__emoji" aria-hidden="true">📋</span>
+    @if (backlogCount() > 0) {
+      <span class="studio-ab__badge studio-ab__badge--count"
+            data-testid="studio-ab-backlog-badge"
+            [appTooltip]="backlogCount() + (backlogCount() === 1 ? ' backlog task' : ' backlog tasks')"
+            aria-hidden="true">{{ backlogCount() }}</span>
+    }
+  </button>
+  <!-- Epic overview destination. Hidden when no epics exist (hide-when-empty),
+       so it never adds clutter for projects that don't use epics. Opens the
+       read-only rollup screen at route #/epics. -->
+  @if (hasEpics()) {
+    <button type="button"
+            class="studio-ab__btn studio-ab__btn--epics"
+            [class.studio-ab__btn--active]="epicsActive()"
+            appTooltip="Open epic overview"
+            data-testid="studio-ab-epics"
+            (click)="openEpicsRequest.emit()">
+      <span class="studio-ab__emoji" aria-hidden="true">🧩</span>
     </button>
   }
   <span class="studio-ab__spacer"></span>

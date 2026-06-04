@@ -729,25 +729,6 @@ export class StudioShellComponent {
     return tab.kind === 'board' && !!tab.sticky;
   }
 
-  /** True when the currently active editor tab is the sticky default board. */
-  isBoardTabActive(): boolean {
-    const tab = this.activeTab();
-    return !!tab && this.isTabSticky(tab);
-  }
-
-  /**
-   * Activity-bar Board button click. Focuses (or restores) the sticky
-   * default board tab so the user can always get back to the kanban,
-   * regardless of which other tab is currently active.
-   */
-  onActivityBarOpenBoard(): void {
-    // Closing the overlays is part of "go to board": Ctrl+B and the Board
-    // button both surface the kanban, not a full-screen overlay.
-    if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
-    if (this.epicOverview.open()) this.epicOverview.closeOverview();
-    this.tabState.activateSticky();
-  }
-
   /**
    * Activity-bar Backlog button click. Opens (or closes) the dedicated
    * backlog triage screen at `#/backlog`. Mirrors the toggle the Ctrl+B

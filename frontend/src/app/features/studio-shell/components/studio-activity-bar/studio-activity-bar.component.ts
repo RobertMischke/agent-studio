@@ -23,12 +23,6 @@ export class StudioActivityBarComponent {
   readonly sidebarVisible = input.required<boolean>();
   /** Per-item badge counts. Items with count > 0 show a small badge on the icon. */
   readonly badgeCounts = input<Readonly<Record<string, number>>>({});
-  /**
-   * Whether the sticky Board tab is currently the active editor tab.
-   * Drives the Board button's active highlight so the operator can tell
-   * at a glance whether clicking it would switch context or no-op.
-   */
-  readonly boardActive = input<boolean>(false);
   /** True while the backlog triage screen is visible. Drives the active highlight. */
   readonly backlogActive = input<boolean>(false);
   /** Count of `0-backlog` tasks under the current project filter; renders a numeric badge. */
@@ -38,8 +32,6 @@ export class StudioActivityBarComponent {
   /** Whether any epics exist. The Epics button is hidden when false. */
   readonly hasEpics = input<boolean>(false);
   readonly panelToggle = output<StudioActivityPanelKey | 'settings'>();
-  /** Fires when the user clicks the always-visible Board button. */
-  readonly openBoardRequest = output<void>();
   /** Fires when the user clicks the always-visible Backlog button. */
   readonly openBacklogRequest = output<void>();
   /** Fires when the user clicks the Epics button (shown only when epics exist). */
