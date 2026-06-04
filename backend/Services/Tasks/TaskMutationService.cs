@@ -262,16 +262,11 @@ public class TaskMutationService
     }
 
     /// <summary>
-    /// Operator override: include a commit in this task's set. When the SHA
-    /// was previously excluded it is restored as
-    /// <see cref="CommitAttributionKinds.ManualIncludeAfterExclude"/>;
-    /// otherwise (an operator "+ Add commit" pick of a commit the rule engine
-    /// never saw) it is added as <see cref="CommitAttributionKinds.ManualAdd"/>.
-    /// <paramref name="candidate"/> carries the commit metadata for the
-    /// add-from-recent case; for a restore the stored exclusion subject is
-    /// used when no candidate is supplied.
+    /// Operator override: restore a commit the rule engine previously
+    /// excluded from this task. Unknown SHAs are rejected so there is no
+    /// backend path for manually assigning arbitrary commits to a task.
     /// </summary>
-    public bool IncludeCommit(string jobId, string sha, TaskCommitInfo? candidate, string? watchPath = null)
+    public bool IncludeCommit(string jobId, string sha, string? watchPath = null)
     {
         if (string.IsNullOrWhiteSpace(sha)) return false;
         var info = _scanner.FindJob(jobId, watchPath);
@@ -279,26 +274,22 @@ public class TaskMutationService
         var (chain, excluded) = ReadCommitState(info.FolderPath);
 
         var exIdx = excluded.FindIndex(e => string.Equals(e.Sha, sha, StringComparison.OrdinalIgnoreCase));
-        var wasExcluded = exIdx >= 0;
-        var prior = wasExcluded ? excluded[exIdx] : null;
-        if (wasExcluded) excluded.RemoveAt(exIdx);
+        if (exIdx < 0) return false;
+        var prior = excluded[exIdx];
+        excluded.RemoveAt(exIdx);
 
         if (chain.Any(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase)))
             return WriteCommitState(info.FolderPath, chain, excluded);
 
-        var kind = wasExcluded
-            ? CommitAttributionKinds.ManualIncludeAfterExclude
-            : CommitAttributionKinds.ManualAdd;
-
         chain.Add(new TaskCommitInfo
         {
             Sha = sha,
-            ShortSha = candidate?.ShortSha ?? prior?.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
-            Message = candidate?.Message ?? prior?.Subject ?? "",
-            FilesChanged = candidate?.FilesChanged ?? 0,
-            Files = candidate?.Files ?? [],
-            At = candidate?.At ?? prior?.At ?? DateTime.UtcNow,
-            Attribution = kind,
+            ShortSha = prior.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
+            Message = prior.Subject ?? "",
+            FilesChanged = 0,
+            Files = [],
+            At = prior.At ?? DateTime.UtcNow,
+            Attribution = CommitAttributionKinds.ManualIncludeAfterExclude,
             Confidence = null,
         });
         return WriteCommitState(info.FolderPath, chain, excluded);

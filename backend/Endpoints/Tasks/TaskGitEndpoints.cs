@@ -97,18 +97,6 @@ public static class TaskGitEndpoints
             return Results.Ok(aggregate);
         });
 
-        // Recent commits on the branch - backs the git pane's "+ Add commit"
-        // operator override (ADR "Commit-Attribution-Regel"). Read-only.
-        group.MapGet("/{jobId}/git/recent-commits", (
-            string jobId, string? watchPath, int? limit,
-            TaskScannerService scanner, GitService git) =>
-        {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-            var commits = git.GetRecentCommits(jobId, watchPath, limit ?? 20);
-            return Results.Ok(new { commits });
-        });
-
         // File list for one of the job's commits. Validates the SHA is
         // actually a known commit on this job before calling git so the
         // endpoint can't be coaxed into showing arbitrary repo history.
@@ -228,34 +216,15 @@ public static class TaskGitEndpoints
                 : Results.BadRequest(new { error = "Could not exclude commit." });
         });
 
-        // Operator override: include a commit in this task's set - either
-        // restoring one the rule engine excluded (manual-include-after-exclude)
-        // or adding one it never saw via "+ Add commit" (manual-add). The
-        // optional body carries commit metadata for the add-from-recent case.
+        // Operator override: restore a commit the rule engine excluded.
         group.MapPost("/{jobId}/commits/{sha}/include", (
-            string jobId, string sha, string? watchPath, IncludeCommitRequest? req,
-            TaskScannerService scanner, TaskMutationService mutations, GitService git) =>
+            string jobId, string sha, string? watchPath,
+            TaskScannerService scanner, TaskMutationService mutations) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
-            // Enrich an add-from-recent pick with live git metadata so the
-            // stored entry carries a real file count + subject, not just a SHA.
-            TaskCommitInfo? candidate = null;
-            var files = git.GetCommitFiles(jobId, watchPath, sha);
-            if (files.Count > 0)
-            {
-                candidate = new TaskCommitInfo
-                {
-                    Sha = sha,
-                    ShortSha = sha.Length > 8 ? sha[..8] : sha,
-                    Message = req?.Message ?? "",
-                    FilesChanged = files.Count,
-                    Files = files.Select(f => f.Path).ToList(),
-                    At = req?.At ?? DateTime.UtcNow,
-                };
-            }
-            return mutations.IncludeCommit(jobId, sha, candidate, watchPath)
+            return mutations.IncludeCommit(jobId, sha, watchPath)
                 ? Results.Ok(new { sha, included = true })
                 : Results.BadRequest(new { error = "Could not include commit." });
         });

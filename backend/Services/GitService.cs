@@ -1169,61 +1169,6 @@ public class GitService
     }
 
     /// <summary>
-    /// Recent commits on the current branch, newest first. Backs the
-    /// "+ Add commit" operator override in the git pane (ADR
-    /// "Commit-Attribution-Regel"): the dropdown lets an operator attach a
-    /// commit the deterministic rule never saw. Read-only; no caching since
-    /// the list shifts whenever the repo advances.
-    /// </summary>
-    public List<GitCommitInfo> GetRecentCommits(string jobId, string? watchPath, int limit = 20)
-    {
-        var configured = ResolveRepoRoot(jobId, watchPath);
-        if (configured == null) return [];
-        var root = ResolveGitToplevel(configured);
-        if (root == null) return [];
-
-        var n = Math.Clamp(limit, 1, 100);
-        const char US = '';
-        var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
-        var args = $"log --no-merges -n {n} --shortstat --pretty=format:\"{fmt}\"";
-        var (output, _, code) = RunGit(root, args);
-        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
-
-        var list = new List<GitCommitInfo>();
-        var raw = output.Replace("\r\n", "\n");
-        foreach (var block in raw.Split("\n\n", StringSplitOptions.None))
-        {
-            if (string.IsNullOrWhiteSpace(block)) continue;
-            string? recordLine = null;
-            string? shortstatLine = null;
-            foreach (var l in block.Split('\n'))
-            {
-                if (string.IsNullOrWhiteSpace(l)) continue;
-                if (recordLine == null) recordLine = l;
-                else { shortstatLine = l.Trim(); break; }
-            }
-            if (recordLine == null) continue;
-            var parts = recordLine.Split(US);
-            if (parts.Length < 5) continue;
-            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
-                    out var ts))
-                continue;
-            var (files, added, removed) = ParseShortstat(shortstatLine);
-            list.Add(new GitCommitInfo(
-                Sha: parts[0],
-                ShortSha: parts[1],
-                AuthorDateUtc: DateTime.SpecifyKind(ts, DateTimeKind.Utc),
-                Author: parts[3],
-                Subject: parts[4],
-                FilesChanged: files,
-                Added: added,
-                Removed: removed));
-        }
-        return list;
-    }
-
-    /// <summary>
     /// Per-SHA enrichment for the commit-attribution step. Returns the full
     /// commit message body and merge flag for each requested SHA in a single
     /// <c>git show -s</c> call. Unknown SHAs are simply absent from the
