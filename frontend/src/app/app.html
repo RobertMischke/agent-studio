@@ -90,30 +90,33 @@
              existing detail-pane toggles via the TaskDetail's own header. -->
         <div studioTabActions class="studio-tab-actions">
           @if (studioTabState.activeTab()?.kind === 'board') {
-            <button type="button"
-                    class="studio-tab-action"
-                    [class.studio-tab-action--active]="groupByEpic()"
-                    [attr.aria-pressed]="groupByEpic()"
-                    data-testid="studio-board-epic-toggle"
-                    [appTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
-                    (click)="toggleGroupByEpic()">
-              <app-studio-icon [name]="groupByEpic() ? 'epic' : 'grid'" [size]="14"></app-studio-icon>
-              <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
-            </button>
-            <button type="button"
-                    class="studio-tab-action"
-                    [class.studio-tab-action--active]="effectiveCompactCards()"
-                    [attr.aria-pressed]="effectiveCompactCards()"
-                    data-testid="studio-board-compact-toggle"
-                    [appTooltip]="compactToggleTooltip()"
-                    (click)="toggleCompactCards()">
-              <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
-              <span>{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
-            </button>
-            <button type="button"
-                    class="studio-tab-action studio-tab-action--primary"
-                    data-testid="studio-board-add-task"
-                    (click)="openCreate()">＋ Add task</button>
+            <div class="studio-board-actions" data-testid="studio-board-actions">
+              <button type="button"
+                      class="studio-tab-action studio-tab-action--toggle"
+                      [class.studio-tab-action--active]="groupByEpic()"
+                      [attr.aria-pressed]="groupByEpic()"
+                      data-testid="studio-board-epic-toggle"
+                      [appTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
+                      (click)="toggleGroupByEpic()">
+                <app-studio-icon [name]="groupByEpic() ? 'epic' : 'grid'" [size]="14"></app-studio-icon>
+                <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
+              </button>
+              <button type="button"
+                      class="studio-tab-action studio-tab-action--toggle"
+                      [class.studio-tab-action--active]="effectiveCompactCards()"
+                      [attr.aria-pressed]="effectiveCompactCards()"
+                      data-testid="studio-board-compact-toggle"
+                      [appTooltip]="compactToggleTooltip()"
+                      (click)="toggleCompactCards()">
+                <span aria-hidden="true">{{ effectiveCompactCards() ? '▤' : '▥' }}</span>
+                <span>{{ effectiveCompactCards() ? 'Compact' : 'Full' }}</span>
+              </button>
+              <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+              <button type="button"
+                      class="studio-tab-action studio-tab-action--primary"
+                      data-testid="studio-board-add-task"
+                      (click)="openCreate()">＋ Add task</button>
+            </div>
           }
           @if (studioTabState.activeTab()?.kind === 'task' && selectedJob(); as detail) {
             @let gitCommitCount = detail.info.commits?.length || (detail.info.commit ? 1 : 0);

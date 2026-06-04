@@ -187,21 +187,23 @@
   &__actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 6px;
   }
 
   &__iconbtn {
-    width: 28px;
+    width: 26px;
     height: 24px;
     display: grid;
     place-items: center;
     color: var(--studio-fg-dim);
-    border-radius: 3px;
+    border: 1px solid transparent;
+    border-radius: 6px;
     font-size: 14px;
     line-height: 1;
 
     &:hover {
       background: var(--studio-bg-hover);
+      border-color: var(--studio-border);
       color: var(--studio-fg);
     }
   }
@@ -214,7 +216,7 @@
     height: 24px;
     background: var(--studio-bg-elevated);
     border: 1px solid var(--studio-border);
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 12px;
     color: var(--studio-fg);
 
@@ -1674,6 +1676,19 @@
     }
   }
 
+  // Must precede `&--active` so the pressed state wins on equal specificity.
+  &--toggle {
+    background: var(--studio-bg-elevated);
+    border-color: var(--studio-border);
+    color: var(--studio-fg-dim);
+
+    &:hover {
+      background: var(--studio-bg-hover);
+      border-color: var(--studio-border-strong);
+      color: var(--studio-fg-strong);
+    }
+  }
+
   &--active {
     background: var(--studio-bg-selected);
     color: var(--studio-fg-strong);
@@ -1729,6 +1744,18 @@
       background: var(--studio-bg-elevated);
       font-weight: 400;
     }
+  }
+}
+
+// Flex row so the board controls get even spacing; the projected wrapper is
+// block-level, so without this the buttons only had whitespace between them.
+.studio-board-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+
+  .studio-tab-actions-sep {
+    margin: 0 var(--studio-spacing-1);
   }
 }
 
