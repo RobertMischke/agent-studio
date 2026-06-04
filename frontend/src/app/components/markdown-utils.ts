@@ -1,3 +1,6 @@
+import { Marked, type MarkedExtension, type Tokens } from 'marked';
+import DOMPurify from 'dompurify';
+
 /**
  * Optional URL transformers for image sources. The prompt editor renders
  * `attachments/<file>` references as full API URLs while editing, then
@@ -17,136 +20,15 @@ export interface MarkdownImageOptions {
   codeLineNumberThreshold?: number;
 }
 
-// Sentinel placeholders wrap image and link tokens so the bold/italic regex
-// can't chew their innards. We use long random strings rather than control
-// chars to keep the source file plain ASCII; collisions with real escaped
-// agent text are vanishingly unlikely.
-const IMG_OPEN = 'XmdImgOpenA93f4X';
-const IMG_CLOSE = 'XmdImgCloseA93f4X';
-const LINK_OPEN = 'XmdLnkOpenA93f4X';
-const LINK_CLOSE = 'XmdLnkCloseA93f4X';
-const CODE_OPEN = 'XmdCodeOpenA93f4X';
-const CODE_CLOSE = 'XmdCodeCloseA93f4X';
-
 export function markdownToHtml(markdown: string, options: MarkdownImageOptions = {}): string {
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
-  const html: string[] = [];
-  let paragraph: string[] = [];
-  let listItems: string[] = [];
-  let orderedItems: string[] = [];
-  let inCode = false;
-  let codeLines: string[] = [];
-  // Language hint captured from the opening fence, e.g. "ts" from
-  // ```ts. Used by renderCodeBlock to emit `data-lang` + a per-
-  // language class so the chat surface can colour-hint without a
-  // full tokenizer (highlight.js / shiki are too heavy to ship into
-  // the chat panel; the lang badge alone is the 80 % UX win for
-  // Claude/Codex code blocks).
-  let codeLang: string | null = null;
-
-  const flushParagraph = () => {
-    if (paragraph.length === 0) return;
-    html.push(`<p>${formatInline(paragraph.join(' '), options)}</p>`);
-    paragraph = [];
-  };
-
-  const flushList = () => {
-    if (listItems.length === 0) return;
-    html.push(`<ul>${listItems.map((item) => `<li>${formatInline(item, options)}</li>`).join('')}</ul>`);
-    listItems = [];
-  };
-
-  const flushOrderedList = () => {
-    if (orderedItems.length === 0) return;
-    html.push(`<ol>${orderedItems.map((item) => `<li>${formatInline(item, options)}</li>`).join('')}</ol>`);
-    orderedItems = [];
-  };
-
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-
-    if (line.startsWith('```')) {
-      if (inCode) {
-        html.push(renderCodeBlock(codeLines, codeLang, options));
-        codeLines = [];
-        codeLang = null;
-        inCode = false;
-      } else {
-        flushParagraph();
-        flushList();
-        flushOrderedList();
-        // Capture the optional language tag right after the fence
-        // (`\`\`\`ts`, `\`\`\`bash`, etc). Strip any extra metadata
-        // some models append after a space (e.g. `\`\`\`ts title=foo`).
-        const langMatch = /^```\s*([A-Za-z0-9_+\-]+)/.exec(line);
-        codeLang = langMatch ? langMatch[1].toLowerCase() : null;
-        inCode = true;
-      }
-      continue;
-    }
-
-    if (inCode) {
-      codeLines.push(rawLine);
-      continue;
-    }
-
-    if (!line.trim()) {
-      flushParagraph();
-      flushList();
-      flushOrderedList();
-      continue;
-    }
-
-    const heading = /^(#{1,4})\s+(.+)$/.exec(line);
-    if (heading) {
-      flushParagraph();
-      flushList();
-      flushOrderedList();
-      const level = heading[1].length;
-      html.push(`<h${level}>${formatInline(heading[2], options)}</h${level}>`);
-      continue;
-    }
-
-    const list = /^[-*]\s+(.+)$/.exec(line);
-    if (list) {
-      flushParagraph();
-      flushOrderedList();
-      listItems.push(list[1]);
-      continue;
-    }
-
-    const ordered = /^\d+\.\s+(.+)$/.exec(line);
-    if (ordered) {
-      flushParagraph();
-      flushList();
-      orderedItems.push(ordered[1]);
-      continue;
-    }
-
-    // Standalone image line — render as a block-level <img> so the editor
-    // shows the screenshot on its own row instead of wrapping it in <p>.
-    const blockImage = /^!\[([^\]]*)\]\(([^)\s]+)\)\s*$/.exec(line);
-    if (blockImage) {
-      flushParagraph();
-      flushList();
-      flushOrderedList();
-      html.push(renderImage(blockImage[1], blockImage[2], options));
-      continue;
-    }
-
-    flushList();
-    flushOrderedList();
-    paragraph.push(line.trim());
+  if (!markdown) return '';
+  const local = new Marked(buildMarkedExtension(options));
+  try {
+    const parsed = local.parse(markdown);
+    return compactHtml(sanitizeHtml(typeof parsed === 'string' ? parsed : ''));
+  } catch {
+    return `<pre><code>${escapeHtml(markdown)}</code></pre>`;
   }
-
-  if (inCode) {
-    html.push(renderCodeBlock(codeLines, codeLang, options));
-  }
-  flushParagraph();
-  flushList();
-  flushOrderedList();
-
-  return html.join('');
 }
 
 export function htmlToMarkdown(html: string, options: MarkdownImageOptions = {}): string {
@@ -223,63 +105,36 @@ function nodeToMarkdown(node: ChildNode, options: MarkdownImageOptions): string 
   }
 }
 
-function formatInline(value: string, options: MarkdownImageOptions): string {
-  // Order matters here: extract structured spans (images, links, inline code)
-  // from the *raw* input before HTML-escaping. Two reasons:
-  //
-  //  1. URLs inside [..](..) must not be double-escaped. Past bug:
-  //     `[x](https://e.com/?a=1&b=2)` produced `&amp;amp;` because the input
-  //     was escapeHtml'd first (turning `&` into `&amp;`) and then the URL
-  //     was escapeAttribute'd again inside renderLink.
-  //  2. Inline code spans (`MAX_LINE_LENGTH`) must not be touched by the
-  //     bold/italic regex. Past bug: the underscore-italic regex matched
-  //     across the code span boundary and rendered `MAX<em>LINE</em>LENGTH`.
-  //
-  // Each extraction stores the rendered HTML on the side and replaces the
-  // original span with a unique sentinel token. Once bold/italic/escape are
-  // done, we splice the rendered HTML back in.
-  const images: string[] = [];
-  const links: string[] = [];
-  const codes: string[] = [];
-
-  // Image first because `![..](..)` is a superset of `[..](..)`.
-  let stripped = value.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_full, alt, src) => {
-    images.push(renderImage(alt, src, options));
-    return `${IMG_OPEN}${images.length - 1}${IMG_CLOSE}`;
-  });
-  // Then plain links.
-  stripped = stripped.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_full, label, url) => {
-    links.push(renderLink(label, url));
-    return `${LINK_OPEN}${links.length - 1}${LINK_CLOSE}`;
-  });
-  // Then inline code spans. The contents are HTML-escaped at render time so
-  // they survive innerHTML safely; we hold them as already-rendered HTML
-  // strings until the splice step.
-  stripped = stripped.replace(/`([^`]+)`/g, (_full, body: string) => {
-    codes.push(`<code>${escapeHtml(body)}</code>`);
-    return `${CODE_OPEN}${codes.length - 1}${CODE_CLOSE}`;
-  });
-
-  // Now safely escape the residue (no <a>, <img>, <code> tokens left to mangle).
-  const escaped = escapeHtml(stripped);
-
-  const formatted = escaped
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
-    .replace(/_([^_]+)_/g, '<em>$1</em>')
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-
-  return formatted
-    .replace(/XmdImgOpenA93f4X(\d+)XmdImgCloseA93f4X/g, (_full, idx) => images[Number(idx)] ?? '')
-    .replace(/XmdLnkOpenA93f4X(\d+)XmdLnkCloseA93f4X/g, (_full, idx) => links[Number(idx)] ?? '')
-    .replace(/XmdCodeOpenA93f4X(\d+)XmdCodeCloseA93f4X/g, (_full, idx) => codes[Number(idx)] ?? '');
-}
-
-function renderLink(label: string, url: string): string {
-  const safe = safeLinkUrl(url);
-  // Label is raw user-supplied text — must be HTML-escaped for the inner-text
-  // position. URL goes into an attribute so it gets the attribute escape.
-  return `<a href="${escapeAttribute(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+function buildMarkedExtension(options: MarkdownImageOptions): MarkedExtension {
+  return {
+    gfm: true,
+    breaks: false,
+    renderer: {
+      code(token: Tokens.Code): string {
+        const lang = (token.lang ?? '').trim().split(/\s+/, 1)[0]?.toLowerCase() || null;
+        return renderCodeBlock(token.text ?? '', lang, options);
+      },
+      html(token: Tokens.HTML | Tokens.Tag): string {
+        return escapeHtml(token.text ?? token.raw ?? '');
+      },
+      paragraph(token: Tokens.Paragraph): string {
+        const inline = this.parser.parseInline(token.tokens);
+        const standaloneImage = token.tokens.length === 1 && token.tokens[0]?.type === 'image';
+        return standaloneImage ? inline : `<p>${inline}</p>`;
+      },
+      link(token: Tokens.Link): string {
+        const href = safeLinkUrl(token.href ?? '');
+        const inner = token.tokens && token.tokens.length
+          ? this.parser.parseInline(token.tokens)
+          : escapeHtml(token.text ?? '');
+        const titleAttr = token.title ? ` title="${escapeAttribute(token.title)}"` : '';
+        return `<a href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer"${titleAttr}>${inner}</a>`;
+      },
+      image(token: Tokens.Image): string {
+        return renderImage(token.text ?? '', token.href ?? '', token.title ?? null, options);
+      },
+    },
+  };
 }
 
 /**
@@ -296,11 +151,8 @@ function safeLinkUrl(raw: string): string {
   return trimmed;
 }
 
-function renderCodeBlock(
-  codeLines: string[],
-  lang: string | null,
-  options: MarkdownImageOptions,
-): string {
+function renderCodeBlock(source: string, lang: string | null, options: MarkdownImageOptions): string {
+  const codeLines = source.split('\n');
   const threshold = options.codeLineNumberThreshold ?? 5;
   const hasLang = !!lang;
   const langAttrs = hasLang ? ` data-lang="${escapeAttribute(lang!)}"` : '';
@@ -309,10 +161,10 @@ function renderCodeBlock(
   // any downstream consumer that grep'd on the literal markup).
   if (!options.codeLineNumbers || codeLines.length <= threshold) {
     if (!hasLang) {
-      return `<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`;
+      return `<pre><code>${escapeHtml(source)}</code></pre>`;
     }
     const langClass = ` md-code--lang-${escapeAttribute(normaliseLang(lang!))}`;
-    return `<pre class="md-code${langClass}"${langAttrs}><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`;
+    return `<pre class="md-code${langClass}"${langAttrs}><code>${escapeHtml(source)}</code></pre>`;
   }
   // Numbered shape: one row per source line, gutter cells get a stable
   // class so the chat stylesheet can hide them from text selection.
@@ -349,9 +201,34 @@ function normaliseLang(lang: string): string {
   }
 }
 
-function renderImage(alt: string, src: string, options: MarkdownImageOptions): string {
+function renderImage(alt: string, src: string, title: string | null, options: MarkdownImageOptions): string {
   const resolved = options.resolveImageSrc ? options.resolveImageSrc(src) : src;
-  return `<img src="${escapeAttribute(resolved)}" alt="${escapeAttribute(alt)}">`;
+  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
+  return `<img src="${escapeAttribute(resolved)}" alt="${escapeAttribute(alt)}"${titleAttr}>`;
+}
+
+function sanitizeHtml(raw: string): string {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return raw;
+  }
+  return DOMPurify.sanitize(raw, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: [
+      'target',
+      'rel',
+      'title',
+      'data-line-count',
+      'data-line',
+      'data-lang',
+      'aria-hidden',
+    ],
+    FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'script'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick'],
+  });
+}
+
+function compactHtml(html: string): string {
+  return html.trim().replace(/>\s+</g, '><');
 }
 
 function escapeHtml(value: string): string {
