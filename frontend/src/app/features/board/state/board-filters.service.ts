@@ -99,9 +99,21 @@ export class BoardFiltersService {
 
   // ---------- filtered grouped feed ----------
 
-  readonly filteredGrouped = computed(() => {
-    const grouped = this.jobService.grouped();
-    const active = this.activeProjects();
+  readonly filteredGrouped = computed(() =>
+    this.filterGrouped(this.jobService.grouped(), this.activeProjects()),
+  );
+
+  /**
+   * Apply the non-project filters plus an explicit project scope. This is used
+   * by project-owned pages such as Backlog where stale URL/localStorage project
+   * filters must not override the currently selected project.
+   */
+  filteredGroupedForProject(projectName: string | null): GroupedJobs {
+    const active = projectName ? new Set([projectName]) : new Set<string>();
+    return this.filterGrouped(this.jobService.grouped(), active);
+  }
+
+  private filterGrouped(grouped: GroupedJobs, active: ReadonlySet<string>): GroupedJobs {
     const ownerId = this.activeClientFilter();
     const dependsOnKey = (this.activeDependsOnFilter() ?? '').trim().toUpperCase();
     const types = this.activeTypeFilter();
@@ -151,7 +163,7 @@ export class BoardFiltersService {
       completed: filterJobs(grouped.completed),
       archive: filterJobs(grouped.archive ?? []),
     } as GroupedJobs;
-  });
+  }
 
   readonly filteredTaskCount = computed(() => {
     const g = this.filteredGrouped();

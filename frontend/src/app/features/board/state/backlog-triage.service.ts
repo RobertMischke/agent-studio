@@ -34,10 +34,12 @@ function readPersistedSort(): BacklogSortMode {
 @Injectable({ providedIn: 'root' })
 export class BacklogTriageService {
   readonly open = signal(false);
+  readonly scopedProject = signal<string | null>(null);
   readonly sortMode = signal<BacklogSortMode>(readPersistedSort());
 
   /** Push `#/backlog` and flip the overlay open. Idempotent. */
-  openTriage(): void {
+  openTriage(projectName: string | null = null): void {
+    this.scopedProject.set(projectName);
     if (typeof window !== 'undefined') {
       const hash = window.location.hash || '';
       if (!hash.startsWith(HASH_ROUTE)) {
@@ -78,11 +80,12 @@ export class BacklogTriageService {
   }
 
   /** Read the current hash and reconcile the open signal. */
-  syncFromHash(): void {
+  syncFromHash(projectName: string | null = null): void {
     if (typeof window === 'undefined') return;
     const hash = window.location.hash || '';
     const onBacklog = hash.startsWith(HASH_ROUTE)
       || hash.split('&').some(s => s === '/backlog' || s.startsWith('/backlog?'));
+    if (onBacklog && !this.open()) this.scopedProject.set(projectName);
     if (onBacklog !== this.open()) this.open.set(onBacklog);
   }
 

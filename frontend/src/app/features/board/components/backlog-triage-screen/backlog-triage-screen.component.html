@@ -16,6 +16,9 @@
            data-testid="backlog-triage-count">
           {{ visibleJobs().length }}
           {{ visibleJobs().length === 1 ? 'task' : 'tasks' }}
+          @if (scopedProject(); as project) {
+            <span>· {{ project }}</span>
+          }
           @if (hasActiveFiltersOrSearch()) {
             <span>· filtered</span>
           }

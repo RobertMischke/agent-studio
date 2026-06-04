@@ -100,11 +100,14 @@ export class BacklogTriageScreenComponent implements OnDestroy {
   readonly hasActiveFilters = this.boardFilters.hasActiveFilters;
   readonly hasActiveFiltersOrSearch = this.boardFilters.hasActiveFiltersOrSearch;
   readonly sortMode = this.triage.sortMode;
+  readonly scopedProject = this.triage.scopedProject;
 
   readonly tagsById = this.tagStore.byId;
 
-  /** Backlog jobs after BoardFiltersService narrows by project/type/tag/owner/query. */
-  readonly filteredBacklog = computed<TaskInfo[]>(() => this.boardFilters.filteredGrouped().backlog ?? []);
+  /** Backlog jobs after BoardFiltersService narrows by the explicit page project. */
+  readonly filteredBacklog = computed<TaskInfo[]>(
+    () => this.boardFilters.filteredGroupedForProject(this.scopedProject()).backlog ?? [],
+  );
 
   /** Sorted list driven by the persisted sort mode. */
   readonly visibleJobs = computed<TaskInfo[]>(() => {
