@@ -943,6 +943,7 @@ public enum MoveJobStatus
     Success,
     NotFound,
     TargetFolderExists,
+    DirectoryLocked,
     Failure
 }
 

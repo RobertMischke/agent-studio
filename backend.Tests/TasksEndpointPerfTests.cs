@@ -341,6 +341,7 @@ internal sealed class FakeRunningCliService : ICliExecutionService
     public bool SendInput(string jobKey, string input) => throw new NotImplementedException();
     public List<CliOutputLine> GetOutput(string jobKey) => throw new NotImplementedException();
     public void DiscardPersistedOutput(string jobKey) => throw new NotImplementedException();
+    public void ReleaseOutputResources(string jobKey) { }
     public SessionUsage? GetLastUsage(string jobKey) => throw new NotImplementedException();
     public bool IsRunningForProject(string rootPath) => throw new NotImplementedException();
     public DateTime? GetLastStreamedAt(string jobKey) => throw new NotImplementedException();

@@ -51,6 +51,13 @@ public interface ICliExecutionService
     /// </summary>
     void DiscardPersistedOutput(string jobKey);
 
+    /// <summary>
+    /// Release runtime output handles without deleting the persisted fallback.
+    /// The runner calls this before task-folder lane transitions so Windows
+    /// directory moves are not blocked by a completed run's retained log store.
+    /// </summary>
+    void ReleaseOutputResources(string jobKey);
+
     CliExecution? GetExecution(string jobKey);
     SessionUsage? GetLastUsage(string jobKey);
     bool IsRunningForProject(string rootPath);

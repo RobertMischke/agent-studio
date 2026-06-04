@@ -17,6 +17,9 @@ namespace OrchestratorApi.Services.Tasks;
 /// </summary>
 public class TaskStateMachine
 {
+    private const int DirectoryMoveMaxAttempts = 8;
+    private static readonly int[] DirectoryMoveBackoffMs = [50, 100, 200, 400, 800, 1200, 1600];
+
     private readonly TaskScannerService _scanner;
     private readonly LaneMutexRegistry _laneMutex;
     private readonly ILogger<TaskStateMachine> _logger;
@@ -85,7 +88,14 @@ public class TaskStateMachine
 
         try
         {
-            Directory.Move(recheck.FolderPath, targetDir);
+            var moveFailure = MoveDirectoryWithRetry(
+                recheck.FolderPath,
+                targetDir,
+                operation: "move-job",
+                subject: jobId,
+                targetState);
+            if (moveFailure != null) return moveFailure with { NewFolderPath = null };
+
             TaskJsonFile.UpdateField(targetDir, "state", targetState, _logger);
             // Lane-entry sort anchor: the task just entered targetState, so
             // re-stamp its entry time. Drives the lane-entry default sort
@@ -364,7 +374,14 @@ public class TaskStateMachine
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
-            Directory.Move(sourceFolder, targetDir);
+            var moveFailure = MoveDirectoryWithRetry(
+                sourceFolder,
+                targetDir,
+                operation: "move-folder-to-state",
+                subject: newSlug,
+                targetState);
+            if (moveFailure != null) return moveFailure;
+
             var jobJsonPath = Path.Combine(targetDir, "job.json");
             var enteredLaneAt = DateTime.UtcNow.ToString("o");
             if (File.Exists(jobJsonPath))
@@ -609,7 +626,19 @@ public class TaskStateMachine
             }
             try
             {
-                Directory.Move(jobFolder, targetFolder);
+                var moveFailure = MoveDirectoryWithRetry(
+                    jobFolder,
+                    targetFolder,
+                    operation: "migrate-numbered-lane",
+                    subject: folderName,
+                    targetState: newName);
+                if (moveFailure != null)
+                {
+                    _logger.LogError(
+                        "ADR-0025 migration: failed to move {Source} to {Target}: {Message}",
+                        jobFolder, targetFolder, moveFailure.Message);
+                    continue;
+                }
                 if (File.Exists(Path.Combine(targetFolder, "job.json")))
                 {
                     TaskJsonFile.UpdateField(targetFolder, "state", newName, _logger);
@@ -678,8 +707,22 @@ public class TaskStateMachine
                 var newDir = Path.Combine(watchPath, newName);
                 if (Directory.Exists(oldDir) && !Directory.Exists(newDir))
                 {
-                    Directory.Move(oldDir, newDir);
+                    var laneMoveFailure = MoveDirectoryWithRetry(
+                        oldDir,
+                        newDir,
+                        operation: "migrate-legacy-lane",
+                        subject: oldName,
+                        targetState: newName);
+                    if (laneMoveFailure != null)
+                    {
+                        _logger.LogError(
+                            "Failed to rename state folder {Old} to {New}: {Message}",
+                            oldName, newName, laneMoveFailure.Message);
+                    }
+                    else
+                    {
                     _logger.LogInformation("Renamed state folder {Old} → {New}", oldName, newName);
+                    }
                 }
             }
 
@@ -725,7 +768,19 @@ public class TaskStateMachine
                     var newState = TaskStates.MapLegacyState(oldState);
 
                     var targetDir = Path.Combine(watchPath, newState, dirName);
-                    Directory.Move(jobDir, targetDir);
+                    var moveFailure = MoveDirectoryWithRetry(
+                        jobDir,
+                        targetDir,
+                        operation: "migrate-flat-job",
+                        subject: dirName,
+                        targetState: newState);
+                    if (moveFailure != null)
+                    {
+                        _logger.LogError(
+                            "Failed to migrate job folder {Dir}: {Message}",
+                            dirName, moveFailure.Message);
+                        continue;
+                    }
                     TaskJsonFile.UpdateField(targetDir, "state", newState, _logger);
                     _logger.LogInformation("Migrated job {Job} from {Old} to {New}", dirName, oldState, newState);
                 }
@@ -936,7 +991,13 @@ public class TaskStateMachine
 
         try
         {
-            Directory.Move(folderPath, target);
+            var moveFailure = MoveDirectoryWithRetry(
+                folderPath,
+                target,
+                operation: "slug-dedupe-neutralize",
+                subject: name,
+                targetState: Path.GetFileName(parent));
+            if (moveFailure != null) return null;
             return Path.GetFileName(target);
         }
         catch (Exception ex)
@@ -945,6 +1006,74 @@ public class TaskStateMachine
             return null;
         }
     }
+
+    private MoveJobOutcome? MoveDirectoryWithRetry(
+        string source,
+        string target,
+        string operation,
+        string subject,
+        string targetState)
+    {
+        Exception? last = null;
+
+        for (var attempt = 1; attempt <= DirectoryMoveMaxAttempts; attempt++)
+        {
+            try
+            {
+                Directory.Move(source, target);
+                if (attempt > 1)
+                {
+                    _logger.LogInformation(
+                        "task-folder-move-recovered operation={Operation} subject={Subject} targetState={TargetState} attempts={Attempts}",
+                        operation, subject, targetState, attempt);
+                }
+                return null;
+            }
+            catch (Exception ex) when (IsRetriableDirectoryMoveException(ex) && attempt < DirectoryMoveMaxAttempts)
+            {
+                last = ex;
+                var delayMs = DirectoryMoveBackoffMs[Math.Min(attempt - 1, DirectoryMoveBackoffMs.Length - 1)];
+                _logger.LogWarning(
+                    ex,
+                    "task-folder-move-retry operation={Operation} subject={Subject} targetState={TargetState} attempt={Attempt}/{MaxAttempts} delayMs={DelayMs}",
+                    operation, subject, targetState, attempt, DirectoryMoveMaxAttempts, delayMs);
+                Thread.Sleep(delayMs);
+            }
+            catch (Exception ex)
+            {
+                if (Directory.Exists(target))
+                {
+                    return new MoveJobOutcome(
+                        MoveJobStatus.TargetFolderExists,
+                        $"A folder named '{Path.GetFileName(target)}' already exists in {targetState}.");
+                }
+                return FailureForMoveException(ex, operation, subject, targetState);
+            }
+        }
+
+        return FailureForMoveException(last, operation, subject, targetState);
+    }
+
+    private MoveJobOutcome FailureForMoveException(Exception? ex, string operation, string subject, string targetState)
+    {
+        var message = ex?.Message ?? "unknown error";
+        if (ex != null && IsRetriableDirectoryMoveException(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "task-folder-move-locked operation={Operation} subject={Subject} targetState={TargetState} attempts={Attempts}",
+                operation, subject, targetState, DirectoryMoveMaxAttempts);
+            return new MoveJobOutcome(
+                MoveJobStatus.DirectoryLocked,
+                $"Task folder is locked by another process after {DirectoryMoveMaxAttempts} move attempts. " +
+                $"Close the active CLI/log handle and retry. Last error: {message}");
+        }
+
+        return new MoveJobOutcome(MoveJobStatus.Failure, message);
+    }
+
+    private static bool IsRetriableDirectoryMoveException(Exception ex)
+        => ex is IOException or UnauthorizedAccessException;
 }
 
 /// <summary>

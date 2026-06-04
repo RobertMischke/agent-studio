@@ -93,7 +93,7 @@ public sealed class CliOutputLogStore : IDisposable
             // Truncate atomically. Open with WriteThrough so the truncation
             // itself reaches disk before we hand the file back for appending.
             using (var fs = new FileStream(
-                Path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite,
+                Path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete,
                 bufferSize: 4096, FileOptions.WriteThrough))
             {
                 fs.Flush(flushToDisk: true);
@@ -180,7 +180,7 @@ public sealed class CliOutputLogStore : IDisposable
             // while a sibling process / thread holds the writer's handle would
             // throw IOException and the Activity Log endpoint would 500.
             using var fs = new FileStream(
-                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(fs, Encoding.UTF8);
             string? line;
             while ((line = reader.ReadLine()) != null)
@@ -216,7 +216,7 @@ public sealed class CliOutputLogStore : IDisposable
         // FileMode.Append positions at end and refuses seeks — exactly what
         // we want to keep concurrent appenders honest.
         return new FileStream(
-            Path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite,
+            Path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete,
             bufferSize: 4096, FileOptions.None);
     }
 

@@ -602,13 +602,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     {
         // If the process is still tracked, drop the open writer first so the
         // Windows file handle is released before delete.
+        ReleaseOutputResources(jobKey);
+
+        try { RunLogStore.DeleteRun(GetOutputLogDir(jobKey)); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log dir for {JobKey}", jobKey); }
+    }
+
+    public void ReleaseOutputResources(string jobKey)
+    {
         if (_processes.TryGetValue(jobKey, out var info))
         {
             try { info.OutputLog.Dispose(); } catch { /* already disposed */ }
         }
-
-        try { RunLogStore.DeleteRun(GetOutputLogDir(jobKey)); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log dir for {JobKey}", jobKey); }
     }
 
     public CliExecution? GetExecution(string jobKey) =>
