@@ -2,9 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 
 import { MarkdownViewComponent } from '../../markdown-view/markdown-view.component';
 import { ToolBurstChipComponent } from '../tool-burst-chip/tool-burst-chip.component';
+import { ConversationSessionCardComponent } from '../conversation-session-card/conversation-session-card.component';
 import { StickToBottomDirective } from '../stick-to-bottom.directive';
 import { TooltipDirective } from '../../tooltip';
 import type { StructuredTooltip } from '../../tooltip';
+import { parseRateLimit, type SessionCardData } from '../conversation-session-meta';
 import type {
   AgentNeedsInputEvent,
   ArtifactImageEvent,
@@ -55,10 +57,24 @@ interface MessageGroupRow {
   lastTs: string;
   items: MessageGroupItem[];
   meta: SessionMeta;
+  /**
+   * True when this group's actor differs from the previous role-bearing row,
+   * so the actor header should be shown. Consecutive same-actor groups (a tool
+   * burst between two agent turns preserves the role) suppress the repeated
+   * header and read as one continuous thread.
+   */
+  showHeader: boolean;
+}
+
+interface SessionMetaRow {
+  kind: 'sessionMeta';
+  id: string;
+  data: SessionCardData;
 }
 
 type RenderRow =
   | MessageGroupRow
+  | SessionMetaRow
   | { kind: 'toolBurst'; id: string; event: ToolBurstEvent }
   | { kind: 'runMarker'; id: string; event: RunMarkerEvent }
   | { kind: 'taskMarker'; id: string; event: TaskMarkerEvent }
@@ -172,7 +188,13 @@ function classifyMessageBody(body: string): ClassifiedBody {
   selector: 'app-conversation-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownViewComponent, ToolBurstChipComponent, TooltipDirective, StickToBottomDirective],
+  imports: [
+    MarkdownViewComponent,
+    ToolBurstChipComponent,
+    ConversationSessionCardComponent,
+    TooltipDirective,
+    StickToBottomDirective,
+  ],
   templateUrl: './conversation-view.component.html',
   styleUrl: './conversation-view.component.scss',
 })
@@ -191,6 +213,14 @@ export class ConversationViewComponent {
   private readonly expandedGroups = signal<ReadonlySet<string>>(new Set());
   private readonly expandedItems = signal<ReadonlySet<string>>(new Set());
 
+  /**
+   * Whether tool-activity rows (tool bursts) are shown in the feed. Defaults
+   * on; the header toggle lets the operator collapse tool noise so the thread
+   * reads as a plain agent/user conversation. Hiding bursts also lets two
+   * agent turns that were only separated by a burst merge into one block.
+   */
+  readonly showTools = signal(true);
+
   readonly visibleItemLimit = VISIBLE_ITEM_LIMIT;
 
   readonly rows = computed<RenderRow[]>(() => {
@@ -202,6 +232,11 @@ export class ConversationViewComponent {
     let lastSeenSessionId: string | undefined;
     let lastSeenSessionInitAt: string | undefined;
     let lastSeenRateLimit: string | undefined;
+    // Role of the previous *visible* row. A tool burst preserves it (an agent
+    // turn → burst → agent turn stays one role); any other rendered event
+    // resets it to null so the next message group re-announces its actor.
+    let lastRole: MessageEvent['kind'] | null = null;
+    const sessionCard: { row: SessionMetaRow | null } = { row: null };
 
     const closeGroup = (): void => {
       const open = cell.open;
@@ -209,8 +244,46 @@ export class ConversationViewComponent {
       // A group that ended up with no rendered items (only lifecycle noise
       // and zero payload) would paint an empty bubble — drop it instead so
       // the user never sees a hollow "Agent" frame.
-      if (open.items.length > 0) out.push(open);
+      if (open.items.length > 0) {
+        open.showHeader = lastRole !== open.actor;
+        lastRole = open.actor;
+        out.push(open);
+      }
       cell.open = null;
+    };
+
+    /**
+     * Resolve the session-meta card for the given session id, creating a fresh
+     * card (on its own line) when the id changes or none exists yet. Mutated in
+     * place as init / rate-limit lines arrive for the same session.
+     */
+    const sessionCardFor = (sessionId: string | undefined): SessionMetaRow => {
+      const cur = sessionCard.row;
+      if (cur) {
+        const curId = cur.data.sessionIdFull;
+        if (!sessionId || !curId || curId === sessionId) {
+          if (sessionId && !curId) {
+            cur.data = {
+              ...cur.data,
+              sessionIdFull: sessionId,
+              sessionIdShort: shortenSessionId(sessionId),
+            };
+          }
+          return cur;
+        }
+      }
+      closeGroup();
+      const row: SessionMetaRow = {
+        kind: 'sessionMeta',
+        id: `session-meta:${out.length}`,
+        data: {
+          sessionIdFull: sessionId,
+          sessionIdShort: sessionId ? shortenSessionId(sessionId) : undefined,
+        },
+      };
+      sessionCard.row = row;
+      out.push(row);
+      return row;
     };
 
     const ensureGroup = (actor: MessageEvent['kind'], ts: string): MessageGroupRow => {
@@ -224,6 +297,7 @@ export class ConversationViewComponent {
         firstTs: ts,
         lastTs: ts,
         items: [],
+        showHeader: true,
         meta: {
           sessionIdShort: lastSeenSessionId ? shortenSessionId(lastSeenSessionId) : undefined,
           sessionIdFull: lastSeenSessionId,
@@ -252,6 +326,7 @@ export class ConversationViewComponent {
         if (m.marker === 'start') continue;
         closeGroup();
         out.push({ kind: 'runMarker', id: m.id, event: m });
+        lastRole = null;
         continue;
       }
 
@@ -271,7 +346,8 @@ export class ConversationViewComponent {
         }
 
         // Lifecycle / telemetry lines never render as their own item.
-        // They feed the sidecar meta the header tooltip surfaces.
+        // They feed the sidecar meta (header chip + tooltip, kept for the
+        // locked tests) and the visible session meta-card.
         if (classified.meta === 'session-init' || classified.meta === 'rate-limit') {
           const open = cell.open;
           if (open && open.actor === m.kind) {
@@ -287,6 +363,14 @@ export class ConversationViewComponent {
               open.meta.rateLimitText = classified.raw.trim();
             }
             open.lastTs = ts;
+          }
+
+          // Render the init block as a pretty meta-card at the head of the run.
+          const card = sessionCardFor(classified.sessionId ?? lastSeenSessionId);
+          if (classified.meta === 'session-init') {
+            card.data = { ...card.data, initAt: ts };
+          } else {
+            card.data = { ...card.data, rateLimit: parseRateLimit(classified.raw) };
           }
           continue;
         }
@@ -332,6 +416,7 @@ export class ConversationViewComponent {
       // Non-message events break the current group and dispatch to their
       // existing inline row renderer.
       closeGroup();
+      const before = out.length;
       switch (e.kind) {
         case 'toolBurst':
           out.push({ kind: 'toolBurst', id: e.id, event: e });
@@ -379,6 +464,9 @@ export class ConversationViewComponent {
         default:
           break;
       }
+      // A tool burst preserves the surrounding role so two agent turns it
+      // separates stay one thread; any other visible event resets it.
+      if (e.kind !== 'toolBurst' && out.length > before) lastRole = null;
     }
 
     closeGroup();
@@ -432,6 +520,10 @@ export class ConversationViewComponent {
 
   emitOpenVerboseDebug(): void {
     this.openVerboseDebug.emit();
+  }
+
+  toggleTools(): void {
+    this.showTools.update((v) => !v);
   }
 
   formatTime(iso: string): string {

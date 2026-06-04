@@ -406,6 +406,85 @@ describe('ConversationViewComponent', () => {
     expect(emitted).toEqual(['add-dark-theme-screenshots']);
   });
 
+  it('shows the actor header once across an agent → tool burst → agent thread', async () => {
+    // Role continuity: a tool burst between two agent turns preserves the
+    // role, so the second group suppresses its repeated header and the run
+    // reads as one continuous block.
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 1, 'first'),
+      toolBurst(),
+      agentMsg('a2', 2, 'second'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const groups = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(groups.length).toBe(2);
+    expect(groups[0].getAttribute('data-show-header')).toBe('true');
+    expect(groups[1].getAttribute('data-show-header')).toBe('false');
+    // The suppressed group has no actor header element at all.
+    expect(groups[1].querySelector('[data-testid="conversation-message-head"]')).toBeFalsy();
+  });
+
+  it('re-announces the actor after a non-tool event resets the role', async () => {
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 1, 'first'),
+      {
+        id: 'r2',
+        kind: 'runMarker',
+        timestamp: new Date(Date.UTC(2026, 4, 5, 12, 0, 10)).toISOString(),
+        marker: 'complete',
+        rawRange: range(11, 11),
+      },
+      agentMsg('a2', 2, 'second'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const groups = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(groups.length).toBe(2);
+    expect(groups[1].getAttribute('data-show-header')).toBe('true');
+  });
+
+  it('hides tool-burst rows when the Tools toggle is switched off', async () => {
+    const fixture = await makeFixture([agentMsg('a1', 1, 'x'), toolBurst()]);
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('[data-testid="conversation-tool-burst"]')).toBeTruthy();
+    const toggle = el.querySelector<HTMLButtonElement>(
+      '[data-testid="conversation-show-tools"]'
+    );
+    expect(toggle?.getAttribute('aria-pressed')).toBe('true');
+    toggle?.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="conversation-tool-burst"]')).toBeFalsy();
+    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('renders the Session init / Rate limit block as a meta-card row', async () => {
+    const sessionId = 'c705779a-a6bc-43ac-bada-358ea7e11a28';
+    const events: ConversationEvent[] = [
+      agentMsg('a1', 0, `● Session init ${sessionId}`),
+      agentMsg(
+        'a2',
+        1,
+        '● Rate limit · five-hour · allowed · reset in 4.4 h  [window=five_hour status=allowed resetsAt=1777393800]'
+      ),
+      agentMsg('a3', 2, 'On branch main'),
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('[data-testid="conversation-session-meta"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="conversation-session-card"]')).toBeTruthy();
+    expect(
+      el.querySelector('[data-testid="conversation-session-card-id"]')?.textContent
+    ).toContain('c705779a');
+    expect(
+      el.querySelector('[data-testid="conversation-session-card-ratelimit"]')?.textContent
+    ).toContain('5h');
+    // The init lines still do not render as message items.
+    const items = el.querySelectorAll('[data-testid="conversation-message-item"]');
+    expect(items.length).toBe(1);
+    expect(items[0].textContent).toContain('On branch main');
+  });
+
   it('renders an answered Ask marker without a queue link', async () => {
     const ask: FeedbackQueuedEvent = {
       id: 'fq-2',

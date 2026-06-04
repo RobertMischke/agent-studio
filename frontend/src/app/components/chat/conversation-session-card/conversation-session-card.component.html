@@ -1,0 +1,32 @@
+<div class="scard" data-testid="conversation-session-card">
+  <span class="scard__glyph" aria-hidden="true">◴</span>
+  <span class="scard__label">Session</span>
+
+  @if (data().sessionIdShort) {
+    <code class="scard__id"
+          data-testid="conversation-session-card-id"
+          [appTooltip]="data().sessionIdFull ?? ''">{{ data().sessionIdShort }}</code>
+  }
+
+  @if (data().initAt) {
+    <span class="scard__init">started {{ formatTime(data().initAt) }}</span>
+  }
+
+  @if (rateLimit(); as rl) {
+    <span class="scard__rate"
+          data-testid="conversation-session-card-ratelimit"
+          [attr.data-status]="rl.status ?? null"
+          [appTooltip]="rl.raw">
+      <span class="scard__rate-icon" aria-hidden="true">⏱</span>
+      @if (rl.windowLabel) {
+        <span class="scard__rate-window">{{ rl.windowLabel }}</span>
+      }
+      @if (rl.status) {
+        <span class="scard__rate-status">{{ rl.status }}</span>
+      }
+      @if (resetClock()) {
+        <span class="scard__rate-reset">resets {{ resetClock() }}</span>
+      }
+    </span>
+  }
+</div>

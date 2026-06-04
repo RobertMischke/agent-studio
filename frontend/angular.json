@@ -58,7 +58,9 @@
               "src/styles.scss",
               "node_modules/diff2html/bundles/css/diff2html.min.css"
             ],
-            "allowedCommonJsDependencies": ["@profoundlogic/hogan"]
+            "allowedCommonJsDependencies": [
+              "@profoundlogic/hogan"
+            ]
           },
           "configurations": {
             "production": {
@@ -68,11 +70,11 @@
                   "maximumWarning": "3MB",
                   "maximumError": "5MB"
                 },
-                  {
-                    "type": "anyComponentStyle",
-                    "maximumWarning": "40kB",
-                    "maximumError": "48kB"
-                  }
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "40kB",
+                  "maximumError": "48kB"
+                }
               ],
               "outputHashing": "all",
               "serviceWorker": "ngsw-config.json"
@@ -103,7 +105,10 @@
         "lint": {
           "builder": "@angular-eslint/builder:lint",
           "options": {
-            "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
+            "lintFilePatterns": [
+              "src/**/*.ts",
+              "src/**/*.html"
+            ]
           }
         },
         "test": {
@@ -242,6 +247,73 @@
             },
             "development": {
               "buildTarget": "plan-strip-mockup:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    },
+    "conversation-view-mockup": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "mockup",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/mockups/conversation-view/main.ts",
+            "index": "src/mockups/conversation-view/index.html",
+            "tsConfig": "tsconfig.mockup.json",
+            "inlineStyleLanguage": "scss",
+            "outputPath": "dist/conversation-view-mockup",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/styles.scss",
+              "src/mockups/conversation-view/styles.scss"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "600kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "40kB",
+                  "maximumError": "48kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4023,
+            "host": "127.0.0.1"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "conversation-view-mockup:build:production"
+            },
+            "development": {
+              "buildTarget": "conversation-view-mockup:build:development"
             }
           },
           "defaultConfiguration": "development"

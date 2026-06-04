@@ -12,6 +12,16 @@
     </div>
     <div class="conv__head-actions">
       <button type="button"
+              class="conv__head-btn conv__head-btn--toggle"
+              data-testid="conversation-show-tools"
+              [class.conv__head-btn--on]="showTools()"
+              [attr.aria-pressed]="showTools() ? 'true' : 'false'"
+              [appTooltip]="showTools() ? 'Hide tool activity rows' : 'Show tool activity rows'"
+              (click)="toggleTools()">
+        <span aria-hidden="true">🔧</span>
+        <span>Tools</span>
+      </button>
+      <button type="button"
               class="conv__head-btn"
               data-testid="conversation-open-trace"
               [appTooltip]="'Open the raw activity log in Trace mode'"
@@ -45,32 +55,36 @@
 
         @case ('messageGroup') {
           <li class="conv__row conv__row--message"
+              [class.conv__row--continued]="!row.showHeader"
               [attr.data-actor]="row.actor"
               [attr.data-item-count]="row.items.length"
+              [attr.data-show-header]="row.showHeader ? 'true' : 'false'"
               [attr.data-session-id]="row.meta.sessionIdFull ?? null"
               [attr.data-has-rate-limit]="row.meta.rateLimitText ? 'true' : 'false'"
               [attr.data-testid]="'conversation-message-' + row.actor">
-            <div class="msg">
-              <header class="msg__head"
-                      [appTooltip]="metaTooltip(row)"
-                      [attr.data-testid]="'conversation-message-head'">
-                <span class="msg__avatar" aria-hidden="true">{{ actorGlyph(row.actor) }}</span>
-                <span class="msg__actor">{{ actorLabel(row.actor) }}</span>
-                @if (row.items.length > 1) {
-                  <span class="msg__count"
-                        data-testid="conversation-message-count">{{ row.items.length }} events</span>
-                }
-                <time class="msg__time">{{ formatGroupTime(row) }}</time>
-                @if (row.meta.sessionIdFull) {
-                  <span class="msg__session"
-                        data-testid="conversation-message-session">session {{ formatSessionIdShort(row.meta.sessionIdFull) }}</span>
-                }
-                @if (row.meta.rateLimitText) {
-                  <span class="msg__rate-dot"
-                        data-testid="conversation-message-rate-limit"
-                        aria-hidden="true">·</span>
-                }
-              </header>
+            <div class="msg" [class.msg--continued]="!row.showHeader">
+              @if (row.showHeader) {
+                <header class="msg__head"
+                        [appTooltip]="metaTooltip(row)"
+                        [attr.data-testid]="'conversation-message-head'">
+                  <span class="msg__avatar" aria-hidden="true">{{ actorGlyph(row.actor) }}</span>
+                  <span class="msg__actor">{{ actorLabel(row.actor) }}</span>
+                  @if (row.items.length > 1) {
+                    <span class="msg__count"
+                          data-testid="conversation-message-count">{{ row.items.length }} events</span>
+                  }
+                  <time class="msg__time">{{ formatGroupTime(row) }}</time>
+                  @if (row.meta.sessionIdFull) {
+                    <span class="msg__session"
+                          data-testid="conversation-message-session">session {{ formatSessionIdShort(row.meta.sessionIdFull) }}</span>
+                  }
+                  @if (row.meta.rateLimitText) {
+                    <span class="msg__rate-dot"
+                          data-testid="conversation-message-rate-limit"
+                          aria-hidden="true">·</span>
+                  }
+                </header>
+              }
               <ol class="msg__items" data-testid="conversation-message-items">
                 @for (item of visibleItems(row); track item.id) {
                   <li class="msg__item"
@@ -121,10 +135,19 @@
           </li>
         }
 
-        @case ('toolBurst') {
-          <li class="conv__row conv__row--burst" data-testid="conversation-tool-burst">
-            <app-tool-burst-chip [event]="row.event" />
+        @case ('sessionMeta') {
+          <li class="conv__row conv__row--session-meta"
+              data-testid="conversation-session-meta">
+            <app-conversation-session-card [data]="row.data" />
           </li>
+        }
+
+        @case ('toolBurst') {
+          @if (showTools()) {
+            <li class="conv__row conv__row--burst" data-testid="conversation-tool-burst">
+              <app-tool-burst-chip [event]="row.event" />
+            </li>
+          }
         }
 
         @case ('runMarker') {
