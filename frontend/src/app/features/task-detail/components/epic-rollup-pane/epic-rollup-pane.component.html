@@ -23,14 +23,32 @@
     @if (r.subTasks.length === 0) {
       <div class="epic-rollup__muted" data-testid="epic-rollup-empty">No sub-tasks yet.</div>
     } @else {
-      <ul class="epic-rollup__list" data-testid="epic-rollup-list">
-        @for (sub of r.subTasks; track sub.id) {
-          <li class="epic-rollup__item">
-            <span class="epic-rollup__item-title" [appTooltip]="sub.title">{{ sub.title || sub.id }}</span>
-            <span class="epic-rollup__item-state" [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
-          </li>
+      <div class="epic-rollup__board" data-testid="epic-rollup-board" role="list">
+        @for (lane of laneGroups(); track trackByLane($index, lane)) {
+          <section class="epic-rollup__lane"
+                   role="listitem"
+                   [attr.data-testid]="'epic-rollup-lane'"
+                   [attr.data-lane]="lane.state">
+            <header class="epic-rollup__lane-head">
+              <span class="epic-rollup__lane-dot" [attr.data-lane]="lane.state" aria-hidden="true"></span>
+              <span class="epic-rollup__lane-label">{{ lane.label }}</span>
+              <span class="epic-rollup__lane-count" data-testid="epic-rollup-lane-count">{{ lane.subTasks.length }}</span>
+            </header>
+            <ul class="epic-rollup__lane-list">
+              @for (sub of lane.subTasks; track sub.id) {
+                <li>
+                  <button type="button"
+                          class="epic-rollup__card"
+                          data-testid="epic-rollup-card"
+                          [attr.data-sub-id]="sub.id"
+                          [appTooltip]="'Open sub-task'"
+                          (click)="openSub(sub)">{{ sub.title || sub.id }}</button>
+                </li>
+              }
+            </ul>
+          </section>
         }
-      </ul>
+      </div>
     }
   }
 </section>

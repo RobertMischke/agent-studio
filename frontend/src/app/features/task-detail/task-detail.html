@@ -81,7 +81,8 @@
   @if (detail().info.kind === 'epic') {
     <app-epic-rollup-pane
       [epicId]="detail().info.id"
-      [watchPath]="detail().info.watchPath" />
+      [watchPath]="detail().info.watchPath"
+      (openSubTask)="openEpicRequested.emit($event)" />
   }
 
   <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
