@@ -3,6 +3,7 @@ import type { TaskInfo } from '../../../../models/task.model';
 import { buildEpicGroups, EpicGroupView } from '../epic-grouping.util';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { StudioIconComponent, StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 
 /**
  * Group-by-epic board view: the "Gruppieren nach Epic" toggle swaps the lane
@@ -19,7 +20,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 @Component({
   selector: 'app-epic-group-board',
   standalone: true,
-  imports: [TaskCardComponent, TooltipDirective],
+  imports: [TaskCardComponent, TooltipDirective, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './epic-group-board.component.html',
   styleUrl: './epic-group-board.component.scss',
@@ -47,8 +48,8 @@ export class EpicGroupBoardComponent {
   }
 
   /** Header glyph: epic puzzle piece, a folder for "No epic", a warning for orphans. */
-  groupIcon(group: EpicGroupView): string {
-    if (group.epic) return '🧩';
-    return group.id === '__orphan__' ? '⚠️' : '🗂️';
+  groupIcon(group: EpicGroupView): StudioIconName {
+    if (group.epic) return 'epic';
+    return group.id === '__orphan__' ? 'warn' : 'folder';
   }
 }

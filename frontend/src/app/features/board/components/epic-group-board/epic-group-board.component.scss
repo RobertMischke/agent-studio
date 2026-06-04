@@ -39,7 +39,9 @@
 
 .epic-board__icon {
   flex: 0 0 auto;
-  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  color: var(--studio-fg-muted);
 }
 
 .epic-board__title {

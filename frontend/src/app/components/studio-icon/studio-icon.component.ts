@@ -18,6 +18,7 @@ export type StudioIconName =
   | 'refresh' | 'more' | 'bell' | 'warn' | 'diff' | 'book' | 'eye'
   | 'panelLeft' | 'panelRight' | 'layout' | 'sliders' | 'bot'
   | 'grid' | 'archive' | 'send' | 'sun' | 'moon' | 'pin'
+  | 'epic' | 'backlog'
   | 'chevronRight' | 'chevronDown' | 'chevronLeft';
 
 @Component({

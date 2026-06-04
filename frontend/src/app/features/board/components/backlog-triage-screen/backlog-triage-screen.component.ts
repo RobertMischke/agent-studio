@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { ClientService } from '../../../../services/client.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { projectIdentity } from '../../../../services/project-identity.util';
@@ -46,7 +47,7 @@ const TYPE_ORDER: Record<string, number> = { bug: 0, feature: 1, chore: 2 };
 @Component({
   selector: 'app-backlog-triage-screen',
   standalone: true,
-  imports: [TooltipDirective, FiltersDropdownComponent],
+  imports: [TooltipDirective, FiltersDropdownComponent, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './backlog-triage-screen.component.html',
   styleUrl: './backlog-triage-screen.component.scss',

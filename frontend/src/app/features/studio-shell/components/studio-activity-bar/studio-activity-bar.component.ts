@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { TooltipDirective } from '../../../../components/tooltip/tooltip.directive';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 
 export type StudioActivityPanelKey = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook';
 
@@ -12,7 +13,7 @@ export interface StudioActivityBarItem {
 @Component({
   selector: 'app-studio-activity-bar',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './studio-activity-bar.component.html',
   styleUrl: './studio-activity-bar.component.scss',

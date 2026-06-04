@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import type { EpicRollup } from '../../../../models/task.model';
@@ -35,7 +36,7 @@ export interface EpicOverviewScope {
 @Component({
   selector: 'app-epic-overview-screen',
   standalone: true,
-  imports: [TooltipDirective, EpicCreateDialogComponent],
+  imports: [TooltipDirective, EpicCreateDialogComponent, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './epic-overview-screen.component.html',
   styleUrl: './epic-overview-screen.component.scss',

@@ -10,7 +10,7 @@
                 [attr.aria-expanded]="!isCollapsed(group.id)"
                 [appTooltip]="isCollapsed(group.id) ? 'Expand epic' : 'Collapse epic'"
                 (click)="toggleCollapse(group.id)">{{ isCollapsed(group.id) ? '›' : '‹' }}</button>
-        <span class="epic-board__icon" aria-hidden="true">{{ groupIcon(group) }}</span>
+        <span class="epic-board__icon" aria-hidden="true"><app-studio-icon [name]="groupIcon(group)" [size]="15"></app-studio-icon></span>
         <h2 class="epic-board__title">{{ group.label }}</h2>
         <span class="epic-board__count"
               [attr.data-testid]="'epic-group-count-' + group.id">{{ group.completed }} / {{ group.total }}</span>

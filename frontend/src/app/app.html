@@ -97,7 +97,7 @@
                     data-testid="studio-board-epic-toggle"
                     [appTooltip]="groupByEpic() ? 'Show lane columns' : 'Group tasks by epic'"
                     (click)="toggleGroupByEpic()">
-              <span aria-hidden="true">{{ groupByEpic() ? '🧩' : '▦' }}</span>
+              <app-studio-icon [name]="groupByEpic() ? 'epic' : 'grid'" [size]="14"></app-studio-icon>
               <span>{{ groupByEpic() ? 'Epics' : 'Lanes' }}</span>
             </button>
             <button type="button"

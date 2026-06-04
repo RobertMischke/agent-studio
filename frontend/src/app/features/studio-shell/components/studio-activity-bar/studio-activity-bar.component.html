@@ -52,7 +52,7 @@
           appTooltip="Open backlog triage (Ctrl+B)"
           data-testid="studio-ab-backlog"
           (click)="openBacklogRequest.emit()">
-    <span class="studio-ab__emoji" aria-hidden="true">📋</span>
+    <app-studio-icon name="backlog" [size]="22"></app-studio-icon>
     @if (backlogCount() > 0) {
       <span class="studio-ab__badge studio-ab__badge--count"
             data-testid="studio-ab-backlog-badge"
@@ -70,7 +70,7 @@
             appTooltip="Open epic overview"
             data-testid="studio-ab-epics"
             (click)="openEpicsRequest.emit()">
-      <span class="studio-ab__emoji" aria-hidden="true">🧩</span>
+      <app-studio-icon name="epic" [size]="22"></app-studio-icon>
     </button>
   }
   <span class="studio-ab__spacer"></span>

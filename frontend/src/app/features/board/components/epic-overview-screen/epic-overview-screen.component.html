@@ -9,7 +9,7 @@
               (click)="close()">←</button>
       <div>
         <h1 class="epic-overview__title">
-          <span aria-hidden="true">🧩</span>
+          <app-studio-icon name="epic" [size]="20"></app-studio-icon>
           Epics
           @if (scopedProject(); as scope) {
             <span class="epic-overview__scope" data-testid="epic-overview-scope">{{ scope.name }}</span>
