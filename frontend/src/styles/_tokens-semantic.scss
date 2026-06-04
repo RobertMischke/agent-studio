@@ -87,6 +87,12 @@
   --studio-accent-warn-strong:    var(--color-yellow-300);
   --studio-accent-6-strong:       var(--color-red-300);
 
+  // Teal status pigment — used by "info / fixture / retry / watch / resolved"
+  // chips & status text that sit on a low-alpha teal tint. No severity alias
+  // covers teal, so this is the one flipping token for that hue: dark keeps the
+  // Mocha teal; the light block darkens it so teal-on-tint clears WCAG-AA.
+  --studio-accent-teal:           var(--color-mocha-teal);
+
   // F39: "Running" state on a job-card / pill is a recurring visual that
   // needs to flip with the theme. The tint is built once here so consumers
   // (.task-card--running, future board surfaces) read a single token instead
@@ -458,6 +464,9 @@
   --studio-accent-success-strong: var(--color-green-700);
   --studio-accent-warn-strong:    var(--color-amber-700);
   --studio-accent-6-strong:       var(--color-red-700);
+
+  // Teal status pigment — darker teal so teal-on-tint stays legible on white.
+  --studio-accent-teal:           var(--color-teal-700);
 
   // F39: running tint is softer on the white shell (10% vs 14% on dark) so
   // the card surface stays paper-toned, not bluish-grey. Shadow ring drops
