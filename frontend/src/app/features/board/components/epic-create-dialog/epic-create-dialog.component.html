@@ -1,0 +1,58 @@
+<app-dialog
+  eyebrow="Epic"
+  title="Create a new epic"
+  [subtitle]="'A new epic lands in the backlog of ' + projectName() + '. Move it to Ready when you want it decomposed.'"
+  kind="primary"
+  testid="epic-create-dialog"
+  (closeRequest)="onCancel()"
+  (backdropClick)="onCancel()">
+  <div class="ecd__form">
+    <label class="ecd__field">
+      <span class="ecd__label">Title</span>
+      <input #titleInput
+             type="text"
+             class="ecd__input"
+             data-testid="epic-create-title"
+             autocomplete="off"
+             spellcheck="false"
+             maxlength="200"
+             [ngModel]="draftTitle()"
+             (ngModelChange)="draftTitle.set($event)"
+             (keydown)="onTitleKeydown($event)"
+             [disabled]="submitting()"
+             placeholder="What is this epic about?" />
+    </label>
+    <label class="ecd__field">
+      <span class="ecd__label">Description <span class="ecd__optional">(optional)</span></span>
+      <textarea class="ecd__input ecd__input--area"
+                data-testid="epic-create-description"
+                rows="4"
+                spellcheck="false"
+                [ngModel]="draftDescription()"
+                (ngModelChange)="draftDescription.set($event)"
+                [disabled]="submitting()"
+                placeholder="Outline the goal so the decomposition run has context."></textarea>
+    </label>
+    @if (errorMsg(); as msg) {
+      <p class="ecd__hint ecd__hint--error" data-testid="epic-create-error">{{ msg }}</p>
+    } @else {
+      <p class="ecd__hint">
+        Creates a <code>kind=epic</code> card. Sub-tasks attach to it once the epic is decomposed.
+      </p>
+    }
+  </div>
+  <div footer class="ecd__actions">
+    <button type="button"
+            class="ecd__btn ecd__btn--ghost"
+            data-testid="epic-create-cancel"
+            [disabled]="submitting()"
+            (click)="onCancel()">Cancel</button>
+    <button type="button"
+            class="ecd__btn ecd__btn--primary"
+            data-testid="epic-create-submit"
+            [disabled]="!canSubmit()"
+            (click)="onSubmit()">
+      {{ submitting() ? 'Creating…' : 'Create epic' }}
+    </button>
+  </div>
+</app-dialog>

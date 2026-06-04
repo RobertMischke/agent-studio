@@ -21,6 +21,7 @@ import {
   CreateTaskDialogComponent,
   EpicGroupBoardComponent,
   EpicOverviewScreenComponent,
+  type EpicOverviewScope,
   EpicOverviewService,
   FiltersDropdownComponent,
   TaskColumnComponent,
@@ -1383,6 +1384,23 @@ export class App implements OnInit, OnDestroy {
     if (active.length > 0) return active[0];
     const watchPaths = this.watchPaths();
     return watchPaths.length > 0 ? watchPaths[0].name : null;
+  });
+
+  /**
+   * Project the epic overview is scoped to. The per-project Epics entry opens
+   * the overview after pinning exactly one active project (setSoleProject), so
+   * a single active project that resolves to a known watch path is the scope.
+   * Anything else (zero or many active projects) leaves the overview in the
+   * read-only cross-project view, where there is no single target to create
+   * an epic into.
+   */
+  readonly epicScopedProject = computed<EpicOverviewScope | null>(() => {
+    const active = [...this.activeProjects()];
+    if (active.length !== 1) return null;
+    const name = active[0];
+    const entry = this.watchPaths().find((wp) => wp.name === name);
+    if (!entry) return null;
+    return { name, watchPath: entry.path };
   });
 
   orchChatTooltip(): string {

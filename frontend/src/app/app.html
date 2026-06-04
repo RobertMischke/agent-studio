@@ -220,6 +220,7 @@
               (newTaskRequested)="onBacklogNewTask()" />
           } @else if (epicOverviewOpen()) {
             <app-epic-overview-screen
+              [scopedProject]="epicScopedProject()"
               (closeRequested)="epicOverview.closeOverview()"
               (openTask)="onEpicOverviewOpenTask($event)" />
           } @else {

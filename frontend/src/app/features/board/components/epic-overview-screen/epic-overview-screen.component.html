@@ -11,26 +11,47 @@
         <h1 class="epic-overview__title">
           <span aria-hidden="true">🧩</span>
           Epics
+          @if (scopedProject(); as scope) {
+            <span class="epic-overview__scope" data-testid="epic-overview-scope">{{ scope.name }}</span>
+          }
         </h1>
         <p class="epic-overview__subtitle" data-testid="epic-overview-count">
           {{ totalEpics() }} {{ totalEpics() === 1 ? 'epic' : 'epics' }}
         </p>
       </div>
     </div>
+    @if (canCreate()) {
+      <button type="button"
+              class="epic-overview__new"
+              data-testid="epic-overview-new"
+              [appTooltip]="'Create a new epic'"
+              (click)="openCreate()">+ New epic</button>
+    }
   </header>
 
-  @if (loading() && epics().length === 0) {
+  @if (loading() && visibleEpics().length === 0) {
     <div class="epic-overview__muted" data-testid="epic-overview-loading">Loading epics…</div>
   } @else if (error()) {
     <div class="epic-overview__muted" data-testid="epic-overview-error">Could not load epics.</div>
-  } @else if (epics().length === 0) {
-    <div class="epic-overview__empty" data-testid="epic-overview-empty">
-      <p class="epic-overview__empty-text">No epics yet.</p>
-      <p class="epic-overview__empty-hint">Create a task with kind “epic”, then attach sub-tasks to it.</p>
-    </div>
+  } @else if (visibleEpics().length === 0) {
+    @if (scopedProject(); as scope) {
+      <div class="epic-overview__empty" data-testid="epic-overview-empty">
+        <p class="epic-overview__empty-text">No epics in {{ scope.name }} yet.</p>
+        <p class="epic-overview__empty-hint">Group related work under an epic, then let it decompose into sub-tasks.</p>
+        <button type="button"
+                class="epic-overview__empty-cta"
+                data-testid="epic-overview-create"
+                (click)="openCreate()">Create your first epic</button>
+      </div>
+    } @else {
+      <div class="epic-overview__empty" data-testid="epic-overview-empty">
+        <p class="epic-overview__empty-text">No epics yet.</p>
+        <p class="epic-overview__empty-hint">Open a project's Epics view to create one.</p>
+      </div>
+    }
   } @else {
     <ul class="epic-overview__list" data-testid="epic-overview-list" role="list">
-      @for (epic of epics(); track trackByEpic($index, epic)) {
+      @for (epic of visibleEpics(); track trackByEpic($index, epic)) {
         @let identity = identityFor(epic.projectName);
         @let expanded = isExpanded(epic.id);
         <li class="epic-overview__card"
@@ -102,5 +123,13 @@
         </li>
       }
     </ul>
+  }
+
+  @if (showCreate() && scopedProject(); as scope) {
+    <app-epic-create-dialog
+      [projectName]="scope.name"
+      [watchPath]="scope.watchPath"
+      (created)="onEpicCreated()"
+      (cancelled)="closeCreate()" />
   }
 </section>

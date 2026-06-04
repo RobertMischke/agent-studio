@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   inject,
+  input,
   OnInit,
   output,
   signal,
@@ -11,6 +12,13 @@ import { TooltipDirective } from '../../../../components/tooltip';
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import type { EpicRollup } from '../../../../models/task.model';
+import { EpicCreateDialogComponent } from '../epic-create-dialog/epic-create-dialog.component';
+
+/** Project the overview is scoped to; null means the cross-project view. */
+export interface EpicOverviewScope {
+  name: string;
+  watchPath: string;
+}
 
 /**
  * Dedicated read-only epic overview at `#/epics`. Lists every epic from
@@ -27,13 +35,21 @@ import type { EpicRollup } from '../../../../models/task.model';
 @Component({
   selector: 'app-epic-overview-screen',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, EpicCreateDialogComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './epic-overview-screen.component.html',
   styleUrl: './epic-overview-screen.component.scss',
 })
 export class EpicOverviewScreenComponent implements OnInit {
   private readonly jobs = inject(TaskService);
+
+  /**
+   * When set, the screen narrows to a single project: the list shows only
+   * that project's epics and the "create epic" affordances light up (the
+   * dialog needs a watch path to target). null keeps the cross-project view
+   * read-only, since there is no single project to create into.
+   */
+  readonly scopedProject = input<EpicOverviewScope | null>(null);
 
   readonly closeRequested = output<void>();
   /** Bubbles a click on an epic or sub-task so the host opens its detail. */
@@ -44,10 +60,25 @@ export class EpicOverviewScreenComponent implements OnInit {
   readonly error = signal(false);
   /** Epic ids whose sub-task list is currently expanded. */
   readonly expanded = signal<ReadonlySet<string>>(new Set());
+  /** Whether the create-epic dialog is mounted. */
+  readonly showCreate = signal(false);
 
-  readonly totalEpics = computed(() => this.epics().length);
+  /** Epics shown after the optional project scope is applied. */
+  readonly visibleEpics = computed(() => {
+    const scope = this.scopedProject();
+    const all = this.epics();
+    return scope ? all.filter((e) => e.projectName === scope.name) : all;
+  });
+
+  readonly totalEpics = computed(() => this.visibleEpics().length);
+  /** Create is only offered when a single project is in scope. */
+  readonly canCreate = computed(() => this.scopedProject() !== null);
 
   ngOnInit(): void {
+    this.loadEpics();
+  }
+
+  private loadEpics(): void {
     this.loading.set(true);
     this.error.set(false);
     this.jobs.getEpics().subscribe({
@@ -60,6 +91,20 @@ export class EpicOverviewScreenComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  openCreate(): void {
+    if (!this.canCreate()) return;
+    this.showCreate.set(true);
+  }
+
+  closeCreate(): void {
+    this.showCreate.set(false);
+  }
+
+  onEpicCreated(): void {
+    this.showCreate.set(false);
+    this.loadEpics();
   }
 
   isExpanded(epicId: string): boolean {
