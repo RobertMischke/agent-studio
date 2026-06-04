@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output } from '@angular/core';
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
+import type { WorkspaceSettingsSection } from '../../state/workspace-overlays.service';
 import { WorkspaceTokenTimelineComponent } from '../../../tokens';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { WorkspaceSummaryComponent } from '../../../summary';
@@ -8,15 +9,30 @@ import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+
+interface SettingsRailItem {
+  key: WorkspaceSettingsSection;
+  label: string;
+  description: string;
+  icon: string;
+}
+
 /**
- * Cycle 9g shell-feature container: renders the three workspace-level
- * overlays (tokens / screenshots / cli-admin) above the kanban shell.
- * State + URL-hash sync owned by WorkspaceOverlaysService; this
- * component is just a thin renderer.
+ * Global Workspace-settings home ("Dach"). One rail+panel modal that
+ * consolidates the formerly scattered workspace overlays (token
+ * timeline, visual-evidence reel, executive summary, CLI usage caps)
+ * into addressable sections, mirroring the project-level settings
+ * layout. State + URL-hash sync own by WorkspaceOverlaysService; this
+ * component renders the rail, the active panel, and the overview cards.
  *
- * The screenshots overlay emits `openTask` (job picked from the reel)
- * up to the shell because navigating to a job is shell-coordinated:
- * the shell owns `selectedJob` and the URL update path.
+ * The active panel re-uses each section's legacy outer test id
+ * (`workspace-tokens-overlay`, `workspace-screenshots-overlay`,
+ * `workspace-summary-overlay`, `cli-admin-overlay`) so existing
+ * deep-links and specs keep resolving against the same hooks.
+ *
+ * The screenshots section emits `openTask` (job picked from the reel)
+ * up to the shell because navigating to a job is shell-coordinated: the
+ * shell owns `selectedJob` and the URL update path.
  */
 @Component({
   selector: 'app-workspace-overlays',
@@ -24,6 +40,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
   imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-overlays.component.html',
+  styleUrl: './workspace-overlays.component.scss',
 })
 export class WorkspaceOverlaysComponent {
   readonly overlays = inject(WorkspaceOverlaysService);
@@ -31,29 +48,53 @@ export class WorkspaceOverlaysComponent {
 
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);
-  private disposers = new Map<string, () => void>();
+  private modalDisposer: (() => void) | null = null;
+
+  /** Rail order: landing first, then the content sections. */
+  readonly railItems: readonly SettingsRailItem[] = [
+    { key: 'overview', label: 'Overview', description: 'Global defaults and usage surfaces, in one place.', icon: '\u{1F3E0}' },
+    { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules, with full usage detail.', icon: '⚙' },
+    { key: 'tokens', label: 'Token usage', description: 'Orchestrator token spend across every watched project.', icon: '\u{1F4CA}' },
+    { key: 'screenshots', label: 'Visual evidence', description: 'Screenshots captured by tasks across all projects.', icon: '\u{1F441}' },
+    { key: 'summary', label: 'Summary', description: 'Executive summary of what happened recently.', icon: '\u{1F4D6}' },
+  ];
+
+  /** The sections surfaced as cards on the overview landing. */
+  get contentItems(): readonly SettingsRailItem[] {
+    return this.railItems.filter(i => i.key !== 'overview');
+  }
 
   constructor() {
-    this.bind('workspace-tokens', this.overlays.tokensOpen, () => this.overlays.closeTokens());
-    this.bind('workspace-screenshots', this.overlays.screenshotsOpen, () => this.overlays.closeScreenshots());
-    this.bind('workspace-summary', this.overlays.summaryOpen, () => this.overlays.closeSummary());
-    this.bind('cli-admin', this.overlays.cliAdminOpen, () => this.overlays.closeCliAdmin());
+    // One modal-stack registration tracks the whole home so Escape and
+    // backdrop ordering behave like the other studio modals.
+    effect(() => {
+      const open = this.overlays.settingsOpen();
+      if (open && !this.modalDisposer) {
+        this.modalDisposer = this.modalStack.push('workspace-settings', () => this.overlays.close());
+      } else if (!open && this.modalDisposer) {
+        this.modalDisposer();
+        this.modalDisposer = null;
+      }
+    });
     this.destroyRef.onDestroy(() => {
-      for (const d of this.disposers.values()) d();
-      this.disposers.clear();
+      this.modalDisposer?.();
+      this.modalDisposer = null;
     });
   }
 
-  private bind(id: string, open: () => boolean, close: () => void): void {
-    effect(() => {
-      const isOpen = open();
-      const existing = this.disposers.get(id);
-      if (isOpen && !existing) {
-        this.disposers.set(id, this.modalStack.push(id, close));
-      } else if (!isOpen && existing) {
-        existing();
-        this.disposers.delete(id);
-      }
-    });
+  /** Outer test id of the active panel, preserved per section so legacy
+   *  deep-link specs keep resolving against the same hook. */
+  panelTestid(): string {
+    switch (this.overlays.section()) {
+      case 'caps': return 'cli-admin-overlay';
+      case 'tokens': return 'workspace-tokens-overlay';
+      case 'screenshots': return 'workspace-screenshots-overlay';
+      case 'summary': return 'workspace-summary-overlay';
+      case 'overview': return 'workspace-settings-overview-panel';
+    }
+  }
+
+  onBackdrop(event: Event): void {
+    if (event.target === event.currentTarget) this.overlays.close();
   }
 }

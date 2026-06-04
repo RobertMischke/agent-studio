@@ -9,13 +9,13 @@ Imports via `from './features/shell'`. See [`index.ts`](./index.ts).
 **State services**:
 
 - `UiPreferencesService` — `taskNavCollapsed`, `compactCards`, `sideSheetWidth` (persisted to localStorage).
-- `WorkspaceOverlaysService` (Cycle 9g) — `tokensOpen` / `screenshotsOpen` / `cliAdminOpen` + URL-hash sync (`#/workspace/tokens`, `#/workspace/screenshots`).
+- `WorkspaceOverlaysService` — drives one global Workspace-settings home: `settingsOpen` + `section` (`overview` / `caps` / `tokens` / `screenshots` / `summary`) with URL-hash sync (`#/workspace/settings`, `#/workspace/settings/caps`, `#/workspace/tokens`, `#/workspace/screenshots`, `#/workspace/summary`). Legacy `tokensOpen` / `screenshotsOpen` / `summaryOpen` / `cliAdminOpen` remain as section-derived computeds so older callers and deep-links keep resolving.
 
 **Components**:
 
-- `StatusBarComponent` — bottom strip: default-CLI picker, default-model per CLI, header-quota donut, usage-hover-panel host.
+- `StatusBarComponent` — bottom strip: default-CLI picker, default-model per CLI, header-quota donut, usage-hover-panel host, and a single "Settings" entry that opens the Workspace-settings home.
 - `WorkspaceBannerComponent` — top strip: surfaces the latest orchestrator-review decision across active projects ("Orchestrator decided X for Y") for at least 30 s.
-- `WorkspaceOverlaysComponent` — renders the three workspace overlays (tokens / screenshots / cli-admin) in one container.
+- `WorkspaceOverlaysComponent` — the global Workspace-settings home: a rail+panel "Dach" (mirroring project settings) whose sections embed the usage-caps (CLI admin), token-timeline, visual-evidence and summary surfaces. Each section keeps its legacy outer test id on the active panel so old deep-links and specs still resolve.
 
 ## Notable
 

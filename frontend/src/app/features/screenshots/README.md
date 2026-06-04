@@ -9,7 +9,7 @@ Imports via `from './features/screenshots'`. See [`index.ts`](./index.ts).
 **Components**:
 
 - `ScreenshotStripComponent` — per-job strip embedded in the protocol pane.
-- `WorkspaceScreenshotsComponent` — full-screen overlay reel (status-bar entry + `#/workspace/screenshots` deep-link).
+- `WorkspaceScreenshotsComponent` — the reel, now embedded as the "Visual evidence" section of the Workspace-settings home (status-bar "Settings" entry + `#/workspace/screenshots` deep-link).
 
 **Types**: `JobScreenshot`, `JobScreenshotsResponse`, `WorkspaceScreenshotsResponse`.
 

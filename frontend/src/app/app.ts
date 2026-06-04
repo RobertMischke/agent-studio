@@ -1004,7 +1004,7 @@ export class App implements OnInit, OnDestroy {
       if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey) return;
       if (this.selectedJob() !== null) return;
       if (this.showCreate()) return;
-      if (this.workspaceTokensOpen() || this.workspaceScreenshotsOpen() || this.workspaceSummaryOpen()) return;
+      if (this.workspaceOverlays.settingsOpen()) return;
       if (this.projectShellName() !== null) return;
       if (this.backlogTriage.open()) return;
       if (this.epicOverview.open()) return;
@@ -1553,6 +1553,12 @@ export class App implements OnInit, OnDestroy {
   // because external call sites (status bar, usage hover panel, dev-tools
   // menu, screenshot reel) and deep-link entry points still go through
   // the shell.
+  openWorkspaceSettings(): void {
+    this.workspaceOverlays.openSettings();
+  }
+  toggleWorkspaceSettings(): void {
+    this.workspaceOverlays.toggleSettings();
+  }
   openWorkspaceTokens(): void {
     this.workspaceOverlays.openTokens();
   }

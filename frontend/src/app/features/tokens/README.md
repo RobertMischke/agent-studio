@@ -9,7 +9,7 @@ Imports via `from './features/tokens'`. See [`index.ts`](./index.ts).
 **Components**:
 
 - `TokenSummaryBlockComponent` — per-project rollup block (totals + per-model breakdown + cost projections); embedded in the orchestrator-feed and the legacy project-detail.
-- `WorkspaceTokenTimelineComponent` — full-screen timeline overlay opened from the usage hover panel + `#/workspace/tokens` deep-link.
+- `WorkspaceTokenTimelineComponent` — the timeline, now embedded as the "Token usage" section of the Workspace-settings home (status-bar "Settings" entry + `#/workspace/tokens` deep-link).
 - `UsageHoverPanelComponent` — modal opened by hovering the status-bar quota strip; combines quota + token sections.
 
 **Types**:

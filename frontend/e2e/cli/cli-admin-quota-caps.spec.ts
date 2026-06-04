@@ -82,11 +82,16 @@ test.describe('CLI Admin / quota caps', () => {
     }
   });
 
-  test('overlay opens and shows the cap section', async ({ page }) => {
+  test('Usage caps section opens from the workspace Settings home', async ({ page }) => {
     await page.goto('/');
-    const trigger = page.getByTestId('status-bar-cli-admin');
+    // The scattered "Manage CLIs" status-bar button folded into the global
+    // Workspace-settings home (ASS-695). Open the home, then pick the
+    // "Usage caps" rail section, which still renders the CLI-admin panel.
+    const trigger = page.getByTestId('status-bar-settings');
     await expect(trigger).toBeVisible();
     await trigger.click();
+
+    await page.getByTestId('workspace-settings-rail-caps').click();
 
     const overlay = page.getByTestId('cli-admin-overlay');
     await expect(overlay).toBeVisible();

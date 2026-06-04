@@ -39,12 +39,13 @@ export class StatusBarComponent implements OnInit {
   readonly toggleUsage = output<void>();
   readonly toggleOrchestrator = output<void>();
   readonly toggleFeed = output<void>();
-  readonly toggleSummary = output<void>();
-  readonly toggleVisualEvidence = output<void>();
-  readonly toggleCliAdmin = output<void>();
-  // Quota-strip click: open (not toggle) the CLI-Management panel where
-  // the full usage detail lives. Separate from `toggleCliAdmin` (the
-  // "Manage CLIs" item, which toggles).
+  // Single entry into the global Workspace-settings home. Summary, visual
+  // evidence and CLI management are sections of that home now, so the
+  // status bar exposes one button instead of three scattered ones.
+  readonly toggleSettings = output<void>();
+  // Quota-strip click: open the CLI-Management (usage caps) section
+  // directly, where the full usage detail lives. Separate from
+  // `toggleSettings`, which lands on the home overview.
   readonly openCliAdmin = output<void>();
   readonly defaultCliChange = output<CliType>();
   readonly defaultModelChange = output<{ cliType: CliType; model: string }>();
