@@ -54,6 +54,7 @@ export interface PipelineStepExecution {
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
+  tokenUsageSource?: string | null;
   reason?: string | null;
   verdict?: string | null;
   /**
@@ -93,6 +94,7 @@ export interface PipelineStepCost {
   stepId: string;
   kind: StepKind;
   model?: string | null;
+  tokenUsageSource?: string | null;
   /** False when the model is not in the price table -> render "n/a". */
   modelKnown: boolean;
   inputTokens: number;
@@ -100,13 +102,25 @@ export interface PipelineStepCost {
   cacheReadTokens: number;
   cacheCreationTokens: number;
   totalTokens: number;
+  inputCostUsd: number;
+  outputCostUsd: number;
+  cacheReadCostUsd: number;
+  cacheCreationCostUsd: number;
   costUsd: number;
 }
 
 /** Per-step rows plus the task total. */
 export interface PipelineCostSummary {
   steps: PipelineStepCost[];
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
   totalTokens: number;
+  totalInputCostUsd: number;
+  totalOutputCostUsd: number;
+  totalCacheReadCostUsd: number;
+  totalCacheCreationCostUsd: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;
 }

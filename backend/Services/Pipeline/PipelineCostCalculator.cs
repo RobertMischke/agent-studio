@@ -13,12 +13,17 @@ public sealed record PipelineStepCost(
     string StepId,
     StepKind Kind,
     string? Model,
+    string? TokenUsageSource,
     bool ModelKnown,
     long InputTokens,
     long OutputTokens,
     long CacheReadTokens,
     long CacheCreationTokens,
     long TotalTokens,
+    decimal InputCostUsd,
+    decimal OutputCostUsd,
+    decimal CacheReadCostUsd,
+    decimal CacheCreationCostUsd,
     decimal CostUsd);
 
 /// <summary>
@@ -28,7 +33,15 @@ public sealed record PipelineStepCost(
 /// </summary>
 public sealed record PipelineCostSummary(
     IReadOnlyList<PipelineStepCost> Steps,
+    long TotalInputTokens,
+    long TotalOutputTokens,
+    long TotalCacheReadTokens,
+    long TotalCacheCreationTokens,
     long TotalTokens,
+    decimal TotalInputCostUsd,
+    decimal TotalOutputCostUsd,
+    decimal TotalCacheReadCostUsd,
+    decimal TotalCacheCreationCostUsd,
     decimal TotalCostUsd,
     bool AnyModelUnknown);
 
@@ -46,11 +59,23 @@ public static class PipelineCostCalculator
     {
         if (record == null || record.Steps.Count == 0)
         {
-            return new PipelineCostSummary(Array.Empty<PipelineStepCost>(), 0, 0m, false);
+            return new PipelineCostSummary(
+                Array.Empty<PipelineStepCost>(),
+                0, 0, 0, 0, 0,
+                0m, 0m, 0m, 0m, 0m,
+                false);
         }
 
         var steps = new List<PipelineStepCost>(record.Steps.Count);
+        long totalInput = 0;
+        long totalOutput = 0;
+        long totalCacheRead = 0;
+        long totalCacheCreation = 0;
         long totalTokens = 0;
+        decimal totalInputCost = 0m;
+        decimal totalOutputCost = 0m;
+        decimal totalCacheReadCost = 0m;
+        decimal totalCacheCreationCost = 0m;
         decimal totalCost = 0m;
         var anyUnknown = false;
 
@@ -68,19 +93,44 @@ public static class PipelineCostCalculator
                 StepId: s.StepId,
                 Kind: s.Kind,
                 Model: s.Model,
+                TokenUsageSource: s.TokenUsageSource,
                 ModelKnown: est.ModelKnown,
                 InputTokens: s.InputTokens,
                 OutputTokens: s.OutputTokens,
                 CacheReadTokens: s.CacheReadTokens,
                 CacheCreationTokens: s.CacheCreationTokens,
                 TotalTokens: stepTokens,
+                InputCostUsd: Round(est.InputUsd),
+                OutputCostUsd: Round(est.OutputUsd),
+                CacheReadCostUsd: Round(est.CacheReadUsd),
+                CacheCreationCostUsd: Round(est.CacheWriteUsd),
                 CostUsd: Round(est.Total)));
 
+            totalInput += s.InputTokens;
+            totalOutput += s.OutputTokens;
+            totalCacheRead += s.CacheReadTokens;
+            totalCacheCreation += s.CacheCreationTokens;
             totalTokens += stepTokens;
+            totalInputCost += est.InputUsd;
+            totalOutputCost += est.OutputUsd;
+            totalCacheReadCost += est.CacheReadUsd;
+            totalCacheCreationCost += est.CacheWriteUsd;
             totalCost += est.Total;
         }
 
-        return new PipelineCostSummary(steps, totalTokens, Round(totalCost), anyUnknown);
+        return new PipelineCostSummary(
+            steps,
+            totalInput,
+            totalOutput,
+            totalCacheRead,
+            totalCacheCreation,
+            totalTokens,
+            Round(totalInputCost),
+            Round(totalOutputCost),
+            Round(totalCacheReadCost),
+            Round(totalCacheCreationCost),
+            Round(totalCost),
+            anyUnknown);
     }
 
     // Costs are fractions of a cent for a single task; keep 6 dp so the

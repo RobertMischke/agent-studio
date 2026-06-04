@@ -4,6 +4,8 @@ using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Quota;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -16,6 +18,20 @@ namespace OrchestratorApi.Services.Runner;
 /// </summary>
 public class ProjectRunner
 {
+    private const string AgentCliFooterUsageSource = "AGENT (CLI FOOTER) / reported";
+    private const string AgentSessionTranscriptUsageSource = "AGENT (SESSION TRANSCRIPT) / reconstructed";
+    private static readonly Regex CompactTokenValueRegex = new(
+        @"(?<value>\d+(?:[.,]\d+)?)\s*(?<suffix>[kKmM])?",
+        RegexOptions.Compiled);
+
+    private sealed record CoreAgentUsage(
+        string? Model,
+        long InputTokens,
+        long OutputTokens,
+        long CacheReadTokens,
+        long CacheCreationTokens,
+        string Source);
+
     private readonly ILogger _logger;
     private readonly TaskScannerService _scanner;
     private readonly TaskStateMachine _states;
@@ -2081,7 +2097,8 @@ public class ProjectRunner
             // this the run-start write would zero the total and the prior
             // attempts' duration would be lost (Symptom 2). RecordStep replaces
             // the whole step, so the value must be passed through here.
-            var accumulatedMs = CoreStepDurationMs(record);
+            var priorCore = CoreStep(record);
+            var accumulatedMs = priorCore?.DurationMs ?? 0;
             _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
             {
                 StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
@@ -2090,6 +2107,11 @@ public class ProjectRunner
                 Status = PipelineStepStatus.Running,
                 StartedAt = execution.StartedAt,
                 DurationMs = accumulatedMs,
+                InputTokens = priorCore?.InputTokens ?? 0,
+                OutputTokens = priorCore?.OutputTokens ?? 0,
+                CacheReadTokens = priorCore?.CacheReadTokens ?? 0,
+                CacheCreationTokens = priorCore?.CacheCreationTokens ?? 0,
+                TokenUsageSource = priorCore?.TokenUsageSource,
             });
             // Arm the loop-guard row. At spawn there is no auto-mode loop yet,
             // so it reads as a clean pass (no verdict pill). RunOrchestratorDecisionAsync
@@ -2320,10 +2342,10 @@ public class ProjectRunner
     /// the project's working directory (the cwd Claude encodes its log folder
     /// from) and the best-available session id for this run.
     /// </summary>
-    private void TryRecordPostHocClaudeUsage(
+    private CoreAgentUsage? TryRecordPostHocClaudeUsage(
         string jobId, string? capturedSessionId, RunPlan? planSnapshot, TaskInfo? finishedInfo)
     {
-        if (_sessionInspector == null) return;
+        if (_sessionInspector == null) return null;
         try
         {
             // Prefer the id captured during this run (a fresh run, or the new
@@ -2334,13 +2356,13 @@ public class ProjectRunner
             var sessionId = !string.IsNullOrWhiteSpace(capturedSessionId) ? capturedSessionId
                 : !string.IsNullOrWhiteSpace(planSnapshot?.SessionToResume) ? planSnapshot!.SessionToResume
                 : finishedInfo?.SessionName;
-            if (string.IsNullOrWhiteSpace(sessionId)) return;
+            if (string.IsNullOrWhiteSpace(sessionId)) return null;
 
             var cwd = Entry.RootPath;
-            if (string.IsNullOrWhiteSpace(cwd)) return;
+            if (string.IsNullOrWhiteSpace(cwd)) return null;
 
             var agg = _sessionInspector.AggregateUsage(sessionId!, cwd!);
-            if (agg == null || agg.TotalTokens <= 0) return;
+            if (agg == null || agg.TotalTokens <= 0) return null;
 
             var synthetic = new SessionUsage
             {
@@ -2354,10 +2376,18 @@ public class ProjectRunner
                     jobId, sessionId, agg.TotalTokens, agg.TurnCount,
                     agg.InputTokens, agg.OutputTokens, agg.CacheReadTokens, agg.CacheCreationTokens);
             }
+            return new CoreAgentUsage(
+                agg.Model,
+                agg.InputTokens,
+                agg.OutputTokens,
+                agg.CacheReadTokens,
+                agg.CacheCreationTokens,
+                AgentSessionTranscriptUsageSource);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "[token-posthoc] Failed to reconstruct Claude usage for {JobId}", jobId);
+            return null;
         }
     }
 
@@ -2375,7 +2405,7 @@ public class ProjectRunner
     /// sentinel-detected / silent-completion run is a completion even though the
     /// process kill yields exitCode = -1 on Windows.
     /// </summary>
-    private void RecordCoreRunFinish(string jobId, CliExecution execution)
+    private void RecordCoreRunFinish(string jobId, CliExecution execution, CoreAgentUsage? usage)
     {
         if (_pipelineLog == null) return;
         try
@@ -2401,8 +2431,13 @@ public class ProjectRunner
             // cumulative span, so it never drifts into the future.
             var thisRunMs = CoreRunStepAccumulator.RunDurationMs(
                 execution.DurationSeconds, startedAt, DateTime.UtcNow);
-            var durationMs = CoreRunStepAccumulator.Accumulate(CoreStepDurationMs(record), thisRunMs);
+            var priorCore = CoreStep(record);
+            var durationMs = CoreRunStepAccumulator.Accumulate(priorCore?.DurationMs ?? 0, thisRunMs);
             var completedAt = startedAt.AddMilliseconds(thisRunMs);
+            var inputTokens = (priorCore?.InputTokens ?? 0) + (usage?.InputTokens ?? 0);
+            var outputTokens = (priorCore?.OutputTokens ?? 0) + (usage?.OutputTokens ?? 0);
+            var cacheReadTokens = (priorCore?.CacheReadTokens ?? 0) + (usage?.CacheReadTokens ?? 0);
+            var cacheCreationTokens = (priorCore?.CacheCreationTokens ?? 0) + (usage?.CacheCreationTokens ?? 0);
 
             // Key the CORE step off the deterministic run status, not the OS
             // exit code: a sentinel-detected / silent-completion run is a
@@ -2436,6 +2471,11 @@ public class ProjectRunner
                 StartedAt = startedAt,
                 CompletedAt = completedAt,
                 DurationMs = durationMs,
+                InputTokens = inputTokens,
+                OutputTokens = outputTokens,
+                CacheReadTokens = cacheReadTokens,
+                CacheCreationTokens = cacheCreationTokens,
+                TokenUsageSource = CombineTokenUsageSource(priorCore?.TokenUsageSource, usage?.Source),
                 Verdict = verdict,
                 Reason = reason,
             });
@@ -2453,11 +2493,110 @@ public class ProjectRunner
     /// the current run's duration onto (Symptom 2). See
     /// <see cref="CoreRunStepAccumulator"/>.
     /// </summary>
-    private static long CoreStepDurationMs(PipelineExecutionRecord? record)
+    private static PipelineStepExecution? CoreStep(PipelineExecutionRecord? record)
         => record?.Steps.FirstOrDefault(s => string.Equals(
                s.StepId,
                OrchestratorApi.Services.Pipeline.PipelineCatalogue.CoreAgentRunStepId,
-               StringComparison.OrdinalIgnoreCase))?.DurationMs ?? 0;
+               StringComparison.OrdinalIgnoreCase));
+
+    private static string? CombineTokenUsageSource(string? existing, string? current)
+    {
+        if (string.IsNullOrWhiteSpace(existing)) return string.IsNullOrWhiteSpace(current) ? null : current;
+        if (string.IsNullOrWhiteSpace(current)) return existing;
+        if (existing.Contains(current, StringComparison.OrdinalIgnoreCase)) return existing;
+        return $"{existing} + {current}";
+    }
+
+    private CoreAgentUsage? ResolveCoreAgentUsage(
+        ICliExecutionService cli,
+        string jobKey,
+        SessionUsage? footerUsage)
+    {
+        var parsed = cli switch
+        {
+            CodexCliService codex   => codex.GetLastParsedTurnUsage(jobKey),
+            ClaudeCliService claude => claude.GetLastParsedTurnUsage(jobKey),
+            _ => null,
+        };
+        if (parsed is { } snapshot)
+        {
+            var u = snapshot.Usage;
+            return new CoreAgentUsage(
+                u.Model,
+                u.Input,
+                u.Output,
+                u.CacheRead,
+                u.CacheWrite,
+                AgentCliFooterUsageSource);
+        }
+
+        return TryParseFooterUsage(footerUsage?.Tokens, model: null, AgentCliFooterUsageSource);
+    }
+
+    private static CoreAgentUsage? TryParseFooterUsage(string? text, string? model, string source)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var value = text!;
+        long input = 0, output = 0, cacheRead = 0, cacheCreation = 0;
+
+        // Claude transcript fallback renders:
+        // "13.6M tokens (in 47.5k, out 128k, cache-read 13.4M, cache-write 12k)".
+        input = TryReadLabeledCompact(value, "in") ?? 0;
+        output = TryReadLabeledCompact(value, "out") ?? 0;
+        cacheRead = TryReadLabeledCompact(value, "cache-read") ?? 0;
+        cacheCreation = TryReadLabeledCompact(value, "cache-write") ?? 0;
+
+        if (input + output + cacheRead + cacheCreation == 0)
+        {
+            // Copilot footer example:
+            // "↑ 38.6k • ↓ 514 • 34.7k (cached)".
+            input = TryReadArrowCompact(value, '↑') ?? 0;
+            output = TryReadArrowCompact(value, '↓') ?? 0;
+            cacheRead = TryReadCachedCompact(value) ?? 0;
+        }
+
+        if (input + output + cacheRead + cacheCreation == 0) return null;
+        return new CoreAgentUsage(model, input, output, cacheRead, cacheCreation, source);
+    }
+
+    private static long? TryReadLabeledCompact(string text, string label)
+    {
+        var match = Regex.Match(
+            text,
+            $@"(?:^|[\s,(]){Regex.Escape(label)}\s+(?<value>\d+(?:[.,]\d+)?)\s*(?<suffix>[kKmM])?",
+            RegexOptions.IgnoreCase);
+        return match.Success ? ParseCompactTokenValue(match) : null;
+    }
+
+    private static long? TryReadArrowCompact(string text, char arrow)
+    {
+        var idx = text.IndexOf(arrow);
+        if (idx < 0 || idx + 1 >= text.Length) return null;
+        var match = CompactTokenValueRegex.Match(text[(idx + 1)..]);
+        return match.Success ? ParseCompactTokenValue(match) : null;
+    }
+
+    private static long? TryReadCachedCompact(string text)
+    {
+        var match = Regex.Match(
+            text,
+            @"(?<value>\d+(?:[.,]\d+)?)\s*(?<suffix>[kKmM])?\s*\(cached\)",
+            RegexOptions.IgnoreCase);
+        return match.Success ? ParseCompactTokenValue(match) : null;
+    }
+
+    private static long ParseCompactTokenValue(Match match)
+    {
+        var raw = match.Groups["value"].Value.Replace(',', '.');
+        if (!decimal.TryParse(raw, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var n))
+        {
+            return 0;
+        }
+        var suffix = match.Groups["suffix"].Value;
+        if (suffix.Equals("m", StringComparison.OrdinalIgnoreCase)) n *= 1_000_000m;
+        else if (suffix.Equals("k", StringComparison.OrdinalIgnoreCase)) n *= 1_000m;
+        return (long)Math.Round(n, MidpointRounding.AwayFromZero);
+    }
 
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {
@@ -2497,13 +2636,8 @@ public class ProjectRunner
             {
                 _sessions.UpdateLastUsage(jobId, usage, Entry.Path);
             }
+            var coreUsage = ResolveCoreAgentUsage(cli, jobKey, usage);
 
-            // Mark the CORE "Agent execution" step done in pipeline-execution.json
-            // with its real duration / start+end times. Without this the step
-            // stayed Running (or Pending) forever while the later aspect rows
-            // showed completed - the bug this addresses. Best-effort; the record
-            // is observability, never a state-machine input.
-            RecordCoreRunFinish(jobId, execution);
 
             // Mirror run-finish + agent-side token usage onto the bus. We emit
             // these even before the post-run policy and lane move so a crash
@@ -2571,8 +2705,16 @@ public class ProjectRunner
             // being absent so we never clobber a real CLI-reported footer.
             if (usage == null && cli is ClaudeCliService)
             {
-                TryRecordPostHocClaudeUsage(jobId, capturedSessionId, planSnapshot, finishedInfo);
+                coreUsage ??= TryRecordPostHocClaudeUsage(jobId, capturedSessionId, planSnapshot, finishedInfo);
             }
+
+            // Mark the CORE "Agent execution" step done in pipeline-execution.json
+            // with its real duration / start+end times and the agent-side token
+            // usage reported for this run. Without this the CORE row stayed
+            // token-blank while the separate Agent footer block had data.
+            // Best-effort; the record is observability, never a state-machine
+            // input.
+            RecordCoreRunFinish(jobId, execution, coreUsage);
 
             // Capture the post-run HEAD SHA so the run's commit set can be
             // derived deterministically via git rev-list HeadShaBefore..After.

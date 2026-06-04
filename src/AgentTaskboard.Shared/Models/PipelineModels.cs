@@ -194,6 +194,12 @@ public sealed record PipelineStepExecution
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }
     public long CacheCreationTokens { get; init; }
+    /// <summary>
+    /// Human-readable attribution for the token counts, e.g.
+    /// <c>AGENT (CLI FOOTER) / reported</c>. Null when no token usage was
+    /// recorded for the step.
+    /// </summary>
+    public string? TokenUsageSource { get; init; }
     /// <summary>Short reason on failure / skip; null on success.</summary>
     public string? Reason { get; init; }
     /// <summary>
