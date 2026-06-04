@@ -141,12 +141,14 @@
     </div>
   </section>
 
-  <!-- Token / Performance block. Rendered only when there is token or
-       performance data to show; an empty task hides the whole section
-       rather than displaying a placeholder. -->
-  @if (hasTokensOrPerformance()) {
+  <!-- Tokens block. Orchestrator-side LLM spend + the agent's own CLI footer.
+       Run count and elapsed time used to live here too, but they duplicated
+       the Runs section at the foot of the tab; both now live there as the one
+       canonical run representation. Rendered only when there is token data to
+       show; an empty task hides the whole section rather than show a placeholder. -->
+  @if (hasTokens()) {
   <section class="ov-section" data-testid="overview-tokens">
-    <h3 class="ov-section__title">Tokens &amp; Performance</h3>
+    <h3 class="ov-section__title">Tokens</h3>
 
     @if (hasOrchestratorTokens()) {
       <div class="ov-grid" data-testid="overview-tokens-orchestrator">
@@ -221,22 +223,6 @@
       </div>
     }
 
-    @if (runCount() > 0 || totalDuration() > 0) {
-      <div class="ov-grid ov-grid--perf" data-testid="overview-tokens-perf">
-        @if (runCount() > 0) {
-          <div class="ov-row">
-            <span class="ov-label">Runs</span>
-            <span class="ov-value ov-value--mono">{{ runCount() }}</span>
-          </div>
-        }
-        @if (totalDuration() > 0) {
-          <div class="ov-row">
-            <span class="ov-label">Total Duration</span>
-            <span class="ov-value ov-value--mono">{{ formatDuration(totalDuration()) }}</span>
-          </div>
-        }
-      </div>
-    }
   </section>
   }
 
@@ -486,20 +472,42 @@
     <app-regression-radar [jobId]="job().id" [watchPath]="job().watchPath" />
   </section>
 
-  <!-- Run History block -->
-  @if (recentRuns().length > 0) {
+  <!-- Runs block: the single home for CLI-run info — count, total elapsed,
+       and the per-run status strip. Consolidates the former Tokens &
+       Performance "Runs" / "Total Duration" rows with the run-icon strip so
+       run data has one representation instead of two. The Pipeline section's
+       "Attempt N/M" is a distinct counter (the auto-review completion loop),
+       not a CLI-run count, and stays there. -->
+  @if (hasRunsSection()) {
     <section class="ov-section" data-testid="overview-runs">
-      <h3 class="ov-section__title">Recent Runs</h3>
-      <div class="ov-run-strip">
-        @for (run of recentRuns(); track run.index) {
-          <span class="ov-run-icon"
-                [class.ov-run-icon--active]="run.status === 'running'"
-                [appTooltip]="runTooltip(run)"
-                data-testid="overview-run-icon">
-            {{ runStatusIcon(run.status) }}
-          </span>
-        }
-      </div>
+      <h3 class="ov-section__title">Runs</h3>
+      @if (runCount() > 0 || totalDuration() > 0) {
+        <div class="ov-runs-summary" data-testid="overview-runs-summary">
+          @if (runCount() > 0) {
+            <span class="ov-runs-summary__stat ov-value--mono"
+                  data-testid="overview-runs-count">{{ runCountLabel() }}</span>
+          }
+          @if (runCount() > 0 && totalDuration() > 0) {
+            <span class="ov-runs-summary__sep" aria-hidden="true">·</span>
+          }
+          @if (totalDuration() > 0) {
+            <span class="ov-runs-summary__stat ov-value--mono"
+                  data-testid="overview-runs-duration">{{ formatDuration(totalDuration()) }} total</span>
+          }
+        </div>
+      }
+      @if (recentRuns().length > 0) {
+        <div class="ov-run-strip">
+          @for (run of recentRuns(); track run.index) {
+            <span class="ov-run-icon"
+                  [class.ov-run-icon--active]="run.status === 'running'"
+                  [appTooltip]="runTooltip(run)"
+                  data-testid="overview-run-icon">
+              {{ runStatusIcon(run.status) }}
+            </span>
+          }
+        </div>
+      }
     </section>
   }
 </div>

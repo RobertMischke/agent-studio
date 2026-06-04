@@ -120,30 +120,33 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.componentInstance.agentUsage()).toBeNull();
   });
 
-  it('tokens & performance: section is hidden (no placeholder) when no token/duration data exists', async () => {
+  it('tokens: section is hidden (no placeholder) when no token data exists; Runs section is also absent', async () => {
     const fixture = await build(baseJob({ state: '2-ready' }));
     const c = fixture.componentInstance;
     expect(c.hasOrchestratorTokens()).toBe(false);
     expect(c.agentUsage()).toBeNull();
     expect(c.runCount()).toBe(0);
     expect(c.totalDuration()).toBe(0);
-    expect(c.hasTokensOrPerformance()).toBe(false);
+    expect(c.hasTokens()).toBe(false);
     // The whole section is absent — and the old empty-state placeholder is gone.
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens-empty"]')).toBeNull();
+    // No runs either -> the consolidated Runs section is also absent.
+    expect(c.hasRunsSection()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).toBeNull();
   });
 
-  it('tokens & performance: a CLI footer (lastUsage) alone makes the section render', async () => {
+  it('tokens: a CLI footer (lastUsage) alone makes the section render; run count no longer gates it', async () => {
     const fixture = await build(baseJob({
       state: '4-auto-review',
       lastUsage: { at: new Date().toISOString(), tokens: '12.4k', changes: null, requests: null },
     }));
     const c = fixture.componentInstance;
-    expect(c.hasTokensOrPerformance()).toBe(true);
+    expect(c.hasTokens()).toBe(true);
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).not.toBeNull();
   });
 
-  it('tokens & performance: a recorded run alone makes the section render with a Runs row but no Runs:0', async () => {
+  it('runs section: a recorded run renders count + total duration (folded out of Tokens), Tokens stays hidden', async () => {
     const fixture = await build(baseJob({ state: '6-completed' }));
     TestBed.inject(RunTimelinePollService).timeline.set(
       runTimeline(2, [runRecord({ durationSeconds: 10 }), runRecord({ durationSeconds: 5 })]),
@@ -151,17 +154,23 @@ describe('OverviewPaneComponent (smoke)', () => {
     try { fixture.detectChanges(); } catch { /* ignore */ }
     const c = fixture.componentInstance;
     expect(c.runCount()).toBe(2);
-    expect(c.hasTokensOrPerformance()).toBe(true);
-    const perf = fixture.nativeElement.querySelector('[data-testid="overview-tokens-perf"]');
-    expect(perf).not.toBeNull();
-    expect(perf.textContent).toContain('Runs');
-    expect(perf.textContent).toContain('Total Duration');
+    expect(c.hasRunsSection()).toBe(true);
+    // Runs moved out of Tokens & Performance: with no token data that section is gone.
+    expect(c.hasTokens()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
+    // The single Runs section carries the count + duration summary and the strip.
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).not.toBeNull();
+    const summary = fixture.nativeElement.querySelector('[data-testid="overview-runs-summary"]');
+    expect(summary).not.toBeNull();
+    expect(summary.textContent).toContain('2 runs');
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-runs-duration"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="overview-run-icon"]').length).toBe(2);
   });
 
-  it('tokens & performance: a killed run with only a CORE-step duration still renders (duration, no Runs row)', async () => {
+  it('runs section: a killed run with only a CORE-step duration shows the duration, no run count, no strip (ASS-665)', async () => {
     // ASS-665/675: no run rows, but the CORE pipeline step persisted elapsed
-    // time. The section must still appear and surface the duration even though
-    // the run-timeline carries no run count.
+    // time. The Runs section must still appear and surface the duration even
+    // though the run-timeline carries no run count.
     const fixture = await build(baseJob({ state: '5-human-review' }));
     const pipe = agentPipeline();
     pipe.execution!.steps[0] = {
@@ -175,12 +184,12 @@ describe('OverviewPaneComponent (smoke)', () => {
     const c = fixture.componentInstance;
     expect(c.runCount()).toBe(0);
     expect(c.totalDuration()).toBeCloseTo(1215.9, 1);
-    expect(c.hasTokensOrPerformance()).toBe(true);
-    const perf = fixture.nativeElement.querySelector('[data-testid="overview-tokens-perf"]');
-    expect(perf).not.toBeNull();
-    expect(perf.textContent).toContain('Total Duration');
-    // No run recorded -> no Runs row (never "Runs: 0").
-    expect(perf.textContent).not.toContain('Runs');
+    expect(c.hasRunsSection()).toBe(true);
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-runs-duration"]')).not.toBeNull();
+    // No run recorded -> no count and no status strip.
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-runs-count"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-run-icon"]')).toBeNull();
   });
 
   it('agent-work block surfaces call count + tool counts from the poll service', async () => {

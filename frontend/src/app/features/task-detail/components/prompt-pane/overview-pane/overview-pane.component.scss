@@ -1,8 +1,8 @@
 :host { display: block; }
 
 .overview {
-  // Density overrides scoped to the meta panel. The five sections (Status,
-  // Agent, Tokens & Performance, Agent Work, Runs) are read together as a
+  // Density overrides scoped to the meta panel. The sections (Status,
+  // Agent, Tokens, Agent Work, Runs) are read together as a
   // scannable label/value list; the compact defaults were still leaving
   // ~26px per row, which scrolled out useful sections before the bottom of
   // the panel. Tightening at the local-token level lets every `.ov-row`
@@ -420,6 +420,27 @@
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--studio-fg-dim);
+  }
+}
+
+// Runs-section summary line: run count + total elapsed, folded in from the
+// old Tokens & Performance "Runs" / "Total Duration" rows so run data has a
+// single home above the per-run status strip.
+.ov-runs-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--studio-fg);
+
+  &__stat {
+    color: var(--studio-fg);
+  }
+
+  &__sep {
+    color: var(--studio-fg-muted);
   }
 }
 

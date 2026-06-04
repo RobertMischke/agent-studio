@@ -483,6 +483,22 @@ export class OverviewPaneComponent {
     return r.slice(-8);
   });
 
+  /** "1 run" / "N runs" label for the consolidated Runs-section summary. */
+  readonly runCountLabel = computed<string>(() => {
+    const n = this.runCount();
+    return n === 1 ? '1 run' : `${n} runs`;
+  });
+
+  /**
+   * Render the consolidated Runs section when there is any run count, any
+   * elapsed time, or at least one run-status icon to show. Folds in the run
+   * count + total duration that used to sit in the Tokens & Performance block
+   * (they duplicated this section), so all CLI-run info has one home.
+   */
+  readonly hasRunsSection = computed<boolean>(() =>
+    this.runCount() > 0 || this.totalDuration() > 0 || this.recentRuns().length > 0,
+  );
+
   readonly totalDuration = computed(() => {
     let total = 0;
     for (const r of this.runs()) {
@@ -505,16 +521,15 @@ export class OverviewPaneComponent {
   readonly runCount = computed<number>(() => this.timeline()?.runCount ?? 0);
 
   /**
-   * Whether the "Tokens & Performance" section has anything worth showing:
-   * orchestrator tokens, a CLI-footer reading, a recorded run, or any
-   * elapsed time. When all four are absent the section is hidden entirely
-   * rather than rendering a placeholder (the empty-state text was removed).
+   * Whether the "Tokens" section has anything worth showing: orchestrator
+   * tokens or a CLI-footer reading. Run count + elapsed time moved to the
+   * Runs section ({@link hasRunsSection}), so they no longer gate this block.
+   * When both token sources are absent the section is hidden entirely rather
+   * than rendering a placeholder (the empty-state text was removed).
    */
-  readonly hasTokensOrPerformance = computed<boolean>(() =>
+  readonly hasTokens = computed<boolean>(() =>
     this.hasOrchestratorTokens()
-    || this.agentUsage() !== null
-    || this.runCount() > 0
-    || this.totalDuration() > 0,
+    || this.agentUsage() !== null,
   );
 
   /**
