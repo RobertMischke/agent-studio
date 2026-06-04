@@ -1,12 +1,25 @@
-:host { display: inline-flex; }
+/* The popover wrap is a sibling of `.uhp` in the template, so the
+   positioning context must live on the host that contains both. */
+:host { display: inline-flex; position: relative; }
 
 .uhp {
   display: inline-flex;
   align-items: center;
   border-radius: 7px;
   outline: none;
+  cursor: pointer;
 }
 
 .uhp:focus-visible {
-  box-shadow: 0 0 0 2px rgba(103, 232, 249, 0.55);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-accent-3) 60%, transparent);
+}
+
+/* Status bar lives at the bottom edge, so float the compact popover
+   above the trigger. A small gap keeps the 220 ms close-grace bridge
+   reachable by the cursor. */
+.uhp__pop-wrap {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 240;
 }

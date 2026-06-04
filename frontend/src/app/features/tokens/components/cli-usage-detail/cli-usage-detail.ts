@@ -1,41 +1,15 @@
-import {
-  AfterViewInit,
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  ElementRef,
-  ViewChild,
-  inject,
-  input,
-  output,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { CliType } from '../../../../models/task.model';
-import { ModalStackService } from '../../../../services/modal-stack.service';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 import type { QuotaWindow } from '../../../../features/quota';
 import { TooltipDirective } from '../../../../components/tooltip';
+import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type {
   AdHocUsageAggregate,
   TokenSummaryAggregate,
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
-
-export interface CliUsageQuotaRow {
-  cliType: CliType;
-  icon: string;
-  label: string;
-  plan: string | null;
-  fetchedAt: string | null;
-  freshness: string;
-  stale: boolean;
-  source: string | null;
-  error: string | null;
-  windows: QuotaWindow[];
-  primary: QuotaWindow | null;
-  primaryPct: number | null;
-  primaryTone: 'ok' | 'warn' | 'hot' | 'unknown';
-}
 
 interface SparkPoint {
   label: string;
@@ -55,15 +29,26 @@ interface ModelUsageRow {
   modelPriced: boolean;
 }
 
+/**
+ * Full CLI-usage detail surface: routing headroom, token trend, per-CLI
+ * quota windows / model spend / top sources, and the workspace's most
+ * expensive tasks. Lives embedded inside the CLI-Management panel (the
+ * "Settings-Dach"); the status-bar quota strip now only shows the
+ * compact <app-cli-usage-mini-popover> on hover and opens this on click.
+ *
+ * Purely presentational - the shared `CliUsageStore` owns the polling
+ * and feeds every input; `refreshAll` / `refreshOne` bubble back so the
+ * host can re-probe.
+ */
 @Component({
-  selector: 'app-cli-usage-detail-modal',
+  selector: 'app-cli-usage-detail',
   standalone: true,
   imports: [ConceptHelpComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './cli-usage-detail-modal.html',
-  styleUrl: './cli-usage-detail-modal.scss',
+  templateUrl: './cli-usage-detail.html',
+  styleUrl: './cli-usage-detail.scss',
 })
-export class CliUsageDetailModalComponent implements AfterViewInit {
+export class CliUsageDetailComponent {
   readonly quotaRows = input<CliUsageQuotaRow[]>([]);
   readonly tokens = input<TokenSummaryAggregate | null>(null);
   readonly adhoc = input<AdHocUsageAggregate | null>(null);
@@ -73,47 +58,8 @@ export class CliUsageDetailModalComponent implements AfterViewInit {
   readonly refreshing = input<Record<string, boolean>>({});
   readonly refreshingAll = input(false);
 
-  readonly closed = output<void>();
   readonly refreshAll = output<Event>();
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();
-
-  @ViewChild('dialog') private dialog?: ElementRef<HTMLElement>;
-
-  constructor() {
-    inject(ModalStackService).pushUntilDestroyed(
-      'cli-usage-detail-modal',
-      () => this.closed.emit(),
-      inject(DestroyRef),
-    );
-  }
-
-  ngAfterViewInit(): void {
-    queueMicrotask(() => this.dialog?.nativeElement.focus());
-  }
-
-  onDialogKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Tab') return;
-    const dialog = this.dialog?.nativeElement;
-    if (!dialog) return;
-    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
-    )).filter(el => !el.hasAttribute('disabled') && el.offsetParent !== null);
-    if (focusable.length === 0) {
-      event.preventDefault();
-      dialog.focus();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const active = document.activeElement;
-    if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
 
   headroom(row: CliUsageQuotaRow): string {
     if (row.primaryPct == null) return 'unknown';

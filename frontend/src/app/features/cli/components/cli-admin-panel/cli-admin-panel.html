@@ -85,24 +85,22 @@
     }
   </section>
 
-  <section class="cli-admin__section cli-admin__section--placeholder">
+  <section class="cli-admin__section">
     <header class="cli-admin__section-head">
-      <h3>Statistics</h3>
-      <span class="cli-admin__hint">coming soon</span>
+      <h3>Usage detail</h3>
+      <span class="cli-admin__hint">quota · tokens · model spend</span>
     </header>
-    <p class="cli-admin__placeholder">
-      Token spend, run counts, quota-cap blocks per day. Placeholder for now.
-    </p>
-  </section>
-
-  <section class="cli-admin__section cli-admin__section--placeholder">
-    <header class="cli-admin__section-head">
-      <h3>Diagnostics</h3>
-      <span class="cli-admin__hint">coming soon</span>
-    </header>
-    <p class="cli-admin__placeholder">
-      CLI version reports, PATH resolution, last quota probe error. Placeholder.
-    </p>
+    <app-cli-usage-detail
+      [quotaRows]="usage.quotaRows()"
+      [tokens]="usage.tokens()"
+      [adhoc]="usage.adhoc()"
+      [timeline24h]="usage.timeline24h()"
+      [timeline7d]="usage.timeline7d()"
+      [expensiveJobs]="usage.expensiveJobs()"
+      [refreshing]="usage.refreshing()"
+      [refreshingAll]="usage.refreshingAll()"
+      (refreshAll)="usage.refreshAll()"
+      (refreshOne)="usage.refreshOne($event.cliType)" />
   </section>
 </div>
   

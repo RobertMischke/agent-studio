@@ -2,31 +2,19 @@
      data-testid="usage-hover-panel"
      role="button"
      tabindex="0"
-     aria-label="Open CLI usage detail"
+     aria-label="Open CLI Management"
      (mouseenter)="onAnchorEnter()"
      (mouseleave)="onAnchorLeave()"
-     (click)="openPanel($event)"
+     (click)="activate($event)"
      (keydown)="onTriggerKeydown($event)">
   <app-header-quota />
 </div>
 
 @if (open()) {
-  @defer (when open()) {
-    <div class="uhp__pop-wrap"
-         (mouseenter)="onPopEnter()"
-         (mouseleave)="onPopLeave()">
-      <app-cli-usage-detail-modal
-        [quotaRows]="quotaRows()"
-        [tokens]="tokens()"
-        [adhoc]="adhoc()"
-        [timeline24h]="timeline24h()"
-        [timeline7d]="timeline7d()"
-        [expensiveJobs]="expensiveJobs()"
-        [refreshing]="refreshing()"
-        [refreshingAll]="refreshingAll()"
-        (closed)="closePanel()"
-        (refreshAll)="refreshAll($event)"
-        (refreshOne)="refreshOneFromModal($event)" />
-    </div>
-  }
+  <div class="uhp__pop-wrap"
+       data-testid="usage-hover-panel-pop"
+       (mouseenter)="onPopEnter()"
+       (mouseleave)="onPopLeave()">
+    <app-cli-usage-mini-popover [rows]="quotaRows()" />
+  </div>
 }

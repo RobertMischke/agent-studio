@@ -42,6 +42,10 @@ export class StatusBarComponent implements OnInit {
   readonly toggleSummary = output<void>();
   readonly toggleVisualEvidence = output<void>();
   readonly toggleCliAdmin = output<void>();
+  // Quota-strip click: open (not toggle) the CLI-Management panel where
+  // the full usage detail lives. Separate from `toggleCliAdmin` (the
+  // "Manage CLIs" item, which toggles).
+  readonly openCliAdmin = output<void>();
   readonly defaultCliChange = output<CliType>();
   readonly defaultModelChange = output<{ cliType: CliType; model: string }>();
 

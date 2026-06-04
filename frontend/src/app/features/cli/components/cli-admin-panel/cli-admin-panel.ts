@@ -5,6 +5,7 @@ import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport } from '../../../../features/quota';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
+import { CliUsageDetailComponent, CliUsageStore } from '../../../tokens';
 
 interface CapsResponse {
   defaultCapPct: number;
@@ -36,7 +37,7 @@ interface CapRow {
 @Component({
   selector: 'app-cli-admin-panel',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CliUsageDetailComponent],
   templateUrl: './cli-admin-panel.html',
   styleUrl: './cli-admin-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -44,6 +45,10 @@ interface CapRow {
 export class CliAdminPanelComponent implements OnInit, OnDestroy {
   private readonly quotaApi = inject(QuotaApiService);
   private readonly jobService = inject(TaskService);
+  // Shared usage store - feeds the embedded full detail. Ref-counted so
+  // the heavy token / timeline / expensive-job polls run only while this
+  // panel is mounted (started in ngOnInit, released in ngOnDestroy).
+  readonly usage = inject(CliUsageStore);
 
   readonly loading = signal(false);
   readonly errorMsg = signal<string | null>(null);
@@ -105,11 +110,13 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
     // Refresh quota every 60s so the visible "used %" stays current. Caps
     // themselves rarely change so we only re-fetch caps on explicit reload.
     this.autoHandle = setInterval(() => this.refreshQuotaOnly(), 60000);
+    this.usage.startDetail();
   }
 
   ngOnDestroy(): void {
     if (this.autoHandle) clearInterval(this.autoHandle);
     for (const handle of this.debounceHandles.values()) clearTimeout(handle);
+    this.usage.stopDetail();
   }
 
   reload() {

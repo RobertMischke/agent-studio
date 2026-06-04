@@ -16,7 +16,7 @@
     <span class="statusbar__sep" aria-hidden="true"></span>
 
     <div class="statusbar__quota">
-      <app-usage-hover-panel />
+      <app-usage-hover-panel (openCliAdmin)="openCliAdmin.emit()" />
     </div>
   </div>
 

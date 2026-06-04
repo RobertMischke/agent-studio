@@ -2,106 +2,123 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
 /**
- * The bottom status-bar's quota strip exposes a hover-open detail
- * modal with the full subscription windows for every primary CLI and
- * the workspace-wide token aggregate, all in one place. Click and
- * Enter still open the modal for keyboard / touch users.
+ * The bottom status-bar's quota strip now follows a two-step model:
  *
- * That modal is owned by `<app-usage-hover-panel>`, which wraps the
- * existing quota strip (`<app-header-quota>`) and renders a deferred
- * dialog with subscription quota, token trend, model spend, and top tasks.
+ * - HOVER opens a small popover (`<app-cli-usage-mini-popover>`) that
+ *   shows only the core values per CLI - the current-window percentage,
+ *   a meter, and the remaining headroom. It is intentionally compact and
+ *   does NOT carry the full token / model-spend / top-tasks dump.
+ * - CLICK (or Enter / Space) navigates into the CLI-Management overlay
+ *   (`<app-cli-admin-panel>`), where the full usage detail now lives as
+ *   an embedded `<app-cli-usage-detail>` section under the Settings roof.
  *
  * This spec asserts:
- * - Hovering the strip opens the large modal.
- * - Clicking the strip also opens it (touch / accessibility fallback).
- * - The modal carries both the quota table and the tokens block.
- * - Esc closes the modal.
+ * - Hovering the strip opens the compact mini-popover with per-CLI rows
+ *   and the "click for full detail" hint, and stays small.
+ * - Clicking the strip opens the CLI-Management overlay with the embedded
+ *   full usage detail.
+ * - Enter opens the overlay too (keyboard / accessibility).
+ * - Escape dismisses the hover popover.
  *
  * Plus screenshots so the visual change is reviewable in chat.
  */
 
-const SCREENSHOT_DIR = 'test-results';
+const SCREENSHOT_DIR = process.env.STATUS_BAR_RESULTS_DIR?.trim() || 'test-results';
 
-test.describe('Status bar usage detail modal', () => {
+test.describe('Status bar usage detail', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
-    await page.goto('http://localhost:4010');
+    await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     // Let the first quota poll fire so the strip has cards to render.
     await page.waitForTimeout(800);
   });
 
-  test('hovering the strip opens a modal with quota and token sections', async ({ page }) => {
+  test('hovering the strip opens a compact mini-popover with core per-CLI values', async ({ page }) => {
     const statusBar = page.getByTestId('status-bar');
     await expect(statusBar).toBeVisible();
 
-    // Pre-state: the modal is not in the DOM until the strip is hovered.
+    // Pre-state: the popover is not in the DOM until the strip is hovered.
     await expect(page.getByTestId('usage-hover-panel-pop')).toHaveCount(0);
 
-    // The wrapper hosts the strip and listens for hover / click / keyboard open.
     const anchor = page.getByTestId('usage-hover-panel');
     await expect(anchor).toBeVisible();
     await anchor.scrollIntoViewIfNeeded();
     await anchor.hover();
 
-    const modal = page.getByTestId('usage-hover-panel-pop');
-    await expect(modal).toBeVisible({ timeout: 2_000 });
+    const pop = page.getByTestId('usage-hover-panel-pop');
+    await expect(pop).toBeVisible({ timeout: 2_000 });
 
-    // Both sections must be present - that is the user-visible
-    // deliverable. The quota table may be empty in CI, but the tokens
-    // block is always rendered.
-    await expect(modal.getByTestId('usage-hover-panel-quota')).toBeVisible();
-    await expect(modal.getByTestId('usage-hover-panel-tokens')).toBeVisible();
-    await expect(modal.getByTestId('usage-hover-panel-top-jobs')).toBeVisible();
-    await expect(page.getByTestId('hquota-modal-cli-copilot')).toBeVisible();
-    await expect(page.getByTestId('hquota-modal-cli-claude')).toBeVisible();
-    await expect(page.getByTestId('hquota-modal-cli-codex')).toBeVisible();
+    // The compact popover renders and carries the "click for detail" hint.
+    const mini = page.getByTestId('cli-usage-mini-popover');
+    await expect(mini).toBeVisible();
+    await expect(page.getByTestId('cli-usage-mini-hint')).toBeVisible();
 
-    // The modal is large enough to actually read.
-    const modalBox = await modal.boundingBox();
-    expect(modalBox, 'modal box').not.toBeNull();
-    expect(modalBox!.width).toBeGreaterThan(500);
+    // It shows core per-CLI rows (or an explicit empty state in CI where
+    // no quota has been sampled yet) - never the full detail dump.
+    const rowCount = await page.getByTestId(/^cli-usage-mini-row-/).count();
+    if (rowCount === 0) {
+      await expect(page.getByTestId('cli-usage-mini-empty')).toBeVisible();
+    }
+    // The big detail must NOT be inlined in the hover popover.
+    await expect(pop.getByTestId('cli-usage-detail')).toHaveCount(0);
+
+    // The popover stays small - it is a peek, not the full panel.
+    const box = await mini.boundingBox();
+    expect(box, 'mini-popover box').not.toBeNull();
+    expect(box!.width).toBeLessThan(360);
+
+    // ...and it must actually sit inside the viewport. The status bar is
+    // at the bottom edge, so the popover floats above the trigger; a
+    // broken positioning context would push it off the top (negative y).
+    const viewport = page.viewportSize();
+    expect(viewport, 'viewport').not.toBeNull();
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
 
     // Screenshots for the chat reply.
     await page.screenshot({
-      path: `${SCREENSHOT_DIR}/status-bar-usage-modal-open.png`,
-      fullPage: false
+      path: `${SCREENSHOT_DIR}/status-bar-mini-popover-open.png`,
+      fullPage: false,
     });
-    await page.getByTestId('hquota-modal').screenshot({
-      path: `${SCREENSHOT_DIR}/status-bar-usage-modal-closeup.png`
+    await mini.screenshot({
+      path: `${SCREENSHOT_DIR}/status-bar-mini-popover-closeup.png`,
     });
   });
 
-  test('clicking the strip also opens the modal (touch / accessibility fallback)', async ({ page }) => {
+  test('clicking the strip opens CLI Management with the embedded full usage detail', async ({ page }) => {
     const anchor = page.getByTestId('usage-hover-panel');
     await anchor.scrollIntoViewIfNeeded();
     await anchor.click();
 
-    const modal = page.getByTestId('usage-hover-panel-pop');
-    await expect(modal).toBeVisible({ timeout: 2_000 });
+    const admin = page.getByTestId('cli-admin-panel');
+    await expect(admin).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
+
+    await page.screenshot({
+      path: `${SCREENSHOT_DIR}/status-bar-cli-admin-open.png`,
+      fullPage: false,
+    });
   });
 
-  test('modal supports keyboard open and close button', async ({ page }) => {
+  test('Enter opens CLI Management too (keyboard / accessibility)', async ({ page }) => {
     const anchor = page.getByTestId('usage-hover-panel');
     await anchor.focus();
     await page.keyboard.press('Enter');
 
-    const modal = page.getByTestId('usage-hover-panel-pop');
-    await expect(modal).toBeVisible({ timeout: 2_000 });
-
-    await page.getByTestId('cli-usage-detail-close').click();
-    await expect(modal).toBeHidden({ timeout: 1_000 });
+    await expect(page.getByTestId('cli-admin-panel')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
   });
 
-  test('Escape closes the modal', async ({ page }) => {
+  test('Escape dismisses the hover popover', async ({ page }) => {
     const anchor = page.getByTestId('usage-hover-panel');
     await anchor.hover();
 
-    const modal = page.getByTestId('usage-hover-panel-pop');
-    await expect(modal).toBeVisible({ timeout: 2_000 });
+    const pop = page.getByTestId('usage-hover-panel-pop');
+    await expect(pop).toBeVisible({ timeout: 2_000 });
 
     await page.keyboard.press('Escape');
-    await expect(modal).toBeHidden({ timeout: 1_000 });
+    await expect(pop).toHaveCount(0, { timeout: 1_000 });
   });
 });

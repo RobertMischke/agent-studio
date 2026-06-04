@@ -138,14 +138,15 @@ test('skills concept-help on the project skill-readiness section', async ({ page
   });
 });
 
-test('probes concept-help on the CLI usage detail modal', async ({ page }) => {
+test('probes concept-help on the CLI usage detail panel', async ({ page }) => {
   await page.goto('/');
-  // The status-bar trigger opens the CLI usage detail modal which carries
-  // the probes concept-help next to the title.
+  // Clicking the status-bar quota strip opens the CLI-Management panel,
+  // whose embedded usage detail carries the probes concept-help by title.
   const trigger = page.getByTestId('usage-hover-panel');
   await expect(trigger).toBeVisible({ timeout: 10_000 });
   await trigger.click();
-  await expect(page.getByTestId('hquota-modal')).toBeVisible();
+  await expect(page.getByTestId('cli-admin-panel')).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
   await assertConceptHelp(page, 'probes', 'docs/cli-skills/cli-overview.md');
   await page.screenshot({
     path: `${SCREENSHOT_DIR}/05-probes.png`,
