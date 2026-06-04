@@ -223,6 +223,72 @@ public class OrchestratorIntakeTests : IDisposable
         Assert.True(ProjectRunner.IsPickupAllowed(passed, intakeEnabled: true));
     }
 
+    // ---- Parallel prep: drain several awaiting cards per tick ----------------
+
+    [Fact]
+    public void SelectCandidates_ReturnsAwaitingCardsOldestFirst_SkipsStamped()
+    {
+        var jobs = new List<TaskInfo>
+        {
+            new() { Id = "b", State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady, WatchPath = _watchPath, Order = 2 },
+            new() { Id = "a", State = TaskStates.Ready, Phase = null,                        WatchPath = _watchPath, Order = 1 },
+            new() { Id = "passed", State = TaskStates.Ready, Phase = LifecyclePhases.IntakePassed,  WatchPath = _watchPath, Order = 3 },
+            new() { Id = "blocked", State = TaskStates.Ready, Phase = LifecyclePhases.IntakeBlocked, WatchPath = _watchPath, Order = 4 },
+            new() { Id = "running", State = TaskStates.Ready, Phase = LifecyclePhases.IntakeRunning, WatchPath = _watchPath, Order = 5 },
+            new() { Id = "elsewhere", State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady, WatchPath = "/other", Order = 0 },
+            new() { Id = "not-ready", State = TaskStates.Progress, Phase = LifecyclePhases.HumanReady, WatchPath = _watchPath, Order = 0 },
+        };
+
+        var picked = IntakeHostedService.SelectCandidates(jobs, _watchPath, cap: 16);
+
+        // Only the two awaiting cards for this project, oldest (Order) first;
+        // stamped / other-project / non-ready cards are excluded.
+        Assert.Equal(new[] { "a", "b" }, picked.Select(p => p.Id).ToArray());
+    }
+
+    [Fact]
+    public void SelectCandidates_HonorsCap()
+    {
+        var jobs = Enumerable.Range(0, 10)
+            .Select(i => new TaskInfo { Id = $"j{i}", State = TaskStates.Ready, Phase = LifecyclePhases.HumanReady, WatchPath = _watchPath, Order = i })
+            .ToList();
+
+        var picked = IntakeHostedService.SelectCandidates(jobs, _watchPath, cap: 3);
+
+        Assert.Equal(3, picked.Count);
+        Assert.Equal(new[] { "j0", "j1", "j2" }, picked.Select(p => p.Id).ToArray());
+    }
+
+    [Fact]
+    public void Intake_DrainsEveryAwaitingCardInOneTick()
+    {
+        // The parallel-prep contract: several awaiting cards are all stamped in
+        // a single pass, none left in human-ready. Intake holds no code seat, so
+        // there is no single-active-run gate as with 3-progress.
+        WriteJob(TaskStates.Ready, "card-1", "Add login button",
+            "Add a login button to the header. Done when it navigates to /login.");
+        WriteJob(TaskStates.Ready, "card-2", "Add logout button",
+            "Add a logout button to the header. Done when it clears the session.");
+        WriteJob(TaskStates.Ready, "card-3", "fix", "fix it"); // will land intake-blocked
+        var (intake, scanner) = BuildIntake();
+
+        var picked = IntakeHostedService.SelectCandidates(
+            scanner.ScanAllJobs(), _watchPath, IntakeHostedService.MaxIntakePerProjectPerTick);
+        Assert.Equal(3, picked.Count);
+        foreach (var c in picked)
+            intake.RunForJob(c.Id, _watchPath);
+
+        foreach (var slug in new[] { "card-1", "card-2", "card-3" })
+        {
+            var info = scanner.FindJob(slug);
+            Assert.NotNull(info);
+            Assert.NotEqual(LifecyclePhases.HumanReady, info!.Phase);
+            Assert.True(
+                info.Phase is LifecyclePhases.IntakePassed or LifecyclePhases.IntakeBlocked,
+                $"{slug} ended in unexpected phase {info.Phase}");
+        }
+    }
+
     // ---- helpers -------------------------------------------------------------
 
     private (IntakeRunner intake, TaskScannerService scanner) BuildIntake()

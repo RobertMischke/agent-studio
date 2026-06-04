@@ -140,6 +140,48 @@ public class IntakeRunnerTests : IDisposable
     //  removed the intra-project-parallelism block, so there is no longer a
     //  hard-block outcome to prioritise here.)
 
+    // ---- Done-precheck matrix -----------------------------------------------
+
+    [Theory]
+    [InlineData("This feature is already implemented on main; nothing to build.")]
+    [InlineData("Heads up: the rollup card has been shipped in the last release.")]
+    [InlineData("Das Token-Rollup wurde bereits umgesetzt und ist live.")]
+    public void Evaluate_PromptDeclaringWorkDone_FlagsAlreadyDone(string prompt)
+    {
+        var target = new TaskInfo { Id = "done-1", Title = "Add daily token rollup card", State = TaskStates.Ready };
+
+        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<TaskInfo>());
+
+        Assert.Equal(IntakeOutcome.AlreadyDone, v.Outcome);
+    }
+
+    [Theory]
+    [InlineData("Make sure this is already implemented and add a test if it is not.")] // 'make sure' + 'not' guard
+    [InlineData("Verify the endpoint already done before wiring the UI.")] // 'verify' guard
+    [InlineData("This is not yet implemented, so build it.")] // negation; also no 'already implemented' bigram
+    [InlineData("Add a daily token rollup card. Acceptance: chip shows totals for the last 24h.")] // no done-signal at all
+    public void Evaluate_AmbiguousOrNegatedDoneLanguage_DoesNotFlagAlreadyDone(string prompt)
+    {
+        var target = new TaskInfo { Id = "guarded", Title = "Add daily token rollup card", State = TaskStates.Ready };
+
+        var v = IntakeRunner.Evaluate(target, prompt, Array.Empty<TaskInfo>());
+
+        Assert.NotEqual(IntakeOutcome.AlreadyDone, v.Outcome);
+    }
+
+    [Fact]
+    public void Evaluate_AlreadyDoneBeatsClarityOnAShortPrompt()
+    {
+        // A done card may have a terse prompt; the done-precheck must win over
+        // the clarity probe so the card is surfaced as already-done, not as
+        // needs-clarification.
+        var target = new TaskInfo { Id = "short-done", Title = "Rollup", State = TaskStates.Ready };
+
+        var v = IntakeRunner.Evaluate(target, "already done.", Array.Empty<TaskInfo>());
+
+        Assert.Equal(IntakeOutcome.AlreadyDone, v.Outcome);
+    }
+
     // ---- RunForJob integration: phase transitions + sidecar ------------------
 
     [Fact]
@@ -206,6 +248,30 @@ public class IntakeRunnerTests : IDisposable
 
         var info = BuildScanner().FindJob("dup-new");
         Assert.Equal(LifecyclePhases.IntakeBlocked, info!.Phase);
+    }
+
+    [Fact]
+    public void RunForJob_AlreadyDoneCard_StampsIntakeBlockedSoRunnerStaysOff()
+    {
+        // Done-precheck routes through the same intake-blocked phase as every
+        // other non-pass outcome: the pickup gate keeps the coding runner off
+        // the card, and the typed AlreadyDone verdict + reason let the human
+        // confirm-and-complete instead of running redundant work.
+        WriteJob(TaskStates.Ready, "done-card", phase: LifecyclePhases.HumanReady,
+            promptMd: "This rollup card is already implemented on main and merged. No work needed.");
+
+        var runner = BuildRunner();
+        var verdict = runner.RunForJob("done-card");
+
+        Assert.Equal(IntakeOutcome.AlreadyDone, verdict.Outcome);
+
+        var info = BuildScanner().FindJob("done-card");
+        Assert.Equal(LifecyclePhases.IntakeBlocked, info!.Phase);
+
+        var sidecar = ReadLifecycleJson("done-card");
+        Assert.NotNull(sidecar);
+        Assert.Equal("failed", sidecar!.IntakeChecks[0].Status);
+        Assert.NotNull(sidecar.BlockingReason);
     }
 
     [Fact]

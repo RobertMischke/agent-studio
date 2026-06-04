@@ -22,7 +22,14 @@ public enum IntakeOutcome
     /// <summary>Prompt mixes several independent units of work; should be split first.</summary>
     NeedsSplit,
     /// <summary>Hard block (e.g. requests out-of-scope behavior). User must resolve.</summary>
-    Blocked
+    Blocked,
+    /// <summary>
+    /// Done-precheck: the prompt itself states the work is already implemented /
+    /// merged / shipped, so executing it would be a no-op or duplicate effort.
+    /// Surfaced for a human to confirm-and-complete rather than run; the pickup
+    /// gate keeps the coding runner off the card (same as any non-Pass verdict).
+    /// </summary>
+    AlreadyDone
 }
 
 /// <summary>One verdict produced by an intake check.</summary>
@@ -39,11 +46,13 @@ public sealed record IntakeVerdict
 /// Deterministic, in-process intake check for the orchestrator-intake lane.
 ///
 /// <para>
-/// V1 is intentionally a small set of rules: prompt length probe (clarity),
-/// fuzzy title match against existing 2-ready / recent human-review cards
-/// (duplicate), heading-based split heuristic (needs-split), and a hard
-/// out-of-scope keyword check (blocked). Anything that passes all four is
-/// promoted with <see cref="IntakeOutcome.Pass"/>. The shape is the part
+/// V1 is intentionally a small set of rules: a hard out-of-scope keyword
+/// check (blocked), a done-precheck that catches prompts which declare the
+/// work already finished (already-done), fuzzy title match against existing
+/// 2-ready / recent human-review cards (duplicate), prompt length probe
+/// (clarity), and a heading-based split heuristic (needs-split). Anything
+/// that passes them all is promoted with <see cref="IntakeOutcome.Pass"/>.
+/// The shape is the part
 /// that matters: a future iteration can swap the heuristic for a model
 /// call without changing the lifecycle plumbing or the public outcome
 /// contract that the runner / UI / tests are pinned to.
@@ -99,6 +108,12 @@ public sealed class IntakeRunner
 
         var blocked = CheckBlocked(prompt);
         if (blocked != null) return blocked;
+
+        // Done-precheck runs before the thinner heuristics: a card that the
+        // prompt itself declares finished should be surfaced as already-done
+        // even when its prompt is short (clarity) or echoes a peer (duplicate).
+        var done = CheckAlreadyDone(prompt);
+        if (done != null) return done;
 
         var dup = CheckDuplicate(target, existingPeers);
         if (dup != null) return dup;
@@ -240,6 +255,53 @@ public sealed class IntakeRunner
         // "create a new branch", "multiple agents at once") are therefore gone.
         // Re-add a blocker here only for a genuine future hard non-goal.
         _ = prompt;
+        return null;
+    }
+
+    // Done-signal phrases (English + German). Deliberately strong completion
+    // language only — "already exists" / "already in place" are excluded because
+    // they routinely describe a *precondition* ("the endpoint already exists, so
+    // wire the UI") rather than the task itself being finished.
+    private static readonly string[] DoneSignals =
+    [
+        "already implemented", "already done", "already merged", "already shipped",
+        "already landed", "already built", "already complete", "already completed",
+        "has been implemented", "has been merged", "has been shipped",
+        "was already implemented", "is already implemented",
+        "bereits umgesetzt", "bereits erledigt", "bereits implementiert",
+        "schon umgesetzt", "schon erledigt", "schon implementiert"
+    ];
+
+    // If any guard word shares the sentence with a done-signal, the signal is
+    // almost certainly negated or an instruction to verify, not an assertion
+    // that the work is finished. Conservative by design: a false positive here
+    // would skip real work, so precision beats recall.
+    private static readonly string[] DoneGuards =
+    [
+        "not ", "n't", "verify", "ensure", "make sure", "confirm", "check",
+        "should", "unless", "if ", "but ", "however", "todo", "to do",
+        "nicht", "noch nicht", "stelle sicher", "prüf", "pruef", "falls", "sofern"
+    ];
+
+    private static IntakeVerdict? CheckAlreadyDone(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return null;
+
+        foreach (var rawSentence in prompt.Split(new[] { '.', '!', '?', '\n', '\r', ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var sentence = rawSentence.ToLowerInvariant();
+            var matched = Array.Find(DoneSignals, s => sentence.Contains(s, StringComparison.Ordinal));
+            if (matched == null) continue;
+            // A guard anywhere in the same sentence vetoes the signal.
+            if (Array.Exists(DoneGuards, g => sentence.Contains(g, StringComparison.Ordinal))) continue;
+
+            return new IntakeVerdict
+            {
+                Outcome = IntakeOutcome.AlreadyDone,
+                Reason = $"Prompt states the work is already done (\"{matched}\"); confirm and complete instead of running.",
+                Details = [matched]
+            };
+        }
         return null;
     }
 
