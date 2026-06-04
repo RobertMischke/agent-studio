@@ -121,4 +121,27 @@ describe('StickToBottomDirective', () => {
     resizeCallback!();
     expect(scroller.scrollTop).toBe(0); // stayed put — user's scroll position respected
   });
+
+  // Requirement 2 (no excess whitespace): the pin requests the maximum scroll
+  // offset, so nothing reachable is left empty below the last row. In a real
+  // browser scrollTop clamps to scrollHeight - clientHeight; here we assert the
+  // post-pin distance-from-bottom is non-positive (fully consumed).
+  it('pins to the maximum offset, leaving no reachable whitespace below', async () => {
+    const { scroller } = await mount();
+    resizeCallback!(); // content settled / grew while stuck → re-pin
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    expect(distanceFromBottom).toBeLessThanOrEqual(0);
+  });
+
+  // Requirement 3 (stable display): small scrolls that stay within the
+  // threshold must not flap the stuck state, which would otherwise toggle the
+  // jump affordance and trigger re-pin churn.
+  it('stays stuck through sub-threshold scroll jitter (no flapping)', async () => {
+    const { scroller, dir } = await mount(); // scrollHeight 1000, clientHeight 200
+    for (const top of [790, 780, 795, 777]) {
+      scroller.scrollTop = top; // distanceFromBottom 10/20/5/23 — all ≤ 24
+      scroller.dispatchEvent(new Event('scroll'));
+      expect(dir.stuck()).toBe(true);
+    }
+  });
 });
