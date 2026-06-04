@@ -217,10 +217,9 @@
   line-height: 1.55;
   word-break: break-word;
 }
-.chat__msg--user .chat__msg-body { white-space: pre-wrap; }
-.chat__msg--system .chat__msg-body { white-space: pre-wrap; color: var(--studio-accent-warn, #fecaca); }
+.chat__msg--system .chat__msg-body { color: var(--studio-accent-warn, #fecaca); }
 
-/* Markdown typography for non-user chat bubbles lives in the global
+/* Markdown typography for chat bubbles lives in the global
    `.markdown-body` / `.markdown-body--dense` class
    (`src/styles/_markdown-body.scss`). The chat template adds the
    class alongside `.chat__msg-body--markdown` so this surface no

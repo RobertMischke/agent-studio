@@ -6,7 +6,6 @@ import {
   OnDestroy,
   computed,
   effect,
-  inject,
   input,
   output,
   signal,
@@ -14,8 +13,6 @@ import {
   viewChild
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { markdownToHtml } from '../../markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../directives/markdown-image-lightbox.directive';
 import { MarkdownViewComponent } from '../../markdown-view/markdown-view.component';
 import { mergeByTimestamp } from '../merge-by-timestamp';
@@ -43,7 +40,6 @@ interface RenderedMessage {
   /** Sort key used to merge with events chronologically. */
   timestamp: string;
   message: ChatMessage;
-  bodyHtml: SafeHtml;
   /** True when the message body exceeds COLLAPSE_LINE_THRESHOLD lines. */
   collapsible: boolean;
   /** Resolved collapsed state: collapsible AND not user-expanded. */
@@ -61,8 +57,8 @@ interface RenderedEvent {
   id: string;
   timestamp: string;
   event: ChatEvent;
-  /** Pre-rendered markdown for the expanded detail body. */
-  detailHtml: SafeHtml | null;
+  /** True when the event has a markdown detail body to expand. */
+  hasDetail: boolean;
   expanded: boolean;
   /** F7: error/warn events older than the latest super-phase get dimmed. */
   staleError: boolean;
@@ -178,8 +174,6 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   private scrollFrame: number | null = null;
   private suppressScrollEvent = false;
 
-  private readonly sanitizer = inject(DomSanitizer);
-
   /**
    * Chat phases derived from the merged message stream. The chat
    * component already orders by timestamp; we feed the same source
@@ -228,15 +222,11 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
       return Number.isFinite(t) && Number.isFinite(staleCutoffMs) && t < staleCutoffMs;
     };
     const messageItems: RenderedItem[] = this.messages().map((message) => {
-      // User input stays plain text (newlines + escaping); every other role
-      // ships Markdown, which is how agents and orchestrator log entries
-      // express themselves on the wire.
+      // Every chat turn can carry Markdown. Route all roles through the
+      // canonical <app-markdown> renderer so operator-pasted tables/lists and
+      // orchestrator replies render with the same GFM, code, link, and
+      // sanitisation path used elsewhere.
       const isUser = message.role === 'user';
-      const bodyHtml = this.sanitizer.bypassSecurityTrustHtml(
-        isUser
-          ? escapeForPlain(message.text)
-          : markdownToHtml(message.text, { codeLineNumbers: true })
-      );
       // Source-line count is a cheap, deterministic proxy for visual height
       // that survives signal recomputes; we don't need exact rendered geometry
       // for the collapse decision since the CSS max-height clips below the fold.
@@ -248,7 +238,6 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
         id: message.id,
         timestamp: message.timestamp,
         message,
-        bodyHtml,
         collapsible,
         collapsed,
         staleError: isStaleError(message.timestamp, !!message.error),
@@ -259,11 +248,7 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
       id: event.id,
       timestamp: event.timestamp,
       event,
-      detailHtml: event.detail
-        ? this.sanitizer.bypassSecurityTrustHtml(
-            markdownToHtml(event.detail, { codeLineNumbers: true })
-          )
-        : null,
+      hasDetail: !!event.detail,
       expanded: expandedEvents.has(event.id),
       staleError: isStaleError(event.timestamp, event.severity === 'error' || event.severity === 'warn'),
     }));
@@ -650,12 +635,4 @@ function countSourceLines(text: string): number {
   if (!text) return 0;
   // Newline-separated source lines; trailing newlines don't count as a row.
   return text.replace(/\n+$/, '').split('\n').length;
-}
-
-function escapeForPlain(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>');
 }

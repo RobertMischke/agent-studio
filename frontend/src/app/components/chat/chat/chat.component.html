@@ -43,18 +43,12 @@
                     }
                     <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
                   </header>
-                  @if (item.message.role === 'user') {
-                    <div class="chat__msg-body"
-                         [class.chat__msg-body--collapsed]="item.collapsed"
-                         [innerHTML]="item.bodyHtml"></div>
-                  } @else {
-                    <app-markdown class="chat__msg-body chat__msg-body--markdown"
-                                  [class.chat__msg-body--collapsed]="item.collapsed"
-                                  [source]="item.message.text"
-                                  [dense]="true"
-                                  [codeLineNumbers]="true"
-                                  testId="chat-turn-md" />
-                  }
+                  <app-markdown class="chat__msg-body chat__msg-body--markdown"
+                                [class.chat__msg-body--collapsed]="item.collapsed"
+                                [source]="item.message.text"
+                                [dense]="true"
+                                [codeLineNumbers]="true"
+                                testId="chat-turn-md" />
                   @if (item.collapsible) {
                     <button type="button"
                             class="chat__msg-toggle"
@@ -101,13 +95,13 @@
                           class="chat__event-head"
                           [attr.data-testid]="'chat-event-toggle-' + item.event.id"
                           [attr.aria-expanded]="item.expanded"
-                          [disabled]="!item.detailHtml"
+                          [disabled]="!item.hasDetail"
                           (click)="toggleEventExpanded(item.event.id)">
                     <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event) }}</span>
                     <span class="chat__event-kind">{{ eventLabel(item.event) }}</span>
                     <span class="chat__event-summary">{{ item.event.summary }}</span>
                     <span class="chat__event-time">{{ formatTime(item.event.timestamp) }}</span>
-                    @if (item.detailHtml) {
+                    @if (item.hasDetail) {
                       <span class="chat__event-caret" aria-hidden="true">{{ item.expanded ? '▴' : '▾' }}</span>
                     }
                   </button>
@@ -245,4 +239,3 @@
         </div>
       </form>
     </div>
-  

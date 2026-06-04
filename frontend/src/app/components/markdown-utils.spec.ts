@@ -34,6 +34,13 @@ describe('markdownToHtml', () => {
     );
   });
 
+  it('renders GFM tables', () => {
+    const html = markdownToHtml('| Field | Value |\n|---|---|\n| ID | ASS-704 |');
+    expect(html).toContain('<table>');
+    expect(html).toContain('<th>Field</th>');
+    expect(html).toContain('<td>ASS-704</td>');
+  });
+
   it('renders inline links and treats javascript: URLs as unsafe', () => {
     const safe = markdownToHtml('See [docs](https://example.com).');
     expect(safe).toContain('href="https://example.com"');

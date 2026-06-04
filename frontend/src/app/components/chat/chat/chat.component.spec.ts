@@ -40,6 +40,51 @@ describe('ChatComponent (smoke)', () => {
   });
 });
 
+describe('ChatComponent markdown rendering', () => {
+  async function makeFixture() {
+    await TestBed.configureTestingModule({
+      imports: [ChatComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    return TestBed.createComponent(ChatComponent);
+  }
+
+  it('renders user and orchestrator turns through the shared markdown view', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('messages', [
+      {
+        id: 'user-table',
+        role: 'user',
+        text: '| Field | Value |\n|---|---|\n| ID | ASS-704 |',
+        timestamp: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'orch-formatting',
+        role: 'orchestrator',
+        text: '- **Done**\n- [Docs](https://example.com)\n\n```ts\nconst ok = true;\n```',
+        timestamp: '2026-01-01T00:00:01.000Z',
+      },
+    ] satisfies ChatMessage[]);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const userTurn = root.querySelector('[data-turn-id="user-table"]') as HTMLElement | null;
+    const orchTurn = root.querySelector('[data-turn-id="orch-formatting"]') as HTMLElement | null;
+
+    expect(userTurn?.querySelector('table')).toBeTruthy();
+    expect(userTurn?.querySelector('td')?.textContent?.trim()).toBe('ASS-704');
+    expect(orchTurn?.querySelector('ul')).toBeTruthy();
+    expect(orchTurn?.querySelector('strong')?.textContent).toBe('Done');
+    expect(orchTurn?.querySelector('a')?.getAttribute('href')).toBe('https://example.com');
+    expect(orchTurn?.querySelector('pre code')?.textContent).toContain('const ok = true;');
+  });
+});
+
 describe('ChatComponent virtualisation', () => {
   // All-agent fixtures: phase grouping is anchored on user steers, so
   // using only agent turns produces a single open phase and every
