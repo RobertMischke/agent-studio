@@ -4,7 +4,7 @@ export { CliUsageStore } from './services/cli-usage.store';
 export type { CliUsageQuotaRow } from './services/cli-usage.store';
 export { TokenSummaryBlockComponent } from './components/token-summary-block/token-summary-block';
 export { UsageHoverPanelComponent } from './components/usage-hover-panel/usage-hover-panel';
-export { CliUsageMiniPopoverComponent } from './components/cli-usage-mini-popover/cli-usage-mini-popover';
+export { CliUsageModalComponent } from './components/cli-usage-modal/cli-usage-modal';
 export { CliUsageDetailComponent } from './components/cli-usage-detail/cli-usage-detail';
 export { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline/workspace-token-timeline';
 export type {

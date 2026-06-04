@@ -1,9 +1,8 @@
-// F50 follow-up (2026-06-01) — every CLI quota card now renders one
-// identical primary pill: icon + name + value + tag + bar. Showing a
-// single most-constraining window per CLI (instead of a per-CLI-
-// variable set of 5H / WK cells) is what makes Claude / Codex /
-// Copilot line up with the same height, padding, and shape. The full
-// per-window breakdown lives in the tooltip / detail modal.
+// Each CLI quota card renders one chip per reported usage window:
+// Claude and Codex surface both their 5H and WK windows side by side,
+// while a single-window CLI (Copilot's monthly) shows one chip. The
+// card itself is a <button> — clicking it opens that CLI's own usage-
+// detail modal (no hover tooltip, no grouped view).
 
 :host { display: inline-flex; }
 
@@ -14,6 +13,12 @@
 }
 
 .hquota__card {
+  // Button reset: the card is a <button> now (click → per-CLI modal),
+  // so strip the UA chrome and inherit the status-bar typography.
+  appearance: none;
+  margin: 0;
+  font: inherit;
+
   display: inline-flex;
   align-items: center;
   gap: 6px;

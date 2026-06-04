@@ -2,30 +2,31 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
 /**
- * The bottom status-bar's quota strip now follows a two-step model:
+ * The bottom status-bar's quota strip now follows a single model:
  *
- * - HOVER opens a small popover (`<app-cli-usage-mini-popover>`) that
- *   shows only the core values per CLI - the current-window percentage,
- *   a meter, and the remaining headroom. It is intentionally compact and
- *   does NOT carry the full token / model-spend / top-tasks dump.
- * - CLICK (or Enter / Space) navigates into the CLI-Management overlay
- *   (`<app-cli-admin-panel>`), where the full usage detail now lives as
- *   an embedded `<app-cli-usage-detail>` section under the Settings roof.
+ * - There is NO hover tooltip / hover popover any more. Hovering a CLI
+ *   card does nothing but a subtle highlight.
+ * - CLICKING a CLI card opens THAT CLI's own usage-detail modal
+ *   (`<app-cli-usage-modal>`, testid `cli-usage-modal-<cli>`). One modal
+ *   per CLI — never a grouped multi-CLI view.
+ * - The modal lists every quota window the probe reported (so Claude /
+ *   Codex show both their 5h and weekly windows) plus that CLI's top
+ *   models, and its "Manage usage caps" footer drops into the full
+ *   CLI-Management panel where caps are edited.
  *
  * This spec asserts:
- * - Hovering the strip opens the compact mini-popover with per-CLI rows
- *   and the "click for full detail" hint, and stays small.
- * - Clicking the strip opens the CLI-Management overlay with the embedded
- *   full usage detail.
- * - Enter opens the overlay too (keyboard / accessibility).
- * - Escape dismisses the hover popover.
+ * - The old hover popover is gone (never appears, opens no modal).
+ * - Clicking a card opens only that CLI's modal.
+ * - Escape and backdrop-click both close the modal.
+ * - "Manage usage caps" opens the CLI-Management overlay.
  *
  * Plus screenshots so the visual change is reviewable in chat.
  */
 
 const SCREENSHOT_DIR = process.env.STATUS_BAR_RESULTS_DIR?.trim() || 'test-results';
+const CLIS = ['copilot', 'claude', 'codex'] as const;
 
-test.describe('Status bar usage detail', () => {
+test.describe('Status bar usage modal', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
@@ -35,90 +36,85 @@ test.describe('Status bar usage detail', () => {
     await page.waitForTimeout(800);
   });
 
-  test('hovering the strip opens a compact mini-popover with core per-CLI values', async ({ page }) => {
-    const statusBar = page.getByTestId('status-bar');
-    await expect(statusBar).toBeVisible();
+  test('the strip has no hover popover / hover tooltip', async ({ page }) => {
+    const strip = page.getByTestId('usage-hover-panel');
+    await expect(strip).toBeVisible();
+    await strip.scrollIntoViewIfNeeded();
+    await strip.hover();
+    await page.waitForTimeout(400);
 
-    // Pre-state: the popover is not in the DOM until the strip is hovered.
+    // The old hover popover and mini-popover are gone for good.
     await expect(page.getByTestId('usage-hover-panel-pop')).toHaveCount(0);
+    await expect(page.getByTestId('cli-usage-mini-popover')).toHaveCount(0);
+    // Hovering must not open any modal either.
+    await expect(page.locator('[data-testid^="cli-usage-modal-"]')).toHaveCount(0);
+  });
 
-    const anchor = page.getByTestId('usage-hover-panel');
-    await expect(anchor).toBeVisible();
-    await anchor.scrollIntoViewIfNeeded();
-    await anchor.hover();
-
-    const pop = page.getByTestId('usage-hover-panel-pop');
-    await expect(pop).toBeVisible({ timeout: 2_000 });
-
-    // The compact popover renders and carries the "click for detail" hint.
-    const mini = page.getByTestId('cli-usage-mini-popover');
-    await expect(mini).toBeVisible();
-    await expect(page.getByTestId('cli-usage-mini-hint')).toBeVisible();
-
-    // It shows core per-CLI rows (or an explicit empty state in CI where
-    // no quota has been sampled yet) - never the full detail dump.
-    const rowCount = await page.getByTestId(/^cli-usage-mini-row-/).count();
-    if (rowCount === 0) {
-      await expect(page.getByTestId('cli-usage-mini-empty')).toBeVisible();
+  test('both 5h and weekly windows show on Claude / Codex cards', async ({ page }) => {
+    // Requirement #2: every reported window is surfaced in the strip, so
+    // Claude and Codex carry both a 5h and a weekly chip. In CI with no
+    // sampled quota the cards fall back to a single placeholder chip, so
+    // only assert the structure when real data is present.
+    for (const cli of ['claude', 'codex'] as const) {
+      const fiveH = page.getByTestId(`hquota-${cli}-5h`);
+      const weekly = page.getByTestId(`hquota-${cli}-wk`);
+      if ((await fiveH.count()) > 0) {
+        await expect(fiveH).toBeVisible();
+        await expect(weekly).toBeVisible();
+      }
     }
-    // The big detail must NOT be inlined in the hover popover.
-    await expect(pop.getByTestId('cli-usage-detail')).toHaveCount(0);
 
-    // The popover stays small - it is a peek, not the full panel.
-    const box = await mini.boundingBox();
-    expect(box, 'mini-popover box').not.toBeNull();
-    expect(box!.width).toBeLessThan(360);
-
-    // ...and it must actually sit inside the viewport. The status bar is
-    // at the bottom edge, so the popover floats above the trigger; a
-    // broken positioning context would push it off the top (negative y).
-    const viewport = page.viewportSize();
-    expect(viewport, 'viewport').not.toBeNull();
-    expect(box!.y).toBeGreaterThanOrEqual(0);
-    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
-
-    // Screenshots for the chat reply.
-    await page.screenshot({
-      path: `${SCREENSHOT_DIR}/status-bar-mini-popover-open.png`,
-      fullPage: false,
-    });
-    await mini.screenshot({
-      path: `${SCREENSHOT_DIR}/status-bar-mini-popover-closeup.png`,
-    });
+    // Close-up of the strip so the two-chip layout is reviewable in chat.
+    const strip = page.getByTestId('usage-hover-panel');
+    await strip.scrollIntoViewIfNeeded();
+    await strip.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-strip-windows.png` });
   });
 
-  test('clicking the strip opens CLI Management with the embedded full usage detail', async ({ page }) => {
-    const anchor = page.getByTestId('usage-hover-panel');
-    await anchor.scrollIntoViewIfNeeded();
-    await anchor.click();
+  test("clicking a CLI card opens that CLI's own modal (and only that CLI)", async ({ page }) => {
+    const claudeCard = page.getByTestId('hquota-card-claude');
+    await expect(claudeCard).toBeVisible();
+    await claudeCard.scrollIntoViewIfNeeded();
+    await claudeCard.click();
 
-    const admin = page.getByTestId('cli-admin-panel');
-    await expect(admin).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
+    const modal = page.getByTestId('cli-usage-modal-claude');
+    await expect(modal).toBeVisible({ timeout: 4_000 });
+
+    // One modal per CLI: the codex / copilot modals must NOT be present,
+    // and the grouped multi-CLI detail surface is not in the click flow.
+    await expect(page.getByTestId('cli-usage-modal-codex')).toHaveCount(0);
+    await expect(page.getByTestId('cli-usage-modal-copilot')).toHaveCount(0);
+    await expect(page.getByTestId('cli-usage-detail')).toHaveCount(0);
 
     await page.screenshot({
-      path: `${SCREENSHOT_DIR}/status-bar-cli-admin-open.png`,
+      path: `${SCREENSHOT_DIR}/status-bar-cli-modal-claude.png`,
       fullPage: false,
     });
-  });
-
-  test('Enter opens CLI Management too (keyboard / accessibility)', async ({ page }) => {
-    const anchor = page.getByTestId('usage-hover-panel');
-    await anchor.focus();
-    await page.keyboard.press('Enter');
-
-    await expect(page.getByTestId('cli-admin-panel')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
-  });
-
-  test('Escape dismisses the hover popover', async ({ page }) => {
-    const anchor = page.getByTestId('usage-hover-panel');
-    await anchor.hover();
-
-    const pop = page.getByTestId('usage-hover-panel-pop');
-    await expect(pop).toBeVisible({ timeout: 2_000 });
 
     await page.keyboard.press('Escape');
-    await expect(pop).toHaveCount(0, { timeout: 1_000 });
+    await expect(modal).toHaveCount(0, { timeout: 2_000 });
+  });
+
+  test('each CLI card opens its matching modal; backdrop closes it', async ({ page }) => {
+    for (const cli of CLIS) {
+      const card = page.getByTestId(`hquota-card-${cli}`);
+      await expect(card).toBeVisible();
+      await card.click();
+
+      const modal = page.getByTestId(`cli-usage-modal-${cli}`);
+      await expect(modal).toBeVisible({ timeout: 4_000 });
+
+      // Backdrop click (top-left corner, clear of the centred panel) closes.
+      await page.getByTestId(`cli-usage-modal-${cli}-overlay`).click({ position: { x: 6, y: 6 } });
+      await expect(modal).toHaveCount(0, { timeout: 2_000 });
+    }
+  });
+
+  test('the modal\'s "Manage usage caps" opens the CLI-Management panel', async ({ page }) => {
+    await page.getByTestId('hquota-card-claude').click();
+    await expect(page.getByTestId('cli-usage-modal-claude')).toBeVisible({ timeout: 4_000 });
+
+    await page.getByTestId('cli-usage-modal-manage-caps').click();
+    await expect(page.getByTestId('cli-admin-panel')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
   });
 });

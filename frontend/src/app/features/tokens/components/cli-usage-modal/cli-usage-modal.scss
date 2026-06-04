@@ -1,0 +1,114 @@
+:host { display: contents; }
+
+.cum {
+  display: grid;
+  gap: 12px;
+  color: var(--studio-fg);
+  font-size: 13px;
+}
+
+.cum__panel {
+  border: 1px solid var(--studio-border);
+  background: var(--studio-bg-hover);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.cum__panel-title {
+  margin: 0 0 8px;
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cum__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.cum__table th,
+.cum__table td {
+  padding: 6px 7px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--studio-border);
+}
+
+.cum__table th {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cum__table tr:last-child td { border-bottom: 0; }
+
+.cum__num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cum code {
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Consolas, monospace);
+  font-size: 11px;
+  color: var(--studio-accent-3-strong);
+  background: var(--studio-bg-elevated);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.cum__muted { color: var(--studio-fg-dim); }
+
+.cum__empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+}
+
+.cum__error {
+  padding: 8px 10px;
+  color: var(--notify-error-icon-fg);
+  background: var(--notify-error-tint);
+  border: 1px solid var(--notify-error-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.cum__footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cum__button {
+  border: 1px solid var(--studio-border-strong);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 6px 12px;
+  font-weight: 650;
+  font-size: 12px;
+}
+
+.cum__button--primary {
+  background: color-mix(in srgb, var(--studio-accent-success) 18%, transparent);
+  border-color: color-mix(in srgb, var(--studio-accent-success) 40%, transparent);
+  color: var(--studio-accent-success-strong);
+}
+
+.cum__button:hover:not(:disabled) {
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+}
+
+.cum__button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}

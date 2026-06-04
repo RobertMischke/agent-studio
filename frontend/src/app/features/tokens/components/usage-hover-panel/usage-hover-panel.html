@@ -1,20 +1,15 @@
-<div class="uhp"
-     data-testid="usage-hover-panel"
-     role="button"
-     tabindex="0"
-     aria-label="Open CLI Management"
-     (mouseenter)="onAnchorEnter()"
-     (mouseleave)="onAnchorLeave()"
-     (click)="activate($event)"
-     (keydown)="onTriggerKeydown($event)">
-  <app-header-quota />
+<div class="uhp" data-testid="usage-hover-panel">
+  <app-header-quota (cliSelected)="select($event)" />
 </div>
 
-@if (open()) {
-  <div class="uhp__pop-wrap"
-       data-testid="usage-hover-panel-pop"
-       (mouseenter)="onPopEnter()"
-       (mouseleave)="onPopLeave()">
-    <app-cli-usage-mini-popover [rows]="quotaRows()" />
-  </div>
+@if (selectedCli(); as cli) {
+  <app-cli-usage-modal
+    [cliType]="cli"
+    [row]="selectedRow()"
+    [tokens]="tokens()"
+    [adhoc]="adhoc()"
+    [refreshing]="!!refreshing()[cli]"
+    (closeRequest)="close()"
+    (refresh)="refreshOne(cli)"
+    (manageCaps)="manageCaps()" />
 }

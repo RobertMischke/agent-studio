@@ -33,8 +33,10 @@ interface ModelUsageRow {
  * Full CLI-usage detail surface: routing headroom, token trend, per-CLI
  * quota windows / model spend / top sources, and the workspace's most
  * expensive tasks. Lives embedded inside the CLI-Management panel (the
- * "Settings-Dach"); the status-bar quota strip now only shows the
- * compact <app-cli-usage-mini-popover> on hover and opens this on click.
+ * "Settings-Dach"), reached from the status-bar usage modal's "Manage
+ * usage caps" button. The status-bar quota strip itself opens a compact
+ * per-CLI <app-cli-usage-modal> on click; this grouped surface is the
+ * caps-editing roof behind it.
  *
  * Purely presentational - the shared `CliUsageStore` owns the polling
  * and feeds every input; `refreshAll` / `refreshOne` bubble back so the

@@ -1,29 +1,32 @@
 <div class="hquota">
   @for (card of cards(); track card.cliType) {
-    <div class="hquota__card"
-         [attr.data-testid]="'hquota-card-' + card.cliType"
-         [attr.aria-label]="card.ariaLabel"
-         [class.hquota__card--error]="!!card.error"
-         [class.hquota__card--stale]="card.stale"
-         [attr.data-tone]="card.tone"
-         [attr.data-state]="card.state"
-         [appTooltip]="card.tooltip">
+    <button type="button"
+            class="hquota__card"
+            [attr.data-testid]="'hquota-card-' + card.cliType"
+            [attr.aria-label]="card.ariaLabel"
+            [class.hquota__card--error]="!!card.error"
+            [class.hquota__card--stale]="card.stale"
+            [attr.data-tone]="card.tone"
+            [attr.data-state]="card.state"
+            (click)="select(card.cliType)">
       <span class="hquota__icon" aria-hidden="true">{{ card.icon }}</span>
       <span class="hquota__label">{{ card.label }}</span>
 
-      <span class="hquota__metric"
-            [attr.data-testid]="'hquota-' + card.cliType + '-primary'"
-            [attr.data-tone]="card.primary.tone">
-        <span class="hquota__value">{{ card.primary.value }}</span>
-        @if (card.primary.tag) {
-          <span class="hquota__tag">{{ card.primary.tag }}</span>
-        }
-        <span class="hquota__bar"><span class="hquota__bar-fill" [style.width.%]="card.primary.barPct"></span></span>
-      </span>
+      @for (chip of card.chips; track chip.windowKey) {
+        <span class="hquota__metric"
+              [attr.data-testid]="'hquota-' + card.cliType + '-' + chip.windowKey"
+              [attr.data-tone]="chip.tone">
+          <span class="hquota__value">{{ chip.value }}</span>
+          @if (chip.tag) {
+            <span class="hquota__tag">{{ chip.tag }}</span>
+          }
+          <span class="hquota__bar"><span class="hquota__bar-fill" [style.width.%]="chip.barPct"></span></span>
+        </span>
+      }
 
       @if (card.stale) {
-        <span class="hquota__stale-dot" [appTooltip]="'Stale: snapshot is older than the cache TTL.'">●</span>
+        <span class="hquota__stale-dot" aria-label="Stale snapshot">●</span>
       }
-    </div>
+    </button>
   }
 </div>
