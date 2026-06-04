@@ -973,41 +973,6 @@
     color: var(--studio-fg-dim);
   }
 
-  &__radio {
-    display: inline-flex;
-    border: 1px solid var(--studio-border-strong);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  &__radio-btn {
-    padding: 3px 10px;
-    font-size: 11px;
-    background: transparent;
-    color: var(--studio-fg-dim);
-    border-right: 1px solid var(--studio-border);
-
-    &:last-child {
-      border-right: 0;
-    }
-
-    &:hover {
-      background: var(--studio-bg-hover);
-      color: var(--studio-fg);
-    }
-
-    &--active {
-      background: var(--studio-accent);
-      color: #1a1a1a;
-      font-weight: 600;
-
-      &:hover {
-        background: var(--studio-accent);
-        color: #1a1a1a;
-      }
-    }
-  }
-
   &__toggle {
     padding: 3px 12px;
     border: 1px solid var(--studio-border-strong);

@@ -1,0 +1,13 @@
+<div class="segmented" role="group" [attr.aria-label]="ariaLabel()">
+  @for (option of options(); track trackOption($index, option)) {
+    <button type="button"
+            class="segmented__option"
+            [class.segmented__option--active]="option.value === value()"
+            [attr.aria-pressed]="option.value === value()"
+            [disabled]="option.disabled === true"
+            [attr.data-testid]="option.testid ?? null"
+            (click)="select(option)">
+      {{ option.label }}
+    </button>
+  }
+</div>

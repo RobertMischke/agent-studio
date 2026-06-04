@@ -19,6 +19,7 @@ import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { PaneHeaderComponent } from '../../components/pane-header/pane-header.component';
+import { SegmentedControlComponent, SegmentedOption } from '../../components/segmented-control/segmented-control.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
@@ -78,7 +79,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, PaneHeaderComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, PaneHeaderComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -130,6 +131,16 @@ export class StudioShellComponent {
   readonly sidebarWidth = this.panelState.sidebarWidth;
   readonly activityBarSide = this.panelState.activityBarSide;
   readonly chatRailOpen = this.panelState.chatRailOpen;
+
+  /** Settings segmented-control option sets (label/value pairs). */
+  readonly themeOptions: readonly SegmentedOption<'dark' | 'light'>[] = [
+    { value: 'dark', label: 'Dark', testid: 'settings-theme-dark' },
+    { value: 'light', label: 'Light', testid: 'settings-theme-light' },
+  ];
+  readonly activityBarSideOptions: readonly SegmentedOption<'left' | 'right'>[] = [
+    { value: 'left', label: 'Left', testid: 'settings-activitybar-left' },
+    { value: 'right', label: 'Right', testid: 'settings-activitybar-right' },
+  ];
 
   /**
    * Which Explorer-tree project rows are expanded (showing Board / Project

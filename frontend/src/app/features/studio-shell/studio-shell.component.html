@@ -361,31 +361,21 @@
               <section class="studio-settings">
                 <div class="studio-explorer__group-head">Appearance</div>
                 <div class="studio-setting">
-                  <span class="studio-setting__label">Theme</span>
-                  <div class="studio-setting__radio">
-                    <button type="button"
-                            class="studio-setting__radio-btn"
-                            [class.studio-setting__radio-btn--active]="theme() === 'dark'"
-                            (click)="setTheme('dark')">Dark</button>
-                    <button type="button"
-                            class="studio-setting__radio-btn"
-                            [class.studio-setting__radio-btn--active]="theme() === 'light'"
-                            (click)="setTheme('light')">Light</button>
-                  </div>
+                  <span class="studio-setting__label" id="studio-setting-theme">Theme</span>
+                  <app-segmented-control
+                    ariaLabel="Theme"
+                    [options]="themeOptions"
+                    [value]="theme()"
+                    (valueChange)="setTheme($event)" />
                 </div>
                 <div class="studio-explorer__group-head studio-explorer__group-head--mt">Layout</div>
                 <div class="studio-setting">
-                  <span class="studio-setting__label">Activity bar</span>
-                  <div class="studio-setting__radio">
-                    <button type="button"
-                            class="studio-setting__radio-btn"
-                            [class.studio-setting__radio-btn--active]="activityBarSide() === 'left'"
-                            (click)="setActivityBarSide('left')">Left</button>
-                    <button type="button"
-                            class="studio-setting__radio-btn"
-                            [class.studio-setting__radio-btn--active]="activityBarSide() === 'right'"
-                            (click)="setActivityBarSide('right')">Right</button>
-                  </div>
+                  <span class="studio-setting__label" id="studio-setting-activitybar">Activity bar</span>
+                  <app-segmented-control
+                    ariaLabel="Activity bar"
+                    [options]="activityBarSideOptions"
+                    [value]="activityBarSide()"
+                    (valueChange)="setActivityBarSide($event)" />
                 </div>
                 <div class="studio-setting">
                   <span class="studio-setting__label">Project chat rail</span>

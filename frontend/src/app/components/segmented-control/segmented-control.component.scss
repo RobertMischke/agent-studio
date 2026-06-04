@@ -1,0 +1,69 @@
+/*
+ * Shared single-select segmented control (Theme Dark|Light, Activity bar
+ * Left|Right, and future "pick one of N" switches).
+ *
+ * Track-style: a bordered, rounded container holds the options on a faint
+ * inset track; the active option lifts into a filled accent "thumb" while
+ * inactive options stay flat and dimmed. The fill — not a hairline divider —
+ * is what separates the choices, so "Dark" and "Light" never read as one
+ * glued word. Tuned to stay legible in both light and dark themes.
+ */
+
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 2px;
+  background: var(--studio-bg-hover);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 6px;
+}
+
+.segmented__option {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+  background: transparent;
+  color: var(--studio-fg-dim);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+
+  &:hover:not(:disabled):not(.segmented__option--active) {
+    background: var(--studio-bg-elevated);
+    color: var(--studio-fg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--studio-accent);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+}
+
+/* Active "thumb": filled brand accent, dark-on-accent label, slight lift.
+ * Loud on purpose so the selected option is unmistakable at a glance.
+ * Doubled class (0,2,0) so it always beats the base `.segmented__option`
+ * regardless of injected-stylesheet order under ViewEncapsulation.None. */
+.segmented__option.segmented__option--active {
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+
+  &:hover:not(:disabled) {
+    background: var(--studio-accent);
+    color: var(--studio-on-accent);
+  }
+}
