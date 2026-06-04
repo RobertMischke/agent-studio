@@ -9,7 +9,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px 4px 8px;
+  // Right gutter reads the shared rail token so a trailing count pill (e.g.
+  // the "Open tabs" total) or the Workspaces "show all" action lines up with
+  // the tree-row / list-row counts below instead of hugging the edge at 12px.
+  padding: 4px var(--studio-rail-trailing-gutter) 4px 8px;
   margin: 0;
   font-size: 11px;
   font-weight: 700;
@@ -71,3 +74,11 @@
     white-space: nowrap;
   }
 }
+
+// Collapsible section heads (Workspaces, Open tabs) render as a `<button>`,
+// so the shell's `.studio button { padding: 0 }` reset (0,1,1) beats the base
+// `.section-header { padding }` (0,1,0) and the trailing count / "show all"
+// action sits flush against the rail edge. Scope to `.studio` (0,2,0) so the
+// shared trailing gutter wins and the section count column lines up with the
+// tree-row counts below it.
+.studio .section-header { padding-right: var(--studio-rail-trailing-gutter); }

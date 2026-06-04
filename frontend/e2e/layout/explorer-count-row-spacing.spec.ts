@@ -1,23 +1,34 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * Explorer count-row vertical-spacing regression.
+ * Explorer count-row spacing regression — both axes.
  *
- * Operator polish 2026-06-03: the stacked count badges down the left
- * Explorer rail (project totals + lane counts, e.g. 6 / 3 / 27 / 14 …)
- * sat too tight under one another. The fix bumps `.tree-row` height so
- * the counts read with breathing room. `app-tree-row` is used ONLY by
+ * Vertical (operator polish 2026-06-03): the stacked count badges down
+ * the left Explorer rail (project totals + lane counts, e.g. 6 / 3 / 27 /
+ * 14 …) sat too tight under one another. The fix bumps `.tree-row` height
+ * so the counts read with breathing room. `app-tree-row` is used ONLY by
  * the Explorer workspace tree, so its row height is the single lever for
  * the spacing between those stacked counts.
  *
- * This spec locks the row rhythm at the DOM-measurement level: every
- * Explorer tree-row renders at the bumped height, and two consecutive
- * project count badges are spaced by that same height. If somebody
- * changes the height the assertion must be updated intentionally — that
- * is the point (same contract style as collapsed-lane-rail-rhythm).
+ * Horizontal (operator polish 2026-06-04): the same counts kleben zu nah
+ * am rechten Rand. The fix routes the right gutter of every rail row
+ * (tree-row, list-row, section-header) through one shared token,
+ * `--studio-rail-trailing-gutter`, so each trailing count sits the same
+ * distance from the rail edge. This spec locks that gutter on the
+ * Explorer tree-row counts and the Workspaces section head's trailing
+ * action, so a per-surface tweak that breaks the alignment is caught.
+ *
+ * Both axes are DOM-measurement locks: if somebody changes the height or
+ * the gutter the assertion must be updated intentionally — that is the
+ * point (same contract style as collapsed-lane-rail-rhythm).
+ *
+ * The count pill is the shared `<app-count-badge>` (`.count-badge`); the
+ * legacy `.tree-row__count` class it replaced is gone, so the locators
+ * below target `.count-badge`.
  */
 
 const ROW_HEIGHT = 30; // matches `.tree-row { height }` in tree-row.component.scss
+const TRAILING_GUTTER = 24; // matches `--studio-rail-trailing-gutter` (--studio-spacing-5)
 
 function makeJob(project: string, id: string, state: string, order: number) {
   return {
@@ -182,7 +193,7 @@ test.describe('Explorer count-row vertical spacing', () => {
     // Two consecutive project count badges sit ROW_HEIGHT apart (vertical
     // centre delta). Before the polish this was 24px; the bump makes the
     // stacked counts read with breathing room.
-    const badges = projectRows.locator('.tree-row__count');
+    const badges = projectRows.locator('.count-badge');
     await expect.poll(() => badges.count()).toBeGreaterThanOrEqual(2);
     const c0 = await badges.nth(0).boundingBox();
     const c1 = await badges.nth(1).boundingBox();
@@ -213,6 +224,76 @@ test.describe('Explorer count-row vertical spacing', () => {
       await page.waitForTimeout(120);
       const beforeShot = await sidebar.screenshot();
       fs.writeFileSync(path.join(process.env.RESULTS_DIR, 'explorer-count-spacing-before-24px.png'), beforeShot);
+    }
+  });
+
+  test('trailing counts sit one shared gutter from the rail right edge', async ({ page }, testInfo) => {
+    await seedBoardTab(page);
+    await installRoutes(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const sidebar = page.getByTestId('studio-sidebar');
+    await expect(sidebar).toBeVisible({ timeout: 10_000 });
+
+    const projectRows = page.locator('button[data-testid^="studio-explorer-project-"]');
+    await expect.poll(() => projectRows.count()).toBeGreaterThanOrEqual(PROJECTS.length);
+
+    // For each project row the count badge is the last flex child, so the
+    // distance from the badge's right edge to the row's right edge is exactly
+    // the row's `padding-right` — the shared rail gutter. Every count must
+    // report the same gutter (uniform) and it must equal TRAILING_GUTTER.
+    const rowGutters: number[] = [];
+    const rowCount = await projectRows.count();
+    for (let i = 0; i < rowCount; i++) {
+      const row = projectRows.nth(i);
+      const badge = row.locator('.count-badge').first();
+      if ((await badge.count()) === 0) continue;
+      const rowBox = await row.boundingBox();
+      const badgeBox = await badge.boundingBox();
+      if (!rowBox || !badgeBox) continue;
+      rowGutters.push(Math.round((rowBox.x + rowBox.width) - (badgeBox.x + badgeBox.width)));
+    }
+    expect(rowGutters.length, 'at least one project count badge measured').toBeGreaterThan(0);
+    for (const g of rowGutters) {
+      expect(Math.abs(g - TRAILING_GUTTER),
+        `tree-row count gutter must be the shared rail gutter; got ${g}, want ${TRAILING_GUTTER}. all=${JSON.stringify(rowGutters)}`)
+        .toBeLessThanOrEqual(1);
+    }
+
+    // Cross-surface uniformity: the Workspaces section head's trailing
+    // element (the "show all" action) must align to the same gutter, so the
+    // section count column and the tree-row count column share one right edge.
+    const head = page.getByTestId('studio-explorer-workspace-head');
+    const showAll = page.getByTestId('studio-explorer-show-all-projects');
+    const headBox = await head.boundingBox();
+    const showAllBox = await showAll.boundingBox();
+    expect(headBox && showAllBox).toBeTruthy();
+    const headGutter = Math.round((headBox!.x + headBox!.width) - (showAllBox!.x + showAllBox!.width));
+    expect(Math.abs(headGutter - TRAILING_GUTTER),
+      `section-header trailing gutter must match the rail gutter; got ${headGutter}, want ${TRAILING_GUTTER}`)
+      .toBeLessThanOrEqual(1);
+
+    // Visual evidence — the count column with the widened gutter.
+    await setTheme(page, 'dark');
+    await page.waitForTimeout(120);
+    const shot = await sidebar.screenshot();
+    await testInfo.attach('explorer-count-right-gutter-dark.png', { body: shot, contentType: 'image/png' });
+    if (process.env.RESULTS_DIR) {
+      const fs = await import('fs');
+      const path = await import('path');
+      fs.writeFileSync(path.join(process.env.RESULTS_DIR, 'explorer-count-right-gutter-dark.png'), shot);
+
+      // Before/after: re-render with the OLD per-surface gutters injected so
+      // the screenshot pair shows the counts moving off the edge.
+      await page.addStyleTag({ content:
+        '.tree-row{padding-right:16px !important;}' +
+        '.list-row{padding-right:16px !important;}' +
+        '.section-header{padding-right:12px !important;}' });
+      await page.waitForTimeout(120);
+      const beforeShot = await sidebar.screenshot();
+      fs.writeFileSync(path.join(process.env.RESULTS_DIR, 'explorer-count-right-gutter-before.png'), beforeShot);
     }
   });
 });

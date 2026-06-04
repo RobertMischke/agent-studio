@@ -320,6 +320,13 @@
   --studio-rail-padding-block:       var(--studio-spacing-2);  // 8px top/bottom of the rail container
   --studio-rail-padding-inline:      var(--studio-spacing-1);  // 4px left/right of the rail container
 
+  // Right gutter for trailing elements (count badges, action buttons) on
+  // sidebar rows + section heads. One token so every trailing count reads
+  // at the same distance from the rail edge instead of crowding it — the
+  // tree-row / list-row / section-header surfaces previously drifted at
+  // 16 / 16 / 12px (operator polish: counts kleben zu nah am Rand).
+  --studio-rail-trailing-gutter:     var(--studio-spacing-5);  // 24px
+
   // Explorer-tree column geometry. Project rows render
   //   [chev: 14px] [gap: 8px] [glyph: 16px] [gap: 8px] [name]
   // at `padding-left: 8px`, so the glyph column starts at

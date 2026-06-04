@@ -18,11 +18,11 @@
   // breathing room instead of crowding each other (operator polish).
   height: 30px;
   padding-top: 0;
-  // 16px right padding so count badges (e.g. `439`, `27`) get breathing
-  // room from the sidebar's right edge instead of being painted flush
-  // against it. Applies to every tree-row across Explorer + Tasks
-  // outlines.
-  padding-right: 16px;
+  // Right gutter so count badges (e.g. `439`, `27`) get breathing room from
+  // the sidebar's right edge instead of being painted flush against it.
+  // Shared with list-row + section-header via the rail token so every
+  // trailing count across Explorer + Tasks outlines lines up identically.
+  padding-right: var(--studio-rail-trailing-gutter);
   padding-bottom: 0;
   background: transparent;
   border: 0;
@@ -116,3 +116,10 @@
  */
 .studio .tree-row--root  { padding-left: 8px;  }
 .studio .tree-row--child { padding-left: 44px; font-size: 12px; }
+
+// Same specificity trap as the indent above: a tree-row renders as a
+// `<button>`, so `.studio button { padding: 0 }` (0,1,1) silently beats the
+// base `.tree-row { padding-right }` (0,1,0) and the count badge ends up
+// flush against the rail edge. Scope to `.studio` (0,2,0) so the trailing
+// gutter actually wins.
+.studio .tree-row { padding-right: var(--studio-rail-trailing-gutter); }
