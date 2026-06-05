@@ -352,8 +352,11 @@
                     data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
             }
             @if (row.model) {
-              <span class="ov-pl-step__model" data-testid="overview-pipeline-step-model"
-                    [appTooltip]="'Model used for this step'">{{ row.model }}</span>
+              <span class="ov-pl-step__model"
+                    [class.ov-pl-step__model--resolved]="row.modelIsResolved"
+                    data-testid="overview-pipeline-step-model"
+                    [attr.data-model-resolved]="row.modelIsResolved ? 'true' : null"
+                    [appTooltip]="row.modelTooltip">{{ row.model }}</span>
             }
             <span class="ov-pl-step__timing"
                   data-testid="overview-pipeline-step-timing"

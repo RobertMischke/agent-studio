@@ -74,6 +74,14 @@ interface PipelineRowVm {
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
   model: string | null;
+  /**
+   * Whether {@link model} is the pre-run resolved effective model (no run has
+   * recorded one yet) vs the model an actual execution used. Drives a subtler
+   * "will run on" presentation before the run.
+   */
+  modelIsResolved: boolean;
+  /** Tooltip explaining where {@link model} comes from (the resolution chain). */
+  modelTooltip: StructuredTooltip | null;
   verdict: string | null;
   /**
    * Structured tooltip for the verdict pill, built from the per-aspect
@@ -739,6 +747,14 @@ export class OverviewPaneComponent {
       else if (step.stub) status = 'planned';
       else status = 'pending';
       const label = step.displayName || step.id;
+      // Model precedence: a recorded execution model (what actually ran) wins;
+      // before any run, fall back to the backend-resolved effective model so the
+      // step shows which model it WILL use, then to the raw override / catalogue.
+      const recordedModel = e?.model ?? null;
+      const resolvedModel = cfg?.resolvedModel ?? null;
+      const model = recordedModel ?? resolvedModel ?? cfg?.model ?? step.model ?? null;
+      const modelIsResolved = recordedModel == null && model != null;
+      const modelTooltip = this.buildModelTooltip(label, model, modelIsResolved, cfg?.modelSource ?? null);
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
       const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
@@ -755,7 +771,9 @@ export class OverviewPaneComponent {
         runMode: step.runMode,
         enabled,
         status,
-        model: e?.model ?? cfg?.model ?? step.model ?? null,
+        model,
+        modelIsResolved,
+        modelTooltip,
         verdict,
         concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
         explanation: buildStepExplanation(step.id, label, step.kind),
@@ -937,6 +955,40 @@ export class OverviewPaneComponent {
 
   /** True once at least one step has a recorded execution. */
   readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
+
+  /**
+   * Tooltip for a step's model chip. Before a run, names the resolved effective
+   * model and where in the hierarchy it came from (step / project / global /
+   * catalogue default); after a run, states the model the execution used.
+   */
+  private buildModelTooltip(
+    label: string,
+    model: string | null,
+    isResolved: boolean,
+    source: string | null,
+  ): StructuredTooltip | null {
+    if (!model) return null;
+    if (!isResolved) {
+      return { title: `${label} model`, body: `Model used for this step: ${model}` };
+    }
+    const sourceLabel = this.modelSourceLabel(source);
+    const body = sourceLabel
+      ? `Will run on ${model}\nSource: ${sourceLabel}`
+      : `Will run on ${model} (configured before the run)`;
+    return { title: `${label} model`, body };
+  }
+
+  /** Human-readable label for a resolved model's source token. */
+  private modelSourceLabel(source: string | null): string | null {
+    switch ((source ?? '').toLowerCase()) {
+      case 'step':      return 'per-step override';
+      case 'project':   return 'project model';
+      case 'global':    return 'global default';
+      case 'catalogue': return 'step default';
+      case 'runtime':   return 'built-in default';
+      default:          return null;
+    }
+  }
 
   private buildStepTokenTooltip(label: string, cost: PipelineStepCost | null): StructuredTooltip | null {
     if (!cost || cost.totalTokens <= 0) return null;

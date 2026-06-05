@@ -131,6 +131,20 @@ export interface PipelineStepConfig {
   model?: string | null;
   thinkingLevel?: string | null;
   mode?: string | null;
+  /**
+   * Effective model the step WILL run on before any run, resolved the same way
+   * the runtime resolves it (step override -> project model -> global ->
+   * catalogue -> runtime default). Null for deterministic / core steps that do
+   * not resolve a per-step LLM model. Lets the Overview pipeline show the model
+   * pre-run, not just after a recorded execution.
+   */
+  resolvedModel?: string | null;
+  /**
+   * Where {@link resolvedModel} came from: `step` | `project` | `global` |
+   * `catalogue` | `runtime`. Drives the "from project / default" hint so the
+   * operator can see the hierarchy at a glance. Null when no model resolves.
+   */
+  modelSource?: string | null;
 }
 
 /**

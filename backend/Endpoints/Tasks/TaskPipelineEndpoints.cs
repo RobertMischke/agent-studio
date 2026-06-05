@@ -50,12 +50,23 @@ public static class TaskPipelineEndpoints
                 : projectSettings.Get(info.ProjectName);
             var config = pipeline.AllSteps.ToDictionary(
                 step => step.Id,
-                step => new
+                step =>
                 {
-                    enabled = PipelineStepConfigResolver.IsEnabled(settings, step.Id),
-                    model = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Model,
-                    thinkingLevel = PipelineStepConfigResolver.Lookup(settings, step.Id)?.ThinkingLevel,
-                    mode = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Mode,
+                    // Effective model + source resolved the same way the runtime
+                    // resolves it (step override -> project model -> global ->
+                    // catalogue -> runtime default), so the Overview pipeline can
+                    // show which model each LLM-backed step WILL run on before the
+                    // run, not just after. Null for deterministic / core steps.
+                    var resolved = PipelineStepModelDefaults.Resolve(settings, step);
+                    return new
+                    {
+                        enabled = PipelineStepConfigResolver.IsEnabled(settings, step.Id),
+                        model = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Model,
+                        thinkingLevel = PipelineStepConfigResolver.Lookup(settings, step.Id)?.ThinkingLevel,
+                        mode = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Mode,
+                        resolvedModel = resolved?.Model,
+                        modelSource = resolved?.Source,
+                    };
                 },
                 StringComparer.OrdinalIgnoreCase);
 

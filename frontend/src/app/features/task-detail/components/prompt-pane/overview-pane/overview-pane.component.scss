@@ -810,6 +810,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    // Pre-run effective model (resolved, no execution recorded yet): a dashed
+    // outline + no fill so it reads as "will run on" rather than "ran on".
+    &--resolved {
+      background: transparent;
+      border: 1px dashed var(--studio-border);
+      padding: 0 4px;
+    }
   }
 
   // Per-step timing: the recorded start clock ("19:56") next to the
