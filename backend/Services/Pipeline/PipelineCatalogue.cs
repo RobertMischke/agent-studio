@@ -189,13 +189,24 @@ public static class PipelineCatalogue
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
 
     /// <summary>
-    /// Shared display name for both orchestrator-review rows: the post-core
-    /// completeness check (<see cref="OrchestratorReviewStepId"/>) and the final
-    /// accept / reissue / escalate decision (<see cref="OrchestratorDecisionStepId"/>).
-    /// They are the same conceptual gate at two points in the run, so they share
-    /// one label and the FE renders both generically from it.
+    /// Display name for the post-core completeness check
+    /// (<see cref="OrchestratorReviewStepId"/>): the EARLY gate that runs straight
+    /// after the core run, before the aspect verdicts. It is deliberately distinct
+    /// from <see cref="FinalOrchestratorReviewDisplayName"/> so the two
+    /// orchestrator-review rows never read as the same step: this one is an early
+    /// static scan / open-items check (verdict <c>complete</c> / <c>reissue</c> /
+    /// <c>escalate</c>) and carries NO "final verdict" semantics.
     /// </summary>
-    public const string OrchestratorReviewDisplayName = "Orchestrator-Review";
+    public const string PostCoreReviewDisplayName = "Post-Core Orchestrator-Review";
+
+    /// <summary>
+    /// Display name for the FINAL accept / reissue / escalate decision
+    /// (<see cref="OrchestratorDecisionStepId"/>): the orchestrator's single
+    /// ruling after the parallel aspects and tools. This is the ONLY row the FE
+    /// tags as the "final verdict"; the post-core review row above
+    /// (<see cref="PostCoreReviewDisplayName"/>) is a distinct early gate.
+    /// </summary>
+    public const string FinalOrchestratorReviewDisplayName = "Final Orchestrator-Review";
 
     /// <summary>
     /// The "Abbruch-Review" (post-abort review) step id. Unlike every other
@@ -368,7 +379,7 @@ public static class PipelineCatalogue
                 new PipelineStep
                 {
                     Id = OrchestratorReviewStepId,
-                    DisplayName = OrchestratorReviewDisplayName,
+                    DisplayName = PostCoreReviewDisplayName,
                     Kind = StepKind.Orchestrator,
                     // Runs straight after the core run, ahead of the aspect
                     // verdicts, so an unfinished close-out is caught before any
@@ -413,7 +424,7 @@ public static class PipelineCatalogue
                 new PipelineStep
                 {
                     Id = OrchestratorDecisionStepId,
-                    DisplayName = OrchestratorReviewDisplayName,
+                    DisplayName = FinalOrchestratorReviewDisplayName,
                     Kind = StepKind.Orchestrator,
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [.. AspectStepIds],

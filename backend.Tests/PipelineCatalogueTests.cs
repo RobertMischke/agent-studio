@@ -42,17 +42,18 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
-    public void StandardPipeline_OrchestratorReview_IsFirstPostStep_AndSharesDisplayNameWithDecision()
+    public void StandardPipeline_OrchestratorReview_IsFirstPostStep_AndHasDistinctDisplayNameFromDecision()
     {
         // The orchestrator-review completeness check is the FIRST post-step (runs
         // straight after the core run, ahead of the aspect verdicts) so an
-        // unfinished close-out is caught before any expensive review pass. It and
-        // the final decision step are the same conceptual gate at two points, so
-        // they share one display name and both surface as "Orchestrator-Review".
+        // unfinished close-out is caught before any expensive review pass. It is
+        // the EARLY gate and the decision step is the FINAL ruling: they are two
+        // distinct steps and must carry DISTINCT display names so the Overview
+        // never renders the same "Orchestrator-Review" twice.
         var p = PipelineCatalogue.Standard;
         var review = p.Post[0];
         Assert.Equal(PipelineCatalogue.OrchestratorReviewStepId, review.Id);
-        Assert.Equal(PipelineCatalogue.OrchestratorReviewDisplayName, review.DisplayName);
+        Assert.Equal(PipelineCatalogue.PostCoreReviewDisplayName, review.DisplayName);
         Assert.Equal(StepKind.Orchestrator, review.Kind);
         Assert.Equal(StepRunMode.Sequential, review.RunMode);
         Assert.True(review.Idempotent);
@@ -68,13 +69,11 @@ public class PipelineCatalogueTests
                 $"orchestrator-review (idx {reviewIndex}) must precede aspect {aspectId} (idx {aspectIndex})");
         }
 
-        // Both orchestrator-review rows carry the same shared display name.
+        // The final decision row carries its OWN distinct display name, and the
+        // two orchestrator-review rows never share a label.
         var decision = p.Post.First(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
-        Assert.Equal(PipelineCatalogue.OrchestratorReviewDisplayName, decision.DisplayName);
-        var orchestratorRows = p.Post
-            .Where(s => s.DisplayName == PipelineCatalogue.OrchestratorReviewDisplayName)
-            .ToList();
-        Assert.Equal(2, orchestratorRows.Count);
+        Assert.Equal(PipelineCatalogue.FinalOrchestratorReviewDisplayName, decision.DisplayName);
+        Assert.NotEqual(review.DisplayName, decision.DisplayName);
     }
 
     [Fact]

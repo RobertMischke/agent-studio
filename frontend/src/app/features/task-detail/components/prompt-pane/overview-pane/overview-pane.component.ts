@@ -71,6 +71,14 @@ interface PipelineRowVm {
    * verdict. Drives the "Parallel" badge so the two phases read as distinct.
    */
   runMode: StepRunMode;
+  /**
+   * True only for the single FINAL orchestrator ruling
+   * (`post-orchestrator-decision`). Drives the "Final verdict" chip and the
+   * row divider so exactly ONE row reads as the final verdict — the post-core
+   * `post-orchestrator-review` early gate (also `orchestrator` kind) is
+   * deliberately NOT tagged, so it shows its own early-gate result instead.
+   */
+  isFinalVerdict: boolean;
   enabled: boolean;
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
@@ -292,6 +300,14 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
 
 const API_PRICE_DISCLAIMER =
   'API price estimate only. Actual CLI billing uses the subscription or plan, not these API rates.';
+
+/**
+ * Catalogue id of the single FINAL orchestrator ruling. Only this row earns
+ * the "Final verdict" chip / divider; the post-core `post-orchestrator-review`
+ * early gate shares the `orchestrator` kind but is NOT the final verdict.
+ * Mirrors backend `PipelineCatalogue.OrchestratorDecisionStepId`.
+ */
+const FINAL_VERDICT_STEP_ID = 'post-orchestrator-decision';
 
 const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
   pre: {
@@ -805,6 +821,7 @@ export class OverviewPaneComponent {
         phaseDescription: phase.description,
         startsPhase: false,
         runMode: step.runMode,
+        isFinalVerdict: step.id === FINAL_VERDICT_STEP_ID,
         enabled,
         status,
         model,

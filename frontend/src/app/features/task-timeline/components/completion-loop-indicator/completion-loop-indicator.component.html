@@ -32,16 +32,22 @@
         </span>
       }
     </div>
-    @if (loop.findings.length > 0) {
-      <app-aspect-findings-list class="loop__findings"
-                                [findings]="loop.findings"
-                                [leadLabel]="loop.latestVerdict === 'accepted' ? 'Note' : 'Gap'"
-                                data-testid="overview-loop-reason" />
-    } @else if (loop.reason; as reason) {
-      <div class="loop__reason" data-testid="overview-loop-reason">
-        <span class="loop__reason-label">{{ loop.latestVerdict === 'accepted' ? 'Note' : 'Gap' }}</span>
-        <span class="loop__reason-text">{{ reason }}</span>
-      </div>
+    <!-- The "gap" line explains why the loop re-opened or escalated. On an
+         ACCEPTED verdict it would only restate the per-step "Auto-review
+         accepted … Moved to 5-human-review" copy, so it is suppressed here to
+         avoid a redundant top-NOTE banner duplicating the final review step. -->
+    @if (loop.latestVerdict !== 'accepted') {
+      @if (loop.findings.length > 0) {
+        <app-aspect-findings-list class="loop__findings"
+                                  [findings]="loop.findings"
+                                  leadLabel="Gap"
+                                  data-testid="overview-loop-reason" />
+      } @else if (loop.reason; as reason) {
+        <div class="loop__reason" data-testid="overview-loop-reason">
+          <span class="loop__reason-label">Gap</span>
+          <span class="loop__reason-text">{{ reason }}</span>
+        </div>
+      }
     }
   </div>
 }

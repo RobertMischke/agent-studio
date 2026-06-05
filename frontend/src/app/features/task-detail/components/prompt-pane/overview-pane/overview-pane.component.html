@@ -286,7 +286,7 @@
           <span class="ov-pl-header__cell ov-pl-header__cost">Cost</span>
         </div>
         @for (row of pipelineRows(); track row.id) {
-          @if (row.startsPhase) {
+          @if (row.startsPhase && row.phaseKey !== 'decision') {
             <div class="ov-pl-phase"
                  [attr.data-phase]="row.phaseKey"
                  data-testid="overview-pipeline-phase">
@@ -298,7 +298,7 @@
           <div class="ov-pl-step"
                [class.ov-pl-step--disabled]="row.status === 'disabled'"
                [class.ov-pl-step--running]="row.status === 'running'"
-               [class.ov-pl-step--final-verdict]="row.kind === 'orchestrator'"
+               [class.ov-pl-step--final-verdict]="row.isFinalVerdict"
                [attr.data-step-id]="row.id"
                [attr.data-phase]="row.phaseKey"
                [attr.data-status]="row.status"
@@ -318,7 +318,7 @@
                 parallel
               </span>
             }
-            @if (row.kind === 'orchestrator') {
+            @if (row.isFinalVerdict) {
               <span class="ov-pl-step__final-badge"
                     data-testid="overview-pipeline-step-final-verdict"
                     [appTooltip]="'The orchestrator&rsquo;s single final ruling, aggregated from the parallel aspect verdicts'">
