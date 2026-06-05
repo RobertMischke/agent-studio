@@ -73,7 +73,7 @@
               </div>
             }
             @case ('caps') {
-              <app-cli-admin-panel />
+              <app-cli-admin-panel (openProjectSettings)="openProjectSettings.emit($event)" />
             }
             @case ('tokens') {
               <app-workspace-token-timeline />

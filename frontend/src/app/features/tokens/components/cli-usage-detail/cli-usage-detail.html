@@ -74,6 +74,30 @@
     </div>
   </section>
 
+  @if (projectRows().length > 0) {
+    <section class="cud__projects" data-testid="cli-usage-detail-projects">
+      <div class="cud__projects-head">
+        <h4>By project</h4>
+        <span class="cud__muted">Click a project to open its settings</span>
+      </div>
+      <div class="cud__project-list">
+        @for (p of projectRows(); track p.slug) {
+          <button type="button"
+                  class="cud__project-row"
+                  [attr.data-testid]="'cli-usage-detail-project-' + p.slug"
+                  [attr.aria-label]="'Open ' + p.project + ' settings'"
+                  [appTooltip]="p.project + ' · ' + formatTokens(p.totalTokens) + ' tokens · ' + p.orchestratorLlmCalls + ' calls · ' + formatUsd(p.estimatedApiCostUsd) + ' — open project settings'"
+                  (click)="openProjectSettings.emit(p.project)">
+            <span class="cud__project-name">{{ p.project }}</span>
+            <span class="cud__project-stat cud__num">{{ formatTokens(p.totalTokens) }}</span>
+            <span class="cud__project-stat cud__num">{{ formatUsd(p.estimatedApiCostUsd) }}</span>
+            <span class="cud__project-go" aria-hidden="true">›</span>
+          </button>
+        }
+      </div>
+    </section>
+  }
+
   <div class="cud__sections">
     @for (row of quotaRows(); track row.cliType) {
       <section class="cud__cli" [attr.data-testid]="'cli-usage-detail-cli-' + row.cliType">

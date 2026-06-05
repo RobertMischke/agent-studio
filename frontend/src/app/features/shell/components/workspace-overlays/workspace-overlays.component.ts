@@ -45,6 +45,10 @@ interface SettingsRailItem {
 export class WorkspaceOverlaysComponent {
   readonly overlays = inject(WorkspaceOverlaysService);
   readonly openTask = output<TaskScreenshot>();
+  /** Project name whose Settings rail the shell should open (bubbled up from
+   *  the usage-caps panel's per-project usage rows). Navigation is shell-
+   *  coordinated, so the shell — not this overlay — owns the route change. */
+  readonly openProjectSettings = output<string>();
 
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);

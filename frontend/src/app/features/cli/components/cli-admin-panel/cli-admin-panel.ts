@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
 import type { CliType } from '../../../../models/task.model';
@@ -49,6 +49,10 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
   // the heavy token / timeline / expensive-job polls run only while this
   // panel is mounted (started in ngOnInit, released in ngOnDestroy).
   readonly usage = inject(CliUsageStore);
+
+  /** Re-emitted from the embedded usage detail so the shell can route to a
+   *  project's Settings rail when a "By project" usage row is clicked. */
+  readonly openProjectSettings = output<string>();
 
   readonly loading = signal(false);
   readonly errorMsg = signal<string | null>(null);

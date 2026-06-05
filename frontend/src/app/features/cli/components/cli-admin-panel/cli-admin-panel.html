@@ -100,7 +100,8 @@
       [refreshing]="usage.refreshing()"
       [refreshingAll]="usage.refreshingAll()"
       (refreshAll)="usage.refreshAll()"
-      (refreshOne)="usage.refreshOne($event.cliType)" />
+      (refreshOne)="usage.refreshOne($event.cliType)"
+      (openProjectSettings)="openProjectSettings.emit($event)" />
   </section>
 </div>
   

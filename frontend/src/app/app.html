@@ -438,7 +438,8 @@
         (uxuiFollowUp)="onUxuiFollowUp($event)"
         (uxuiActionQueued)="onUxuiActionQueued($event)"
         (openTask)="onOpenTaskFromReel($event)" />
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)" />
+      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
+                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)" />
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {
           <app-verbose-debug-overlay
@@ -731,7 +732,8 @@
         (openTask)="onOpenTaskFromReel($event)" />
 
 
-      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)" />
+      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
+                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)" />
 
 
       @if (showCreate()) {

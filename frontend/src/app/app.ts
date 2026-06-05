@@ -1860,6 +1860,20 @@ export class App implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * "By project" usage row clicked inside the CLI-Management usage detail:
+   * close the global workspace-settings overlay, then open that project's
+   * Settings rail. Routing through `openProjectShell` keeps navigation
+   * shell-coordinated rather than letting a leaf component write the hash.
+   * The overlay must be closed explicitly first because the project-shell
+   * hash push does not fire a hashchange that would auto-close it.
+   */
+  onOpenProjectSettingsFromUsage(name: string): void {
+    if (!name) return;
+    this.workspaceOverlays.close();
+    this.openProjectShell(name, 'settings');
+  }
+
   cancelCreate() {
     this.createJobForm.cancel();
   }

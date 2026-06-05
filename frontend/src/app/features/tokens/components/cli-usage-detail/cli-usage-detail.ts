@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import type { CliType } from '../../../../models/task.model';
 import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 import type { QuotaWindow } from '../../../../features/quota';
@@ -15,6 +15,14 @@ interface SparkPoint {
   label: string;
   total: number;
   pct: number;
+}
+
+interface ProjectUsageRow {
+  project: string;
+  slug: string;
+  orchestratorLlmCalls: number;
+  totalTokens: number;
+  estimatedApiCostUsd: number;
 }
 
 interface ModelUsageRow {
@@ -41,6 +49,12 @@ interface ModelUsageRow {
  * Purely presentational - the shared `CliUsageStore` owns the polling
  * and feeds every input; `refreshAll` / `refreshOne` bubble back so the
  * host can re-probe.
+ *
+ * The "By project" rows are click-targets: each emits `openProjectSettings`
+ * with the project name so the shell can route to that project's Settings
+ * rail. Hover still shows the compact peek; the click is the only new
+ * affordance (navigation stays shell-coordinated, never a leaf-side hash
+ * write).
  */
 @Component({
   selector: 'app-cli-usage-detail',
@@ -62,6 +76,33 @@ export class CliUsageDetailComponent {
 
   readonly refreshAll = output<Event>();
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();
+  /** Project name whose Settings rail the shell should open on a row click. */
+  readonly openProjectSettings = output<string>();
+
+  /**
+   * Per-project orchestrator spend, busiest first. Each row is the
+   * click-target that bubbles `openProjectSettings` so the shell can route
+   * to that project's Settings rail (`#/projects/<slug>/settings`).
+   */
+  readonly projectRows = computed<ProjectUsageRow[]>(() => {
+    const rows = this.tokens()?.byProject ?? [];
+    return rows
+      .filter((p) => !!p.project)
+      .map((p) => ({
+        project: p.project,
+        slug: this.toSlug(p.project),
+        orchestratorLlmCalls: p.orchestratorLlmCalls,
+        totalTokens:
+          p.inputTokens + p.outputTokens + p.cacheReadTokens + p.cacheCreationTokens,
+        estimatedApiCostUsd: p.estimatedApiCostUsd,
+      }))
+      .sort((a, b) => b.totalTokens - a.totalTokens);
+  });
+
+  /** Mirror of the shell's `toProjectSlug` so testids/deep-links line up. */
+  private toSlug(name: string): string {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
 
   headroom(row: CliUsageQuotaRow): string {
     if (row.primaryPct == null) return 'unknown';

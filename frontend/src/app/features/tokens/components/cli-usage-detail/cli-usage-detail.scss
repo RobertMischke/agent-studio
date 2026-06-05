@@ -113,6 +113,7 @@
 .cud__compare,
 .cud__trend,
 .cud__jobs,
+.cud__projects,
 .cud__cli {
   margin-bottom: 14px;
 }
@@ -128,6 +129,7 @@
 .cud__panel,
 .cud__cli,
 .cud__trend,
+.cud__projects,
 .cud__jobs {
   border: 1px solid var(--studio-border);
   background: var(--studio-bg-hover);
@@ -137,6 +139,7 @@
 .cud__headroom-card { padding: 10px; }
 .cud__trend,
 .cud__jobs,
+.cud__projects,
 .cud__cli { padding: 12px; }
 
 .cud__headroom-main,
@@ -302,6 +305,67 @@
   border-radius: 4px;
   font-size: 11px;
   line-height: 1.5;
+}
+
+.cud__projects-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.cud__projects-head .cud__muted { font-size: 11px; }
+
+.cud__project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cud__project-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto 14px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--studio-border);
+  background: var(--studio-bg-editor);
+  border-radius: 6px;
+  color: var(--studio-fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cud__project-row:hover,
+.cud__project-row:focus-visible {
+  background: var(--studio-bg-selected);
+  border-color: var(--studio-border-strong);
+  color: var(--studio-fg-strong);
+  outline: none;
+}
+
+.cud__project-name {
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cud__project-stat { color: var(--studio-fg-dim); }
+
+.cud__project-go {
+  color: var(--studio-fg-muted);
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+
+.cud__project-row:hover .cud__project-go,
+.cud__project-row:focus-visible .cud__project-go {
+  color: var(--studio-accent-3-strong);
 }
 
 @media (max-width: 760px) {
