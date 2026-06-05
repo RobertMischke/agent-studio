@@ -11,6 +11,7 @@ import {
   output,
   signal,
 } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import type { CliType, PromoteToCodingResponse, TaskInfo } from '../../../../../models/task.model';
 import { CreateTaskFormService, type PendingAttachment } from '../../../../board';
 import type { CliModelInfo } from '../../../../cli';
@@ -82,6 +83,20 @@ interface PipelineRowVm {
   modelIsResolved: boolean;
   /** Tooltip explaining where {@link model} comes from (the resolution chain). */
   modelTooltip: StructuredTooltip | null;
+  /**
+   * Whether this row exposes an inline per-step model selector. True for the
+   * always-on aspect review steps (the models the operator most wants to pin
+   * before a run); the full per-step catalogue lives on the project-settings
+   * page. Drives the editable `<select>` next to the resolved-model chip.
+   */
+  modelEditable: boolean;
+  /**
+   * The raw per-step model override stored for this step (`''` = inherit), as
+   * opposed to {@link model} which is the resolved effective model. Bound to
+   * the inline selector so it reflects the persisted knob, not the inherited
+   * value.
+   */
+  modelOverride: string;
   verdict: string | null;
   /**
    * Structured tooltip for the verdict pill, built from the per-aspect
@@ -337,11 +352,25 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   return { title: label, body };
 }
 
+/**
+ * Models a per-step LLM call can be pinned to from the Overview pipeline.
+ * Empty `id` clears the override so the step inherits the project model and
+ * then the runtime default (see backend PipelineStepConfigResolver). Kept in
+ * sync with the project-settings page list; defined locally to avoid a
+ * cross-feature import into project-detail.
+ */
+const PIPELINE_STEP_MODEL_OPTIONS: readonly { id: string; label: string; defaultThinkingLevel: string | null }[] = [
+  { id: '',                  label: 'Inherit',     defaultThinkingLevel: null },
+  { id: 'claude-opus-4-7',   label: 'Opus 4.7',    defaultThinkingLevel: 'high' },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6',  defaultThinkingLevel: 'high' },
+  { id: 'claude-haiku-4-5',  label: 'Haiku 4.5',   defaultThinkingLevel: null },
+];
+
 @Component({
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent],
+  imports: [FormsModule, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -755,6 +784,13 @@ export class OverviewPaneComponent {
       const model = recordedModel ?? resolvedModel ?? cfg?.model ?? step.model ?? null;
       const modelIsResolved = recordedModel == null && model != null;
       const modelTooltip = this.buildModelTooltip(label, model, modelIsResolved, cfg?.modelSource ?? null);
+      // Inline model editing is offered for the always-on aspect reviews:
+      // they resolve a per-step LLM model, are never mode-/condition-gated,
+      // and default-enabled, so a model write can safely clear the other
+      // facets without re-enabling an opt-in step. The selector binds to the
+      // raw override (cfg.model), not the resolved effective model.
+      const modelEditable = step.kind === 'aspect' && (cfg?.resolvedModel ?? null) != null;
+      const modelOverride = cfg?.model ?? '';
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
       const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
@@ -774,6 +810,8 @@ export class OverviewPaneComponent {
         model,
         modelIsResolved,
         modelTooltip,
+        modelEditable,
+        modelOverride,
         verdict,
         concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
         explanation: buildStepExplanation(step.id, label, step.kind),
@@ -988,6 +1026,71 @@ export class OverviewPaneComponent {
       case 'runtime':   return 'built-in default';
       default:          return null;
     }
+  }
+
+  /** Options for the inline per-step model selector. */
+  readonly pipelineStepModelOptions = PIPELINE_STEP_MODEL_OPTIONS;
+
+  /** Step ids with a per-step model write in flight (disable the selector). */
+  private readonly savingStepModel = signal<ReadonlySet<string>>(new Set());
+
+  stepModelBusy(stepId: string): boolean {
+    return this.savingStepModel().has(stepId);
+  }
+
+  /**
+   * Persist a per-step model override for an aspect review and re-resolve the
+   * pipeline so the row's effective-model chip + source update in place. The
+   * override is project-scoped (mirrors the project-settings page), so this is
+   * the in-context way to change the model a step WILL run on before the run.
+   *
+   * The backend replaces the whole step entry, so the unchanged facets are
+   * resent: aspect steps carry no mode/condition and are enabled by default,
+   * so `enabled` is preserved only when explicitly disabled and the model's
+   * default thinking level rides along (matching the project-settings write).
+   */
+  onStepModelChange(stepId: string, model: string): void {
+    if (this.isRunning() || this.stepModelBusy(stepId)) return;
+    const value = (model ?? '').trim();
+    const cfg = this.pipelinePoll.pipeline()?.config?.[stepId] ?? null;
+    const thinkingLevel = value
+      ? this.pipelineStepModelOptions.find(o => o.id === value)?.defaultThinkingLevel ?? null
+      : null;
+
+    this.savingStepModel.update(set => new Set(set).add(stepId));
+    this.jobService.setProjectPipelineStep(this.job().projectName, {
+      stepId,
+      // Aspect steps default to enabled; only re-send `enabled` when the
+      // project explicitly disabled this one, otherwise null clears the facet
+      // and lets it fall back to the built-in default.
+      enabled: cfg?.enabled === false ? false : null,
+      model: value || null,
+      thinkingLevel,
+      mode: cfg?.mode ?? null,
+      condition: null,
+    }).subscribe({
+      next: () => {
+        this.clearStepModelBusy(stepId);
+        // Re-resolve so the chip flips to the new effective model + source.
+        this.pipelinePoll.refresh();
+      },
+      error: () => {
+        this.clearStepModelBusy(stepId);
+        this.pipelinePoll.refresh();
+        this.notifs.warning(
+          'Could not change the model for this step. Try again in a moment.',
+          'Model change failed',
+        );
+      },
+    });
+  }
+
+  private clearStepModelBusy(stepId: string): void {
+    this.savingStepModel.update(set => {
+      const next = new Set(set);
+      next.delete(stepId);
+      return next;
+    });
   }
 
   private buildStepTokenTooltip(label: string, cost: PipelineStepCost | null): StructuredTooltip | null {

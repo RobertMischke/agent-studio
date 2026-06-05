@@ -358,6 +358,19 @@
                     [attr.data-model-resolved]="row.modelIsResolved ? 'true' : null"
                     [appTooltip]="row.modelTooltip">{{ row.model }}</span>
             }
+            @if (row.modelEditable) {
+              <select class="ov-pl-step__model-select"
+                      data-testid="overview-pipeline-step-model-select"
+                      [attr.data-model-override]="row.modelOverride || null"
+                      [appTooltip]="'Pin the model for this step (project-level). Inherit falls back to the project model, then the runtime default.'"
+                      [disabled]="isRunning() || stepModelBusy(row.id)"
+                      [ngModel]="row.modelOverride"
+                      (ngModelChange)="onStepModelChange(row.id, $event)">
+                @for (opt of pipelineStepModelOptions; track opt.id) {
+                  <option [value]="opt.id">{{ opt.label }}</option>
+                }
+              </select>
+            }
             <span class="ov-pl-step__timing"
                   data-testid="overview-pipeline-step-timing"
                   [appTooltip]="stepTimingTooltip(row)">

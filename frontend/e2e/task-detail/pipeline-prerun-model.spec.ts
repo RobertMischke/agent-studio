@@ -2,14 +2,19 @@ import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 
 /**
- * Pre-run model visibility (hierarchical per-step model config).
+ * Pre-run model visibility + editing (hierarchical per-step model config).
  *
- * Before any run has recorded a model, each LLM-backed pipeline step now shows
- * the effective model it WILL run on, resolved by the backend the same way the
+ * Before any run has recorded a model, each LLM-backed pipeline step shows the
+ * effective model it WILL run on, resolved by the backend the same way the
  * runtime resolves it (step override -> project model -> global -> catalogue ->
  * runtime default). The resolved chip renders with `data-model-resolved="true"`
  * and a dashed "will run on" style so the operator can see, and reason about,
  * the model hierarchy ahead of the run.
+ *
+ * The aspect review rows additionally expose an inline model selector that
+ * writes a project-level per-step override via PUT /pipeline-step and re-
+ * resolves the pipeline, so the operator can change the model a step will run
+ * on, in context, before starting — the second test exercises that loop.
  *
  * Fully mocked - no backend or git repository needed. `execution` is null
  * (nothing has run yet), so the only model source is the resolved config.
@@ -80,7 +85,7 @@ function basePipeline() {
  * resolve a model (one from the project override, one with a per-step override),
  * deterministic / core steps resolve none.
  */
-function prerunConfig() {
+function prerunConfig(): Record<string, Record<string, unknown>> {
   return {
     'aspect-code-quality': {
       enabled: true,
@@ -98,10 +103,10 @@ function prerunConfig() {
       resolvedModel: 'claude-sonnet-4-6',
       modelSource: 'project',
     },
-  } as Record<string, unknown>;
+  };
 }
 
-function prerunPipeline() {
+function prerunPipeline(config: Record<string, unknown>) {
   return {
     pipeline: basePipeline(),
     execution: null,
@@ -119,12 +124,27 @@ function prerunPipeline() {
       totalCostUsd: 0,
       anyModelUnknown: false,
     },
-    config: prerunConfig(),
+    config,
   };
 }
 
-async function installRoutes(page: Page, state: string): Promise<void> {
+/**
+ * Mutable backend state captured by the routes so a per-step model write
+ * (PUT /pipeline-step) is reflected by the next pipeline GET — exercising the
+ * full edit -> persist -> re-resolve loop the Overview selector drives.
+ */
+interface MockState {
+  config: Record<string, Record<string, unknown>>;
+  pipelineStepPuts: Array<Record<string, unknown>>;
+}
+
+function makeMockState(): MockState {
+  return { config: prerunConfig(), pipelineStepPuts: [] };
+}
+
+async function installRoutes(page: Page, state: string, mock: MockState): Promise<void> {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const projEsc = PROJECT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
 
   await page.route('**/api/**', (route) => {
@@ -205,9 +225,28 @@ async function installRoutes(page: Page, state: string): Promise<void> {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(prerunPipeline()),
+      body: JSON.stringify(prerunPipeline(mock.config)),
     }),
   );
+  // Per-step model write. Records the request, mutates the captured config so
+  // the next pipeline GET re-resolves with the new override (source "step"),
+  // mirroring the backend's replace-then-resolve behaviour.
+  await page.route(new RegExp(`/api/projects/${projEsc}/pipeline-step(\\?|$)`), async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    mock.pipelineStepPuts.push(body);
+    const stepId = String(body.stepId);
+    const model = (body.model as string | null) ?? null;
+    if (mock.config[stepId]) {
+      mock.config[stepId].model = model;
+      mock.config[stepId].resolvedModel = model ?? 'claude-sonnet-4-6';
+      mock.config[stepId].modelSource = model ? 'step' : 'project';
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ stepId, pipelineSteps: {} }),
+    });
+  });
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }),
   );
@@ -241,7 +280,7 @@ test.describe('Pipeline: pre-run resolved model', () => {
   });
 
   test('each LLM step shows its effective model before the run, marked as resolved', async ({ page }) => {
-    await installRoutes(page, '2-ready');
+    await installRoutes(page, '2-ready', makeMockState());
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
     await dismissErrorDialog(page);
 
@@ -259,14 +298,66 @@ test.describe('Pipeline: pre-run resolved model', () => {
     await expect(rfModel).toHaveText('claude-sonnet-4-6');
     await expect(rfModel).toHaveAttribute('data-model-resolved', 'true');
 
-    // Deterministic steps resolve no model, so no chip is rendered.
+    // Each aspect row also carries an inline selector reflecting its stored
+    // override: code-quality has a per-step override (opus), requirement-fit
+    // inherits the project model (empty = Inherit).
+    await expect(cqRow.getByTestId('overview-pipeline-step-model-select')).toHaveValue('claude-opus-4-7');
+    await expect(rfRow.getByTestId('overview-pipeline-step-model-select')).toHaveValue('');
+
+    // Deterministic steps resolve no model, so neither chip nor selector renders.
     const loopRow = page.locator('[data-step-id="pre-loop-guard"]');
     await expect(loopRow.getByTestId('overview-pipeline-step-model')).toHaveCount(0);
+    await expect(loopRow.getByTestId('overview-pipeline-step-model-select')).toHaveCount(0);
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
         path: path.join(RESULTS_DIR, 'pipeline-prerun-model.png'),
+        fullPage: true,
+      });
+    }
+  });
+
+  test('changing an aspect step model before the run persists the override and re-resolves the chip', async ({ page }) => {
+    const mock = makeMockState();
+    await installRoutes(page, '2-ready', mock);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+
+    const rfRow = page.locator('[data-step-id="aspect-requirement-fit"]');
+    const rfModel = rfRow.getByTestId('overview-pipeline-step-model');
+    const rfSelect = rfRow.getByTestId('overview-pipeline-step-model-select');
+
+    // Starts on the inherited project model (sonnet, source project).
+    await expect(rfModel).toHaveText('claude-sonnet-4-6');
+    await expect(rfSelect).toHaveValue('');
+
+    // Pin the step to Opus before the run.
+    await rfSelect.selectOption('claude-opus-4-7');
+
+    // The write hit the project pipeline-step endpoint with the new model and
+    // the model's default thinking level, leaving the other facets cleared.
+    await expect.poll(() => mock.pipelineStepPuts.length).toBeGreaterThan(0);
+    const put = mock.pipelineStepPuts.at(-1)!;
+    expect(put.stepId).toBe('aspect-requirement-fit');
+    expect(put.model).toBe('claude-opus-4-7');
+    expect(put.thinkingLevel).toBe('high');
+    expect(put.enabled).toBeNull();
+    expect(put.mode).toBeNull();
+
+    // After the re-resolve, the chip reflects the pinned model and now reads as
+    // a per-step override (still pre-run, so still the dashed "will run on").
+    await expect(rfModel).toHaveText('claude-opus-4-7');
+    await expect(rfModel).toHaveAttribute('data-model-resolved', 'true');
+    await expect(rfSelect).toHaveValue('claude-opus-4-7');
+
+    if (RESULTS_DIR) {
+      await pipeline.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-prerun-model-edited.png'),
         fullPage: true,
       });
     }
