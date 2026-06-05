@@ -48,3 +48,48 @@ describe('EpicRollupPaneComponent (smoke)', () => {
     }
   });
 });
+
+/**
+ * ASS-733 regression. The epic rollup pane sits as a flex child of the
+ * height-constrained `.detail` column. When vertical space is tight (short
+ * column / after a resize) the host must be able to shrink below its content
+ * height and scroll its own viewport — otherwise the gray box (`.epic-rollup`)
+ * overflows the column unreachably and its lower lanes (incl. Archive) spill
+ * past the visible bottom with no scrollbar, making the box look "too small".
+ *
+ * This guards the host scroll contract at the unit level (no backend needed),
+ * complementing the live-backend e2e in
+ * `e2e/board/epic-rollup-tight-viewport.spec.ts`.
+ */
+describe('EpicRollupPaneComponent host scroll contract (ASS-733)', () => {
+  it('host can shrink (min-height:0) and scrolls its own viewport (overflow-y)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [EpicRollupPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(EpicRollupPaneComponent);
+    fixture.componentRef.setInput('epicId', 'epic-under-test');
+    const host = fixture.nativeElement as HTMLElement;
+    // Connect to the live document so the cascade applies the component's
+    // emulated-encapsulation `:host` rules to getComputedStyle.
+    document.body.appendChild(host);
+    try {
+      try { fixture.detectChanges(); } catch { /* render needs seeded inputs; the host styles apply regardless */ }
+
+      const style = getComputedStyle(host);
+      // The flex item must be allowed to shrink past its content height...
+      expect(style.minHeight).toBe('0px');
+      // ...and own the scroll so the gray box keeps full height while every
+      // lane stays reachable.
+      expect(['auto', 'scroll']).toContain(style.overflowY);
+    } finally {
+      host.remove();
+    }
+  });
+});
