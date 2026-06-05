@@ -832,6 +832,71 @@ export class OverviewPaneComponent {
   /** True once at least one step has a recorded execution. */
   readonly hasPipelineExecution = computed(() => this.pipelinePoll.hasExecution());
 
+  private buildStepTokenTooltip(label: string, cost: PipelineStepCost | null): StructuredTooltip | null {
+    if (!cost || cost.totalTokens <= 0) return null;
+    return {
+      title: `${label} tokens`,
+      body: [
+        `Input: ${this.formatTokens(cost.inputTokens)}`,
+        `Output: ${this.formatTokens(cost.outputTokens)}`,
+        `Cache read: ${this.formatTokens(cost.cacheReadTokens)}`,
+        `Cache creation: ${this.formatTokens(cost.cacheCreationTokens)}`,
+        `Total: ${this.formatTokens(cost.totalTokens)}`,
+      ].join('\n'),
+    };
+  }
+
+  private buildStepCostTooltip(label: string, cost: PipelineStepCost | null): StructuredTooltip | null {
+    if (!cost || cost.totalTokens <= 0) return null;
+    if (!cost.modelKnown) {
+      return {
+        title: `${label} cost`,
+        body: `Model: ${cost.model ?? 'unknown'}\nNo price on file for this model.\n${API_PRICE_DISCLAIMER}`,
+      };
+    }
+    return {
+      title: `${label} cost`,
+      body: [
+        `Input: ${this.formatCost(cost.inputCostUsd)}`,
+        `Output: ${this.formatCost(cost.outputCostUsd)}`,
+        `Cache read: ${this.formatCost(cost.cacheReadCostUsd)}`,
+        `Cache creation: ${this.formatCost(cost.cacheCreationCostUsd)}`,
+        `Total: ${this.formatCost(cost.costUsd)}`,
+        API_PRICE_DISCLAIMER,
+      ].join('\n'),
+    };
+  }
+
+  private buildTotalTokenTooltip(cost: PipelineCostSummary): StructuredTooltip | null {
+    if (cost.totalTokens <= 0) return null;
+    return {
+      title: 'Task total tokens',
+      body: [
+        `Input: ${this.formatTokens(cost.totalInputTokens)}`,
+        `Output: ${this.formatTokens(cost.totalOutputTokens)}`,
+        `Cache read: ${this.formatTokens(cost.totalCacheReadTokens)}`,
+        `Cache creation: ${this.formatTokens(cost.totalCacheCreationTokens)}`,
+        `Total: ${this.formatTokens(cost.totalTokens)}`,
+      ].join('\n'),
+    };
+  }
+
+  private buildTotalCostTooltip(cost: PipelineCostSummary): StructuredTooltip | null {
+    if (cost.totalTokens <= 0) return null;
+    const lines = [
+      `Input: ${this.formatCost(cost.totalInputCostUsd)}`,
+      `Output: ${this.formatCost(cost.totalOutputCostUsd)}`,
+      `Cache read: ${this.formatCost(cost.totalCacheReadCostUsd)}`,
+      `Cache creation: ${this.formatCost(cost.totalCacheCreationCostUsd)}`,
+      `Total: ${this.formatCost(cost.totalCostUsd)}`,
+    ];
+    if (cost.anyModelUnknown) {
+      lines.push('One or more steps used a model with no price on file; the total excludes them.');
+    }
+    lines.push(API_PRICE_DISCLAIMER);
+    return { title: 'Task total cost', body: lines.join('\n') };
+  }
+
   /** The current run's execution record, or null before any run. */
   private readonly pipelineExecution = computed<PipelineExecutionRecord | null>(
     () => this.pipelinePoll.pipeline()?.execution ?? null,

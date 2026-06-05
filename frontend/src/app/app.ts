@@ -38,7 +38,6 @@ import {
   splitReadyByPhase,
 } from './features/board';
 import {
-  EpicRollupPaneComponent,
   TaskDetailComponent,
   TaskSelectionService,
   TriageController,
@@ -132,7 +131,6 @@ interface VerboseDebugContext {
   imports: [
     TaskColumnComponent,
     TaskDetailComponent,
-    EpicRollupPaneComponent,
     CliUsageSheetComponent,
     OrchestratorSideSheetComponent,
     OrchestratorSettingsModalComponent,

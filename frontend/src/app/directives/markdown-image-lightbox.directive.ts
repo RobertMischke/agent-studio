@@ -7,7 +7,7 @@ import {
   inject,
 } from '@angular/core';
 import {
-  MediaLightboxImage,
+  MediaLightboxRequest,
   MediaLightboxService,
 } from '../services/media-lightbox.service';
 
@@ -121,8 +121,8 @@ export class MarkdownImageLightboxDirective implements AfterViewInit, OnDestroy 
    * data attributes win over the inner `<img>` so a thumbnail that points
    * at a full-res asset still enlarges the full-res one.
    */
-  private collectGallery(): { images: MediaLightboxImage[]; anchors: HTMLElement[] } {
-    const images: MediaLightboxImage[] = [];
+  private collectGallery(): { images: MediaLightboxRequest[]; anchors: HTMLElement[] } {
+    const images: MediaLightboxRequest[] = [];
     const anchors: HTMLElement[] = [];
     const seenWrappers = new Set<HTMLElement>();
     this.host.nativeElement
