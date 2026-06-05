@@ -5,7 +5,7 @@ import { TaskInfo } from '../../../models/task.model';
 function job(id: string, verdict: TaskInfo['orchestratorVerdict'] = null): TaskInfo {
   return {
     id,
-    jobKey: `ws::${id}`,
+    taskKey: `ws::${id}`,
     title: id,
     state: '4-review',
     order: 1,

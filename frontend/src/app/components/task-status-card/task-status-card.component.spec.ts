@@ -10,7 +10,7 @@ import type { TaskInfo } from '../../models/task.model';
 function fixtureJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   const base: Partial<TaskInfo> = {
     id: 'demo-task',
-    jobKey: 'C:/x::demo-task',
+    taskKey: 'C:/x::demo-task',
     key: 'ATP-001',
     title: 'A meaningful task title',
     state: '3-progress',

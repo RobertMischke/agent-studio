@@ -20,7 +20,7 @@ import type { GroupedJobs, TaskInfo } from '../../../models/task.model';
 function makeJob(id: string, projectName: string, state: string): TaskInfo {
   return {
     id,
-    jobKey: `${projectName}::${id}`,
+    taskKey: `${projectName}::${id}`,
     title: id,
     state,
     order: 0,

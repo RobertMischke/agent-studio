@@ -4,7 +4,7 @@ import type { CliExecution } from '../../../models/task.model';
 
 const baseExecution: CliExecution = {
   jobId: 'job',
-  jobKey: 'watch::job',
+  taskKey: 'watch::job',
   processId: 123,
   startedAt: '2026-05-12T00:00:00Z',
   status: 'failed',

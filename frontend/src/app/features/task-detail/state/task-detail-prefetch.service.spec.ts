@@ -30,7 +30,7 @@ describe('TaskDetailPrefetchService', () => {
     ({
       info: {
         id,
-        jobKey: `${watchPath}::${id}`,
+        taskKey: `${watchPath}::${id}`,
         title: id,
         state: '5-human-review',
         watchPath,

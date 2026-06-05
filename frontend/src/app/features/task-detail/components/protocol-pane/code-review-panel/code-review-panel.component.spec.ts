@@ -56,7 +56,7 @@ describe('CodeReviewPanelComponent', () => {
   function seedJob(): TaskInfo {
     return {
       id: 'demo-job',
-      jobKey: 'p::demo-job',
+      taskKey: 'p::demo-job',
       title: 'Demo job',
       state: '3-progress',
       order: 1,

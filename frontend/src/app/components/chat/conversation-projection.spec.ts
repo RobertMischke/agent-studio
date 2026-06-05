@@ -397,7 +397,7 @@ describe('projectConversation', () => {
       runTimeline: runTimelineForComposite(),
       job: {
         id: 'fixture-job',
-        jobKey: 'wp::fixture-job',
+        taskKey: 'wp::fixture-job',
         title: 'Fixture',
         state: '3-progress',
         order: 0,
