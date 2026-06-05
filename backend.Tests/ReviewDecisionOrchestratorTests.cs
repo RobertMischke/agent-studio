@@ -263,6 +263,135 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
     }
 
+    [Theory]
+    [InlineData(ReviewDecisionKind.Reissue, TaskStates.Ready)]
+    [InlineData(ReviewDecisionKind.Escalate, TaskStates.HumanReview)]
+    [InlineData(ReviewDecisionKind.AcceptAsDone, TaskStates.HumanReview)]
+    public async Task StaleWithVerdict_BackfillsDueLaneMove_ForEachVerdictType(
+        ReviewDecisionKind verdict, string expectedLane)
+    {
+        // The move-after-verdict bug: the verdict path resolved the agent
+        // sentinel (its [orchestrator]/[supervisor] follow-up line) then
+        // warned-but-continued on a failed MoveJob, leaving the card parked in
+        // 4-auto-review WITH a journalled verdict. Every other guard skips it
+        // (sentinel resolved; IsStaleWithoutVerdict only covers the no-verdict
+        // case), so it hangs. The backfill nudges the due move after the grace
+        // window: reissue -> 2-ready, escalate / accept -> 5-human-review.
+        var slug = $"stuck-{verdict}".ToLowerInvariant();
+        SeedResolvedReviewCardPastGrace(slug);
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow.AddMinutes(-25),
+            JobId: slug,
+            Project: Project,
+            Kind: verdict,
+            Reason: "verdict recorded but the lane move never completed",
+            Prompt: "(seed)",
+            Response: "(seed)",
+            FollowUp: string.Empty));
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=reissue; reason=should not run]]",
+            onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Deterministic backfill: no fast-model call.
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, expectedLane, slug)));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, slug)));
+
+        // Idempotent: the backfill performs only the move, it does not append a
+        // second verdict record (the original is the source of truth).
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Single(records);
+        Assert.Equal(verdict, records[0].Kind);
+    }
+
+    [Fact]
+    public async Task StaleWithVerdict_DoesNotFire_BeforeGraceWindow()
+    {
+        // A card that has only just had its verdict recorded (log mtime fresh)
+        // must NOT be force-moved: a verdict path may still be completing its own
+        // move on the same tick. Only a card stuck past the grace window is stale.
+        SeedResolvedReviewCardPastGrace("fresh-verdict");
+        // Re-stamp the log to "now" so the grace window has not elapsed.
+        File.SetLastWriteTimeUtc(TaskPathLog(TaskStates.AutoReview, "fresh-verdict"), DateTime.UtcNow);
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: "fresh-verdict",
+            Project: Project,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: "just recorded",
+            Prompt: "(seed)",
+            Response: "(seed)",
+            FollowUp: string.Empty));
+
+        var orchestrator = BuildOrchestrator(cliResponse: "[[ORCHESTRATOR_DECISION: action=reissue; reason=noop]]");
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Untouched: still in 4-auto-review (the grace window protects it).
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "fresh-verdict")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "fresh-verdict")));
+    }
+
+    [Fact]
+    public async Task StaleWithVerdict_SkippedVerdict_IsNotForceMoved()
+    {
+        // A Skipped record (no decision sentinel parsed) does NOT resolve the
+        // agent sentinel, so the normal sentinel path re-processes the card. The
+        // backfill must not treat Skipped as a due move and yank it out of lane.
+        SeedResolvedReviewCardPastGrace("skipped-card");
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow.AddMinutes(-25),
+            JobId: "skipped-card",
+            Project: Project,
+            Kind: ReviewDecisionKind.Skipped,
+            Reason: "no sentinel parsed",
+            Prompt: "(seed)",
+            Response: "(seed)",
+            FollowUp: string.Empty));
+
+        var orchestrator = BuildOrchestrator(cliResponse: "[[ORCHESTRATOR_DECISION: action=reissue; reason=noop]]");
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "skipped-card")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "skipped-card")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "skipped-card")));
+    }
+
+    [Fact]
+    public async Task StaleWithVerdict_BackfillIsIdempotent_AcrossTicks()
+    {
+        // Re-bill safety / move-retry semantics: the backfill appends no new
+        // verdict record and a successful move takes the card out of the lane,
+        // so a second tick is a clean no-op. The same guard is what retries the
+        // move on a later tick when an earlier move did not stick (move-lock).
+        SeedResolvedReviewCardPastGrace("idempotent-stuck");
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow.AddMinutes(-25),
+            JobId: "idempotent-stuck",
+            Project: Project,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: "verdict recorded but the lane move never completed",
+            Prompt: "(seed)",
+            Response: "(seed)",
+            FollowUp: string.Empty));
+
+        var orchestrator = BuildOrchestrator(cliResponse: "[[ORCHESTRATOR_DECISION: action=reissue; reason=noop]]");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Moved exactly once to 5-human-review; second tick finds nothing to do.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "idempotent-stuck")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "idempotent-stuck")));
+
+        // No new verdict records were appended by the backfill (only the seed).
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Single(records);
+    }
+
     [Fact]
     public async Task NoOp_WithRealPrompt_ReissuesWithSharpenedFraming_WithoutSpendingFastModel()
     {
@@ -1266,6 +1395,28 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
             $"[12:00:01.000] [stdout] [[TASK_DONE]]{Environment.NewLine}" +
             suffix);
+    }
+
+    /// <summary>
+    /// Seed a 4-auto-review card whose agent sentinel is already resolved by a
+    /// trailing [orchestrator] follow-up line (the verdict-recorded state) and
+    /// whose log mtime is aged 30 min past the stale-verdict grace window. This
+    /// is the move-after-verdict failure shape: a verdict was journalled but the
+    /// lane move never completed, leaving the card stuck.
+    /// </summary>
+    private void SeedResolvedReviewCardPastGrace(string slug)
+    {
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
+        var logPath = Path.Combine(dir, "logs", "cli-output.log");
+        File.WriteAllText(logPath,
+            $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
+            $"[12:00:01.000] [stdout] [[TASK_DONE]]{Environment.NewLine}" +
+            $"[12:00:30.000] [orchestrator] [decision] verdict recorded{Environment.NewLine}");
+        File.SetLastWriteTimeUtc(logPath, DateTime.UtcNow.AddMinutes(-30));
     }
 
     private int ReadJobOrder(string state, string slug)

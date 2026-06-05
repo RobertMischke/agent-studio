@@ -363,6 +363,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
                     try
                     {
+                        if (pending.Kind == ReviewSignalKind.StaleWithVerdict)
+                        {
+                            // Move-after-verdict backfill: a recorded verdict
+                            // whose lane move never completed. Deterministic and
+                            // move-lock-resilient - no fast-model call.
+                            await ProcessStaleVerdictAsync(workspace, entry, pending, ct);
+                            continue;
+                        }
+
                         if (pending.Kind == ReviewSignalKind.NoOp)
                         {
                             // NOOP is fully deterministic: no fast-model call,
@@ -1134,6 +1143,108 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Response: "(no fast-model call)",
             FollowUp: string.Empty));
 
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Backfill the lane move for a card that already carries an orchestrator
+    /// verdict but never left <c>4-auto-review</c> (the move failed after the
+    /// verdict was recorded - a Move-Lock from open handles / orphan processes,
+    /// vgl. ASS-759, or a backend restart between record and
+    /// <see cref="TaskStateMachine.MoveJob"/>). This is the move-retry the
+    /// verdict paths lacked: they warned-but-continued on a failed move and left
+    /// the card verdict-but-stuck. Performs ONLY the due move
+    /// (<see cref="ReviewDecisionKind.Reissue"/> -> 2-ready,
+    /// <see cref="ReviewDecisionKind.Escalate"/> /
+    /// <see cref="ReviewDecisionKind.AcceptAsDone"/> -> 5-human-review), appends
+    /// NO new verdict record (the original is the source of truth), and writes
+    /// the operator-facing chat-log / timeline line only AFTER the move sticks -
+    /// so a still-failing move leaves the log mtime untouched and the next tick
+    /// simply retries, move-lock-resilient and spam-free.
+    /// </summary>
+    private Task ProcessStaleVerdictAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        CancellationToken ct)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var verdict = pending.StaleVerdict ?? ReviewDecisionKind.Skipped;
+
+        if (verdict == ReviewDecisionKind.Reissue)
+        {
+            var moved = MoveReissueToReadyTop(current, entry, "stale-verdict backfill");
+            if (moved == null)
+            {
+                _logger.LogWarning(
+                    "ReviewDecisionOrchestrator: stale-with-verdict backfill could not move {Project}/{JobId} (reissue) to 2-ready; leaving for next-tick retry",
+                    entry.Name, current.Id);
+                return Task.CompletedTask;
+            }
+
+            var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+            _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+                $"Auto-review backfill: a recorded reissue verdict for \"{title}\" never completed its lane move; nudged the card to 2-ready.");
+            EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+                TimelineActors.QualityLoop,
+                "Backfill: recorded reissue verdict had no lane move; sent to 2-ready.",
+                BuildReopenDetails("stale-verdict-backfill",
+                    CountPriorReissues(workspace, entry.Name, current.Id),
+                    "Recorded reissue verdict never completed its lane move."));
+            _statusSnapshot.RecordReissue();
+            _logger.LogInformation(
+                "ReviewDecisionOrchestrator: stale-with-verdict backfill moved {Project}/{JobId} (reissue) to 2-ready",
+                entry.Name, current.Id);
+            return Task.CompletedTask;
+        }
+
+        // Escalate / AcceptAsDone both land in 5-human-review.
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: stale-with-verdict backfill could not move {Project}/{JobId} ({Verdict}) to 5-human-review: {Status} {Message}; leaving for next-tick retry",
+                entry.Name, current.Id, verdict, move.Status, move.Message);
+            return Task.CompletedTask;
+        }
+
+        var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+        var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        var titleH = string.IsNullOrWhiteSpace(movedInfo.Title) ? movedInfo.Id : movedInfo.Title;
+
+        if (verdict == ReviewDecisionKind.AcceptAsDone)
+        {
+            // Provenance stamp mirrors the live accept path so the board can tell
+            // an orchestrator-advanced card from a human-accepted one.
+            ConcernTagWriter.MergeConcernTags(movedFolderPath, new[] { OrchestratorMovedTagId }, _logger);
+            _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision,
+                $"Auto-review backfill: a recorded accept verdict for \"{titleH}\" never completed its lane move; moved to 5-human-review for your approval.");
+            EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorVerdictAccepted,
+                TimelineActors.Orchestrator,
+                "Backfill: recorded accept verdict had no lane move; moved to 5-human-review.",
+                new Dictionary<string, string>
+                {
+                    ["verdict"] = "accept",
+                    ["cause"] = "stale-verdict-backfill",
+                });
+            _statusSnapshot.RecordAccept();
+        }
+        else
+        {
+            _chatLog.AppendSupervisor(movedInfo, "escalate",
+                $"Auto-review backfill: a recorded escalate verdict for \"{titleH}\" never completed its lane move; promoted to 5-human-review.");
+            EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
+                TimelineActors.Orchestrator,
+                "Backfill: recorded escalate verdict had no lane move; moved to 5-human-review.",
+                BuildEscalateDetails("stale-verdict-backfill",
+                    "Recorded escalate verdict never completed its lane move.",
+                    CountPriorReissues(workspace, entry.Name, current.Id)));
+            _statusSnapshot.RecordEscalate();
+        }
+
+        _logger.LogInformation(
+            "ReviewDecisionOrchestrator: stale-with-verdict backfill moved {Project}/{JobId} ({Verdict}) to 5-human-review",
+            entry.Name, current.Id, verdict);
         return Task.CompletedTask;
     }
 
@@ -2296,6 +2407,62 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     /// <summary>
+    /// Stale-WITH-verdict guard (the move-after-verdict failure mode this fixes):
+    /// a card still parked in <c>4-auto-review</c> past the grace window whose
+    /// latest decision-journal record already names a verdict that implies a
+    /// lane move which never completed. The deterministic verdict paths
+    /// (NOOP/BLOCKED/gate reissue + escalate) write their
+    /// <c>[orchestrator]</c>/<c>[supervisor]</c> follow-up line FIRST - which
+    /// resolves the agent sentinel - then only warn-but-continue if
+    /// <see cref="TaskStateMachine.MoveJob"/> fails (a Move-Lock from open log
+    /// handles / orphan processes - vgl. ASS-759 - or a backend restart between
+    /// recording and moving), yet still append the verdict record. The card is
+    /// then invisible to every other path: the sentinel is resolved, and
+    /// <see cref="IsStaleWithoutVerdict"/> only covers the no-verdict case.
+    ///
+    /// <para>
+    /// Returns the verdict whose move is due so the tick can backfill it
+    /// idempotently - <see cref="ReviewDecisionKind.Reissue"/> -> 2-ready,
+    /// <see cref="ReviewDecisionKind.Escalate"/> /
+    /// <see cref="ReviewDecisionKind.AcceptAsDone"/> -> 5-human-review - or
+    /// <c>null</c> when no move is due. <see cref="ReviewDecisionKind.Skipped"/>
+    /// never resolves the sentinel (it leaves the card for the normal sentinel
+    /// path), so it is deliberately excluded.
+    /// </para>
+    /// </summary>
+    private ReviewDecisionKind? GetStaleVerdictNeedingMove(string workspace, string project, TaskInfo info, string logPath)
+    {
+        var graceMinutes = _configuration.GetValue("ReviewDecisionOrchestrator:StaleVerdictGraceMinutes", 15);
+        if (graceMinutes <= 0) return null;
+
+        DateTime lastWriteUtc;
+        try { lastWriteUtc = File.GetLastWriteTimeUtc(logPath); }
+        catch { return null; }
+
+        if (DateTime.UtcNow - lastWriteUtc < TimeSpan.FromMinutes(graceMinutes))
+            return null;
+
+        IReadOnlyList<ReviewDecisionRecord> records;
+        try { records = ReviewDecisionLog.ReadAll(workspace, project); }
+        catch { return null; }
+
+        ReviewDecisionRecord? latest = null;
+        for (var i = records.Count - 1; i >= 0; i--)
+        {
+            if (records[i].JobId == info.Id) { latest = records[i]; break; }
+        }
+        if (latest == null) return null;
+
+        return latest.Kind switch
+        {
+            ReviewDecisionKind.Reissue => ReviewDecisionKind.Reissue,
+            ReviewDecisionKind.Escalate => ReviewDecisionKind.Escalate,
+            ReviewDecisionKind.AcceptAsDone => ReviewDecisionKind.AcceptAsDone,
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// Configured reissue budget (shared by NEEDS_INPUT / NOOP / aspect /
     /// lint-scss reissues). Defaults to <see cref="MaxAutoReissueAttempts"/>.
     /// Drives the <c>maxAttempts</c> detail on the completion-loop timeline
@@ -2867,6 +3034,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     // the guard no longer fires.
                     yield return new PendingDecision(info, ReviewSignalKind.NoCompletionSignal, LineNumber: -1, Reason: "no-verdict-timeout", NeedsInput: null);
                 }
+                else if (GetStaleVerdictNeedingMove(workspace, entry.Name, info, logPath) is { } dueVerdict)
+                {
+                    // Stale-with-verdict guard: a recorded verdict whose lane
+                    // move never completed (the verdict path resolved the
+                    // sentinel via its follow-up line, then warned-but-continued
+                    // on a failed MoveJob - ASS-759 move-lock / backend restart).
+                    // Backfill the due move; idempotent and re-bill-safe because
+                    // a successful move takes the card out of this lane.
+                    yield return new PendingDecision(info, ReviewSignalKind.StaleWithVerdict, LineNumber: -1, Reason: "stale-with-verdict", NeedsInput: null, StaleVerdict: dueVerdict);
+                }
                 continue;
             }
 
@@ -3095,7 +3272,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         /// to human review. Detected via
         /// <see cref="ReviewDecisionParsing.LacksTerminalSentinelInLatestRun"/>.
         /// </summary>
-        NoCompletionSignal
+        NoCompletionSignal,
+
+        /// <summary>
+        /// A card parked in 4-auto-review past the grace window whose latest
+        /// decision-journal verdict already implies a lane move that never
+        /// completed (the move failed after the verdict was recorded - a
+        /// Move-Lock or a backend restart between record and MoveJob). The tick
+        /// backfills the due move idempotently: reissue -> 2-ready, escalate /
+        /// accept-as-done -> 5-human-review. Detected via
+        /// <see cref="GetStaleVerdictNeedingMove"/>; the due verdict travels on
+        /// <see cref="PendingDecision.StaleVerdict"/>.
+        /// </summary>
+        StaleWithVerdict
     }
 
     private sealed record PendingDecision(
@@ -3103,7 +3292,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         ReviewSignalKind Kind,
         int LineNumber,
         string? Reason,
-        NeedsInputState? NeedsInput);
+        NeedsInputState? NeedsInput,
+        ReviewDecisionKind? StaleVerdict = null);
 
     private sealed record NoOpProgressEvidence(
         bool SawNoOpRecoveryReissue,
