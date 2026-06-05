@@ -22,7 +22,6 @@ import {
   EpicGroupBoardComponent,
   EpicOverviewScreenComponent,
   type EpicOverviewScope,
-  EpicOverviewService,
   FiltersDropdownComponent,
   TaskColumnComponent,
   KanbanFilterSidesheetComponent,
@@ -336,8 +335,6 @@ export class App implements OnInit, OnDestroy {
   private readonly boardFilters = inject(BoardFiltersService);
   readonly backlogTriage = inject(BacklogTriageService);
   readonly backlogTriageOpen = this.backlogTriage.open;
-  readonly epicOverview = inject(EpicOverviewService);
-  readonly epicOverviewOpen = this.epicOverview.open;
   private readonly tagRegistryStore = inject(TagRegistryStore);
   private readonly cliCatalogStore = inject(CliCatalogStore);
   readonly activeProjects = this.boardFilters.activeProjects;
@@ -1099,16 +1096,13 @@ export class App implements OnInit, OnDestroy {
 
     // Deep-link: open the workspace token timeline when the URL already
     // points at it, and keep the overlay in sync as the hash changes.
-    // Also reconciles the backlog triage `#/backlog` route.
+    // Also reconciles legacy top-level hash routes into their current
+    // editor-tab destinations.
     const applyHash = () => {
       this.workspaceOverlays.syncFromHash();
       this.applyProjectShellHash();
       this.backlogTriage.syncFromHash(this.currentBacklogScopeProject());
-      this.epicOverview.syncFromHash();
-      if (this.epicOverview.open()) {
-        this.studioTabState.open({ kind: 'epics', projectName: null });
-        this.epicOverview.closeOverview();
-      }
+      this.syncEpicsTabFromHash();
     };
     applyHash();
     this.hashListener = applyHash;
