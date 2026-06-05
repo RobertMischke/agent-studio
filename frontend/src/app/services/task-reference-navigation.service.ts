@@ -2,8 +2,20 @@ import { Injectable, computed, inject } from '@angular/core';
 import type { MarkdownTaskReference } from '../components/markdown-utils';
 import type { TaskInfo } from '../models/task.model';
 import { TaskService } from './task.service';
-import { TaskSelectionService } from '../features/task-detail';
-import { StudioTabStateService } from '../features/studio-shell';
+// These two services are imported from their concrete module paths rather than
+// the feature barrels, which is why the cross-feature barrel lint rule is
+// disabled on each line below. The studio-shell / task-detail barrels also
+// re-export their heavy host components (StudioShellComponent, TaskDetailComponent).
+// Those components render <app-markdown-view>, which injects THIS service - so a
+// barrel import here closes a module cycle that left the host component def
+// undefined at evaluation time (Angular NG0919) and blanked the studio tab strip.
+// The barrels share one module per feature, so a service-only import cannot avoid
+// pulling the component; the direct path is the narrow break that keeps this
+// root-level service out of the component graph.
+// eslint-disable-next-line no-restricted-imports
+import { TaskSelectionService } from '../features/task-detail/state/task-selection.service';
+// eslint-disable-next-line no-restricted-imports
+import { StudioTabStateService } from '../features/studio-shell/services/studio-tab-state.service';
 
 @Injectable({ providedIn: 'root' })
 export class TaskReferenceNavigationService {

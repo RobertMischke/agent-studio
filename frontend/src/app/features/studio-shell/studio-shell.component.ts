@@ -18,6 +18,7 @@ import type { TaskInfo, RegistryWorkspaceListItem, WatchPathEntry } from '../../
 import { TaskService } from '../../services/task.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
+import { StudioEmptyStateComponent } from './components/studio-empty-state/studio-empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
 import { CountBadgeComponent } from '../../components/count-badge/count-badge.component';
 import { ListRowComponent } from '../../components/list-row/list-row.component';
@@ -87,7 +88,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, StudioEmptyStateComponent, SectionHeaderComponent, CountBadgeComponent, ListRowComponent, StudioActivityBarComponent, MenuComponent, TooltipDirective, TaskStatusPopoverDirective, ExplorerWorkspaceTreeComponent, SegmentedControlComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -731,11 +732,6 @@ export class StudioShellComponent {
     this.tabState.open({ kind: 'board', projectName });
   }
 
-  /** True when the tab is the sticky default board (cannot be closed). */
-  isTabSticky(tab: StudioTab): boolean {
-    return tab.kind === 'board' && !!tab.sticky;
-  }
-
   /**
    * Activity-bar Backlog button click. Toggles the dedicated backlog triage
    * tab (a first-class editor tab, equivalent to Board / Epics) and keeps
@@ -745,7 +741,7 @@ export class StudioShellComponent {
   onActivityBarOpenBacklog(): void {
     if (this.activeTab()?.kind === 'backlog') {
       this.backlogTriage.closeTriage();
-      this.tabState.activateSticky();
+      this.tabState.activateAllProjectsBoard();
     } else {
       const project = this.activeProjectName();
       this.backlogTriage.openTriage(project);
@@ -1022,7 +1018,6 @@ export class StudioShellComponent {
       hasTabsToRight: idx >= 0 && idx < tabs.length - 1,
       hasTabsToLeft: idx > 0,
       task,
-      isSticky: tab ? this.isTabSticky(tab) : false,
     });
   });
   readonly tabCtxMenuPosition = computed(() => {

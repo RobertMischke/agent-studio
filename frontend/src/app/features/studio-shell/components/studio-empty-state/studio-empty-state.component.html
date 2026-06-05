@@ -1,0 +1,6 @@
+<div class="empty" data-testid="studio-empty-state">
+  <div class="empty__stage" [class.empty--static]="reducedMotion()">
+    <canvas #canvas class="empty__canvas" aria-hidden="true" data-testid="studio-empty-canvas"></canvas>
+  </div>
+  <p class="empty__subtitle" data-testid="studio-empty-subtitle" aria-live="polite">{{ subtitle() }}</p>
+</div>

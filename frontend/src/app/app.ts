@@ -1408,7 +1408,7 @@ export class App implements OnInit, OnDestroy {
   toggleBacklogTriage(): void {
     if (this.studioTabState.activeTab()?.kind === 'backlog') {
       this.backlogTriage.closeTriage();
-      this.studioTabState.activateSticky();
+      this.studioTabState.activateAllProjectsBoard();
     } else {
       const project = this.currentBacklogScopeProject();
       this.backlogTriage.openTriage(project);
