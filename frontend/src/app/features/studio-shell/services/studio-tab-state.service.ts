@@ -1,9 +1,12 @@
 import { Injectable, computed, signal } from '@angular/core';
-import type { StudioTab } from '../studio-shell.types';
+import type { BoardTab, StudioTab } from '../studio-shell.types';
 import { studioTabKey } from '../studio-shell.types';
 
 const STORAGE_KEY = 'atp.studio.tabs.v1';
 const STORAGE_VERSION = 1;
+const STICKY_PROJECT = '__all__';
+const STICKY_TAB: BoardTab = { kind: 'board', projectName: STICKY_PROJECT, sticky: true };
+const STICKY_KEY = studioTabKey(STICKY_TAB);
 
 interface PersistedState {
   v: number;
@@ -41,6 +44,24 @@ export class StudioTabStateService {
 
   constructor() {
     this.restore();
+    this.ensureStickyTab();
+    if (!this._activeKey()) this._activeKey.set(STICKY_KEY);
+    this.persist();
+  }
+
+  stickyKey(): string {
+    return STICKY_KEY;
+  }
+
+  isStickyKey(key: string | null | undefined): boolean {
+    return key === STICKY_KEY;
+  }
+
+  activateSticky(): string {
+    this.ensureStickyTab();
+    this._activeKey.set(STICKY_KEY);
+    this.persist();
+    return STICKY_KEY;
   }
 
   /** Open the tab if it's not already there, then focus it. */
@@ -62,11 +83,13 @@ export class StudioTabStateService {
 
   /** Close the tab; if it was active, fall back to the last remaining tab. */
   close(key: string): void {
+    if (this.isStickyKey(key)) return;
     const list = this._tabs();
     const next = list.filter(t => studioTabKey(t) !== key);
-    this._tabs.set(next);
+    this._tabs.set(this.withSticky(next));
     if (this._activeKey() === key) {
-      this._activeKey.set(next.length ? studioTabKey(next[next.length - 1]) : null);
+      const tabs = this._tabs();
+      this._activeKey.set(tabs.length ? studioTabKey(tabs[tabs.length - 1]) : STICKY_KEY);
     }
     this.persist();
   }
@@ -74,7 +97,7 @@ export class StudioTabStateService {
   /** Close every tab except the one given. */
   closeOthers(keepKey: string): void {
     const list = this._tabs();
-    const next = list.filter(t => studioTabKey(t) === keepKey);
+    const next = this.withSticky(list.filter(t => studioTabKey(t) === keepKey));
     this._tabs.set(next);
     if (next.some(t => studioTabKey(t) === keepKey)) {
       this._activeKey.set(keepKey);
@@ -91,7 +114,7 @@ export class StudioTabStateService {
     const list = this._tabs();
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
-    const next = list.filter((_t, i) => i <= idx);
+    const next = this.withSticky(list.filter((t, i) => i <= idx || this.isStickyKey(studioTabKey(t))));
     this._tabs.set(next);
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
@@ -104,7 +127,7 @@ export class StudioTabStateService {
     const list = this._tabs();
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
-    const next = list.filter((_t, i) => i >= idx);
+    const next = this.withSticky(list.filter((t, i) => i >= idx || this.isStickyKey(studioTabKey(t))));
     this._tabs.set(next);
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
@@ -114,8 +137,8 @@ export class StudioTabStateService {
 
   /** Close every tab. */
   closeAll(): void {
-    this._tabs.set([]);
-    this._activeKey.set(null);
+    this._tabs.set([STICKY_TAB]);
+    this._activeKey.set(STICKY_KEY);
     this.persist();
   }
 
@@ -129,6 +152,7 @@ export class StudioTabStateService {
    * focused; moving a non-active tab leaves the focus where it was.
    */
   move(sourceKey: string, targetKey: string | null): void {
+    if (this.isStickyKey(sourceKey) || this.isStickyKey(targetKey)) return;
     const list = this._tabs();
     const fromIdx = list.findIndex(t => studioTabKey(t) === sourceKey);
     if (fromIdx < 0) return;
@@ -192,11 +216,11 @@ export class StudioTabStateService {
         try { return typeof studioTabKey(t) === 'string'; }
         catch { return false; }
       });
-      this._tabs.set(safeTabs.map(t => this.normalizeTab(t)));
+      this._tabs.set(this.withSticky(safeTabs.map(t => this.normalizeTab(t))));
       // Only restore the active key if it points at a surviving tab.
       const normalizedTabs = this._tabs();
       const validKey = normalizedTabs.some(t => studioTabKey(t) === parsed.activeKey);
-      this._activeKey.set(validKey ? parsed.activeKey : (normalizedTabs.length ? studioTabKey(normalizedTabs[normalizedTabs.length - 1]) : null));
+      this._activeKey.set(validKey ? parsed.activeKey : (normalizedTabs.length ? studioTabKey(normalizedTabs[normalizedTabs.length - 1]) : STICKY_KEY));
     } catch {
       // Corrupt payload — drop it. The effect will overwrite next write.
     }
@@ -219,6 +243,7 @@ export class StudioTabStateService {
   private normalizeTab(tab: StudioTab): StudioTab {
     switch (tab.kind) {
       case 'board':
+        if (tab.projectName === STICKY_PROJECT) return STICKY_TAB;
         return { kind: 'board', projectName: tab.projectName };
       case 'backlog':
         return { kind: 'backlog', projectName: tab.projectName };
@@ -235,5 +260,25 @@ export class StudioTabStateService {
       case 'welcome':
         return { kind: 'welcome' };
     }
+  }
+
+  private ensureStickyTab(): void {
+    this._tabs.set(this.withSticky(this._tabs()));
+    if (!this._tabs().some(t => studioTabKey(t) === this._activeKey())) {
+      this._activeKey.set(STICKY_KEY);
+    }
+  }
+
+  private withSticky(tabs: readonly StudioTab[]): StudioTab[] {
+    const next: StudioTab[] = [STICKY_TAB];
+    const seen = new Set<string>([STICKY_KEY]);
+    for (const tab of tabs) {
+      const normalized = this.normalizeTab(tab);
+      const key = studioTabKey(normalized);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      next.push(normalized);
+    }
+    return next;
   }
 }

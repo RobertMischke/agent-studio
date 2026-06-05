@@ -11,7 +11,7 @@ import { TaskTimelinePollService } from '../../../../polling/services/task-timel
 import { OverviewPaneComponent } from './overview-pane.component';
 import type { TaskInfo } from '../../../../../models/task.model';
 import type { AgentWorkSummary } from '../../../../session-events';
-import type { TaskPipelineResponse } from '../../../../task-pipeline';
+import type { PipelineCostSummary, PipelineStepCost, TaskPipelineResponse } from '../../../../task-pipeline';
 import type { RunRecord, RunTimeline } from '../../../../run-timeline';
 
 /** A pipeline catalogue + execution with a single core Agent-execution row. */
@@ -32,8 +32,43 @@ function agentPipeline(coreModel: string | null = 'claude-opus-4-8'): TaskPipeli
         { stepId: 'core-agent-run', kind: 'core', model: coreModel ?? undefined, status: 'running', startedAt: new Date().toISOString(), completedAt: null, durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
       ],
     },
-    cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+    cost: emptyCost(),
     config: {},
+  };
+}
+
+function emptyCost(overrides: Partial<PipelineCostSummary> = {}): PipelineCostSummary {
+  return {
+    steps: [],
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalCacheReadTokens: 0,
+    totalCacheCreationTokens: 0,
+    totalTokens: 0,
+    totalInputCostUsd: 0,
+    totalOutputCostUsd: 0,
+    totalCacheReadCostUsd: 0,
+    totalCacheCreationCostUsd: 0,
+    totalCostUsd: 0,
+    anyModelUnknown: false,
+    ...overrides,
+  };
+}
+
+function stepCost(overrides: Partial<PipelineStepCost> & Pick<PipelineStepCost, 'stepId' | 'kind'>): PipelineStepCost {
+  return {
+    modelKnown: true,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    totalTokens: 0,
+    inputCostUsd: 0,
+    outputCostUsd: 0,
+    cacheReadCostUsd: 0,
+    cacheCreationCostUsd: 0,
+    costUsd: 0,
+    ...overrides,
   };
 }
 
