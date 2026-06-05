@@ -39,6 +39,13 @@ interface RenderedMessage {
   id: string;
   /** Sort key used to merge with events chronologically. */
   timestamp: string;
+  /**
+   * Pre-formatted clock label (HH:MM). Computed once when `rendered()`
+   * recomputes — never per change-detection pass — so a keystroke in the
+   * composer (which dirties this view) does not re-run the expensive
+   * `toLocaleTimeString`/Intl path for every row. See the typing-perf note.
+   */
+  formattedTime: string;
   message: ChatMessage;
   /** True when the message body exceeds COLLAPSE_LINE_THRESHOLD lines. */
   collapsible: boolean;
@@ -56,6 +63,12 @@ interface RenderedEvent {
   kind: 'event';
   id: string;
   timestamp: string;
+  /** Pre-formatted clock label — see {@link RenderedMessage.formattedTime}. */
+  formattedTime: string;
+  /** Pre-resolved head glyph; precomputed so the loop body stays binding-only. */
+  icon: string;
+  /** Pre-resolved kind label; precomputed for the same reason. */
+  label: string;
   event: ChatEvent;
   /** True when the event has a markdown detail body to expand. */
   hasDetail: boolean;
@@ -237,6 +250,7 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
         kind: 'message',
         id: message.id,
         timestamp: message.timestamp,
+        formattedTime: this.formatTime(message.timestamp),
         message,
         collapsible,
         collapsed,
@@ -247,6 +261,9 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
       kind: 'event',
       id: event.id,
       timestamp: event.timestamp,
+      formattedTime: this.formatTime(event.timestamp),
+      icon: this.eventIcon(event),
+      label: this.eventLabel(event),
       event,
       hasDetail: !!event.detail,
       expanded: expandedEvents.has(event.id),

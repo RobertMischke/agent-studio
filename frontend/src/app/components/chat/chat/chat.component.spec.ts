@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ChatComponent } from './chat.component';
-import type { ChatMessage } from '../chat-types';
+import type { ChatEvent, ChatMessage } from '../chat-types';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -153,6 +153,50 @@ describe('ChatComponent virtualisation', () => {
   // the scroll-derived window lands a phantom bottom spacer under the
   // freshly loaded tail and pushes it out of the viewport — blank until a
   // manual scroll. While sticky the window stays pinned to the tail.
+  it('does NOT re-run per-row time/icon/label formatting on a keystroke CD pass', async () => {
+    // Typing in the composer dirties the chat view, so a CD pass re-runs
+    // the whole template — including the message/event @for. The draft does
+    // not change messages() or events(), so the memoised rendered() slice
+    // must already carry the per-row display strings; the loop body must NOT
+    // call formatTime()/eventIcon()/eventLabel() again on every keystroke.
+    // Those calls (formatTime → toLocaleTimeString / Intl in particular) are
+    // the typing-lag culprit when multiplied across the rendered window.
+    const fixture = await makeFixture(false);
+    const messages = Array.from({ length: 40 }, (_, i) => makeMessage(i));
+    fixture.componentRef.setInput('messages', messages);
+    const events: ChatEvent[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `evt-${i}`,
+      kind: 'tool-call',
+      timestamp: new Date(Date.UTC(2026, 0, 1, 0, 1, i)).toISOString(),
+      summary: `tool ${i}`,
+    }));
+    fixture.componentRef.setInput('events', events);
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    const formatSpy = vi.spyOn(c, 'formatTime');
+    const iconSpy = vi.spyOn(c, 'eventIcon');
+    const labelSpy = vi.spyOn(c, 'eventLabel');
+
+    // Simulate real keystrokes: ngModel's (input) listener dirties the chat
+    // view, so the next CD pass re-runs the whole template (the message /
+    // event @for included). Dispatching the DOM event — not just poking
+    // draftText — is what reproduces the keystroke path: a plain field write
+    // would not mark the OnPush view dirty.
+    const textarea = fixture.nativeElement.querySelector(
+      '[data-testid="chat-input"]'
+    ) as HTMLTextAreaElement;
+    for (const value of ['h', 'he', 'hel']) {
+      textarea.value = value;
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    }
+
+    expect(formatSpy).not.toHaveBeenCalled();
+    expect(iconSpy).not.toHaveBeenCalled();
+    expect(labelSpy).not.toHaveBeenCalled();
+  });
+
   it('keeps the newest turn rendered when a scroll fires while sticky-at-bottom', async () => {
     const fixture = await makeFixture(true);
     // Defaults: 120px estimate, 20-row buffer — the production config.

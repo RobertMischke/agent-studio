@@ -41,7 +41,7 @@
                     } @else {
                       <app-role-badge [author]="item.message.role" />
                     }
-                    <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
+                    <span class="chat__msg-time">{{ item.formattedTime }}</span>
                   </header>
                   <app-markdown class="chat__msg-body chat__msg-body--markdown"
                                 [class.chat__msg-body--collapsed]="item.collapsed"
@@ -97,10 +97,10 @@
                           [attr.aria-expanded]="item.expanded"
                           [disabled]="!item.hasDetail"
                           (click)="toggleEventExpanded(item.event.id)">
-                    <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event) }}</span>
-                    <span class="chat__event-kind">{{ eventLabel(item.event) }}</span>
+                    <span class="chat__event-icon" aria-hidden="true">{{ item.icon }}</span>
+                    <span class="chat__event-kind">{{ item.label }}</span>
                     <span class="chat__event-summary">{{ item.event.summary }}</span>
-                    <span class="chat__event-time">{{ formatTime(item.event.timestamp) }}</span>
+                    <span class="chat__event-time">{{ item.formattedTime }}</span>
                     @if (item.hasDetail) {
                       <span class="chat__event-caret" aria-hidden="true">{{ item.expanded ? '▴' : '▾' }}</span>
                     }
