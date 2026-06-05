@@ -35,6 +35,10 @@ import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { RegressionRadarComponent } from '../../../../regression-radar';
 import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail.component';
+import {
+  PipelineStepResultComponent,
+  type PipelineStepResultHeader,
+} from '../pipeline-step-result/pipeline-step-result.component';
 import { ReferencesSectionComponent } from '../../references-section/references-section.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { StructuredTooltip } from '../../../../../components/tooltip';
@@ -386,7 +390,7 @@ const PIPELINE_STEP_MODEL_OPTIONS: readonly { id: string; label: string; default
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent],
+  imports: [FormsModule, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent, PipelineStepResultComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -985,6 +989,40 @@ export class OverviewPaneComponent {
    */
   steeringForRow(row: PipelineRowVm): SteeringInfo | null {
     return row.kind === 'orchestrator' ? this.latestSteeringInfo() : null;
+  }
+
+  /**
+   * Per-step structured result, rendered "where it originates" as an
+   * expandable card under the row. Returns the on-disk markdown file the card
+   * fetches plus a self-contained header (title + status + verdict + run
+   * meta), or null for steps that have no per-job result file. The CORE run
+   * carries `status.md`; each review aspect carries `aspect-{id}.md` (the step
+   * id IS the report stem). Only shown once the step has actually run so the
+   * card never fetches a file that does not exist yet; orchestrator steps keep
+   * their richer steering trace via {@link steeringForRow}, and tool / drift
+   * steps have no per-job markdown.
+   */
+  resultForRow(row: PipelineRowVm): { fileName: string; header: PipelineStepResultHeader } | null {
+    let fileName: string | null = null;
+    if (row.kind === 'core') fileName = 'status.md';
+    else if (row.kind === 'aspect') fileName = `${row.id}.md`;
+    if (!fileName) return null;
+    if (row.status !== 'passed' && row.status !== 'failed' && row.status !== 'skipped') return null;
+
+    return {
+      fileName,
+      header: {
+        label: row.label,
+        statusIcon: this.stepStatusIcon(row.status),
+        statusLabel: this.stepStatusLabel(row.status),
+        status: row.status,
+        verdict: row.verdict,
+        model: row.model,
+        durationLabel: row.durationMs > 0 ? this.formatStepDuration(row.durationMs) : null,
+        tokensLabel: row.totalTokens > 0 ? this.formatTokens(row.totalTokens) : null,
+        costLabel: row.totalTokens > 0 && row.costKnown ? this.formatCost(row.costUsd) : null,
+      },
+    };
   }
 
   /** Task-total tokens + cost across all recorded steps. */

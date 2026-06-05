@@ -1,0 +1,121 @@
+/**
+ * Cleaning helpers for a pipeline step's raw on-disk result markdown so the
+ * Overview step-result card renders well-formatted prose instead of the raw
+ * file. The aspect reports (`aspect-{id}.md`) and the CORE run summary
+ * (`status.md`) are the two sources; the aspect file in particular wraps the
+ * model's prose in a bare ``` fence and trails machine sentinels
+ * (`[[ASPECT_VERDICT: …]]`, `[[TASK_DONE]]`) that should never reach the
+ * rendered card.
+ *
+ * Pure string transforms with no markdown parsing, so they are cheap and
+ * unit-testable without a DOM. A `status.md` (already clean prose, no
+ * frontmatter, no fences) passes through unchanged.
+ */
+
+/** A line that is only a machine sentinel token, e.g. `[[TASK_DONE]]`. */
+const SENTINEL_LINE = /^\[\[[^\]]*\]\]$/;
+
+/**
+ * Normalise a raw step-result markdown body for display:
+ *  1. strip a leading YAML frontmatter block,
+ *  2. unwrap the bare ``` fence around the "Model reply" section so its prose
+ *     renders as markdown rather than a monospace blob,
+ *  3. drop machine sentinel lines and the now-empty fences that wrapped them,
+ *  4. collapse the runs of blank lines those removals leave behind.
+ */
+export function cleanStepResultMarkdown(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let lines = raw.replace(/\r\n/g, '\n').split('\n');
+  lines = stripFrontmatter(lines);
+  lines = unwrapModelReplyFence(lines);
+  lines = stripSentinelLines(lines);
+  lines = removeEmptyFences(lines);
+  return collapseBlankRuns(lines).join('\n').trim();
+}
+
+/** Drop a leading `---` … `---` YAML frontmatter block, if present. */
+function stripFrontmatter(lines: string[]): string[] {
+  if (lines[0]?.trim() !== '---') return lines;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === '---') return lines.slice(i + 1);
+  }
+  return lines;
+}
+
+/**
+ * Remove the pair of bare ``` fence lines that wrap the first "Model reply"
+ * section so the reply renders as prose. Only a language-less fence is
+ * unwrapped (a fenced code sample with a language tag is left intact).
+ */
+function unwrapModelReplyFence(lines: string[]): string[] {
+  const heading = lines.findIndex((l) => /^#+\s*model reply\b/i.test(l.trim()));
+  if (heading === -1) return lines;
+
+  let open = -1;
+  for (let i = heading + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t === '') continue;
+    if (t === '```') open = i;
+    break;
+  }
+  if (open === -1) return lines;
+
+  let close = -1;
+  for (let i = open + 1; i < lines.length; i++) {
+    if (lines[i].trim() === '```') {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return lines;
+
+  const out = lines.slice();
+  out.splice(close, 1);
+  out.splice(open, 1);
+  return out;
+}
+
+/** Remove whole lines that are only a `[[…]]` sentinel token. */
+function stripSentinelLines(lines: string[]): string[] {
+  return lines.filter((l) => !SENTINEL_LINE.test(l.trim()));
+}
+
+/**
+ * Drop pairs of bare ``` fences whose body is now only blank lines — the
+ * residue left after a sentinel that lived inside its own fence is removed.
+ */
+function removeEmptyFences(lines: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === '```') {
+      let close = -1;
+      let onlyBlank = true;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() === '```') {
+          close = j;
+          break;
+        }
+        if (lines[j].trim() !== '') onlyBlank = false;
+      }
+      if (close !== -1 && onlyBlank) {
+        i = close;
+        continue;
+      }
+    }
+    out.push(lines[i]);
+  }
+  return out;
+}
+
+/** Collapse 2+ consecutive blank lines down to a single blank line. */
+function collapseBlankRuns(lines: string[]): string[] {
+  const out: string[] = [];
+  let blank = false;
+  for (const line of lines) {
+    const isBlank = line.trim() === '';
+    if (isBlank && blank) continue;
+    blank = isBlank;
+    out.push(line);
+  }
+  return out;
+}

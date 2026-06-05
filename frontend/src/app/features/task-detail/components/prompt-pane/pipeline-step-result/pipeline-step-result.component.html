@@ -1,0 +1,57 @@
+@let h = header();
+<div class="step-result" [class.step-result--open]="open()" data-testid="pipeline-step-result">
+  <button type="button"
+          class="step-result__toggle"
+          data-testid="pipeline-step-result-toggle"
+          [attr.aria-expanded]="open()"
+          (click)="toggle()">
+    <span class="step-result__chevron" aria-hidden="true">{{ open() ? '▾' : '▸' }}</span>
+    <span class="step-result__toggle-label">{{ open() ? 'Hide result' : 'View result' }}</span>
+  </button>
+
+  @if (open()) {
+    <div class="step-result__card" data-testid="pipeline-step-result-card">
+      <header class="step-result__header" [attr.data-status]="h.status">
+        <span class="step-result__title">{{ h.label }}</span>
+        <span class="step-result__status" data-testid="pipeline-step-result-status">
+          <span aria-hidden="true">{{ h.statusIcon }}</span>
+          {{ h.statusLabel }}
+        </span>
+        @if (h.verdict) {
+          <span class="step-result__verdict"
+                [attr.data-verdict]="h.verdict"
+                data-testid="pipeline-step-result-verdict">{{ h.verdict }}</span>
+        }
+        <span class="step-result__meta">
+          @if (h.model) {
+            <span class="step-result__chip step-result__chip--model">{{ h.model }}</span>
+          }
+          @if (h.durationLabel) {
+            <span class="step-result__chip">{{ h.durationLabel }}</span>
+          }
+          @if (h.tokensLabel) {
+            <span class="step-result__chip">{{ h.tokensLabel }}</span>
+          }
+          @if (h.costLabel) {
+            <span class="step-result__chip">{{ h.costLabel }}</span>
+          }
+        </span>
+      </header>
+
+      <div class="step-result__body" data-testid="pipeline-step-result-body">
+        @if (loading()) {
+          <p class="step-result__state">Loading result…</p>
+        } @else if (failed()) {
+          <p class="step-result__state step-result__state--error">
+            Could not load this step’s result.
+          </p>
+        } @else if (hasContent()) {
+          <app-markdown [source]="content()" [dense]="true"
+                        testId="pipeline-step-result-markdown" />
+        } @else {
+          <p class="step-result__state">No structured result was written for this step.</p>
+        }
+      </div>
+    </div>
+  }
+</div>

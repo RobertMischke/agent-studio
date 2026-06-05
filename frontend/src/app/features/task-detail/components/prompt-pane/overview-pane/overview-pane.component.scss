@@ -594,6 +594,14 @@
   margin-left: calc(var(--ov-pipeline-status-col) + var(--studio-spacing-1));
 }
 
+// Per-step structured-result card, indented under its row to read as a child
+// of the step (same gutter the steering trace uses).
+.ov-pl-result {
+  display: block;
+  margin: 2px 0 8px;
+  margin-left: calc(var(--ov-pipeline-status-col) + var(--studio-spacing-1));
+}
+
 .ov-pl-step {
   display: grid;
   grid-template-columns:

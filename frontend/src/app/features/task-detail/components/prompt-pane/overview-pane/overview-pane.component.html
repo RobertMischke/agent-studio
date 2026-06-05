@@ -406,6 +406,17 @@
                                  [showVerdictChip]="true"
                                  data-testid="overview-pipeline-step-steering" />
           }
+          @if (resultForRow(row); as res) {
+            <!-- Per-step structured result (HTML header + formatted markdown),
+                 rendered where the result originates. CORE -> status.md;
+                 each aspect -> its aspect-{id}.md report. -->
+            <app-pipeline-step-result class="ov-pl-result"
+                                      [header]="res.header"
+                                      [jobId]="job().id"
+                                      [watchPath]="job().watchPath"
+                                      [fileName]="res.fileName"
+                                      data-testid="overview-pipeline-step-result" />
+          }
         }
       </div>
 
