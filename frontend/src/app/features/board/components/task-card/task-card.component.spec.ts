@@ -5,8 +5,15 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskCardComponent } from './task-card.component';
-import type { TaskInfo, ClientSummary } from '../../../../models/task.model';
-import { buildEffectiveModelChip, buildModeBadge } from './task-card-view-model';
+import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
+import {
+  buildEffectiveModelChip,
+  buildModeBadge,
+  buildTagChips,
+  buildReviewBadge,
+  buildHumanReviewBadge,
+  buildPhaseBadge,
+} from './task-card-view-model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -305,7 +312,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__human-review-pill--attention');
   });
 
-  it('shows a calm sign-off pill (not attention) for an accepted human-review card', async () => {
+  it('shows a calm Reviewed pill (not attention) for an accepted human-review card', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
       providers: [
@@ -330,7 +337,9 @@ describe('TaskCardComponent (smoke)', () => {
     expect(host?.classList.contains('task-card--attention')).toBe(false);
 
     const pill = fixture.nativeElement.querySelector('[data-testid="task-card-human-review"]') as HTMLElement | null;
-    expect(pill?.textContent).toContain('Ready to sign off');
+    // ASS-748: an accepted card carries the lane-independent "Reviewed" signal,
+    // not the old lane-mirroring "Ready to sign off" wording.
+    expect(pill?.textContent).toContain('Reviewed');
     expect(pill?.className).toContain('task-card__human-review-pill--accept');
   });
 
@@ -775,6 +784,110 @@ describe('buildModeBadge', () => {
   it('returns null for coding and for an absent mode (older payloads)', () => {
     expect(buildModeBadge('coding')).toBeNull();
     expect(buildModeBadge(undefined)).toBeNull();
+  });
+});
+
+// ASS-748: the card must not repeat what the lane already says. These cover the
+// pure render-logic that drops lane-mirroring labels and concern/classifier
+// tags while keeping genuine content tags and the "Reviewed" signal.
+describe('buildTagChips — lane-mirror + concern suppression', () => {
+  function registry(...entries: TagRegistryEntry[]): Map<string, TagRegistryEntry> {
+    return new Map(entries.map((e) => [e.id, e]));
+  }
+  function tag(id: string, label = id): TagRegistryEntry {
+    return { id, label, color: '#888888', description: '' };
+  }
+
+  it('drops concern + unparseable classifier tags regardless of lane', () => {
+    const chips = buildTagChips(
+      ['requirement:concerns', 'quality:concerns', 'review:unparseable'],
+      new Map(),
+      '5-human-review',
+    );
+    expect(chips).toEqual([]);
+  });
+
+  it('drops a "Q&As" registry tag by its label', () => {
+    const reg = registry(tag('qas-tag', 'Q&As'));
+    const chips = buildTagChips(['qas-tag'], reg, '3-progress');
+    expect(chips).toEqual([]);
+  });
+
+  it('drops tags that mirror the auto-review lane', () => {
+    const reg = registry(tag('review', 'Review'), tag('auto-review', 'Auto Review'));
+    const chips = buildTagChips(['review', 'auto-review'], reg, '4-auto-review');
+    expect(chips).toEqual([]);
+  });
+
+  it('drops tags that mirror the human-review lane (review ready / sign off)', () => {
+    const reg = registry(
+      tag('humanreview', 'Human Review'),
+      tag('review-ready', 'Review Ready'),
+      tag('ready-to-sign-off', 'Ready to sign off'),
+    );
+    const chips = buildTagChips(
+      ['humanreview', 'review-ready', 'ready-to-sign-off'],
+      reg,
+      '5-human-review',
+    );
+    expect(chips).toEqual([]);
+  });
+
+  it('keeps genuine content tags (architecture, security)', () => {
+    const reg = registry(tag('architecture', 'Architecture'), tag('security', 'Security'));
+    const chips = buildTagChips(['architecture', 'security'], reg, '4-auto-review');
+    expect(chips.map((c) => c.label)).toEqual(['Architecture', 'Security']);
+  });
+
+  it('does not suppress a lane-name tag in an unrelated lane', () => {
+    const reg = registry(tag('review', 'Review'));
+    // 'review' only mirrors review lanes; in 3-progress it survives.
+    const chips = buildTagChips(['review'], reg, '3-progress');
+    expect(chips.map((c) => c.id)).toEqual(['review']);
+  });
+});
+
+describe('buildReviewBadge — keeps the Reviewed signal, no lane label', () => {
+  it('renders "Reviewed" for a ready summary (not "review ready")', () => {
+    const badge = buildReviewBadge({
+      status: 'ready', startedAt: null, finishedAt: null, errorMessage: null, bytesWritten: 42,
+    });
+    expect(badge?.label).toBe('Reviewed');
+    expect(badge?.tone).toBe('ready');
+  });
+
+  it('uses "summarizing" (not "auto-reviewing") while generating', () => {
+    const badge = buildReviewBadge({
+      status: 'generating', startedAt: null, finishedAt: null, errorMessage: null, bytesWritten: null,
+    });
+    expect(badge?.label).toBe('summarizing');
+  });
+});
+
+describe('buildHumanReviewBadge — verdict is kept, "Reviewed" replaces sign-off', () => {
+  it('renders "Reviewed" for an accepted card (not "Ready to sign off")', () => {
+    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'accept' }));
+    expect(badge?.label).toBe('Reviewed');
+    expect(badge?.tone).toBe('accept');
+  });
+
+  it('keeps the escalate verdict — it is not derivable from the lane', () => {
+    const badge = buildHumanReviewBadge(makeJob({ state: '5-human-review', orchestratorVerdict: 'escalate' }));
+    expect(badge?.label).toBe('Escalated');
+  });
+
+  it('stays quiet for an undecided human-review card (no lane mirror)', () => {
+    expect(buildHumanReviewBadge(makeJob({ state: '5-human-review' }))).toBeNull();
+  });
+});
+
+describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
+  it('returns null for human-ready (the lane already says it)', () => {
+    expect(buildPhaseBadge('human-ready')).toBeNull();
+  });
+
+  it('still surfaces non-lane intake substates', () => {
+    expect(buildPhaseBadge('intake-blocked')?.label).toBe('Intake blocked');
   });
 });
 

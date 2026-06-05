@@ -10,7 +10,9 @@ import { test, expect, Page } from '@playwright/test';
  *   - an info button next to the lane title opens a drawer that explains
  *     what auto-review does;
  *   - jobs that picked up a `<namespace>:concerns` tag from the pipeline
- *     render a small concern chip on the card.
+ *     do NOT render a concern chip on the card (ASS-748: the lane already
+ *     says the card is in auto-review, so concern/classifier markers are
+ *     suppressed as lane-derivable noise).
  *
  * Fully fixture-driven via `page.route` intercepts so the spec doesn't
  * depend on a real running orchestrator.
@@ -261,7 +263,11 @@ test.describe('Auto-review multi-aspect surface', () => {
     await expect(modal).toHaveCount(0);
   });
 
-  test('job with quality:concerns tag renders a ⚠ concern chip', async ({ page }) => {
+  // ASS-748: concern/classifier tags are lane-derivable noise. A card in
+  // 4-auto-review must NOT repeat that it is being reviewed nor surface the
+  // pipeline's `<namespace>:concerns` markers; the card carries only
+  // non-lane-derivable information.
+  test('job with quality:concerns tags renders no concern chip and no lane-mirroring status', async ({ page }) => {
     const job = jobStub({
       id: 'fixture-concerns',
       title: 'Auto-review flagged concerns',
@@ -286,20 +292,16 @@ test.describe('Auto-review multi-aspect surface', () => {
 
     const card = page.locator('[data-testid="job-card"]', { hasText: 'Auto-review flagged concerns' });
     await expect(card).toBeVisible({ timeout: 10_000 });
-    await expect(card.getByTestId('job-card-auto-review-status')).toContainText('queued for review');
 
-    const concernChips = card.locator('[data-testid="job-card-concern-chip"]');
-    await expect(concernChips).toHaveCount(2);
+    // Concern chips are suppressed: the lane already says it is in auto-review.
+    await expect(card.locator('[data-testid="job-card-concern-chip"]')).toHaveCount(0);
+    await expect(card.getByText('quality:concerns')).toHaveCount(0);
+    await expect(card.getByText('docs:concerns')).toHaveCount(0);
 
-    // First chip is the warning glyph plus the namespaced label.
-    const first = concernChips.first();
-    await expect(first).toContainText('⚠');
-    await expect(first).toContainText('quality:concerns');
+    // No lane-mirroring "queued for review" / "review pending" status pill.
+    await expect(card.getByTestId('job-card-auto-review-status')).toHaveCount(0);
 
-    // Second chip from the docs aspect.
-    await expect(concernChips.nth(1)).toContainText('docs:concerns');
-
-    // Capture concern-chip evidence on the card.
+    // Capture suppression evidence on the card.
     await page.setViewportSize({ width: 1400, height: 900 });
     await card.screenshot({ path: 'screenshots/auto-review/auto-review-concerns-card.png' });
   });
