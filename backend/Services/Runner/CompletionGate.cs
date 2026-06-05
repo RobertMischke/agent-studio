@@ -17,7 +17,7 @@ public static class CompletionGate
     private const int MaxFindingLength = 220;
 
     private static readonly Regex ResultLineRegex = new(
-        @"^\s*-\s*Result:\s*(?<result>[A-Za-z]+)\s*$",
+        @"^\s*[-*]?\s*Result:\s*(?<result>[A-Za-z]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
     private static readonly Regex UncheckedItemRegex = new(
@@ -30,9 +30,39 @@ public static class CompletionGate
 
     private static readonly Regex WhitespaceRun = new(@"\s+", RegexOptions.Compiled);
 
+    // The build / compile / test-failure vocabulary. Kept as one fragment so the
+    // generic incomplete-work scan and the "claims success but build failed"
+    // contradiction check (see BuildErrorEvidenceRegex) share exactly one
+    // definition and cannot drift. Extended mode (?x): literal spaces are
+    // ignored, so spacing is written with \s.
+    private const string BuildErrorEvidence = @"
+        build\s+fail(?:s|ed|ing)? |
+        build\s+(?:is\s+)?broken |
+        failed\s+to\s+build |
+        compilation\s+failed |
+        compile\s+errors? |
+        does(?:n'?t|\s+not)\s+compile |
+        wo(?:n'?t|uld\s+not)\s+compile |
+        error\s+TS\d+ |
+        error\s+CS\d+ |
+        error\s+NG\d+ |
+        typescript\s+errors? |
+        npm\s+ERR |
+        application\s+bundle\s+generation\s+failed |
+        tests?\s+fail(?:s|ed|ing)?";
+
+    /// <summary>
+    /// Build / compile / test-failure evidence on its own. Used by the
+    /// contradiction rule: a run that claims success while one of these signals
+    /// appears in its own close-out is reported as a finding.
+    /// </summary>
+    private static readonly Regex BuildErrorEvidenceRegex = new(
+        @"(?ix)\b(?:" + BuildErrorEvidence + @")\b",
+        RegexOptions.Compiled);
+
     private static readonly Regex IncompleteEvidenceRegex = new(
         @"(?ix)
-        \b(
+        \b(?:
             incomplete |
             unfinished |
             not\s+finished |
@@ -40,14 +70,15 @@ public static class CompletionGate
             pending |
             file-state\s+mismatch |
             route[-\s]?wiring\s+pending |
-            build\s+failed |
-            failed\s+to\s+build |
-            compilation\s+failed |
-            tests?\s+failed |
-            apply_patch\b.{0,80}\b(failed|mismatch|reject(?:ed)?) |
-            patch\b.{0,80}\b(failed|did\s+not\s+apply|reject(?:ed)?)
+            apply_patch\b.{0,80}\b(?:failed|mismatch|reject(?:ed)?) |
+            patch\b.{0,80}\b(?:failed|did\s+not\s+apply|reject(?:ed)?) |"
+        + BuildErrorEvidence + @"
         )\b",
         RegexOptions.Compiled);
+
+    private static readonly Regex SuccessResultRegex = new(
+        @"^(?:success|succeeded|done|complete|completed|pass|passed)$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public enum CompletionGateAction
     {
@@ -124,16 +155,15 @@ public static class CompletionGate
         }
 
         var status = statusMarkdown ?? string.Empty;
+        var logTail = TailLines(recentLog ?? string.Empty, 80);
         var result = ResultLineRegex.Match(status);
-        if (result.Success)
+        string? resultToken = result.Success ? result.Groups["result"].Value.Trim() : null;
+        if (resultToken is not null &&
+            (resultToken.Equals("Partial", StringComparison.OrdinalIgnoreCase) ||
+             resultToken.Equals("Failed", StringComparison.OrdinalIgnoreCase) ||
+             resultToken.Equals("Blocked", StringComparison.OrdinalIgnoreCase)))
         {
-            var token = result.Groups["result"].Value.Trim();
-            if (token.Equals("Partial", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("Failed", StringComparison.OrdinalIgnoreCase) ||
-                token.Equals("Blocked", StringComparison.OrdinalIgnoreCase))
-            {
-                Add($"Status result is {token}.");
-            }
+            Add($"Status result is {resultToken}.");
         }
 
         foreach (var item in ExtractOpenItemsSection(status))
@@ -150,10 +180,22 @@ public static class CompletionGate
         // The status summary is the preferred result surface. The log tail is a
         // fallback for failures the summarizer omitted, especially CLI/tool
         // errors near the final DONE marker.
-        foreach (var line in EvidenceLines(TailLines(recentLog ?? string.Empty, 80)))
+        foreach (var line in EvidenceLines(logTail))
         {
             if (IncompleteEvidenceRegex.IsMatch(line))
                 Add(line);
+        }
+
+        // Contradiction rule: the run claims success yet its own close-out
+        // reports a build / compile / test failure. The generic scan above
+        // already surfaces the raw failing line, but this makes the conflict
+        // explicit so the orchestrator (and the operator) sees that the success
+        // claim is contradicted by the evidence rather than just "a build line".
+        if (resultToken is not null && SuccessResultRegex.IsMatch(resultToken))
+        {
+            var contradiction = FirstBuildErrorLine(status) ?? FirstBuildErrorLine(logTail);
+            if (contradiction is not null)
+                Add($"Status result is {resultToken} but build/test failure evidence was found: {contradiction}");
         }
 
         return findings.Count > MaxFindings ? findings.Take(MaxFindings).ToList() : findings;
@@ -188,6 +230,16 @@ public static class CompletionGate
             var bullet = BulletRegex.Match(trimmed);
             yield return bullet.Success ? bullet.Groups["text"].Value : trimmed;
         }
+    }
+
+    private static string? FirstBuildErrorLine(string text)
+    {
+        foreach (var line in EvidenceLines(text))
+        {
+            if (BuildErrorEvidenceRegex.IsMatch(line))
+                return line;
+        }
+        return null;
     }
 
     private static IEnumerable<string> EvidenceLines(string text)

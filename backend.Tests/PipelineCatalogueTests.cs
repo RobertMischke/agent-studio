@@ -35,9 +35,46 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post: 4 aspects + commit-attribution + lint-scss + regression-radar
-        // + orchestrator decision + 5 opt-in drift dimensions (DRIFT Nachtrag).
-        Assert.Equal(13, p.Post.Count);
+        // Post: post-core orchestrator-review + 4 aspects + commit-attribution
+        // + lint-scss + regression-radar + final orchestrator decision + 5
+        // opt-in drift dimensions (DRIFT Nachtrag).
+        Assert.Equal(14, p.Post.Count);
+    }
+
+    [Fact]
+    public void StandardPipeline_OrchestratorReview_IsFirstPostStep_AndSharesDisplayNameWithDecision()
+    {
+        // The orchestrator-review completeness check is the FIRST post-step (runs
+        // straight after the core run, ahead of the aspect verdicts) so an
+        // unfinished close-out is caught before any expensive review pass. It and
+        // the final decision step are the same conceptual gate at two points, so
+        // they share one display name and both surface as "Orchestrator-Review".
+        var p = PipelineCatalogue.Standard;
+        var review = p.Post[0];
+        Assert.Equal(PipelineCatalogue.OrchestratorReviewStepId, review.Id);
+        Assert.Equal(PipelineCatalogue.OrchestratorReviewDisplayName, review.DisplayName);
+        Assert.Equal(StepKind.Orchestrator, review.Kind);
+        Assert.Equal(StepRunMode.Sequential, review.RunMode);
+        Assert.True(review.Idempotent);
+        Assert.True(review.DefaultEnabled);
+        Assert.Empty(review.DependsOn);
+
+        // It precedes every aspect so the gate runs before the verdicts.
+        var reviewIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorReviewStepId);
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            var aspectIndex = p.Post.FindIndex(s => s.Id == aspectId);
+            Assert.True(reviewIndex < aspectIndex,
+                $"orchestrator-review (idx {reviewIndex}) must precede aspect {aspectId} (idx {aspectIndex})");
+        }
+
+        // Both orchestrator-review rows carry the same shared display name.
+        var decision = p.Post.First(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.Equal(PipelineCatalogue.OrchestratorReviewDisplayName, decision.DisplayName);
+        var orchestratorRows = p.Post
+            .Where(s => s.DisplayName == PipelineCatalogue.OrchestratorReviewDisplayName)
+            .ToList();
+        Assert.Equal(2, orchestratorRows.Count);
     }
 
     [Fact]

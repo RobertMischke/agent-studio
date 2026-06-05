@@ -340,7 +340,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 if (string.IsNullOrWhiteSpace(entry.Path)) continue;
                 if (!Directory.Exists(entry.Path)) continue;
 
-                foreach (var pending in EnumeratePending(entry))
+                foreach (var pending in EnumeratePending(workspace, entry))
                 {
                     if (ct.IsCancellationRequested) return;
                     _statusSnapshot.RecordPending();
@@ -631,7 +631,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // HashSet keeps a second folder for the same job id (rare, e.g. mid
             // crash-recovery) from being appended twice in one sweep.
             if (records.Any(r => r.JobId == job.Id)) continue;
-            if (!repairedKeys.Add($"{job.ProjectName} {job.Id}")) continue;
+            if (!repairedKeys.Add($"{job.ProjectName} {job.Id}")) continue;
 
             _humanReviewEscalation.RecordVerdictAndStatus(
                 job.ProjectName, job.Id, job.FolderPath,
@@ -908,10 +908,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         // Budget left: reissue, explicitly demanding a terminal sentinel on
-        // close-out.
+        // close-out. A silent finish is a reviewable signal, not something to
+        // ignore: run the same completion-gate scan over the run's own evidence
+        // and, when it finds unfinished work (open items / build failures), append
+        // those items so the reissue foregrounds them instead of only demanding a
+        // sentinel.
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var (_, recentLog) = LoadTaskContext(pending);
+        var findings = CompletionGate.ExtractFindings(LoadStatusSummary(current.FolderPath), recentLog);
+
         var followUp = RunOutcomePolicy.BuildMissingSentinelInterventionPrompt(
             "the previous run ended without any [[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel");
-        await ReissueNoCompletionSignalAsync(workspace, entry, pending, followUp, ct);
+        if (findings.Count > 0)
+        {
+            followUp += "\n\n" + CompletionGate.BuildFollowUp(findings);
+        }
+        await ReissueNoCompletionSignalAsync(workspace, entry, pending, followUp, findings.Count, ct);
     }
 
     private async Task ReissueNoCompletionSignalAsync(
@@ -919,10 +931,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WatchPathEntry entry,
         PendingDecision pending,
         string followUp,
+        int gateFindings,
         CancellationToken ct)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
-        var reason = "Run finished without a terminal sentinel; reissuing and demanding a deterministic close-out signal.";
+        var reason = gateFindings > 0
+            ? $"Run finished without a terminal sentinel and its own close-out lists {gateFindings} unfinished item(s); reissuing with them foregrounded."
+            : "Run finished without a terminal sentinel; reissuing and demanding a deterministic close-out signal.";
 
         _chatLog.Append(current, OrchestratorMessageKind.Reissue,
             $"Decision: reissue (no completion signal). Reason: {reason}");
@@ -930,6 +945,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var moved = MoveReissueToReadyTop(current, entry, "NO-SIGNAL");
         if (moved != null)
         {
+            // Post-core Orchestrator-Review row: the silent-finish reissue is the
+            // same completeness gate firing without a sentinel, so record it for
+            // the Overview pipeline.
+            RecordOrchestratorReviewStep(moved.FolderPath, PipelineStepStatus.Failed,
+                DecisionVerdictReissue, reason);
             await WriteFollowUpFileAsync(moved, followUp, ct);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
@@ -970,7 +990,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 current.Id, move.Status, move.Message);
         }
 
-        EmitVerdictTimeline(move.NewFolderPath ?? current.FolderPath,
+        var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+        RecordOrchestratorReviewStep(escalatedFolder, PipelineStepStatus.Failed,
+            DecisionVerdictEscalate, reason);
+
+        EmitVerdictTimeline(escalatedFolder,
             TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, reason,
             BuildEscalateDetails("no-completion-signal", reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
@@ -1072,6 +1096,34 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resumes the in-flight record so CORE survives, and only begins a
         // fresh one when no run record exists yet (legacy / hand-moved job).
         _pipelineLog?.EnsureRun(current.FolderPath, PipelineCatalogue.Standard, entry.Name, current.Id);
+
+        // Post-core completeness gate (Orchestrator-Review, the first post-step):
+        // before spending the parallel aspect review, scan the run's OWN close-out
+        // evidence - status Open Items / Notes, the Result line, and the log tail -
+        // for unfinished-work signals: open checklist boxes, self-reported build /
+        // compile / test failures, or a success claim contradicted by a build
+        // error. A hit short-circuits the accept and drives the task to a
+        // conclusion: reissue with the items foregrounded while the shared reissue
+        // budget allows, otherwise escalate to 5-human-review. This closes the
+        // silent-completion gap (ASS-764 self-reported build error accepted with
+        // concerns; ASS-766 silent finish + open items parked without a verdict)
+        // where a run says done while its own evidence still lists open work.
+        var gate = CompletionGate.Evaluate(
+            statusSummary, recentLog,
+            CountPriorReissues(workspace, entry.Name, current.Id),
+            ConfiguredMaxReissues());
+        if (gate.IsIncomplete)
+        {
+            await HandleCompletionGateAsync(workspace, entry, pending, current, gate, ct);
+            return;
+        }
+
+        // Gate clean: record the post-core Orchestrator-Review row as a passed
+        // completeness check so the Overview pipeline shows the gate ran ahead of
+        // the aspect verdicts, then fall through to the normal aspect review and
+        // the final Orchestrator-Review decision below.
+        RecordOrchestratorReviewStep(current.FolderPath, PipelineStepStatus.Passed,
+            ReviewVerdictComplete, gate.Reason);
 
         // Per-project pipeline config: drop aspects the project disabled and
         // route each remaining aspect's CLI call to its configured model
@@ -1388,6 +1440,144 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     internal const string DecisionVerdictAcceptWithConcerns = "accept-with-concerns";
     internal const string DecisionVerdictReissue = "reissue";
     internal const string DecisionVerdictEscalate = "escalate";
+
+    /// <summary>
+    /// Verdict token for a clean post-core
+    /// <see cref="PipelineCatalogue.OrchestratorReviewStepId"/> completeness
+    /// check: the run's own close-out carried no unfinished-work evidence, so the
+    /// gate let the task proceed to the aspect review. A non-clean gate stamps
+    /// <see cref="DecisionVerdictReissue"/> or <see cref="DecisionVerdictEscalate"/>
+    /// instead, mirroring the final decision row's vocabulary.
+    /// </summary>
+    internal const string ReviewVerdictComplete = "complete";
+
+    /// <summary>
+    /// Drive a non-clean completion-gate decision to a conclusion so the task can
+    /// never park in 4-auto-review without a verdict. Reissue (budget left) sends
+    /// the card back to 2-ready with the gate's findings foregrounded into a
+    /// follow-up; escalate (budget spent) hands it to 5-human-review. Both record
+    /// the post-core <see cref="PipelineCatalogue.OrchestratorReviewStepId"/> row
+    /// so the gate's ruling is visible in the Overview pipeline. The in-flight
+    /// pipeline run is completed before the lane move so the record travels with
+    /// the folder.
+    /// </summary>
+    private async Task HandleCompletionGateAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        TaskInfo current,
+        CompletionGate.Decision gate,
+        CancellationToken ct)
+    {
+        _pipelineLog?.Complete(current.FolderPath);
+
+        var findingsBlock = string.Join("; ", gate.Findings.Take(CompletionGate.MaxFindings));
+        var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+
+        if (gate.Action == CompletionGate.CompletionGateAction.Escalate)
+        {
+            _chatLog.AppendSupervisor(current, "escalate",
+                $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {gate.Reason}. Promoted to 5-human-review.");
+
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+            if (move.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after completion-gate escalate: {Status} {Message}",
+                    current.Id, move.Status, move.Message);
+            }
+
+            var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+            RecordOrchestratorReviewStep(escalatedFolder, PipelineStepStatus.Failed,
+                DecisionVerdictEscalate, gate.Reason);
+
+            EmitVerdictTimeline(escalatedFolder,
+                TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
+                BuildEscalateDetails("completion-gate", gate.Reason, priorReissues));
+
+            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow,
+                JobId: current.Id,
+                Project: entry.Name,
+                Kind: ReviewDecisionKind.Escalate,
+                Reason: gate.Reason,
+                Prompt: "(completion-gate static scan)",
+                Response: findingsBlock,
+                FollowUp: string.Empty));
+
+            _statusSnapshot.RecordEscalate();
+            return;
+        }
+
+        // Reissue: foreground the gate's findings so the next run finishes the
+        // open work instead of restarting blind.
+        var followUp = CompletionGate.BuildFollowUp(gate.Findings);
+        var moved = MoveReissueToReadyTop(current, entry, "completion-gate");
+        if (moved == null)
+        {
+            // Move failed -> no operator-facing banner; the DONE stays unresolved
+            // and the next tick retries.
+            return;
+        }
+
+        RecordOrchestratorReviewStep(moved.FolderPath, PipelineStepStatus.Failed,
+            DecisionVerdictReissue, gate.Reason);
+
+        await WriteFollowUpFileAsync(moved, followUp, ct);
+
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        var count = gate.Findings.Count;
+        var noun = count == 1 ? "item" : "items";
+        _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+            $"Auto-review sent \"{title}\" back to 2-ready ({count} unfinished {noun} from its own close-out).");
+
+        EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            $"Reopened: completion gate found {count} unfinished {noun} in the run's own close-out.",
+            BuildReopenDetails("completion-gate",
+                CountPriorReissues(workspace, entry.Name, current.Id), findingsBlock));
+
+        _statusSnapshot.RecordReissue();
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: gate.Reason,
+            Prompt: "(completion-gate static scan)",
+            Response: findingsBlock,
+            FollowUp: followUp));
+    }
+
+    /// <summary>
+    /// Record the post-core <see cref="PipelineCatalogue.OrchestratorReviewStepId"/>
+    /// completeness-check row. This is the FIRST of the two "Orchestrator-Review"
+    /// rows the Overview pipeline shows (the second is the final
+    /// <see cref="PipelineCatalogue.OrchestratorDecisionStepId"/> decision). No-op
+    /// when the pipeline log is not wired (stand-alone test path) or no run record
+    /// exists yet.
+    /// </summary>
+    private void RecordOrchestratorReviewStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        string verdict,
+        string? reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.OrchestratorReviewStepId,
+            Kind = StepKind.Orchestrator,
+            Status = status,
+            StartedAt = now,
+            CompletedAt = now,
+            DurationMs = 0,
+            Verdict = verdict,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
 
     /// <summary>
     /// Record the <see cref="PipelineCatalogue.OrchestratorDecisionStepId"/>
@@ -1782,6 +1972,44 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         return ReviewDecisionLog.ReadAll(workspace, project)
             .Count(r => r.JobId == jobId && r.Kind == ReviewDecisionKind.Reissue);
+    }
+
+    /// <summary>
+    /// No-verdict guard (requirement 7): true when a 4-auto-review card has sat
+    /// past the grace window with NO recorded orchestrator verdict at all. This
+    /// rescues a card whose terminal sentinel was resolved on a prior tick but
+    /// whose decision never landed - e.g. a lane move that silently failed to
+    /// stick - so it is driven to a conclusion instead of hanging in
+    /// 4-auto-review without a verdict.
+    ///
+    /// Two cheap preconditions, mtime first so the common (fresh) case never
+    /// touches the decision journal: the CLI log must be older than the
+    /// configurable grace window
+    /// (<c>ReviewDecisionOrchestrator:NoVerdictGraceMinutes</c>, default 15),
+    /// and the journal must hold no record for this job. The no-verdict
+    /// precondition makes force-processing re-bill-safe: the first force-process
+    /// appends a decision record, after which this returns false.
+    /// </summary>
+    private bool IsStaleWithoutVerdict(string workspace, string project, TaskInfo info, string logPath)
+    {
+        var graceMinutes = _configuration.GetValue("ReviewDecisionOrchestrator:NoVerdictGraceMinutes", 15);
+        if (graceMinutes <= 0) return false;
+
+        DateTime lastWriteUtc;
+        try { lastWriteUtc = File.GetLastWriteTimeUtc(logPath); }
+        catch { return false; }
+
+        if (DateTime.UtcNow - lastWriteUtc < TimeSpan.FromMinutes(graceMinutes))
+            return false;
+
+        try
+        {
+            return !ReviewDecisionLog.ReadAll(workspace, project).Any(r => r.JobId == info.Id);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -2283,7 +2511,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return string.Join('\n', records.Select(r => $"- {r.CreatedAt:u} [{r.Kind}] {r.Reason}"));
     }
 
-    private IEnumerable<PendingDecision> EnumeratePending(WatchPathEntry entry)
+    private IEnumerable<PendingDecision> EnumeratePending(string workspace, WatchPathEntry entry)
     {
         // ADR-0024: list 4-auto-review through the typed layer
         // instead of walking the lane directory by hand. The cache
@@ -2326,6 +2554,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 if (ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log))
                 {
                     yield return new PendingDecision(info, ReviewSignalKind.NoCompletionSignal, LineNumber: -1, Reason: null, NeedsInput: null);
+                }
+                else if (IsStaleWithoutVerdict(workspace, entry.Name, info, logPath))
+                {
+                    // No-verdict guard: a card that has sat in 4-auto-review past
+                    // the grace window with no recorded orchestrator verdict at
+                    // all (its sentinel was resolved on a prior tick but no
+                    // decision ever landed - e.g. a move that silently failed to
+                    // stick). Force-process it as a no-completion-signal so it is
+                    // driven to a conclusion rather than hanging without a verdict.
+                    // The no-verdict precondition makes this re-bill-safe: the
+                    // first force-process appends a decision record, after which
+                    // the guard no longer fires.
+                    yield return new PendingDecision(info, ReviewSignalKind.NoCompletionSignal, LineNumber: -1, Reason: "no-verdict-timeout", NeedsInput: null);
                 }
                 continue;
             }

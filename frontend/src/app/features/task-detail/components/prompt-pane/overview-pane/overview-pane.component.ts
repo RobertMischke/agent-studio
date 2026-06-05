@@ -233,6 +233,8 @@ const PIPELINE_STEP_EXPLANATIONS: Record<string, string> = {
     'Runs stylelint over the frontend SCSS tree after the run. Depending on the configured gate mode (off, warn, or fail) a failure can trigger a re-issue back to Ready.',
   'post-regression-radar':
     'Deterministic spec-change analysis. Diffs the run\'s commit range and classifies each changed spec as intended, at-risk, or drift. Reporting only: it never triggers a re-issue.',
+  'post-orchestrator-review':
+    'Post-core completeness check. Right after the agent reports done, a deterministic scan reads the run\'s own close-out evidence (open items, notes, the result line, and the log tail) for unfinished-work signals such as open checklist boxes or self-reported build / test failures. A hit re-issues the task with those items foregrounded before any review pass runs, so a task is never accepted while its own evidence says it is unfinished.',
   'post-orchestrator-decision':
     'The orchestrator\'s single final ruling. Aggregates the parallel aspect verdicts and decides re-issue, accept-as-done, or escalate. This is the step that moves the task out of auto-review.',
   'post-drift-adr-code':

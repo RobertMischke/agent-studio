@@ -150,7 +150,31 @@ public static class PipelineCatalogue
     /// <see cref="OrchestratorApi.Services.RegressionRadar.RegressionRadarService"/>.
     /// </summary>
     public const string RegressionRadarStepId = "post-regression-radar";
+
+    /// <summary>
+    /// Post-core completeness check that runs immediately after the core agent
+    /// run, before the aspect verdicts. It is the deterministic
+    /// <c>CompletionGate</c> scan of the run's own close-out evidence
+    /// (status Open Items / Notes, the Result line, and the log tail) for
+    /// unfinished-work signals: open checklist boxes, self-reported build / test
+    /// failures, or a silent finish with leftover items. A hit short-circuits the
+    /// accept and reissues with the items foregrounded so a task can never be
+    /// accepted while its own evidence says it is unfinished. It surfaces in the
+    /// Overview pipeline as the FIRST "Orchestrator-Review" row (the final
+    /// <see cref="OrchestratorDecisionStepId"/> row is the second one). Recorded
+    /// by <c>ReviewDecisionOrchestrator</c>.
+    /// </summary>
+    public const string OrchestratorReviewStepId = "post-orchestrator-review";
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
+
+    /// <summary>
+    /// Shared display name for both orchestrator-review rows: the post-core
+    /// completeness check (<see cref="OrchestratorReviewStepId"/>) and the final
+    /// accept / reissue / escalate decision (<see cref="OrchestratorDecisionStepId"/>).
+    /// They are the same conceptual gate at two points in the run, so they share
+    /// one label and the FE renders both generically from it.
+    /// </summary>
+    public const string OrchestratorReviewDisplayName = "Orchestrator-Review";
 
     /// <summary>
     /// The "Abbruch-Review" (post-abort review) step id. Unlike every other
@@ -320,6 +344,17 @@ public static class PipelineCatalogue
             ],
             Post =
             [
+                new PipelineStep
+                {
+                    Id = OrchestratorReviewStepId,
+                    DisplayName = OrchestratorReviewDisplayName,
+                    Kind = StepKind.Orchestrator,
+                    // Runs straight after the core run, ahead of the aspect
+                    // verdicts, so an unfinished close-out is caught before any
+                    // expensive review pass. No intra-section dependency.
+                    RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                },
                 .. aspects,
                 new PipelineStep
                 {
@@ -357,7 +392,7 @@ public static class PipelineCatalogue
                 new PipelineStep
                 {
                     Id = OrchestratorDecisionStepId,
-                    DisplayName = "Auto-review decision",
+                    DisplayName = OrchestratorReviewDisplayName,
                     Kind = StepKind.Orchestrator,
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [.. AspectStepIds],
