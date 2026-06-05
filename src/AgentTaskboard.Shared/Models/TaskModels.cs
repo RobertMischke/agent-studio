@@ -95,6 +95,14 @@ public record TaskInfo
     /// without <c>commits</c> are surfaced as <c>[commit]</c> by the scanner.
     /// </summary>
     public List<TaskCommitInfo> Commits { get; init; } = [];
+    /// <summary>
+    /// SHAs the attribution rule withheld from this task (e.g. a crash-recovery
+    /// commit for another task that landed inside this run window). Kept for
+    /// build compatibility with the commit-aggregation consumers; UI exposure
+    /// of manual exclude/include was removed (ASS-761) and pending a clean
+    /// follow-up. Default empty.
+    /// </summary>
+    public List<TaskExcludedCommitInfo> ExcludedCommits { get; init; } = [];
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to
     /// <see cref="DefaultClientIdentity.Id"/> for legacy jobs whose
@@ -1969,8 +1977,11 @@ public static class CommitAttributionKinds
     /// attribution step). Treated as "trust the existing stamp" by readers.
     /// </summary>
     public const string Legacy = "legacy";
+    /// <summary>Operator manually re-included a commit that the rule had excluded.
+    /// Kept for build compatibility; manual exclude/include UI was removed (ASS-761).</summary>
+    public const string ManualIncludeAfterExclude = "manual-include-after-exclude";
 
-    public static readonly string[] All = [Automatic, Legacy];
+    public static readonly string[] All = [Automatic, Legacy, ManualIncludeAfterExclude];
 
     public static string Normalize(string? value)
     {

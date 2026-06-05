@@ -178,10 +178,10 @@ public static class CompletionGate
             if (trimmed.Length == 0) continue;
             if (IsNoneLine(trimmed)) continue;
 
-            var unchecked = UncheckedItemRegex.Match(trimmed);
-            if (unchecked.Success)
+            var uncheckedMatch = UncheckedItemRegex.Match(trimmed);
+            if (uncheckedMatch.Success)
             {
-                yield return unchecked.Groups["text"].Value;
+                yield return uncheckedMatch.Groups["text"].Value;
                 continue;
             }
 

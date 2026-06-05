@@ -288,7 +288,7 @@ public class TaskMutationService
             Message = prior.Subject ?? "",
             FilesChanged = 0,
             Files = [],
-            At = prior.At ?? DateTime.UtcNow,
+            At = prior.At == default ? DateTime.UtcNow : prior.At,
             Attribution = CommitAttributionKinds.ManualIncludeAfterExclude,
             Confidence = null,
         });

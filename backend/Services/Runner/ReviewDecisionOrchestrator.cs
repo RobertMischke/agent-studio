@@ -380,8 +380,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             // deterministic sentinel-demanding reissue only
                             // if the model is unavailable or malformed.
                             await ProcessNoCompletionSignalAsync(
-                                workspace, entry, pending, cliBinary, model,
-                                maxPerHour, maxReissues, ct);
+                                workspace, entry, pending, maxReissues, ct);
                             _statusSnapshot.RecordReissue();
                             continue;
                         }
