@@ -18,6 +18,12 @@ export interface MarkdownImageOptions {
    */
   codeLineNumbers?: boolean;
   codeLineNumberThreshold?: number;
+  taskReferences?: readonly MarkdownTaskReference[];
+}
+
+export interface MarkdownTaskReference {
+  label: string;
+  taskKey: string;
 }
 
 export function markdownToHtml(markdown: string, options: MarkdownImageOptions = {}): string {
@@ -25,7 +31,8 @@ export function markdownToHtml(markdown: string, options: MarkdownImageOptions =
   const local = new Marked(buildMarkedExtension(options));
   try {
     const parsed = local.parse(markdown);
-    return compactHtml(sanitizeHtml(typeof parsed === 'string' ? parsed : ''));
+    const html = linkTaskReferencesInHtml(typeof parsed === 'string' ? parsed : '', options.taskReferences);
+    return compactHtml(sanitizeHtml(html));
   } catch {
     return `<pre><code>${escapeHtml(markdown)}</code></pre>`;
   }
@@ -220,11 +227,86 @@ function sanitizeHtml(raw: string): string {
       'data-line-count',
       'data-line',
       'data-lang',
+      'data-task-ref',
+      'data-task-key',
       'aria-hidden',
     ],
     FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'script'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick'],
   });
+}
+
+export function linkTaskReferencesInHtml(
+  html: string,
+  references: readonly MarkdownTaskReference[] | null | undefined,
+): string {
+  if (!html || !references?.length || typeof document === 'undefined') return html;
+  const unique = uniqueTaskReferences(references);
+  if (!unique.length) return html;
+  const byLabel = new Map(unique.map(ref => [ref.label.toLowerCase(), ref]));
+  const pattern = new RegExp(`(^|[^A-Za-z0-9_-])(${unique.map(ref => escapeRegExp(ref.label)).join('|')})(?=$|[^A-Za-z0-9_-])`, 'gi');
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      if (parent.closest('a, code, pre, kbd, samp, script, style')) return NodeFilter.FILTER_REJECT;
+      pattern.lastIndex = 0;
+      return pattern.test(node.textContent ?? '')
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  const nodes: Text[] = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+  for (const node of nodes) {
+    pattern.lastIndex = 0;
+    const fragment = document.createDocumentFragment();
+    let cursor = 0;
+    let match: RegExpExecArray | null;
+    const text = node.textContent ?? '';
+    while ((match = pattern.exec(text)) !== null) {
+      const prefix = match[1] ?? '';
+      const label = match[2] ?? '';
+      const labelStart = match.index + prefix.length;
+      const ref = byLabel.get(label.toLowerCase());
+      if (!ref) continue;
+      if (labelStart > cursor) fragment.append(document.createTextNode(text.slice(cursor, labelStart)));
+      const anchor = document.createElement('a');
+      anchor.href = `#task:${encodeURIComponent(ref.taskKey)}`;
+      anchor.dataset.taskRef = 'true';
+      anchor.dataset.taskKey = ref.taskKey;
+      anchor.textContent = text.slice(labelStart, labelStart + label.length);
+      fragment.append(anchor);
+      cursor = labelStart + label.length;
+    }
+    if (cursor < text.length) fragment.append(document.createTextNode(text.slice(cursor)));
+    node.replaceWith(fragment);
+  }
+  return template.innerHTML;
+}
+
+function uniqueTaskReferences(references: readonly MarkdownTaskReference[]): MarkdownTaskReference[] {
+  const byLabel = new Map<string, MarkdownTaskReference>();
+  const duplicateLabels = new Set<string>();
+  for (const ref of references) {
+    const label = ref.label.trim();
+    if (!label || !ref.taskKey) continue;
+    const key = label.toLowerCase();
+    if (byLabel.has(key)) {
+      duplicateLabels.add(key);
+      continue;
+    }
+    byLabel.set(key, { label, taskKey: ref.taskKey });
+  }
+  for (const duplicate of duplicateLabels) byLabel.delete(duplicate);
+  return [...byLabel.values()].sort((a, b) => b.label.length - a.label.length);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function compactHtml(html: string): string {
