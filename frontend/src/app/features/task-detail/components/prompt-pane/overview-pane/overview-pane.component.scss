@@ -583,6 +583,17 @@
   &__cost { width: 64px; }
 }
 
+// Structured steering trace rendered under an orchestrator step row
+// (Epic ASS-776). Indented and rail-marked so it reads as belonging to the
+// step above it, not as a peer pipeline row.
+.ov-pl-steer {
+  display: block;
+  margin: 2px 0 6px;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--studio-border);
+  margin-left: calc(var(--ov-pipeline-status-col) + var(--studio-spacing-1));
+}
+
 .ov-pl-step {
   display: grid;
   grid-template-columns:

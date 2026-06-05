@@ -5,6 +5,12 @@ import {
   resolveAspectFindings,
   type AspectFinding,
 } from '../../../../components/aspect-findings';
+import {
+  SteeringDetailComponent,
+  isSteeringKind,
+  steeringInfoFromEvent,
+  type SteeringInfo,
+} from '../../../../components/steering-detail';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import {
   TIMELINE_KIND,
@@ -32,7 +38,7 @@ import {
   selector: 'app-task-timeline-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective, AspectFindingsListComponent],
+  imports: [TooltipDirective, AspectFindingsListComponent, SteeringDetailComponent],
   templateUrl: './task-timeline-pane.component.html',
   styleUrl: './task-timeline-pane.component.scss',
 })
@@ -62,6 +68,21 @@ export class TaskTimelinePaneComponent {
   /** True for the three completion-loop terminal kinds (emphasised rows). */
   isVerdictKind(kind: string): boolean {
     return TaskTimelinePaneComponent.VERDICT_KINDS.has(kind);
+  }
+
+  /**
+   * True when this event is a steering step (accept / reissue / escalate /
+   * continuation). Such rows render the shared structured steering block
+   * (verdict + reason + collapsible prompt + context) instead of the ad-hoc
+   * gap/reason/details rendering used for ordinary lifecycle rows.
+   */
+  isSteeringEvent(kind: string): boolean {
+    return isSteeringKind(kind);
+  }
+
+  /** Project a steering event into the shared {@link SteeringInfo} block. */
+  steeringInfo(event: TaskTimelineEvent): SteeringInfo | null {
+    return steeringInfoFromEvent(event);
   }
 
   verdictLabel(v: CompletionLoopVerdict | null): string {
@@ -126,18 +147,6 @@ export class TaskTimelinePaneComponent {
     return Object.entries(d)
       .filter(([k]) => !hidden.has(k))
       .map(([key, value]) => ({ key, value }));
-  }
-
-  /**
-   * The exact steering prompt the orchestrator handed the agent for this
-   * reissue/continuation, when recorded (ASS-734 traceability). Rendered as a
-   * collapsible "Prompt + Context" block so the operator can verify the agent
-   * was told to steer the diff rather than restart, without leaving the
-   * Timeline. Null when the event carries no recorded prompt.
-   */
-  steeringPrompt(event: TaskTimelineEvent): string | null {
-    const value = event.details?.['followUpPrompt'];
-    return value && value.trim().length > 0 ? value : null;
   }
 
   /**

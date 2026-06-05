@@ -380,6 +380,16 @@
               }
             </span>
           </div>
+          @if (steeringForRow(row); as steer) {
+            <!-- Structured steering trace for the orchestrator review / decision
+                 steps (Epic ASS-776): verdict + reason + collapsible steer
+                 prompt + context, mirroring the Timeline, instead of only the
+                 bare verdict token above. -->
+            <app-steering-detail class="ov-pl-steer"
+                                 [info]="steer"
+                                 [showVerdictChip]="true"
+                                 data-testid="overview-pipeline-step-steering" />
+          }
         }
       </div>
 

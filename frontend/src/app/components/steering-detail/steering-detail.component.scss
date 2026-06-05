@@ -1,0 +1,173 @@
+:host { display: block; }
+
+.steer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  // Toned verdict chip. Colours come exclusively from the central severity
+  // tokens so the chip flips with the theme (ASS-737).
+  &__chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--studio-bg-hover);
+    border: 1px solid var(--studio-border);
+    color: var(--studio-fg-dim);
+
+    &--ok {
+      color: var(--severity-pass);
+      background: color-mix(in srgb, var(--severity-pass) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-pass) 40%, transparent);
+    }
+
+    &--warn {
+      color: var(--severity-warn);
+      background: color-mix(in srgb, var(--severity-warn) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-warn) 40%, transparent);
+    }
+
+    &--danger {
+      color: var(--severity-high);
+      background: color-mix(in srgb, var(--severity-high) 14%, transparent);
+      border-color: color-mix(in srgb, var(--severity-high) 40%, transparent);
+    }
+
+    &--neutral {
+      color: var(--studio-fg-dim);
+    }
+  }
+
+  &__reason {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--studio-fg);
+    word-break: break-word;
+
+    &--inline {
+      margin: 0;
+    }
+  }
+
+  &__reason-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--studio-fg-dim);
+    margin-right: 4px;
+  }
+
+  &__body {
+    font-size: 11.5px;
+  }
+
+  &__summary {
+    cursor: pointer;
+    color: var(--studio-fg-dim);
+    font-weight: 600;
+    user-select: none;
+  }
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  &__section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--studio-fg-dim);
+  }
+
+  &__prompt {
+    margin: 0;
+    padding: 8px;
+    border-radius: 6px;
+    background: var(--studio-bg-hover);
+    border: 1px solid var(--studio-border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--studio-fg);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow: auto;
+  }
+
+  &__context {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  &__context-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  &__context-key {
+    flex: 0 0 auto;
+    min-width: 92px;
+    margin: 0;
+    font-weight: 600;
+    color: var(--studio-fg-dim);
+  }
+
+  &__context-val {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    font-family: var(--font-mono);
+    color: var(--studio-fg);
+    word-break: break-word;
+  }
+
+  &__commits {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__commit {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--studio-fg);
+    word-break: break-word;
+  }
+}

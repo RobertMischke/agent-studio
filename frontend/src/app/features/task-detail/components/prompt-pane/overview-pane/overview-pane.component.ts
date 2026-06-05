@@ -39,6 +39,12 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 import type { StructuredTooltip } from '../../../../../components/tooltip';
 import { TaskPromptPopoverComponent } from '../task-prompt-popover/task-prompt-popover.component';
 import {
+  SteeringDetailComponent,
+  isSteeringKind,
+  steeringInfoFromEvent,
+  type SteeringInfo,
+} from '../../../../../components/steering-detail';
+import {
   cliTypeIcon,
   cliTypeLabel,
   formatTokens,
@@ -327,7 +333,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent],
+  imports: [CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -880,6 +886,33 @@ export class OverviewPaneComponent {
 
   /** Render the Pipeline section when there are steps or completion-loop activity. */
   readonly hasPipelineSection = computed(() => this.hasPipeline() || this.hasCompletionLoop());
+
+  /**
+   * The latest orchestrator steering step, projected from the shared
+   * task-timeline ledger (Epic ASS-776). The orchestrator review / decision
+   * steps render this as a collapsible structured block (verdict + reason +
+   * steer prompt + context) so the Steps surface shows the same steering
+   * trace as the Timeline, not just the bare verdict token. Null until the
+   * completion loop has emitted at least one steering event.
+   */
+  private readonly latestSteeringInfo = computed<SteeringInfo | null>(() => {
+    const events = this.timelinePoll.events();
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (isSteeringKind(events[i].kind)) {
+        return steeringInfoFromEvent(events[i]);
+      }
+    }
+    return null;
+  });
+
+  /**
+   * Structured steering block for an orchestrator-kind step row. Both the
+   * review and the decision step reflect the orchestrator's steer, so each
+   * surfaces the latest steering trace; non-orchestrator rows return null.
+   */
+  steeringForRow(row: PipelineRowVm): SteeringInfo | null {
+    return row.kind === 'orchestrator' ? this.latestSteeringInfo() : null;
+  }
 
   /** Task-total tokens + cost across all recorded steps. */
   readonly pipelineTotal = computed<PipelineTotalVm | null>(() => {

@@ -142,16 +142,17 @@ test.describe('Task completion loop — Overview indicator + Timeline tab', () =
       await page.getByTestId('prompt-tab-timeline').click();
       await expect(page.getByTestId('timeline-verdict-banner')).toBeVisible();
 
-      // The reopen event carries an expandable "Prompt + Context" block holding
-      // the verbatim steering prompt the orchestrator handed the agent.
-      const steering = page.getByTestId('timeline-event-steering-prompt');
+      // The reopen event carries an expandable structured steering block
+      // (Epic ASS-776) holding the verbatim steer prompt + context the
+      // orchestrator handed the agent.
+      const steering = page.getByTestId('timeline-event-steering');
       await expect(steering).toBeVisible();
-      await expect(steering.locator('summary')).toContainText('Prompt + Context');
+      await expect(steering.locator('summary')).toContainText('Steer prompt + context');
       // Collapsed by default: the verbatim body is not yet rendered visibly.
-      await expect(steering.locator('.tl-item__steering-body')).toBeHidden();
+      await expect(steering.locator('.steer__prompt')).toBeHidden();
 
       await steering.locator('summary').click();
-      await expect(steering.locator('.tl-item__steering-body')).toBeVisible();
+      await expect(steering.locator('.steer__prompt')).toBeVisible();
       // Expanded: the diff-only rule + the prior-commits block are now visible,
       // proving the operator can confirm the agent was told to steer the diff.
       await expect(steering).toContainText('STEER THE DIFF, DO NOT RESTART');

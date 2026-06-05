@@ -239,32 +239,10 @@
     color: var(--studio-fg);
   }
 
+  // Wrapper spacing for the shared <app-steering-detail> block on steering rows.
   &__steering {
+    display: block;
     margin-top: 6px;
-    font-size: 11.5px;
-  }
-
-  &__steering-summary {
-    cursor: pointer;
-    color: var(--studio-fg-dim);
-    font-weight: 600;
-    user-select: none;
-  }
-
-  &__steering-body {
-    margin: 6px 0 0;
-    padding: 8px;
-    border-radius: 6px;
-    background: var(--studio-bg-hover);
-    border: 1px solid var(--studio-border);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--studio-fg);
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 320px;
-    overflow: auto;
   }
 }
 

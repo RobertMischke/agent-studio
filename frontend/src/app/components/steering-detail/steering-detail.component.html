@@ -1,0 +1,65 @@
+@let i = info();
+<div class="steer" [class]="'steer--' + i.tone" data-testid="steering-detail">
+  @if (showVerdictChip()) {
+    <div class="steer__head" data-testid="steering-detail-head">
+      <span class="steer__chip"
+            [class]="'steer__chip--' + i.tone"
+            [attr.data-verdict]="i.verdict"
+            data-testid="steering-detail-verdict">{{ i.verdictLabel }}</span>
+      @if (i.reason) {
+        <span class="steer__reason" data-testid="steering-detail-reason">{{ i.reason }}</span>
+      }
+    </div>
+  } @else if (i.reason) {
+    <p class="steer__reason steer__reason--inline" data-testid="steering-detail-reason">
+      <span class="steer__reason-label">{{ i.verdict === 'accept' ? 'Note' : 'Gap' }}:</span>
+      {{ i.reason }}
+    </p>
+  }
+
+  @if (hasBody()) {
+    <details class="steer__body" data-testid="steering-detail-body">
+      <summary class="steer__summary">Steer prompt + context</summary>
+      <div class="steer__content">
+        @if (i.openItems.length > 0) {
+          <app-aspect-findings-list class="steer__open-items"
+                                    [findings]="i.openItems"
+                                    leadLabel="Open items"
+                                    data-testid="steering-detail-open-items" />
+        }
+
+        @if (i.prompt; as prompt) {
+          <div class="steer__section" data-testid="steering-detail-prompt">
+            <span class="steer__section-label">Steer prompt</span>
+            <pre class="steer__prompt">{{ prompt }}</pre>
+          </div>
+        }
+
+        @if (i.context.length > 0) {
+          <div class="steer__section" data-testid="steering-detail-context">
+            <span class="steer__section-label">Context</span>
+            <dl class="steer__context">
+              @for (c of i.context; track c.key) {
+                <div class="steer__context-row">
+                  <dt class="steer__context-key">{{ c.key }}</dt>
+                  <dd class="steer__context-val">{{ c.value }}</dd>
+                </div>
+              }
+            </dl>
+          </div>
+        }
+
+        @if (i.commits.length > 0) {
+          <div class="steer__section" data-testid="steering-detail-commits">
+            <span class="steer__section-label">Considered commits</span>
+            <ul class="steer__commits">
+              @for (commit of i.commits; track $index) {
+                <li class="steer__commit">{{ commit }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    </details>
+  }
+</div>

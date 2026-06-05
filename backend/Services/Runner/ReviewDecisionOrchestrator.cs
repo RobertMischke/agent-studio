@@ -819,12 +819,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (moved != null)
         {
             var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
-            await WriteFollowUpFileAsync(moved, followUp, ct,
-                new SteeringContext("noop-recovery", "reissue", priorReissues, reason));
+            var steering = new SteeringContext("noop-recovery", "reissue", priorReissues, reason);
+            await WriteFollowUpFileAsync(moved, followUp, ct, steering);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: NOOP recovery, reissued with sharpened framing.",
-                BuildReopenDetails("noop-recovery", priorReissues, reason, followUpPrompt: followUp));
+                BuildReopenDetails("noop-recovery", priorReissues, reason,
+                    followUpPrompt: followUp, context: steering));
         }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -1042,12 +1043,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             RecordOrchestratorReviewStep(moved.FolderPath, PipelineStepStatus.Failed,
                 DecisionVerdictReissue, reason);
             var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
-            await WriteFollowUpFileAsync(moved, followUp, ct,
-                new SteeringContext("no-completion-signal", "reissue", priorReissues, reason));
+            var steering = new SteeringContext("no-completion-signal", "reissue", priorReissues, reason);
+            await WriteFollowUpFileAsync(moved, followUp, ct, steering);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: run finished without a terminal sentinel, reissued demanding one.",
-                BuildReopenDetails("no-completion-signal", priorReissues, reason, followUpPrompt: followUp));
+                BuildReopenDetails("no-completion-signal", priorReissues, reason,
+                    followUpPrompt: followUp, context: steering));
         }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -2503,7 +2505,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private Dictionary<string, string> BuildReopenDetails(
         string cause, int priorReissues, string? gap = null,
         IReadOnlyList<AspectVerdict>? verdicts = null,
-        string? followUpPrompt = null)
+        string? followUpPrompt = null,
+        SteeringContext? context = null)
     {
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         var details = new Dictionary<string, string>
@@ -2518,6 +2521,26 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (!string.IsNullOrWhiteSpace(followUpPrompt))
         {
             details["followUpPrompt"] = Truncate(followUpPrompt!.Trim(), 4000);
+        }
+        // Epic ASS-776: when the steering context is known, also carry the
+        // resume-vs-fresh mode, the resumed session, the considered commits, and
+        // the prior re-issue counter so the FE renders a structured "Context"
+        // block alongside the prompt. All optional and forward-compatible: an
+        // older ledger row (or a branch that does not build a context) simply
+        // omits these keys and the FE shows whatever is present.
+        if (context != null)
+        {
+            details["priorReissues"] = context.PriorReissues.ToString(inv);
+            details["mode"] = context.ResumeSessionId != null ? "resume" : "fresh-run";
+            if (!string.IsNullOrWhiteSpace(context.ResumeSessionId))
+            {
+                details["resumeSessionId"] = context.ResumeSessionId!;
+            }
+            if (context.PriorCommits is { Count: > 0 })
+            {
+                details["priorCommits"] = Truncate(
+                    string.Join("\n", context.PriorCommits.Take(20)), 1200);
+            }
         }
         if (!string.IsNullOrWhiteSpace(gap))
         {
