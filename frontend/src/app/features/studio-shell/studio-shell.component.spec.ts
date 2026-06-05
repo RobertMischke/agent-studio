@@ -199,4 +199,53 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
 
     expect(component.activeWorkspaceName()).toBe('Product Lab');
   });
+
+  it('renders only concrete workspace plus project in the titlebar breadcrumb area', () => {
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    const component = fixture.componentInstance;
+
+    fixture.componentRef.setInput('knownProjectNames', ['Agent Task Processor']);
+    fixture.componentRef.setInput('projectWatchPaths', [{
+      name: 'Agent Task Processor',
+      path: 'C:\\Projects\\Agent-Taskboard\\',
+      rootPath: 'C:\\Projects\\Agent-Taskboard\\',
+    }]);
+    component.registryWorkspaces.set([workspace({
+      id: 'ws-product',
+      displayName: 'Product Lab',
+      projects: [{
+        ...project('PROJ-ATP'),
+        displayName: 'Renamed Registry Label',
+        storageLocation: 'c:/projects/agent-taskboard',
+        workspaceId: 'ws-product',
+      }],
+    })]);
+
+    component.openBoard('Agent Task Processor');
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const titlebar = root.querySelector<HTMLElement>('[data-testid="studio-titlebar"]');
+    const crumbs = root.querySelector<HTMLElement>('[data-testid="studio-titlebar-crumbs"]');
+    const workspaceEl = root.querySelector<HTMLElement>('[data-testid="studio-titlebar-active-workspace"]');
+    const picker = root.querySelector<HTMLElement>('[data-testid="studio-project-picker-trigger"]');
+
+    expect(workspaceEl?.textContent?.trim()).toBe('Product Lab');
+    expect(crumbs?.textContent?.trim()).toBe('Product Lab');
+    expect(picker?.textContent).toContain('Agent Task Processor');
+    expect(titlebar?.textContent).not.toContain('Agent Software Studio');
+    expect(titlebar?.textContent).not.toContain('Workspace');
+    expect(titlebar?.textContent).not.toContain('Board');
+    expect(root.querySelector('[data-testid="studio-titlebar-workspace"]')).toBeNull();
+    expect(root.querySelector('[data-testid="studio-titlebar-active-tab"]')).toBeNull();
+  });
 });
