@@ -5,6 +5,7 @@ import {
   HostListener,
   effect,
   inject,
+  signal,
 } from '@angular/core';
 import { MediaLightboxService } from '../../services/media-lightbox.service';
 import { ModalStackService } from '../../services/modal-stack.service';
@@ -42,6 +43,14 @@ export class MediaLightboxComponent {
 
   private stackDispose: (() => void) | null = null;
 
+  /**
+   * "Original size" toggle. Off (default) fits the image into the fixed
+   * stage (`object-fit: contain`, never upscaled); on shows it at its
+   * intrinsic pixel size inside a scrollable stage. Reset on every image
+   * change so paging always starts from the fitted view.
+   */
+  readonly zoomed = signal(false);
+
   constructor() {
     effect(() => {
       const open = this.lightbox.active() !== null;
@@ -55,6 +64,16 @@ export class MediaLightboxComponent {
         this.stackDispose();
         this.stackDispose = null;
       }
+    });
+
+    // Reset zoom on every image change and warm the neighbours so paging
+    // with the arrows never shows a decode flash or reflows the stage.
+    effect(() => {
+      this.lightbox.active();
+      this.lightbox.position();
+      this.zoomed.set(false);
+      preloadImage(this.lightbox.prevSrc());
+      preloadImage(this.lightbox.nextSrc());
     });
     this.destroyRef.onDestroy(() => {
       if (this.stackDispose) {
@@ -106,7 +125,22 @@ export class MediaLightboxComponent {
     this.lightbox.close();
   }
 
+  /** Toggle intrinsic-size ("Originalgröße") view; click on the image. */
+  toggleZoom(event: MouseEvent): void {
+    event.stopPropagation();
+    this.zoomed.update((v) => !v);
+  }
+
   async runAction(action: { run: () => void | Promise<void> }): Promise<void> {
     await action.run();
   }
+}
+
+/** Warm the browser cache for a neighbour image without rendering it. */
+function preloadImage(src: string | null): void {
+  if (!src) return;
+  if (typeof Image === 'undefined') return;
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = src;
 }

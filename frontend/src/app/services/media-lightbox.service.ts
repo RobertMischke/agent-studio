@@ -78,6 +78,22 @@ export class MediaLightboxService {
   readonly hasPrev = computed(() => this.cursor() > 0);
   readonly hasNext = computed(() => this.cursor() < this.images().length - 1);
 
+  /**
+   * Source of the previous / next image, or null at the ends (or closed).
+   * Exposed so the lightbox component can warm the browser cache for the
+   * neighbours and avoid a flash/reflow when the user pages with arrows.
+   */
+  readonly prevSrc = computed(() => {
+    const list = this.images();
+    const i = this.cursor();
+    return i > 0 ? list[i - 1]?.src ?? null : null;
+  });
+  readonly nextSrc = computed(() => {
+    const list = this.images();
+    const i = this.cursor();
+    return i < list.length - 1 ? list[i + 1]?.src ?? null : null;
+  });
+
   open(req: MediaLightboxRequest): void {
     const image = normalise(req);
     if (!image) return;

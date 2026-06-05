@@ -33,10 +33,17 @@
 
     <figure class="media-lightbox__figure"
             (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-      <img class="media-lightbox__img"
-           data-testid="media-lightbox-image"
-           [src]="media.src"
-           [alt]="media.alt" />
+      <div class="media-lightbox__stage"
+           [class.media-lightbox__stage--zoomed]="zoomed()"
+           data-testid="media-lightbox-stage">
+        <img class="media-lightbox__img"
+             [class.media-lightbox__img--zoomed]="zoomed()"
+             data-testid="media-lightbox-image"
+             [src]="media.src"
+             [alt]="media.alt"
+             [attr.title]="zoomed() ? 'Klick: einpassen' : 'Klick: Originalgröße'"
+             (click)="toggleZoom($event)" />
+      </div>
       @if (media.alt) {
         <figcaption class="media-lightbox__caption"
                     data-testid="media-lightbox-caption">{{ media.alt }}</figcaption>

@@ -110,3 +110,36 @@ describe('MediaLightboxComponent (arrow paging)', () => {
     expect(right.defaultPrevented).toBe(false);
   });
 });
+
+/**
+ * "Originalgröße" zoom toggle. Zoom is a per-image affordance that must
+ * always reset to the fitted view when the user pages to another image,
+ * so the stage size stays predictable. The reset runs in an effect that
+ * tracks the current image, so we flush change detection after paging.
+ */
+describe('MediaLightboxComponent (zoom)', () => {
+  let svc: MediaLightboxService;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [MediaLightboxComponent],
+      providers: [provideZonelessChangeDetection()],
+    });
+    svc = TestBed.inject(MediaLightboxService);
+  });
+
+  it('toggles zoom and resets it when the image changes', () => {
+    svc.openGallery({ images: [{ src: '/a.png' }, { src: '/b.png' }], index: 0 });
+    const fixture = TestBed.createComponent(MediaLightboxComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+
+    expect(cmp.zoomed()).toBe(false);
+    cmp.toggleZoom(new MouseEvent('click'));
+    expect(cmp.zoomed()).toBe(true);
+
+    svc.next();
+    fixture.detectChanges();
+    expect(cmp.zoomed()).toBe(false);
+  });
+});
