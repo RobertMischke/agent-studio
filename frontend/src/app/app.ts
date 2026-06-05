@@ -126,6 +126,18 @@ interface VerboseDebugContext {
   job: TaskInfo | null;
 }
 
+interface ShellPanesVisible {
+  prompt: boolean;
+  protocol: boolean;
+  git: boolean;
+}
+
+const SHELL_PANES_FALLBACK: ShellPanesVisible = {
+  prompt: false,
+  protocol: false,
+  git: false,
+};
+
 @Component({
   selector: 'app-root',
   imports: [
@@ -221,6 +233,10 @@ export class App implements OnInit, OnDestroy {
 
   @ViewChild('jobDetail') private jobDetailRef?: TaskDetailComponent;
   @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
+  private readonly jobDetailSig = viewChild<TaskDetailComponent>('jobDetail');
+  readonly shellPanesVisible = computed<ShellPanesVisible>(
+    () => this.jobDetailSig()?.panesVisible() ?? SHELL_PANES_FALLBACK,
+  );
   /**
    * Signal-form view child for the orchestrator side-sheet. Lets the
    * `effectiveCompactCards` computed react when the rail opens/closes

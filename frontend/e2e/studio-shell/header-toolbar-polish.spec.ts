@@ -1,4 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
+import { api } from '../helpers/api';
+import { createJob } from '../helpers/jobs';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Header-toolbar polish (operator request, 2026-06-04).
@@ -45,6 +48,20 @@ async function gotoBoard(page: Page): Promise<void> {
   }
 
   await dismissTransientErrors(page);
+}
+
+interface WatchPath { path: string; name?: string }
+
+async function pickWatchPath(): Promise<string> {
+  const paths = await api<WatchPath[]>('/api/watch-paths');
+  if (!paths.length) throw new Error('No watch paths configured');
+  return paths[0].path;
+}
+
+async function deleteJob(jobId: string, watchPath: string): Promise<void> {
+  await api(`/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    method: 'DELETE',
+  });
 }
 
 test.describe('Header toolbar polish', () => {
@@ -99,5 +116,78 @@ test.describe('Header toolbar polish', () => {
     // Restore original toggle states so the spec leaves no board change.
     if (epicPressedBefore === 'false') await epicToggle.click();
     if (compactPressedBefore === 'false') await compactToggle.click();
+  });
+
+  test('task pane header buttons expose active pressed state', async ({ page }) => {
+    const watchPath = await pickWatchPath();
+    const job = await createJob({
+      title: `header-pane-active-${Date.now()}`,
+      watchPath,
+      cliType: 'claude',
+      agent: 'claude',
+      promptMarkdown: '# Header pane active-state test',
+      targetState: '2-ready',
+    });
+
+    try {
+      await page.setViewportSize({ width: 1600, height: 1000 });
+      await page.addInitScript(() => {
+        try {
+          localStorage.setItem(
+            'taskboard.panesVisible',
+            JSON.stringify({ prompt: true, protocol: true, git: false }),
+          );
+        } catch {
+          /* private mode */
+        }
+      });
+
+      await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      await dismissTransientErrors(page);
+
+      const chatButton = page.getByTestId('studio-titlebar-chat');
+      if ((await chatButton.count()) === 0) {
+        test.skip(true, 'vsCodeLayout shell not active; task-tab pane buttons only exist there');
+        return;
+      }
+
+      const prompt = page.getByTestId('studio-pane-toggle-prompt');
+      const protocol = page.getByTestId('studio-pane-toggle-protocol');
+      const git = page.getByTestId('studio-pane-toggle-git');
+      const cluster = page.getByTestId('studio-pane-toggles');
+      await expect(prompt).toBeVisible({ timeout: 10_000 });
+      await expect(protocol).toBeVisible();
+      await expect(git).toBeVisible();
+
+      await expect(prompt).toHaveAttribute('aria-pressed', 'true');
+      await expect(protocol).toHaveAttribute('aria-pressed', 'true');
+      await expect(git).toHaveAttribute('aria-pressed', 'false');
+      await expect(prompt).toHaveClass(/studio-tab-action--active/);
+      await expect(protocol).toHaveClass(/studio-tab-action--active/);
+      await expect(git).not.toHaveClass(/studio-tab-action--active/);
+
+      await setTheme(page, 'dark');
+      await cluster.screenshot({ path: 'test-results/header-pane-toggles-active-dark.png' });
+
+      await git.click();
+      await expect(git).toHaveAttribute('aria-pressed', 'true');
+      await expect(git).toHaveClass(/studio-tab-action--active/);
+      await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
+
+      await prompt.click();
+      await expect(prompt).toHaveAttribute('aria-pressed', 'false');
+      await expect(prompt).not.toHaveClass(/studio-tab-action--active/);
+      await expect(page.getByTestId('pane-prompt')).toHaveCount(0);
+
+      await protocol.click();
+      await expect(protocol).toHaveAttribute('aria-pressed', 'false');
+      await expect(protocol).not.toHaveClass(/studio-tab-action--active/);
+      await expect(page.getByTestId('pane-protocol')).toHaveCount(0);
+
+      await setTheme(page, 'light');
+      await cluster.screenshot({ path: 'test-results/header-pane-toggles-active-light.png' });
+    } finally {
+      await deleteJob(job.id, watchPath).catch(() => {});
+    }
   });
 });

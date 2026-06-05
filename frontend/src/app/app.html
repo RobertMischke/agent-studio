@@ -126,10 +126,14 @@
                  detail-header row that the reference design folded into
                  the tab bar. -->
             <div class="studio-tab-action__pane-toggles"
+                 data-testid="studio-pane-toggles"
                  role="group"
                  aria-label="Toggle detail panes">
               <button type="button"
                       class="studio-tab-action studio-tab-action--icon"
+                      [class.studio-tab-action--active]="shellPanesVisible().prompt"
+                      [attr.aria-pressed]="shellPanesVisible().prompt"
+                      aria-label="Toggle Description panel"
                       data-testid="studio-pane-toggle-prompt"
                       [appTooltip]="'Description'"
                       (click)="onShellTogglePane('prompt')">
@@ -137,6 +141,9 @@
               </button>
               <button type="button"
                       class="studio-tab-action studio-tab-action--icon"
+                      [class.studio-tab-action--active]="shellPanesVisible().protocol"
+                      [attr.aria-pressed]="shellPanesVisible().protocol"
+                      aria-label="Toggle Protocol panel"
                       data-testid="studio-pane-toggle-protocol"
                       [appTooltip]="'Protocol &amp; chat'"
                       (click)="onShellTogglePane('protocol')">
@@ -144,6 +151,9 @@
               </button>
               <button type="button"
                       class="studio-tab-action studio-tab-action--icon studio-tab-action--has-badge"
+                      [class.studio-tab-action--active]="shellPanesVisible().git"
+                      [attr.aria-pressed]="shellPanesVisible().git"
+                      aria-label="Toggle Git panel"
                       data-testid="studio-pane-toggle-git"
                       [appTooltip]="'Git diff &amp; file tree'"
                       (click)="onShellTogglePane('git')">
