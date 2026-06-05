@@ -416,37 +416,65 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task NoCompletionSignal_WithRealPrompt_ReissuesDemandingSentinel_WithoutSpendingFastModel()
+    public async Task NoCompletionSignal_WithRealPrompt_UsesReviewDecisionFallback_ToAcceptAsDone()
     {
         // Requirement 4 (deterministic completion): a run landed in
         // 4-auto-review with NO terminal sentinel - only heuristic
-        // "done"-ish prose. It must NOT be silently treated as completed;
-        // the loop reissues to 2-ready demanding a deterministic close-out.
+        // "done"-ish prose. ASS-684 adds a fast-model fallback before the
+        // deterministic reissue path, so clearly completed evidence can move
+        // forward for human approval instead of stranding on classifier-
+        // unknown / missing-terminal-sentinel.
         SeedReviewJobWithoutSentinel("ghosted-completion",
             title: "Add pagination to the task list endpoint",
             promptBody: "# Add pagination\n\nAdd cursor-based pagination to GET /api/tasks so the kanban can lazy-load lanes with hundreds of cards.\n");
 
         var calls = 0;
-        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=accept-as-done; reason=Implementation evidence is complete despite the missing sentinel.]]\n[[TASK_DONE]]",
+            onCall: () => calls++);
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        // Deterministic branch: no fast-model call.
-        Assert.Equal(0, calls);
-
-        // Loop, do not accept: the job goes back to 2-ready at order 0, not
-        // forward to human-review or completed.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ghosted-completion")));
+        Assert.Equal(1, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "ghosted-completion")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "ghosted-completion")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "ghosted-completion")));
-        Assert.Equal(0, ReadJobOrder(TaskStates.Ready, "ghosted-completion"));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ghosted-completion")));
 
-        var log = ReadCliLog(TaskStates.Ready, "ghosted-completion");
+        var log = ReadCliLog(TaskStates.HumanReview, "ghosted-completion");
         Assert.Contains("[orchestrator]", log);
-        Assert.Contains("[reissue]", log);
-        Assert.Contains("no completion signal", log);
+        Assert.Contains("accepted", log, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("missing sentinel", log);
 
-        var followUpPath = Path.Combine(_watchPath, TaskStates.Ready, "ghosted-completion", "orchestrator-follow-up.md");
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
+        Assert.Contains("complete", record.Reason);
+        Assert.Contains("ORCHESTRATOR_DECISION", record.Prompt);
+    }
+
+    [Fact]
+    public async Task NoCompletionSignal_MalformedFallback_ReissuesDemandingSentinel()
+    {
+        // The LLM fallback must not create a new dead-end when its own output
+        // is malformed. Fall back to the deterministic reissue path and demand
+        // a terminal sentinel from the run agent.
+        SeedReviewJobWithoutSentinel("ghosted-malformed",
+            title: "Add pagination to the task list endpoint",
+            promptBody: "# Add pagination\n\nAdd cursor-based pagination to GET /api/tasks so the kanban can lazy-load lanes with hundreds of cards.\n");
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "I think this should be accepted, but I forgot the required decision sentinel.",
+            onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(1, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ghosted-malformed")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "ghosted-malformed")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "ghosted-malformed")));
+        Assert.Equal(0, ReadJobOrder(TaskStates.Ready, "ghosted-malformed"));
+
+        var followUpPath = Path.Combine(_watchPath, TaskStates.Ready, "ghosted-malformed", "orchestrator-follow-up.md");
         Assert.True(File.Exists(followUpPath));
         var followUp = File.ReadAllText(followUpPath);
         Assert.Contains("terminal sentinel", followUp);
@@ -454,6 +482,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
+        Assert.Equal("(deterministic no-completion-signal branch)", record.Prompt);
     }
 
     [Fact]

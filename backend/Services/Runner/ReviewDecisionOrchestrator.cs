@@ -380,7 +380,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             // deterministic sentinel-demanding reissue only
                             // if the model is unavailable or malformed.
                             await ProcessNoCompletionSignalAsync(
-                                workspace, entry, pending, maxReissues, ct);
+                                workspace, entry, pending, cliBinary, model,
+                                maxPerHour, maxReissues, ct);
                             _statusSnapshot.RecordReissue();
                             continue;
                         }
@@ -880,6 +881,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
+        string cliBinary,
+        string model,
+        int maxPerHour,
         int maxReissues,
         CancellationToken ct)
     {
@@ -907,6 +911,61 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
+        if (RateLimitOk(maxPerHour))
+        {
+            var prompt = BuildNoCompletionSignalPrompt(entry, pending, workspace);
+            try
+            {
+                var sw = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.StartTiming();
+                var rawResponse = await CliRunner(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
+                sw.Stop();
+                var (response, callUsage) = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
+                OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.Record(
+                    _usage,
+                    OrchestratorApi.Models.AdHocUsageSources.ReviewDecision,
+                    model,
+                    callUsage,
+                    sw.ElapsedMilliseconds,
+                    ok: true,
+                    project: entry.Name,
+                    jobId: pending.Job.Id);
+                RecordRateLimitedCall();
+
+                var verdict = ReviewDecisionParsing.ParseDecision(response);
+                if (verdict != null)
+                {
+                    switch (verdict.Action)
+                    {
+                        case OrchestratorDecisionAction.Reissue:
+                            await HandleReissueAsync(workspace, entry, pending, prompt, response, verdict, ct);
+                            return;
+                        case OrchestratorDecisionAction.Escalate:
+                            await HandleEscalateAsync(workspace, entry, pending, prompt, response, verdict, ct);
+                            return;
+                        case OrchestratorDecisionAction.AcceptAsDone:
+                            HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict);
+                            return;
+                    }
+                }
+
+                _logger.LogInformation(
+                    "ReviewDecisionOrchestrator: no no-completion decision sentinel parsed for {Project}/{JobId}; falling back to deterministic reissue",
+                    entry.Name, pending.Job.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "ReviewDecisionOrchestrator no-completion CLI fallback failed for {Project}/{JobId}; falling back to deterministic reissue",
+                    entry.Name, pending.Job.Id);
+            }
+        }
+        else
+        {
+            _logger.LogInformation(
+                "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); using deterministic no-completion reissue for {JobId}",
+                maxPerHour, pending.Job.Id);
+        }
+
         // Budget left: reissue, explicitly demanding a terminal sentinel on
         // close-out. A silent finish is a reviewable signal, not something to
         // ignore: run the same completion-gate scan over the run's own evidence
@@ -924,6 +983,29 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             followUp += "\n\n" + CompletionGate.BuildFollowUp(findings);
         }
         await ReissueNoCompletionSignalAsync(workspace, entry, pending, followUp, findings.Count, ct);
+    }
+
+    private string BuildNoCompletionSignalPrompt(WatchPathEntry entry, PendingDecision pending, string workspace)
+    {
+        var (taskBody, recentLog) = LoadTaskContext(pending);
+        var roadmapExcerpt = LoadRoadmap(entry.RootPath);
+        var adrTitles = LoadAdrTitles(entry.RootPath);
+        var prevDecisions = LoadPreviousDecisionsSummary(workspace, entry.Name, pending.Job.Id);
+
+        return "You are the orchestrator reviewing a 4-auto-review task whose latest run ended without any terminal "
+             + "[[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel. Decide whether the visible evidence means the task should be reissued, escalated, or accepted as done.\n"
+             + "Rules:\n"
+             + "- Use reissue when work appears incomplete, ambiguous, or the agent only needs to close out with a sentinel.\n"
+             + "- Use escalate when the evidence requires human judgment or repeated automation would be unsafe.\n"
+             + "- Use accept-as-done only when the recent log and task evidence clearly show the requested work is complete despite the missing sentinel.\n\n"
+             + $"Project: {entry.Name}\n"
+             + $"Job: {pending.Job.Id} - {pending.Job.Title}\n\n"
+             + $"Task body:\n{taskBody}\n\n"
+             + $"Recent log:\n{recentLog}\n\n"
+             + $"Roadmap excerpt:\n{roadmapExcerpt}\n\n"
+             + $"ADR titles:\n{adrTitles}\n\n"
+             + $"Previous decisions:\n{prevDecisions}\n\n"
+             + "Reply with exactly one [[ORCHESTRATOR_DECISION: action=<reissue|escalate|accept-as-done>; reason=<short>]] sentinel then [[TASK_DONE]].";
     }
 
     private async Task ReissueNoCompletionSignalAsync(
