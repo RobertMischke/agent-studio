@@ -741,6 +741,103 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public void EnrichLineStats_PersistedChainCommitsWithoutLines_BackfillsRealChangeset()
+    {
+        // ASS-770 regression. The run-window SHA range produced no commits, so
+        // the aggregator surfaced the work only from the persisted job.json
+        // chain - which stores a file count but hardcodes +0/-0. Pre-fix the
+        // aspect reviewer saw "7 files, +0/-0" and false-BLOCKed a real,
+        // tested commit (a9af3aa: +771/-28 over 7 files). EnrichLineStats must
+        // re-derive the genuine line counts per SHA and rebuild the totals.
+        var t = DateTime.UtcNow;
+        var aggregate = new TaskCommitsAggregate
+        {
+            Count = 2,
+            TotalFilesChanged = 7,
+            TotalAdded = 0,
+            TotalRemoved = 0,
+            Commits = new List<TaskCommitRecord>
+            {
+                new() { Sha = "a9af3aa", ShortSha = "a9af3aa", AuthorDateUtc = t,                Subject = "feat(orchestrator): post-core gate", FilesChanged = 5, Added = 0, Removed = 0 },
+                new() { Sha = "e4bb834", ShortSha = "e4bb834", AuthorDateUtc = t.AddMinutes(-3), Subject = "feat(models): thinking level",        FilesChanged = 2, Added = 0, Removed = 0 }
+            }
+        };
+
+        var stats = new Dictionary<string, (int, int, int)>
+        {
+            ["a9af3aa"] = (5, 600, 20),
+            ["e4bb834"] = (2, 171, 8)
+        };
+        var enriched = ReviewDecisionOrchestrator.EnrichLineStats(aggregate, sha => stats[sha]);
+
+        Assert.Equal(771, enriched.TotalAdded);
+        Assert.Equal(28, enriched.TotalRemoved);
+        Assert.Equal(7, enriched.TotalFilesChanged);
+
+        var summary = ReviewDecisionOrchestrator.BuildDiffSummary(enriched, legacyAutoCommit: null);
+        Assert.Contains("Total lines added: 771", summary);
+        Assert.Contains("Total lines removed: 28", summary);
+        Assert.Contains("+600, -20", summary);
+        // The false-positive cue must be gone: no per-commit +0/-0 line.
+        Assert.DoesNotContain("+0, -0", summary);
+        Assert.DoesNotContain("could not be computed", summary);
+    }
+
+    [Fact]
+    public void EnrichLineStats_RangeCommitsAlreadyCarryLines_LeftUntouched()
+    {
+        // A commit that came from the SHA-range path already has +/- counts.
+        // The lookup must not be consulted for it (and a thrown lookup must
+        // not corrupt the result), so the aggregate passes through unchanged.
+        var aggregate = new TaskCommitsAggregate
+        {
+            Count = 1,
+            TotalFilesChanged = 3,
+            TotalAdded = 120,
+            TotalRemoved = 15,
+            Commits = new List<TaskCommitRecord>
+            {
+                new() { Sha = "rng1", ShortSha = "rng1", Subject = "feat: real", FilesChanged = 3, Added = 120, Removed = 15 }
+            }
+        };
+
+        var enriched = ReviewDecisionOrchestrator.EnrichLineStats(
+            aggregate, _ => throw new InvalidOperationException("lookup must not be called"));
+
+        Assert.Equal(120, enriched.TotalAdded);
+        Assert.Equal(15, enriched.TotalRemoved);
+        Assert.Equal(3, enriched.TotalFilesChanged);
+    }
+
+    [Fact]
+    public void EnrichLineStats_LookupUnavailable_KeepsFilesAndTriggersDefensiveNote()
+    {
+        // Worst case: commits exist with a file count but git cannot re-derive
+        // line stats (lookup returns all-zero - e.g. an unresolvable worktree).
+        // We must NOT invent numbers; the file count stays, and BuildDiffSummary
+        // appends the defensive note so the reviewer does not read +0/-0 as
+        // "corrupted / no work".
+        var aggregate = new TaskCommitsAggregate
+        {
+            Count = 1,
+            TotalFilesChanged = 4,
+            TotalAdded = 0,
+            TotalRemoved = 0,
+            Commits = new List<TaskCommitRecord>
+            {
+                new() { Sha = "deadbee", ShortSha = "deadbee", Subject = "feat: work", FilesChanged = 4, Added = 0, Removed = 0 }
+            }
+        };
+
+        var enriched = ReviewDecisionOrchestrator.EnrichLineStats(aggregate, _ => (0, 0, 0));
+        Assert.Equal(4, enriched.TotalFilesChanged);
+
+        var summary = ReviewDecisionOrchestrator.BuildDiffSummary(enriched, legacyAutoCommit: null);
+        Assert.Contains("do NOT treat the zero line totals as missing, empty, or corrupted", summary);
+        Assert.Contains("4 files", summary);
+    }
+
+    [Fact]
     public void IsPromptUsable_SeparatesRealPromptsFromPlaceholders()
     {
         // Heuristic guard: any future change to the placeholder rules

@@ -1910,6 +1910,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
             var aggregate = TaskCommitsAggregator.Aggregate(job, timeline.Runs,
                 (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
+            // Commits surfaced from the persisted chain (job.json) carry only a
+            // file count - their +/- line stats are hardcoded 0 because
+            // TaskCommitInfo never stored them. Re-derive the real +N/-M per
+            // SHA from git so the aspect reviewer never sees "N files, +0/-0"
+            // (read as "corrupted / no work") for a genuine multi-line commit.
+            aggregate = EnrichLineStats(aggregate,
+                sha => _git!.GetCommitStat(job.Id, watchPath, sha));
             return BuildDiffSummary(aggregate, job.Commit);
         }
         catch (Exception ex)
@@ -1922,6 +1929,64 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     private static readonly TaskCommitsAggregate EmptyAggregate = new() { Count = 0, Commits = [] };
+
+    /// <summary>
+    /// Backfill genuine +added/-removed line stats onto aggregate commits that
+    /// arrived without them. The aggregator folds persisted-chain and legacy
+    /// auto-commit entries with <c>Added = Removed = 0</c> (the
+    /// <see cref="TaskCommitInfo"/> chain only caches a file count), so a task
+    /// whose run-window SHA range produced no commits - and therefore surfaces
+    /// only via that chain - renders as "N files changed, +0/-0". An aspect
+    /// reviewer reads that as corrupted / empty work and false-BLOCKs a real,
+    /// tested change (ASS-770). For each such commit we ask <paramref name="statLookup"/>
+    /// for the real per-SHA stat and recompute the totals.
+    ///
+    /// <para>
+    /// Pure aside from the injected lookup so it can be pinned by a unit test
+    /// with a fake stat source. A commit that already has line data (it came
+    /// from the SHA-range path, which carries +/-) is left untouched; a lookup
+    /// that returns all-zero (truly empty commit, or repo unresolvable) leaves
+    /// the record as-is so we never invent numbers.
+    /// </para>
+    /// </summary>
+    internal static TaskCommitsAggregate EnrichLineStats(
+        TaskCommitsAggregate aggregate,
+        Func<string, (int FilesChanged, int Added, int Removed)> statLookup)
+    {
+        if (aggregate.Count == 0) return aggregate;
+        if (!aggregate.Commits.Any(c => c.Added == 0 && c.Removed == 0 && !string.IsNullOrWhiteSpace(c.Sha)))
+            return aggregate;
+
+        var enriched = new List<TaskCommitRecord>(aggregate.Commits.Count);
+        foreach (var c in aggregate.Commits)
+        {
+            if (c.Added == 0 && c.Removed == 0 && !string.IsNullOrWhiteSpace(c.Sha))
+            {
+                (int FilesChanged, int Added, int Removed) stat;
+                try { stat = statLookup(c.Sha); }
+                catch { stat = (0, 0, 0); }
+                if (stat.Added != 0 || stat.Removed != 0 || stat.FilesChanged != 0)
+                {
+                    enriched.Add(c with
+                    {
+                        Added = stat.Added,
+                        Removed = stat.Removed,
+                        FilesChanged = stat.FilesChanged > 0 ? stat.FilesChanged : c.FilesChanged
+                    });
+                    continue;
+                }
+            }
+            enriched.Add(c);
+        }
+
+        return aggregate with
+        {
+            Commits = enriched,
+            TotalAdded = enriched.Sum(x => x.Added),
+            TotalRemoved = enriched.Sum(x => x.Removed),
+            TotalFilesChanged = enriched.Sum(x => x.FilesChanged)
+        };
+    }
 
     /// <summary>
     /// Pure renderer: turn an aggregate plus the legacy auto-commit into the
@@ -1964,6 +2029,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             var subject = string.IsNullOrWhiteSpace(c.Subject) ? "(no subject)" : c.Subject;
             sb.AppendLine($"- {c.ShortSha} {subject} ({c.FilesChanged} files, +{c.Added}, -{c.Removed})");
+        }
+
+        // Defensive: commits exist and touch files, but no +/- line counts
+        // could be derived (line stats were not cached on the attributed
+        // commits and git could not re-derive them - e.g. an unresolvable
+        // worktree). The file counts above are the authoritative signal that
+        // work landed; spell that out so a reviewer does NOT read the zero
+        // line totals as "no work", "empty", or "corrupted data" and BLOCK a
+        // real change (ASS-770).
+        if (aggregate.TotalAdded == 0 && aggregate.TotalRemoved == 0 && aggregate.TotalFilesChanged > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Note: per-line +/- counts could not be computed for these commits (line stats were not cached and git could not re-derive them). The file counts above are authoritative and confirm real changes - do NOT treat the zero line totals as missing, empty, or corrupted work.");
         }
         return sb.ToString();
     }

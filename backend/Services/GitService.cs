@@ -830,6 +830,34 @@ public class GitService
     }
 
     /// <summary>
+    /// Real change stat (files / +added / -removed) for a single
+    /// already-recorded SHA via <c>git show --shortstat</c>. The persisted
+    /// <see cref="OrchestratorApi.Models.TaskCommitInfo"/> chain only caches a
+    /// file count, so an aspect-review diff summary built from that chain
+    /// reports "+0/-0" even for a large commit; this re-derives the genuine
+    /// line counts straight from git so the reviewer sees the real changeset.
+    /// Returns (0,0,0) when the repo or SHA cannot be resolved - never throws.
+    /// SHAs are validated through <see cref="IsLikelyShaOrRef"/> first so a
+    /// crafted argument cannot smuggle a flag into the git invocation.
+    /// </summary>
+    public (int FilesChanged, int Added, int Removed) GetCommitStat(string jobId, string? watchPath, string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha) || !IsLikelyShaOrRef(sha)) return (0, 0, 0);
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return (0, 0, 0);
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return (0, 0, 0);
+
+        // --pretty=format: drops the commit header so the only "changed" line
+        // in the output is the shortstat summary we want to parse.
+        var (output, _, code) = RunGit(root, $"show --shortstat --pretty=format: {sha}");
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return (0, 0, 0);
+        var statLine = output.Replace("\r\n", "\n").Split('\n')
+            .FirstOrDefault(l => l.Contains("changed", StringComparison.OrdinalIgnoreCase));
+        return ParseShortstat(statLine);
+    }
+
+    /// <summary>
     /// Returns the unified diff for an already-recorded commit, optionally
     /// scoped to a single path. Used by the detail view so a long-completed
     /// task still surfaces "what changed in this commit" even after the
