@@ -262,6 +262,18 @@
 
       @if (hasPipeline()) {
       <div class="ov-pipeline" data-testid="overview-pipeline-steps">
+        <!-- Column headers for the right-aligned per-step metric cells. Widths
+             and gaps mirror `.ov-pl-step`'s timing / tokens / cost columns so
+             each caption sits over its values. Introduced once at the top so the
+             bare numbers (clock, duration, token count, cost) are interpretable. -->
+        <div class="ov-pl-header" data-testid="overview-pipeline-header">
+          <span class="ov-pl-header__timing">
+            <span class="ov-pl-header__cell ov-pl-header__time">Time</span>
+            <span class="ov-pl-header__cell ov-pl-header__duration">Duration</span>
+          </span>
+          <span class="ov-pl-header__cell ov-pl-header__tokens">Tokens</span>
+          <span class="ov-pl-header__cell ov-pl-header__cost">Cost</span>
+        </div>
         @for (row of pipelineRows(); track row.id) {
           @if (row.startsPhase) {
             <div class="ov-pl-phase"

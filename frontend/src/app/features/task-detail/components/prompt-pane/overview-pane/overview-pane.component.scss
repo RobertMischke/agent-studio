@@ -523,6 +523,40 @@
   }
 }
 
+// Header row for the per-step metric columns. Sits once above the steps; its
+// cell widths and gaps mirror `.ov-pl-step`'s timing/tokens/cost cells so each
+// caption lines up over its right-aligned values. Pure presentation — quiet,
+// uppercase captions in the label idiom used elsewhere in this panel.
+.ov-pl-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--studio-spacing-1);
+  padding-block: var(--studio-row-pad-block);
+
+  &__timing {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 5px;
+  }
+
+  &__cell {
+    flex: 0 0 auto;
+    text-align: right;
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--studio-fg-muted);
+  }
+
+  &__time { width: 38px; }
+  &__duration { width: 52px; }
+  &__tokens { width: 56px; }
+  &__cost { width: 64px; }
+}
+
 .ov-pl-step {
   display: grid;
   grid-template-columns:
