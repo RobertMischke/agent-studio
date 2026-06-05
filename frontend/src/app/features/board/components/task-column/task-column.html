@@ -125,12 +125,6 @@
                 [appTooltip]="'Collapse ' + title() + ' lane'"
                 (click)="collapseToggle.emit()">‹</button>
       </div>
-      @if (isAutoReview()) {
-        <div class="column__auto-review-status"
-             data-testid="auto-review-status">
-          {{ autoReviewStatusLine() }}
-        </div>
-      }
       <div class="column__body">
         @if (isArchive()) {
           @for (job of archiveVisible(); track job.taskKey) {

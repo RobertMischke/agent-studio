@@ -195,7 +195,7 @@ describe('TaskColumnComponent (smoke)', () => {
       state: '3-progress',
       execution: {
         jobId: 'shared-task-9',
-        jobKey: 'shared::shared-task-9',
+        taskKey: 'shared::shared-task-9',
         processId: 5796,
         startedAt: '2026-05-27T14:58:00Z',
         status: 'running',
@@ -229,7 +229,7 @@ describe('TaskColumnComponent (smoke)', () => {
       state: '3-progress',
       execution: {
         jobId: 'shared-task-10',
-        jobKey: 'shared::shared-task-10',
+        taskKey: 'shared::shared-task-10',
         processId: 5796,
         startedAt: '2026-05-27T14:58:00Z',
         status: 'running',
@@ -293,6 +293,28 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(fixture.componentInstance.statusCluster()).toBeNull();
   });
 
+  it('does not render a separate auto-review tick line in the lane header', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskColumnComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskColumnComponent);
+    fixture.componentRef.setInput('title', 'Auto Review');
+    fixture.componentRef.setInput('state', '4-auto-review');
+    fixture.componentRef.setInput('jobs', []);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="auto-review-status"]')).toBeNull();
+    expect(host.textContent ?? '').not.toContain('Last tick:');
+  });
+
   it('forwards card delete requests from regular lanes', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskColumnComponent],
@@ -324,7 +346,7 @@ describe('TaskColumnComponent (smoke)', () => {
 function makeExec(overrides: Partial<CliExecution> = {}): CliExecution {
   return {
     jobId: 'task-1',
-    jobKey: 'test::task-1',
+    taskKey: 'test::task-1',
     processId: 12345,
     startedAt: '2026-05-27T14:00:00Z',
     status: 'running',
@@ -352,7 +374,7 @@ function makeStatus(overrides: Partial<ProjectRunnerStatus> = {}): ProjectRunner
 function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
     id: 'task-1',
-    jobKey: 'test::task-1',
+    taskKey: 'test::task-1',
     title: 'Task 1',
     state: '2-ready',
     order: 1,

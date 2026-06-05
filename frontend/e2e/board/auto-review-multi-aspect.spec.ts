@@ -3,15 +3,14 @@ import { test, expect, Page } from '@playwright/test';
 /**
  * Multi-aspect auto-review surface (slice 1).
  *
- * Verifies the kanban-side contract introduced when the orchestrator
- * gained a multi-aspect quality pass for jobs in `4-auto-review`:
- *   - the lane header shows a live status string sourced from
- *     `/api/auto-review/status` so the user sees the orchestrator is
- *     alive and forming opinions instead of silent durchwinken;
- *   - an info button next to the lane title opens a drawer that
- *     explains what auto-review does;
- *   - jobs that picked up a `<namespace>:concerns` tag from the
- *     pipeline render a small ⚠ chip on the card.
+ * Verifies the kanban-side contract for the multi-aspect quality pass
+ * on jobs in `4-auto-review`:
+ *   - the Auto Review lane header stays quiet and does not render the
+ *     old per-tick counter line;
+ *   - an info button next to the lane title opens a drawer that explains
+ *     what auto-review does;
+ *   - jobs that picked up a `<namespace>:concerns` tag from the pipeline
+ *     render a small concern chip on the card.
  *
  * Fully fixture-driven via `page.route` intercepts so the spec doesn't
  * depend on a real running orchestrator.
@@ -19,7 +18,7 @@ import { test, expect, Page } from '@playwright/test';
 
 interface JobInfoStub {
   id: string;
-  jobKey: string;
+  taskKey: string;
   title: string;
   state: string;
   order: number;
@@ -45,7 +44,7 @@ function jobStub(over: Partial<JobInfoStub>): JobInfoStub {
   const id = over.id ?? 'stub-job';
   return {
     id,
-    jobKey: `stub::${id}`,
+    taskKey: `stub::${id}`,
     title: over.title ?? id,
     state: over.state ?? '4-auto-review',
     order: over.order ?? 1,
@@ -88,7 +87,7 @@ async function installMocks(
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const p = url.pathname;
-    if (p === '/api/jobs/grouped') {
+    if (p === '/api/tasks/grouped' || p === '/api/jobs/grouped') {
       const body = {
         backlog: jobs.filter((j) => j.state === '0-backlog'),
         preparation: jobs.filter((j) => j.state === '1-preparation'),
@@ -104,7 +103,7 @@ async function installMocks(
       };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     }
-    if (p === '/api/jobs' || p === '/api/jobs/') {
+    if (p === '/api/tasks' || p === '/api/tasks/' || p === '/api/jobs' || p === '/api/jobs/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
     }
     if (p === '/api/auto-review/status') {
@@ -137,6 +136,56 @@ async function installMocks(
         { name: 'stub-project', path: 'C:/stub', rootPath: 'C:/stub' }
       ]) });
     }
+    if (p === '/api/workspaces') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{
+          id: 'default',
+          displayName: 'Workspaces',
+          sortOrder: 0,
+          isDefault: true,
+          color: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          projects: [{
+            id: 'stub-project',
+            displayName: 'stub-project',
+            shortCode: 'SP',
+            workspaceId: 'default',
+            color: null,
+            cliDefault: null,
+            modelDefault: null,
+            sortOrder: 0,
+            storageLocation: 'C:/stub',
+            archived: false,
+            createdAt: '2026-01-01T00:00:00Z'
+          }]
+        }])
+      });
+    }
+    if (p === '/api/environment') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } })
+      });
+    }
+    if (p === '/api/projects/settings') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+    }
+    if (p === '/api/dev-tools/flags') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ updateStableEnabled: false, deleteE2EJobsEnabled: false })
+      });
+    }
+    if (p.match(/^\/api\/cli\/[^/]+\/models$/)) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ models: [], defaultModel: null }) });
+    }
+    if (p === '/api/settings/cli/models') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ models: [] }) });
+    }
     if (p === '/api/cli/quota') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ at: new Date().toISOString(), ttlSeconds: 600, snapshots: [] }) });
     }
@@ -158,8 +207,18 @@ async function dismissErrorDialogIfPresent(page: Page): Promise<void> {
   }
 }
 
+async function restoreAllProjectsBoard(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+      v: 1,
+      tabs: [{ kind: 'board', projectName: '__all__' }],
+      activeKey: 'board:__all__'
+    }));
+  });
+}
+
 test.describe('Auto-review multi-aspect surface', () => {
-  test('lane header shows live status string and info drawer opens', async ({ page }) => {
+  test('lane header omits tick counters and info drawer opens', async ({ page }) => {
     const job = jobStub({ id: 'fixture-pass', title: 'All aspects pass', state: '4-auto-review', tags: [] });
     await installMocks(page, [job], {
       lastTickAt: new Date(Date.now() - 12_000).toISOString(),
@@ -171,27 +230,15 @@ test.describe('Auto-review multi-aspect surface', () => {
       currentJob: 'fixture-pass',
       currentProject: 'stub-project'
     });
+    await restoreAllProjectsBoard(page);
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await dismissErrorDialogIfPresent(page);
 
-    const headerStatus = page.getByTestId('header-auto-review-status');
-    await expect(headerStatus).toBeVisible({ timeout: 10_000 });
-    await expect(headerStatus).toContainText('Auto-review running');
-
-    // Status string is the load-bearing surface: it carries the per-tick
-    // counters and the "last tick was N seconds ago" recency. Without
-    // it the user has no way to tell that the orchestrator is alive.
-    const statusLine = page.getByTestId('auto-review-status');
-    await expect(statusLine).toBeVisible({ timeout: 10_000 });
-    await expect(statusLine).toContainText('6 queued');
-    await expect(statusLine).toContainText('4 accept');
-    await expect(statusLine).toContainText('1 reissue');
-    await expect(statusLine).toContainText('0 escalate');
-
-    const card = page.locator('[data-testid="job-card"]', { hasText: 'All aspects pass' });
-    await expect(card.getByTestId('job-card-auto-review-status')).toContainText('reviewing now');
+    await expect(page.getByTestId('lane-4-auto-review')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('auto-review-status')).toHaveCount(0);
+    await expect(page.getByTestId('lane-4-auto-review')).not.toContainText('Last tick:');
 
     // Info button next to the lane title opens the centered lane-info
     // modal with the rendered concept doc fetched from /api/concept-docs/.
@@ -205,7 +252,7 @@ test.describe('Auto-review multi-aspect surface', () => {
     await expect(modal).toContainText(/multi-aspect/i);
     await expect(modal).toContainText(/aspect-/);
 
-    // Capture lane-header evidence (status string + open modal + info button).
+    // Capture lane-header evidence (no tick line + open modal + info button).
     await page.setViewportSize({ width: 1400, height: 900 });
     await page.screenshot({ path: 'screenshots/auto-review/auto-review-lane-header.png', fullPage: false });
 
@@ -231,6 +278,7 @@ test.describe('Auto-review multi-aspect surface', () => {
       currentJob: null,
       currentProject: null
     });
+    await restoreAllProjectsBoard(page);
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');

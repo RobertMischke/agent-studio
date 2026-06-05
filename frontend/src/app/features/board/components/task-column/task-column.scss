@@ -31,14 +31,14 @@
       transition: outline 0.15s;
       /*
        * CSS containment: scrolling a single lane's body or polling a
-       * single lane's status (4-auto-review header line) must not
+       * single lane's live child updates must not
        * trigger layout/paint work in sibling lanes. The "layout" scope
        * keeps descendants' size/position changes from invalidating
        * ancestors; the "paint" scope clips the column's painting to
        * its own border box. The "inline-size" scope is the fix for the
        * ready-lane-width regression: without it, the column's
        * intrinsic min-content (driven by white-space:nowrap content
-       * like the 4-auto-review status line or a running execution
+       * like a running execution
        * card's badges) propagated up through the lane-group's
        * min-content and pushed lanes in heavier groups visibly wider
        * than lanes in lighter groups, breaking the equal-width
@@ -47,8 +47,8 @@
        * flex layout alone (min-width + flex-basis + container-share),
        * and inner content lays out within that width instead of
        * widening the column. Overflow inside the column is handled by
-       * per-element overflow:hidden + ellipsis already in the header,
-       * status-line, and card chips.
+       * per-element overflow:hidden + ellipsis already in the header
+       * and card chips.
        *
        * The default style/size scopes are intentionally left
        * untouched so descendant counters and viewport units still
@@ -267,20 +267,6 @@
     .column__add-icon {
       font-size: 16px;
       line-height: 1;
-    }
-    .column__auto-review-status {
-      margin-top: -4px;
-      padding: 4px 8px;
-      border-radius: 8px;
-      background: rgba(139, 92, 246, 0.05);
-      border: 1px solid rgba(139, 92, 246, 0.15);
-      color: #c4b5fd;
-      font-size: 11px;
-      line-height: 1.4;
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
     .column__archive-all {
       background: rgba(100, 116, 139, 0.12);

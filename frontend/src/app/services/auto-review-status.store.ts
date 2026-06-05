@@ -4,11 +4,9 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
 
 /**
  * Live status snapshot of the multi-aspect auto-review tick. Surfaced
- * in the kanban 4-auto-review lane header so the user sees that the
- * orchestrator is alive and forming opinions instead of silently
- * waving jobs through. The store polls the backend at the
- * orchestrator's tick cadence (default 30s); the lane header reads
- * the signal directly.
+ * in the global header indicator and card-level 4-auto-review process
+ * badges. The store polls the backend at the orchestrator's tick
+ * cadence (default 30s).
  *
  * Shape mirrors the backend's `AutoReviewStatusView` record. A null
  * `lastTickAt` means the orchestrator has not completed a tick since

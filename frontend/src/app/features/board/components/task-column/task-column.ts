@@ -389,26 +389,6 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
   readonly infoTopic = computed<string | null>(() => laneDocTopic(this.state()));
 
   /**
-   * One-line live status string for the 4-auto-review lane header. Reads
-   * the polled snapshot from {@link AutoReviewStatusStore}; falls back to
-   * a static "waiting" message before the first tick completes so the
-   * lane is never silent.
-   */
-  readonly autoReviewStatusLine = computed(() => {
-    const s = this.autoReviewStatus.status();
-    if (!s || !s.lastTickAt) {
-      return 'Auto-review: waiting for first tick';
-    }
-    const delta = Math.max(0, Math.round((Date.now() - new Date(s.lastTickAt).getTime()) / 1000));
-    const ago = delta < 60 ? `${delta}s ago` : `${Math.round(delta / 60)}m ago`;
-    const pending = s.pending ?? 0;
-    if (s.currentJob) {
-      return `Reviewing ${s.currentJob}. Last tick: ${pending} queued · ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
-    }
-    return `Last tick: ${pending} queued · ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
-  });
-
-  /**
    * The ADR-0025 swim-lanes are now real columns; the in-column
    * subdivision only triggers for the legacy `4-review` payload (older
    * backend, newer frontend, or until the migration runs). The new
