@@ -48,7 +48,7 @@ instead of re-querying or hard-coding model lists.
 - **Model list CLI-aware?** No — hard-coded to a curated Claude list, not
   read from `CliCatalogStore`.
 - **Writes:** `runCodeReview(jobId, { model: selectedModel() }, watchPath)` →
-  `POST /api/jobs/{id}/code-review`. The backend already accepts `cliType`
+  `POST /api/tasks/{id}/code-review`. The backend already accepts `cliType`
   too (`backend/Endpoints/Jobs/JobCodeReviewEndpoints.cs:162`); the frontend
   just never sends it.
 - **Migration note:** the backend has accepted both fields since the endpoint

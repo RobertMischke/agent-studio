@@ -1,11 +1,11 @@
-// Find jobs across all projects + lanes.
+// Find tasks across all projects + lanes.
 //
 // The server does not have a search/filter endpoint today; instead it
 // returns the full set and the client filters. The full payload is small
 // (~1-2 MB for hundreds of jobs) so client-side filter is fast enough.
 //
 // Usage:
-//   node find-jobs.js                          # list every job, grouped by lane
+//   node find-jobs.js                          # list every task, grouped by lane
 //   node find-jobs.js --lane 2-ready           # one lane only
 //   node find-jobs.js --grep "codex"           # case-insensitive id/title match
 //   node find-jobs.js --project "Lotta"        # project name contains
@@ -13,10 +13,10 @@
 //
 // Output is one line per match: <lane>  <project>  <slug>  -  <title>
 
-const http = require('http');
+import http from 'node:http';
 
 const HOST = '127.0.0.1';
-const PORT = 5031;
+const PORT = Number(process.env.TASKBOARD_PORT ?? 5031);
 
 function arg(name) {
   const i = process.argv.indexOf(name);
@@ -27,7 +27,7 @@ const wantGrep = arg('--grep');
 const wantProject = arg('--project');
 
 const req = http.request({
-  hostname: HOST, port: PORT, path: '/api/jobs/grouped', method: 'GET',
+  hostname: HOST, port: PORT, path: '/api/tasks/grouped', method: 'GET',
   headers: { 'X-Client-Id': 'local-default' },
 }, res => {
   let body = '';
@@ -39,7 +39,7 @@ const req = http.request({
     // Response shape: { backlog: [], preparation: [], ready: [], progress: [], ... }
     const laneAlias = {
       backlog: '0-backlog', preparation: '1-preparation', orchestratorPrep: '1a-orchestrator-prep',
-      needsHumanReview: '1b-needs-human-review', ready: '2-ready', progress: '3-progress',
+      needsHumanReview: '5-human-review', ready: '2-ready', progress: '3-progress',
       failedPickup: '3a-failed-pickup', autoReview: '4-auto-review', humanReview: '5-human-review',
       completed: '6-completed', archive: '7-archive',
     };

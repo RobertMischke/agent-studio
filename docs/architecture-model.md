@@ -141,7 +141,7 @@ elements:
     relevantTests:
       - frontend/e2e/**
     runtimeSignals:
-      - endpoint:/api/jobs/grouped
+      - endpoint:/api/tasks/grouped
   - elementId: backend-api
     label: Backend API
     expectedRole: ASP.NET Core API + SignalR hub. Owns REST endpoints and live push.

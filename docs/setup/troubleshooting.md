@@ -41,7 +41,7 @@ Symptom: the per-project counters in the header strip show numbers that don't ma
 
 Cause: known cross-project leak in the header counter aggregation. Tracked as `bug-board-shows-wrong-project-counter-cross-project-leak` (currently in `5-human-review`).
 
-Workaround: refresh the page; the counts recompute from `/api/jobs/grouped` on load. If the leak persists across refreshes, capture the response payload and attach it to the existing job rather than opening a new bug.
+Workaround: refresh the page; the counts recompute from `/api/tasks/grouped` on load. If the leak persists across refreshes, capture the response payload and attach it to the existing job rather than opening a new bug.
 
 ## "Two jobs sitting in 3-progress at the same time"
 
@@ -81,11 +81,10 @@ Symptom: a lane folder exists with only a `logs/` subdirectory; no `job.json`, n
 
 Cause: orchestrator crash mid-transition or a multi-lane race.
 
-Fix: this is an exception to the "API only" rule for job-folder mutations. Delete the empty shell folder directly:
-
-```js
-fs.rmSync(folderPath, { recursive: true, force: true });
-```
+Fix: use a dedicated recovery/delete API when one exists. If the current API
+cannot see the shell folder, stop and ask for an explicit operator decision
+before any filesystem cleanup; do not hide direct deletion inside an automated
+triage script.
 
 See [../../.agents/skills/job-api/references/known-pitfalls.md](../../.agents/skills/job-api/references/known-pitfalls.md) §7.
 
@@ -99,7 +98,7 @@ Fix going forward: commit before booting the dev backend. The orchestrator memor
 
 ## "I want to script a job move but the API rejects it"
 
-Symptom: `POST /api/jobs/<id>/move` returns `409 Job already exists or invalid input` even though the slug is unique.
+Symptom: `POST /api/tasks/<id>/move` returns `409 Job already exists or invalid input` even though the slug is unique.
 
 Cause: you passed `rootPath` as `watchPath`. The server resolves jobs against the *resolved job-folder root* under the workspace, not the project's source tree.
 

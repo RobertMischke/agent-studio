@@ -130,8 +130,8 @@ protocol pane and the workspace-wide visual evidence reel:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/jobs/{id}/screenshots?watchPath=...` | Recursive walk over `<job>/results/`, ordered oldest-first, captioned by spec/folder name with optional pass-fail status from `results/playwright/index.json`. Drives the per-task strip + lightbox above the protocol body. |
-| `GET /api/jobs/{id}/screenshot?path=<rel>&watchPath=...` | Sub-path aware file server. Path-traversal-guarded; only image content types are served. Used by the strip for nested artefacts under `results/playwright/<spec>/...` (the existing flat `/results/{name}` endpoint stays for top-level files). |
+| `GET /api/tasks/{id}/screenshots?watchPath=...` | Recursive walk over `<job>/results/`, ordered oldest-first, captioned by spec/folder name with optional pass-fail status from `results/playwright/index.json`. Drives the per-task strip + lightbox above the protocol body. |
+| `GET /api/tasks/{id}/screenshot?path=<rel>&watchPath=...` | Sub-path aware file server. Path-traversal-guarded; only image content types are served. Used by the strip for nested artefacts under `results/playwright/<spec>/...` (the existing flat `/results/{name}` endpoint stays for top-level files). |
 | `GET /api/workspace/screenshots?windowHours=N&projectFilter=...` | Newest-first reel across every watched job whose `results/` folder was touched inside the window. Drives the workspace "Visual evidence" overlay (`#/workspace/screenshots`). |
 
 The retention rule from §4.1 still applies: only files that already
@@ -195,9 +195,9 @@ The protocol pane renders `status.md` through [`markdownToHtml`](../frontend/src
 
 | Markdown source | Resolved URL |
 |-----------------|--------------|
-| `attachments/<name>` | `/api/jobs/{jobId}/attachments/{name}?watchPath=…` |
-| `results/<name>` | `/api/jobs/{jobId}/results/{name}?watchPath=…` |
-| `<name>.png` (no prefix) | `/api/jobs/{jobId}/results/{name}?watchPath=…` (fallback for legacy protocols) |
+| `attachments/<name>` | `/api/tasks/{jobId}/attachments/{name}?watchPath=…` |
+| `results/<name>` | `/api/tasks/{jobId}/results/{name}?watchPath=…` |
+| `<name>.png` (no prefix) | `/api/tasks/{jobId}/results/{name}?watchPath=…` (fallback for legacy protocols) |
 | Absolute `http(s)://…` | passed through unchanged |
 
 The backend endpoints serve only files whose names contain no path separators and live directly under `attachments/` or `results/`. They reject `..`, `/`, and `\`; see [`JobScannerService.ResolveAttachment`](../backend/Services/Jobs/JobScannerService.cs) and the `results/` mirror.

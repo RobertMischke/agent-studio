@@ -1,8 +1,8 @@
-# Job API Endpoint Reference
+# Task API Endpoint Reference
 
 Every endpoint listed here is on the backend (`http://127.0.0.1:5031` for
 stable, `:5030` for dev). Mutations require the
-`X-Client-Id: local-default` header. Source: `backend/Endpoints/Jobs/*.cs`.
+`X-Client-Id: local-default` header. Source: `backend/Endpoints/Tasks/*.cs`.
 
 ## Discovery
 
@@ -41,21 +41,21 @@ project is busy (avoid disturbing an in-flight run).
 }
 ```
 
-## Listing jobs
+## Listing tasks
 
-### `GET /api/jobs/grouped`
+### `GET /api/tasks/grouped`
 
 Returns jobs grouped by lane. Heavy; prefer the per-lane folder scan when you
 only need slugs.
 
-### `GET /api/jobs/{id}`
+### `GET /api/tasks/{id}`
 
 Single job detail. Pass `?watchPath=...` to disambiguate when the slug exists
 in multiple projects.
 
 ## Mutations (all require X-Client-Id)
 
-### `POST /api/jobs`
+### `POST /api/tasks`
 
 Create a job. Body:
 
@@ -66,16 +66,20 @@ Create a job. Body:
   "targetState": "2-ready",
   "order": 0,
   "taskType": "bug",
-  "agent": "claude",
-  "cliType": "claude",
+  "agent": "codex",
+  "cliType": "codex",
   "watchPath": "C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard",
   "promptMarkdown": "..."
 }
 ```
 
+`agent` and `cliType` must be supported CLI values (`claude`, `codex`,
+`copilot`, or `gemini`) and should match. Do not use `agent: "human"` as a
+parking mechanism; choose a non-running lane instead.
+
 Returns `200 {"id":"..."}` or `409 "Job already exists or invalid input"`.
 
-### `PUT /api/jobs/{jobId}/state?watchPath=...`
+### `PUT /api/tasks/{jobId}/state?watchPath=...`
 
 Move a job to another lane. Body:
 
@@ -85,17 +89,17 @@ Move a job to another lane. Body:
 
 Returns `200` (empty body). 404 if slug not found at the resolved watchPath.
 
-### `POST /api/jobs/{jobId}/move?watchPath=...`
+### `POST /api/tasks/{jobId}/move?watchPath=...`
 
 Same effect as `PUT /state`; exists as an alternative verb for clients that
 prefer POST for state changes.
 
-### `POST /api/jobs/{jobId}/move-to-top?watchPath=...`
+### `POST /api/tasks/{jobId}/move-to-top?watchPath=...`
 
 Promote a job to the head of `2-ready`. No body. Returns
 `{ position: 0 }` on success, `404` if not found in a promotable lane.
 
-### `POST /api/jobs/reorder`
+### `POST /api/tasks/reorder`
 
 Bulk reorder. Body:
 
@@ -106,11 +110,11 @@ Bulk reorder. Body:
 The given order becomes the new order on the lane the jobs share. All jobs
 must be on the same lane.
 
-### `DELETE /api/jobs/{jobId}?watchPath=...`
+### `DELETE /api/tasks/{jobId}?watchPath=...`
 
 Delete a job and its folder. Returns `200` on success.
 
-### `POST /api/jobs/{jobId}/restore-from-failed-pickup?watchPath=...`
+### `POST /api/tasks/{jobId}/restore-from-failed-pickup?watchPath=...`
 
 Lift a folder out of `3a-failed-pickup` back into `2-ready` and drop the
 `-pickup-failed-<utc>` suffix in one server-side step. Pass the dead-letter
@@ -125,11 +129,13 @@ Idempotent (`200 { "status": "no-op" }` when already restored). Appends a
 `pickup-restored` row to `<workspace>/logs/pickup-failures.jsonl`. Use this
 instead of a manual `mv` + rename.
 
-### `PUT /api/jobs/{jobId}/title`, `.../task-type`, `.../agent`
+### `PUT /api/tasks/{jobId}/title`, `.../task-type`, `.../cli-type`, `.../model`
 
-Single-field edits. Body: `{ "title": "new" }` etc. Same auth headers.
+Single-field edits. Body: `{ "title": "new" }`, `{ "cliType": "codex" }`,
+`{ "model": "gpt-5.5" }`, etc. Updating `cli-type` also keeps the parallel
+`agent` field in lockstep.
 
-### `POST /api/jobs/{jobId}/intake`
+### `POST /api/tasks/{jobId}/intake`
 
 Trigger the orchestrator-intake gate for a single job (when configured).
 

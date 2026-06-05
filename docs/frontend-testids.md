@@ -22,7 +22,7 @@ page.locator('[data-testid="lane-5-human-review"]')
 page.locator('[data-testid^="job-card-"]').filter({ hasText: 'My title' }).first()
 
 // Wait for a job to reach a target state (API-based — see G1 below):
-const url = `/api/jobs/${id}?watchPath=${encodeURIComponent(wp)}`;
+const url = `/api/tasks/${id}?watchPath=${encodeURIComponent(wp)}`;
 const state = await page.evaluate(
   async (u) => (await (await fetch(u)).json()).state,
   url
@@ -86,7 +86,7 @@ the F45b endpoints ship.
 | ❌ Anti-pattern | ✅ Why it's bad | Use instead |
 |---|---|---|
 | `lane-group-decide` to find a human-review card | Couples your test to the lane GROUPING (subject to ADR-0026 reshuffles). | `[data-states*="5-human-review"]` |
-| Wait for a state transition by polling DOM | UI poll rate (≥ 1 s) can be slower than backend state machine; fast lifecycles slip past every tick. See G1 below. | Poll `/api/jobs/{id}` directly, react to state change |
+| Wait for a state transition by polling DOM | UI poll rate (≥ 1 s) can be slower than backend state machine; fast lifecycles slip past every tick. See G1 below. | Poll `/api/tasks/{id}` directly, react to state change |
 | `getByRole({name:'Create'})` on the create dialog | i18n-fragile + breaks if label changes. | `getByTestId('create-submit')` |
 
 ## G1 — API state vs DOM scan
@@ -97,7 +97,7 @@ collapse into a single 20-second UI-poll window. If your test relies on
 seeing a card "in the In-Progress lane" to decide what to do, you will
 miss it.
 
-Pattern: poll `/api/jobs/{id}` every 2-3 s for state changes, and only
+Pattern: poll `/api/tasks/{id}` every 2-3 s for state changes, and only
 use the DOM to act once the state is the one you want (e.g. click
 Complete from `5-human-review`).
 

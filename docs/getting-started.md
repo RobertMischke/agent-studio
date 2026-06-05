@@ -63,10 +63,15 @@ Agents and scripts must organize jobs through the application API, not by direct
 Use the API for normal job operations:
 
 - `GET /api/watch-paths` to discover the correct `watchPath`.
-- `POST /api/jobs` with `CreateJobRequest` to create a job. Set `targetState` when a job should land directly in `1-preparation` or `2-ready`.
-- `POST /api/jobs/{jobId}/move?watchPath=...` to move a job.
-- `POST /api/jobs/reorder` to reorder jobs.
-- `DELETE /api/jobs/{jobId}?watchPath=...` to delete a job.
+- `POST /api/tasks` with `CreateJobRequest` to create a job. Set `targetState` when a job should land directly in `1-preparation` or `2-ready`.
+- `POST /api/tasks/{jobId}/move?watchPath=...` to move a job.
+- `POST /api/tasks/reorder` to reorder jobs.
+- `DELETE /api/tasks/{jobId}?watchPath=...` to delete a job.
+
+On create, `agent` and `cliType` must be valid CLI values (`claude`, `codex`,
+`copilot`, or `gemini`) and should match. Do not use `agent: "human"` to keep
+a card visible; choose a non-running lane such as `0-backlog` or
+`5-human-review`.
 
 Direct filesystem edits are reserved for backend implementation, migrations, recovery work, and tests that deliberately exercise the filesystem contract. They are not the normal operating path for agents. The API is the boundary that keeps ownership, client identity, validation, live updates, and future Task Access behavior in one place.
 

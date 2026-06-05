@@ -22,8 +22,8 @@ bearing reference for the per-project `LaneMutexRegistry` (F21).
 
 | Writer | Trigger | What it moves | Entry point |
 |--------|---------|----------------|-------------|
-| `JobTransitionService.MoveAsync` | API `POST /api/jobs/{id}/move`, runner completion, drag-and-drop in UI | Single job from any lane to any lane; combines move with auto-commit + reorder. | `backend/Services/Jobs/JobTransitionService.cs` |
-| `JobTransitionService.BatchMoveAsync` | API `POST /api/jobs/batch-move` | Many jobs in one call (per-item atomic). Each item routes through `MoveAsync`. | same file |
+| `JobTransitionService.MoveAsync` | API `POST /api/tasks/{id}/move`, runner completion, drag-and-drop in UI | Single job from any lane to any lane; combines move with auto-commit + reorder. | `backend/Services/Jobs/JobTransitionService.cs` |
+| `JobTransitionService.BatchMoveAsync` | API `POST /api/tasks/batch-move` | Many jobs in one call (per-item atomic). Each item routes through `MoveAsync`. | same file |
 | `JobStateMachine.MoveJob` / `MoveFolderToState` / `DeleteJob` / `ChangeProject` | Called by every higher-level mover. The lowest-level lane mutator. | Direct `Directory.Move` / `Directory.Delete`. | `backend/Services/Jobs/JobStateMachine.cs` |
 | `CrashRecoveryService.RecoverAsync` | Boot (before first runner tick) | Finishes a transition whose `completion-marker.json` survived a backend crash. Calls `JobTransitionService.MoveAsync`. | `backend/Services/Runner/CrashRecoveryService.cs` |
 | `StaleProgressArchiver.SweepAsync` | Boot (after crash recovery), and could be invoked later by the supervisor | Per ADR-0051: requeues a stale `3-progress` folder that still has `job.json` back to `2-ready` (`RequeueOrphanToReadyAsync`), archives an empty/no-`job.json` folder to `7-archive` (`ArchiveOrphanFolder`), or finishes a missed `3-progress -> 4-auto-review` transition when the sentinel survived. Never dead-letters. | `backend/Services/Runner/StaleProgressArchiver.cs` |
@@ -96,7 +96,7 @@ Trade-offs documented:
    simultaneously. With the mutex, the archiver always sees either
    the pre-move state (and skips, because the folder is fresh) or the
    post-move state (and skips, because the source is gone).
-2. **API + supervisor race**: `POST /api/jobs/{id}/move` runs while
+2. **API + supervisor race**: `POST /api/tasks/{id}/move` runs while
    the supervisor's archiver sweep starts. Same mechanism: the move
    APIs go through `JobStateMachine.MoveJob`, the sweep goes through
    `JobStateMachine.MoveFolderToState`. Both take the mutex.

@@ -2,32 +2,63 @@
 //
 // Pattern from the 2026-05-11 human-review triage of 108 tasks. Reads each
 // task's status.md and aspect-*.md, classifies into action buckets, then
-// loops the move API per task. Idempotent prompt-append so re-running the
-// reissue path does not stack duplicate notes.
-//
-// Adapt the classify() function to your specific lane. The boilerplate
-// below filters out the "bogus aspect-runner produced no parseable verdict"
-// false-positive class that was common before the 2026-05-11 aspect-runner
-// fix.
+// mutates through the task API. Reading files is fine for classification;
+// writing/moving must go through /api/tasks.
 
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
+import fs from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
 
 const HOST = '127.0.0.1';
-const PORT = 5031;
-const lane = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard\\5-human-review';
-const watchPath = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard';
+const PORT = Number(process.env.TASKBOARD_PORT ?? 5031);
+const TARGET_PROJECT = process.env.TASKBOARD_PROJECT ?? 'Agent Task Processor';
+const SOURCE_STATE = process.env.TASKBOARD_SOURCE_STATE ?? '5-human-review';
 
 const BOGUS_ASPECT = /Aspect runner produced no parseable verdict/i;
 
-function classify() {
+function request(method, reqPath, bodyObj = null) {
+  return new Promise(resolve => {
+    const body = bodyObj ? JSON.stringify(bodyObj) : '';
+    const req = http.request({
+      hostname: HOST,
+      port: PORT,
+      path: reqPath,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-Id': 'local-default',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', e => resolve({ status: -1, body: e.message }));
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+async function resolveWatchPath() {
+  const res = await request('GET', '/api/watch-paths');
+  if (res.status !== 200) throw new Error(`watch-path lookup failed: ${res.status} ${res.body}`);
+  const entries = JSON.parse(res.body);
+  const entry = entries.find(p => p.name === TARGET_PROJECT)
+    ?? entries.find(p => p.name?.toLowerCase().includes(TARGET_PROJECT.toLowerCase()));
+  if (!entry?.path) throw new Error(`No watchPath found for project "${TARGET_PROJECT}"`);
+  return entry.path;
+}
+
+function classify(lane) {
   const out = { DONE: [], OPEN: [], CHECK: [] };
   const folders = fs.readdirSync(lane).filter(d => fs.statSync(path.join(lane, d)).isDirectory());
   for (const slug of folders) {
     const folder = path.join(lane, slug);
-    let realConcerns = 0, bogusConcerns = 0;
-    let hasOpen = false, hasDone = false;
+    let realConcerns = 0;
+    let bogusConcerns = 0;
+    let hasOpen = false;
+    let hasDone = false;
     let openItemsText = '';
     const statusPath = path.join(folder, 'status.md');
     if (fs.existsSync(statusPath)) {
@@ -53,35 +84,24 @@ function classify() {
         else realConcerns++;
       }
     }
-    if (hasOpen) out.OPEN.push({ slug, openItemsText });
+    if (hasOpen) out.OPEN.push({ slug, folder, openItemsText });
     else if (hasDone || bogusConcerns > 0) out.DONE.push({ slug });
     else out.CHECK.push({ slug });
   }
   return out;
 }
 
-function moveTo(slug, targetState) {
-  return new Promise(resolve => {
-    const body = JSON.stringify({ targetState });
-    const reqPath = `/api/jobs/${encodeURIComponent(slug)}/state?watchPath=${encodeURIComponent(watchPath)}`;
-    const req = http.request({
-      hostname: HOST, port: PORT, path: reqPath, method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Client-Id': 'local-default',
-        'Content-Length': Buffer.byteLength(body),
-      },
-    }, res => { let d = ''; res.on('data', c => d += c); res.on('end', () => resolve({ slug, status: res.statusCode, body: d.slice(0, 200) })); });
-    req.on('error', e => resolve({ slug, status: -1, body: e.message }));
-    req.write(body); req.end();
-  });
+async function moveTo(watchPath, slug, targetState) {
+  const reqPath = `/api/tasks/${encodeURIComponent(slug)}/move?watchPath=${encodeURIComponent(watchPath)}`;
+  const res = await request('POST', reqPath, { targetState });
+  return { slug, status: res.status, body: res.body.slice(0, 200) };
 }
 
-function appendReissueNote(slug, openItemsText) {
-  const promptPath = path.join(lane, slug, 'prompt.md');
+async function appendReissueNote(watchPath, item) {
+  const promptPath = path.join(item.folder, 'prompt.md');
   if (!fs.existsSync(promptPath)) return false;
   const original = fs.readFileSync(promptPath, 'utf-8');
-  if (original.includes('Human Review Reissue Note')) return false; // idempotent
+  if (original.includes('Human Review Reissue Note')) return false;
   const today = new Date().toISOString().slice(0, 10);
   const note = [
     '',
@@ -89,38 +109,48 @@ function appendReissueNote(slug, openItemsText) {
     '',
     `## Human Review Reissue Note (${today})`,
     '',
-    'Triagiert in `5-human-review`. Der vorherige Run hat folgende Open Items dokumentiert:',
+    'Triaged in `5-human-review`. The previous run documented these open items:',
     '',
-    openItemsText || '(no specific open items found, please re-evaluate)',
+    item.openItemsText || '(no specific open items found, please re-evaluate)',
     '',
-    'Bitte diese Punkte adressieren oder dokumentieren warum sie out-of-scope sind.',
+    'Please address these points or document why they are out of scope.',
     '',
   ].join('\n');
-  fs.writeFileSync(promptPath, original + note, 'utf-8');
+  const reqPath = `/api/tasks/${encodeURIComponent(item.slug)}/files/${encodeURIComponent('prompt.md')}`
+    + `?watchPath=${encodeURIComponent(watchPath)}`;
+  const res = await request('PUT', reqPath, { content: original + note });
+  if (res.status < 200 || res.status >= 300) {
+    console.error(`prompt update failed for ${item.slug}: ${res.status} ${res.body.slice(0, 200)}`);
+    return false;
+  }
   return true;
 }
 
 async function main() {
-  const buckets = classify();
+  const watchPath = await resolveWatchPath();
+  const lane = path.join(watchPath, SOURCE_STATE);
+  const buckets = classify(lane);
   console.log('Buckets:');
   for (const k of Object.keys(buckets)) console.log(`  ${k}: ${buckets[k].length}`);
 
   const arg = process.argv[2];
   if (arg === '--move-done') {
-    let ok = 0, fail = 0;
+    let ok = 0;
+    let fail = 0;
     for (const { slug } of buckets.DONE) {
-      const r = await moveTo(slug, '6-completed');
+      const r = await moveTo(watchPath, slug, '6-completed');
       r.status === 200 ? ok++ : fail++;
     }
-    console.log(`DONE → 6-completed: ok=${ok} fail=${fail}`);
+    console.log(`DONE -> 6-completed: ok=${ok} fail=${fail}`);
   } else if (arg === '--reissue-open') {
-    let ok = 0, fail = 0;
-    for (const { slug, openItemsText } of buckets.OPEN) {
-      appendReissueNote(slug, openItemsText);
-      const r = await moveTo(slug, '2-ready');
+    let ok = 0;
+    let fail = 0;
+    for (const item of buckets.OPEN) {
+      await appendReissueNote(watchPath, item);
+      const r = await moveTo(watchPath, item.slug, '2-ready');
       r.status === 200 ? ok++ : fail++;
     }
-    console.log(`OPEN → 2-ready (with note): ok=${ok} fail=${fail}`);
+    console.log(`OPEN -> 2-ready (with note): ok=${ok} fail=${fail}`);
   } else {
     console.log('Usage: --move-done | --reissue-open');
     console.log('Run without flags to just print bucket counts (dry-run).');

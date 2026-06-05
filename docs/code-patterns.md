@@ -188,7 +188,7 @@ severityIfBad: High
 ```yaml
 # ---------------------------------------------------------------------------
 # `cliType` and `agent` in job.json must stay in sync. On 2026-05-12 a mass
-# flip of 62 jobs from Claude to Codex via PUT /api/jobs/{id}/cli-type set
+# flip of 62 jobs from Claude to Codex via PUT /api/tasks/{id}/cli-type set
 # `cliType=codex` but left `agent=claude`. The kanban card reads the icon
 # from `cliType` and the text label from `agent`, so the cards rendered the
 # Codex icon next to a "claude" label until the file was hand-edited. Only

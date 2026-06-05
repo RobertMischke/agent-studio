@@ -19,4 +19,4 @@ related-adrs: []
 **What.** Newly created tasks displayed `agent: human` even when auto-pickup would run a CLI agent.
 **Why.** The persisted job data did not materialize the effective owner/client defaults at create time.
 **Workaround.** None needed for new tasks after the fix; inspect legacy tasks if labels look stale.
-**Long-term.** Keep `agent` and `cliType` synchronized through the canonical mutation path.
+**Long-term.** Keep `agent` and `cliType` synchronized through the canonical mutation path. New scripted tasks must use a supported CLI value (`claude`, `codex`, `copilot`, or `gemini`) for both fields; do not use `agent: human` as a parking mechanism.

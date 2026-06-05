@@ -1,8 +1,8 @@
-# Job State Reference
+# Task State Reference
 
 The canonical lane vocabulary. `targetState` strings on every mutation must
 match one of these exactly; aliases are accepted but the resolved value is the
-full form below. Source: `backend/Models/JobModels.cs::JobStates`.
+full form below. Source: `src/AgentTaskboard.Shared/Models/TaskModels.cs::TaskStates`.
 
 | Lane | Constant | Purpose |
 |------|----------|---------|
@@ -37,5 +37,6 @@ Prefer the full `N-name` form for clarity in scripts.
 - `3-progress` should always have at most one job per project. If you see two,
   it is the race-condition documented in
   `fix-auto-review-reissue-must-go-to-ready-not-progress` (2026-05-11).
-- Empty shell folders (no `job.json`) cannot be moved via the API. Delete the
-  folder directly via `fs.rmSync(path, { recursive: true })`.
+- Empty shell folders (no `job.json`) cannot be moved via the regular task
+  API. Use the dedicated recovery/delete API when one exists; otherwise ask
+  for an explicit operator decision before any filesystem cleanup.

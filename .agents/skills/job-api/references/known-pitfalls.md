@@ -97,12 +97,10 @@ Sometimes a lane folder exists with just a `logs/` subdirectory and no
 `job.json` or `prompt.md`. Caused by orchestrator crashes mid-transition or
 multi-lane race-conditions.
 
-These cannot be moved via the API (no `job.json` → server cannot find them).
-Delete the folder directly:
-
-```js
-fs.rmSync(folderPath, { recursive: true, force: true });
-```
+These cannot be moved via the regular task API (no `job.json` means the server
+cannot resolve a task id). Use a dedicated recovery/delete API when one exists.
+If no API path exists, stop and ask for an explicit operator decision before
+any filesystem cleanup; do not hide this behind a triage script.
 
 ## 8. Codex-specific (in flight)
 

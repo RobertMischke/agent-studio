@@ -11,10 +11,10 @@ sentinel: TASKBOARD-SKILL-JOB-API
 
 > Sentinel: `TASKBOARD-SKILL-JOB-API`. Echo this string in your first reply when the orchestrator probes whether the skill loaded.
 
-Programmatic interaction with the agent-taskboard job API. Read this before
+Programmatic interaction with the agent-taskboard task API. Read this before
 creating or moving tasks via HTTP, especially when the task you are doing
-includes "add to the queue", "reissue this job", "drop the task to archive",
-"sort the job to the top", or "create a follow-up task".
+includes "add to the queue", "reissue this task", "drop the task to archive",
+"sort the task to the top", or "create a follow-up task".
 
 The board mostly drives state via the UI, but agents (including you, future-me)
 need a reliable scripted path because:
@@ -43,7 +43,7 @@ requests do not need the header but it is harmless to include.
 
 ## Common pitfall: the watchPath quirk
 
-Every mutation that targets a specific job needs a `watchPath` query parameter.
+Every mutation that targets a specific task needs a `watchPath` query parameter.
 This is **not** the project's source-tree path; it is the resolved job-folder
 root that `GET /api/watch-paths` returns under the `path` field.
 
@@ -65,7 +65,7 @@ For the agent-taskboard project the call is `GET /api/watch-paths`:
 ]
 ```
 
-Use the `path` field, not `rootPath`. The server resolves jobs against that
+Use the `path` field, not `rootPath`. The server resolves tasks against that
 path; using `rootPath` returns `409 Job already exists or invalid input` even
 when the slug is unique.
 
@@ -82,13 +82,20 @@ For self-contained projects (no `.orchestrator.yml` pointer) the `path` is
 3. **Use Node.js, not curl.** Windows backslashes in JSON bodies break shell
    quoting. The reference scripts in [`scripts/`](scripts) handle this; copy
    them rather than hand-rolling curl.
-4. **One job per request.** No bulk-create endpoint. Loop in your script.
+4. **One task per request.** No bulk-create endpoint. Loop in your script.
 5. **Slugs are stable.** Do not include timestamps in `id` unless you actually
    want a fresh per-attempt artifact. Stable slugs keep history linkable.
 6. **Lane targets use the full lane name**, e.g. `2-ready` or `6-completed`
    (not `ready` / `completed`). See [`references/states.md`](references/states.md).
 7. **Failed-pickup orphans are not regular tasks.** Do not move them with the
-   state API if they have no `job.json`. Delete the folder directly instead.
+   state API if they have no `job.json`. Use a dedicated API recovery/delete
+   path when one exists; otherwise stop and ask for an explicit operator
+   decision before filesystem cleanup.
+8. **`agent` and `cliType` must be real CLI values.** Use `claude`, `codex`,
+   `copilot`, or `gemini`, and keep them aligned unless you are deliberately
+   testing drift handling. Do not use `agent: "human"` to keep a card visible;
+   park visible non-running work by choosing an appropriate lane such as
+   `0-backlog` or `5-human-review`.
 
 ## Process: finding existing jobs
 
@@ -107,7 +114,7 @@ node scripts/find-jobs.js --lane 4-auto-review --grep "session"
 Output: `<lane>\t<project>\t<slug>  -  <title>`, one line per match. Pipe to
 `grep` for further narrowing.
 
-Underlying call: `GET /api/jobs/grouped`. Returns
+Underlying call: `GET /api/tasks/grouped`. Returns
 `{ backlog: [], preparation: [], ready: [], progress: [], ... }`, each value
 an array of `JobInfo`-shaped objects with `id`, `title`, `projectName`,
 `state`, `cliType`, etc.
@@ -125,8 +132,8 @@ const job = {
   targetState: '2-ready',     // initial lane
   order: 0,                    // position within lane; 0 = top of new batch
   taskType: 'bug',             // or feature/refactor/analysis/chore
-  agent: 'claude',             // or codex/copilot/gemini
-  cliType: 'claude',           // usually matches agent
+  agent: 'codex',              // claude | codex | copilot | gemini
+  cliType: 'codex',            // keep in lockstep with agent
   watchPath,
   promptMarkdown: [
     '## Context',
@@ -137,7 +144,7 @@ const job = {
 
 const body = JSON.stringify(job);
 const req = http.request({
-  hostname: '127.0.0.1', port: 5031, path: '/api/jobs', method: 'POST',
+  hostname: '127.0.0.1', port: 5031, path: '/api/tasks/', method: 'POST',
   headers: {
     'Content-Type': 'application/json',
     'X-Client-Id': 'local-default',
@@ -158,15 +165,15 @@ the `watchPath` not matching `/api/watch-paths`.
 
 The full template is in [`scripts/create-job.js`](scripts/create-job.js).
 
-## Process: moving a job between lanes
+## Process: moving a task between lanes
 
-`PUT /api/jobs/{jobId}/state?watchPath=...` with body `{"targetState":"6-completed"}`.
+`POST /api/tasks/{jobId}/move?watchPath=...` with body `{"targetState":"6-completed"}`.
 
 ```js
 const body = JSON.stringify({ targetState: '6-completed' });
-const path = `/api/jobs/${encodeURIComponent(jobId)}/state` +
+const path = `/api/tasks/${encodeURIComponent(jobId)}/move` +
              `?watchPath=${encodeURIComponent(watchPath)}`;
-// PUT, same headers as create
+// POST, same headers as create
 ```
 
 Common targets:
@@ -179,7 +186,7 @@ The full template is in [`scripts/move-state.js`](scripts/move-state.js).
 
 ## Process: promoting to the top of `2-ready`
 
-`POST /api/jobs/{jobId}/move-to-top?watchPath=...` with no body.
+`POST /api/tasks/{jobId}/move-to-top?watchPath=...` with no body.
 
 Use this when a hot bug needs to be picked up before the existing queue, but
 the job is already in `2-ready` or `0-backlog`. The state machine handles the

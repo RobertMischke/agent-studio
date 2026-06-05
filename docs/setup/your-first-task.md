@@ -50,7 +50,7 @@ Tasks that look small but make the loop tell you nothing:
 
 ## Creating tasks programmatically
 
-When you need to script task creation (bulk seed, follow-up batches, triage scripts), use the Job API rather than the create dialog. The full contract, the `watchPath` quirk, the `X-Client-Id` header, and ready-to-use Node templates live in [../../.agents/skills/job-api/SKILL.md](../../.agents/skills/job-api/SKILL.md).
+When you need to script task creation (bulk seed, follow-up batches, triage scripts), use the Task API rather than the create dialog. The full contract, the `watchPath` quirk, the `X-Client-Id` header, and ready-to-use Node templates live in [../../.agents/skills/job-api/SKILL.md](../../.agents/skills/job-api/SKILL.md).
 
 A minimal create looks like:
 
@@ -59,20 +59,21 @@ A minimal create looks like:
 const watchPaths = await fetch('http://127.0.0.1:5030/api/watch-paths').then(r => r.json());
 const target = watchPaths.find(w => w.name === 'Lotta Dashboard');
 
-await fetch('http://127.0.0.1:5030/api/jobs', {
+await fetch('http://127.0.0.1:5030/api/tasks', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'local-default' },
   body: JSON.stringify({
     watchPath: target.path,   // resolved job-folder root, NOT rootPath
     title: 'docs: add Project Overview doc',
-    prompt: '...',
+    promptMarkdown: '...',
+    agent: 'claude',
     cliType: 'claude',
     targetState: '2-ready',
   }),
 });
 ```
 
-The Job API skill is **mandatory** before any scripted board mutation; the `watchPath` vs. `rootPath` distinction trips up every new operator at least once.
+The Task API skill is **mandatory** before any scripted board mutation; the `watchPath` vs. `rootPath` distinction trips up every new operator at least once. Keep `agent` and `cliType` on the same real CLI value (`claude`, `codex`, `copilot`, or `gemini`).
 
 ## What "the loop works" actually means
 

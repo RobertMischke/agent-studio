@@ -1,32 +1,30 @@
-// Template: create one job.
+// Template: create one task through the application API.
 //
 // Usage:
-//   1. Adjust HOST / PORT below (5031=stable, 5030=dev).
-//   2. Replace the `watchPath` with the `path` field from
-//      `GET /api/watch-paths` for your target project.
-//   3. Fill `id`, `title`, `targetState`, `taskType`, and `promptMarkdown`.
-//   4. Run `node create-job.js`.
+//   1. Adjust PORT / TARGET_PROJECT below, or pass env vars:
+//        TASKBOARD_PORT=5031 TASKBOARD_PROJECT="Agent Task Processor" node create-job.js
+//   2. Fill `id`, `title`, `targetState`, `taskType`, and `promptMarkdown`.
+//   3. Keep `agent` and `cliType` on the same real CLI value.
 //
-// Returns 200 with `{ id }` on success; 409 "Job already exists or invalid
-// input" usually means the watchPath does not match GET /api/watch-paths
-// (use the `path` field, not `rootPath`).
+// Returns 200 with `{ id }` on success. A 409 usually means the slug already
+// exists or the watchPath was not resolved from GET /api/watch-paths.
 
-const http = require('http');
+import http from 'node:http';
 
 const HOST = '127.0.0.1';
-const PORT = 5031; // stable; use 5030 for dev
+const PORT = Number(process.env.TASKBOARD_PORT ?? 5031); // stable; use 5030 for dev
+const TARGET_PROJECT = process.env.TASKBOARD_PROJECT ?? 'Agent Task Processor';
+const CLI_TYPES = new Set(['claude', 'codex', 'copilot', 'gemini']);
 
-const watchPath = 'C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard';
-
-const job = {
+const task = {
   id: 'REPLACE-ME-stable-slug',
   title: 'REPLACE ME - Human-readable title shown on the card',
   targetState: '2-ready',     // initial lane; see references/states.md
   order: 0,                    // position within lane; 0 = top of new batch
-  taskType: 'bug',             // bug | feature | refactor | analysis | chore | cleanup
-  agent: 'claude',             // claude | codex | copilot | gemini
-  cliType: 'claude',           // usually matches agent
-  watchPath,
+  taskType: 'chore',           // bug | feature | chore
+  agent: 'codex',              // claude | codex | copilot | gemini
+  cliType: 'codex',            // keep in lockstep with agent
+  watchPath: '',               // resolved live below; do not hard-code rootPath
   promptMarkdown: [
     '## Context',
     '',
@@ -38,19 +36,49 @@ const job = {
   ].join('\n'),
 };
 
-const body = JSON.stringify(job);
-const req = http.request({
-  hostname: HOST, port: PORT, path: '/api/jobs', method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-Client-Id': 'local-default',
-    'Content-Length': Buffer.byteLength(body),
-  },
-}, res => {
-  let d = '';
-  res.on('data', c => d += c);
-  res.on('end', () => console.log('status:', res.statusCode, '| body:', d.slice(0, 400) || '(empty)'));
-});
-req.on('error', e => console.log('ERR', e.message));
-req.write(body);
-req.end();
+function request(method, path, bodyObj = null) {
+  return new Promise(resolve => {
+    const body = bodyObj ? JSON.stringify(bodyObj) : '';
+    const req = http.request({
+      hostname: HOST,
+      port: PORT,
+      path,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-Id': 'local-default',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', e => resolve({ status: -1, body: e.message }));
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+function assertCliPair({ agent, cliType }) {
+  if (!CLI_TYPES.has(agent) || !CLI_TYPES.has(cliType) || agent !== cliType) {
+    throw new Error(
+      `agent and cliType must match a real CLI (${[...CLI_TYPES].join(', ')}); got agent=${agent} cliType=${cliType}`,
+    );
+  }
+}
+
+async function resolveWatchPath() {
+  const res = await request('GET', '/api/watch-paths');
+  if (res.status !== 200) throw new Error(`watch-path lookup failed: ${res.status} ${res.body}`);
+  const entries = JSON.parse(res.body);
+  const entry = entries.find(p => p.name === TARGET_PROJECT)
+    ?? entries.find(p => p.name?.toLowerCase().includes(TARGET_PROJECT.toLowerCase()));
+  if (!entry?.path) throw new Error(`No watchPath found for project "${TARGET_PROJECT}"`);
+  return entry.path;
+}
+
+assertCliPair(task);
+task.watchPath = await resolveWatchPath();
+const res = await request('POST', '/api/tasks/', task);
+console.log('status:', res.status, '| body:', res.body.slice(0, 400) || '(empty)');

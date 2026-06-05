@@ -8,7 +8,7 @@ Every tooltip in the agent-taskboard frontend goes through one directive:
 
 ```html
 <button [appTooltip]="'Refresh the board'">↻</button>
-<button [appTooltip]="{ title: 'Refresh', body: 'Re-fetches all lanes from <code>/api/jobs</code>.' }">↻</button>
+<button [appTooltip]="{ title: 'Refresh', body: 'Re-fetches all lanes from <code>/api/tasks</code>.' }">↻</button>
 <span [appTooltip]="row.tooltip"
       tooltipPosition="top"
       tooltipSeverity="warn">…</span>

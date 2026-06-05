@@ -120,7 +120,7 @@ Five identifier fields, each with a narrow purpose. Do not overload them.
 | `id` | ULID or UUID v7 | Globally unique, lexically sortable. The canonical reference target. |
 | `replyToId` | Another `id` | Direct answer relationship. Question -> answer, decision -> follow-up decision, advisory -> intervention. Render as a thread in the UI. |
 | `correlationId` | Free-form, often the originating user message `id` | Group of messages that belong to one logical activity but cross participants and runs. Render as a participant graph cluster. |
-| `runId` | Stable id from `/api/jobs/{id}/runs` | Bus message belongs to one CLI invocation. Lets the timeline filter "show me run 3" without scanning text. |
+| `runId` | Stable id from `/api/tasks/{id}/runs` | Bus message belongs to one CLI invocation. Lets the timeline filter "show me run 3" without scanning text. |
 | `cliSessionId` | Provider session id | Bus message belongs to one provider chat session. Lets system-review correlate with on-disk session evidence. |
 
 Recommended id choice: ULID. 26 chars, lexically sortable, no dashes, OS-clock based. UUID v7 is acceptable when a library already produces them. Plain UUID v4 is **not** acceptable because lexical order does not match time and replay becomes O(n log n) on every read.
@@ -133,7 +133,7 @@ Every cross-stream link is a typed field on the message envelope. The bus does n
 
 - **`project`** matches `ProjectRunnerStatus.projectName` and the watch-paths name. Workspace-wide messages set it to `null`.
 - **`jobId`** is the `JobInfo.Id` slug. Lifecycle messages that create the job carry `jobId` (the new id) plus a `payload.transitionReason` describing why.
-- **`runId`** is the run id used by `/api/jobs/{id}/runs`. The runner emits it on `lifecycle:RunStarted`; downstream messages within the same run inherit it. When a run dies and is recovered, the recovered run gets a new `runId` and the recovery `decision` carries `replyToId` to the original run's last message.
+- **`runId`** is the run id used by `/api/tasks/{id}/runs`. The runner emits it on `lifecycle:RunStarted`; downstream messages within the same run inherit it. When a run dies and is recovered, the recovered run gets a new `runId` and the recovery `decision` carries `replyToId` to the original run's last message.
 - **`cliSessionId`** is the provider session UUID (Claude), session id (Codex), session name (Copilot, Gemini). Optional; only set when the runner knows it. Useful for stale-session diagnostics.
 - **`artifacts`** is an array of [`agent-artifact-ref`](schemas/agent-artifact-ref.schema.json) pointers. Always references, never inlined bytes. Screenshots live under `<job>/results/`; log slices reference `logs/cli-output.log` with a `byteRange` or `lineRange`; supervisor records reference `logs/meta/<project>/observations.jsonl` with a `lineRange`. Artifact `kind` drives how the UI renders the link.
 - **`tokens`** is a per-message attribution block: `{ input, output, cacheRead?, cacheWrite?, model?, dollars? }`. `kind:token-usage` messages always carry it; other kinds may carry it for traceability. Rolling windowed totals belong in [`token-aggregate.schema.json`](schemas/token-aggregate.schema.json), not on each message.
@@ -268,7 +268,7 @@ Each project-level supporting action declares the same five-field contract. The 
 
 ## 9c. Auto-review diff discovery
 
-Auto-review aspect runners must receive a full job-range diff summary, not a HEAD-only or latest-commit-only view. The summary is built from every commit attributed to the job across all runs (`HeadShaBefore..HeadShaAfter` ranges from the run timeline, deduped) plus the auto-commit recorded on `JobInfo.Commit`. This matches the `/api/jobs/{id}/commits` protocol-pane aggregation so the automated reviewer and the human reviewer inspect the same commit set.
+Auto-review aspect runners must receive a full job-range diff summary, not a HEAD-only or latest-commit-only view. The summary is built from every commit attributed to the job across all runs (`HeadShaBefore..HeadShaAfter` ranges from the run timeline, deduped) plus the auto-commit recorded on `JobInfo.Commit`. This matches the `/api/tasks/{id}/commits` protocol-pane aggregation so the automated reviewer and the human reviewer inspect the same commit set.
 
 Crash-recovery commits are often empty fixups on top of the real work. If an aspect prompt only receives that latest recovery commit, it can falsely report "0 files changed" and block a successful task. Truly empty aggregates must be stated explicitly as "No commits attributed to this task" rather than rendered as a zero-file commit.
 

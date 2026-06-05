@@ -155,11 +155,11 @@ Targets (the user-visible bar these cycles are measured against):
 | Endpoint | p95 target |
 |---|---|
 | `/api/runner/status` | < 50 ms |
-| `/api/jobs` | < 100 ms |
-| `/api/jobs/grouped` | < 100 ms |
-| `/api/jobs/{id}` | < 50 ms |
-| `/api/jobs/{id}/output` | < 50 ms |
-| `/api/jobs/{id}/runs` | < 50 ms |
+| `/api/tasks` | < 100 ms |
+| `/api/tasks/grouped` | < 100 ms |
+| `/api/tasks/{id}` | < 50 ms |
+| `/api/tasks/{id}/output` | < 50 ms |
+| `/api/tasks/{id}/runs` | < 50 ms |
 
 `/api/cli/usage` is exempt; it walks per-CLI session histories on disk and
 is intrinsically slow. Cycle 7 explores keeping CLI processes alive
@@ -177,11 +177,11 @@ the live HTTP cost before the cache + watcher fixes:
 | Endpoint | Vorher p95 | After C1 p95 | After C2 p95 |
 |---|---:|---:|---:|
 | `/api/runner/status` | 205 ms | 0.5 ms | 0.4 ms |
-| `/api/jobs/grouped` | 103 ms | 6.7 ms | 7.4 ms |
-| `/api/jobs` | 90 ms | 5.5 ms | 6.2 ms |
-| `/api/jobs/{id}/runs` | 227 ms | 0.7 ms | 0.6 ms |
-| `/api/jobs/{id}/output` | 147 ms | 0.7 ms | 0.8 ms |
-| `/api/jobs/{id}` | 154 ms | 2.4 ms | 1.9 ms |
+| `/api/tasks/grouped` | 103 ms | 6.7 ms | 7.4 ms |
+| `/api/tasks` | 90 ms | 5.5 ms | 6.2 ms |
+| `/api/tasks/{id}/runs` | 227 ms | 0.7 ms | 0.6 ms |
+| `/api/tasks/{id}/output` | 147 ms | 0.7 ms | 0.8 ms |
+| `/api/tasks/{id}` | 154 ms | 2.4 ms | 1.9 ms |
 | `/api/cli/usage` | 2171 ms | 2096 ms | 2084 ms |
 
 Frontend per-surface (idle 10 s window, dev-server build):

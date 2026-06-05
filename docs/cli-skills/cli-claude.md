@@ -173,7 +173,7 @@ Anthropic streams a `rate_limit_event` frame **per turn**. We render it to a sin
 - A human prefix: `● Rate limit · five-hour · allowed · reset in 109 min`
 - A machine kv tail: `[window=five_hour status=allowed resetsAt=1777393800 overage=allowed usingOverage=false]`
 
-`OnOutputLine` parses the tail back into `ClaudeRateLimitSnapshot` (window, status, resetsAt, overageStatus, isUsingOverage, capturedAt). The frontend's protocol-pane header pill reads `info.LastRateLimit` via `GET /api/jobs/{id}/claude/session-info`.
+`OnOutputLine` parses the tail back into `ClaudeRateLimitSnapshot` (window, status, resetsAt, overageStatus, isUsingOverage, capturedAt). The frontend's protocol-pane header pill reads `info.LastRateLimit` via `GET /api/tasks/{id}/claude/session-info`.
 
 If you change the marker format, you break the pill. Update both halves together and add a test that round-trips a captured frame.
 
@@ -268,7 +268,7 @@ If `/usage` output format changes, the parser in [`ClaudeQuotaParser`](../../bac
 1. Locate the frame type in the catalogue above; add a switch arm in `ClaudeOutputRenderer` if new.
 2. Render to a marker line with a stable bracketed kv tail (`[key=value …]`) — same pattern as `rate_limit_event`.
 3. Add a regex in `OnOutputLine` to read the kv tail back; assign to a typed snapshot on `ProcInfo`.
-4. Expose via the existing `/api/jobs/{id}/claude/session-info` endpoint (do not introduce a new endpoint per snapshot).
+4. Expose via the existing `/api/tasks/{id}/claude/session-info` endpoint (do not introduce a new endpoint per snapshot).
 
 ### "Add a new model"
 

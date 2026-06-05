@@ -19,7 +19,7 @@ The pass has two clearly separated phases, and both are first-class rows in the 
 
 ## Diff discovery: full job range, not HEAD alone
 
-Each aspect prompt is fed a diff summary that names the commits the job produced. The summary is built from **every commit attributed to the job across all of its runs** (via the run timeline's `HeadShaBefore..HeadShaAfter` SHA ranges, deduped) plus the auto-commit recorded on `JobInfo.Commit`. This is the same aggregation pipeline that powers `/api/jobs/{id}/commits` in the protocol pane, so the reviewer and the human see the same set of commits.
+Each aspect prompt is fed a diff summary that names the commits the job produced. The summary is built from **every commit attributed to the job across all of its runs** (via the run timeline's `HeadShaBefore..HeadShaAfter` SHA ranges, deduped) plus the auto-commit recorded on `JobInfo.Commit`. This is the same aggregation pipeline that powers `/api/tasks/{id}/commits` in the protocol pane, so the reviewer and the human see the same set of commits.
 
 The lane explicitly does not look at HEAD alone. Crash-recovery commits land as near-empty fixups on top of the real work; if the aspect runner only saw HEAD it would report "0 files changed" and false-positive a block on a successful refactor. Walking the full run range avoids that drift.
 
