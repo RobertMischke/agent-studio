@@ -349,7 +349,6 @@
                 @if (tab.kind === 'epics') {
                   <app-epic-overview-screen
                     [scopedProject]="activeEpicScopedProject()"
-                    (closeRequested)="closeStudioTab(tab)"
                     (openTask)="onEpicOverviewOpenTask($event)" />
                 }
               }

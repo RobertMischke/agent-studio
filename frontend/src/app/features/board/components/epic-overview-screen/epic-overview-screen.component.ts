@@ -31,7 +31,7 @@ export interface EpicOverviewScope {
  *
  * Mirrors {@link BacklogTriageScreenComponent}: the host owns the route
  * (`EpicOverviewService`) and the detail-open flow; this component fetches,
- * renders, and emits.
+ * renders, and emits navigation requests.
  */
 @Component({
   selector: 'app-epic-overview-screen',
@@ -52,7 +52,6 @@ export class EpicOverviewScreenComponent implements OnInit {
    */
   readonly scopedProject = input<EpicOverviewScope | null>(null);
 
-  readonly closeRequested = output<void>();
   /** Bubbles a click on an epic or sub-task so the host opens its detail. */
   readonly openTask = output<{ jobId: string; watchPath: string }>();
 
@@ -140,10 +139,6 @@ export class EpicOverviewScreenComponent implements OnInit {
 
   openSubTask(epic: EpicRollup, subId: string): void {
     this.openTask.emit({ jobId: subId, watchPath: epic.watchPath });
-  }
-
-  close(): void {
-    this.closeRequested.emit();
   }
 
   trackByEpic = (_: number, epic: EpicRollup) => epic.id;

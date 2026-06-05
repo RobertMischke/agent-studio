@@ -134,6 +134,35 @@ test.describe('studio-shell · navigation has no dead end', () => {
     await expect(page.getByTestId('studio-welcome')).toHaveCount(0);
   });
 
+  test('Epics is a normal closeable editor tab', async ({ page }) => {
+    await bootStudio(page);
+    await page.evaluate(() => {
+      const payload = {
+        v: 1,
+        tabs: [
+          { kind: 'board', projectName: '__all__', sticky: true },
+          { kind: 'epics', projectName: null },
+        ],
+        activeKey: 'epics:__all__',
+      };
+      localStorage.setItem('atp.studio.tabs.v1', JSON.stringify(payload));
+    });
+    await page.reload();
+    await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 15_000 });
+
+    const epicsTab = tabBy(page, 'epics:__all__');
+    await expect(epicsTab).toBeVisible();
+    await expect(epicsTab).toHaveClass(/studio-tab--active/);
+    await expect(epicsTab).not.toHaveAttribute('data-sticky', 'true');
+    await expect(epicsTab.locator('[data-testid="studio-tab-pin"]')).toHaveCount(0);
+    await expect(epicsTab.locator('.studio-tab__close')).toBeVisible();
+    await expect(page.getByTestId('epic-overview-close')).toHaveCount(0);
+
+    await epicsTab.locator('.studio-tab__close').click();
+    await expect(epicsTab).toHaveCount(0);
+    await expect(tabBy(page, STICKY_TAB_KEY)).toHaveClass(/studio-tab--active/);
+  });
+
   test('Ctrl+B toggles through the backlog triage and back to the sticky board tab', async ({ page }) => {
     await bootStudio(page);
     await page.evaluate(() => {

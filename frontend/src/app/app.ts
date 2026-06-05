@@ -1404,17 +1404,11 @@ export class App implements OnInit, OnDestroy {
   }
 
   /**
-   * Epic overview screen "open epic" / "open sub-task" click. Closes the
-   * tab so the editor area is free, then routes to the card's detail
-   * via the same flow as the side-sheet "Open task" action.
+   * Epic overview screen "open epic" / "open sub-task" click. The Epics
+   * overview is a normal editor tab, so navigation opens the target task in
+   * its own tab and leaves the overview tab in the tab strip.
    */
   onEpicOverviewOpenTask(event: { jobId: string; watchPath: string }): void {
-    const tab = this.studioTabState.activeTab();
-    if (tab?.kind === 'epics') {
-      this.studioTabState.close(studioTabKey(tab));
-    } else {
-      this.epicOverview.closeOverview();
-    }
     this.openRelatedJob(event);
   }
 
