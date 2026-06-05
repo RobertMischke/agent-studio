@@ -67,6 +67,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly expandedFile = signal<string | null>(null);
   readonly expandedBody = signal<string | null>(null);
   readonly selectedModel = signal<string>('claude-opus-4-7');
+  readonly selectedThinkingLevel = signal<string | null>(null);
   readonly selectedCli = signal<CliType>('claude');
 
   private readonly jobs = inject(TaskService);
@@ -85,6 +86,7 @@ export class CodeReviewPanelComponent implements OnInit {
     if (remembered) {
       this.selectedCli.set(remembered.cliType);
       this.selectedModel.set(remembered.model);
+      this.selectedThinkingLevel.set(remembered.thinkingLevel ?? null);
     } else {
       // Provisional fallback while the configured default loads.
       this.selectedModel.set(this.defaultModel());
@@ -105,25 +107,25 @@ export class CodeReviewPanelComponent implements OnInit {
   }
 
   /** Read the remembered last-used pair, tolerating absent/corrupt storage. */
-  private readLastAgent(): { cliType: CliType; model: string } | null {
+  private readLastAgent(): { cliType: CliType; model: string; thinkingLevel?: string | null } | null {
     try {
       const raw = localStorage.getItem(LAST_AGENT_STORAGE_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as { cliType?: string; model?: string };
+      const parsed = JSON.parse(raw) as { cliType?: string; model?: string; thinkingLevel?: string | null };
       if (!parsed?.cliType || !parsed?.model) return null;
-      return { cliType: parsed.cliType as CliType, model: parsed.model };
+      return { cliType: parsed.cliType as CliType, model: parsed.model, thinkingLevel: parsed.thinkingLevel ?? null };
     } catch {
       return null;
     }
   }
 
   /** Persist the chosen pair so the next visit seeds from it. */
-  private rememberLastAgent(cliType: CliType, model: string): void {
+  private rememberLastAgent(cliType: CliType, model: string, thinkingLevel: string | null = null): void {
     if (!cliType || !model) return;
     try {
       localStorage.setItem(
         LAST_AGENT_STORAGE_KEY,
-        JSON.stringify({ cliType, model }),
+        JSON.stringify({ cliType, model, thinkingLevel }),
       );
     } catch {
       // Private-mode / quota failures are non-fatal; the picker still works.
@@ -165,11 +167,12 @@ export class CodeReviewPanelComponent implements OnInit {
     // operator navigates away from this detail pane.
     const activityKey = CodeReviewActivityStore.key(job.watchPath, job.id);
     this.activity.markRunning(activityKey);
-    const body: { model?: string; cliType?: string } = {
+    const body: { model?: string; cliType?: string; thinkingLevel?: string | null } = {
       cliType: this.selectedCli(),
     };
     const model = this.selectedModel().trim();
     if (model) body.model = model;
+    if (this.selectedThinkingLevel()) body.thinkingLevel = this.selectedThinkingLevel();
     this.jobs.runCodeReview(job.id, body, job.watchPath).subscribe({
       next: (resp) => {
         // Remember the pair the backend actually ran with, so the next
@@ -178,7 +181,9 @@ export class CodeReviewPanelComponent implements OnInit {
         const ranModel = resp?.model || this.selectedModel();
         this.selectedCli.set(ranCli);
         this.selectedModel.set(ranModel);
-        this.rememberLastAgent(ranCli, ranModel);
+        const ranThinkingLevel = resp?.thinkingLevel ?? this.selectedThinkingLevel();
+        this.selectedThinkingLevel.set(ranThinkingLevel ?? null);
+        this.rememberLastAgent(ranCli, ranModel, ranThinkingLevel ?? null);
         this.running.set(false);
         this.activity.clear(activityKey);
         this.refresh();
@@ -192,10 +197,11 @@ export class CodeReviewPanelComponent implements OnInit {
   }
 
   /** Atomic commit from the shared selector picker. */
-  onAgentCommit(change: { cliType: CliType; model: string }): void {
+  onAgentCommit(change: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     this.selectedCli.set(change.cliType);
     this.selectedModel.set(change.model);
-    this.rememberLastAgent(change.cliType, change.model);
+    this.selectedThinkingLevel.set(change.thinkingLevel);
+    this.rememberLastAgent(change.cliType, change.model, change.thinkingLevel);
   }
 
   /** Toggle the inline body view for one row. */

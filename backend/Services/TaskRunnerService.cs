@@ -420,7 +420,7 @@ public class TaskRunnerService : BackgroundService
         return runner.GetPendingDecisions();
     }
 
-    public async Task<ContinueJobResponse> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, CancellationToken ct = default)
+    public async Task<ContinueJobResponse> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, string? thinkingLevelOverride = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) throw new TaskOperationException("Job not found", 404);
@@ -442,6 +442,13 @@ public class TaskRunnerService : BackgroundService
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {
             _mutations.SetJobModel(jobId, modelOverride, watchPath);
+            info = _scanner.FindJob(jobId, watchPath) ?? info;
+        }
+
+        if (thinkingLevelOverride is not null && thinkingLevelOverride != info.ThinkingLevel)
+        {
+            _mutations.SetJobThinkingLevel(jobId, thinkingLevelOverride, watchPath);
+            info = _scanner.FindJob(jobId, watchPath) ?? info;
         }
 
         var outcome = await runner.StartJobManualAsync(jobId, ct);
@@ -457,19 +464,33 @@ public class TaskRunnerService : BackgroundService
     /// continuation they asked for instead of a 400 - at the cost of conversation
     /// memory that wasn't already on disk.
     /// </summary>
-    public async Task<ContinueJobResponse> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? mode = null, CancellationToken ct = default)
+    public async Task<ContinueJobResponse> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, string? thinkingLevelOverride = null, string? mode = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) throw new TaskOperationException("Job not found", 404);
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
         if (runner == null) throw new TaskOperationException($"No runner configured for project '{info.ProjectName}'", 400);
+
+        if (!string.IsNullOrWhiteSpace(cliTypeOverride) && cliTypeOverride != info.CliType)
+        {
+            _mutations.SetJobCliType(jobId, CliTypes.Normalize(cliTypeOverride), watchPath);
+            info = _scanner.FindJob(jobId, watchPath) ?? info;
+        }
+
         var cli = _router.Get(info.CliType);
         if (!cli.IsAvailable()) throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
 
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {
             _mutations.SetJobModel(jobId, modelOverride, watchPath);
+            info = _scanner.FindJob(jobId, watchPath) ?? info;
+        }
+
+        if (thinkingLevelOverride is not null && thinkingLevelOverride != info.ThinkingLevel)
+        {
+            _mutations.SetJobThinkingLevel(jobId, thinkingLevelOverride, watchPath);
+            info = _scanner.FindJob(jobId, watchPath) ?? info;
         }
 
         var normalizedMode = ContinueModes.Normalize(mode);

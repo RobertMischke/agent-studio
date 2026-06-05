@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Review;
@@ -98,6 +99,7 @@ public static class TaskCodeReviewEndpoints
                                 Summary = fields.GetValueOrDefault("summary") ?? string.Empty,
                                 Model = fields.GetValueOrDefault("model") ?? string.Empty,
                                 CliType = fields.GetValueOrDefault("cliType") ?? string.Empty,
+                                ThinkingLevel = fields.GetValueOrDefault("thinkingLevel"),
                                 Commit = fields.GetValueOrDefault("commit"),
                                 RunAt = fields.GetValueOrDefault("runAt") ?? string.Empty,
                             });
@@ -192,6 +194,7 @@ public static class TaskCodeReviewEndpoints
             var model = !string.IsNullOrWhiteSpace(body?.Model)
                 ? body!.Model!
                 : configuration[DefaultModelConfigKey] ?? DefaultModelFallback;
+            var thinkingLevel = CliThinkingLevels.Normalize(cli, model, body?.ThinkingLevel);
             var timeoutSeconds = configuration.GetValue<int?>(TimeoutSecondsConfigKey)
                 ?? DefaultTimeoutSecondsFallback;
 
@@ -205,6 +208,7 @@ public static class TaskCodeReviewEndpoints
                 CliType: cli,
                 Model: model)
             {
+                ThinkingLevel = thinkingLevel,
                 Commit = string.IsNullOrWhiteSpace(commit) ? null : commit,
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds),
             };
@@ -218,6 +222,7 @@ public static class TaskCodeReviewEndpoints
                 Summary = report.Summary,
                 Model = report.Model,
                 CliType = report.CliType,
+                ThinkingLevel = report.ThinkingLevel,
                 Commit = report.Commit,
                 ConcernTagId = report.ConcernTagId,
                 DurationMs = report.DurationMs,
@@ -242,6 +247,7 @@ public sealed record CodeReviewListEntry
     public required string Summary { get; init; }
     public required string Model { get; init; }
     public required string CliType { get; init; }
+    public string? ThinkingLevel { get; init; }
     public string? Commit { get; init; }
     public required string RunAt { get; init; }
 }
@@ -258,6 +264,7 @@ public sealed record CodeReviewStepEndpointRequest
     public string? WatchPath { get; init; }
     public string? Model { get; init; }
     public string? CliType { get; init; }
+    public string? ThinkingLevel { get; init; }
     public string? Commit { get; init; }
 }
 
@@ -269,6 +276,7 @@ public sealed record CodeReviewStepEndpointResponse
     public required string Summary { get; init; }
     public required string Model { get; init; }
     public required string CliType { get; init; }
+    public string? ThinkingLevel { get; init; }
     public string? Commit { get; init; }
     public string? ConcernTagId { get; init; }
     public required long DurationMs { get; init; }

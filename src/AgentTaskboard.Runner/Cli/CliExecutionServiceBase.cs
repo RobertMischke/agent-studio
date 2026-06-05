@@ -178,6 +178,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         string? sessionName,
         bool resumeSession,
         string? model,
+        string? thinkingLevel,
         string? permissionMode);
 
     /// <summary>
@@ -280,6 +281,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         string? sessionName = null,
         bool resumeSession = false,
         string? model = null,
+        string? thinkingLevel = null,
         string? jobFolderPath = null,
         string? permissionMode = null,
         CancellationToken ct = default)
@@ -308,7 +310,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
 
         var invocationModel = NormalizeModelForInvocation(model);
-        var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, invocationModel, permissionMode);
+        var invocationThinkingLevel = CliThinkingLevels.Normalize(CliType, invocationModel, thinkingLevel);
+        var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, invocationModel, invocationThinkingLevel, permissionMode);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError  = true;
         // ADR-0014: stdin is default-deny. We only redirect (and pipe a
@@ -407,7 +410,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             ProcessId = process.Id,
             StartedAt = DateTime.UtcNow,
             Status = "running",
-            Model = string.IsNullOrWhiteSpace(invocationModel) ? null : invocationModel
+            Model = string.IsNullOrWhiteSpace(invocationModel) ? null : invocationModel,
+            ThinkingLevel = invocationThinkingLevel
         };
 
         var logDir = GetOutputLogDir(jobKey);
@@ -471,7 +475,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         {
             Timestamp = DateTime.UtcNow,
             Stream = "system",
-            Text = BuildStartedLineText(CliType, process.Id, invocationModel, sessionName, resumeSession)
+            Text = BuildStartedLineText(CliType, process.Id, invocationModel, invocationThinkingLevel, sessionName, resumeSession)
         };
         info.OutputBuffer.Add(startedLine);
         if (!info.OutputLog.Append(startedLine))
@@ -491,10 +495,12 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         string cliType,
         int processId,
         string? model,
+        string? thinkingLevel,
         string? sessionName,
         bool resumeSession)
         => $"[taskboard] Started {cliType} CLI (PID {processId})"
            + (string.IsNullOrWhiteSpace(model) ? "" : $", model={model}")
+           + (string.IsNullOrWhiteSpace(thinkingLevel) ? "" : $", thinkingLevel={thinkingLevel}")
            + (string.IsNullOrWhiteSpace(sessionName) ? "" : $", session={sessionName}")
            + (resumeSession ? " (resume)" : "");
 

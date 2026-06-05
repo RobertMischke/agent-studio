@@ -131,7 +131,7 @@ public class CopilotCliService : ICliExecutionService
         return available;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? jobFolderPath = null, string? permissionMode = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? thinkingLevel = null, string? jobFolderPath = null, string? permissionMode = null, CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
         {

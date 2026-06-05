@@ -10,6 +10,7 @@
       <app-cli-model-selector
         [cliType]="cliTypeDraft()"
         [model]="modelDraft()"
+        [thinkingLevel]="thinkingLevelDraft()"
         [availableModels]="availableModels()"
         [disabled]="true"
         triggerTestid="commandbar-agent"
@@ -46,12 +47,14 @@
       class="commandbar__agent"
       [cliType]="cliTypeDraft()"
       [model]="modelDraft()"
+      [thinkingLevel]="thinkingLevelDraft()"
       [availableModels]="availableModels()"
       [disabled]="isRunning()"
       triggerTestid="commandbar-agent"
       pickerTestidPrefix="commandbar-agent-picker"
       (cliTypeChange)="cliTypeChange.emit($event)"
-      (modelChange)="modelChange.emit($event)" />
+      (modelChange)="modelChange.emit($event)"
+      (thinkingLevelChange)="thinkingLevelChange.emit($event)" />
 
     @if (isRunning()) {
       <span class="commandbar__status" data-testid="commandbar-running">

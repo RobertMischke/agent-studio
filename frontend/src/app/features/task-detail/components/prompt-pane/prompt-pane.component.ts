@@ -61,6 +61,7 @@ export class PromptPaneComponent {
    *  parent's detail re-fetch. See [[OverviewPaneComponent]] and ADR-0046. */
   readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
   readonly modelOverride = input<string | null | undefined>(undefined);
+  readonly thinkingLevelOverride = input<string | null | undefined>(undefined);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
@@ -69,7 +70,7 @@ export class PromptPaneComponent {
   readonly evidenceCreateFollowup = output<ReviewEvidenceEntry>();
   /** Atomic CLI + model commit from the Overview tab's chat-model-badge picker.
    *  Forwarded to the parent task-detail which issues both PUTs in sequence. */
-  readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
+  readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
   /** Forwarded from the Overview tab's compact References section after a
    *  successful reference write so the parent can re-fetch the detail. */
   readonly referencesChanged = output<void>();

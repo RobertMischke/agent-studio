@@ -63,6 +63,7 @@ public sealed class DriftPostStepRunner
     /// </summary>
     public Func<string, string, string?, string?, TimeSpan, CancellationToken, Task<DriftCliResult>> CliRunner { get; set; }
         = (_, _, _, _, _, _) => Task.FromResult(new DriftCliResult(false, string.Empty, null));
+    private Func<string, string, string?, string?, string?, TimeSpan, CancellationToken, Task<DriftCliResult>>? _thinkingAwareCliRunner;
 
     public DriftPostStepRunner(
         RuntimePromptService prompts,
@@ -93,12 +94,12 @@ public sealed class DriftPostStepRunner
 
         if (_oneShotRegistry != null)
         {
-            CliRunner = RunViaOneShotAsync;
+            _thinkingAwareCliRunner = RunViaOneShotAsync;
         }
     }
 
     private async Task<DriftCliResult> RunViaOneShotAsync(
-        string model, string prompt, string? project, string? jobId, TimeSpan timeout, CancellationToken ct)
+        string model, string prompt, string? project, string? jobId, string? thinkingLevel, TimeSpan timeout, CancellationToken ct)
     {
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot == null) return new DriftCliResult(false, string.Empty, null);
@@ -108,6 +109,7 @@ public sealed class DriftPostStepRunner
             Model: model,
             Prompt: prompt)
         {
+            ThinkingLevel = thinkingLevel,
             Timeout = timeout,
             Source = AdHocUsageSources.DriftAnalysis,
             RecordUsage = true,
@@ -164,9 +166,10 @@ public sealed class DriftPostStepRunner
         {
             ct.ThrowIfCancellationRequested();
             var model = PipelineStepConfigResolver.ResolveModel(settings, step, DefaultModel);
+            var thinkingLevel = PipelineStepConfigResolver.ResolveThinkingLevel(settings, step, CliTypes.Claude, model);
             try
             {
-                await RunDimensionAsync(step, model, project, jobId, jobFolderPath, projectRoot, repoRoot, workspace!, ct)
+                await RunDimensionAsync(step, model, thinkingLevel, project, jobId, jobFolderPath, projectRoot, repoRoot, workspace!, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -180,6 +183,7 @@ public sealed class DriftPostStepRunner
     private async Task RunDimensionAsync(
         PipelineStep step,
         string model,
+        string? thinkingLevel,
         string project,
         string jobId,
         string jobFolderPath,
@@ -212,7 +216,9 @@ public sealed class DriftPostStepRunner
             return;
         }
 
-        var cli = await CliRunner(model, prompt, project, jobId, PerDimensionTimeout, ct).ConfigureAwait(false);
+        var cli = _thinkingAwareCliRunner is null
+            ? await CliRunner(model, prompt, project, jobId, PerDimensionTimeout, ct).ConfigureAwait(false)
+            : await _thinkingAwareCliRunner(model, prompt, project, jobId, thinkingLevel, PerDimensionTimeout, ct).ConfigureAwait(false);
         var agentText = cli.Text ?? string.Empty;
         var reportId = NewReportId();
         var markdownBody = !string.IsNullOrWhiteSpace(agentText)

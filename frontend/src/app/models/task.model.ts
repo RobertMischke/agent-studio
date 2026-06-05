@@ -96,6 +96,7 @@ export interface TaskInfo {
    */
   tokenSummary?: TaskTokenSummary | null;
   model: string | null;
+  thinkingLevel?: string | null;
   cliType: CliType | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
@@ -248,6 +249,7 @@ export interface ClientSummary {
   notes: string | null;
   defaultCliType?: string | null;
   defaultModel?: string | null;
+  defaultThinkingLevel?: string | null;
 }
 
 /**
@@ -258,6 +260,7 @@ export interface ClientDefaultsResponse {
   id: string;
   defaultCliType: string | null;
   defaultModel: string | null;
+  defaultThinkingLevel: string | null;
 }
 
 /**
@@ -566,6 +569,7 @@ export interface CreateJobRequest {
   targetState?: string;
   cliType?: CliType;
   model?: string;
+  thinkingLevel?: string;
   /** One of `bug`, `feature`, `chore`. Defaults to `chore` server-side. */
   taskType?: string;
   /** Workspace tag ids to attach on create. */
@@ -642,6 +646,7 @@ export interface EpicSubTaskSpec {
   promptMarkdown?: string;
   cliType?: CliType;
   model?: string;
+  thinkingLevel?: string;
 }
 
 /**
@@ -709,6 +714,7 @@ export interface CliExecution {
   exitCode: number | null;
   durationSeconds: number | null;
   model: string | null;
+  thinkingLevel?: string | null;
   runOutcome?: string | null;
 }
 

@@ -69,6 +69,7 @@ export class CreateTaskDialogComponent implements AfterViewInit {
   readonly newTitle = model<string>('');
   readonly newWatchPath = model<string>('');
   readonly newModel = model<string>('');
+  readonly newThinkingLevel = model<string | null>(null);
   readonly newPrompt = model<string>('');
   readonly attachments = model<PendingAttachment[]>([]);
   /** Backlog-lane spec: structural classification picker. */

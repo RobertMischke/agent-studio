@@ -129,6 +129,7 @@ export interface PipelineCostSummary {
 export interface PipelineStepConfig {
   enabled: boolean;
   model?: string | null;
+  thinkingLevel?: string | null;
   mode?: string | null;
 }
 
@@ -194,6 +195,7 @@ export interface PipelineStepSetting {
   enabled?: boolean | null;
   mode?: string | null;
   model?: string | null;
+  thinkingLevel?: string | null;
   condition?: PipelineStepCondition | null;
 }
 

@@ -79,7 +79,7 @@ public class CliWatchdogIntegrationTests
 
         protected override ProcessStartInfo BuildStartInfo(
             string prompt, string workingDirectory,
-            string? sessionName, bool resumeSession, string? model, string? permissionMode)
+            string? sessionName, bool resumeSession, string? model, string? thinkingLevel, string? permissionMode)
         {
             var psi = new ProcessStartInfo
             {

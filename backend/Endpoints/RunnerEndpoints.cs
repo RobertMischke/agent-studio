@@ -204,7 +204,7 @@ public static class RunnerEndpoints
                 {
                     try
                     {
-                        await runner.ContinueJobAsync(req.JobId, req.NewDirection, watchEntry.Path, modelOverride: null, mode: "steer", ct);
+                        await runner.ContinueJobAsync(req.JobId, req.NewDirection, watchEntry.Path, modelOverride: null, cliTypeOverride: null, thinkingLevelOverride: null, mode: "steer", ct);
                     }
                     catch (Exception ex)
                     {

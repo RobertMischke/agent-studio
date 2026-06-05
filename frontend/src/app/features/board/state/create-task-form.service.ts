@@ -53,6 +53,7 @@ export class CreateTaskFormService {
   newAllowWebAccess = false;
   newCliType: CliType = readDefaultCliPref();
   newModel: string = readDefaultModelPref(readDefaultCliPref());
+  newThinkingLevel: string | null = readDefaultThinkingLevelPref(readDefaultCliPref());
   newAttachments: PendingAttachment[] = [];
 
   /** Allowed manual-create lanes (everything before 3-progress). */
@@ -183,13 +184,15 @@ export class CreateTaskFormService {
     if (this.newCliType === t) return;
     this.newCliType = t;
     this.newModel = readDefaultModelPref(t);
+    this.newThinkingLevel = readDefaultThinkingLevelPref(t);
     this.loadCreateModels(t);
   }
 
   /** Mirrors a global "default model for CLI X" change into the form when relevant. */
-  onDefaultModelChange(ev: { cliType: CliType; model: string }): void {
+  onDefaultModelChange(ev: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     if (ev.cliType === this.newCliType) {
       this.newModel = ev.model;
+      this.newThinkingLevel = ev.thinkingLevel;
     }
   }
 
@@ -198,6 +201,7 @@ export class CreateTaskFormService {
     const t = readDefaultCliPref();
     this.newCliType = t;
     this.newModel = readDefaultModelPref(t);
+    this.newThinkingLevel = readDefaultThinkingLevelPref(t);
   }
 
   // ---------- close + submit ----------
@@ -216,6 +220,7 @@ export class CreateTaskFormService {
     this.newAllowWebAccess = false;
     this.newCliType = readDefaultCliPref();
     this.newModel = readDefaultModelPref(this.newCliType);
+    this.newThinkingLevel = readDefaultThinkingLevelPref(this.newCliType);
     this.availableModels.set([]);
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = [];
@@ -245,6 +250,7 @@ export class CreateTaskFormService {
       targetState: this.newTargetState,
       cliType: this.newCliType,
       model: this.newModel.trim() || undefined,
+      thinkingLevel: this.newThinkingLevel || undefined,
       taskType: this.newTaskType,
       tags: this.newTags.length > 0 ? [...this.newTags] : undefined,
       kind: this.newKind,
@@ -282,7 +288,10 @@ export class CreateTaskFormService {
       this.availableModels.set(models);
       if (!this.newModel) {
         const def = models.find((m) => m.isDefault);
-        if (def) this.newModel = def.id;
+        if (def) {
+          this.newModel = def.id;
+          this.newThinkingLevel = this.newThinkingLevel ?? def.defaultThinkingLevel ?? null;
+        }
       }
       return;
     }
@@ -292,7 +301,10 @@ export class CreateTaskFormService {
         this.availableModels.set(list);
         if (!this.newModel) {
           const def = list.find((m) => m.isDefault);
-          if (def) this.newModel = def.id;
+          if (def) {
+            this.newModel = def.id;
+            this.newThinkingLevel = this.newThinkingLevel ?? def.defaultThinkingLevel ?? null;
+          }
         }
       },
       error: () => this.availableModels.set([]),
@@ -369,6 +381,10 @@ function readDefaultCliPref(): CliType {
 
 function readDefaultModelPref(cliType: CliType): string {
   return localStorage.getItem('defaultModel:' + cliType) ?? '';
+}
+
+function readDefaultThinkingLevelPref(cliType: CliType): string | null {
+  return localStorage.getItem('defaultThinkingLevel:' + cliType) ?? null;
 }
 
 function deriveDraftTitle(text: string): string {

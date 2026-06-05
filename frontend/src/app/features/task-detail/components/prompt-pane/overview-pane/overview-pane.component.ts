@@ -344,10 +344,11 @@ export class OverviewPaneComponent {
    *  protocol-pane, see ADR-0046. */
   readonly cliTypeOverride = input<CliType | null | undefined>(undefined);
   readonly modelOverride = input<string | null | undefined>(undefined);
+  readonly thinkingLevelOverride = input<string | null | undefined>(undefined);
 
   /** Atomic CLI + model commit from the unified <app-cli-model-selector>
    *  picker. The parent task-detail handler issues both PUTs in sequence. */
-  readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
+  readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
   /** Re-emitted from the embedded References section after a successful write. */
   readonly referencesChanged = output<void>();
   /** Fired after a successful title PUT so the parent can re-fetch the
@@ -478,6 +479,10 @@ export class OverviewPaneComponent {
   readonly effectiveModel = computed<string | null>(() => {
     const override = this.modelOverride();
     return override !== undefined ? override : this.job().model;
+  });
+  readonly effectiveThinkingLevel = computed<string | null>(() => {
+    const override = this.thinkingLevelOverride();
+    return override !== undefined ? override : (this.job().thinkingLevel ?? null);
   });
 
   /** Clear the optimistic override once the real `job().title` catches up

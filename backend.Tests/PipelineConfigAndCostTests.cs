@@ -60,6 +60,25 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void ResolveThinkingLevel_OrdersStepOverride_Then_ProjectDefault_Then_GlobalDefault_Then_ModelDefault()
+    {
+        var withStep = SettingsWith(("aspect-code-quality", new PipelineStepSetting { ThinkingLevel = "xhigh" }))
+            with { OrchestratorThinkingLevel = "medium" };
+        Assert.Equal("xhigh",
+            PipelineStepConfigResolver.ResolveThinkingLevel(withStep, "aspect-code-quality", "claude", "claude-opus-4-7", "low"));
+
+        var projectOnly = new ProjectSettings { OrchestratorThinkingLevel = "medium" };
+        Assert.Equal("medium",
+            PipelineStepConfigResolver.ResolveThinkingLevel(projectOnly, "aspect-code-quality", "claude", "claude-opus-4-7", "low"));
+
+        Assert.Equal("low",
+            PipelineStepConfigResolver.ResolveThinkingLevel(null, "aspect-code-quality", "claude", "claude-opus-4-7", "low"));
+
+        Assert.Equal("high",
+            PipelineStepConfigResolver.ResolveThinkingLevel(null, "aspect-code-quality", "claude", "claude-opus-4-7"));
+    }
+
+    [Fact]
     public void Summarize_EmptyRecord_IsZeroCost()
     {
         var summary = PipelineCostCalculator.Summarize(null);
@@ -125,7 +144,7 @@ public class PipelineConfigAndCostTests
                 {
                     StepId = "aspect-code-quality",
                     Kind = StepKind.Aspect,
-                    Model = "gpt-5-codex",
+                    Model = "unpriced-test-model",
                     InputTokens = 500,
                     OutputTokens = 200,
                 },
@@ -224,7 +243,7 @@ public class PipelineConfigAndCostTests
                 new PipelineStepExecution
                 {
                     StepId = "aspect-code-quality", Kind = StepKind.Aspect,
-                    Model = "gpt-5-codex", InputTokens = 500, OutputTokens = 200,
+                    Model = "unpriced-test-model", InputTokens = 500, OutputTokens = 200,
                 }),
             // Outside the 2-day window -> excluded entirely.
             RunOn(now.AddDays(-10),

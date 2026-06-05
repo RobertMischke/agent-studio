@@ -21,11 +21,11 @@ export const OrchestratorRunner_KnownModels: readonly { id: string; label: strin
  * default (see PipelineStepConfigResolver.ResolveModel). The price table
  * that turns these into cost lives in backend TokenPricing.
  */
-export const PipelineStep_KnownModels: readonly { id: string; label: string }[] = [
-  { id: '',                  label: 'Inherit (project / default)' },
-  { id: 'claude-opus-4-7',   label: 'Opus 4.7 (strongest)' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-haiku-4-5',  label: 'Haiku 4.5 (cheapest)' }
+export const PipelineStep_KnownModels: readonly { id: string; label: string; thinkingLevels: readonly string[]; defaultThinkingLevel: string | null }[] = [
+  { id: '',                  label: 'Inherit (project / default)', thinkingLevels: [], defaultThinkingLevel: null },
+  { id: 'claude-opus-4-7',   label: 'Opus 4.7 (strongest)', thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'high' },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
+  { id: 'claude-haiku-4-5',  label: 'Haiku 4.5 (cheapest)', thinkingLevels: [], defaultThinkingLevel: null }
 ];
 
 /** Gate-mode choices for steps that expose a warn/fail gate (lint, decision). */

@@ -251,6 +251,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly followupPrompt = signal('');
   readonly continueMode = signal<ContinueMode>('continue');
   readonly modelDraft = signal('');
+  readonly thinkingLevelDraft = signal<string | null>(null);
   readonly availableModels = signal<CliModelInfo[]>([]);
   readonly cliTypes = CLI_TYPES;
   readonly cliTypeDraft = signal<CliType>('copilot');
@@ -424,6 +425,7 @@ export class TaskDetailComponent implements OnDestroy {
       const def = this.availableModels().find((m) => m.isDefault);
       this.modelDraft.set(def?.id ?? '');
     }
+    this.thinkingLevelDraft.set(d.info.thinkingLevel ?? null);
     const nextCliType = (d.info.cliType ?? 'copilot') as CliType;
     if (nextCliType !== this.cliTypeDraft()) {
       this.cliTypeDraft.set(nextCliType);
@@ -696,7 +698,8 @@ export class TaskDetailComponent implements OnDestroy {
     this.errorMsg.set(null);
     this.starting.set(true);
     const model = this.modelDraft().trim() || undefined;
-    this.jobService.startJob(this.detail().info.id, this.detail().info.watchPath, model).subscribe({
+    const thinkingLevel = this.thinkingLevelDraft() ?? undefined;
+    this.jobService.startJob(this.detail().info.id, this.detail().info.watchPath, model, undefined, thinkingLevel).subscribe({
       next: (resp) => {
         this.starting.set(false);
         if (resp.status === 'started' && resp.execution) {
@@ -734,6 +737,7 @@ export class TaskDetailComponent implements OnDestroy {
     this.cliPoll.appendOptimisticUserMessage(prompt);
     this.followupPrompt.set('');
     const model = this.modelDraft().trim() || undefined;
+    const thinkingLevel = this.thinkingLevelDraft() ?? undefined;
     this.jobService
       .continueJob(
         this.detail().info.id,
@@ -741,6 +745,7 @@ export class TaskDetailComponent implements OnDestroy {
         this.detail().info.watchPath,
         model,
         undefined,
+        thinkingLevel,
         this.continueMode(),
       )
       .subscribe({
@@ -826,6 +831,22 @@ export class TaskDetailComponent implements OnDestroy {
       });
   }
 
+  onThinkingLevelDraftChange(value: string | null): void {
+    this.thinkingLevelDraft.set(value);
+    const current = this.detail().info.thinkingLevel ?? null;
+    if (value === current) return;
+
+    this.jobService
+      .setJobThinkingLevel(
+        this.detail().info.id,
+        value,
+        this.detail().info.watchPath,
+      )
+      .subscribe({
+        error: (err) => this.showError(err),
+      });
+  }
+
   /**
    * Atomic CLI + model commit from the chat-model-badge picker. The picker
    * collects both fields locally; this handler sequences the two PUT calls
@@ -840,16 +861,19 @@ export class TaskDetailComponent implements OnDestroy {
    * gets a clear toast via `showError`; on a network failure the parent's
    * refresh-on-fileSaved path heals the UI back to the on-disk state.
    */
-  onAgentConfigCommit(change: { cliType: CliType; model: string }): void {
+  onAgentConfigCommit(change: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     const info = this.detail().info;
     const previousCli = this.cliTypeDraft();
     const previousModel = this.modelDraft();
+    const previousThinkingLevel = this.thinkingLevelDraft();
     const previousCatalog = this.availableModels();
     const currentCli = previousCli;
     const currentModel = (info.model ?? '').trim();
+    const currentThinkingLevel = info.thinkingLevel ?? null;
     const cliChanged = change.cliType !== currentCli;
     const modelChanged = change.model !== currentModel;
-    if (!cliChanged && !modelChanged) return;
+    const thinkingChanged = change.thinkingLevel !== currentThinkingLevel;
+    if (!cliChanged && !modelChanged && !thinkingChanged) return;
 
     // Optimistic local update so the badge re-renders instantly without
     // waiting for the parent's detail re-fetch.
@@ -862,10 +886,12 @@ export class TaskDetailComponent implements OnDestroy {
       this.loadModelCatalog(change.cliType);
     }
     this.modelDraft.set(change.model);
+    this.thinkingLevelDraft.set(change.thinkingLevel);
 
     const revert = () => {
       this.cliTypeDraft.set(previousCli);
       this.modelDraft.set(previousModel);
+      this.thinkingLevelDraft.set(previousThinkingLevel);
       this.availableModels.set(previousCatalog);
     };
 
@@ -876,6 +902,21 @@ export class TaskDetailComponent implements OnDestroy {
           change.model === '' ? null : change.model,
           info.watchPath,
         )
+        .subscribe({
+          next: () => {
+            if (thinkingChanged) thinkingPut();
+            else this.fileSaved.emit();
+          },
+          error: (err) => {
+            revert();
+            this.showError(err);
+          },
+        });
+    };
+
+    const thinkingPut = () => {
+      this.jobService
+        .setJobThinkingLevel(info.id, change.thinkingLevel, info.watchPath)
         .subscribe({
           next: () => this.fileSaved.emit(),
           error: (err) => {
@@ -891,6 +932,7 @@ export class TaskDetailComponent implements OnDestroy {
         .subscribe({
           next: () => {
             if (modelChanged) modelPut();
+            else if (thinkingChanged) thinkingPut();
             else this.fileSaved.emit();
           },
           error: (err) => {
@@ -902,6 +944,7 @@ export class TaskDetailComponent implements OnDestroy {
     }
 
     if (modelChanged) modelPut();
+    else if (thinkingChanged) thinkingPut();
   }
 
   private showError(err: unknown): void {

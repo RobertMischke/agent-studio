@@ -67,6 +67,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string? sessionName,
         bool resumeSession,
         string? model,
+        string? thinkingLevel,
         string? permissionMode)
     {
         // For Codex, sessionName is the session UUID (or null for a fresh session).
@@ -114,6 +115,9 @@ public sealed class CodexCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(model);
         }
 
+        foreach (var flag in CliReasoningFlags.For(CliType, model, thinkingLevel))
+            psi.ArgumentList.Add(flag);
+
         // Use `-` to tell Codex to read the prompt from stdin instead of
         // taking it as a positional argv. The actual bytes are written by
         // the base class via GetPromptStdinPayload below.
@@ -151,6 +155,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string? sessionName,
         bool resumeSession,
         string? model,
+        string? thinkingLevel = null,
         string? permissionMode = null)
         => BuildStartInfo(
             prompt,
@@ -158,6 +163,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
             sessionName,
             resumeSession,
             NormalizeModelForInvocation(model),
+            thinkingLevel,
             permissionMode);
 
     internal string? BuildPromptStdinPayloadForTest(

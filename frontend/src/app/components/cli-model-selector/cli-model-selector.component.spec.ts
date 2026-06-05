@@ -18,8 +18,9 @@ import { TaskService } from '../../services/task.service';
  */
 describe('CliModelSelectorComponent', () => {
   const claudeModels: CliModelInfo[] = [
-    { id: 'claude-opus-4-7', label: 'Opus 4.7', multiplier: 5, vendor: 'anthropic', isDefault: true },
-    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', multiplier: 1, vendor: 'anthropic', isDefault: false },
+    { id: 'claude-opus-4-7', label: 'Opus 4.7', multiplier: 5, vendor: 'anthropic', isDefault: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'high' },
+    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', multiplier: 1, vendor: 'anthropic', isDefault: false, thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
+    { id: 'claude-haiku-4-5', label: 'Haiku 4.5', multiplier: 1, vendor: 'anthropic', isDefault: false, thinkingLevels: [], defaultThinkingLevel: null },
   ];
 
   function configure() {
@@ -39,6 +40,7 @@ describe('CliModelSelectorComponent', () => {
     const fixture = TestBed.createComponent(CliModelSelectorComponent);
     fixture.componentRef.setInput('cliType', 'claude');
     fixture.componentRef.setInput('model', 'claude-opus-4-7');
+    fixture.componentRef.setInput('thinkingLevel', 'high');
     fixture.componentRef.setInput('availableModels', claudeModels);
     fixture.componentRef.setInput('disabled', false);
     try { fixture.detectChanges(); } catch (e) {
@@ -98,7 +100,7 @@ describe('CliModelSelectorComponent', () => {
     fixture.componentRef.setInput('disabled', false);
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
-    const commits: { cliType: string; model: string }[] = [];
+    const commits: { cliType: string; model: string; thinkingLevel: string | null }[] = [];
     const modelChanges: string[] = [];
     fixture.componentInstance.commit.subscribe((c) => commits.push(c));
     fixture.componentInstance.modelChange.subscribe((m) => modelChanges.push(m));
@@ -106,15 +108,15 @@ describe('CliModelSelectorComponent', () => {
     fixture.componentInstance.openPicker(new MouseEvent('click'));
     fixture.componentInstance.onModelPillClick('claude-sonnet-4-6');
 
-    expect(commits).toEqual([{ cliType: 'claude', model: 'claude-sonnet-4-6' }]);
+    expect(commits).toEqual([{ cliType: 'claude', model: 'claude-sonnet-4-6', thinkingLevel: 'high' }]);
     expect(modelChanges).toEqual(['claude-sonnet-4-6']);
     expect(fixture.componentInstance.pickerOpen()).toBe(false);
   });
 
   it('after a CLI switch, model click keeps the picker open until Done', async () => {
     const codexModels: CliModelInfo[] = [
-      { id: 'gpt-5', label: 'GPT-5', multiplier: 3, vendor: 'openai', isDefault: true },
-      { id: 'gpt-5-mini', label: 'GPT-5 mini', multiplier: 1, vendor: 'openai', isDefault: false },
+      { id: 'gpt-5', label: 'GPT-5', multiplier: 3, vendor: 'openai', isDefault: true, thinkingLevels: ['minimal', 'low', 'medium', 'high'], defaultThinkingLevel: 'medium' },
+      { id: 'gpt-5-mini', label: 'GPT-5 mini', multiplier: 1, vendor: 'openai', isDefault: false, thinkingLevels: ['minimal', 'low', 'medium', 'high'], defaultThinkingLevel: 'medium' },
     ];
     TestBed.configureTestingModule({
       imports: [CliModelSelectorComponent],
@@ -146,7 +148,7 @@ describe('CliModelSelectorComponent', () => {
     fixture.componentRef.setInput('disabled', false);
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
-    const commits: { cliType: string; model: string }[] = [];
+    const commits: { cliType: string; model: string; thinkingLevel: string | null }[] = [];
     const cliChanges: string[] = [];
     fixture.componentInstance.commit.subscribe((c) => commits.push(c));
     fixture.componentInstance.cliTypeChange.subscribe((t) => cliChanges.push(t));
@@ -159,7 +161,7 @@ describe('CliModelSelectorComponent', () => {
     expect(fixture.componentInstance.pickerOpen()).toBe(true);
 
     fixture.componentInstance.onDoneClick();
-    expect(commits).toEqual([{ cliType: 'codex', model: 'gpt-5-mini' }]);
+    expect(commits).toEqual([{ cliType: 'codex', model: 'gpt-5-mini', thinkingLevel: 'medium' }]);
     expect(cliChanges).toEqual(['codex']);
     expect(fixture.componentInstance.pickerOpen()).toBe(false);
   });
@@ -173,7 +175,7 @@ describe('CliModelSelectorComponent', () => {
     fixture.componentRef.setInput('disabled', false);
     try { fixture.detectChanges(); } catch { /* ignore */ }
 
-    const commits: { cliType: string; model: string }[] = [];
+    const commits: { cliType: string; model: string; thinkingLevel: string | null }[] = [];
     fixture.componentInstance.commit.subscribe((c) => commits.push(c));
 
     fixture.componentInstance.openPicker(new MouseEvent('click'));
@@ -184,7 +186,7 @@ describe('CliModelSelectorComponent', () => {
 
   it('uses the cached catalog synchronously when opening on a hydrated CLI', async () => {
     const codexModels: CliModelInfo[] = [
-      { id: 'gpt-5', label: 'GPT-5', multiplier: 3, vendor: 'openai', isDefault: true },
+      { id: 'gpt-5', label: 'GPT-5', multiplier: 3, vendor: 'openai', isDefault: true, thinkingLevels: ['minimal', 'low', 'medium', 'high'], defaultThinkingLevel: 'medium' },
     ];
     TestBed.configureTestingModule({
       imports: [CliModelSelectorComponent],
@@ -226,5 +228,29 @@ describe('CliModelSelectorComponent', () => {
     expect(fixture.componentInstance.draftCliType()).toBe('codex');
     expect(fixture.componentInstance.draftAvailableModels()).toEqual(codexModels);
     expect(fixture.componentInstance.loadingCatalog()).toBe(false);
+  });
+
+  it('exposes thinking levels only for capable models and resets on model change', async () => {
+    await configure();
+    const fixture = TestBed.createComponent(CliModelSelectorComponent);
+    fixture.componentRef.setInput('cliType', 'claude');
+    fixture.componentRef.setInput('model', 'claude-opus-4-7');
+    fixture.componentRef.setInput('thinkingLevel', 'xhigh');
+    fixture.componentRef.setInput('availableModels', claudeModels);
+    fixture.componentRef.setInput('disabled', false);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+    expect(fixture.componentInstance.draftThinkingLevels()).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+    expect(fixture.componentInstance.draftThinkingLevel()).toBe('xhigh');
+
+    fixture.componentInstance.onModelPillClick('claude-sonnet-4-6');
+    expect(fixture.componentInstance.draftThinkingLevels()).toEqual(['low', 'medium', 'high']);
+    expect(fixture.componentInstance.draftThinkingLevel()).toBe('high');
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+    fixture.componentInstance.onModelPillClick('claude-haiku-4-5');
+    expect(fixture.componentInstance.draftThinkingLevels()).toEqual([]);
+    expect(fixture.componentInstance.draftThinkingLevel()).toBeNull();
   });
 });

@@ -31,6 +31,7 @@ export class CommandDeckComponent {
   readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly cliTypeDraft = input.required<CliType>();
   readonly modelDraft = input.required<string>();
+  readonly thinkingLevelDraft = input<string | null>(null);
   readonly availableModels = input<CliModelInfo[]>([]);
 
   readonly isRunning = input(false);
@@ -46,6 +47,7 @@ export class CommandDeckComponent {
   readonly projectChange = output<string>();
   readonly cliTypeChange = output<CliType>();
   readonly modelChange = output<string>();
+  readonly thinkingLevelChange = output<string | null>();
   readonly startRequest = output<void>();
   readonly stopRequest = output<void>();
   readonly toggleCollapsed = output<void>();

@@ -758,7 +758,7 @@ export class App implements OnInit, OnDestroy {
     void t;
     this.createJobForm.applyStoredCliDefault();
   }
-  onDefaultModelChange(ev: { cliType: CliType; model: string }): void {
+  onDefaultModelChange(ev: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     this.createJobForm.onDefaultModelChange(ev);
   }
   canAddTaskToGroup(state: string): boolean {

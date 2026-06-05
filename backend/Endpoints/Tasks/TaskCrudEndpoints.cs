@@ -292,6 +292,12 @@ public static class TaskCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
+        group.MapPut("/{jobId}/thinking-level", (string jobId, string? watchPath, SetJobThinkingLevelRequest req, TaskMutationService mutations) =>
+        {
+            var success = mutations.SetJobThinkingLevel(jobId, req?.ThinkingLevel, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
         group.MapPut("/{jobId}/cli-type", (string jobId, string? watchPath, SetJobCliTypeRequest req, TaskMutationService mutations) =>
         {
             if (req is null || !CliTypes.IsValid(req.CliType))

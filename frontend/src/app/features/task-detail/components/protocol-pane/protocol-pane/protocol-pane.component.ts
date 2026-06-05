@@ -130,6 +130,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   // F44: forwarded straight to <app-cli-model-selector>.
   readonly cliType = input<CliType | null>(null);
   readonly model = input<string | null>(null);
+  readonly thinkingLevel = input<string | null>(null);
   readonly availableModels = input<readonly CliModelInfo[]>([]);
 
   readonly maximizeToggle = output<void>();
@@ -150,7 +151,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   /** Atomic CLI + model commit from the unified <app-cli-model-selector>
    *  picker. The parent applies both changes in one PUT sequence; the
    *  selector guarantees only truly-changed configurations are emitted. */
-  readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
+  readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
 
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);

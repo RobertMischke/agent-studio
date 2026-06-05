@@ -82,7 +82,22 @@ public class TaskMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        TaskJsonFile.UpdateField(info.FolderPath, "model", model ?? "", _logger);
+        var normalizedModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        TaskJsonFile.UpdateField(info.FolderPath, "model", normalizedModel ?? "", _logger);
+        TaskJsonFile.UpdateField(
+            info.FolderPath,
+            "thinkingLevel",
+            CliThinkingLevels.Normalize(info.CliType, normalizedModel, info.ThinkingLevel) ?? "",
+            _logger);
+        return Updated();
+    }
+
+    public bool SetJobThinkingLevel(string jobId, string? thinkingLevel, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var normalized = CliThinkingLevels.Normalize(info.CliType, info.Model, thinkingLevel);
+        TaskJsonFile.UpdateField(info.FolderPath, "thinkingLevel", normalized ?? "", _logger);
         return Updated();
     }
 
@@ -106,6 +121,11 @@ public class TaskMutationService
         if (info == null) return false;
         var normalized = CliTypes.Normalize(cliType);
         TaskJsonFile.UpdateField(info.FolderPath, "cliType", normalized, _logger);
+        TaskJsonFile.UpdateField(
+            info.FolderPath,
+            "thinkingLevel",
+            CliThinkingLevels.Normalize(normalized, info.Model, info.ThinkingLevel) ?? "",
+            _logger);
         // Keep the parallel `agent` field in lockstep with `cliType`. The two
         // were originally meant to address different layers (which CLI vs.
         // which logical agent) but every supported CLI maps 1:1 to one agent
@@ -606,8 +626,14 @@ public class TaskMutationService
                 ? CliTypes.Normalize(dc)
                 : null);
         var effectiveModel = !string.IsNullOrWhiteSpace(req.Model)
-            ? req.Model
+            ? req.Model.Trim()
             : ownerIdentity?.DefaultModel;
+        var effectiveThinkingLevel = CliThinkingLevels.Normalize(
+            effectiveCliType,
+            effectiveModel,
+            !string.IsNullOrWhiteSpace(req.ThinkingLevel)
+                ? req.ThinkingLevel
+                : ownerIdentity?.DefaultThinkingLevel);
         var effectiveAgent = string.Equals(req.Agent, AgentTypes.Human, StringComparison.OrdinalIgnoreCase)
             ? AgentTypes.Human
             : effectiveCliType ?? req.Agent;
@@ -635,6 +661,8 @@ public class TaskMutationService
         };
         if (!string.IsNullOrWhiteSpace(effectiveModel))
             jobJson["model"] = effectiveModel;
+        if (!string.IsNullOrWhiteSpace(effectiveThinkingLevel))
+            jobJson["thinkingLevel"] = effectiveThinkingLevel;
         if (!string.IsNullOrWhiteSpace(effectiveCliType))
             jobJson["cliType"] = effectiveCliType;
         // Epics: card kind (task|epic) + optional parent epic (assignment way 1,
@@ -993,8 +1021,9 @@ public class TaskMutationService
                 ? CliTypes.Normalize(dc)
                 : null;
             var model = owner.DefaultModel;
+            var thinkingLevel = CliThinkingLevels.Normalize(cliType, model, owner.DefaultThinkingLevel);
 
-            if (cliType == null && model == null) continue;
+            if (cliType == null && model == null && thinkingLevel == null) continue;
 
             if (cliType != null)
             {
@@ -1003,11 +1032,13 @@ public class TaskMutationService
             }
             if (model != null)
                 TaskJsonFile.UpdateField(job.FolderPath, "model", model, _logger);
+            if (thinkingLevel != null)
+                TaskJsonFile.UpdateField(job.FolderPath, "thinkingLevel", thinkingLevel, _logger);
 
             count++;
             _logger.LogInformation(
-                "backfill-agent-defaults jobId={JobId} owner={Owner} agent={Agent} cliType={CliType} model={Model}",
-                job.Id, ownerId, cliType ?? job.Agent, cliType, model);
+                "backfill-agent-defaults jobId={JobId} owner={Owner} agent={Agent} cliType={CliType} model={Model} thinkingLevel={ThinkingLevel}",
+                job.Id, ownerId, cliType ?? job.Agent, cliType, model, thinkingLevel);
         }
         if (count > 0) _scanner.InvalidateCache();
         return count;

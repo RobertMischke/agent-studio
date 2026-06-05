@@ -213,11 +213,45 @@ public class CodexCliServiceTests
             CliTypes.Codex,
             processId: 1234,
             model,
+            thinkingLevel: null,
             sessionName: null,
             resumeSession: false);
 
         Assert.Contains("model=gpt-5-codex", line);
         Assert.DoesNotContain("claude-opus-4-7", line);
+    }
+
+    [Fact]
+    public void BuildStartInfo_AddsReasoningEffortConfig_WhenModelSupportsLevel()
+    {
+        var svc = BuildService();
+
+        var args = svc.BuildStartInfoForTest(
+            "do work",
+            Environment.CurrentDirectory,
+            sessionName: null,
+            resumeSession: false,
+            model: "gpt-5-codex",
+            thinkingLevel: "high").ArgumentList.ToArray();
+
+        Assert.Contains("-c", args);
+        Assert.Contains("model_reasoning_effort=\"high\"", args);
+    }
+
+    [Fact]
+    public void BuildStartInfo_NormalizesInvalidReasoningEffortToModelDefault()
+    {
+        var svc = BuildService();
+
+        var args = svc.BuildStartInfoForTest(
+            "do work",
+            Environment.CurrentDirectory,
+            sessionName: null,
+            resumeSession: false,
+            model: "gpt-5-codex",
+            thinkingLevel: "max").ArgumentList.ToArray();
+
+        Assert.Contains("model_reasoning_effort=\"medium\"", args);
     }
 
     [Fact]

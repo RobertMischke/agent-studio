@@ -46,6 +46,14 @@ public static class PipelineStepConfigResolver
         string? CatalogueDefault,
         string RuntimeDefault);
 
+    public sealed record ThinkingLevelResolution(
+        string? ThinkingLevel,
+        string Source,
+        string? StepOverride,
+        string? ProjectOverride,
+        string? GlobalDefault,
+        string? ModelDefault);
+
     /// <summary>Prefixes the catalogue uses; stripped to support bare-suffix lookup.</summary>
     private static readonly string[] StepIdPrefixes = { "aspect-", "post-", "pre-" };
 
@@ -154,6 +162,48 @@ public static class PipelineStepConfigResolver
             runtimeDefault: runtimeDefault);
     }
 
+    public static string? ResolveThinkingLevel(
+        ProjectSettings? settings,
+        string stepId,
+        string? cliType,
+        string? resolvedModel,
+        string? globalDefault = null)
+        => ResolveThinkingLevelWithSource(settings, stepId, cliType, resolvedModel, globalDefault).ThinkingLevel;
+
+    public static string? ResolveThinkingLevel(
+        ProjectSettings? settings,
+        PipelineStep step,
+        string? cliType,
+        string? resolvedModel,
+        string? globalDefault = null)
+        => ResolveThinkingLevelWithSource(settings, step, cliType, resolvedModel, globalDefault).ThinkingLevel;
+
+    public static ThinkingLevelResolution ResolveThinkingLevelWithSource(
+        ProjectSettings? settings,
+        string stepId,
+        string? cliType,
+        string? resolvedModel,
+        string? globalDefault = null)
+        => ResolveThinkingLevelCore(
+            stepOverride: Lookup(settings, stepId)?.ThinkingLevel,
+            projectOverride: settings?.OrchestratorThinkingLevel,
+            globalDefault: globalDefault,
+            cliType: cliType,
+            resolvedModel: resolvedModel);
+
+    public static ThinkingLevelResolution ResolveThinkingLevelWithSource(
+        ProjectSettings? settings,
+        PipelineStep step,
+        string? cliType,
+        string? resolvedModel,
+        string? globalDefault = null)
+        => ResolveThinkingLevelCore(
+            stepOverride: Lookup(settings, step.Id)?.ThinkingLevel,
+            projectOverride: settings?.OrchestratorThinkingLevel,
+            globalDefault: globalDefault,
+            cliType: cliType,
+            resolvedModel: resolvedModel);
+
     private static ModelResolution ResolveModelCore(
         string? stepOverride,
         string? catalogueDefault,
@@ -172,6 +222,27 @@ public static class PipelineStepConfigResolver
         if (global is not null) return new(global, ModelSourceGlobal, null, null, global, catalogue, runtime);
         if (catalogue is not null) return new(catalogue, ModelSourceCatalogue, null, null, null, catalogue, runtime);
         return new(runtime, ModelSourceRuntime, null, null, null, null, runtime);
+    }
+
+    private static ThinkingLevelResolution ResolveThinkingLevelCore(
+        string? stepOverride,
+        string? projectOverride,
+        string? globalDefault,
+        string? cliType,
+        string? resolvedModel)
+    {
+        var step = Normalize(stepOverride);
+        var project = Normalize(projectOverride);
+        var global = Normalize(globalDefault);
+        var modelDefault = CliThinkingLevels.DefaultFor(cliType, resolvedModel);
+
+        if (step is not null)
+            return new(CliThinkingLevels.Normalize(cliType, resolvedModel, step), ModelSourceStep, step, project, global, modelDefault);
+        if (project is not null)
+            return new(CliThinkingLevels.Normalize(cliType, resolvedModel, project), ModelSourceProject, null, project, global, modelDefault);
+        if (global is not null)
+            return new(CliThinkingLevels.Normalize(cliType, resolvedModel, global), ModelSourceGlobal, null, null, global, modelDefault);
+        return new(modelDefault, ModelSourceCatalogue, null, null, null, modelDefault);
     }
 
     private static string? Normalize(string? value)

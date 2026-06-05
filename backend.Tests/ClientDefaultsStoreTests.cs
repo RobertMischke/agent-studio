@@ -49,6 +49,9 @@ public class ClientDefaultsStoreTests : IDisposable
         Assert.Equal("claude", updated!.DefaultCliType);
         Assert.Equal("claude-opus-4-7", updated.DefaultModel);
 
+        var withThinking = store.SetDefaults(alice.Id, null, null, defaultThinkingLevel: "xhigh");
+        Assert.Equal("xhigh", withThinking!.DefaultThinkingLevel);
+
         // Re-load from disk and verify the change survived.
         var freshStore = new ClientIdentityStore(BuildConfig(), NullLogger<ClientIdentityStore>.Instance);
         freshStore.EnsureLoaded();
@@ -56,6 +59,7 @@ public class ClientDefaultsStoreTests : IDisposable
         Assert.NotNull(reloaded);
         Assert.Equal("claude", reloaded!.DefaultCliType);
         Assert.Equal("claude-opus-4-7", reloaded.DefaultModel);
+        Assert.Equal("xhigh", reloaded.DefaultThinkingLevel);
     }
 
     [Fact]
@@ -70,6 +74,7 @@ public class ClientDefaultsStoreTests : IDisposable
         var updated = store.SetDefaults(alice.Id, defaultCliType: null, defaultModel: "claude-haiku-4-5-20251001");
         Assert.Equal("claude", updated!.DefaultCliType);
         Assert.Equal("claude-haiku-4-5-20251001", updated.DefaultModel);
+        Assert.Null(updated.DefaultThinkingLevel);
     }
 
     [Fact]
@@ -89,6 +94,11 @@ public class ClientDefaultsStoreTests : IDisposable
         var bothCleared = store.SetDefaults(alice.Id, defaultCliType: null, defaultModel: null, clearCli: true, clearModel: false);
         Assert.Null(bothCleared!.DefaultCliType);
         Assert.Null(bothCleared.DefaultModel);
+
+        var thinking = store.SetDefaults(alice.Id, defaultCliType: null, defaultModel: null, defaultThinkingLevel: "high");
+        Assert.Equal("high", thinking!.DefaultThinkingLevel);
+        var thinkingCleared = store.SetDefaults(alice.Id, defaultCliType: null, defaultModel: null, clearThinkingLevel: true);
+        Assert.Null(thinkingCleared!.DefaultThinkingLevel);
     }
 
     [Fact]
@@ -109,10 +119,12 @@ public class ClientDefaultsStoreTests : IDisposable
             Kind = ClientIdentityKind.Human,
             RegisteredAt = DateTime.UtcNow,
             DefaultCliType = "codex",
-            DefaultModel = "gpt-5"
+            DefaultModel = "gpt-5",
+            DefaultThinkingLevel = "medium"
         };
         var s = ClientSummary.From(identity);
         Assert.Equal("codex", s.DefaultCliType);
         Assert.Equal("gpt-5", s.DefaultModel);
+        Assert.Equal("medium", s.DefaultThinkingLevel);
     }
 }

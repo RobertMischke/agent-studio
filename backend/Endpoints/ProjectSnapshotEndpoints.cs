@@ -121,6 +121,7 @@ public static class ProjectSnapshotEndpoints
                     autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy),
                     runnerMode = settings.RunnerMode,
                     orchestratorModel = settings.OrchestratorModel,
+                    orchestratorThinkingLevel = settings.OrchestratorThinkingLevel,
                     // F35: every lane resolved to its effective strategy.
                     // The kanban renders the lane-header icon and the
                     // drag-disabled hint from this map.

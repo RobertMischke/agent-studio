@@ -19,6 +19,7 @@ import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
+const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 
 interface CapSummaryRow {
   cliType: CliType;
@@ -59,6 +60,7 @@ export class ProjectSettingsPanelComponent implements OnInit {
   /** Global default agent, read-only — the value the orchestrator inherits. */
   readonly defaultCli = signal<CliType | null>(null);
   readonly defaultModel = signal<string | null>(null);
+  readonly defaultThinkingLevel = signal<string | null>(null);
 
   /** Global per-CLI usage caps, read-only. */
   readonly defaultCapPct = signal<number>(95);
@@ -88,12 +90,14 @@ export class ProjectSettingsPanelComponent implements OnInit {
     // backend value (the one the orchestrator actually inherits).
     this.defaultCli.set(this.readStoredCli());
     this.defaultModel.set(this.readStoredModel(this.readStoredCli()));
+    this.defaultThinkingLevel.set(this.readStoredThinkingLevel(this.readStoredCli()));
     this.clientDefaults.getDefaults().subscribe({
       next: (r) => {
         const cli = r?.defaultCliType;
         if (cli && (CLI_TYPES as string[]).includes(cli)) {
           this.defaultCli.set(cli as CliType);
           this.defaultModel.set(r?.defaultModel ?? this.readStoredModel(cli as CliType));
+          this.defaultThinkingLevel.set(r?.defaultThinkingLevel ?? this.readStoredThinkingLevel(cli as CliType));
         }
       },
       error: () => { /* keep the localStorage-seeded value */ },
@@ -115,6 +119,11 @@ export class ProjectSettingsPanelComponent implements OnInit {
   private readStoredModel(cli: CliType | null): string | null {
     if (!cli) return null;
     return localStorage.getItem(STORAGE_DEFAULT_MODEL_PREFIX + cli);
+  }
+
+  private readStoredThinkingLevel(cli: CliType | null): string | null {
+    if (!cli) return null;
+    return localStorage.getItem(STORAGE_DEFAULT_THINKING_PREFIX + cli);
   }
 
   /** Open the global Workspace-settings home (where the default agent lives). */

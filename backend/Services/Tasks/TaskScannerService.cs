@@ -289,6 +289,7 @@ public class TaskScannerService : ITaskScanner
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), TaskJsonFile.ReadOpts)
                     : null,
                 Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null,
+                ThinkingLevel = raw.TryGetProperty("thinkingLevel", out var tl) ? tl.GetString() : null,
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
                 Kind = TaskKinds.Normalize(raw.TryGetProperty("kind", out var kd) ? kd.GetString() : null),
                 EpicId = raw.TryGetProperty("epicId", out var ep) && !string.IsNullOrWhiteSpace(ep.GetString()) ? ep.GetString() : null,

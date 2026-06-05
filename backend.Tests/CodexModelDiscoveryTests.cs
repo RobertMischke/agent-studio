@@ -25,6 +25,11 @@ public class CodexModelDiscoveryTests
         Assert.DoesNotContain(models, m => m.Id == "codex-auto-review");
         Assert.Equal("gpt-5.4", Assert.Single(models, m => m.IsDefault).Id);
         Assert.All(models, m => Assert.Equal("openai", m.Vendor));
+        Assert.All(models, m =>
+        {
+            Assert.Equal(["minimal", "low", "medium", "high"], m.ThinkingLevels);
+            Assert.Equal("medium", m.DefaultThinkingLevel);
+        });
     }
 
     [Fact]

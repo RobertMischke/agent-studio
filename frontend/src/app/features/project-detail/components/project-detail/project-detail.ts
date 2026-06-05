@@ -205,6 +205,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         supportsCondition: step.supportsCondition,
         enabled: ov?.enabled ?? step.defaultEnabled,
         model: ov?.model ?? '',
+        thinkingLevel: ov?.thinkingLevel ?? '',
+        thinkingLevels: this.thinkingLevelsForModel(ov?.model ?? ''),
         mode: ov?.mode ?? '',
         condition: conditionWhen,
         conditionValue,
@@ -436,7 +438,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     if (!text) return;
     this.liveReplySending[jobId] = true;
     this.liveReplyErrors[jobId] = null;
-    this.jobService.continueJob(jobId, text, undefined, undefined, undefined, 'steer').subscribe({
+    this.jobService.continueJob(jobId, text, undefined, undefined, undefined, undefined, 'steer').subscribe({
       next: () => {
         this.liveReplyDrafts[jobId] = '';
         this.liveReplySending[jobId] = false;
@@ -541,11 +543,20 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   }
 
   onStepModelChange(stepId: string, model: string): void {
-    this.writeStep(stepId, { model });
+    const cur = this.pipelineOverrides()[stepId] ?? {};
+    const valid = this.thinkingLevelsForModel(model);
+    const nextThinkingLevel = valid.includes(cur.thinkingLevel ?? '')
+      ? cur.thinkingLevel
+      : this.defaultThinkingLevelForModel(model);
+    this.writeStep(stepId, { model, thinkingLevel: nextThinkingLevel });
   }
 
   onStepModeChange(stepId: string, mode: string): void {
     this.writeStep(stepId, { mode });
+  }
+
+  onStepThinkingLevelChange(stepId: string, thinkingLevel: string): void {
+    this.writeStep(stepId, { thinkingLevel });
   }
 
   /**
@@ -625,12 +636,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
    */
   private writeStep(
     stepId: string,
-    patch: { enabled?: boolean; model?: string; mode?: string; condition?: PipelineStepCondition | null },
+    patch: { enabled?: boolean; model?: string; thinkingLevel?: string | null; mode?: string; condition?: PipelineStepCondition | null },
   ): void {
     const cur = this.pipelineOverrides()[stepId] ?? {};
     const defaultEnabled = this.pipelineCatalogue().find(s => s.id === stepId)?.defaultEnabled ?? true;
     const enabled = patch.enabled ?? (cur.enabled ?? defaultEnabled);
     const model = (patch.model ?? cur.model ?? '').trim();
+    const thinkingLevel = (patch.thinkingLevel !== undefined ? patch.thinkingLevel : (cur.thinkingLevel ?? ''))?.trim() ?? '';
     const mode = (patch.mode ?? cur.mode ?? '').trim();
     const condition = patch.condition !== undefined ? patch.condition : (cur.condition ?? null);
 
@@ -643,6 +655,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       // whose default is off: enabling them must store true, not clear it.
       enabled: enabled === defaultEnabled ? null : enabled,
       model: model || null,
+      thinkingLevel: thinkingLevel || null,
       mode: mode || null,
       condition: condition ?? null,
     }).subscribe({
@@ -658,6 +671,18 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         this.clearConditionDraft(stepId);
       }
     });
+  }
+
+  private thinkingLevelsForModel(model: string | null | undefined): readonly string[] {
+    const id = (model ?? '').trim();
+    if (!id) return [];
+    return this.pipelineStepModels.find(m => m.id === id)?.thinkingLevels ?? [];
+  }
+
+  private defaultThinkingLevelForModel(model: string | null | undefined): string | null {
+    const id = (model ?? '').trim();
+    if (!id) return null;
+    return this.pipelineStepModels.find(m => m.id === id)?.defaultThinkingLevel ?? null;
   }
 
   repairQueueHealth(): void {

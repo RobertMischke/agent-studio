@@ -95,12 +95,14 @@
           class="create-cli-picker"
           [cliType]="cliTypeDraft()"
           [model]="newModel()"
+          [thinkingLevel]="newThinkingLevel()"
           [availableModels]="availableModels()"
           eyebrow="Agent for new task"
           triggerTestid="create-agent"
           pickerTestidPrefix="create-agent-picker"
           (cliTypeChange)="cliTypeChange.emit($event)"
-          (modelChange)="newModel.set($event)" />
+          (modelChange)="newModel.set($event)"
+          (thinkingLevelChange)="newThinkingLevel.set($event)" />
       </div>
     </div>
 

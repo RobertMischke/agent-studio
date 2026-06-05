@@ -47,10 +47,12 @@ public static class ProjectSettingsEndpoints
                     autoPushStrategy = AutoPushStrategies.Normalize(kv.Value.AutoPushStrategy),
                     runnerMode = kv.Value.RunnerMode,
                     orchestratorModel = kv.Value.OrchestratorModel,
+                    orchestratorThinkingLevel = kv.Value.OrchestratorThinkingLevel,
                     // Epic decomposition (planning) run knobs (way 3): null
                     // model means "use the epic card's own model"; subTasksToReady
                     // null/false lands generated sub-tasks in 0-backlog.
                     epicPlanningModel = kv.Value.EpicPlanningModel,
+                    epicPlanningThinkingLevel = kv.Value.EpicPlanningThinkingLevel,
                     epicSubTasksToReady = kv.Value.EpicSubTasksToReady ?? false,
                     intakeEnabled = kv.Value.IntakeEnabled,
                     autonomyLevel = kv.Value.AutonomyLevel,
@@ -195,6 +197,7 @@ public static class ProjectSettingsEndpoints
                 Enabled = req.Enabled,
                 Mode = req.Mode,
                 Model = req.Model,
+                ThinkingLevel = req.ThinkingLevel,
                 Condition = req.Condition,
             });
             return Results.Ok(new
@@ -342,7 +345,7 @@ public static class ProjectSettingsEndpoints
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
-            settings.SetOrchestratorModel(projectName, req.Model);
+            settings.SetOrchestratorModel(projectName, req.Model, req.ThinkingLevel);
             return Results.Ok(settings.Get(projectName));
         });
 
@@ -354,7 +357,7 @@ public static class ProjectSettingsEndpoints
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
-            settings.SetEpicPlanning(projectName, req.Model, req.SubTasksToReady);
+            settings.SetEpicPlanning(projectName, req.Model, req.ThinkingLevel, req.SubTasksToReady);
             return Results.Ok(settings.Get(projectName));
         });
 

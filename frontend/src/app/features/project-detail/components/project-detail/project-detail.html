@@ -280,6 +280,19 @@
                     <option [value]="opt.id">{{ opt.label }}</option>
                   }
                 </select>
+                @if (step.thinkingLevels.length > 0) {
+                  <select class="proj-detail__pl-model"
+                          [attr.data-testid]="'pipeline-step-thinking-' + step.id"
+                          [appTooltip]="'Thinking level for this step LLM call. Inherit uses the selected model default.'"
+                          [disabled]="!step.enabled || pipelineStepBusy[step.id]"
+                          [ngModel]="step.thinkingLevel"
+                          (ngModelChange)="onStepThinkingLevelChange(step.id, $event)">
+                    <option value="">Default</option>
+                    @for (level of step.thinkingLevels; track level) {
+                      <option [value]="level">{{ level }}</option>
+                    }
+                  </select>
+                }
               }
 
               @if (step.supportsMode) {

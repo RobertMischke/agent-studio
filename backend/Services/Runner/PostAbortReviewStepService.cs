@@ -46,6 +46,7 @@ public sealed class PostAbortReviewStepService
     /// </summary>
     public Func<string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
+    private Func<string, string, string, string?, TimeSpan, CancellationToken, Task<string>>? _thinkingAwareCliRunner;
 
     public PostAbortReviewStepService(
         RuntimePromptService prompts,
@@ -60,8 +61,7 @@ public sealed class PostAbortReviewStepService
 
         if (_oneShotRegistry != null)
         {
-            CliRunner = (cli, model, prompt, timeout, ct) =>
-                RunViaOneShotAsync(cli, model, prompt, timeout, ct);
+            _thinkingAwareCliRunner = RunViaOneShotAsync;
         }
     }
 
@@ -105,7 +105,9 @@ public sealed class PostAbortReviewStepService
         var ok = true;
         try
         {
-            rawResponse = await CliRunner(request.CliType, request.Model, prompt, request.Timeout, ct);
+            rawResponse = _thinkingAwareCliRunner is null
+                ? await CliRunner(request.CliType, request.Model, prompt, request.Timeout, ct)
+                : await _thinkingAwareCliRunner(request.CliType, request.Model, prompt, request.ThinkingLevel, request.Timeout, ct);
             sw.Stop();
             var (parsedText, parsedUsage) = AdHocClaudeInvoker.ParseOrFallback(rawResponse, request.Model);
             rawResponse = parsedText;
@@ -356,7 +358,7 @@ public sealed class PostAbortReviewStepService
         return oneLine;
     }
 
-    private async Task<string> RunViaOneShotAsync(string cliType, string model, string prompt, TimeSpan timeout, CancellationToken ct)
+    private async Task<string> RunViaOneShotAsync(string cliType, string model, string prompt, string? thinkingLevel, TimeSpan timeout, CancellationToken ct)
     {
         var oneShot = _oneShotRegistry?.Get(cliType);
         if (oneShot == null) return await DefaultRunCliAsync(cliType, model, prompt, timeout, ct);
@@ -366,6 +368,7 @@ public sealed class PostAbortReviewStepService
             Model: model,
             Prompt: prompt)
         {
+            ThinkingLevel = thinkingLevel,
             Timeout = timeout,
             Source = UsageSource,
             RecordUsage = false,
@@ -405,6 +408,8 @@ public sealed record PostAbortReviewRequest(
     string CliType,
     string Model)
 {
+    public string? ThinkingLevel { get; init; }
+
     /// <summary>Automatic reruns this job has left. Drives the decider.</summary>
     public int RerunBudgetRemaining { get; init; } = PostAbortReviewDecider.DefaultRerunBudget;
 

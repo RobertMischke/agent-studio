@@ -70,6 +70,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         string? sessionName,
         bool resumeSession,
         string? model,
+        string? thinkingLevel,
         string? permissionMode)
     {
         // claude -p <prompt-as-argv> [-r <s>] [--model <m>]
@@ -134,6 +135,9 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(normalizedModel);
         }
 
+        foreach (var flag in CliReasoningFlags.For(CliType, normalizedModel, thinkingLevel))
+            psi.ArgumentList.Add(flag);
+
         psi.ArgumentList.Add("--output-format");
         psi.ArgumentList.Add("stream-json");
         psi.ArgumentList.Add("--verbose");
@@ -188,6 +192,23 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
         => null;
+
+    internal ProcessStartInfo BuildStartInfoForTest(
+        string prompt,
+        string workingDirectory,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        string? thinkingLevel = null,
+        string? permissionMode = null)
+        => BuildStartInfo(
+            prompt,
+            workingDirectory,
+            sessionName,
+            resumeSession,
+            NormalizeModelForInvocation(model),
+            thinkingLevel,
+            permissionMode);
 
     /// <summary>
     /// Pre-spawn self-heal for the npm-shim install. Probe first; if it
@@ -681,10 +702,10 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // user picks one, the CLI validates. Empty list also works (default).
         var models = new List<CliModelInfo>
         {
-            new() { Id = "claude-opus-4-8",       Label = "Claude Opus 4.8",     Vendor = "anthropic", IsDefault = true },
-            new() { Id = "claude-opus-4-7",       Label = "Claude Opus 4.7",     Vendor = "anthropic" },
-            new() { Id = "claude-sonnet-4-6",     Label = "Claude Sonnet 4.6",   Vendor = "anthropic" },
-            new() { Id = "claude-haiku-4-5",      Label = "Claude Haiku 4.5",    Vendor = "anthropic" }
+            Model("claude-opus-4-8",   "Claude Opus 4.8",   isDefault: true),
+            Model("claude-opus-4-7",   "Claude Opus 4.7"),
+            Model("claude-sonnet-4-6", "Claude Sonnet 4.6"),
+            Model("claude-haiku-4-5",  "Claude Haiku 4.5")
         };
         return Task.FromResult(new CliModelCatalog
         {
@@ -693,6 +714,17 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             FetchedAt = DateTime.UtcNow
         });
     }
+
+    private static CliModelInfo Model(string id, string label, bool isDefault = false)
+        => new()
+        {
+            Id = id,
+            Label = label,
+            Vendor = "anthropic",
+            IsDefault = isDefault,
+            ThinkingLevels = CliThinkingLevels.For(CliTypes.Claude, id).ToList(),
+            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(CliTypes.Claude, id)
+        };
 
     /// <summary>
     /// Coerces the dotted model-version forms users tend to type or paste

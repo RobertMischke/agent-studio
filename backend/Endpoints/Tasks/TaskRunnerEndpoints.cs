@@ -28,7 +28,7 @@ public static class TaskRunnerEndpoints
 
             try
             {
-                var resp = await runner.StartJobAsync(jobId, watchPath, req?.Model, req?.CliType, ct);
+                var resp = await runner.StartJobAsync(jobId, watchPath, req?.Model, req?.CliType, req?.ThinkingLevel, ct);
                 return resp.Status == "queued"
                     ? Results.Accepted(value: resp)
                     : Results.Ok(resp);
@@ -65,7 +65,7 @@ public static class TaskRunnerEndpoints
             var mode = ContinueModes.Normalize(req.Mode);
             try
             {
-                var resp = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, mode, ct);
+                var resp = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, req.CliType, req.ThinkingLevel, mode, ct);
                 return resp.Status == "queued"
                     ? Results.Accepted(value: resp)
                     : Results.Ok(resp);

@@ -64,7 +64,7 @@ export class EpicRollupPaneComponent {
   /** Fires after a successful reference write so the host can re-fetch. */
   readonly referencesChanged = output<void>();
   /** Atomic CLI + model commit forwarded to the host's sequenced PUTs. */
-  readonly agentConfigCommit = output<{ cliType: CliType; model: string }>();
+  readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
 
   private readonly jobs = inject(TaskService);
   readonly rollup = signal<EpicRollup | null>(null);

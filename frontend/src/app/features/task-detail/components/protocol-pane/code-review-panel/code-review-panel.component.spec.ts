@@ -154,11 +154,12 @@ describe('CodeReviewPanelComponent', () => {
     // The unified selector is a chip + popover, not a <select>. Drive the
     // signal directly to exercise the "operator picked a different model"
     // path without re-opening the picker in a unit test.
-    fixture.componentInstance.onAgentCommit({ cliType: 'claude', model: 'claude-haiku-4-5-20251001' });
+    fixture.componentInstance.onAgentCommit({ cliType: 'claude', model: 'claude-haiku-4-5-20251001', thinkingLevel: null });
     // Committing through the picker persists the pair for the next visit.
     expect(JSON.parse(localStorage.getItem(LAST_AGENT_KEY) ?? '{}')).toEqual({
       cliType: 'claude',
       model: 'claude-haiku-4-5-20251001',
+      thinkingLevel: null,
     });
 
     const button = root.querySelector('[data-testid="code-review-run"]') as HTMLButtonElement;
@@ -205,6 +206,7 @@ describe('CodeReviewPanelComponent', () => {
     expect(JSON.parse(localStorage.getItem(LAST_AGENT_KEY) ?? '{}')).toEqual({
       cliType: 'claude',
       model: 'claude-haiku-4-5-20251001',
+      thinkingLevel: null,
     });
     httpCtrl.verify();
   });

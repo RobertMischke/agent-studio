@@ -168,7 +168,9 @@ public sealed class CodexModelDiscovery
                 Id = id,
                 Label = label.Trim(),
                 Vendor = GuessVendor(id),
-                IsDefault = string.Equals(id, activeModel, StringComparison.OrdinalIgnoreCase)
+                IsDefault = string.Equals(id, activeModel, StringComparison.OrdinalIgnoreCase),
+                ThinkingLevels = CliThinkingLevels.For(CliTypes.Codex, id).ToList(),
+                DefaultThinkingLevel = CliThinkingLevels.DefaultFor(CliTypes.Codex, id)
             }, priority, index++));
         }
 

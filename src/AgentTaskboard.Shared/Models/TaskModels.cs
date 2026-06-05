@@ -1853,6 +1853,7 @@ public record SetCliModeRequest
 public record SetOrchestratorModelRequest
 {
     public string? Model { get; init; }
+    public string? ThinkingLevel { get; init; }
 }
 
 /// <summary>
@@ -1864,6 +1865,7 @@ public record SetOrchestratorModelRequest
 public record SetEpicPlanningRequest
 {
     public string? Model { get; init; }
+    public string? ThinkingLevel { get; init; }
     public bool? SubTasksToReady { get; init; }
 }
 
@@ -1899,6 +1901,7 @@ public record SetPipelineStepRequest
     public bool? Enabled { get; init; }
     public string? Mode { get; init; }
     public string? Model { get; init; }
+    public string? ThinkingLevel { get; init; }
 
     /// <summary>
     /// Run condition for this step (see <see cref="PipelineStepConditions"/>).
@@ -2065,6 +2068,7 @@ public record CliExecution
     public int? ExitCode { get; init; }
     public double? DurationSeconds { get; init; }
     public string? Model { get; init; }
+    public string? ThinkingLevel { get; init; }
     /// <summary>
     /// Canonical terminal run outcome once known: success, failed, noop,
     /// blocked, needs-input, interrupted, or unknown. Null while running and

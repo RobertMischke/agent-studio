@@ -312,12 +312,12 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', status: 'passed', durationMs: 1200, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
         ],
       },
-      cost: {
+      cost: emptyCost({
         steps: [
-          { stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', modelKnown: true, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 1200, costUsd: 0.002 },
+          stepCost({ stepId: 'aspect-code-quality', kind: 'aspect', model: 'claude-haiku-4-5', modelKnown: true, inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 1200, costUsd: 0.002 }),
         ],
         totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false,
-      },
+      }),
       // tests-and-evidence disabled at project level; code-quality forced to Haiku.
       config: {
         'aspect-tests-and-evidence': { enabled: false, model: null, mode: null },
@@ -346,7 +346,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(tests.enabled).toBe(false);
 
     expect(c.hasPipeline()).toBe(true);
-    expect(c.pipelineTotal()).toEqual({ totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false });
+    expect(c.pipelineTotal()).toEqual(expect.objectContaining({ totalTokens: 1200, totalCostUsd: 0.002, anyModelUnknown: false }));
     expect(c.formatCost(0.002)).toBe('$0.0020');
     expect(c.formatCost(1.5)).toBe('$1.50');
   });
@@ -369,7 +369,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-7', status: 'running', startedAt: new Date().toISOString(), completedAt: null, durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -406,7 +406,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'core-agent-run', kind: 'core', model: 'm', status: 'running', startedAt: runningStart, completedAt: null, durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -474,7 +474,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'aspect-code-quality', kind: 'aspect', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'pass' },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -512,7 +512,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'core-agent-run', kind: 'core', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -553,7 +553,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'core-agent-run', kind: 'core', status: 'failed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'success' },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -589,7 +589,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'core-agent-run', kind: 'core', status: 'passed', durationMs: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'success' },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -617,7 +617,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'pre-loop-guard', kind: 'module', status: 'passed', durationMs: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'looping', verdictSummary: 'Auto-mode loop forming: 2/5 iterations, 40000/200000 orchestrator tokens used.' },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -651,7 +651,7 @@ describe('OverviewPaneComponent (smoke)', () => {
           { stepId: 'post-orchestrator-decision', kind: 'orchestrator', model: 'm', status: 'passed', durationMs: 1, inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, verdict: 'accept', verdictSummary: 'All aspects passed; accepting.' },
         ],
       },
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -714,7 +714,7 @@ describe('OverviewPaneComponent (smoke)', () => {
         ],
       },
       execution: null,
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
@@ -755,7 +755,7 @@ describe('OverviewPaneComponent (smoke)', () => {
         ],
       },
       execution: null,
-      cost: { steps: [], totalTokens: 0, totalCostUsd: 0, anyModelUnknown: false },
+      cost: emptyCost(),
       config: {},
     };
     TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);

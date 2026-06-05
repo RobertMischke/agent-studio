@@ -53,6 +53,43 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.Equal("claude", info!.Agent);
         Assert.Equal("claude", info.CliType);
         Assert.Equal("claude-opus-4-7", info.Model);
+        Assert.Equal("high", info.ThinkingLevel);
+    }
+
+    [Fact]
+    public void CreateJob_MaterializesOwnerThinkingLevel_WhenValid()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-opus-4-7", defaultThinkingLevel: "xhigh");
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "task-thinking",
+            Title = "Test thinking",
+            WatchPath = _watchPath,
+            TargetState = TaskStates.Ready
+        });
+
+        var info = scanner.FindJob("task-thinking", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("xhigh", info!.ThinkingLevel);
+    }
+
+    [Fact]
+    public void CreateJob_NormalizesForeignThinkingLevel_ToModelDefault()
+    {
+        var (_, scanner, mutations) = Build(defaultCliType: "claude", defaultModel: "claude-sonnet-4-6", defaultThinkingLevel: "max");
+
+        mutations.CreateJob(new CreateJobRequest
+        {
+            Id = "task-sonnet",
+            Title = "Test sonnet",
+            WatchPath = _watchPath,
+            TargetState = TaskStates.Ready
+        });
+
+        var info = scanner.FindJob("task-sonnet", _watchPath);
+        Assert.NotNull(info);
+        Assert.Equal("high", info!.ThinkingLevel);
     }
 
     [Fact]
@@ -143,6 +180,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         Assert.Equal("claude", info!.Agent);
         Assert.Equal("claude", info.CliType);
         Assert.Equal("claude-opus-4-7", info.Model);
+        Assert.Equal("high", info.ThinkingLevel);
     }
 
     [Fact]
@@ -210,7 +248,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
     }
 
     private (TaskStateMachine machine, TaskScannerService scanner, TaskMutationService mutations) Build(
-        string? defaultCliType, string? defaultModel)
+        string? defaultCliType, string? defaultModel, string? defaultThinkingLevel = null)
     {
         var config = BuildConfig();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
@@ -220,7 +258,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
         clients.EnsureLoaded();
 
         if (defaultCliType != null || defaultModel != null)
-            clients.SetDefaults(DefaultClientIdentity.Id, defaultCliType, defaultModel);
+            clients.SetDefaults(DefaultClientIdentity.Id, defaultCliType, defaultModel, defaultThinkingLevel: defaultThinkingLevel);
 
         var mutations = new TaskMutationService(scanner, clients, new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
         machine.EnsureStateFoldersAndMigrate();

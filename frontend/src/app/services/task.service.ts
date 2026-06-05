@@ -74,6 +74,7 @@ export interface CodeReviewListEntry {
   summary: string;
   model: string;
   cliType: string;
+  thinkingLevel?: string | null;
   commit?: string | null;
   runAt: string;
 }
@@ -91,6 +92,7 @@ export interface CodeReviewRunResponse {
   summary: string;
   model: string;
   cliType: string;
+  thinkingLevel?: string | null;
   commit?: string | null;
   concernTagId?: string | null;
   durationMs: number;
@@ -646,7 +648,7 @@ export class TaskService {
    */
   runCodeReview(
     jobId: string,
-    body: { model?: string; cliType?: string; commit?: string },
+    body: { model?: string; cliType?: string; thinkingLevel?: string | null; commit?: string },
     watchPath?: string,
   ) {
     return this.http.post<CodeReviewRunResponse>(
@@ -1061,10 +1063,11 @@ export class TaskService {
   }
 
   // CLI execution
-  startJob(jobId: string, watchPath?: string, model?: string, cliType?: CliType) {
-    const body: { model?: string; cliType?: CliType } = {};
+  startJob(jobId: string, watchPath?: string, model?: string, cliType?: CliType, thinkingLevel?: string) {
+    const body: { model?: string; cliType?: CliType; thinkingLevel?: string } = {};
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
+    if (thinkingLevel) body.thinkingLevel = thinkingLevel;
     return this.http.post<ContinueTaskResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/start`,
       body,
@@ -1099,13 +1102,15 @@ export class TaskService {
     watchPath?: string,
     model?: string,
     cliType?: CliType,
+    thinkingLevel?: string,
     mode?: ContinueMode,
   ) {
-    const body: { prompt: string; model?: string; cliType?: CliType; mode?: ContinueMode } = {
+    const body: { prompt: string; model?: string; cliType?: CliType; thinkingLevel?: string; mode?: ContinueMode } = {
       prompt,
     };
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
+    if (thinkingLevel) body.thinkingLevel = thinkingLevel;
     if (mode) body.mode = mode;
     return this.http.post<ContinueTaskResponse>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/continue`,
@@ -1118,6 +1123,14 @@ export class TaskService {
     return this.http.put(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/model`,
       { model },
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  setJobThinkingLevel(jobId: string, thinkingLevel: string | null, watchPath?: string) {
+    return this.http.put(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/thinking-level`,
+      { thinkingLevel },
       this.withWatchPath(watchPath),
     );
   }
@@ -1409,6 +1422,7 @@ export class TaskService {
       enabled?: boolean | null;
       mode?: string | null;
       model?: string | null;
+      thinkingLevel?: string | null;
       condition?: PipelineStepCondition | null;
     },
   ) {

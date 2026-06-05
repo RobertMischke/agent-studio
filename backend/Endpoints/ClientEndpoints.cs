@@ -82,7 +82,8 @@ public static class ClientEndpoints
             {
                 Id = record.Id,
                 DefaultCliType = record.DefaultCliType,
-                DefaultModel = record.DefaultModel
+                DefaultModel = record.DefaultModel,
+                DefaultThinkingLevel = record.DefaultThinkingLevel
             });
         });
 
@@ -94,6 +95,7 @@ public static class ClientEndpoints
             // untouched. The store distinguishes the two via the clear flags.
             var clearCli = request.DefaultCliType is not null && string.IsNullOrWhiteSpace(request.DefaultCliType);
             var clearModel = request.DefaultModel is not null && string.IsNullOrWhiteSpace(request.DefaultModel);
+            var clearThinkingLevel = request.DefaultThinkingLevel is not null && string.IsNullOrWhiteSpace(request.DefaultThinkingLevel);
 
             // Validate the CLI value against the known set if it's a non-empty set.
             string? cli = string.IsNullOrWhiteSpace(request.DefaultCliType) ? null : request.DefaultCliType!.Trim().ToLowerInvariant();
@@ -108,14 +110,28 @@ public static class ClientEndpoints
                 return Results.BadRequest(new { error = "model-too-long" });
             }
 
-            var updated = store.SetDefaults(id, cli, model, clearCli, clearModel);
+            string? thinkingLevel = string.IsNullOrWhiteSpace(request.DefaultThinkingLevel)
+                ? null
+                : request.DefaultThinkingLevel!.Trim().ToLowerInvariant();
+            if (thinkingLevel is { Length: > 32 })
+            {
+                return Results.BadRequest(new { error = "thinking-level-too-long" });
+            }
+
+            var existing = store.Find(id);
+            var normalizedThinkingLevel = thinkingLevel is null
+                ? null
+                : CliThinkingLevels.Normalize(cli ?? existing?.DefaultCliType, model ?? existing?.DefaultModel, thinkingLevel);
+
+            var updated = store.SetDefaults(id, cli, model, clearCli, clearModel, normalizedThinkingLevel, clearThinkingLevel);
             if (updated is null) return Results.NotFound(new { error = "client-not-found" });
 
             return Results.Ok(new ClientDefaultsResponse
             {
                 Id = updated.Id,
                 DefaultCliType = updated.DefaultCliType,
-                DefaultModel = updated.DefaultModel
+                DefaultModel = updated.DefaultModel,
+                DefaultThinkingLevel = updated.DefaultThinkingLevel
             });
         });
     }

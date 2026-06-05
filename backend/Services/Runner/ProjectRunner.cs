@@ -702,14 +702,18 @@ public class ProjectRunner
             // fresh decomposition, so it is left on the normal path.
             var isEpicPlanningRun = EpicRunPolicy.IsPlanningRun(info.Kind, intent);
             var runModel = info.Model;
+            var runThinkingLevel = info.ThinkingLevel;
             if (isEpicPlanningRun)
             {
                 plan = plan with { PromptTemplate = RuntimePromptService.EpicDecomposition, PromptOverride = null };
-                var planningModel = _projectSettings.Get(ProjectName).EpicPlanningModel;
+                var projectSettings = _projectSettings.Get(ProjectName);
+                var planningModel = projectSettings.EpicPlanningModel;
                 if (!string.IsNullOrWhiteSpace(planningModel)) runModel = planningModel;
+                if (projectSettings.EpicPlanningThinkingLevel is not null)
+                    runThinkingLevel = projectSettings.EpicPlanningThinkingLevel;
                 _logger.LogInformation(
-                    "[taskboard] epic {JobId} -> planning/decomposition run (model={Model})",
-                    jobId, runModel ?? "<task-default>");
+                    "[taskboard] epic {JobId} -> planning/decomposition run (model={Model}, thinkingLevel={ThinkingLevel})",
+                    jobId, runModel ?? "<task-default>", runThinkingLevel ?? "<model-default>");
             }
 
             var prompt = RenderPrompt(plan, info);
@@ -859,7 +863,7 @@ public class ProjectRunner
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, Entry.RootPath,
-                plan.SessionToResume, plan.ResumeFlag, runModel, info.FolderPath, permissionMode, ct);
+                plan.SessionToResume, plan.ResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, ct);
 
             if (execution == null)
             {
@@ -3385,6 +3389,12 @@ public class ProjectRunner
             settings,
             OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
             runtimeDefault: execution.Model ?? activeInfo.Model ?? "claude-haiku-4-5");
+        var thinkingLevel = OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
+            settings,
+            OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
+            cliType,
+            model,
+            execution.ThinkingLevel ?? activeInfo.ThinkingLevel);
 
         var phase = _phaseByJob.TryGetValue(jobKey, out var snap) ? snap.Phase.ToString() : RunPhase.Unknown.ToString();
         var request = new PostAbortReviewRequest(
@@ -3402,6 +3412,7 @@ public class ProjectRunner
             CliType: cliType,
             Model: model)
         {
+            ThinkingLevel = thinkingLevel,
             RerunBudgetRemaining = budgetRemaining,
         };
 

@@ -20,6 +20,7 @@ import { CliModelSelectorComponent } from '../../../../components/cli-model-sele
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
+const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 
 @Component({
   selector: 'app-status-bar',
@@ -58,10 +59,11 @@ export class StatusBarComponent implements OnInit {
   // `toggleSettings`, which lands on the home overview.
   readonly openCliAdmin = output<void>();
   readonly defaultCliChange = output<CliType>();
-  readonly defaultModelChange = output<{ cliType: CliType; model: string }>();
+  readonly defaultModelChange = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
 
   readonly defaultCli = signal<CliType>(this.readDefaultCli());
   readonly defaultModel = signal<string>(this.readDefaultModel(this.readDefaultCli()));
+  readonly defaultThinkingLevel = signal<string | null>(this.readDefaultThinkingLevel(this.readDefaultCli()));
 
   readonly runningCount = computed(() => {
     const status = this.jobService.runnerStatus();
@@ -82,6 +84,7 @@ export class StatusBarComponent implements OnInit {
       const cli = this.readDefaultCli();
       this.defaultCli.set(cli);
       this.defaultModel.set(this.readDefaultModel(cli));
+      this.defaultThinkingLevel.set(this.readDefaultThinkingLevel(cli));
     });
   }
 
@@ -98,7 +101,7 @@ export class StatusBarComponent implements OnInit {
   /** Atomic commit from the unified selector. Persists to localStorage and
    *  to the cross-device ClientDefaults profile; the create-task form
    *  subscribes via `defaultCliChange` / `defaultModelChange`. */
-  onDefaultCommit(change: { cliType: CliType; model: string }): void {
+  onDefaultCommit(change: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     const previousCli = this.defaultCli();
     if (change.cliType !== previousCli) {
       this.defaultCli.set(change.cliType);
@@ -107,17 +110,26 @@ export class StatusBarComponent implements OnInit {
       this.defaultCliChange.emit(change.cliType);
       // When the CLI flips we also need a fresh per-CLI model preference.
       this.defaultModel.set(this.readDefaultModel(change.cliType));
+      this.defaultThinkingLevel.set(this.readDefaultThinkingLevel(change.cliType));
     }
     const model = change.model;
-    if (model !== this.defaultModel() || change.cliType !== previousCli) {
+    const thinkingLevel = change.thinkingLevel;
+    if (model !== this.defaultModel() || thinkingLevel !== this.defaultThinkingLevel() || change.cliType !== previousCli) {
       this.defaultModel.set(model);
+      this.defaultThinkingLevel.set(thinkingLevel);
       if (model) {
         localStorage.setItem(STORAGE_DEFAULT_MODEL_PREFIX + change.cliType, model);
       } else {
         localStorage.removeItem(STORAGE_DEFAULT_MODEL_PREFIX + change.cliType);
       }
+      if (thinkingLevel) {
+        localStorage.setItem(STORAGE_DEFAULT_THINKING_PREFIX + change.cliType, thinkingLevel);
+      } else {
+        localStorage.removeItem(STORAGE_DEFAULT_THINKING_PREFIX + change.cliType);
+      }
       void this.clientDefaults.pushDefaultModel(model);
-      this.defaultModelChange.emit({ cliType: change.cliType, model });
+      void this.clientDefaults.pushDefaultThinkingLevel(thinkingLevel);
+      this.defaultModelChange.emit({ cliType: change.cliType, model, thinkingLevel });
     }
   }
 
@@ -129,5 +141,9 @@ export class StatusBarComponent implements OnInit {
 
   private readDefaultModel(cliType: CliType): string {
     return localStorage.getItem(STORAGE_DEFAULT_MODEL_PREFIX + cliType) ?? '';
+  }
+
+  private readDefaultThinkingLevel(cliType: CliType): string | null {
+    return localStorage.getItem(STORAGE_DEFAULT_THINKING_PREFIX + cliType) ?? null;
   }
 }

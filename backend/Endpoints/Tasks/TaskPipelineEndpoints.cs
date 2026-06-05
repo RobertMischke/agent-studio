@@ -54,6 +54,7 @@ public static class TaskPipelineEndpoints
                 {
                     enabled = PipelineStepConfigResolver.IsEnabled(settings, step.Id),
                     model = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Model,
+                    thinkingLevel = PipelineStepConfigResolver.Lookup(settings, step.Id)?.ThinkingLevel,
                     mode = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Mode,
                 },
                 StringComparer.OrdinalIgnoreCase);

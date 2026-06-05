@@ -136,13 +136,22 @@ public class ProjectSettingsService
     /// Sets the model the orchestrator uses when deciding on the user's
     /// behalf in auto mode. Null clears (revert to default Opus).
     /// </summary>
-    public void SetOrchestratorModel(string projectName, string? model)
+    public void SetOrchestratorModel(string projectName, string? model, string? thinkingLevel = null)
     {
         EnsureLoaded();
         lock (_lock)
         {
             var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
-            _cache[projectName] = current with { OrchestratorModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim() };
+            var normalizedModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+            _cache[projectName] = current with
+            {
+                OrchestratorModel = normalizedModel,
+                OrchestratorThinkingLevel = thinkingLevel is null
+                    ? current.OrchestratorThinkingLevel
+                    : (string.IsNullOrWhiteSpace(thinkingLevel)
+                        ? null
+                        : CliThinkingLevels.Normalize(CliTypes.Claude, normalizedModel, thinkingLevel))
+            };
             Persist();
         }
     }
@@ -153,17 +162,23 @@ public class ProjectSettingsService
     /// and the backlog/ready target independently. An empty model string
     /// clears the override (revert to the epic card's own model).
     /// </summary>
-    public void SetEpicPlanning(string projectName, string? model, bool? subTasksToReady)
+    public void SetEpicPlanning(string projectName, string? model, string? thinkingLevel, bool? subTasksToReady)
     {
         EnsureLoaded();
         lock (_lock)
         {
             var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var normalizedModel = model is null
+                ? current.EpicPlanningModel
+                : (string.IsNullOrWhiteSpace(model) ? null : model.Trim());
             _cache[projectName] = current with
             {
-                EpicPlanningModel = model is null
-                    ? current.EpicPlanningModel
-                    : (string.IsNullOrWhiteSpace(model) ? null : model.Trim()),
+                EpicPlanningModel = normalizedModel,
+                EpicPlanningThinkingLevel = thinkingLevel is null
+                    ? current.EpicPlanningThinkingLevel
+                    : (string.IsNullOrWhiteSpace(thinkingLevel)
+                        ? null
+                        : CliThinkingLevels.Normalize(CliTypes.Claude, normalizedModel, thinkingLevel)),
                 EpicSubTasksToReady = subTasksToReady ?? current.EpicSubTasksToReady,
             };
             Persist();
@@ -266,10 +281,13 @@ public class ProjectSettingsService
                 : new Dictionary<string, PipelineStepSetting>(current.PipelineSteps, StringComparer.OrdinalIgnoreCase);
 
             var normalizedModel = string.IsNullOrWhiteSpace(setting?.Model) ? null : setting!.Model!.Trim();
+            var normalizedThinkingLevel = string.IsNullOrWhiteSpace(setting?.ThinkingLevel)
+                ? null
+                : setting!.ThinkingLevel!.Trim().ToLowerInvariant();
             var normalizedMode = string.IsNullOrWhiteSpace(setting?.Mode) ? null : setting!.Mode!.Trim().ToLowerInvariant();
             var normalizedCondition = NormalizeCondition(setting?.Condition);
             var isEmpty = setting is null
-                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null && normalizedCondition is null);
+                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedCondition is null);
 
             if (isEmpty)
             {
@@ -282,6 +300,7 @@ public class ProjectSettingsService
                     Enabled = setting!.Enabled,
                     Mode = normalizedMode,
                     Model = normalizedModel,
+                    ThinkingLevel = normalizedThinkingLevel,
                     Condition = normalizedCondition,
                 };
             }

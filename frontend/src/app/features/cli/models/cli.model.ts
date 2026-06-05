@@ -16,6 +16,8 @@ export interface CliModelInfo {
   multiplier: number | null;
   vendor: string | null;
   isDefault: boolean;
+  thinkingLevels?: string[];
+  defaultThinkingLevel?: string | null;
 }
 
 export interface CliModelCatalog {

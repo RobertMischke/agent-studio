@@ -32,6 +32,7 @@ export class ClientDefaultsService {
 
   private static readonly STORAGE_DEFAULT_CLI = 'defaultCliType';
   private static readonly STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
+  private static readonly STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 
   /**
    * Read the durable defaults from the backend without touching the
@@ -61,6 +62,12 @@ export class ClientDefaultsService {
           : (localStorage.getItem(ClientDefaultsService.STORAGE_DEFAULT_CLI) ?? 'claude');
         localStorage.setItem(ClientDefaultsService.STORAGE_DEFAULT_MODEL_PREFIX + cli, r.defaultModel);
       }
+      if (r.defaultThinkingLevel) {
+        const cli = (r.defaultCliType && (CLI_TYPES as string[]).includes(r.defaultCliType))
+          ? r.defaultCliType
+          : (localStorage.getItem(ClientDefaultsService.STORAGE_DEFAULT_CLI) ?? 'claude');
+        localStorage.setItem(ClientDefaultsService.STORAGE_DEFAULT_THINKING_PREFIX + cli, r.defaultThinkingLevel);
+      }
     } catch {
       // Backend unreachable on boot is non-fatal; localStorage is the
       // cache and the status bar will still render last-known values.
@@ -88,6 +95,20 @@ export class ClientDefaultsService {
         this.http.put<ClientDefaultsResponse>(
           `/api/clients/${encodeURIComponent(CLIENT_ID)}/defaults`,
           { defaultModel: model ?? '' }
+        )
+      );
+    } catch {
+      // ignored
+    }
+  }
+
+  /** Push the new default thinking level (or clear it via empty string). */
+  async pushDefaultThinkingLevel(thinkingLevel: string | null): Promise<void> {
+    try {
+      await firstValueFrom(
+        this.http.put<ClientDefaultsResponse>(
+          `/api/clients/${encodeURIComponent(CLIENT_ID)}/defaults`,
+          { defaultThinkingLevel: thinkingLevel ?? '' }
         )
       );
     } catch {

@@ -5,6 +5,7 @@
       <app-cli-model-selector
         [cliType]="selectedCli()"
         [model]="selectedModel()"
+        [thinkingLevel]="selectedThinkingLevel()"
         [disabled]="running()"
         eyebrow="Code review agent"
         triggerTestid="code-review-model"
@@ -59,6 +60,9 @@
             <span class="cr-summary">{{ entry.summary || '(no summary)' }}</span>
             <span class="cr-meta">
               {{ entry.model }}
+              @if (entry.thinkingLevel) {
+                <span> &middot; {{ entry.thinkingLevel }}</span>
+              }
               @if (entry.commit) {
                 <span> &middot; {{ entry.commit.substring(0, 7) }}</span>
               }

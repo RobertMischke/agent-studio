@@ -47,6 +47,8 @@ public sealed class AspectRunnerService
     public Func<string, string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
 
+    private Func<string, string, string, string, string?, TimeSpan, CancellationToken, Task<string>>? _thinkingAwareCliRunner;
+
     private readonly AdHocUsageRecorder? _usage;
     private readonly CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
@@ -71,12 +73,11 @@ public sealed class AspectRunnerService
         // and substitute their own stub via the CliRunner property.
         if (_oneShotRegistry != null)
         {
-            CliRunner = (aspectId, cli, model, prompt, timeout, ct) =>
-                RunViaOneShotAsync(aspectId, cli, model, prompt, timeout, ct);
+            _thinkingAwareCliRunner = RunViaOneShotAsync;
         }
     }
 
-    private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
+    private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, string? thinkingLevel, TimeSpan timeout, CancellationToken ct)
     {
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot == null) return await DefaultRunCliAsync(aspectId, cli, model, prompt, timeout, ct);
@@ -86,6 +87,7 @@ public sealed class AspectRunnerService
             Model: model,
             Prompt: prompt)
         {
+            ThinkingLevel = thinkingLevel,
             Timeout = timeout,
             Source = AdHocUsageSources.ReviewDecision,
             RecordUsage = false, // RunAsync caller (this service) records via AdHocClaudeInvoker.Record below
@@ -164,7 +166,8 @@ public sealed class AspectRunnerService
         string model,
         TimeSpan perAspectTimeout,
         CancellationToken ct,
-        Func<string, string>? modelForAspect = null)
+        Func<string, string>? modelForAspect = null,
+        Func<string, string?>? thinkingLevelForAspect = null)
     {
         var now = DateTime.UtcNow;
 
@@ -198,7 +201,8 @@ public sealed class AspectRunnerService
                 // resolver or a null reply means "use the run-wide model".
                 var stepModel = modelForAspect?.Invoke(entry.Def.Id);
                 if (string.IsNullOrWhiteSpace(stepModel)) stepModel = model;
-                return RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, stepModel,
+                var stepThinkingLevel = thinkingLevelForAspect?.Invoke(entry.Def.Id);
+                return RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, stepModel, stepThinkingLevel,
                     perAspectTimeout, gate, now, ct);
             })
             .ToArray();
@@ -223,6 +227,7 @@ public sealed class AspectRunnerService
         AspectRunInputs inputs,
         string cliBinary,
         string model,
+        string? thinkingLevel,
         TimeSpan perAspectTimeout,
         SemaphoreSlim gate,
         DateTime now,
@@ -250,7 +255,9 @@ public sealed class AspectRunnerService
             try
             {
                 var sw = AdHocClaudeInvoker.StartTiming();
-                var rawResponse = await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct);
+                var rawResponse = _thinkingAwareCliRunner is null
+                    ? await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct)
+                    : await _thinkingAwareCliRunner(def.Id, cliBinary, model, prompt, thinkingLevel, perAspectTimeout, ct);
                 sw.Stop();
                 durationMs = sw.ElapsedMilliseconds;
                 var parsed = AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);

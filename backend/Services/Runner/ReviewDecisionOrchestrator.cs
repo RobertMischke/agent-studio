@@ -1084,8 +1084,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         Func<string, string>? modelForAspect = settings is null
             ? null
             : aspectId => PipelineStepConfigResolver.ResolveModel(settings, $"aspect-{aspectId}", aspectModel);
+        Func<string, string?>? thinkingLevelForAspect = settings is null
+            ? null
+            : aspectId =>
+            {
+                var resolvedModel = modelForAspect?.Invoke(aspectId) ?? aspectModel;
+                return PipelineStepConfigResolver.ResolveThinkingLevel(
+                    settings,
+                    $"aspect-{aspectId}",
+                    CliTypes.Claude,
+                    resolvedModel);
+            };
 
-        var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect);
+        var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect, thinkingLevelForAspect);
 
         // ASS-563: run the lint-scss post-step BEFORE the pipeline Complete
         // mark so its step record lands in pipeline-execution.json while

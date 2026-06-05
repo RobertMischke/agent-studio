@@ -53,6 +53,7 @@ public sealed class GeminiCliService : CliExecutionServiceBase
         string? sessionName,
         bool resumeSession,
         string? model,
+        string? thinkingLevel,
         string? permissionMode)
     {
         // gemini -p "<prompt>" -o stream-json --skip-trust -y [-m <id>] [-r <uuid>]

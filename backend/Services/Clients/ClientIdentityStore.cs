@@ -236,7 +236,7 @@ public class ClientIdentityStore
     /// other; passing both as null clears both. Returns the updated record,
     /// or null if the identity does not exist.
     /// </summary>
-    public ClientIdentity? SetDefaults(string id, string? defaultCliType, string? defaultModel, bool clearCli = false, bool clearModel = false)
+    public ClientIdentity? SetDefaults(string id, string? defaultCliType, string? defaultModel, bool clearCli = false, bool clearModel = false, string? defaultThinkingLevel = null, bool clearThinkingLevel = false)
     {
         EnsureLoaded();
         lock (_lock)
@@ -245,7 +245,8 @@ public class ClientIdentityStore
             var updated = existing with
             {
                 DefaultCliType = clearCli ? null : (defaultCliType ?? existing.DefaultCliType),
-                DefaultModel = clearModel ? null : (defaultModel ?? existing.DefaultModel)
+                DefaultModel = clearModel ? null : (defaultModel ?? existing.DefaultModel),
+                DefaultThinkingLevel = clearThinkingLevel ? null : (defaultThinkingLevel ?? existing.DefaultThinkingLevel)
             };
             _byId[id] = updated;
             TryWriteLocked(updated);

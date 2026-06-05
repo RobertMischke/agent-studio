@@ -50,6 +50,11 @@ public sealed record CliOneShotRequest(
     string Model,
     string Prompt)
 {
+    /// <summary>Optional thinking/reasoning level for CLIs and models that
+    /// support one. Unsupported combinations are normalized away by the
+    /// concrete runner.</summary>
+    public string? ThinkingLevel { get; init; }
+
     /// <summary>Working directory the child process runs in. Defaults to
     /// the backend's CWD when null - usually the workspace root.</summary>
     public string? WorkingDirectory { get; init; }

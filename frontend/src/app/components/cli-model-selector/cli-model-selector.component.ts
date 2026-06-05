@@ -41,8 +41,9 @@ import { CliCatalogStore } from '../../services/cli-catalog.store';
  * snapshot fallback for the very first render before hydration lands.
  *
  * Three event surfaces:
- * - `commit({ cliType, model })` - atomic, fires from Done or auto-commit.
- * - `cliTypeChange(cliType)` and `modelChange(model)` - derived, fire
+ * - `commit({ cliType, model, thinkingLevel })` - atomic, fires from Done or auto-commit.
+ * - `cliTypeChange(cliType)`, `modelChange(model)`, and
+ *   `thinkingLevelChange(thinkingLevel)` - derived, fire
  *   for parents that already split the two PUTs (status-bar default,
  *   command-deck, create-task form).
  */
@@ -57,6 +58,7 @@ import { CliCatalogStore } from '../../services/cli-catalog.store';
 export class CliModelSelectorComponent {
   readonly cliType = input<CliType | null>(null);
   readonly model = input<string | null>(null);
+  readonly thinkingLevel = input<string | null>(null);
   /** Optional snapshot fallback used only before the catalog store has hydrated. */
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   /** True while the surface should suppress the click (e.g. a run is in flight). */
@@ -88,11 +90,13 @@ export class CliModelSelectorComponent {
   readonly pickerTestidPrefix = input<string>('cli-model-selector-picker');
 
   /** Atomic commit: emitted from Done or from an auto-commit on a model click. */
-  readonly commit = output<{ cliType: CliType; model: string }>();
+  readonly commit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
   /** Convenience event that always pairs with `commit` when the CLI changed. */
   readonly cliTypeChange = output<CliType>();
   /** Convenience event that always pairs with `commit` for the new model value. */
   readonly modelChange = output<string>();
+  /** Convenience event that always pairs with `commit` for thinking-level changes. */
+  readonly thinkingLevelChange = output<string | null>();
 
   readonly pickerOpen = signal<boolean>(false);
 
@@ -120,6 +124,7 @@ export class CliModelSelectorComponent {
   /** Draft state initialised when the picker opens. */
   readonly draftCliType = signal<CliType | null>(null);
   readonly draftModel = signal<string>('');
+  readonly draftThinkingLevel = signal<string | null>(null);
   readonly draftAvailableModels = signal<readonly CliModelInfo[]>([]);
   readonly loadingCatalog = signal<boolean>(false);
   readonly catalogError = signal<string | null>(null);
@@ -139,12 +144,12 @@ export class CliModelSelectorComponent {
   });
 
   /** Canonical "{cli} · {model}" rendering used for the picker header, tooltip, and aria-label. */
-  readonly currentBadgeText = computed<string>(() => buildBadgeText(this.cliType(), this.model()));
+  readonly currentBadgeText = computed<string>(() => buildBadgeText(this.cliType(), this.model(), this.thinkingLevel()));
 
   readonly draftHeaderText = computed<string>(() => {
     const t = this.draftCliType();
     const m = this.draftModel();
-    return buildBadgeText(t, m && m.length > 0 ? m : null);
+    return buildBadgeText(t, m && m.length > 0 ? m : null, this.draftThinkingLevel());
   });
 
   readonly tooltip = computed<string>(() => {
@@ -165,7 +170,20 @@ export class CliModelSelectorComponent {
     const cliChanged = this.draftCliType() !== this.cliType();
     const modelInput = (this.model() ?? '').trim();
     const modelChanged = this.draftModel() !== modelInput;
-    return cliChanged || modelChanged;
+    const currentThinkingLevel = this.normalizeThinkingLevel(this.draftModel(), this.thinkingLevel());
+    const thinkingChanged = this.draftThinkingLevel() !== currentThinkingLevel;
+    return cliChanged || modelChanged || thinkingChanged;
+  });
+
+  readonly draftSelectedModel = computed<CliModelInfo | null>(() => {
+    const id = this.draftModel();
+    if (!id) return null;
+    return this.draftAvailableModels().find((m) => m.id === id) ?? null;
+  });
+
+  readonly draftThinkingLevels = computed<readonly string[]>(() => {
+    const levels = this.draftSelectedModel()?.thinkingLevels ?? [];
+    return levels.length > 0 ? levels : [];
   });
 
   @ViewChild('triggerBtn') private triggerBtnRef?: ElementRef<HTMLButtonElement>;
@@ -210,6 +228,7 @@ export class CliModelSelectorComponent {
     this.loadingCatalog.set(false);
     const cached = currentCli ? this.catalogStore.modelsFor(currentCli) : [];
     this.draftAvailableModels.set(cached.length > 0 ? cached : this.availableModels());
+    this.draftThinkingLevel.set(this.normalizeThinkingLevel(currentModel, this.thinkingLevel()));
     this.pickerOpen.set(true);
   }
 
@@ -250,7 +269,9 @@ export class CliModelSelectorComponent {
   }
 
   onModelPillClick(modelId: string): void {
+    const previous = this.draftThinkingLevel();
     this.draftModel.set(modelId);
+    this.draftThinkingLevel.set(this.normalizeThinkingLevel(modelId, previous));
     if (this.draftCliType() === this.cliType()) {
       this.onDoneClick();
     }
@@ -258,6 +279,14 @@ export class CliModelSelectorComponent {
 
   onDefaultModelClick(): void {
     this.draftModel.set('');
+    this.draftThinkingLevel.set(null);
+    if (this.draftCliType() === this.cliType()) {
+      this.onDoneClick();
+    }
+  }
+
+  onThinkingLevelPillClick(level: string): void {
+    this.draftThinkingLevel.set(level);
     if (this.draftCliType() === this.cliType()) {
       this.onDoneClick();
     }
@@ -271,9 +300,10 @@ export class CliModelSelectorComponent {
       return;
     }
     if (this.hasChanges()) {
-      const change = { cliType: cli, model: this.draftModel() };
+      const change = { cliType: cli, model: this.draftModel(), thinkingLevel: this.draftThinkingLevel() };
       if (cli !== this.cliType()) this.cliTypeChange.emit(cli);
       this.modelChange.emit(change.model);
+      this.thinkingLevelChange.emit(change.thinkingLevel);
       this.commit.emit(change);
     }
     this.closePicker();
@@ -313,9 +343,22 @@ export class CliModelSelectorComponent {
     this.draftAvailableModels.set(models);
     const current = this.draftModel();
     const stillValid = current.length > 0 && models.some((m) => m.id === current);
-    if (stillValid) return;
+    if (stillValid) {
+      this.draftThinkingLevel.set(this.normalizeThinkingLevel(current, this.draftThinkingLevel()));
+      return;
+    }
     const def = models.find((m) => m.isDefault);
     this.draftModel.set(def ? def.id : '');
+    this.draftThinkingLevel.set(def?.defaultThinkingLevel ?? null);
+  }
+
+  private normalizeThinkingLevel(modelId: string, requested: string | null): string | null {
+    if (!modelId) return null;
+    const info = this.draftAvailableModels().find((m) => m.id === modelId);
+    const levels = info?.thinkingLevels ?? [];
+    if (levels.length === 0) return null;
+    if (requested && levels.includes(requested)) return requested;
+    return info?.defaultThinkingLevel ?? levels[0] ?? null;
   }
 
   // ---------------------------------------------------------------------------
@@ -427,10 +470,10 @@ export class CliModelSelectorComponent {
   }
 }
 
-function buildBadgeText(cliType: CliType | null, model: string | null): string {
+function buildBadgeText(cliType: CliType | null, model: string | null, thinkingLevel?: string | null): string {
   const cli = cliType ? fmtCliTypeLabel(cliType) : 'no CLI';
   const mTrim = model && model.trim() ? model.trim() : 'CLI default';
-  return `${cli} · ${mTrim}`;
+  return thinkingLevel ? `${cli} · ${mTrim} · ${thinkingLevel}` : `${cli} · ${mTrim}`;
 }
 
 function clamp(value: number, min: number, max: number): number {

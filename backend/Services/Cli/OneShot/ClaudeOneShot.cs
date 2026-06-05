@@ -117,6 +117,8 @@ public sealed class ClaudeOneShot : ICliOneShot
         psi.ArgumentList.Add("json");
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(request.Model);
+        foreach (var arg in CliReasoningFlags.For(CliTypes.Claude, request.Model, request.ThinkingLevel))
+            psi.ArgumentList.Add(arg);
         psi.ArgumentList.Add("--dangerously-skip-permissions");
         var multimodal = request.InlineImages is { Count: > 0 };
         if (multimodal)

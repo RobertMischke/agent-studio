@@ -80,6 +80,7 @@
         <span class="epic-rollup__field-label">Model / CLI</span>
         <app-cli-model-selector [cliType]="info.cliType ?? null"
                                 [model]="info.model ?? null"
+                                [thinkingLevel]="info.thinkingLevel ?? null"
                                 [availableModels]="availableModels()"
                                 [disabled]="isRunning()"
                                 triggerTestid="epic-model"

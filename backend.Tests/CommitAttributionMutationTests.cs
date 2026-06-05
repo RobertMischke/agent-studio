@@ -84,7 +84,7 @@ public class CommitAttributionMutationTests : IDisposable
         Assert.Equal(CommitExclusionReasons.ManualExclude, ex.Reason);
 
         // Operator re-includes it -> manual-include-after-exclude.
-        Assert.True(mutations.IncludeCommit("beta", Pad("ccccccc"), candidate: null, _watchPath));
+        Assert.True(mutations.IncludeCommit("beta", Pad("ccccccc"), _watchPath));
         var afterInclude = scanner.FindJob("beta", _watchPath)!;
         Assert.Empty(afterInclude.ExcludedCommits);
         var c = Assert.Single(afterInclude.Commits);
@@ -93,19 +93,16 @@ public class CommitAttributionMutationTests : IDisposable
     }
 
     [Fact]
-    public void IncludeUnseenCommit_IsManualAdd()
+    public void IncludeUnseenCommit_IsRejected()
     {
         var (scanner, mutations) = Build();
         var jobDir = SeedJobFolder("gamma");
         mutations.SetCommitAttributionOnFolder(jobDir, [], []);
 
-        var candidate = Commit("ddddddd", "feat: missed by rule", CommitAttributionKinds.Automatic, 0.9);
-        Assert.True(mutations.IncludeCommit("gamma", Pad("ddddddd"), candidate, _watchPath));
+        Assert.False(mutations.IncludeCommit("gamma", Pad("ddddddd"), _watchPath));
 
         var info = scanner.FindJob("gamma", _watchPath)!;
-        var c = Assert.Single(info.Commits);
-        Assert.Equal(CommitAttributionKinds.ManualAdd, c.Attribution);
-        Assert.Equal("ddddddd", c.ShortSha);
+        Assert.Empty(info.Commits);
     }
 
     private static TaskCommitInfo Commit(string shortSha, string message, string attribution, double? confidence) => new()

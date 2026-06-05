@@ -103,6 +103,28 @@
       }
     </section>
 
+    @if (draftThinkingLevels().length > 0) {
+      <section class="cli-model-picker__section">
+        <div class="cli-model-picker__section-label">Level</div>
+        <div class="cli-model-picker__pills"
+             role="radiogroup"
+             aria-label="Thinking level"
+             [attr.data-testid]="pickerTestidPrefix() + '-thinking-pills'">
+          @for (level of draftThinkingLevels(); track level) {
+            <button type="button"
+                    class="cli-model-picker__pill"
+                    [class.cli-model-picker__pill--active]="draftThinkingLevel() === level"
+                    role="radio"
+                    [attr.aria-checked]="draftThinkingLevel() === level"
+                    [attr.data-testid]="pickerTestidPrefix() + '-thinking-' + level"
+                    (click)="onThinkingLevelPillClick(level)">
+              <span class="cli-model-picker__pill-label">{{ level }}</span>
+            </button>
+          }
+        </div>
+      </section>
+    }
+
     <footer class="cli-model-picker__footer">
       <button type="button"
               class="cli-model-picker__btn cli-model-picker__btn--ghost"
