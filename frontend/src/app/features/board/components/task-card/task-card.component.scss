@@ -882,13 +882,13 @@
       white-space: nowrap;
     }
     .task-card__commit-subject {
-      color: var(--studio-fg-muted);
+      color: var(--studio-commit-muted-fg);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       min-width: 0;
     }
-    .task-card__commit-files { color: var(--studio-fg-dim); white-space: nowrap; }
+    .task-card__commit-files { color: var(--studio-commit-muted-fg); white-space: nowrap; }
     .task-card__commit-more {
       color: var(--studio-commit-fg);
       font-weight: 600;

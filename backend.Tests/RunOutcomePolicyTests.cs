@@ -514,4 +514,122 @@ public class RunOutcomePolicyTests
         Assert.False(action.IsHeuristicFallback);
         Assert.Equal(OrchestratorMessageKind.WatchdogTimeout, action.MessageKind);
     }
+
+    private static CodexCompletionEvidence.Inputs CodexEvidence(
+        bool hasCommits = true,
+        string? resultToken = "Success",
+        int openFindings = 0,
+        bool timedOut = false,
+        int continuationsUsed = 0)
+        => new(
+            IsCodex: true,
+            HasCommits: hasCommits,
+            StatusResultToken: resultToken,
+            OpenFindingsCount: openFindings,
+            TimedOutMidTask: timedOut,
+            ContinuationAttemptsUsed: continuationsUsed);
+
+    /// <summary>
+    /// The Codex silent-finish main shape (MissingTerminalSentinel) with real
+    /// commits + a clean self-reported status is accepted directly - no reissue
+    /// churn - when evidence is supplied. This is the core accept-rate fix.
+    /// </summary>
+    [Fact]
+    public void Codex_MissingSentinel_CleanEvidence_AcceptsWithoutReissue()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Done) with { IssueKind = RunIssueKind.MissingTerminalSentinel },
+            followupPrompt: null,
+            reissueAttempt: 0,
+            codexEvidence: CodexEvidence(hasCommits: true, resultToken: "Success", openFindings: 0));
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.Equal(RunIssueKind.SilentCompletion, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.SilentCompletion, action.MessageKind);
+    }
+
+    /// <summary>
+    /// A Codex silent finish with open items is driven to completion via a
+    /// bounded continuation (codex exec resume) instead of being reissued/
+    /// escalated. The retry attempt advances so the loop is bounded.
+    /// </summary>
+    [Fact]
+    public void Codex_MissingSentinel_OpenItems_ContinuesBounded()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Done) with { IssueKind = RunIssueKind.MissingTerminalSentinel },
+            followupPrompt: null,
+            reissueAttempt: 0,
+            codexEvidence: CodexEvidence(openFindings: 2));
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Equal(1, action.RetryAttempt);
+        Assert.True(action.IsPreframedRetryPrompt);
+        Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
+    }
+
+    /// <summary>
+    /// Once the continuation budget is exhausted the evidence path goes
+    /// Inconclusive and the run falls through to the existing
+    /// MissingTerminalSentinel routing (accept with a visible marker after the
+    /// soft-intervention budget is spent), so the loop converges.
+    /// </summary>
+    [Fact]
+    public void Codex_MissingSentinel_OpenItems_BudgetExhausted_FallsThrough()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Done) with { IssueKind = RunIssueKind.MissingTerminalSentinel },
+            followupPrompt: null,
+            reissueAttempt: RunOutcomePolicy.MaxSoftInterventionAttempts,
+            codexEvidence: CodexEvidence(
+                openFindings: 2,
+                continuationsUsed: CodexCompletionEvidence.DefaultContinuationBudget));
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.Equal(RunIssueKind.MissingTerminalSentinel, action.IssueKind);
+    }
+
+    /// <summary>
+    /// Without evidence (e.g. a Claude run) the MissingTerminalSentinel path is
+    /// unchanged: one soft reissue asking for a structured close-out.
+    /// </summary>
+    [Fact]
+    public void NonCodex_MissingSentinel_KeepsExistingSoftReissue()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Done) with { IssueKind = RunIssueKind.MissingTerminalSentinel },
+            followupPrompt: null,
+            reissueAttempt: 0,
+            codexEvidence: null);
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Equal(RunIssueKind.MissingTerminalSentinel, action.IssueKind);
+    }
+
+    /// <summary>
+    /// A Codex SilentCompletion with open items also runs the bounded
+    /// continuation rather than the plain accept it would otherwise get.
+    /// </summary>
+    [Fact]
+    public void Codex_SilentCompletion_OpenItems_Continues()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Done) with { IssueKind = RunIssueKind.SilentCompletion },
+            followupPrompt: null,
+            reissueAttempt: 0,
+            codexEvidence: CodexEvidence(openFindings: 1));
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
+    }
 }

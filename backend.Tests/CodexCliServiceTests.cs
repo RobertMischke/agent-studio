@@ -87,6 +87,7 @@ public class CodexCliServiceTests
         Assert.Contains("[[TASK_BLOCKED:", prefix);
         Assert.Contains("[[TASK_NEEDS_INPUT:", prefix);
         Assert.Contains("[[TASK_NOOP]]", prefix);
+        Assert.Contains("Time-box investigation", prefix);
         Assert.DoesNotContain("windows", prefix, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CreateProcessAsUserW", prefix);
         Assert.EndsWith("\n\n", prefix);
@@ -113,8 +114,8 @@ public class CodexCliServiceTests
         var win = CodexCliService.BuildSystemPromptPrefix(isWindows: true);
         var posix = CodexCliService.BuildSystemPromptPrefix(isWindows: false);
 
-        Assert.True(win.Length < 900, $"Windows prefix grew to {win.Length} chars");
-        Assert.True(posix.Length < 500, $"Non-Windows prefix grew to {posix.Length} chars");
+        Assert.True(win.Length < 1100, $"Windows prefix grew to {win.Length} chars");
+        Assert.True(posix.Length < 700, $"Non-Windows prefix grew to {posix.Length} chars");
     }
 
     [Fact]

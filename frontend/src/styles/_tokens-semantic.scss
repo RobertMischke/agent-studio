@@ -157,6 +157,7 @@
   --studio-commit-bg:     color-mix(in srgb, var(--studio-accent-success) 12%, var(--studio-bg-elevated));
   --studio-commit-border: color-mix(in srgb, var(--studio-accent-success) 34%, transparent);
   --studio-commit-fg:     var(--color-slate-50);
+  --studio-commit-muted-fg: var(--color-slate-200);
 
   // Text to use ON an accent fill (a brand-orange button etc.). Tuned for dark
   // text on the saturated accent in both themes.
@@ -573,6 +574,7 @@
   --studio-commit-bg:     color-mix(in srgb, var(--studio-accent-success) 9%, var(--studio-bg-elevated));
   --studio-commit-border: color-mix(in srgb, var(--studio-accent-success) 36%, transparent);
   --studio-commit-fg:     var(--color-grey-950);
+  --studio-commit-muted-fg: var(--color-slate-700);
 
   // Severity — darker variants for readable pills + verdict-banner stripe.
   --severity-pass:    var(--color-green-600);

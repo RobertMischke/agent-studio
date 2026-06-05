@@ -142,6 +142,30 @@ public static class CompletionGate
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Pull the agent's self-reported <c>Result:</c> token (e.g. "Success",
+    /// "Partial", "Failed") out of a status / close-out surface. Returns null
+    /// when no <c>Result:</c> line is present. Shares the exact regex the
+    /// finding scan uses so the two cannot drift; exposed so the Codex
+    /// evidence-based-completion evaluator can read the same token the gate
+    /// reads.
+    /// </summary>
+    public static string? ExtractResultToken(string? statusMarkdown)
+    {
+        if (string.IsNullOrEmpty(statusMarkdown)) return null;
+        var match = ResultLineRegex.Match(statusMarkdown);
+        if (!match.Success) return null;
+        var token = match.Groups["result"].Value.Trim();
+        return token.Length == 0 ? null : token;
+    }
+
+    /// <summary>
+    /// True when a <c>Result:</c> token denotes a successful close-out. Same
+    /// vocabulary as the contradiction rule's <see cref="SuccessResultRegex"/>.
+    /// </summary>
+    public static bool IsSuccessResultToken(string? resultToken)
+        => resultToken is not null && SuccessResultRegex.IsMatch(resultToken.Trim());
+
     public static IReadOnlyList<string> ExtractFindings(string? statusMarkdown, string? recentLog)
     {
         var findings = new List<string>();

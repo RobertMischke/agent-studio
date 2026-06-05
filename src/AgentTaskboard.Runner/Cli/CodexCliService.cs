@@ -214,14 +214,20 @@ public sealed class CodexCliService : CliExecutionServiceBase
     internal static string BuildSystemPromptPrefix(bool isWindows)
     {
         const string sentinelLine =
-            "Orchestrator note: end your reply with exactly one of `[[TASK_DONE]]`, " +
+            "Orchestrator note: your reply MUST end with exactly one of `[[TASK_DONE]]`, " +
             "`[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, or " +
-            "`[[TASK_NOOP]]` as the final line. The orchestrator parses this token; " +
-            "without it the run lands in auto-review as missing-terminal-sentinel.";
+            "`[[TASK_NOOP]]` as the final line - this is required, not optional. The " +
+            "orchestrator parses this token; without it the run lands in auto-review as " +
+            "missing-terminal-sentinel.";
+
+        const string investigationLine =
+            "Time-box investigation: do not spend the whole turn searching or reading - " +
+            "form a plan early and start making the change, then verify. A turn spent only " +
+            "exploring will be killed by the watchdog with the work unfinished.";
 
         if (!isWindows)
         {
-            return sentinelLine + "\n\n";
+            return sentinelLine + "\n" + investigationLine + "\n\n";
         }
 
         const string windowsShellLine =
@@ -231,7 +237,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
             "progress without shell access, stop and reply with " +
             "`[[TASK_BLOCKED:windows-sandbox]]`.";
 
-        return sentinelLine + "\n" + windowsShellLine + "\n\n";
+        return sentinelLine + "\n" + investigationLine + "\n" + windowsShellLine + "\n\n";
     }
 
     /// <summary>

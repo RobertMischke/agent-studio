@@ -2894,8 +2894,31 @@ public class ProjectRunner
                     "run-committed-partial job={JobId} commits={Commits} status={Status} duration={Duration}s: routing to review instead of hard-failing",
                     jobId, commitsDuringRun, execution.Status, execution.DurationSeconds ?? 0.0);
             }
+            // Evidence-based completion for Codex silent finishes. Codex ends
+            // the large majority of its runs without a terminal sentinel; rather
+            // than reissuing every such run, hand the policy the on-disk
+            // evidence (commits + the run's own Result:/open-items close-out) so
+            // a clean finish is accepted and one with open work is driven to
+            // completion via a bounded continuation loop. Claude stays
+            // sentinel-based (the evidence is gated on IsCodex inside the policy).
+            CodexCompletionEvidence.Inputs? codexEvidence = null;
+            if (string.Equals(cliType, CliTypes.Codex, StringComparison.OrdinalIgnoreCase)
+                && (outcome.IssueKind == RunIssueKind.MissingTerminalSentinel
+                    || outcome.IssueKind == RunIssueKind.SilentCompletion))
+            {
+                var closeOut = string.Join("\n", liveOutputSnapshot.Select(l => l.Text ?? string.Empty));
+                var openFindings = CompletionGate.ExtractFindings(closeOut, closeOut);
+                codexEvidence = new CodexCompletionEvidence.Inputs(
+                    IsCodex: true,
+                    HasCommits: commitsDuringRun > 0,
+                    StatusResultToken: CompletionGate.ExtractResultToken(closeOut),
+                    OpenFindingsCount: openFindings.Count,
+                    TimedOutMidTask: false,
+                    ContinuationAttemptsUsed: capturedAttempt);
+            }
+
             OutcomeAction? action = capturedPlan != null
-                ? RunOutcomePolicy.Decide(capturedIntent, capturedPlan, outcome, capturedFollowup, capturedAttempt)
+                ? RunOutcomePolicy.Decide(capturedIntent, capturedPlan, outcome, capturedFollowup, capturedAttempt, codexEvidence)
                 : null;
             if (action != null && activeInfo != null)
             {

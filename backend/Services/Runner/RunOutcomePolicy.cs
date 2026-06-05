@@ -72,7 +72,8 @@ public static class RunOutcomePolicy
         RunPlan plan,
         AgentOutcome outcome,
         string? followupPrompt,
-        int reissueAttempt)
+        int reissueAttempt,
+        CodexCompletionEvidence.Inputs? codexEvidence = null)
     {
         var heuristic = !outcome.MatchedSentinel;
         var hasFollowup = !string.IsNullOrWhiteSpace(followupPrompt);
@@ -83,6 +84,14 @@ public static class RunOutcomePolicy
 
         if (outcome.IssueKind == RunIssueKind.SilentCompletion)
         {
+            // Evidence-based completion for Codex (see CodexCompletionEvidence):
+            // a silent finish with open items / a mid-task timeout is driven to
+            // a clean finish via a bounded continuation loop before we accept.
+            // A clean finish (commits + success status, nothing open) still
+            // accepts, just with an evidence-grounded note.
+            var codexAction = TryCodexEvidenceAction(codexEvidence, outcome, reissueAttempt, RunIssueKind.SilentCompletion);
+            if (codexAction != null) return codexAction;
+
             // Codex stopped after a successful tool call and never produced
             // a closing sentinel. The runtime detector already killed the
             // lingering process with RunStopReason.SilentCompletion (which
@@ -184,6 +193,14 @@ public static class RunOutcomePolicy
 
         if (outcome.IssueKind == RunIssueKind.MissingTerminalSentinel)
         {
+            // Evidence-based completion for Codex: the main silent-finish shape
+            // (turn.completed / exit without a sentinel) lands here. With real
+            // commits + a clean self-reported status we accept directly instead
+            // of burning a reissue; with open items / a mid-task timeout we run
+            // a bounded continuation (codex exec resume) to close it out.
+            var codexAction = TryCodexEvidenceAction(codexEvidence, outcome, reissueAttempt, RunIssueKind.MissingTerminalSentinel);
+            if (codexAction != null) return codexAction;
+
             if (reissueAttempt < MaxSoftInterventionAttempts)
             {
                 return new OutcomeAction(
@@ -357,6 +374,67 @@ public static class RunOutcomePolicy
              + "User request:\n"
              + (originalFollowup ?? string.Empty).Trim();
     }
+
+    /// <summary>
+    /// Apply the Codex evidence-based completion verdict, when evidence is
+    /// supplied. Returns the resulting <see cref="OutcomeAction"/> for an
+    /// AcceptAsDone or Continue verdict, or <c>null</c> for Inconclusive /
+    /// no-evidence so the caller falls through to the existing routing for the
+    /// given <paramref name="issueKind"/>. Shared by the SilentCompletion and
+    /// MissingTerminalSentinel branches so both Codex silent-finish shapes get
+    /// identical evidence treatment.
+    /// </summary>
+    private static OutcomeAction? TryCodexEvidenceAction(
+        CodexCompletionEvidence.Inputs? codexEvidence,
+        AgentOutcome outcome,
+        int reissueAttempt,
+        RunIssueKind issueKind)
+    {
+        if (codexEvidence is not { } evidence) return null;
+
+        var verdict = CodexCompletionEvidence.Decide(evidence);
+        switch (verdict.Action)
+        {
+            case CodexCompletionEvidence.CompletionAction.AcceptAsDone:
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.NotifyUserAndAccept,
+                    MetaMessage: $"Codex finished without a terminal sentinel, but the evidence shows the work is done. {verdict.Reason}",
+                    IsHeuristicFallback: false)
+                {
+                    IssueKind = RunIssueKind.SilentCompletion,
+                    MessageKind = OrchestratorMessageKind.SilentCompletion
+                };
+
+            case CodexCompletionEvidence.CompletionAction.Continue:
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.ReissueWithStrongerFraming,
+                    MetaMessage: $"Codex finished without a terminal sentinel and left open work. Running a bounded continuation to drive it to completion. {verdict.Reason}",
+                    IsHeuristicFallback: false,
+                    FollowupRetryPrompt: BuildCodexContinuationPrompt(outcome),
+                    RetryAttempt: reissueAttempt + 1)
+                {
+                    IssueKind = issueKind,
+                    MessageKind = OrchestratorMessageKind.SoftIntervention,
+                    IsPreframedRetryPrompt = true
+                };
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Continuation prompt for the bounded Codex completion loop. Used when a
+    /// silent finish left open items or timed out mid-task: resume the same
+    /// session, finish the remaining work, then sign off. Kept next to the
+    /// policy that decides to continue so they move together.
+    /// </summary>
+    public static string BuildCodexContinuationPrompt(AgentOutcome outcome)
+        => "Your previous turn ended without the required terminal sentinel and the task still has open work. "
+         + "Finish the remaining items now - do not re-investigate from scratch, build on what you already did. "
+         + "When the work is genuinely complete, end with exactly one terminal sentinel on its own line: "
+         + "[[TASK_DONE]] (or [[TASK_BLOCKED:<short reason>]] if you truly cannot finish). "
+         + $"The orchestrator's summary of your previous turn was: {outcome.Summary ?? "unclassified"}.";
 
     public static string BuildPermissionInterventionPrompt()
         => "The previous attempt hit one or more tool permission errors. "

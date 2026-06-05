@@ -566,6 +566,8 @@ describe('TaskCardComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="task-card-commit"]')).not.toBeNull();
     expect(findCssDeclaration('.task-card__commits', 'color')).toBe('var(--studio-commit-fg)');
     expect(findCssDeclaration('.task-card__commit-sha', 'color')).toBe('var(--studio-commit-fg)');
+    expect(findCssDeclaration('.task-card__commit-subject', 'color')).toBe('var(--studio-commit-muted-fg)');
+    expect(findCssDeclaration('.task-card__commit-files', 'color')).toBe('var(--studio-commit-muted-fg)');
   });
 
   it('AC#4 three-commit card renders all three rows (sha + subject + files), newest first', async () => {
