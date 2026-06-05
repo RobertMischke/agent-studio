@@ -25,6 +25,18 @@
             data-testid="git-commit-chain"
             role="list"
             aria-label="Commits attributed to this task (oldest first)">
+          <li class="git-view__commit-chain-item git-view__commit-chain-item--all"
+              [class.git-view__commit-chain-item--selected]="git.selectedCommitSha() === null"
+              data-testid="git-commit-chain-all">
+            <button type="button"
+                    class="git-view__commit-chain-button"
+                    [attr.aria-pressed]="git.selectedCommitSha() === null"
+                    [appTooltip]="'Combined diff across all ' + git.commitChain().length + ' task commits'"
+                    (click)="git.selectAllCommits()">
+              <span class="git-view__commit-chain-step">∑</span>
+              <span class="git-view__commit-chain-subject">All {{ git.commitChain().length }} commits</span>
+            </button>
+          </li>
           @for (entry of git.commitChain(); track entry.sha; let i = $index) {
             <li class="git-view__commit-chain-item"
                 [class.git-view__commit-chain-item--selected]="git.selectedCommitSha() === entry.sha"
@@ -49,7 +61,15 @@
           }
         </ol>
       }
-      @if (git.commitDetail()?.commit; as c) {
+      @if (git.isAggregate()) {
+        <div class="git-view__commit-header"
+             data-testid="git-commit-aggregate-header">
+          <div class="git-view__commit-row">
+            <span class="git-view__commit-sha" data-testid="git-commit-sha">∑ All commits</span>
+            <span class="git-view__commit-files">{{ git.commitFiles().length }} {{ git.commitFiles().length === 1 ? 'file' : 'files' }} · {{ git.commitChain().length }} commits</span>
+          </div>
+        </div>
+      } @else if (git.commitDetail()?.commit; as c) {
         <div class="git-view__commit-header"
              [class.git-view__commit-header--collapsed]="commitHeaderCollapsed()"
              data-testid="git-commit-header">
@@ -81,11 +101,13 @@
             <pre class="git-view__commit-msg-display" data-testid="git-commit-message">{{ c.message }}</pre>
           }
         </div>
-        @if (git.commitDetail()?.files?.length) {
+      }
+      @if (git.isAggregate() || git.commitDetail()?.commit) {
+        @if (git.commitFiles().length) {
           <div class="git-view__split-body">
             <div class="git-view__tree-col" data-testid="git-tree-col">
               <app-git-file-tree
-                [files]="git.commitDetail()!.files"
+                [files]="git.commitFiles()"
                 [selected]="git.selectedDiffPath()"
                 [fill]="maximized()"
                 (selectRequest)="git.selectDiffPath($event)" />
@@ -123,7 +145,7 @@
             }
           </div>
         } @else {
-          <div class="git-view__empty">No files recorded for this commit.</div>
+          <div class="git-view__empty">{{ git.isAggregate() ? 'No files recorded across these commits.' : 'No files recorded for this commit.' }}</div>
         }
       } @else {
         <div class="git-view__empty">Loading commit…</div>

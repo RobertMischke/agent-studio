@@ -86,9 +86,6 @@ export class GitPaneService implements OnDestroy {
   // That data survives future work in the repo and is what the user wants
   // to see when reviewing a finished task.
   readonly commitDetail = signal<TaskCommitDetail | null>(null);
-  readonly viewMode = computed<'commit' | 'worktree'>(() =>
-    this.commitDetail()?.commit ? 'commit' : 'worktree',
-  );
 
   /**
    * Ordered chain of commits attributed to this task (oldest -&gt; newest).
@@ -97,8 +94,42 @@ export class GitPaneService implements OnDestroy {
    * commit's detail to display.
    */
   readonly commitChain = signal<TaskCommitInfo[]>([]);
-  /** SHA of the commit currently rendered in the commit detail view. Defaults to the newest entry. */
+  /**
+   * SHA of the commit the detail view is filtered to. `null` is the
+   * default for multi-commit tasks and means "all commits aggregated":
+   * the file list + per-file diffs are combined across every commit
+   * attributed to the task. A non-null SHA filters the view down to that
+   * single commit. Single-commit tasks pin this to their one SHA (no
+   * filter is offered).
+   */
   readonly selectedCommitSha = signal<string | null>(null);
+
+  /**
+   * File list aggregated across every commit attributed to this task.
+   * Populated only while {@link isAggregate} is active; the single-commit
+   * file list lives on {@link commitDetail}.
+   */
+  readonly aggregateFiles = signal<GitFileChange[]>([]);
+
+  /** Commit-history view is active whenever the task carries any commit. */
+  readonly viewMode = computed<'commit' | 'worktree'>(() =>
+    this.commitChain().length > 0 ? 'commit' : 'worktree',
+  );
+
+  /**
+   * True when the detail view shows the combined diff across all task
+   * commits. Only reachable for multi-commit tasks; a lone commit always
+   * renders as itself so the redundant "all = the one commit" filter is
+   * never shown.
+   */
+  readonly isAggregate = computed<boolean>(
+    () => this.commitChain().length > 1 && this.selectedCommitSha() === null,
+  );
+
+  /** Files backing the commit-mode tree: aggregated set, or the single commit's. */
+  readonly commitFiles = computed<GitFileChange[]>(() =>
+    this.isAggregate() ? this.aggregateFiles() : this.commitDetail()?.files ?? [],
+  );
 
   private currentJob: TaskInfo | null = null;
   private refreshTimer: VisibleIntervalHandle | null = null;
@@ -140,28 +171,25 @@ export class GitPaneService implements OnDestroy {
       this.currentJob.id === info.id &&
       this.currentJob.watchPath === info.watchPath;
     if (sameJob) {
-      const hadCommit = !!this.currentJob!.commit;
       const oldChainLen = this.commitChain().length;
       this.currentJob = info!;
-      this.commitChain.set(info!.commits ?? (info!.commit ? [info!.commit] : []));
+      const chain = info!.commits ?? (info!.commit ? [info!.commit] : []);
+      this.commitChain.set(chain);
       // The auto-commit lands on the progress→review transition, so a
       // refresh of the same job can flip from "no commit" to "has commit".
       // Load the snapshot lazily when that happens. Also reload when a
       // new commit lands on the chain (continue-mode follow-up, recovery
       // commit, operator-driven steer).
-      const newChainLen = this.commitChain().length;
-      if ((!hadCommit && info!.commit) || newChainLen > oldChainLen) {
-        const newest = this.commitChain()[newChainLen - 1] ?? null;
-        if (newest) {
-          this.selectedCommitSha.set(newest.sha);
-        }
-        this.loadCommitDetail();
+      const newChainLen = chain.length;
+      if ((oldChainLen === 0 && newChainLen > 0) || newChainLen > oldChainLen) {
+        this.applyCommitDefault(chain);
       }
       return;
     }
     this.currentJob = info ?? null;
     this.status.set(null);
     this.commitDetail.set(null);
+    this.aggregateFiles.set([]);
     this.selectedDiffPath.set(null);
     this.diffText.set('');
     this.commitMessage.set('');
@@ -171,8 +199,63 @@ export class GitPaneService implements OnDestroy {
     this.clearDiffCache();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
     this.commitChain.set(chain);
-    this.selectedCommitSha.set(chain.length > 0 ? chain[chain.length - 1].sha : null);
-    if (info?.commit || chain.length > 0) this.loadCommitDetail();
+    this.applyCommitDefault(chain);
+  }
+
+  /**
+   * Pick the default commit-detail view for a freshly-set chain:
+   *   - empty chain  -> no commit view (worktree mode).
+   *   - one commit   -> that commit (no aggregate filter is offered).
+   *   - many commits -> the aggregated "all commits" diff.
+   */
+  private applyCommitDefault(chain: TaskCommitInfo[]): void {
+    if (chain.length === 0) {
+      this.selectedCommitSha.set(null);
+      this.aggregateFiles.set([]);
+      return;
+    }
+    if (chain.length > 1) {
+      this.selectedCommitSha.set(null);
+      this.loadAggregate();
+    } else {
+      this.selectedCommitSha.set(chain[0].sha);
+      this.loadCommitDetail();
+    }
+  }
+
+  /**
+   * Switch the detail view back to the aggregated "all commits" diff.
+   * No-op when already aggregated. Drops the single-commit detail so the
+   * aggregate header + combined file list take over.
+   */
+  selectAllCommits(): void {
+    if (this.selectedCommitSha() === null) return;
+    this.selectedCommitSha.set(null);
+    this.selectedDiffPath.set(null);
+    this.diffText.set('');
+    this.commitDetail.set(null);
+    this.loadAggregate();
+  }
+
+  /**
+   * Load the file list aggregated across every commit attributed to this
+   * task. Default-selects the first changed file so the combined diff is
+   * visible without a click.
+   */
+  private loadAggregate(): void {
+    const info = this.currentJob;
+    if (!info) return;
+    this.jobService.getJobCommitFilesAggregate(info.id, info.watchPath).subscribe({
+      next: (res) => {
+        const files: GitFileChange[] = res?.files ?? [];
+        this.aggregateFiles.set(files);
+        this.selectedDiffPath.set(null);
+        this.diffText.set('');
+        const first = files[0]?.path ?? null;
+        if (first) this.selectDiffPath(first);
+      },
+      error: () => this.aggregateFiles.set([]),
+    });
   }
 
   /**
@@ -291,8 +374,6 @@ export class GitPaneService implements OnDestroy {
     // commit, not whichever one happens to be on `TaskInfo.commit`.
     if (this.viewMode() === 'commit') {
       const selectedSha = this.selectedCommitSha();
-      const newest = this.commitChain()[this.commitChain().length - 1]?.sha ?? null;
-      const useShaEndpoint = selectedSha != null && selectedSha !== newest;
       const setDiff = (res: unknown) => {
         let text = '';
         if (typeof res === 'string') text = res;
@@ -308,12 +389,21 @@ export class GitPaneService implements OnDestroy {
         next: setDiff,
         error: () => { if (stillSelected()) this.diffText.set('(failed to load diff)'); },
       };
-      if (useShaEndpoint) {
+      if (selectedSha === null) {
+        // Aggregated default: combined diff across all task commits.
         this.jobService
-          .getJobCommitDiffBySha(info.id, selectedSha!, path, info.watchPath)
+          .getJobCommitDiffAggregate(info.id, path, info.watchPath)
           .subscribe(handlers);
       } else {
-        this.jobService.getJobCommitDiff(info.id, path, info.watchPath).subscribe(handlers);
+        const newest = this.commitChain()[this.commitChain().length - 1]?.sha ?? null;
+        const useShaEndpoint = selectedSha !== newest;
+        if (useShaEndpoint) {
+          this.jobService
+            .getJobCommitDiffBySha(info.id, selectedSha, path, info.watchPath)
+            .subscribe(handlers);
+        } else {
+          this.jobService.getJobCommitDiff(info.id, path, info.watchPath).subscribe(handlers);
+        }
       }
       return;
     }

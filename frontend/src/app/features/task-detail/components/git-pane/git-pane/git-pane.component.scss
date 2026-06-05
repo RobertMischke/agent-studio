@@ -416,6 +416,12 @@
   align-items: center;
   gap: 4px;
 }
+.git-view__commit-chain-item--all {
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--studio-border);
+}
+.git-view__commit-chain-item--all .git-view__commit-chain-subject { font-weight: 600; }
 .git-view__commit-chain-button {
   display: flex;
   gap: 8px;
