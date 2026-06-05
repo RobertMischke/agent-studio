@@ -301,11 +301,17 @@ slice is not built twice.
    *(The "write an ADR for the carve-out" step from the prior draft is
    deleted: ADR-0052 already reversed the non-goal - there is nothing
    left to carve out.)*
-2. **Read-only pipeline variant.** Define the planning/research pipeline
-   as the ADR-0045 pipeline with the git pre/post steps omitted (no
-   worktree-create, no Commit+Push, no Integration, no teardown) and the
-   parallelisability gate short-circuited to `parallel-ok`. Docks onto
-   the concept doc's slice 2 (slot model) and slice 4 (gate).
+2. **Read-only pipeline variant. SHIPPED 2026-06-05** (see the ADR-0052
+   amendment of the same date). The planning/research pipeline is the
+   ADR-0045 pipeline with the git pre/post steps omitted (no worktree-
+   create, no Commit+Push, no Integration, no teardown) and the
+   parallelisability gate short-circuited to `parallel-ok`. Selection is
+   `PipelineCatalogue.ForMode`; the git-step gate also lives in
+   `TaskTransitionService`; the gate short-circuit is
+   `ParallelSlotPolicy` (`TaskParallelism.ReadOnlyTask`). A non-empty diff
+   at run end is reported as a containment violation rather than trusted
+   or reverted (`ProjectRunner.ReportReadOnlyContainmentIfDirty` ->
+   `read_only_containment_violation`).
 3. **Create-task modal: kind selector + web-access toggle.** Mockup
    first under `docs/mockups/`. Per-kind default prompt scaffolds live in
    `prompts/runtime/`, parameterised by kind. Sentinel-driven unit tests
