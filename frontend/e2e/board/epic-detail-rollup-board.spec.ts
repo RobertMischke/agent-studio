@@ -145,6 +145,34 @@ test.describe('Epic detail: sub-tasks grouped by lane', () => {
     await expect(progressLane.locator('[data-testid="epic-rollup-lane-count"]')).toHaveText('1');
     await expect(completedLane.locator('[data-testid="epic-rollup-lane-count"]')).toHaveText('1');
 
+    const chrome = await readyLane.evaluate((lane) => {
+      const laneStyles = getComputedStyle(lane);
+      const firstCard = lane.querySelector('[data-testid="epic-rollup-card"]');
+      if (!(firstCard instanceof HTMLElement)) throw new Error('Missing rollup card');
+      const firstCardStyles = getComputedStyle(firstCard);
+      const firstRow = firstCard.closest('li');
+      if (!(firstRow instanceof HTMLElement)) throw new Error('Missing rollup row');
+      const firstRowStyles = getComputedStyle(firstRow);
+      return {
+        laneBackground: laneStyles.backgroundColor,
+        laneBorderTopWidth: laneStyles.borderTopWidth,
+        laneBorderLeftWidth: laneStyles.borderLeftWidth,
+        cardBackground: firstCardStyles.backgroundColor,
+        cardBorderTopWidth: firstCardStyles.borderTopWidth,
+        rowSeparatorStyle: firstRowStyles.borderBottomStyle,
+        rowSeparatorWidth: firstRowStyles.borderBottomWidth,
+      };
+    });
+    expect(chrome).toMatchObject({
+      laneBackground: 'rgba(0, 0, 0, 0)',
+      laneBorderTopWidth: '0px',
+      laneBorderLeftWidth: '0px',
+      cardBackground: 'rgba(0, 0, 0, 0)',
+      cardBorderTopWidth: '0px',
+      rowSeparatorStyle: 'solid',
+      rowSeparatorWidth: '1px',
+    });
+
     const boardShot = testInfo.outputPath('epic-detail-lane-board.png');
     await page.screenshot({ path: boardShot, fullPage: false });
     await testInfo.attach('epic-detail-lane-board', { path: boardShot, contentType: 'image/png' });

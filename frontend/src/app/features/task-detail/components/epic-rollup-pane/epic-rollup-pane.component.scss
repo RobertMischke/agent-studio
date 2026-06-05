@@ -5,7 +5,7 @@
   padding: var(--studio-spacing-3);
   border: 1px solid var(--studio-border);
   border-radius: 6px;
-  background: var(--studio-bg-subtle, var(--studio-bg-hover));
+  background: var(--studio-bg-elevated);
 
   /* Editable epic properties (description / references / model+CLI). Sits
      above the status board so the pane reads as Edit-then-Status. */
@@ -172,7 +172,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: var(--studio-spacing-2);
+    gap: var(--studio-spacing-4);
     margin-top: var(--studio-spacing-1);
   }
 
@@ -181,12 +181,10 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--studio-spacing-1);
-    padding: var(--studio-spacing-2);
-    border: 1px solid var(--studio-border);
-    border-top: 2px solid var(--lane-color, var(--studio-border));
-    border-radius: 6px;
-    background: var(--studio-bg-editor);
+    gap: var(--studio-spacing-2);
+    padding: 0;
+    border: 0;
+    background: transparent;
 
     &[data-lane="0-backlog"]      { --lane-color: var(--lane-backlog); }
     &[data-lane="1-preparation"]  { --lane-color: var(--lane-prep); }
@@ -203,6 +201,9 @@
     display: flex;
     align-items: center;
     gap: var(--studio-spacing-1);
+    min-height: 24px;
+    padding-bottom: var(--studio-spacing-1);
+    border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 70%, transparent);
   }
 
   &__lane-dot {
@@ -240,7 +241,15 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--studio-spacing-1);
+    gap: 0;
+  }
+
+  &__lane-list li {
+    border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 62%, transparent);
+
+    &:last-child {
+      border-bottom: 0;
+    }
   }
 
   &__card {
@@ -248,22 +257,22 @@
     display: block;
     width: 100%;
     text-align: left;
-    border: 1px solid var(--studio-border);
-    border-radius: 4px;
-    background: var(--studio-bg-hover);
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
     color: var(--studio-fg);
     cursor: pointer;
-    padding: var(--studio-spacing-1) var(--studio-spacing-2);
+    padding: var(--studio-spacing-2) var(--studio-spacing-1);
     font-size: 12px;
     line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    transition: background 0.12s ease, border-color 0.12s ease;
+    transition: background 0.12s ease, color 0.12s ease;
 
     &:hover {
-      background: var(--studio-bg-elevated);
-      border-color: color-mix(in srgb, var(--lane-color, var(--studio-accent)) 50%, var(--studio-border));
+      background: color-mix(in srgb, var(--lane-color, var(--studio-accent)) 9%, transparent);
+      color: var(--studio-fg-strong, var(--studio-fg));
     }
 
     &:focus-visible {
