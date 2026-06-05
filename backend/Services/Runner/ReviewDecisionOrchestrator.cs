@@ -3258,36 +3258,57 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// (ASS-734): without it the only record of "what did the orchestrator tell
     /// the agent" was a single file the next reissue clobbered.
     /// </summary>
-    private async Task WriteFollowUpFileAsync(
+    private Task WriteFollowUpFileAsync(
         TaskInfo moved, string followUp, CancellationToken ct, SteeringContext? context = null)
+        => WriteFollowUpFilesAsync(moved.FolderPath, followUp, context, moved.Id, _logger, ct);
+
+    /// <summary>
+    /// Pure-IO core of <see cref="WriteFollowUpFileAsync"/>: write the canonical
+    /// follow-up file and the append-only versioned history copy into
+    /// <paramref name="folderPath"/>. Extracted as an internal static so the
+    /// audit-persistence behaviour (history file is created, carries the verbatim
+    /// prompt + context, and never clobbers a prior step's copy) is testable
+    /// against a temp folder without standing up the whole orchestrator. Returns
+    /// the path of the history file written (null when that write failed) so the
+    /// test can assert append-only-ness across calls.
+    /// </summary>
+    internal static async Task<string?> WriteFollowUpFilesAsync(
+        string folderPath, string followUp, SteeringContext? context,
+        string jobId, ILogger logger, CancellationToken ct)
     {
         var canonical = $"# Orchestrator follow-up\n\n{followUp}\n";
         try
         {
-            var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
+            var followUpPath = Path.Combine(folderPath, "orchestrator-follow-up.md");
             await File.WriteAllTextAsync(followUpPath, canonical, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
+            logger.LogWarning(ex,
                 "ReviewDecisionOrchestrator: failed to write follow-up file for {JobId}",
-                moved.Id);
+                jobId);
         }
 
         try
         {
-            var historyDir = Path.Combine(moved.FolderPath, "orchestrator-follow-up-history");
+            var historyDir = Path.Combine(folderPath, "orchestrator-follow-up-history");
             Directory.CreateDirectory(historyDir);
             var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture);
             var cause = SanitizeForFileName(context?.Cause ?? "reissue");
+            // Append-only: two steers within the same millisecond must not
+            // clobber each other, so disambiguate with a suffix when needed.
             var historyPath = Path.Combine(historyDir, $"{stamp}-{cause}.md");
+            for (var n = 2; File.Exists(historyPath); n++)
+                historyPath = Path.Combine(historyDir, $"{stamp}-{cause}-{n}.md");
             await File.WriteAllTextAsync(historyPath, RenderSteeringHistory(context, followUp), ct);
+            return historyPath;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
+            logger.LogWarning(ex,
                 "ReviewDecisionOrchestrator: failed to write versioned follow-up history for {JobId}",
-                moved.Id);
+                jobId);
+            return null;
         }
     }
 
