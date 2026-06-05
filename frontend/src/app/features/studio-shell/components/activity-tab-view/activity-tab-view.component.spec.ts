@@ -31,10 +31,10 @@ describe('StudioActivityViewComponent (smoke)', () => {
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(StudioActivityViewComponent);
-      fixture.componentRef.setInput('jobKey', undefined);
+      fixture.componentRef.setInput('taskKey', undefined);
 
       // Required inputs seeded with undefined — replace with realistic defaults if needed:
-    // jobKey
+    // taskKey
     try { fixture.detectChanges(); } catch (e) {
         console.warn('[smoke] StudioActivityViewComponent initial render skipped:', (e as Error).message);
       }
