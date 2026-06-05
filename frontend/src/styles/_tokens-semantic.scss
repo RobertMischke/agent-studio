@@ -567,12 +567,12 @@
   --studio-card-attention-bg:    color-mix(in srgb, var(--studio-accent-6) 7%, var(--studio-bg-surface));
   --studio-card-attention-border: color-mix(in srgb, var(--studio-accent-6) 58%, var(--studio-card-border));
 
-  // Commit attribution rows need near-ink green text on the white shell. The
-  // tint stays subtle while the foreground clears WCAG-AA at the card's small
-  // mono hash size.
+  // Commit attribution rows keep their success cue in the tint and border, not
+  // in pale green text. The foreground is ink-dark so small mono hashes clear
+  // WCAG-AA on the white shell.
   --studio-commit-bg:     color-mix(in srgb, var(--studio-accent-success) 9%, var(--studio-bg-elevated));
   --studio-commit-border: color-mix(in srgb, var(--studio-accent-success) 36%, transparent);
-  --studio-commit-fg:     var(--color-green-900);
+  --studio-commit-fg:     var(--color-grey-950);
 
   // Severity — darker variants for readable pills + verdict-banner stripe.
   --severity-pass:    var(--color-green-600);
