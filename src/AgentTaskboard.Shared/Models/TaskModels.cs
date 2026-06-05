@@ -259,6 +259,43 @@ public record TaskOutcomeIssue
 }
 
 /// <summary>
+/// Pure rules for reconciling a derived <see cref="TaskOutcomeIssue"/> against a
+/// task's final accept verdict. An accepted/completed task (moved to
+/// 5-human-review / 6-completed after an <c>accept</c> verdict) must NOT carry a
+/// Warn-class ambiguity outcome that contradicts that verdict: a
+/// <c>classifier-unknown</c> / <c>heuristic-done</c> / <c>missing-terminal-sentinel</c>
+/// chip is an intermediate-run-cycle artifact, not the final state. This is the
+/// "Erfolg sieht aus wie classifier-unknown" gap (ASS-775). Shared by the
+/// read-time scanner derivation, the endpoint overlay, and the boot backfill so
+/// all three agree on which outcomes an accept supersedes.
+/// </summary>
+public static class TaskOutcomeIssueReconciliation
+{
+    /// <summary>
+    /// Warn-class outcome kinds that an <c>accept</c> verdict supersedes. High
+    /// severity infra failures (environment-blocker / permission-blocked /
+    /// watchdog-timeout) are intentionally absent: those describe a real host
+    /// condition worth surfacing even on a terminal card.
+    /// </summary>
+    public static readonly string[] VerdictContradictingKinds =
+        ["classifier-unknown", "heuristic-done", "missing-terminal-sentinel"];
+
+    /// <summary>True when the issue is a Warn-class ambiguity outcome that an accept verdict supersedes.</summary>
+    public static bool IsVerdictContradicting(TaskOutcomeIssue? issue)
+        => issue != null
+           && VerdictContradictingKinds.Any(k => string.Equals(k, issue.Kind, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// True when a derived outcome issue should be dropped because the task was
+    /// accepted: an <c>accept</c> verdict (<paramref name="verdictAccepted"/>)
+    /// means the run's final disposition supersedes the intermediate-cycle Warn
+    /// chip.
+    /// </summary>
+    public static bool ShouldSuppress(TaskOutcomeIssue? issue, bool verdictAccepted)
+        => verdictAccepted && IsVerdictContradicting(issue);
+}
+
+/// <summary>
 /// String constants for <see cref="TaskInfo.TaskType"/>. Kept as constants (not
 /// an enum) so the JSON wire format is the literal string and stable across
 /// enum renames. The default is <see cref="Chore"/>: existing technical work

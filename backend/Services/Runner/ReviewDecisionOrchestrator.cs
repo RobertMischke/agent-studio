@@ -284,6 +284,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 // 4-auto-review / 5-human-review that the merge-only path left
                 // behind before the reconcile fix shipped. Idempotent.
                 BackfillStaleConcernTags(workspace!, stoppingToken);
+                // One-shot migration for the "Erfolg sieht aus wie classifier-unknown"
+                // bug (ASS-775): clear a stale Warn-class outcome chip from already-
+                // accepted 5-human-review cards whose accept note never reached the
+                // log (6-completed cards are already reconciled by the scanner).
+                BackfillStaleAcceptedOutcomeIssues(workspace!, stoppingToken);
                 _logger.LogInformation("ReviewDecisionOrchestrator boot sweep complete; entering recurring tick loop.");
             }
             catch (OperationCanceledException) { return; }
@@ -585,6 +590,77 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (cleaned > 0)
         {
             _logger.LogInformation("ReviewDecisionOrchestrator: tag-drift backfill cleaned {Cleaned} card(s).", cleaned);
+        }
+    }
+
+    /// <summary>
+    /// One-shot boot-sweep backfill for the "Erfolg sieht aus wie classifier-unknown"
+    /// bug (ASS-775). Scans <c>5-human-review</c> and <c>6-completed</c> and, for every
+    /// card the orchestrator <c>accept</c>ed that still derives a verdict-contradicting
+    /// Warn-class outcome chip (<c>classifier-unknown</c> / <c>heuristic-done</c> /
+    /// <c>missing-terminal-sentinel</c>), appends a typed reconcile note to the chat
+    /// log. The note is itself an accept line, so the read-time derivation
+    /// (<c>TaskScannerService.ResolveOutcomeIssue</c>) then suppresses the stale chip.
+    /// 6-completed cards are already reconciled at read time, so they never need a
+    /// write and their lane order is left untouched. Deterministic, idempotent (once a
+    /// card carries the note it derives no contradicting issue and is skipped), and
+    /// safe on every boot. Public so tests can drive it against a temp workspace. See
+    /// <see cref="TaskOutcomeIssueReconciliation"/>.
+    /// </summary>
+    public void BackfillStaleAcceptedOutcomeIssues(string workspace, CancellationToken ct)
+    {
+        List<TaskInfo> jobs;
+        try { jobs = _scanner.ScanAllJobs(); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ReviewDecisionOrchestrator: accepted-outcome backfill scan failed");
+            return;
+        }
+
+        var decisionsByProject = new Dictionary<string, IReadOnlyList<ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
+        var cleaned = 0;
+
+        foreach (var job in jobs)
+        {
+            if (ct.IsCancellationRequested) return;
+            if (job.State != TaskStates.HumanReview && job.State != TaskStates.Completed) continue;
+            if (!TaskOutcomeIssueReconciliation.IsVerdictContradicting(job.OutcomeIssue)) continue;
+            if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
+
+            // 6-completed is terminal-done = always accepted. For 5-human-review we
+            // only touch cards whose latest verdict is an explicit accept (an
+            // escalated card legitimately keeps its outcome chip).
+            var accepted = job.State == TaskStates.Completed;
+            if (!accepted)
+            {
+                if (!decisionsByProject.TryGetValue(job.ProjectName, out var records))
+                {
+                    try { records = ReviewDecisionLog.ReadAll(workspace, job.ProjectName); }
+                    catch { records = Array.Empty<ReviewDecisionRecord>(); }
+                    decisionsByProject[job.ProjectName] = records;
+                }
+
+                ReviewDecisionRecord? latest = null;
+                for (var i = records.Count - 1; i >= 0; i--)
+                {
+                    if (records[i].JobId == job.Id) { latest = records[i]; break; }
+                }
+                accepted = latest?.Kind == ReviewDecisionKind.AcceptAsDone;
+            }
+            if (!accepted) continue;
+
+            var kind = job.OutcomeIssue!.Kind;
+            _chatLog.Append(job, OrchestratorMessageKind.Decision,
+                $"Outcome reconciled on accept: cleared stale {kind} marker. The run was accepted and its final verdict supersedes the intermediate-cycle outcome.");
+            cleaned++;
+            _logger.LogInformation(
+                "ReviewDecisionOrchestrator: accepted-outcome backfill cleared stale {Kind} on {Project}/{JobId} in {State}.",
+                kind, job.ProjectName, job.Id, job.State);
+        }
+
+        if (cleaned > 0)
+        {
+            _logger.LogInformation("ReviewDecisionOrchestrator: accepted-outcome backfill cleaned {Cleaned} card(s).", cleaned);
         }
     }
 

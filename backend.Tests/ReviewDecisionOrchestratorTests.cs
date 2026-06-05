@@ -1170,6 +1170,80 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public void OutcomeBackfill_AcceptedHumanReviewCard_ClearsStaleClassifierUnknownChip()
+    {
+        // ASS-775: a 5-human-review card the orchestrator accepted still derives a
+        // classifier-unknown chip because the accept note never reached the log.
+        // The backfill writes a reconcile note so the read path drops the chip.
+        SeedHumanReviewCardWithLog("accepted-stale",
+            $"[09:10:00.000] [orchestrator] [classifier-unknown] could not classify the agent's reply{Environment.NewLine}");
+        AppendAcceptDecision("accepted-stale", "all aspects pass");
+        var orchestrator = BuildOrchestratorWithAspects(_ => string.Empty);
+
+        Assert.Equal("classifier-unknown", OutcomeKind(TaskStates.HumanReview, "accepted-stale"));
+
+        orchestrator.BackfillStaleAcceptedOutcomeIssues(_workspace, CancellationToken.None);
+
+        var log = ReadCliLog(TaskStates.HumanReview, "accepted-stale");
+        Assert.Contains("reconciled on accept", log, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(OutcomeKind(TaskStates.HumanReview, "accepted-stale"));
+    }
+
+    [Fact]
+    public void OutcomeBackfill_IsIdempotent_AppendsReconcileNoteOnce()
+    {
+        SeedHumanReviewCardWithLog("idempotent-stale",
+            $"[09:10:00.000] [orchestrator] [classifier-unknown] could not classify the agent's reply{Environment.NewLine}");
+        AppendAcceptDecision("idempotent-stale", "all aspects pass");
+
+        // The backfill runs once per boot. Use a fresh orchestrator for each
+        // call so the second pass sees the first pass's appended note through a
+        // cold scanner cache (TaskIndexCache is keyed on job.json mtime and does
+        // not invalidate on a cli-output.log append within one process).
+        BuildOrchestratorWithAspects(_ => string.Empty)
+            .BackfillStaleAcceptedOutcomeIssues(_workspace, CancellationToken.None);
+        BuildOrchestratorWithAspects(_ => string.Empty)
+            .BackfillStaleAcceptedOutcomeIssues(_workspace, CancellationToken.None);
+
+        var log = ReadCliLog(TaskStates.HumanReview, "idempotent-stale");
+        var occurrences = log.Split("reconciled on accept", StringSplitOptions.None).Length - 1;
+        Assert.Equal(1, occurrences);
+    }
+
+    [Fact]
+    public void OutcomeBackfill_EscalatedCard_PreservesChip()
+    {
+        // A 5-human-review card whose latest verdict is NOT accept (here: a reissue
+        // record, i.e. not accepted) must keep its outcome chip - the gate only
+        // touches accepted cards.
+        SeedHumanReviewCardWithLog("escalated-open",
+            $"[09:10:00.000] [orchestrator] [classifier-unknown] could not classify the agent's reply{Environment.NewLine}");
+        AppendReissueDecision("escalated-open", "needs another pass");
+        var orchestrator = BuildOrchestratorWithAspects(_ => string.Empty);
+
+        orchestrator.BackfillStaleAcceptedOutcomeIssues(_workspace, CancellationToken.None);
+
+        var log = ReadCliLog(TaskStates.HumanReview, "escalated-open");
+        Assert.DoesNotContain("reconciled on accept", log, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("classifier-unknown", OutcomeKind(TaskStates.HumanReview, "escalated-open"));
+    }
+
+    [Fact]
+    public void OutcomeReconciliationRule_SuppressesContradictingWarnOnlyWhenAccepted()
+    {
+        var classifierUnknown = new TaskOutcomeIssue { Kind = "classifier-unknown", Severity = "Warn" };
+        var blocker = new TaskOutcomeIssue { Kind = "environment-blocker", Severity = "High" };
+
+        Assert.True(TaskOutcomeIssueReconciliation.IsVerdictContradicting(classifierUnknown));
+        Assert.False(TaskOutcomeIssueReconciliation.IsVerdictContradicting(blocker));
+        Assert.False(TaskOutcomeIssueReconciliation.IsVerdictContradicting(null));
+
+        Assert.True(TaskOutcomeIssueReconciliation.ShouldSuppress(classifierUnknown, verdictAccepted: true));
+        Assert.False(TaskOutcomeIssueReconciliation.ShouldSuppress(classifierUnknown, verdictAccepted: false));
+        Assert.False(TaskOutcomeIssueReconciliation.ShouldSuppress(blocker, verdictAccepted: true));
+    }
+
+    [Fact]
     public async Task TaskDone_OneAspectBlocks_ReissuesToReadyTop_WithFollowUpFile()
     {
         SeedReviewJobWithDone("blocked-job");
@@ -1363,6 +1437,30 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] done{Environment.NewLine}");
+    }
+
+    private void SeedHumanReviewCardWithLog(string slug, string log)
+    {
+        var dir = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.HumanReview}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n");
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"), log);
+    }
+
+    private string? OutcomeKind(string state, string slug)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = Project,
+                ["WatchPaths:0:Path"] = _watchPath
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        return scanner.FindJob(slug, _watchPath)?.OutcomeIssue?.Kind;
     }
 
     private void AppendAcceptDecision(string slug, string reason)

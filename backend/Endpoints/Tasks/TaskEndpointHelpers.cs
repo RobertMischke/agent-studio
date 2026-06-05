@@ -80,9 +80,19 @@ internal static class TaskEndpointHelpers
         {
             verdict = v;
         }
+        // Reconcile a stale Warn-class outcome chip against the final verdict: an
+        // accepted card must not surface a classifier-unknown/heuristic-done/
+        // missing-terminal-sentinel chip that contradicts its accept (ASS-775).
+        // The scanner already clears this when the accept note is in the log; this
+        // covers 5-human-review accepts whose accept note never reached the log.
+        var outcomeIssue = TaskOutcomeIssueReconciliation.ShouldSuppress(
+            job.OutcomeIssue, verdictAccepted: string.Equals(verdict, "accept", StringComparison.Ordinal))
+            ? null
+            : job.OutcomeIssue;
         return job with
         {
             Execution = exec,
+            OutcomeIssue = outcomeIssue,
             AutoLoop = loop == null ? null : new AutoLoopSnapshot
             {
                 Iteration = loop.IterationCount,

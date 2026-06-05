@@ -303,7 +303,7 @@ public class TaskScannerService : ITaskScanner
                 CodeActivityDetected = DetectCodeActivity(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
-                OutcomeIssue = ResolveOutcomeIssue(jobDir),
+                OutcomeIssue = ResolveOutcomeIssue(jobDir, state),
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, state, jobDir),
@@ -595,7 +595,7 @@ public class TaskScannerService : ITaskScanner
 
     private const int OutcomeIssueTailBytes = 16 * 1024;
 
-    private static TaskOutcomeIssue? ResolveOutcomeIssue(string jobFolder)
+    private static TaskOutcomeIssue? ResolveOutcomeIssue(string jobFolder, string state)
     {
         var logPath = TaskPaths.CliOutputLog(jobFolder);
         if (!File.Exists(logPath)) return null;
@@ -603,17 +603,70 @@ public class TaskScannerService : ITaskScanner
         var tail = ReadTailUtf8(logPath, OutcomeIssueTailBytes);
         if (string.IsNullOrWhiteSpace(tail)) return null;
 
+        var completed = string.Equals(state, TaskStates.Completed, StringComparison.OrdinalIgnoreCase);
+        var lastSeenAt = File.GetLastWriteTimeUtc(logPath);
         var lines = tail.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         for (var i = lines.Length - 1; i >= 0; i--)
         {
             var line = lines[i].Trim();
-            if (TryResolveOutcomeIssue(line, File.GetLastWriteTimeUtc(logPath), out var issue))
+
+            // Reconcile with the final verdict: the orchestrator's accept note
+            // (move to 5-human-review / 6-completed) supersedes every earlier
+            // intermediate-cycle outcome marker. Scanning newest-first, the first
+            // accept line means anything above it is resolved - so an accepted
+            // task never carries a stale classifier-unknown/Warn chip (ASS-775).
+            if (IsAcceptReconcileLine(line)) return null;
+
+            // Never derive an outcome issue from an orchestrator decision/reissue/
+            // meta line or a supervisor line. Those carry prose - e.g. an accept
+            // reason that mentions "classifier-unknown" - that must not be read as
+            // a runner outcome and must never become the issue summary. The typed
+            // issue tags ([classifier-unknown], [missing-terminal-sentinel], ...)
+            // are NOT meta, so genuine outcome lines are still derived.
+            if (IsOrchestratorMetaLine(line)) continue;
+
+            if (TryResolveOutcomeIssue(line, lastSeenAt, out var issue))
             {
+                // A terminal 6-completed card was accepted; a Warn-class ambiguity
+                // chip contradicts that and is a stale intermediate-cycle artifact
+                // even if the accept note has scrolled out of the read tail.
+                if (completed && TaskOutcomeIssueReconciliation.IsVerdictContradicting(issue))
+                    return null;
                 return issue;
             }
         }
 
         return null;
+    }
+
+    private static readonly string[] OrchestratorMetaTags =
+        ["[decision]", "[reissue]", "[heuristic]", "[intervention]", "[steer]", "[giveup]"];
+
+    /// <summary>
+    /// True for orchestrator decision/reissue/meta lines and supervisor lines.
+    /// These carry prose, not a typed runner outcome, so they are never a source
+    /// for a <see cref="TaskOutcomeIssue"/> (kind or summary).
+    /// </summary>
+    private static bool IsOrchestratorMetaLine(string line)
+    {
+        var lower = line.ToLowerInvariant();
+        if (lower.Contains("[supervisor]")) return true;
+        foreach (var tag in OrchestratorMetaTags)
+            if (lower.Contains(tag)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// True for the orchestrator's accept decision note (<c>Auto-review accepted
+    /// "X" ... Moved to 5-human-review</c>) and the boot backfill's reconcile note.
+    /// Both mark the run as accepted, which supersedes earlier outcome markers.
+    /// </summary>
+    private static bool IsAcceptReconcileLine(string line)
+    {
+        var lower = line.ToLowerInvariant();
+        if (!lower.Contains("[decision]")) return false;
+        return lower.Contains("auto-review accepted")
+            || lower.Contains("reconciled on accept");
     }
 
     private static string ReadTailUtf8(string path, int maxBytes)
