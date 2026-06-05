@@ -270,6 +270,11 @@ builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<CompletedPushQueue>();
 builder.Services.AddHostedService<CompletedPushWorker>();
 builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
+// Periodic reap of orphaned CLI process trees (codex/node) that a finished or
+// crashed run left behind. Closes the days-long accumulation gap the startup
+// reaper alone cannot: those survivors hold job-folder handles and wedge the
+// next lane move with "file in use by another process".
+builder.Services.AddHostedService<OrphanReaperHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<SkillReadinessService>();

@@ -1154,28 +1154,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
                     // PID-recycling guard: if the running process clearly isn't
                     // the one we recorded, leave it alone.
-                    if (!string.IsNullOrEmpty(entry.ProcessName))
-                    {
-                        var liveName = SafeProcessName(proc);
-                        if (!string.IsNullOrEmpty(liveName) &&
-                            !string.Equals(liveName, entry.ProcessName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            _logger.LogDebug("Skipping reap of PID {Pid}: name '{Live}' != recorded '{Recorded}'",
-                                entry.ProcessId, liveName, entry.ProcessName);
-                            continue;
-                        }
-                    }
-                    if (entry.ProcessStartTimeUtc.HasValue)
-                    {
-                        var liveStart = SafeProcessStartTime(proc);
-                        if (liveStart.HasValue &&
-                            Math.Abs((liveStart.Value - entry.ProcessStartTimeUtc.Value).TotalSeconds) > 5)
-                        {
-                            _logger.LogDebug("Skipping reap of PID {Pid}: start time mismatch ({Live} vs {Recorded})",
-                                entry.ProcessId, liveStart, entry.ProcessStartTimeUtc);
-                            continue;
-                        }
-                    }
+                    if (!MatchesRecordedIdentity(proc, entry)) continue;
 
                     SafeKillReap(proc, entry);
                     _logger.LogWarning("Reaped orphan {Cli} CLI for job {Job} (PID {Pid}) left over from a previous backend run",
@@ -1196,6 +1175,131 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // will repopulate via UpsertActiveJob.
             WriteActiveJobs([]);
         }
+    }
+
+    /// <summary>
+    /// PID-recycling guard shared by the startup reaper and the periodic
+    /// stale-orphan sweep: the live process at <paramref name="entry"/>'s
+    /// recorded PID must still match the recorded process name and start time
+    /// (5s tolerance for UTC/clock skew). Returns false when the PID has been
+    /// recycled by an unrelated process, so callers never kill a stranger.
+    /// </summary>
+    private bool MatchesRecordedIdentity(Process proc, ActiveJob entry)
+    {
+        if (!string.IsNullOrEmpty(entry.ProcessName))
+        {
+            var liveName = SafeProcessName(proc);
+            if (!string.IsNullOrEmpty(liveName) &&
+                !string.Equals(liveName, entry.ProcessName, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("Skipping reap of PID {Pid}: name '{Live}' != recorded '{Recorded}'",
+                    entry.ProcessId, liveName, entry.ProcessName);
+                return false;
+            }
+        }
+        if (entry.ProcessStartTimeUtc.HasValue)
+        {
+            var liveStart = SafeProcessStartTime(proc);
+            if (liveStart.HasValue &&
+                Math.Abs((liveStart.Value - entry.ProcessStartTimeUtc.Value).TotalSeconds) > 5)
+            {
+                _logger.LogDebug("Skipping reap of PID {Pid}: start time mismatch ({Live} vs {Recorded})",
+                    entry.ProcessId, liveStart, entry.ProcessStartTimeUtc);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Periodic counterpart to <see cref="ReapOrphans"/>, safe to call on a
+    /// timer while the backend is up. Walks the persisted active-jobs file and
+    /// reaps the recorded process tree only for entries the backend no longer
+    /// tracks as a live run — the run finished or its
+    /// <see cref="MonitorProcessAsync"/> died without
+    /// <see cref="RemoveActiveJob"/> firing, yet the CLI process (codex / node)
+    /// is still alive and holding job-folder handles. This is the
+    /// accumulation the bug observed: a backend left up for days collects
+    /// orphan codex processes from earlier runs, and their open handles wedge
+    /// the next lane move with "file in use by another process".
+    ///
+    /// <para>Safety: an entry whose run is genuinely in flight (a live,
+    /// non-exited <see cref="ProcInfo"/> in <see cref="_processes"/>) is kept
+    /// untouched, so the timer can never kill an active run. The same
+    /// <see cref="MatchesRecordedIdentity"/> PID-recycling guard the startup
+    /// reaper uses protects against killing an unrelated process that inherited
+    /// a recycled PID. Stale entries whose process is already gone are simply
+    /// pruned from the file.</para>
+    /// </summary>
+    public void ReapStaleOrphans()
+    {
+        lock (_activeJobsLock)
+        {
+            var list = ReadActiveJobs();
+            if (list.Count == 0) return;
+
+            var survivors = new List<ActiveJob>();
+            var reaped = 0;
+            foreach (var entry in list)
+            {
+                // Keep entries whose run is still genuinely in flight. The
+                // startup spawn path sets _processes BEFORE writing the file,
+                // so a live run always has a tracked ProcInfo here.
+                if (_processes.TryGetValue(entry.TaskKey, out var liveInfo)
+                    && !SafeHasExited(liveInfo.Process))
+                {
+                    survivors.Add(entry);
+                    continue;
+                }
+
+                Process? proc = null;
+                try { proc = Process.GetProcessById(entry.ProcessId); }
+                catch (ArgumentException) { proc = null; }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "stale-orphan GetProcessById failed for PID {Pid} ({Cli})", entry.ProcessId, CliType);
+                    survivors.Add(entry); // can't decide safely; keep for next sweep
+                    continue;
+                }
+
+                if (proc == null) continue; // process gone: drop the stale entry
+
+                try
+                {
+                    if (proc.HasExited) continue; // gone: drop
+                    if (!MatchesRecordedIdentity(proc, entry))
+                    {
+                        // PID recycled by a stranger; don't kill, but the run is
+                        // no longer ours to track, so let the entry drop.
+                        continue;
+                    }
+
+                    SafeKillReap(proc, entry);
+                    reaped++;
+                    _logger.LogWarning(
+                        "Reaped stale-orphan {Cli} CLI tree for job {Job} (PID {Pid}): run no longer tracked but process survived and held job handles",
+                        CliType, entry.JobId, entry.ProcessId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to reap stale-orphan PID {Pid} ({Cli})", entry.ProcessId, CliType);
+                    survivors.Add(entry); // retry next sweep
+                }
+                finally
+                {
+                    try { proc.Dispose(); } catch { }
+                }
+            }
+
+            if (survivors.Count != list.Count) WriteActiveJobs(survivors);
+            if (reaped > 0)
+                _logger.LogInformation("stale-orphan-sweep {Cli} reaped={Reaped} remaining={Remaining}", CliType, reaped, survivors.Count);
+        }
+    }
+
+    private static bool SafeHasExited(Process p)
+    {
+        try { return p.HasExited; } catch { return true; }
     }
 
     /// <summary>

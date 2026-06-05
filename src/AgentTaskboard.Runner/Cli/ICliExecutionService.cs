@@ -84,6 +84,19 @@ public interface ICliExecutionService
 
     void ReattachOnStartup();
 
+    /// <summary>
+    /// Periodic orphan sweep, run on a timer <b>while the backend is up</b>
+    /// (unlike <see cref="ReattachOnStartup"/>, which only fires once at boot).
+    /// Closes the days-long accumulation gap: when the backend stays up for
+    /// days, a finished or crashed run can leave its CLI process tree
+    /// (codex / node) alive and holding job-folder handles, wedging the next
+    /// lane move. This reaps only process trees the backend no longer tracks
+    /// as a live run; a genuinely in-flight run is never touched. Default
+    /// no-op so implementations without their own active-process tracking
+    /// (and test stubs) opt out cleanly.
+    /// </summary>
+    void ReapStaleOrphans() { }
+
     /// <summary>Returns the set of models the user can select for this CLI.</summary>
     Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default);
 

@@ -55,4 +55,15 @@ public sealed class CliRouter
     {
         foreach (var svc in _byType.Values) svc.ReattachOnStartup();
     }
+
+    /// <summary>
+    /// Run each backend's periodic stale-orphan sweep. Driven by
+    /// <c>OrphanReaperHostedService</c> on a timer so orphaned CLI process
+    /// trees from finished/crashed runs do not accumulate over a long-lived
+    /// backend session. Safe to call repeatedly: a live run is never reaped.
+    /// </summary>
+    public void ReapStaleOrphansAll()
+    {
+        foreach (var svc in _byType.Values) svc.ReapStaleOrphans();
+    }
 }
