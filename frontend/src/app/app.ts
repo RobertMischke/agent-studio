@@ -1777,6 +1777,16 @@ export class App implements OnInit, OnDestroy {
     this.projectOverlays.syncFeedFromHash(this.watchPaths());
   }
 
+  private syncEpicsTabFromHash(): void {
+    const rawHash = window.location.hash || '';
+    if (!rawHash.startsWith('#epics')) return;
+    const rawProject = rawHash.startsWith('#epics:')
+      ? decodeURIComponent(rawHash.slice('#epics:'.length))
+      : '';
+    const projectName = rawProject || null;
+    this.studioTabState.open({ kind: 'epics', projectName });
+  }
+
   // Cycle 9g: workspace overlay open/close + URL-hash sync delegated to
   // WorkspaceOverlaysService. The shell keeps these thin pass-throughs
   // because external call sites (status bar, usage hover panel, dev-tools
