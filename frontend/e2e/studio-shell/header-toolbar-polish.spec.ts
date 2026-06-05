@@ -165,6 +165,17 @@ test.describe('Header toolbar polish', () => {
       await expect(prompt).toHaveClass(/studio-tab-action--active/);
       await expect(protocol).toHaveClass(/studio-tab-action--active/);
       await expect(git).not.toHaveClass(/studio-tab-action--active/);
+      const activeStyle = await prompt.evaluate((el) => {
+        const style = window.getComputedStyle(el);
+        return { color: style.color, background: style.backgroundColor, boxShadow: style.boxShadow };
+      });
+      const inactiveStyle = await git.evaluate((el) => {
+        const style = window.getComputedStyle(el);
+        return { color: style.color, background: style.backgroundColor, boxShadow: style.boxShadow };
+      });
+      expect(activeStyle.color).not.toBe(inactiveStyle.color);
+      expect(activeStyle.background).not.toBe(inactiveStyle.background);
+      expect(activeStyle.boxShadow).toContain('inset');
 
       await setTheme(page, 'dark');
       await cluster.screenshot({ path: 'test-results/header-pane-toggles-active-dark.png' });
