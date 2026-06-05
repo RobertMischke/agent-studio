@@ -71,10 +71,33 @@ public sealed record PhaseBudget(
         // silent". Operators can re-calibrate per CLI via
         // Watchdog:Phase:ToolExecuting:{Suspicious,Hung}Seconds.
         RunPhase.ToolExecuting        => new PhaseBudget(SuspiciousSeconds: 300, HungSeconds: 1200),
-        // Terminal-for-this-turn states - the watchdog stays its hand
-        // because the runner is about to finalize anyway.
-        RunPhase.TurnCompleted        => new PhaseBudget(SuspiciousSeconds: 9999, HungSeconds: 9999),
-        RunPhase.TurnFailed           => new PhaseBudget(SuspiciousSeconds: 9999, HungSeconds: 9999),
+        // Turn-finished states. A CLI that emits its terminal turn frame
+        // (claude-code `result:*`, codex `turn.completed`, a `turn.failed`)
+        // is expected to exit its process within seconds; the sentinel-stop
+        // and the OS exit handler take it from there. The ORIGINAL profile
+        // gave these phases an effectively-infinite budget (9999/9999s) on
+        // the theory that "the runner is about to finalize anyway" - but a
+        // process that emits the frame and then NEVER exits (no further
+        // output, no OS exit) is precisely the shape that pins the coding
+        // seat forever: TurnCompleted is reached, the watchdog is disabled,
+        // and the run sits `exec=running` indefinitely (observed ASS-757:
+        // a reissue wedged >2.5h in TurnCompleted, log showed
+        // `[phase=TurnCompleted silence=91s allowed=9999/9999s]`). So these
+        // two phases now carry a bounded HARD-REAP budget: an early visible
+        // Suspicious warning at 2 min, a kill backstop at 10 min. The kill
+        // flows through the same `cli.Stop(RunStopReason.Watchdog)` path as
+        // any other hang, so the seat is freed and the existing reissue/
+        // recovery policy applies. Operators can re-tune per CLI via
+        // Watchdog:Phase:{TurnCompleted,TurnFailed}:{Suspicious,Hung}Seconds.
+        // Epic ASS-776.
+        RunPhase.TurnCompleted        => new PhaseBudget(SuspiciousSeconds: 120, HungSeconds: 600),
+        RunPhase.TurnFailed           => new PhaseBudget(SuspiciousSeconds: 120, HungSeconds: 600),
+        // Genuinely-waiting / already-dead states keep the watchdog's hand
+        // stayed. NeedsInput legitimately blocks on a human (manual mode) or
+        // the orchestrator's reply, so a wide silence there is expected, not a
+        // hang. Exited/Killed mean the process is already gone, so the
+        // watchdog tick (which only runs while exec=running) never reaches
+        // them; the wide budget just documents the intent.
         RunPhase.NeedsInput           => new PhaseBudget(SuspiciousSeconds: 9999, HungSeconds: 9999),
         RunPhase.Exited               => new PhaseBudget(SuspiciousSeconds: 9999, HungSeconds: 9999),
         RunPhase.Killed               => new PhaseBudget(SuspiciousSeconds: 9999, HungSeconds: 9999),

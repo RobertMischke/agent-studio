@@ -151,20 +151,64 @@ public class PhaseAwareWatchdogTests
     }
 
     [Fact]
-    public void TerminalPhases_NeverEscalate()
+    public void WaitingOrDeadPhases_NeverEscalate()
     {
+        // NeedsInput legitimately blocks on a human / orchestrator reply;
+        // Exited / Killed mean the process is already gone (the live
+        // watchdog tick never reaches them). Even at huge silence these
+        // stay non-escalating so the watchdog cannot double-dispose a run
+        // that is correctly parked or already terminated.
         foreach (var phase in new[] {
-            RunPhase.TurnCompleted, RunPhase.TurnFailed,
             RunPhase.NeedsInput, RunPhase.Exited, RunPhase.Killed })
         {
-            // Even at huge silence, terminal phases are healthy because the
-            // runner is about to finalize. The watchdog should not double-
-            // dispose them.
             Assert.Equal(WatchdogState.Quiet, // global Quiet still applies
                 PhaseAwareWatchdog.DecideState(35, 100, phase, Cfg));
             Assert.Equal(WatchdogState.Quiet,
                 PhaseAwareWatchdog.DecideState(9000, 10000, phase, Cfg));
         }
+    }
+
+    [Fact]
+    public void TurnFinishedPhases_HardReap_KillAt600s()
+    {
+        // ASS-757 / Epic ASS-776: a process that emits its terminal turn
+        // frame (TurnCompleted / TurnFailed) but never exits used to pin the
+        // coding seat forever under the old 9999/9999s budget. These phases
+        // now carry a bounded hard-reap budget (120s, 600s): an early
+        // Suspicious warning at 2 min, a kill backstop at 10 min. Lock the
+        // contract so a regression cannot quietly re-disable the reap.
+        foreach (var phase in new[] { RunPhase.TurnCompleted, RunPhase.TurnFailed })
+        {
+            // Within the warning band: visible, not yet killed.
+            Assert.Equal(WatchdogState.Quiet,
+                PhaseAwareWatchdog.DecideState(45, 100, phase, Cfg));
+            Assert.Equal(WatchdogState.Suspicious,
+                PhaseAwareWatchdog.DecideState(125, 200, phase, Cfg));
+            // 91s - the silence in the observed wedge log line - is still
+            // only Quiet; the kill backstop is what eventually frees the seat.
+            Assert.Equal(WatchdogState.Quiet,
+                PhaseAwareWatchdog.DecideState(91, 200, phase, Cfg));
+            // Past 600s the wedged run is reaped (the runner kills the
+            // process tree and the seat is freed).
+            Assert.Equal(WatchdogState.Hung,
+                PhaseAwareWatchdog.DecideState(605, 9999, phase, Cfg));
+        }
+    }
+
+    [Fact]
+    public void TurnCompleted_HardReap_HonorsConfiguredOverride()
+    {
+        // The hard-reap backstop is tunable like every other phase budget,
+        // so an operator can widen (or tighten) it per CLI without a build.
+        var table = PhaseBudgetTable.FromConfig(ConfigFrom(
+            ("Watchdog:Phase:TurnCompleted:HungSeconds", "900")));
+        Assert.Equal(900, table.For(RunPhase.TurnCompleted).HungSeconds);
+        Assert.Equal(120, table.For(RunPhase.TurnCompleted).SuspiciousSeconds); // default kept
+        // The previously-fatal 605s is now merely Suspicious; kill moves to 900s.
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(605, 9999, RunPhase.TurnCompleted, Cfg, table));
+        Assert.Equal(WatchdogState.Hung,
+            PhaseAwareWatchdog.DecideState(905, 9999, RunPhase.TurnCompleted, Cfg, table));
     }
 
     [Fact]
