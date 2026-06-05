@@ -32,7 +32,12 @@
         </span>
       }
     </div>
-    @if (loop.reason; as reason) {
+    @if (loop.findings.length > 0) {
+      <app-aspect-findings-list class="loop__findings"
+                                [findings]="loop.findings"
+                                [leadLabel]="loop.latestVerdict === 'accepted' ? 'Note' : 'Gap'"
+                                data-testid="overview-loop-reason" />
+    } @else if (loop.reason; as reason) {
       <div class="loop__reason" data-testid="overview-loop-reason">
         <span class="loop__reason-label">{{ loop.latestVerdict === 'accepted' ? 'Note' : 'Gap' }}</span>
         <span class="loop__reason-text">{{ reason }}</span>

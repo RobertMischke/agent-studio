@@ -279,6 +279,35 @@ public class AspectRunnerTests : IDisposable
         Assert.Null(AspectVerdictParsing.ParseVerdict(input));
     }
 
+    [Fact]
+    public void SerializeFindings_EmitsCamelCaseTokenisedArray_ForTheFrontend()
+    {
+        var verdicts = new[]
+        {
+            new AspectVerdict("requirement-fit", AspectStatus.Concerns, "missing edge-case test", "body", "fit:concerns"),
+            new AspectVerdict("code-quality", AspectStatus.Block, "helper duplicated", "body", "quality:block"),
+        };
+
+        var json = AspectVerdictParsing.SerializeFindings(verdicts);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var items = doc.RootElement.EnumerateArray().ToList();
+        Assert.Equal(2, items.Count);
+
+        // camelCase property names + normalised status token (not the enum name).
+        Assert.Equal("requirement-fit", items[0].GetProperty("aspect").GetString());
+        Assert.Equal("concerns", items[0].GetProperty("verdict").GetString());
+        Assert.Equal("missing edge-case test", items[0].GetProperty("reason").GetString());
+        Assert.Equal("code-quality", items[1].GetProperty("aspect").GetString());
+        Assert.Equal("block", items[1].GetProperty("verdict").GetString());
+    }
+
+    [Fact]
+    public void SerializeFindings_EmptyInput_YieldsEmptyArray()
+    {
+        Assert.Equal("[]", AspectVerdictParsing.SerializeFindings(Array.Empty<AspectVerdict>()));
+    }
+
     private AspectRunInputs BuildInputs() => new(
         Project: "demo",
         JobId: "test-job",

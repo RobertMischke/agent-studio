@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { AspectFindingsListComponent } from '../../../../components/aspect-findings';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import {
   verdictGlyph,
@@ -25,7 +26,7 @@ import {
   selector: 'app-completion-loop-indicator',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, AspectFindingsListComponent],
   templateUrl: './completion-loop-indicator.component.html',
   styleUrl: './completion-loop-indicator.component.scss',
 })

@@ -1,0 +1,21 @@
+@if (findings().length > 0) {
+  <div class="aspect-findings" data-testid="aspect-findings">
+    @if (leadLabel(); as label) {
+      <span class="aspect-findings__lead">{{ label }}</span>
+    }
+    <ul class="aspect-findings__list">
+      @for (f of findings(); track $index) {
+        <li class="aspect-findings__item" data-testid="aspect-finding">
+          <span class="aspect-findings__aspect">{{ f.aspect }}</span>
+          <span class="aspect-findings__chip"
+                [class]="'aspect-findings__chip--' + tone(f.verdict)"
+                data-testid="aspect-finding-chip"
+                [attr.data-tone]="tone(f.verdict)">{{ chipLabel(f.verdict) }}</span>
+          @if (f.reason) {
+            <span class="aspect-findings__reason">{{ f.reason }}</span>
+          }
+        </li>
+      }
+    </ul>
+  </div>
+}

@@ -1,7 +1,22 @@
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace OrchestratorApi.Services.Runner;
+
+/// <summary>
+/// Wire shape for one structured aspect finding written into a timeline
+/// event's <c>details["findings"]</c> bag (a JSON array string). The
+/// frontend's central aspect-findings list renders these as a list of
+/// toned verdict chips instead of the legacy preformatted
+/// <c>**{aspect}** [{verdict}]: {reason}</c> blob. <c>Verdict</c> is the
+/// normalised status token (<c>pass|concerns|block</c>) so the FE can map
+/// it straight onto a tone without re-parsing markdown.
+/// </summary>
+/// <param name="Aspect">Aspect identifier, e.g. <c>code-quality</c>.</param>
+/// <param name="Verdict">Normalised status token: <c>pass|concerns|block</c>.</param>
+/// <param name="Reason">One-line summary the aspect produced.</param>
+public sealed record AspectFinding(string Aspect, string Verdict, string Reason);
 
 /// <summary>
 /// Outcome of a single aspect-runner pass against a 4-auto-review job.
@@ -199,6 +214,29 @@ public static class AspectVerdictParsing
         AspectStatus.Block => "block",
         _ => "pass"
     };
+
+    private static readonly JsonSerializerOptions FindingsJsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    /// <summary>
+    /// Serialise per-aspect verdicts into the JSON array string carried by a
+    /// timeline event's <c>details["findings"]</c>. Each element is an
+    /// <see cref="AspectFinding"/> (<c>{aspect, verdict, reason}</c>) so the
+    /// frontend can render a list of toned chips without re-parsing the
+    /// preformatted <c>**{aspect}** [{verdict}]: {reason}</c> blob. The
+    /// caller decides which verdicts to include (the reopen path passes only
+    /// the non-pass ones that triggered the reissue, mirroring
+    /// <c>FollowUpSummary</c>).
+    /// </summary>
+    public static string SerializeFindings(IEnumerable<AspectVerdict> verdicts)
+    {
+        var items = verdicts
+            .Select(v => new AspectFinding(v.Aspect, StatusToken(v.Status), v.Summary ?? string.Empty))
+            .ToList();
+        return JsonSerializer.Serialize(items, FindingsJsonOpts);
+    }
 
     /// <summary>
     /// Read back the frontmatter status token from a previously written

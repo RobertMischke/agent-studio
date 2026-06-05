@@ -1,5 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { TooltipDirective } from '../../../../components/tooltip';
+import {
+  AspectFindingsListComponent,
+  resolveAspectFindings,
+  type AspectFinding,
+} from '../../../../components/aspect-findings';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
 import {
   TIMELINE_KIND,
@@ -27,7 +32,7 @@ import {
   selector: 'app-task-timeline-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, AspectFindingsListComponent],
   templateUrl: './task-timeline-pane.component.html',
   styleUrl: './task-timeline-pane.component.scss',
 })
@@ -117,10 +122,27 @@ export class TaskTimelinePaneComponent {
   detailEntries(event: TaskTimelineEvent): { key: string; value: string }[] {
     const d = event.details;
     if (!d) return [];
-    const hidden = new Set(['gap', 'reason', 'attempt', 'maxAttempts']);
+    const hidden = new Set(['gap', 'reason', 'findings', 'attempt', 'maxAttempts']);
     return Object.entries(d)
       .filter(([k]) => !hidden.has(k))
       .map(([key, value]) => ({ key, value }));
+  }
+
+  /**
+   * Resolve the structured aspect findings for one of an event's reason
+   * surfaces. Prefers the structured `details["findings"]` JSON; falls back
+   * to parsing the legacy `**{aspect}** [{verdict}]: {reason}` blob in the
+   * named detail (`gap` for reopens, `reason` for escalations). Returns []
+   * when neither yields findings, in which case the template renders the
+   * raw blob as plain text (unchanged behaviour for non-aspect reasons).
+   */
+  aspectFindings(event: TaskTimelineEvent, key: 'gap' | 'reason'): AspectFinding[] {
+    const d = event.details;
+    if (!d) return [];
+    // The structured `findings` array only attaches to the reopen (`gap`)
+    // surface; an escalation reason is a free-form sentence.
+    const structured = key === 'gap' ? d['findings'] : null;
+    return resolveAspectFindings(structured, d[key]);
   }
 
   /**

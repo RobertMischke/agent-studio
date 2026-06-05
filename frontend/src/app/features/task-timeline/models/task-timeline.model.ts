@@ -10,6 +10,8 @@
  * naming policy); keep this interface in sync with
  * `src/AgentTaskboard.Shared/Models/TimelineEvent.cs`.
  */
+import { resolveAspectFindings, type AspectFinding } from '../../../components/aspect-findings';
+
 export interface TaskTimelineEvent {
   ts: string;
   kind: string;
@@ -64,6 +66,14 @@ export interface CompletionLoopState {
   maxAttempts: number | null;
   /** One-line gap / reason for the latest verdict. */
   reason: string | null;
+  /**
+   * Structured per-aspect findings behind the latest verdict, when it was
+   * aspect-driven. Resolved from the event's structured `findings` JSON or
+   * by parsing the legacy `**{aspect}** [{verdict}]: {reason}` blob, so the
+   * Overview strip can render toned chips instead of the raw `reason` text.
+   * Empty for non-aspect verdicts.
+   */
+  findings: AspectFinding[];
   /** Timestamp of the latest verdict event. */
   at: string | null;
   /** True once the loop has produced at least one verdict event. */
@@ -111,6 +121,7 @@ export function deriveCompletionLoop(events: readonly TaskTimelineEvent[]): Comp
     attempt: null,
     maxAttempts: null,
     reason: null,
+    findings: [],
     at: null,
     hasActivity: false,
   };
@@ -132,6 +143,7 @@ export function deriveCompletionLoop(events: readonly TaskTimelineEvent[]): Comp
     (latestVerdict === 'accepted' ? reopenCount + 1 : null);
   const reason =
     (details['gap'] ?? details['reason'] ?? latest.summary ?? '').trim() || null;
+  const findings = resolveAspectFindings(details['findings'], details['gap'] ?? details['reason']);
 
   return {
     latestVerdict,
@@ -139,6 +151,7 @@ export function deriveCompletionLoop(events: readonly TaskTimelineEvent[]): Comp
     attempt,
     maxAttempts: parseIntOrNull(details['maxAttempts']),
     reason,
+    findings,
     at: latest.ts ?? null,
     hasActivity: true,
   };

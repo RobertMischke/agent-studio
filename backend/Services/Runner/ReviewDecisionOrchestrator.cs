@@ -1339,7 +1339,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             $"Reopened: {blockCount} blocking {blockNoun} from auto-review.",
             BuildReopenDetails("multi-aspect-block",
                 CountPriorReissues(workspace, entry.Name, current.Id),
-                report.FollowUpSummary));
+                report.FollowUpSummary,
+                report.Verdicts));
 
         _statusSnapshot.RecordReissue();
 
@@ -2250,7 +2251,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// reopen (the decision-journal record is appended after the emit), so
     /// the upcoming attempt is <c>priorReissues + 2</c> (initial run = 1).
     /// </summary>
-    private Dictionary<string, string> BuildReopenDetails(string cause, int priorReissues, string? gap = null)
+    private Dictionary<string, string> BuildReopenDetails(
+        string cause, int priorReissues, string? gap = null,
+        IReadOnlyList<AspectVerdict>? verdicts = null)
     {
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         var details = new Dictionary<string, string>
@@ -2262,6 +2265,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (!string.IsNullOrWhiteSpace(gap))
         {
             details["gap"] = Truncate(gap!.Trim(), 600);
+        }
+        // Option A: when the reopen was driven by per-aspect verdicts, carry
+        // the structured findings alongside the legacy `gap` blob so the FE
+        // renders a list of toned chips instead of raw `**`/`[]` markdown. We
+        // mirror FollowUpSummary and emit only the non-pass verdicts that
+        // actually triggered the reissue. The `gap` string stays for
+        // backwards-compat (alt-clients / old ledger rows parse it instead).
+        if (verdicts != null)
+        {
+            var flagged = verdicts.Where(v => v.Status != AspectStatus.Pass).ToList();
+            if (flagged.Count > 0)
+            {
+                details["findings"] = AspectVerdictParsing.SerializeFindings(flagged);
+            }
         }
         return details;
     }
