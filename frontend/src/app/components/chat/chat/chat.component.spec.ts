@@ -5,7 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ChatComponent } from './chat.component';
-import type { ChatEvent, ChatMessage } from '../chat-types';
+import type { ChatEvent, ChatMessage, ChatSubmitEvent } from '../chat-types';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -226,5 +226,86 @@ describe('ChatComponent virtualisation', () => {
     expect(c.bottomSpacerPx()).toBe(0);
     const windowed = c.windowedItems();
     expect(windowed[windowed.length - 1].id).toBe('msg-199');
+  });
+});
+
+// Guards the prompt's must-not-regress composer behaviours and the core
+// invariant the typing-perf fix relies on: a keystroke dirties the OnPush
+// view but must NOT recompute the memoised rendered() slice (that slice now
+// carries the pre-formatted per-row time/icon/label strings, so rebuilding
+// it on every keystroke is exactly the lag we removed).
+describe('ChatComponent composer (typing-perf no-regression)', () => {
+  function makeMessage(i: number): ChatMessage {
+    return {
+      id: `msg-${i}`,
+      role: 'agent',
+      text: `Body ${i}`,
+      timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+    };
+  }
+
+  async function makeFixture() {
+    await TestBed.configureTestingModule({
+      imports: [ChatComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    return TestBed.createComponent(ChatComponent);
+  }
+
+  function typeInto(fixture: Awaited<ReturnType<typeof makeFixture>>, value: string): HTMLTextAreaElement {
+    const textarea = fixture.nativeElement.querySelector(
+      '[data-testid="chat-input"]'
+    ) as HTMLTextAreaElement;
+    textarea.value = value;
+    textarea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    return textarea;
+  }
+
+  it('does NOT recompute the memoised rendered() slice on keystrokes', async () => {
+    const fixture = await makeFixture();
+    fixture.componentRef.setInput('messages', Array.from({ length: 30 }, (_, i) => makeMessage(i)));
+    fixture.componentRef.setInput('events', [
+      { id: 'evt-0', kind: 'tool-call', timestamp: '2026-01-01T00:01:00.000Z', summary: 'tool' },
+    ] satisfies ChatEvent[]);
+    fixture.detectChanges();
+
+    const c = fixture.componentInstance;
+    // Capturing the array identity is the tightest possible proof: a signal
+    // `computed` returns the SAME reference until one of its dependencies
+    // changes. The draft is a plain field, not a tracked signal, so typing
+    // must leave rendered() — and every per-row display string in it — intact.
+    const before = c.rendered();
+    for (const value of ['a', 'ab', 'abc', 'abcd']) typeInto(fixture, value);
+    expect(c.rendered()).toBe(before);
+  });
+
+  it('sends on Enter and clears the draft; Shift+Enter does not send', async () => {
+    const fixture = await makeFixture();
+    fixture.detectChanges();
+    const c = fixture.componentInstance;
+    const submits: ChatSubmitEvent[] = [];
+    c.submitMessage.subscribe((e) => submits.push(e));
+
+    const textarea = typeInto(fixture, 'hello');
+
+    // Shift+Enter is the multiline shortcut — it must NOT submit.
+    textarea.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true })
+    );
+    expect(submits.length).toBe(0);
+
+    // Plain Enter submits the trimmed draft and resets the composer.
+    textarea.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+    expect(submits.length).toBe(1);
+    expect(submits[0].text).toBe('hello');
+    expect(c.draftText).toBe('');
   });
 });
