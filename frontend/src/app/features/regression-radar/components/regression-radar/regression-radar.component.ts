@@ -8,10 +8,10 @@ import {
   OnInit,
   OnDestroy,
 } from '@angular/core';
-import type { RegressionRadarResult, SpecChangeEntry } from '../models/regression-radar.model';
-import { TaskService } from '../../../services/task.service';
-import { TooltipDirective } from '../../../components/tooltip';
-import { InfoButtonComponent } from '../../../components/info-button/info-button.component';
+import type { RegressionRadarResult, SpecChangeEntry } from '../../models/regression-radar.model';
+import { TaskService } from '../../../../services/task.service';
+import { TooltipDirective } from '../../../../components/tooltip';
+import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 
 @Component({
   selector: 'app-regression-radar',

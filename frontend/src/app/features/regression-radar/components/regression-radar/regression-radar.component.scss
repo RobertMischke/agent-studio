@@ -296,6 +296,19 @@
   }
 }
 
+.radar-inline-note {
+  display: flex;
+  align-items: center;
+  color: var(--studio-fg-muted, rgba(255, 255, 255, 0.45));
+  font-size: 0.82rem;
+  line-height: 1.4;
+  padding-block: var(--studio-spacing-1);
+
+  &__text {
+    min-width: 0;
+  }
+}
+
 @keyframes radar-spin {
   to { transform: rotate(360deg); }
 }

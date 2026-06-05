@@ -69,6 +69,22 @@ function makeRadarResult() {
   };
 }
 
+function makeUnavailableRangeResult() {
+  return {
+    overallStatus: 'Intended',
+    intendedCount: 0,
+    atRiskCount: 0,
+    driftCount: 0,
+    totalSpecChanges: 0,
+    baselineSha: null,
+    headSha: null,
+    error: 'No commit range available (task has no tracked runs with SHA data)',
+    generatedAt: '2026-06-03T09:00:00Z',
+    durationMs: 0,
+    entries: [],
+  };
+}
+
 function makeDetail(state: string) {
   return {
     info: {
@@ -100,7 +116,7 @@ function makeDetail(state: string) {
   };
 }
 
-async function installRoutes(page: Page, state: string) {
+async function installRoutes(page: Page, state: string, radarResult = makeRadarResult()) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const detail = makeDetail(state);
 
@@ -178,7 +194,7 @@ async function installRoutes(page: Page, state: string) {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(makeRadarResult()),
+      body: JSON.stringify(radarResult),
     }),
   );
   await page.route('**/api/concept-docs/regression-radar', (route) =>
@@ -362,6 +378,30 @@ test.describe('Regression radar info-button', () => {
     if (RESULTS_DIR) {
       await radar.scrollIntoViewIfNeeded();
       await radar.screenshot({ path: path.join(RESULTS_DIR, 'radar-expanded.png') });
+    }
+  });
+
+  test('renders unavailable commit range as a quiet inline note', async ({ page }) => {
+    await installRoutes(page, '5-human-review', makeUnavailableRangeResult());
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+
+    await dismissErrorDialog(page);
+
+    const note = page.getByTestId('regression-radar-error');
+    await expect(note).toBeVisible({ timeout: 10_000 });
+    await expect(note).toContainText('No commit range available');
+    await expect(page.getByTestId('regression-radar')).toHaveCount(0);
+
+    const box = await note.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeLessThan(36);
+
+    const borderWidth = await note.evaluate((el) => getComputedStyle(el).borderTopWidth);
+    expect(borderWidth).toBe('0px');
+
+    if (RESULTS_DIR) {
+      await note.scrollIntoViewIfNeeded();
+      await note.screenshot({ path: path.join(RESULTS_DIR, 'radar-unavailable-range-inline-note.png') });
     }
   });
 });

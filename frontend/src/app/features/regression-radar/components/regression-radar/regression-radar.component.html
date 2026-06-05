@@ -4,13 +4,12 @@
     <span class="radar__loading-text">Analyzing spec changes...</span>
   </div>
 } @else if (result()?.error) {
-  <div class="radar radar--empty" data-testid="regression-radar-error">
-    <span class="radar__empty-text">{{ result()!.error }}</span>
+  <div class="radar-inline-note" data-testid="regression-radar-error">
+    <span class="radar-inline-note__text">{{ result()!.error }}</span>
   </div>
 } @else if (isEmpty()) {
-  <div class="radar radar--empty" data-testid="regression-radar-empty">
-    <span class="radar__empty-icon">&#x2714;</span>
-    <span class="radar__empty-text">No spec file changes in this task</span>
+  <div class="radar-inline-note" data-testid="regression-radar-empty">
+    <span class="radar-inline-note__text">No spec file changes in this task</span>
   </div>
 } @else if (hasData()) {
   <div class="radar" data-testid="regression-radar">
