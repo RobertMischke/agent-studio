@@ -263,11 +263,21 @@
       @if (hasPipeline()) {
       <div class="ov-pipeline" data-testid="overview-pipeline-steps">
         @for (row of pipelineRows(); track row.id) {
+          @if (row.startsPhase) {
+            <div class="ov-pl-phase"
+                 [attr.data-phase]="row.phaseKey"
+                 data-testid="overview-pipeline-phase">
+              <span class="ov-pl-phase__label">{{ row.phaseLabel }}</span>
+              <span class="ov-pl-phase__rule" aria-hidden="true"></span>
+              <span class="ov-pl-phase__description">{{ row.phaseDescription }}</span>
+            </div>
+          }
           <div class="ov-pl-step"
                [class.ov-pl-step--disabled]="row.status === 'disabled'"
                [class.ov-pl-step--running]="row.status === 'running'"
                [class.ov-pl-step--final-verdict]="row.kind === 'orchestrator'"
                [attr.data-step-id]="row.id"
+               [attr.data-phase]="row.phaseKey"
                [attr.data-status]="row.status"
                [attr.data-run-mode]="row.runMode"
                data-testid="overview-pipeline-step">

@@ -54,6 +54,10 @@ interface PipelineRowVm {
   id: string;
   label: string;
   kind: StepKind;
+  phaseKey: PipelinePhaseKey;
+  phaseLabel: string;
+  phaseDescription: string;
+  startsPhase: boolean;
   /**
    * 'parallel' for the read-only aspect reviews that run concurrently in the
    * orchestrator pool; 'sequential' for the core run and the single final
@@ -98,6 +102,14 @@ interface PipelineRowVm {
   costKnown: boolean;
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
+}
+
+type PipelinePhaseKey = 'pre' | 'core' | 'aspect' | 'tool' | 'decision' | 'drift';
+
+interface PipelinePhaseVm {
+  key: PipelinePhaseKey;
+  label: string;
+  description: string;
 }
 
 interface PipelineTotalVm {
@@ -249,6 +261,51 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
 
 const API_PRICE_DISCLAIMER =
   'API price estimate only. Actual CLI billing uses the subscription or plan, not these API rates.';
+
+const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
+  pre: {
+    key: 'pre',
+    label: 'PRE',
+    description: 'Preparation checks before the agent gets the task.',
+  },
+  core: {
+    key: 'core',
+    label: 'CORE',
+    description: 'The coding agent run.',
+  },
+  aspect: {
+    key: 'aspect',
+    label: 'ASPECT',
+    description: 'Parallel review passes over the finished work.',
+  },
+  tool: {
+    key: 'tool',
+    label: 'TOOL',
+    description: 'Deterministic post-run tooling and evidence steps.',
+  },
+  decision: {
+    key: 'decision',
+    label: 'DECISION',
+    description: 'The orchestrator ruling that accepts, reissues, or escalates.',
+  },
+  drift: {
+    key: 'drift',
+    label: 'DRIFT',
+    description: 'Optional drift-analysis passes.',
+  },
+};
+
+function pipelinePhaseForKind(kind: StepKind): PipelinePhaseVm {
+  switch (kind) {
+    case 'module':       return PIPELINE_PHASES.pre;
+    case 'core':         return PIPELINE_PHASES.core;
+    case 'aspect':       return PIPELINE_PHASES.aspect;
+    case 'tool':         return PIPELINE_PHASES.tool;
+    case 'orchestrator': return PIPELINE_PHASES.decision;
+    case 'drift':        return PIPELINE_PHASES.drift;
+    default:             return PIPELINE_PHASES.tool;
+  }
+}
 
 /**
  * Build the always-present step-name explanation tooltip: the step's display
@@ -657,7 +714,7 @@ export class OverviewPaneComponent {
     const exec = new Map((res.execution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
     const cost = new Map((res.cost?.steps ?? []).map(c => [c.stepId.toLowerCase(), c]));
 
-    return steps.map(step => {
+    const rows = steps.map(step => {
       const key = step.id.toLowerCase();
       const e = exec.get(key);
       const c = cost.get(key);
@@ -673,10 +730,15 @@ export class OverviewPaneComponent {
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
       const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
       const costTooltip = this.buildStepCostTooltip(label, c ?? null);
+      const phase = pipelinePhaseForKind(step.kind);
       return {
         id: step.id,
         label,
         kind: step.kind,
+        phaseKey: phase.key,
+        phaseLabel: phase.label,
+        phaseDescription: phase.description,
+        startsPhase: false,
         runMode: step.runMode,
         enabled,
         status,
@@ -703,6 +765,10 @@ export class OverviewPaneComponent {
         costTooltip,
       };
     });
+    return rows.map((row, index) => ({
+      ...row,
+      startsPhase: index === 0 || row.phaseKey !== rows[index - 1].phaseKey,
+    }));
   });
 
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
@@ -1057,6 +1123,7 @@ export class OverviewPaneComponent {
       case 'aspect':       return 'Aspect';
       case 'orchestrator': return 'Decision';
       case 'tool':         return 'Tool';
+      case 'drift':        return 'Drift';
       default:             return kind;
     }
   }
