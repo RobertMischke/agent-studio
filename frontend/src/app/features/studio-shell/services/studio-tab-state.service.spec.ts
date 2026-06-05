@@ -63,6 +63,41 @@ describe('StudioTabStateService', () => {
     });
   });
 
+  describe('epics tab is a normal, closable tab (nothing special)', () => {
+    it('opens the workspace-wide Epics view as a non-sticky, active tab', () => {
+      svc.open({ kind: 'epics', projectName: null });
+      const key = 'epics:__all__';
+      expect(svc.activeKey()).toBe(key);
+      expect(svc.isStickyKey(key)).toBe(false);
+      // Sticky board + the epics tab.
+      expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY, key]);
+      const epicsTab = svc.tabs().find(t => studioTabKey(t) === key)!;
+      expect((epicsTab as { sticky?: boolean }).sticky).toBeUndefined();
+    });
+
+    it('close() removes the Epics tab and falls back to the sticky board', () => {
+      svc.open({ kind: 'epics', projectName: null });
+      svc.close('epics:__all__');
+      expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY]);
+      expect(svc.activeKey()).toBe(STICKY_KEY);
+    });
+
+    it('scopes a project Epics tab by name and keeps it closable', () => {
+      svc.open({ kind: 'epics', projectName: 'demo' });
+      const key = 'epics:demo';
+      expect(svc.activeKey()).toBe(key);
+      expect(svc.isStickyKey(key)).toBe(false);
+      svc.close(key);
+      expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY]);
+    });
+
+    it('focuses an already-open Epics tab instead of duplicating', () => {
+      svc.open({ kind: 'epics', projectName: null });
+      svc.open({ kind: 'epics', projectName: null });
+      expect(svc.tabs().map(t => studioTabKey(t))).toEqual([STICKY_KEY, 'epics:__all__']);
+    });
+  });
+
   it('opens a tab and makes it active', () => {
     const tab: StudioTab = { kind: 'board', projectName: 'demo' };
     svc.open(tab);

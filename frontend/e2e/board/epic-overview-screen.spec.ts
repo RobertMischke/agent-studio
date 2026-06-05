@@ -1,10 +1,15 @@
 /**
- * Acceptance for the dedicated Epic overview screen (route `#/epics`). The
- * VS-Code studio shell carries an activity-bar "Epics" button that is hidden
- * when no epics exist; clicking it opens a read-only overview listing every
- * epic from `GET /api/epics` with a done / in-progress / open progress bar and
- * an expandable sub-task list. Clicking a sub-task closes the overview and
- * opens that card's detail.
+ * Acceptance for the Epic overview, which renders inside a normal, closable
+ * studio editor tab (no overlay, not pinned). The VS-Code studio shell carries
+ * an activity-bar "Epics" button that is hidden when no epics exist; clicking it
+ * opens (or focuses) an `epics` editor tab listing every epic from
+ * `GET /api/epics` with a done / in-progress / open progress bar and an
+ * expandable sub-task list. Clicking a sub-task navigates into that card's
+ * detail.
+ *
+ * The Epics tab is just like any other tab: it carries a close-x, no pin glyph,
+ * and is not sticky. The closable-tab contract is asserted alongside the rollup
+ * so a future change cannot silently turn Epics back into a special overlay.
  *
  * The test seeds one epic + four sub-tasks via the API (two -> 6-completed,
  * one -> 3-progress, one stays 2-ready, so the rollup reads "2 / 4 done"),
@@ -138,6 +143,16 @@ test.describe('Epic overview screen', () => {
     const overviewShot = testInfo.outputPath('epic-overview.png');
     await page.screenshot({ path: overviewShot, fullPage: false });
     await testInfo.attach('epic-overview', { path: overviewShot, contentType: 'image/png' });
+
+    // Closable-tab contract: the Epics view is a normal editor tab, not an
+    // overlay or a pinned tab. It must carry a close-x, no pin glyph, and not
+    // be marked sticky. (Non-sticky tabs render `data-sticky` as null, so the
+    // attribute is absent.)
+    const epicsTab = page.locator('[role="tab"][data-tab-key="epics:__all__"]');
+    await expect(epicsTab).toBeVisible({ timeout: 10_000 });
+    await expect(epicsTab).not.toHaveAttribute('data-sticky', /.+/);
+    await expect(epicsTab.locator('[data-testid="studio-tab-pin"]')).toHaveCount(0);
+    await expect(epicsTab.getByRole('button', { name: 'Close tab' })).toHaveCount(1);
 
     // Expand the epic -> the four sub-tasks render as navigable rows.
     await card.locator('[data-testid="epic-overview-expand"]').click();
