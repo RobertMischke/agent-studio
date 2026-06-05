@@ -875,7 +875,12 @@
       gap: 6px;
       min-width: 0;
     }
-    .task-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; white-space: nowrap; }
+    .task-card__commit-sha {
+      color: var(--studio-commit-fg);
+      font-family: var(--font-mono, monospace);
+      font-weight: 600;
+      white-space: nowrap;
+    }
     .task-card__commit-subject {
       color: var(--studio-fg-muted);
       overflow: hidden;

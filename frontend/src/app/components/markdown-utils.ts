@@ -276,8 +276,8 @@ export function linkTaskReferencesInHtml(
       if (labelStart > cursor) fragment.append(document.createTextNode(text.slice(cursor, labelStart)));
       const anchor = document.createElement('a');
       anchor.href = `#task:${encodeURIComponent(ref.taskKey)}`;
-      anchor.dataset.taskRef = 'true';
-      anchor.dataset.taskKey = ref.taskKey;
+      anchor.dataset['taskRef'] = 'true';
+      anchor.dataset['taskKey'] = ref.taskKey;
       anchor.textContent = text.slice(labelStart, labelStart + label.length);
       fragment.append(anchor);
       cursor = labelStart + label.length;
