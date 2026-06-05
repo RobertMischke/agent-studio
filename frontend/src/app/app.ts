@@ -435,9 +435,7 @@ export class App implements OnInit, OnDestroy {
   // Cycle 9 / ADR-0034: filter state + URL sync delegated to BoardFiltersService.
   readonly searchQuery = this.boardFilters.searchQuery;
   readonly activeFilterCount = this.boardFilters.activeFilterCount;
-  readonly filterBadgeCount = computed(() =>
-    this.boardFilters.activeFilterCount() + (this.effectiveCompactCards() ? 1 : 0),
-  );
+  readonly filterBadgeCount = computed(() => this.boardFilters.activeFilterCount());
   readonly hasActiveFiltersOrSearch = this.boardFilters.hasActiveFiltersOrSearch;
   readonly filteredGrouped = this.boardFilters.filteredGrouped;
   readonly filteredTaskCount = this.boardFilters.filteredTaskCount;

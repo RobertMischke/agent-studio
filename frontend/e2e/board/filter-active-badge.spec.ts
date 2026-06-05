@@ -52,6 +52,37 @@ test.describe('Filter-active badge (F59)', () => {
     await expect(badge).toHaveText('1');
   });
 
+  test('project scope and compact visibility do not count as active filters', async ({ page }) => {
+    const trigger = page.getByTestId('studio-project-picker-trigger');
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+
+    const projectItems = page
+      .locator('[data-testid^="studio-project-picker-item-"]')
+      .filter({ hasNotText: 'All projects' });
+    const projectCount = await projectItems.count();
+    test.skip(projectCount === 0, 'No project item available to scope the board.');
+
+    await projectItems.first().click();
+    await expect(page.getByTestId('studio-board')).toBeVisible({ timeout: 10_000 });
+
+    const compactToggle = page.getByTestId('studio-board-compact-toggle');
+    await expect(compactToggle).toBeVisible();
+    if (await compactToggle.getAttribute('aria-pressed') !== 'true') {
+      await compactToggle.click();
+    }
+
+    await expect(page.getByTestId('studio-ab-badge-filters')).toHaveCount(0);
+
+    await page.getByTestId('studio-ab-filters').click();
+    await expect(page.getByTestId('studio-sidebar')).toBeVisible();
+    await page.getByTestId('kanban-filter-type-bug').click();
+
+    const badge = page.getByTestId('studio-ab-badge-filters');
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveText('1');
+  });
+
   test('badge tooltip shows filter count', async ({ page }) => {
     const filterBtn = page.getByTestId('studio-ab-filters');
     await filterBtn.click();

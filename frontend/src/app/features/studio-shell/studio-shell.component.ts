@@ -111,8 +111,8 @@ export class StudioShellComponent {
 
   /**
    * Host-computed badge for the Filters activity-bar item. The host owns
-   * visibility state such as rail-forced compact cards, while this shell
-   * owns the rail button that renders the count.
+   * the distinction between real filters and view/scope state, while this
+   * shell owns the rail button that renders the count.
    */
   readonly filterBadgeCount = input<number | null>(null);
 
@@ -724,7 +724,7 @@ export class StudioShellComponent {
 
   readonly activityBarBadgeCounts = computed<Record<string, number>>(() => ({
     filters: this.filterBadgeCount()
-      ?? this.boardFilters.activeFilterCount() + (this.uiPrefs.compactCards() ? 1 : 0),
+      ?? this.boardFilters.activeFilterCount(),
   }));
 
   openBoard(projectName: string): void {
