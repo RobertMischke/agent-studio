@@ -85,6 +85,28 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void Ass775_VerbatimProductionShape_DerivesNoChip_OnCompletedOrHumanReview()
+    {
+        // ASS-775 grounded in the *verbatim* production line formats observed in
+        // the workspace logs: a typed classifier-unknown marker from an
+        // intermediate cycle, then the orchestrator's real "accepted with concerns
+        // ... Moved to 5-human-review for your approval" decision note. The stale
+        // chip — whose summary was wrongly sourced from that decision note — must
+        // no longer be derived, on the 6-completed card OR the 5-human-review card.
+        var classifierUnknown =
+            "[08:53:55.333] [orchestrator] [classifier-unknown] Could not classify the agent's reply after deterministic checks. (category: classifier-unknown; run summary: Agent text did not match any known shape.)";
+        var acceptWithConcerns =
+            "[09:15:33.000] [orchestrator] [decision] Auto-review accepted \"BUG: classifier-unknown routing\" with concerns (1 of 4 aspects flagged). Moved to 5-human-review for your approval.";
+        var log = classifierUnknown + Environment.NewLine + acceptWithConcerns + Environment.NewLine;
+
+        SeedJob("ass775-completed", TaskStates.Completed, log);
+        SeedJob("ass775-human", TaskStates.HumanReview, log);
+
+        Assert.Null(Outcome("ass775-completed"));
+        Assert.Null(Outcome("ass775-human"));
+    }
+
+    [Fact]
     public void DecisionLineMentioningClassifierUnknown_IsNeverDerivedAsAnOutcome()
     {
         // The summary must never come from an orchestrator decision/meta line:
