@@ -162,4 +162,22 @@ public class CompletionGateTests
         Assert.Contains("[[TASK_DONE]]", followUp);
         Assert.Contains("[[TASK_BLOCKED", followUp);
     }
+
+    /// <summary>
+    /// ASS-734: the completion-gate follow-up must also lead with the diff-only
+    /// steering rule and list the already-made commits when supplied, so the
+    /// reissue resolves the open findings on top of existing work.
+    /// </summary>
+    [Fact]
+    public void BuildFollowUp_LeadsWithDiffOnlyRule_AndListsPriorCommits()
+    {
+        var followUp = CompletionGate.BuildFollowUp(
+            new[] { "wire the route" },
+            priorCommits: new[] { "a1b2c3 feat: scaffold route" });
+
+        Assert.StartsWith(RunOutcomePolicy.DiffOnlySteeringRule, followUp);
+        Assert.Contains("Commits already made for this task", followUp);
+        Assert.Contains("a1b2c3 feat: scaffold route", followUp);
+        Assert.Contains("- [ ] wire the route", followUp);
+    }
 }

@@ -118,6 +118,54 @@ public class RunOutcomePolicyTests
     }
 
     /// <summary>
+    /// ASS-734: every steering prompt must lead with the "steer the diff, do not
+    /// restart" rule so a reissue/continuation builds on the existing commits
+    /// instead of redoing the task from scratch. Pin it across all four builders
+    /// so a future edit cannot quietly drop the rule from one of them.
+    /// </summary>
+    [Fact]
+    public void EverySteeringPrompt_LeadsWithDiffOnlyRule()
+    {
+        var reissue = RunOutcomePolicy.BuildReissueFollowupPrompt("do the thing");
+        var missing = RunOutcomePolicy.BuildMissingSentinelInterventionPrompt("prior summary");
+        var codex = RunOutcomePolicy.BuildCodexContinuationPrompt(
+            Outcome(AgentOutcomeKind.Done, sentinel: false));
+
+        Assert.StartsWith(RunOutcomePolicy.DiffOnlySteeringRule, reissue);
+        Assert.StartsWith(RunOutcomePolicy.DiffOnlySteeringRule, missing);
+        Assert.StartsWith(RunOutcomePolicy.DiffOnlySteeringRule, codex);
+        foreach (var prompt in new[] { reissue, missing, codex })
+        {
+            Assert.Contains("Build on the commits already made", prompt);
+            Assert.Contains("do NOT redo the work from scratch", prompt);
+        }
+    }
+
+    /// <summary>
+    /// When the orchestrator knows the commits already made for the task, the
+    /// builders list them so the agent does not re-apply committed work.
+    /// </summary>
+    [Fact]
+    public void SteeringPrompt_ListsPriorCommits_WhenSupplied()
+    {
+        var commits = new[] { "a1b2c3 feat: add lane move", "d4e5f6 test: cover backfill" };
+
+        var reissue = RunOutcomePolicy.BuildReissueFollowupPrompt("do it", priorCommits: commits);
+        var missing = RunOutcomePolicy.BuildMissingSentinelInterventionPrompt("sum", priorCommits: commits);
+
+        foreach (var prompt in new[] { reissue, missing })
+        {
+            Assert.Contains("Commits already made for this task", prompt);
+            Assert.Contains("a1b2c3 feat: add lane move", prompt);
+            Assert.Contains("d4e5f6 test: cover backfill", prompt);
+        }
+
+        // No commit block leaks when none are supplied.
+        var noCommits = RunOutcomePolicy.BuildReissueFollowupPrompt("do it");
+        Assert.DoesNotContain("Commits already made for this task", noCommits);
+    }
+
+    /// <summary>
     /// Resume-continue with follow-up + fast no-output IS the case where
     /// auto-reissue still fires: the session was alive, the agent had real
     /// context, and it still ignored the follow-up. One retry with sharper

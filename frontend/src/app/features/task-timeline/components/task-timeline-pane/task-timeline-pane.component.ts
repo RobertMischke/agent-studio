@@ -122,10 +122,22 @@ export class TaskTimelinePaneComponent {
   detailEntries(event: TaskTimelineEvent): { key: string; value: string }[] {
     const d = event.details;
     if (!d) return [];
-    const hidden = new Set(['gap', 'reason', 'findings', 'attempt', 'maxAttempts']);
+    const hidden = new Set(['gap', 'reason', 'findings', 'attempt', 'maxAttempts', 'followUpPrompt']);
     return Object.entries(d)
       .filter(([k]) => !hidden.has(k))
       .map(([key, value]) => ({ key, value }));
+  }
+
+  /**
+   * The exact steering prompt the orchestrator handed the agent for this
+   * reissue/continuation, when recorded (ASS-734 traceability). Rendered as a
+   * collapsible "Prompt + Context" block so the operator can verify the agent
+   * was told to steer the diff rather than restart, without leaving the
+   * Timeline. Null when the event carries no recorded prompt.
+   */
+  steeringPrompt(event: TaskTimelineEvent): string | null {
+    const value = event.details?.['followUpPrompt'];
+    return value && value.trim().length > 0 ? value : null;
   }
 
   /**

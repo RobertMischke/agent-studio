@@ -818,13 +818,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var moved = MoveReissueToReadyTop(current, entry, "NOOP");
         if (moved != null)
         {
-            await WriteFollowUpFileAsync(moved, followUp, ct);
+            var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+            await WriteFollowUpFileAsync(moved, followUp, ct,
+                new SteeringContext("noop-recovery", "reissue", priorReissues, reason));
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: NOOP recovery, reissued with sharpened framing.",
-                BuildReopenDetails("noop-recovery",
-                    CountPriorReissues(workspace, entry.Name, current.Id),
-                    reason));
+                BuildReopenDetails("noop-recovery", priorReissues, reason, followUpPrompt: followUp));
         }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -1041,13 +1041,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // the Overview pipeline.
             RecordOrchestratorReviewStep(moved.FolderPath, PipelineStepStatus.Failed,
                 DecisionVerdictReissue, reason);
-            await WriteFollowUpFileAsync(moved, followUp, ct);
+            var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+            await WriteFollowUpFileAsync(moved, followUp, ct,
+                new SteeringContext("no-completion-signal", "reissue", priorReissues, reason));
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,
                 "Reopened: run finished without a terminal sentinel, reissued demanding one.",
-                BuildReopenDetails("no-completion-signal",
-                    CountPriorReissues(workspace, entry.Name, current.Id),
-                    reason));
+                BuildReopenDetails("no-completion-signal", priorReissues, reason, followUpPrompt: followUp));
         }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -2502,7 +2502,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     private Dictionary<string, string> BuildReopenDetails(
         string cause, int priorReissues, string? gap = null,
-        IReadOnlyList<AspectVerdict>? verdicts = null)
+        IReadOnlyList<AspectVerdict>? verdicts = null,
+        string? followUpPrompt = null)
     {
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         var details = new Dictionary<string, string>
@@ -2511,6 +2512,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ["attempt"] = (priorReissues + 2).ToString(inv),
             ["maxAttempts"] = (ConfiguredMaxReissues() + 1).ToString(inv),
         };
+        // Traceability (ASS-734): carry the exact steering prompt the agent
+        // received so the FE timeline/protocol pane can show "Prompt + Context"
+        // per steering step instead of only a verdict label.
+        if (!string.IsNullOrWhiteSpace(followUpPrompt))
+        {
+            details["followUpPrompt"] = Truncate(followUpPrompt!.Trim(), 4000);
+        }
         if (!string.IsNullOrWhiteSpace(gap))
         {
             details["gap"] = Truncate(gap!.Trim(), 600);
@@ -3239,15 +3247,25 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return moved;
     }
 
-    private async Task WriteFollowUpFileAsync(TaskInfo moved, string followUp, CancellationToken ct)
+    /// <summary>
+    /// Persist the exact steering prompt that the orchestrator handed the agent,
+    /// both as the canonical <c>orchestrator-follow-up.md</c> (read by the pickup
+    /// pre-check) AND as an append-only, timestamped copy under
+    /// <c>orchestrator-follow-up-history/</c>. The history copy is never
+    /// overwritten, so an operator can reconstruct, per steering step, the exact
+    /// prompt and the context it was given (resume vs fresh, prior attempt count,
+    /// reason). This is the traceability half of the diff-steering fix
+    /// (ASS-734): without it the only record of "what did the orchestrator tell
+    /// the agent" was a single file the next reissue clobbered.
+    /// </summary>
+    private async Task WriteFollowUpFileAsync(
+        TaskInfo moved, string followUp, CancellationToken ct, SteeringContext? context = null)
     {
+        var canonical = $"# Orchestrator follow-up\n\n{followUp}\n";
         try
         {
             var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
-            await File.WriteAllTextAsync(
-                followUpPath,
-                $"# Orchestrator follow-up\n\n{followUp}\n",
-                ct);
+            await File.WriteAllTextAsync(followUpPath, canonical, ct);
         }
         catch (Exception ex)
         {
@@ -3255,7 +3273,83 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 "ReviewDecisionOrchestrator: failed to write follow-up file for {JobId}",
                 moved.Id);
         }
+
+        try
+        {
+            var historyDir = Path.Combine(moved.FolderPath, "orchestrator-follow-up-history");
+            Directory.CreateDirectory(historyDir);
+            var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture);
+            var cause = SanitizeForFileName(context?.Cause ?? "reissue");
+            var historyPath = Path.Combine(historyDir, $"{stamp}-{cause}.md");
+            await File.WriteAllTextAsync(historyPath, RenderSteeringHistory(context, followUp), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: failed to write versioned follow-up history for {JobId}",
+                moved.Id);
+        }
     }
+
+    /// <summary>
+    /// Render one versioned steering-history entry: a context header (timestamp,
+    /// cause/verdict, prior attempt count, resume-vs-fresh, reason) followed by
+    /// the verbatim steering prompt the agent received. Public-shaped string so
+    /// the FE protocol/timeline pane can show "Prompt + Context" per step.
+    /// </summary>
+    internal static string RenderSteeringHistory(SteeringContext? context, string followUp)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Orchestrator steering step");
+        sb.AppendLine();
+        sb.AppendLine("## Context");
+        sb.AppendLine($"- timestamp: {DateTime.UtcNow:O}");
+        if (context != null)
+        {
+            sb.AppendLine($"- cause: {context.Cause}");
+            sb.AppendLine($"- verdict: {context.Verdict}");
+            sb.AppendLine($"- priorReissues: {context.PriorReissues}");
+            sb.AppendLine($"- mode: {(context.ResumeSessionId != null ? "resume" : "fresh-run")}");
+            if (context.ResumeSessionId != null)
+                sb.AppendLine($"- resumeSessionId: {context.ResumeSessionId}");
+            if (!string.IsNullOrWhiteSpace(context.Reason))
+                sb.AppendLine($"- reason: {context.Reason!.Replace("\r", " ").Replace("\n", " ").Trim()}");
+            if (context.PriorCommits is { Count: > 0 })
+            {
+                sb.AppendLine("- priorCommits:");
+                foreach (var commit in context.PriorCommits.Take(20))
+                    sb.AppendLine($"  - {commit.Replace("\r", " ").Replace("\n", " ").Trim()}");
+            }
+        }
+        sb.AppendLine();
+        sb.AppendLine("## Steering prompt (verbatim)");
+        sb.AppendLine();
+        sb.AppendLine(followUp);
+        return sb.ToString();
+    }
+
+    private static string SanitizeForFileName(string value)
+    {
+        var trimmed = (value ?? "reissue").Trim();
+        if (trimmed.Length == 0) trimmed = "reissue";
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = trimmed.Select(c => invalid.Contains(c) || c == ' ' ? '-' : c).ToArray();
+        return new string(chars);
+    }
+
+    /// <summary>
+    /// The orchestrator context recorded alongside a single steering step so the
+    /// operator can see exactly what the agent was told and why. Optional on the
+    /// write path: deterministic branches that carry the data pass it; the rest
+    /// still get the verbatim prompt versioned without the structured header.
+    /// </summary>
+    internal sealed record SteeringContext(
+        string Cause,
+        string Verdict,
+        int PriorReissues,
+        string? Reason = null,
+        string? ResumeSessionId = null,
+        IReadOnlyList<string>? PriorCommits = null);
 
     private enum ReviewSignalKind
     {

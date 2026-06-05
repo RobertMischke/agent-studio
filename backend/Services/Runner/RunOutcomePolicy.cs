@@ -60,6 +60,40 @@ public static class RunOutcomePolicy
     public const int MaxSoftInterventionAttempts = 1;
 
     /// <summary>
+    /// The load-bearing first rule on every reissue / continuation / completion
+    /// follow-up prompt: steer the open diff, do not restart. The operator
+    /// symptom this fixes (ASS-734) was the orchestrator re-running a task from
+    /// scratch on every reissue, duplicating already-committed work. Kept as one
+    /// shared constant so the reissue, missing-sentinel, Codex-continuation and
+    /// completion-gate builders cannot drift apart on this instruction.
+    /// </summary>
+    public const string DiffOnlySteeringRule =
+        "STEER THE DIFF, DO NOT RESTART: Do ONLY the open remaining work. "
+        + "Build on the commits already made for this task - do NOT redo the work from scratch, "
+        + "and do NOT re-apply changes that are already committed. Resume where the previous run "
+        + "left off and close out only the items still open.";
+
+    /// <summary>
+    /// Render a short, agent-readable block listing the commits already made for
+    /// this task so a reissue/continuation builds on them instead of redoing the
+    /// work. Returns the empty string when no commits are supplied so callers can
+    /// concatenate unconditionally.
+    /// </summary>
+    public static string RenderPriorCommitsBlock(IReadOnlyList<string>? priorCommits)
+    {
+        if (priorCommits == null || priorCommits.Count == 0) return string.Empty;
+        var sb = new System.Text.StringBuilder();
+        sb.Append("\n\nCommits already made for this task (build on these, do not repeat them):\n");
+        foreach (var commit in priorCommits.Take(20))
+        {
+            var line = (commit ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            if (line.Length == 0) continue;
+            sb.Append("- ").Append(line).Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Decide what to do with a finished run.
     /// </summary>
     /// <param name="intent">Why the run was started.</param>
@@ -361,17 +395,22 @@ public static class RunOutcomePolicy
     /// graceful recovery: if it fails, the orchestrator gives up.
     /// </para>
     /// </summary>
-    public static string BuildReissueFollowupPrompt(string originalFollowup, bool recoveryContext = false)
+    public static string BuildReissueFollowupPrompt(
+        string originalFollowup,
+        bool recoveryContext = false,
+        IReadOnlyList<string>? priorCommits = null)
     {
         var head = recoveryContext
             ? "The previous CLI session for this task is unrecoverable. There is no conversation history to read; the only context you have is the job folder on disk (prompt.md, status.md, logs/cli-output.log) and the user request below. Do the work the user asked for, end-to-end. "
               + "Reading 'I'll wait for your request' or 'standing by' as a valid answer is not acceptable - the user already gave you the request. "
             : "The previous run exited without acting on the user request below. "
               + "Treat the user request as the only thing that matters now. ";
-        return head
+        return DiffOnlySteeringRule + "\n\n"
+             + head
              + "Do not reply 'task done' unless you have actually performed the work the user asked for. "
-             + "If you genuinely cannot perform the request, emit [[TASK_BLOCKED:<reason>]] and explain why.\n\n"
-             + "User request:\n"
+             + "If you genuinely cannot perform the request, emit [[TASK_BLOCKED:<reason>]] and explain why."
+             + RenderPriorCommitsBlock(priorCommits)
+             + "\n\nUser request:\n"
              + (originalFollowup ?? string.Empty).Trim();
     }
 
@@ -429,12 +468,14 @@ public static class RunOutcomePolicy
     /// session, finish the remaining work, then sign off. Kept next to the
     /// policy that decides to continue so they move together.
     /// </summary>
-    public static string BuildCodexContinuationPrompt(AgentOutcome outcome)
-        => "Your previous turn ended without the required terminal sentinel and the task still has open work. "
+    public static string BuildCodexContinuationPrompt(AgentOutcome outcome, IReadOnlyList<string>? priorCommits = null)
+        => DiffOnlySteeringRule + "\n\n"
+         + "Your previous turn ended without the required terminal sentinel and the task still has open work. "
          + "Finish the remaining items now - do not re-investigate from scratch, build on what you already did. "
          + "When the work is genuinely complete, end with exactly one terminal sentinel on its own line: "
          + "[[TASK_DONE]] (or [[TASK_BLOCKED:<short reason>]] if you truly cannot finish). "
-         + $"The orchestrator's summary of your previous turn was: {outcome.Summary ?? "unclassified"}.";
+         + $"The orchestrator's summary of your previous turn was: {outcome.Summary ?? "unclassified"}."
+         + RenderPriorCommitsBlock(priorCommits);
 
     public static string BuildPermissionInterventionPrompt()
         => "The previous attempt hit one or more tool permission errors. "
@@ -442,8 +483,8 @@ public static class RunOutcomePolicy
          + "If a command or path is unavailable, try a narrower read, use existing repository files, inspect the task folder evidence, or reason from the visible output. "
          + "When you finish, end with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].";
 
-    public static string BuildMissingSentinelInterventionPrompt(AgentOutcome outcome)
-        => BuildMissingSentinelInterventionPrompt(outcome.Summary);
+    public static string BuildMissingSentinelInterventionPrompt(AgentOutcome outcome, IReadOnlyList<string>? priorCommits = null)
+        => BuildMissingSentinelInterventionPrompt(outcome.Summary, priorCommits);
 
     /// <summary>
     /// Overload used by the review-decision orchestrator's no-completion-signal
@@ -451,9 +492,11 @@ public static class RunOutcomePolicy
     /// <see cref="AgentOutcome"/>. Same framing so the agent always gets the
     /// identical "close out with exactly one terminal sentinel" instruction.
     /// </summary>
-    public static string BuildMissingSentinelInterventionPrompt(string? previousSummary)
-        => "Your previous reply did not include the terminal sentinel required by this taskboard. "
+    public static string BuildMissingSentinelInterventionPrompt(string? previousSummary, IReadOnlyList<string>? priorCommits = null)
+        => DiffOnlySteeringRule + "\n\n"
+         + "Your previous reply did not include the terminal sentinel required by this taskboard. "
          + "Continue the task if work remains; otherwise close it out now. "
          + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]]. "
-         + $"The orchestrator's current summary of your previous reply was: {previousSummary ?? "unclassified"}.";
+         + $"The orchestrator's current summary of your previous reply was: {previousSummary ?? "unclassified"}."
+         + RenderPriorCommitsBlock(priorCommits);
 }

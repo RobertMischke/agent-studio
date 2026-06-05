@@ -83,6 +83,12 @@
                 }
               </div>
             }
+            @if (steeringPrompt(event); as prompt) {
+              <details class="tl-item__steering" data-testid="timeline-event-steering-prompt">
+                <summary class="tl-item__steering-summary">Prompt + Context</summary>
+                <pre class="tl-item__steering-body">{{ prompt }}</pre>
+              </details>
+            }
           </div>
         </li>
       }
