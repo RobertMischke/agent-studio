@@ -57,21 +57,24 @@ function step(id: string, displayName: string, kind: string, runMode: string) {
 
 // Core run (sequential), then the read-only aspect pool (parallel), then the
 // single orchestrator final verdict (sequential).
+const pre = [step('pre-loop-guard', 'Loop guard', 'pre', 'sequential')];
 const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [
   step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
   step('aspect-code-quality', 'Code quality', 'aspect', 'parallel'),
   step('aspect-tests-and-evidence', 'Tests and evidence', 'aspect', 'parallel'),
+  step('post-lint-scss', 'Frontend stylelint', 'tool', 'sequential'),
+  step('post-regression-radar', 'Regression radar', 'drift', 'sequential'),
   step('post-orchestrator-decision', 'Final verdict', 'orchestrator', 'sequential'),
 ];
-const allSteps = [...core, ...post];
+const allSteps = [...pre, ...core, ...post];
 
 function basePipeline() {
   return {
     id: 'standard-task-pipeline',
     displayName: 'Standard task pipeline',
     version: 1,
-    pre: [],
+    pre,
     core,
     post,
     allSteps,
@@ -107,10 +110,13 @@ function pipelineAcceptedFinalVerdict() {
       startedAt: '2026-06-02T08:00:00Z',
       completedAt: '2026-06-02T08:00:04Z',
       steps: [
+        execStep('pre-loop-guard', 'pre', 'passed'),
         execStep('core-agent-run', 'core', 'passed'),
         execStep('aspect-requirement-fit', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-code-quality', 'aspect', 'passed', { verdict: 'pass' }),
         execStep('aspect-tests-and-evidence', 'aspect', 'passed', { verdict: 'pass' }),
+        execStep('post-lint-scss', 'tool', 'passed'),
+        execStep('post-regression-radar', 'drift', 'passed', { verdict: 'clean' }),
         execStep('post-orchestrator-decision', 'orchestrator', 'passed', {
           verdict: 'accept',
           verdictSummary:
@@ -295,6 +301,57 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
         path: path.join(RESULTS_DIR, 'pipeline-parallel-aspects-and-final-verdict.png'),
+        fullPage: true,
+      });
+    }
+  });
+
+  test('stage labels use one fixed gutter and names start on one shared edge', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineAcceptedFinalVerdict);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+
+    const metrics = await page.getByTestId('overview-pipeline-step').evaluateAll((rows) =>
+      rows.map((row) => {
+        const kind = row.querySelector<HTMLElement>('.ov-pl-step__kind');
+        const name = row.querySelector<HTMLElement>('.ov-pl-step__name');
+        if (!kind || !name) throw new Error('Pipeline row is missing kind or name cell.');
+        const kindRect = kind.getBoundingClientRect();
+        const nameRect = name.getBoundingClientRect();
+        return {
+          label: kind.textContent?.trim().toUpperCase() ?? '',
+          kindLeft: Math.round(kindRect.left),
+          kindWidth: Math.round(kindRect.width),
+          nameLeft: Math.round(nameRect.left),
+        };
+      }),
+    );
+
+    expect(metrics.map(m => m.label)).toEqual([
+      'PRE',
+      'CORE',
+      'ASPECT',
+      'ASPECT',
+      'ASPECT',
+      'TOOL',
+      'DRIFT',
+      'DECISION',
+    ]);
+
+    const maxDelta = (values: number[]) => Math.max(...values) - Math.min(...values);
+    expect(maxDelta(metrics.map(m => m.kindLeft)), JSON.stringify(metrics)).toBeLessThanOrEqual(1);
+    expect(maxDelta(metrics.map(m => m.kindWidth)), JSON.stringify(metrics)).toBeLessThanOrEqual(1);
+    expect(maxDelta(metrics.map(m => m.nameLeft)), JSON.stringify(metrics)).toBeLessThanOrEqual(1);
+
+    if (RESULTS_DIR) {
+      await pipeline.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-fixed-stage-gutter-alignment.png'),
         fullPage: true,
       });
     }
