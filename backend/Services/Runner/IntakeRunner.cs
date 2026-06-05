@@ -256,6 +256,16 @@ public sealed class IntakeRunner
         // Context-load: resolve references + prompt attachments against what is
         // actually available, so the verdict and sidecar carry the card's context.
         var context = BuildContextManifest(info, prompt, peers, ReadAttachmentFileNames(info.FolderPath));
+        // Surface the context-load result in the run log: the manifest already
+        // lands in lifecycle.json, but a structured line lets operators watching
+        // the Preparation step see at a glance what context a card is missing
+        // without opening the sidecar.
+        _logger.LogInformation(
+            "Intake context-load for {JobId}: references {ResolvedRefs} resolved / {MissingRefs} missing, attachments {ResolvedAttachments} resolved / {MissingAttachments} missing, {TagCount} tag(s), complete={ContextComplete}",
+            info.Id,
+            context.ResolvedReferences.Count, context.MissingReferences.Count,
+            context.ResolvedAttachments.Count, context.MissingAttachments.Count,
+            context.Tags.Count, context.IsComplete);
 
         // Stamp intake-running first so observers see the in-flight state. A
         // restart between this stamp and the verdict write leaves the card in
