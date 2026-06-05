@@ -49,6 +49,10 @@ export class WorkspaceOverlaysComponent {
    *  the usage-caps panel's per-project usage rows). Navigation is shell-
    *  coordinated, so the shell — not this overlay — owns the route change. */
   readonly openProjectSettings = output<string>();
+  /** Task the shell should open in its detail panel (bubbled up from the
+   *  usage-caps panel's CLI-sessions list when a session's task-link chip is
+   *  clicked). Shell-coordinated, same as `openTask`. */
+  readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);

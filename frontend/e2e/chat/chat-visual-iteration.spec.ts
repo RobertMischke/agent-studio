@@ -46,7 +46,7 @@ async function closeOrchestrator(page: Page): Promise<void> {
   if (opened > 0) {
     // The orchestrator wraps `<app-sidesheet>`, whose close button
     // ships with `data-testid="sidesheet-close"`. Scope to the host
-    // so a hidden cli-usage-sheet sibling doesn't claim the click.
+    // so a hidden kanban-filter-sidesheet sibling doesn't claim the click.
     await page.locator('app-orchestrator-side-sheet [data-testid="sidesheet-close"]').click();
     await page.waitForTimeout(300);
   }

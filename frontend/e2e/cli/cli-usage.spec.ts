@@ -1,18 +1,36 @@
 import { test, expect } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 import { getCliUsage } from '../helpers/quota';
 
 /**
- * Smoke checks the CLI Usage sidesheet:
- *  - opens via the toolbar button
- *  - shows all three CLI sections (Copilot / Claude / Codex)
- *  - version pills are visible for available CLIs
- *  - no error banner
+ * CLI-usage entry path after the loose `<app-cli-usage-sheet>` sidesheet
+ * was retired (its quota glance + per-CLI session inventory folded into
+ * the Workspace-settings home's CLI-Management section). The status-bar
+ * "Usage" button now opens that single hub instead of a parallel modal.
  *
- * The backend must already have probed each CLI; we sanity-check that via
- * the REST endpoint first, so test failures point at the right layer.
+ * This spec verifies:
+ *  - the backend `/api/cli/usage` report is sane (Copilot / Claude / Codex)
+ *  - clicking `status-bar-usage` opens the home at the CLI-Management
+ *    ("caps") section (`cli-admin-overlay`)
+ *  - the embedded `cli-admin-sessions` section renders the
+ *    `cli-sessions-panel` with the available CLI labels and no error
+ *
+ * The session list is the preserved feature — it must still render from
+ * inside the home, reachable via the (now non-parallel) Usage trigger.
  */
 
-test.describe('CLI Usage sidesheet', () => {
+const SCREENSHOT_DIR = (() => {
+  const fromEnv = process.env.CLI_USAGE_RESULTS_DIR;
+  if (fromEnv && fromEnv.trim()) return fromEnv;
+  return path.resolve(__dirname, '..', '..', 'playwright-screenshots', 'cli-usage');
+})();
+
+test.beforeAll(() => {
+  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+});
+
+test.describe('CLI usage hub (status-bar → settings home)', () => {
   test('backend reports all three CLIs as available', async () => {
     const report = await getCliUsage();
     const types = report.sections.map(s => s.cliType).sort();
@@ -25,54 +43,64 @@ test.describe('CLI Usage sidesheet', () => {
     }
   });
 
-  test('UI shows all three CLI sections with version pills', async ({ page }) => {
+  test('status-bar Usage opens the home CLI-Management with the sessions panel', async ({ page }) => {
     await page.goto('/');
 
-    // Open the CLI Usage sheet. The toolbar button label is "🪙 Usage" with
-    // title="CLI sessions"; match either. Consider adding
-    // `data-testid="cli-usage-toggle"` for a more stable hook.
-    const toggle = page.getByRole('button', { name: /usage|cli sessions/i }).first();
-    await toggle.click();
+    // The Usage button is the only CLI-usage entry point now; it opens the
+    // global Workspace-settings home at the "caps" (CLI Management) section.
+    await page.getByTestId('status-bar-usage').click();
 
-    const sheet = page.locator('aside.sheet');
-    await expect(sheet).toBeVisible();
-    await expect(sheet.getByRole('heading', { name: 'CLI Usage' })).toBeVisible();
+    const overlay = page.getByTestId('cli-admin-overlay');
+    await expect(overlay).toBeVisible();
+    await expect(page.getByTestId('cli-admin-panel')).toBeVisible();
 
-    // Sections segment may be collapsed by default; expand if so.
-    const sessionsHead = sheet.getByRole('button', { name: /sessions/i }).first();
-    const isCollapsed = await sessionsHead.locator('.seg__chev').textContent();
-    if (isCollapsed?.includes('▶')) await sessionsHead.click();
+    // The preserved per-CLI per-project session inventory is embedded here.
+    const sessionsSection = page.getByTestId('cli-admin-sessions');
+    await expect(sessionsSection).toBeVisible();
+    const sessions = page.getByTestId('cli-sessions-panel');
+    await expect(sessions).toBeVisible();
 
-    // Each CLI label should be present.
+    // The panel lazy-loads `/api/cli/usage`; wait out the loading state.
+    await expect(sessions.getByText('Loading native CLI session stores...')).toHaveCount(0, {
+      timeout: 15_000,
+    });
+
+    // Available CLI section headers render even with zero sessions.
     for (const label of ['Copilot', 'Claude Code', 'Codex']) {
-      await expect(sheet.getByText(label, { exact: true }).first()).toBeVisible();
+      await expect(sessions.getByText(label, { exact: true }).first()).toBeVisible();
     }
 
-    // No error banner.
-    await expect(sheet.locator('.sheet__error')).toHaveCount(0);
+    // No error surfaced from the session load.
+    await expect(sessions.locator('.sessions__error')).toHaveCount(0);
+
+    await page.getByTestId('cli-admin-overlay').screenshot({
+      path: path.join(SCREENSHOT_DIR, '01-cli-management-top.png'),
+    });
+
+    // Scroll the preserved session inventory's header into view and capture
+    // the viewport for visual evidence that the feature still renders from
+    // inside the home. (A full-element shot would be tens of thousands of px
+    // tall on a machine with many real sessions.)
+    await sessionsSection.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-cli-sessions-panel.png') });
   });
 
-  test('quota strip renders without NG0100 (dev-mode change-detection error)', async ({ page }) => {
-    // Regression guard for an ExpressionChangedAfterItHasBeenCheckedError
-    // in QuotaStripComponent.resetText(): using Date.now() instead of the
-    // ticking signal made the value drift across change-detection passes
-    // when the wall clock crossed a minute boundary.
-    const ngErrors: string[] = [];
-    page.on('pageerror', err => {
-      if (err.message.includes('NG0100')) ngErrors.push(err.message);
-    });
-    page.on('console', msg => {
-      const txt = msg.text();
-      if (msg.type() === 'error' && txt.includes('NG0100')) ngErrors.push(txt);
-    });
-
+  test('the status-bar Usage button reflects the home open state', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: /usage|cli sessions/i }).first().click();
-    const sheet = page.locator('aside.sheet');
-    await expect(sheet).toBeVisible();
-    // Wait long enough to cross the 1s tick boundary a few times.
-    await page.waitForTimeout(2500);
 
-    expect(ngErrors, `NG0100 errors leaked:\n${ngErrors.join('\n')}`).toHaveLength(0);
+    const usageBtn = page.getByTestId('status-bar-usage');
+    await expect(usageBtn).toHaveAttribute('aria-pressed', 'false');
+
+    await usageBtn.click();
+    await expect(page.getByTestId('cli-admin-overlay')).toBeVisible();
+    // The trigger reflects the home being open (no parallel modal of its own).
+    await expect(usageBtn).toHaveAttribute('aria-pressed', 'true');
+
+    // The home is a full-screen modal; it closes via its own close control,
+    // after which the Usage trigger goes inactive again — no orphaned overlay.
+    await page.getByTestId('workspace-settings-close').click();
+    await expect(page.getByTestId('cli-admin-overlay')).not.toBeVisible();
+    await expect(page.getByTestId('workspace-settings-overlay')).not.toBeVisible();
+    await expect(usageBtn).toHaveAttribute('aria-pressed', 'false');
   });
 });

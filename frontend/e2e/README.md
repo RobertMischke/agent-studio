@@ -53,7 +53,7 @@ auto-discovers via `testDir: './e2e'` so no path tweaks are needed.
 | `add-task/` | Add-Task dialog flows: open, attachments, prompt enhance, generated titles. | 6 |
 | `board/` | Kanban / lanes / cards: lane reorder, archive, backlog tags, auto-pickup, drag-and-drop, lane scroll. | 30 |
 | `chat/` | Activity log + chat surfaces + next-gen chat workbench: messages, tool bursts, markdown, virtualisation, role attribution. | 21 |
-| `cli/` | CLI back-ends: Claude / Codex / Gemini / Copilot smokes, quota, sessions, CLI Usage sheet. | 13 |
+| `cli/` | CLI back-ends: Claude / Codex / Gemini / Copilot smokes, quota, sessions, CLI-usage hub in the settings home. | 13 |
 | `dev-tools/` | Dev mode, stable update pipeline, backend fixture, smoke + refactor baselines. | 7 |
 | `git/` | Git pane: diff viewer, tree, commit chain, tooltip overflow, no-NG0600 regression. | 6 |
 | `layout/` | VS-Code-layout shell, statusbar, sidebar filter sheet, drag-auto-scroll, header buttons. | 7 |
@@ -214,7 +214,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `cli-icons-screenshots.spec.ts` | CLI icons — screenshots @screenshots |
 | `cli-icons.spec.ts` | CLI icons — distinct glyph per CLI |
 | `cli-skills-pickup.spec.ts` | CLI skills — pickup @billable |
-| `cli-usage.spec.ts` | CLI Usage sidesheet |
+| `cli-usage.spec.ts` | CLI-usage hub (status-bar → settings home) |
 | `gemini-hello-world.spec.ts` | Gemini — hello world @billable |
 | `quota.spec.ts` | Claude quota |
 

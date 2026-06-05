@@ -103,5 +103,13 @@
       (refreshOne)="usage.refreshOne($event.cliType)"
       (openProjectSettings)="openProjectSettings.emit($event)" />
   </section>
+
+  <section class="cli-admin__section" data-testid="cli-admin-sessions">
+    <header class="cli-admin__section-head">
+      <h3>CLI sessions</h3>
+      <span class="cli-admin__hint">per-CLI per-project inventory</span>
+    </header>
+    <app-cli-sessions-panel (openJobDetail)="openJobDetail.emit($event)" />
+  </section>
 </div>
   

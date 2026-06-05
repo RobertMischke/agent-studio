@@ -46,7 +46,6 @@ import {
   primaryActionFor,
   type TriageButton,
 } from './features/task-detail';
-import { CliUsageSheetComponent } from './features/cli';
 import {
   OrchestratorSettingsModalComponent,
   OrchestratorSideSheetComponent,
@@ -143,7 +142,6 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
   imports: [
     TaskColumnComponent,
     TaskDetailComponent,
-    CliUsageSheetComponent,
     OrchestratorSideSheetComponent,
     OrchestratorSettingsModalComponent,
     ProjectOverlaysComponent,
@@ -1872,6 +1870,29 @@ export class App implements OnInit, OnDestroy {
     if (!name) return;
     this.workspaceOverlays.close();
     this.openProjectShell(name, 'settings');
+  }
+
+  /**
+   * Session task-link chip clicked inside the CLI-Management "CLI sessions"
+   * list: close the global workspace-settings home, then open the owning
+   * task's detail panel. Mirrors `onOpenTaskFromReel`; routing through the
+   * shell keeps `selectedJob` + the URL query the single owner of detail
+   * navigation rather than letting a leaf component drive it.
+   */
+  onOpenTaskFromSession(ref: { jobId: string; watchPath: string }): void {
+    this.workspaceOverlays.close();
+    if (!ref?.jobId || !ref?.watchPath) return;
+    history.replaceState(
+      null,
+      '',
+      `?job=${encodeURIComponent(ref.jobId)}&watchPath=${encodeURIComponent(ref.watchPath)}`,
+    );
+    this.jobService.getDetail(ref.jobId, ref.watchPath).subscribe({
+      next: (detail) => this.selectedJob.set(detail),
+      error: () => {
+        /* keep the user where they were */
+      },
+    });
   }
 
   cancelCreate() {

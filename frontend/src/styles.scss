@@ -409,10 +409,8 @@ html[data-studio-theme='light'] {
   // rendered inside each sidesheet / dialog.
   .app__sidesheet,
   .filter-sidesheet,
-  .cli-usage-sheet,
   .orchestrator-side-sheet,
   app-orchestrator-side-sheet,
-  app-cli-usage-sheet,
   app-kanban-filter-sidesheet {
     background: transparent;
     color: #1a1a1a;
@@ -439,7 +437,6 @@ html[data-studio-theme='light'] {
   .dialog,
   .modal,
   app-orchestrator-side-sheet .sheet,
-  app-cli-usage-sheet .sheet,
   app-kanban-filter-sidesheet .sheet,
   app-create-job-dialog .dialog,
   app-create-job-dialog .panel,

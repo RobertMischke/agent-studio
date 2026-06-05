@@ -6,6 +6,7 @@ import type { QuotaReport } from '../../../../features/quota';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
 import { CliUsageDetailComponent, CliUsageStore } from '../../../tokens';
+import { CliSessionsPanelComponent } from '../cli-sessions-panel/cli-sessions-panel';
 
 interface CapsResponse {
   defaultCapPct: number;
@@ -37,7 +38,7 @@ interface CapRow {
 @Component({
   selector: 'app-cli-admin-panel',
   standalone: true,
-  imports: [FormsModule, CliUsageDetailComponent],
+  imports: [FormsModule, CliUsageDetailComponent, CliSessionsPanelComponent],
   templateUrl: './cli-admin-panel.html',
   styleUrl: './cli-admin-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -53,6 +54,12 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
   /** Re-emitted from the embedded usage detail so the shell can route to a
    *  project's Settings rail when a "By project" usage row is clicked. */
   readonly openProjectSettings = output<string>();
+
+  /** Re-emitted from the embedded CLI-sessions list so the shell can open
+   *  the owning task's detail panel when a session's task-link chip is
+   *  clicked. Navigation is shell-coordinated, so this leaf only forwards
+   *  the reference up. */
+  readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   readonly loading = signal(false);
   readonly errorMsg = signal<string | null>(null);

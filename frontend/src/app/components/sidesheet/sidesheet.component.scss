@@ -27,7 +27,7 @@
   min-height: 0;
   font-size: 13px;
   /* Width defaults to 100% so the caller's outer host (the
-     `<app-orchestrator-side-sheet>`, `<app-cli-usage-sheet>`,
+     `<app-orchestrator-side-sheet>`,
      `<app-kanban-filter-sidesheet>`, …) drives the visible panel
      width via its own `:host(.is-open) { width: ... }` rule. The
      previous fixed `width: 360px` was a dead default — no caller

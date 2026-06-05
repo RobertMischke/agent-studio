@@ -52,11 +52,13 @@ Stylelint enforces this scoped per file via `scale-unlimited/declaration-strict-
 
 If a value legitimately doesn't fit the scale (true one-off like a 1 px hairline, an animation frame, a sub-pixel border), inline a `/* stylelint-disable-next-line scale-unlimited/declaration-strict-value */` with a short rationale on the same line.
 
-## Side-sheet layout contract (`<app-orchestrator-side-sheet>`, `<app-cli-usage-sheet>`, `<app-kanban-filter-sidesheet>`)
+## Side-sheet layout contract (`<app-orchestrator-side-sheet>`, `<app-kanban-filter-sidesheet>`)
 
-All three right-edge side sheets are **panels that push the workspace, not overlays that float over it**. The push behaviour rides on three coordinated pieces; break any one and the panel either floats, overlays, leaves a transparent gap, or stacks on the wrong side. Locked by the `open pushes studio-shell + inner panel fills host` test in `e2e/orchestrator-side-sheet-position.spec.ts`.
+Both right-edge side sheets are **panels that push the workspace, not overlays that float over it**. The push behaviour rides on three coordinated pieces; break any one and the panel either floats, overlays, leaves a transparent gap, or stacks on the wrong side. Locked by the `open pushes studio-shell + inner panel fills host` test in `e2e/orchestrator-side-sheet-position.spec.ts`.
 
-1. **Flex parent.** In `app.html` the `vsCodeLayout` branch wraps `<app-studio-shell>` + the three side sheets in `<div class="app-shell">`, styled `display: flex; flex-direction: row-reverse`. Row-reverse keeps the studio shell on the left (consuming the remaining space via `flex: 1 1 auto`) while the side sheets dock on the right edge in natural DOM order. Without the flex parent the sheets fall back to block layout and stack vertically.
+> History: a third sheet, `<app-cli-usage-sheet>`, used to live here. Its quota glance and per-CLI session inventory were folded into the global Workspace Settings home (the CLI Management / "Usage caps" section, `features/cli/components/cli-admin-panel`) so CLI usage has a single hub; the loose sidesheet was retired. The status-bar "Usage" button now opens that home section instead of a parallel sidesheet.
+
+1. **Flex parent.** In `app.html` the `vsCodeLayout` branch wraps `<app-studio-shell>` + the side sheets in `<div class="app-shell">`, styled `display: flex; flex-direction: row-reverse`. Row-reverse keeps the studio shell on the left (consuming the remaining space via `flex: 1 1 auto`) while the side sheets dock on the right edge in natural DOM order. Without the flex parent the sheets fall back to block layout and stack vertically.
 
 2. **Caller `:host` width animation.** Each side sheet's own SCSS owns the open/close animation:
    ```scss
@@ -64,14 +66,14 @@ All three right-edge side sheets are **panels that push the workspace, not overl
            overflow: hidden; flex: 0 0 auto; }
    :host(.is-open) { width: min(<callerWidth>px, 9Xvw); }
    ```
-   `overflow: hidden` is load-bearing — without it the inner panel can render past the host's collapsed 0px width and float over the workspace. `flex: 0 0 auto` keeps the host honouring its specified width (no flex-grow surprises). Callers pick their own px width (kanban-filter 320, cli-usage 440, orchestrator 640); the host has no business setting a fixed width on the inner panel.
+   `overflow: hidden` is load-bearing — without it the inner panel can render past the host's collapsed 0px width and float over the workspace. `flex: 0 0 auto` keeps the host honouring its specified width (no flex-grow surprises). Callers pick their own px width (kanban-filter 320, orchestrator 640); the host has no business setting a fixed width on the inner panel.
 
 3. **Inner `<app-sidesheet>` width: 100 %.** `components/sidesheet/sidesheet.component.scss` ships `.sidesheet { width: 100% }` so the inner chrome (background, border, header / body / footer) tracks the host's animating width. A previous hard-coded `width: 360px` default left a transparent gap inside any host wider than 360px (visible as unreadable empty space in the orchestrator's 640px slot). Callers that need an explicit px width can still drive it via the `[width]` input.
 
 Anti-patterns to reject in review:
-- `position: fixed` on any of the three sheets in `src/styles.scss` or component SCSS. Out-of-flow positioning makes push impossible. (An old workaround did this pre-`app-shell`; the new contract is now described in `styles.scss` where the workaround used to live.)
+- `position: fixed` on either sheet in `src/styles.scss` or component SCSS. Out-of-flow positioning makes push impossible. (An old workaround did this pre-`app-shell`; the new contract is now described in `styles.scss` where the workaround used to live.)
 - A fixed `width: ...` on the inner `.sidesheet` BEM root (the inner panel must mirror the host).
-- Adding `flex-direction: row` (non-reverse) to `.app-shell` without also reordering the HTML to put `<app-studio-shell>` first. Current order is `kanban-filter, cli-usage, orchestrator, studio-shell` and relies on row-reverse to dock the sheets right.
+- Adding `flex-direction: row` (non-reverse) to `.app-shell` without also reordering the HTML to put `<app-studio-shell>` first. Current order is `kanban-filter, orchestrator, studio-shell` and relies on row-reverse to dock the sheets right.
 
 When you add a new right-edge side sheet, follow the same three-piece contract and add it to the regression spec.
 

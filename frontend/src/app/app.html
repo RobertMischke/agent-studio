@@ -14,7 +14,6 @@
         projected into studio-shell's activity-bar "Filters" slot.
       -->
       <div class="app-shell" data-testid="app-shell">
-      <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
       <app-studio-shell data-testid="studio-shell-root"
                         [knownProjectNames]="projectNames()"
                         [projectWatchPaths]="watchPaths()"
@@ -22,7 +21,7 @@
                         (projectDeleted)="loadWatchPaths()"
                         (chatToggle)="toggleOrchestratorChat()"
                         (addTaskRequested)="openCreate()"
-                        (openUsageSheet)="usageSheet.toggle()"
+                        (openUsageSheet)="toggleCliAdmin()"
                         (openCliAdmin)="toggleCliAdmin()"
                         (openWorkspaceScreenshots)="toggleWorkspaceScreenshots()"
                         (openOrchFeed)="toggleOrchFeed()"
@@ -30,11 +29,11 @@
                         (toggleAuto)="onToggleAuto($event)">
         <app-status-bar studioStatusbar
           [projectNames]="projectNames()"
-          [usageOpen]="usageSheet.open()"
+          [usageOpen]="cliAdminOpen()"
           [orchestratorOpen]="orchSideSheet.open()"
           [feedOpen]="orchFeedProject() !== null"
           [settingsOpen]="workspaceSettingsOpen()"
-          (toggleUsage)="usageSheet.toggle()"
+          (toggleUsage)="toggleCliAdmin()"
           (toggleOrchestrator)="toggleOrchestratorChat()"
           (toggleFeed)="toggleOrchFeed()"
           (toggleSettings)="toggleWorkspaceSettings()"
@@ -439,7 +438,8 @@
         (uxuiActionQueued)="onUxuiActionQueued($event)"
         (openTask)="onOpenTaskFromReel($event)" />
       <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
-                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)" />
+                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
+                              (openJobDetail)="onOpenTaskFromSession($event)" />
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {
           <app-verbose-debug-overlay
@@ -693,7 +693,6 @@
         }
       </div>
 
-        <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
         <app-orchestrator-side-sheet
           #orchSideSheet
           class="app__sidesheet"
@@ -711,11 +710,11 @@
 
       <app-status-bar
         [projectNames]="projectNames()"
-        [usageOpen]="usageSheet.open()"
+        [usageOpen]="cliAdminOpen()"
         [orchestratorOpen]="orchSideSheet.open()"
         [feedOpen]="orchFeedProject() !== null"
         [settingsOpen]="workspaceSettingsOpen()"
-        (toggleUsage)="usageSheet.toggle()"
+        (toggleUsage)="toggleCliAdmin()"
         (toggleOrchestrator)="toggleOrchestratorChat()"
         (toggleFeed)="toggleOrchFeed()"
         (toggleSettings)="toggleWorkspaceSettings()"
@@ -733,7 +732,8 @@
 
 
       <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)"
-                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)" />
+                              (openProjectSettings)="onOpenProjectSettingsFromUsage($event)"
+                              (openJobDetail)="onOpenTaskFromSession($event)" />
 
 
       @if (showCreate()) {

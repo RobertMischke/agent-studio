@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Verifies that each CLI gets a distinct icon glyph in:
- *   1. The cost overview (quota strip in the CLI Usage sidesheet).
+ *   1. The cost overview (per-CLI cards in the CLI-Management "Usage caps"
+ *      section of the workspace-settings home).
  *   2. The job preview cards on the board.
  *   3. The Command Deck CLI selector and the Add-Task dialog picker.
  *
@@ -18,20 +19,23 @@ const ICONS = {
 } as const;
 
 test.describe('CLI icons — distinct glyph per CLI', () => {
-  test('quota strip shows a per-CLI icon next to each card', async ({ page }) => {
+  test('CLI-Management cards show a per-CLI icon next to each card', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: /usage|cli sessions/i }).first().click();
-    const sheet = page.locator('aside.sheet');
-    await expect(sheet).toBeVisible();
+    // The Usage trigger opens the workspace-settings home at the CLI-Management
+    // ("Usage caps") section — the cost overview that succeeded the old
+    // quota strip when the loose CLI-usage sidesheet was retired.
+    await page.getByTestId('status-bar-usage').click();
+    const overlay = page.getByTestId('cli-admin-overlay');
+    await expect(overlay).toBeVisible();
 
-    const qcards = sheet.locator('.qcard');
-    await expect(qcards.first()).toBeVisible();
+    const cards = overlay.locator('article[data-cli]');
+    await expect(cards.first()).toBeVisible();
 
     const seen: string[] = [];
-    const count = await qcards.count();
+    const count = await cards.count();
     for (let i = 0; i < count; i++) {
-      const icon = await qcards.nth(i).locator('.qcard__icon').textContent();
-      expect(icon?.trim(), `qcard ${i} should have an icon`).toBeTruthy();
+      const icon = await cards.nth(i).locator('.cli-card__icon').textContent();
+      expect(icon?.trim(), `cli-card ${i} should have an icon`).toBeTruthy();
       seen.push(icon!.trim());
     }
     // Every visible card must use one of the four declared glyphs.

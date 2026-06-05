@@ -1,4 +1,4 @@
-/* The host participates in flex layout (same as cli-usage-sheet). When
+/* The host participates in flex layout (same as kanban-filter-sidesheet). When
    closed it collapses to zero width so the main board reclaims the space
    and stays fully visible; when open it animates to its open width
    driven entirely from `:host(.is-open)` below. The inner panel chrome

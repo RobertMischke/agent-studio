@@ -2,7 +2,6 @@
 export { CliAdminPanelComponent } from './components/cli-admin-panel/cli-admin-panel';
 export { CliConsoleComponent } from './components/cli-console/cli-console';
 export { CliSessionsPanelComponent } from './components/cli-sessions-panel/cli-sessions-panel';
-export { CliUsageSheetComponent } from './components/cli-usage-sheet/cli-usage-sheet';
 export type {
   CliModelInfo,
   CliModelCatalog,

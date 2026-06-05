@@ -10,14 +10,15 @@ test.describe('CLI icons — screenshots @screenshots', () => {
   test('capture quota strip, command deck, add-task dialog, and job board', async ({ page }) => {
     page.setViewportSize({ width: 1400, height: 900 });
 
-    // 1) Quota strip in CLI Usage sidesheet (cost overview)
+    // 1) CLI-Management cards (cost overview) in the workspace-settings home
     await page.goto('/');
-    await page.getByRole('button', { name: /usage|cli sessions/i }).first().click();
-    await page.locator('aside.sheet').waitFor();
+    await page.getByTestId('status-bar-usage').click();
+    const overlay = page.getByTestId('cli-admin-overlay');
+    await overlay.waitFor();
     // Wait briefly so quota cards have a chance to populate.
     await page.waitForTimeout(800);
-    await page.locator('aside.sheet').screenshot({ path: 'test-results/screenshots/quota-strip.png' });
-    await page.locator('aside.sheet button.sheet__close').click();
+    await overlay.screenshot({ path: 'test-results/screenshots/quota-strip.png' });
+    await page.getByTestId('workspace-settings-close').click();
 
     // 2) Job board with preview cards
     await page.screenshot({ path: 'test-results/screenshots/board.png', fullPage: false });

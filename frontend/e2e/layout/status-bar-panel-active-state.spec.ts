@@ -51,7 +51,21 @@ async function expectTogglesActive(page: Page, testid: string): Promise<void> {
 test.describe('Status bar panel buttons - active/toggle state', () => {
   test('Usage button reflects + toggles its open state', async ({ page }) => {
     await gotoBoard(page);
-    await expectTogglesActive(page, 'status-bar-usage');
+    const statusBar = page.getByTestId('status-bar');
+    const usage = statusBar.getByTestId('status-bar-usage');
+    await expect(usage).toHaveAttribute('aria-pressed', 'false');
+
+    await usage.click();
+    await expect(usage).toHaveAttribute('aria-pressed', 'true');
+
+    // Usage now opens the workspace-settings home at its CLI-Management
+    // section (the loose CLI-usage sidesheet was retired). That home is a
+    // full-screen modal whose backdrop covers the status bar, so — like the
+    // Settings button — it closes via the home's own ✕, not a re-click of
+    // the now-occluded trigger. The active state must clear afterwards.
+    await expect(page.getByTestId('cli-admin-overlay')).toBeVisible();
+    await page.getByTestId('workspace-settings-close').click();
+    await expect(usage).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('Orchestrator button reflects + toggles its open state', async ({ page }) => {
@@ -83,22 +97,27 @@ test.describe('Status bar panel buttons - active/toggle state', () => {
     await setTheme(page, 'dark');
     const statusBar = page.getByTestId('status-bar');
     const usage = statusBar.getByTestId('status-bar-usage');
-    const settings = statusBar.getByTestId('status-bar-settings');
+    const orchestrator = statusBar.getByTestId('orch-side-sheet-toggle');
 
-    await usage.click();
-    await expect(usage).toHaveAttribute('aria-pressed', 'true');
-    await expect(settings).toHaveAttribute('aria-pressed', 'false');
+    // Usage and Settings are now two sections of one home modal, so they are
+    // no longer independent overlays. The orchestrator side sheet is a push
+    // panel (it does not occlude the status bar), so pair it with Usage to
+    // assert the active state tracks each panel's own flag, not a shared one.
+    await orchestrator.click();
+    await expect(orchestrator).toHaveAttribute('aria-pressed', 'true');
+    await expect(usage).toHaveAttribute('aria-pressed', 'false');
 
-    // Active-state evidence: capture the bar with one button pressed.
+    // Active-state evidence: capture the bar with one button pressed (taken
+    // before opening the Usage home, whose modal backdrop covers the bar).
     await statusBar.screenshot({
       path: 'test-results/status-bar-active-dark.png',
     });
 
-    await settings.click();
-    await expect(settings).toHaveAttribute('aria-pressed', 'true');
-    // Usage stays open (independent overlays); this asserts the active
-    // state tracks each panel's own flag rather than a single shared one.
+    // Opening the Usage home must not clear the orchestrator's own pressed
+    // state — each button tracks its own panel's flag rather than a shared one.
+    await usage.click();
     await expect(usage).toHaveAttribute('aria-pressed', 'true');
+    await expect(orchestrator).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('active state renders in light theme', async ({ page }) => {

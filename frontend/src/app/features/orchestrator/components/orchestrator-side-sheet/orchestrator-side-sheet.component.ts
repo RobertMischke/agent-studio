@@ -26,8 +26,8 @@ import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.c
 import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
- * the same flex-collapse pattern as `cli-usage-sheet` (host width animates
- * to 0 when closed so the board reflows instead of being overlaid).
+ * the same flex-collapse pattern as `kanban-filter-sidesheet` (host width
+ * animates to 0 when closed so the board reflows instead of being overlaid).
  *
  * Phase 3 wires this to a real bidirectional conversation endpoint
  * (`/api/runner/{project}/orchestrator-chat`): the backend resumes the
