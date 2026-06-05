@@ -56,6 +56,12 @@ public record ClientIdentity
     /// Surfaced into the per-turn orchestrator prompt. Null until first set.
     /// </summary>
     public string? DefaultModel { get; init; }
+
+    /// <summary>
+    /// User's preferred thinking / reasoning level for new tasks. Null means
+    /// use the selected model's default level.
+    /// </summary>
+    public string? DefaultThinkingLevel { get; init; }
 }
 
 public enum ClientIdentityKind
@@ -120,6 +126,7 @@ public record ClientSummary
     public string? Notes { get; init; }
     public string? DefaultCliType { get; init; }
     public string? DefaultModel { get; init; }
+    public string? DefaultThinkingLevel { get; init; }
 
     public static ClientSummary From(ClientIdentity i) => new()
     {
@@ -140,7 +147,8 @@ public record ClientSummary
         TokenBudgetMonthly = i.TokenBudgetMonthly,
         Notes = i.Notes,
         DefaultCliType = i.DefaultCliType,
-        DefaultModel = i.DefaultModel
+        DefaultModel = i.DefaultModel,
+        DefaultThinkingLevel = i.DefaultThinkingLevel
     };
 }
 
@@ -153,6 +161,7 @@ public record SetClientDefaultsRequest
 {
     public string? DefaultCliType { get; init; }
     public string? DefaultModel { get; init; }
+    public string? DefaultThinkingLevel { get; init; }
 }
 
 /// <summary>
@@ -164,6 +173,7 @@ public record ClientDefaultsResponse
     public string Id { get; init; } = "";
     public string? DefaultCliType { get; init; }
     public string? DefaultModel { get; init; }
+    public string? DefaultThinkingLevel { get; init; }
 }
 
 public record ClientDetail

@@ -42,6 +42,8 @@ public record TaskInfo
     public string? SessionName { get; init; }
     /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
     public string? Model { get; init; }
+    /// <summary>Optional thinking / reasoning effort level for the selected CLI model.</summary>
+    public string? ThinkingLevel { get; init; }
     /// <summary>Which CLI backend executes this job: <c>copilot</c>, <c>claude</c>, or <c>codex</c>. Defaults to <c>copilot</c>.</summary>
     public string? CliType { get; init; }
     /// <summary>
@@ -1048,6 +1050,7 @@ public record CreateJobRequest
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }
+    public string? ThinkingLevel { get; init; }
     public string? TargetState { get; init; }
     /// <summary>Optional CLI backend (claude|codex|copilot|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
@@ -1280,6 +1283,12 @@ public record ProjectSettings
     public string? OrchestratorModel { get; init; }
 
     /// <summary>
+    /// Thinking / reasoning level for the orchestrator model. Null means use
+    /// the selected model's default capability level.
+    /// </summary>
+    public string? OrchestratorThinkingLevel { get; init; }
+
+    /// <summary>
     /// Per-topic cadence for scheduled analysis reports (project-level
     /// "Analysis Reports" surface). Map of topic slug
     /// (e.g. <c>roadmapAlignment</c>, <c>queueHealth</c>, <c>docsDrift</c>,
@@ -1393,6 +1402,12 @@ public record ProjectSettings
     /// <c>project-settings.json</c>.
     /// </summary>
     public string? EpicPlanningModel { get; init; }
+
+    /// <summary>
+    /// Thinking / reasoning level for epic decomposition runs. Null means use
+    /// the selected planning model's default capability level.
+    /// </summary>
+    public string? EpicPlanningThinkingLevel { get; init; }
 
     /// <summary>
     /// Where an epic decomposition run's generated sub-tasks land. False /
@@ -1518,6 +1533,12 @@ public record PipelineStepSetting
     /// steps ignore it.
     /// </summary>
     public string? Model { get; init; }
+
+    /// <summary>
+    /// Optional thinking / reasoning level for this step's LLM call. Null
+    /// falls through to the selected model's default level.
+    /// </summary>
+    public string? ThinkingLevel { get; init; }
 
     /// <summary>
     /// Run condition gating whether this step executes for a given task run.
@@ -2121,6 +2142,7 @@ public record StartJobRequest
     public string? AgentOverride { get; init; }
     public string? Model { get; init; }
     public string? CliType { get; init; }
+    public string? ThinkingLevel { get; init; }
 }
 
 public record ContinueJobRequest
@@ -2128,6 +2150,7 @@ public record ContinueJobRequest
     public string Prompt { get; init; } = "";
     public string? Model { get; init; }
     public string? CliType { get; init; }
+    public string? ThinkingLevel { get; init; }
     /// <summary>
     /// How the follow-up should be interpreted. <c>continue</c> (default) is a
     /// next-turn message in the same conversation. <c>steer</c> frames the
@@ -2220,6 +2243,11 @@ public record SetJobModelRequest
     public string? Model { get; init; }
 }
 
+public record SetJobThinkingLevelRequest
+{
+    public string? ThinkingLevel { get; init; }
+}
+
 public record SetJobCliTypeRequest
 {
     public string CliType { get; init; } = "";
@@ -2250,6 +2278,10 @@ public record CliModelInfo
     public string? Vendor { get; init; }
     /// <summary>Marks the entry the CLI uses by default when <c>--model</c> is omitted.</summary>
     public bool IsDefault { get; init; }
+    /// <summary>Supported thinking / reasoning levels for this model. Empty means no selector.</summary>
+    public List<string> ThinkingLevels { get; init; } = [];
+    /// <summary>Default thinking / reasoning level for this model, or null when unsupported.</summary>
+    public string? DefaultThinkingLevel { get; init; }
 }
 
 public record CliModelCatalog
