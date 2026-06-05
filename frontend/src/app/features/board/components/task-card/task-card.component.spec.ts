@@ -556,6 +556,17 @@ describe('TaskCardComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="task-card-no-commits"]')).toBeNull();
   });
 
+  it('routes commit-row foreground through the semantic commit token', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '4-auto-review',
+      commit: null,
+      commits: [commit({ shortSha: 'a614ea0', message: 'fix: readable commit hash' })],
+    }));
+
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-commit"]')).not.toBeNull();
+    expect(findCssDeclaration('.task-card__commits', 'color')).toBe('var(--studio-commit-fg)');
+  });
+
   it('AC#4 three-commit card renders all three rows (sha + subject + files), newest first', async () => {
     const fixture = await renderCard(makeJob({
       state: '5-human-review',
@@ -806,4 +817,34 @@ function makeJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
     tags: [],
     ...overrides,
   };
+}
+
+function findCssDeclaration(selectorFragment: string, property: string): string | null {
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    const found = findDeclarationInRules(rules, selectorFragment, property);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+function findDeclarationInRules(rules: CSSRuleList, selectorFragment: string, property: string): string | null {
+  for (const rule of Array.from(rules)) {
+    if ('selectorText' in rule && typeof rule.selectorText === 'string') {
+      const style = (rule as CSSStyleRule).style;
+      if (rule.selectorText.includes(selectorFragment) && style.getPropertyValue(property)) {
+        return style.getPropertyValue(property).trim();
+      }
+    }
+    if ('cssRules' in rule) {
+      const nested = findDeclarationInRules((rule as CSSGroupingRule).cssRules, selectorFragment, property);
+      if (nested !== null) return nested;
+    }
+  }
+  return null;
 }
