@@ -69,13 +69,14 @@ export class BacklogTriageScreenComponent implements OnDestroy {
     { value: 'by-type', label: 'By type' },
   ];
 
-  readonly closeRequested = output<void>();
   /**
    * Only the "+ New task" affordance bubbles to the host because the
    * create dialog's form state is owned by CreateTaskFormService and
    * the dialog is mounted by the shell. Other mutations (promote /
    * delete / set-tags) call into the existing services directly so
-   * the shell stays a thin coordinator.
+   * the shell stays a thin coordinator. The screen is a first-class
+   * editor tab now, so there is no close/back affordance — navigation
+   * is a tab switch.
    */
   readonly newTaskRequested = output<void>();
 
@@ -258,10 +259,6 @@ export class BacklogTriageScreenComponent implements OnDestroy {
   cancelTagDraft(): void {
     this.tagEditorOpen.set(null);
     this.tagDraft.set(new Set());
-  }
-
-  close(): void {
-    this.closeRequested.emit();
   }
 
   newTask(): void {

@@ -185,6 +185,41 @@ test.describe('Backlog dedicated triage screen (#/backlog)', () => {
     expect(total).toBeLessThan(200);
   });
 
+  test('renders as a dedicated editor tab (not an overlay over another tab)', async ({ page }) => {
+    await page.goto('/?includeFixtures=true#/backlog');
+    await expect(page.getByTestId('backlog-triage-screen')).toBeVisible();
+
+    // The tab bar carries a Backlog tab and it is the active tab — the
+    // screen lives inside the tab system, it does not layer over the board.
+    const backlogTab = page.locator('[data-tab-key="backlog:__all__"]');
+    await expect(backlogTab).toHaveCount(1);
+    await expect(backlogTab).toHaveAttribute('aria-selected', 'true');
+    await expect(backlogTab).toContainText('Backlog');
+
+    // The board tab is still present (sticky) but not the active one, so the
+    // board is not rendered underneath the triage screen.
+    await expect(page.getByTestId('studio-board')).toHaveCount(0);
+
+    // No back / close affordance inside the screen — navigation is a tab switch.
+    await expect(page.getByTestId('backlog-triage-close')).toHaveCount(0);
+  });
+
+  test('switching to the board tab leaves the backlog tab in the strip', async ({ page }) => {
+    await page.goto('/?includeFixtures=true#/backlog');
+    await expect(page.getByTestId('backlog-triage-screen')).toBeVisible();
+
+    // Click the sticky board tab; the board renders, the backlog tab stays
+    // available (a real tab, not a transient overlay).
+    await page.locator('[data-tab-key="board:__all__"]').click();
+    await expect(page.getByTestId('studio-board')).toBeVisible();
+    await expect(page.getByTestId('backlog-triage-screen')).toHaveCount(0);
+    await expect(page.locator('[data-tab-key="backlog:__all__"]')).toHaveCount(1);
+
+    // Re-selecting the backlog tab brings the screen back without a reload.
+    await page.locator('[data-tab-key="backlog:__all__"]').click();
+    await expect(page.getByTestId('backlog-triage-screen')).toBeVisible();
+  });
+
   test('Ctrl+B toggles between board and triage screen', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('studio-board')).toBeVisible();

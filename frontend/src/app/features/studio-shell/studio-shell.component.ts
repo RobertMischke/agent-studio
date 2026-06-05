@@ -737,15 +737,19 @@ export class StudioShellComponent {
   }
 
   /**
-   * Activity-bar Backlog button click. Opens (or closes) the dedicated
-   * backlog triage screen at `#/backlog`. Mirrors the toggle the Ctrl+B
-   * accelerator drives so the two entry points stay in lock-step.
+   * Activity-bar Backlog button click. Toggles the dedicated backlog triage
+   * tab (a first-class editor tab, equivalent to Board / Epics) and keeps
+   * the `#/backlog` deep-link hash in sync. Mirrors the Ctrl+B accelerator
+   * so the two entry points stay in lock-step.
    */
   onActivityBarOpenBacklog(): void {
-    if (this.backlogTriage.open()) {
+    if (this.activeTab()?.kind === 'backlog') {
       this.backlogTriage.closeTriage();
+      this.tabState.activateSticky();
     } else {
-      this.backlogTriage.openTriage(this.activeProjectName());
+      const project = this.activeProjectName();
+      this.backlogTriage.openTriage(project);
+      this.tabState.open({ kind: 'backlog', projectName: project });
     }
   }
 
@@ -754,7 +758,6 @@ export class StudioShellComponent {
    * epic overview as a normal editor tab.
    */
   onActivityBarOpenEpics(): void {
-    if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
     this.tabState.open({ kind: 'epics', projectName: null });
   }
 
@@ -791,13 +794,13 @@ export class StudioShellComponent {
 
   /**
    * Explorer "Backlog" link for a single project (ASS-658). Scopes the
-   * board filter to that project so the triage overlay narrows to it, then
-   * opens the backlog screen. Mutually exclusive with the epic overlay.
+   * board filter to that project so the triage list narrows to it, then
+   * opens the project-scoped backlog tab.
    */
   openProjectBacklog(projectName: string): void {
-    this.openBoard(projectName);
     this.boardFilters.setSoleProject(projectName);
     this.backlogTriage.openTriage(projectName);
+    this.tabState.open({ kind: 'backlog', projectName });
   }
 
   /**
@@ -805,7 +808,6 @@ export class StudioShellComponent {
    * epic overview as a normal editor tab.
    */
   openProjectEpics(projectName: string): void {
-    if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
     this.tabState.open({ kind: 'epics', projectName });
   }
 

@@ -50,11 +50,14 @@ function projectFromBacklogSegment(segment: string | undefined): string | null {
 }
 
 /**
- * State + URL-hash sync for the dedicated backlog triage screen at
- * `#/backlog`. Mirrors the pattern used by `ProjectOverlaysService` for
- * `#/projects/<slug>`: signals hold the open/close + sort state, the
- * shell wires a `hashchange` listener that calls `syncFromHash`, and
- * imperative open/close mutate both the hash and the signal.
+ * Scope + sort state and URL-hash bridge for the dedicated backlog triage
+ * screen at `#/backlog`. The screen renders as a first-class editor tab
+ * (`StudioTabKind = 'backlog'`), equivalent to Board / Epics, so the tab
+ * system (`StudioTabStateService`) owns open/close/active; this service
+ * only owns the deep-link hash, the scoped project, and the persisted
+ * sort mode. The shell wires a `hashchange` listener that calls
+ * `syncFromHash` (returns whether the URL is on `#/backlog`) so a bookmark
+ * or copy-paste opens the backlog tab.
  *
  * Filter integration stays with `BoardFiltersService`, so opening the
  * triage screen automatically respects the existing project / type /
@@ -62,11 +65,15 @@ function projectFromBacklogSegment(segment: string | undefined): string | null {
  */
 @Injectable({ providedIn: 'root' })
 export class BacklogTriageService {
-  readonly open = signal(false);
   readonly scopedProject = signal<string | null>(null);
   readonly sortMode = signal<BacklogSortMode>(readPersistedSort());
 
-  /** Push `#/backlog?project=...` and flip the overlay open. Idempotent. */
+  /**
+   * Push `#/backlog?project=...` to the URL hash and record the scope.
+   * The backlog is now a first-class editor tab (not an overlay), so the
+   * host opens the tab; this method only owns the deep-link hash + scope.
+   * Idempotent.
+   */
   openTriage(projectName: string | null = null): void {
     const scope = normaliseProjectName(projectName);
     this.scopedProject.set(scope);
@@ -90,10 +97,9 @@ export class BacklogTriageService {
         }
       }
     }
-    if (!this.open()) this.open.set(true);
   }
 
-  /** Clear `#/backlog` and flip the overlay closed. Idempotent. */
+  /** Clear `#/backlog` from the URL hash and reset the scope. Idempotent. */
   closeTriage(): void {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash || '';
@@ -111,12 +117,15 @@ export class BacklogTriageService {
       }
     }
     this.scopedProject.set(null);
-    if (this.open()) this.open.set(false);
   }
 
-  /** Read the current hash and reconcile the open signal. */
-  syncFromHash(projectName: string | null = null): void {
-    if (typeof window === 'undefined') return;
+  /**
+   * Read the current hash and reconcile the scope signal. Returns whether
+   * the URL is currently on the `#/backlog` deep link so the host can open
+   * (or focus) the backlog tab.
+   */
+  syncFromHash(projectName: string | null = null): boolean {
+    if (typeof window === 'undefined') return false;
     const hash = window.location.hash || '';
     const backlogSegment = hashSegments(hash).find(isBacklogSegment);
     const onBacklog = hash.startsWith(HASH_ROUTE) || backlogSegment !== undefined;
@@ -125,7 +134,7 @@ export class BacklogTriageService {
     } else {
       this.scopedProject.set(null);
     }
-    if (onBacklog !== this.open()) this.open.set(onBacklog);
+    return onBacklog;
   }
 
   setSortMode(mode: BacklogSortMode): void {

@@ -334,7 +334,6 @@ export class App implements OnInit, OnDestroy {
    */
   private readonly boardFilters = inject(BoardFiltersService);
   readonly backlogTriage = inject(BacklogTriageService);
-  readonly backlogTriageOpen = this.backlogTriage.open;
   private readonly tagRegistryStore = inject(TagRegistryStore);
   private readonly cliCatalogStore = inject(CliCatalogStore);
   readonly activeProjects = this.boardFilters.activeProjects;
@@ -1068,6 +1067,17 @@ export class App implements OnInit, OnDestroy {
       );
     });
 
+    // Keep the backlog triage screen's scope in lock-step with the active
+    // backlog tab. Each backlog tab carries its own projectName (key
+    // `backlog:<project|__all__>`), so switching to a differently-scoped
+    // backlog tab re-narrows the triage list without going through the hash.
+    effect(() => {
+      const tab = this.studioTabState.activeTab();
+      if (tab?.kind === 'backlog') {
+        untracked(() => this.backlogTriage.scopedProject.set(tab.projectName));
+      }
+    });
+
   }
 
   ngOnInit() {
@@ -1099,7 +1109,7 @@ export class App implements OnInit, OnDestroy {
     const applyHash = () => {
       this.workspaceOverlays.syncFromHash();
       this.applyProjectShellHash();
-      this.backlogTriage.syncFromHash(this.currentBacklogScopeProject());
+      this.syncBacklogTabFromHash();
       this.syncEpicsTabFromHash();
     };
     applyHash();
@@ -1116,7 +1126,7 @@ export class App implements OnInit, OnDestroy {
       if (this.showCreate()) return;
       if (this.workspaceOverlays.settingsOpen()) return;
       if (this.projectShellName() !== null) return;
-      if (this.backlogTriage.open()) return;
+      if (this.studioTabState.activeTab()?.kind === 'backlog') return;
       if (this.studioTabState.activeTab()?.kind === 'epics') return;
       const target = ev.target as HTMLElement | null;
       if (target) {
@@ -1386,12 +1396,23 @@ export class App implements OnInit, OnDestroy {
   }
 
   onBacklogNewTask(): void { this.openCreate('0-backlog'); }
+
+  /**
+   * Ctrl+B toggle between the kanban board and the dedicated backlog triage
+   * tab. The triage screen is a first-class editor tab (equivalent to Board
+   * / Epics), so opening it focuses a `backlog` tab rather than layering an
+   * overlay over the active tab; closing it falls back to the sticky board.
+   * The `#/backlog` deep-link hash is kept in sync via the triage service so
+   * a reload / shared URL reopens the tab.
+   */
   toggleBacklogTriage(): void {
-    if (this.backlogTriage.open()) {
+    if (this.studioTabState.activeTab()?.kind === 'backlog') {
       this.backlogTriage.closeTriage();
-      this.studioTabState.open({ kind: 'board', projectName: '__all__' });
+      this.studioTabState.activateSticky();
     } else {
-      this.backlogTriage.openTriage(this.currentBacklogScopeProject());
+      const project = this.currentBacklogScopeProject();
+      this.backlogTriage.openTriage(project);
+      this.studioTabState.open({ kind: 'backlog', projectName: project });
     }
   }
 
@@ -1775,6 +1796,20 @@ export class App implements OnInit, OnDestroy {
   private applyProjectShellHash(): void {
     this.projectOverlays.syncShellFromHash(this.watchPaths());
     this.projectOverlays.syncFeedFromHash(this.watchPaths());
+  }
+
+  /**
+   * Deep-link sync for `#/backlog`: when the URL is on the backlog hash,
+   * open (or focus) the backlog tab so a bookmark / shared link / reload
+   * lands on the triage screen with the tab bar showing Backlog active.
+   * Read-only with respect to closing — leaving the hash is driven by the
+   * explicit toggle, mirroring `syncEpicsTabFromHash`.
+   */
+  private syncBacklogTabFromHash(): void {
+    const onBacklog = this.backlogTriage.syncFromHash(this.currentBacklogScopeProject());
+    if (onBacklog) {
+      this.studioTabState.open({ kind: 'backlog', projectName: this.backlogTriage.scopedProject() });
+    }
   }
 
   private syncEpicsTabFromHash(): void {

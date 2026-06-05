@@ -130,7 +130,7 @@
       [activePanel]="activePanel()"
       [sidebarVisible]="sidebarVisible()"
       [badgeCounts]="activityBarBadgeCounts()"
-      [backlogActive]="backlogTriage.open()"
+      [backlogActive]="activeTab()?.kind === 'backlog'"
       [backlogCount]="backlogCount()"
       [epicsActive]="activeTab()?.kind === 'epics'"
       [hasEpics]="hasEpics()"
