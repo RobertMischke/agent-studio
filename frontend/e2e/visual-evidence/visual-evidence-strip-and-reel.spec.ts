@@ -45,7 +45,55 @@ function inlinePngs(): Buffer[] {
 }
 
 const TASK_JOB_ID = 'visual-evidence-priority-screenshots-clickable';
+const PREV_TASK_JOB_ID = 'visual-evidence-priority-previous-task';
+const NEXT_TASK_JOB_ID = 'visual-evidence-priority-next-task';
 const TASK_WATCH_PATH = 'C:/Projects/agent-taskboard-workspace/projects/agent-taskboard';
+
+function taskInfo(id: string, title: string, order: number) {
+  return {
+    id,
+    taskKey: `${TASK_WATCH_PATH}::${id}`,
+    title,
+    state: '5-human-review',
+    order,
+    agent: 'claude',
+    cliType: 'claude',
+    model: null,
+    createdAt: new Date().toISOString(),
+    watchPath: TASK_WATCH_PATH,
+    projectName: 'agent-taskboard',
+    folderPath: `${TASK_WATCH_PATH}/5-human-review/${id}`,
+    lastActivity: new Date().toISOString(),
+    sessionChain: [],
+    ownerClientId: 'default',
+    commitCount: 0
+  };
+}
+
+function buildPagerTasks() {
+  return [
+    taskInfo(PREV_TASK_JOB_ID, 'Visual evidence previous task', 0),
+    taskInfo(TASK_JOB_ID, 'Visual evidence priority', 1),
+    taskInfo(NEXT_TASK_JOB_ID, 'Visual evidence next task', 2)
+  ];
+}
+
+function emptyGrouped() {
+  return {
+    backlog: [],
+    preparation: [],
+    orchestratorPrep: [],
+    ready: [],
+    progress: [],
+    failedPickup: [],
+    codeNotComplete: [],
+    autoReview: [],
+    humanReview: buildPagerTasks(),
+    review: [],
+    completed: [],
+    archive: []
+  };
+}
 
 function buildJobScreenshots() {
   // Three timestamps within an hour, ordered oldest-first to verify
@@ -154,8 +202,9 @@ async function stubBackgroundApis(page: Page) {
   // `/api/jobs/<id>` and `/api/jobs/<id>/screenshots` route handlers
   // registered later. Playwright glob `?` matches a single char, which
   // is exactly the kind of pattern that does eclipse them.
-  await page.route(/\/api\/jobs(\?.*)?$/, json([]));
-  await page.route('**/api/jobs/grouped*', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
+  await page.route(/\/api\/(?:jobs|tasks)(\?.*)?$/, json(buildPagerTasks()));
+  await page.route('**/api/jobs/grouped*', json(emptyGrouped()));
+  await page.route('**/api/tasks/grouped*', json(emptyGrouped()));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: TASK_WATCH_PATH }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
   await page.route('**/api/runner/token-summary-aggregate*', json({
@@ -173,7 +222,7 @@ async function stubBackgroundApis(page: Page) {
 async function stubScreenshotApis(page: Page, jobScreenshots: any[], workspaceScreenshots: any[]) {
   // Use regex anchors so /screenshots and /screenshot don't shadow
   // each other through Playwright's glob `*` semantics.
-  await page.route(/\/api\/jobs\/[^/]+\/screenshots(\?.*)?$/, async (route) => {
+  await page.route(/\/api\/(?:jobs|tasks)\/[^/]+\/screenshots(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -203,7 +252,7 @@ async function stubScreenshotApis(page: Page, jobScreenshots: any[], workspaceSc
   // show. Anchored regex so this does not shadow the /screenshots
   // listing endpoint.
   let pngIndex = 0;
-  await page.route(/\/api\/jobs\/[^/]+\/screenshot(\?.*)?$/, async (route) => {
+  await page.route(/\/api\/(?:jobs|tasks)\/[^/]+\/screenshot(\?.*)?$/, async (route) => {
     const pngs = inlinePngs();
     const body = pngs[pngIndex++ % pngs.length];
     await route.fulfill({ status: 200, contentType: 'image/png', body });
@@ -214,42 +263,28 @@ async function stubJobDetailForTask(page: Page) {
   // The protocol pane only mounts when a job detail loads. Stub the
   // detail endpoint and the cli-output / runs endpoints to a sane
   // empty shape.
-  const detail = {
-    info: {
-      id: TASK_JOB_ID,
-      taskKey: `${TASK_WATCH_PATH}::${TASK_JOB_ID}`,
-      title: 'Visual evidence priority',
-      state: '4-review',
-      order: 0,
-      agent: 'claude',
-      createdAt: new Date().toISOString(),
-      watchPath: TASK_WATCH_PATH,
-      projectName: 'agent-taskboard',
-      folderPath: `${TASK_WATCH_PATH}/4-review/${TASK_JOB_ID}`,
-      lastActivity: new Date().toISOString(),
-      sessionChain: [],
-      ownerClientId: 'default',
-      commitCount: 0
-    },
+  const detailFor = (info: ReturnType<typeof taskInfo>) => ({
+    info,
     promptMarkdown: '# Visual evidence priority\n\nSurface screenshots prominently.',
     promptHistory: [],
     statusMarkdown: '# Status\n\n- Result: Success\n- Duration: 3 min\n\n## What Was Done\n- Stubbed screenshots for the visual evidence test.\n',
     contextUsage: null,
     log: [],
     summaryState: { status: 'ready' }
-  };
-
-  // The bare detail endpoint. Use a regex anchored to the job id so it
-  // does not eclipse the /screenshots subpath route registered above
-  // (which uses a glob).
-  const detailRe = new RegExp(`/api/jobs/${escapeForRegex(TASK_JOB_ID)}(\\?.*)?$`);
-  await page.route(detailRe, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(detail)
-    });
   });
+
+  for (const info of buildPagerTasks()) {
+    // The bare detail endpoint. Use a regex anchored to the task id so it
+    // does not eclipse the /screenshots subpath route registered above.
+    const detailRe = new RegExp(`/api/(?:jobs|tasks)/${escapeForRegex(info.id)}(\\?.*)?$`);
+    await page.route(detailRe, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(detailFor(info))
+      });
+    });
+  }
 
   // Sub-routes off the detail endpoint that the protocol pane polls.
   // Each one returns an empty-but-valid shape so the panes mount.
@@ -262,9 +297,14 @@ async function stubJobDetailForTask(page: Page) {
     commits:          []
   };
   for (const [suffix, body] of Object.entries(subRoutes)) {
-    await page.route(`**/api/jobs/${TASK_JOB_ID}/${suffix}*`, async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-    });
+    for (const info of buildPagerTasks()) {
+      await page.route(`**/api/jobs/${info.id}/${suffix}*`, async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      });
+      await page.route(`**/api/tasks/${info.id}/${suffix}*`, async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      });
+    }
   }
 }
 

@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  HostListener,
   computed,
   effect,
   inject,
@@ -141,17 +140,19 @@ export class ScreenshotStripComponent {
     this.openTask.emit(s);
   }
 
-  // Arrow keys for the lightbox stay local; Escape routes through ModalStack
-  // so a confirm-dialog above the lightbox wins. See constructor below.
-  @HostListener('window:keydown', ['$event'])
+  // Arrow keys for the lightbox stay local. This runs as a capture-phase
+  // listener because the task detail pager listens on document keydown; a
+  // normal window HostListener fires too late in the bubble path.
   onKey(e: KeyboardEvent): void {
     if (this.activeIndex() < 0) return;
     if (e.key === 'ArrowLeft') {
       this.prev();
       e.preventDefault();
+      e.stopPropagation();
     } else if (e.key === 'ArrowRight') {
       this.next();
       e.preventDefault();
+      e.stopPropagation();
     }
   }
 
@@ -159,8 +160,13 @@ export class ScreenshotStripComponent {
   private readonly destroyRef = inject(DestroyRef);
   private lightboxStackDispose: (() => void) | null = null;
   private readonly preloadedUrls = new Set<string>();
+  private readonly keydownCapture = (event: KeyboardEvent) => this.onKey(event);
 
   constructor() {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('keydown', this.keydownCapture, true);
+    }
+
     // Lightbox open/close drives the modal-stack registration. The strip
     // itself is never the top of the stack - only its lightbox is.
     effect(() => {
@@ -185,6 +191,9 @@ export class ScreenshotStripComponent {
       this.preloadNeighbour(activeIndex + 1, screenshots);
     });
     this.destroyRef.onDestroy(() => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('keydown', this.keydownCapture, true);
+      }
       if (this.lightboxStackDispose) {
         this.lightboxStackDispose();
         this.lightboxStackDispose = null;
