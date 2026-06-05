@@ -38,6 +38,7 @@ import {
   splitReadyByPhase,
 } from './features/board';
 import {
+  EpicRollupPaneComponent,
   TaskDetailComponent,
   TaskSelectionService,
   TriageController,
@@ -87,7 +88,7 @@ import {
 import { TaskService } from './services/task.service';
 import { ClientService } from './services/client.service';
 import { NotificationService } from './services/notification.service';
-import type { TaskInfo, WatchPathEntry, CliType } from './models/task.model';
+import type { TaskDetail, TaskInfo, WatchPathEntry, CliType } from './models/task.model';
 import { CLI_TYPES } from './models/task.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import {
@@ -129,6 +130,7 @@ interface VerboseDebugContext {
   imports: [
     TaskColumnComponent,
     TaskDetailComponent,
+    EpicRollupPaneComponent,
     CliUsageSheetComponent,
     OrchestratorSideSheetComponent,
     OrchestratorSettingsModalComponent,
@@ -206,6 +208,16 @@ export class App implements OnInit, OnDestroy {
   private readonly lanePager = inject(LanePagerService);
   readonly selectedJob = this.jobSelection.selected;
   readonly triageToast = this.jobSelection.triageToast;
+  readonly epicOverlayDetail = signal<TaskDetail | null>(null);
+  readonly epicOverlayTaskDetail = computed<TaskDetail | null>(() => {
+    const epic = this.epicOverlayDetail();
+    const selected = this.selectedJob();
+    if (!epic || !selected) return null;
+    if (selected.info.kind === 'epic') return null;
+    if (selected.info.epicId !== epic.info.id) return null;
+    if (selected.info.watchPath !== epic.info.watchPath) return null;
+    return selected;
+  });
 
   @ViewChild('jobDetail') private jobDetailRef?: TaskDetailComponent;
   @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
@@ -230,6 +242,7 @@ export class App implements OnInit, OnDestroy {
    * fetch yank the user back onto the task — the very F5 symptom, mid-session.
    */
   private studioActiveTabWasTask = false;
+  private relatedOpenToken = 0;
   /**
    * Read-only "Verbose Debug" overlay state opened from the orchestrator
    * side sheet's bug button. The protocol pane has its own copy that lives
@@ -1182,6 +1195,10 @@ export class App implements OnInit, OnDestroy {
   }
 
   openDetail(job: TaskInfo) {
+    if (job.kind === 'epic') {
+      this.openEpicOverlay({ jobId: job.id, watchPath: job.watchPath });
+      return;
+    }
     this.jobSelection.openDetail(job);
   }
   closeDetail() {
@@ -1377,7 +1394,7 @@ export class App implements OnInit, OnDestroy {
    */
   onEpicOverviewOpenTask(event: { jobId: string; watchPath: string }): void {
     this.epicOverview.closeOverview();
-    this.onOpenJobDetailFromSheet(event);
+    this.openRelatedJob(event);
   }
 
   /**
@@ -1557,31 +1574,117 @@ export class App implements OnInit, OnDestroy {
     this.verboseDebugContext.set(null);
   }
 
-  /**
-   * Slice E: route a click on the bug-confirmation card's "Open task"
-   * action to the kanban detail panel. Uses the same `getDetail` +
-   * `selectedJob.set` flow as `openDetail` (and the URL-restore path)
-   * so the task lands in the same focus view, with the URL synced for
-   * deep-link reload, regardless of whether the new job has appeared
-   * in the local kanban list yet.
-   */
-  onOpenJobDetailFromSheet(event: { jobId: string; watchPath: string }): void {
+  private selectFetchedDetail(detail: TaskDetail): void {
     history.replaceState(
       null,
       '',
-      `?job=${encodeURIComponent(event.jobId)}&watchPath=${encodeURIComponent(event.watchPath)}`,
+      `?job=${encodeURIComponent(detail.info.id)}&watchPath=${encodeURIComponent(detail.info.watchPath)}`,
     );
     const token = this.jobSelection.bumpOpenDetailToken();
+    this.jobSelection.setSelectedFromAdvance(detail, token);
+  }
+
+  /**
+   * Target-aware open helper. Epic targets become a closable master/detail
+   * overlay and do not change the selected task or URL; normal task targets
+   * still use the existing task-selection flow and therefore change lane/task
+   * context only after the operator picked a sub-task.
+   */
+  openRelatedJob(event: { jobId: string; watchPath: string }): void {
+    const requestToken = ++this.relatedOpenToken;
     this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
-      next: (detail) => this.jobSelection.setSelectedFromAdvance(detail, token),
+      next: (detail) => {
+        if (requestToken !== this.relatedOpenToken) return;
+        if (detail.info.kind === 'epic') {
+          this.epicOverlayDetail.set(detail);
+          return;
+        }
+        this.selectFetchedDetail(detail);
+      },
       error: (err) => {
-        history.replaceState(null, '', window.location.pathname);
+        if (requestToken !== this.relatedOpenToken) return;
         this.errorDialog.show(err, {
           title: 'Failed to open task',
           source: `task ${event.jobId}`,
         });
       },
     });
+  }
+
+  /**
+   * Slice E: route a click on the bug-confirmation card's "Open task"
+   * action to the kanban detail panel. Epic targets intentionally open the
+   * retained overlay instead of becoming a new task tab.
+   */
+  onOpenJobDetailFromSheet(event: { jobId: string; watchPath: string }): void {
+    this.openRelatedJob(event);
+  }
+
+  openEpicOverlay(event: { jobId: string; watchPath: string }): void {
+    this.openRelatedJob(event);
+  }
+
+  closeEpicOverlay(): void {
+    this.epicOverlayDetail.set(null);
+  }
+
+  refreshEpicOverlay(): void {
+    const epic = this.epicOverlayDetail();
+    if (!epic) return;
+    this.jobService.getDetail(epic.info.id, epic.info.watchPath).subscribe({
+      next: (detail) => {
+        if (detail.info.kind === 'epic') this.epicOverlayDetail.set(detail);
+      },
+      error: () => {
+        /* keep the current overlay content */
+      },
+    });
+  }
+
+  saveEpicOverlayTitle(title: string): void {
+    const epic = this.epicOverlayDetail();
+    if (!epic) return;
+    this.jobService.setJobTitle(epic.info.id, title, epic.info.watchPath).subscribe({
+      next: () => this.refreshEpicOverlay(),
+      error: (err) => this.errorDialog.show(err, { title: 'Failed to rename epic' }),
+    });
+  }
+
+  saveEpicOverlayDescription(content: string): void {
+    const epic = this.epicOverlayDetail();
+    if (!epic) return;
+    this.jobService.updateJobFile(epic.info.id, 'prompt.md', content, epic.info.watchPath).subscribe({
+      next: () => this.refreshEpicOverlay(),
+      error: (err) => this.errorDialog.show(err, { title: 'Failed to save epic description' }),
+    });
+  }
+
+  onEpicOverlayAgentConfigCommit(change: { cliType: CliType; model: string }): void {
+    const epic = this.epicOverlayDetail();
+    if (!epic) return;
+    const info = epic.info;
+    const cliChanged = change.cliType !== (info.cliType ?? 'copilot');
+    const modelChanged = change.model !== (info.model ?? '');
+    const saveModel = () => {
+      if (!modelChanged) {
+        this.refreshEpicOverlay();
+        return;
+      }
+      this.jobService
+        .setJobModel(info.id, change.model === '' ? null : change.model, info.watchPath)
+        .subscribe({
+          next: () => this.refreshEpicOverlay(),
+          error: (err) => this.errorDialog.show(err, { title: 'Failed to update epic model' }),
+        });
+    };
+    if (cliChanged) {
+      this.jobService.setJobCliType(info.id, change.cliType, info.watchPath).subscribe({
+        next: () => saveModel(),
+        error: (err) => this.errorDialog.show(err, { title: 'Failed to update epic CLI' }),
+      });
+      return;
+    }
+    saveModel();
   }
 
   /**

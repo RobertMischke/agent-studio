@@ -3,12 +3,15 @@
  *
  * Sub-components (cli-config-card, command-deck, detail-header, git-pane,
  * hygiene-strip, log-overlay, pane-toggle-bar, prompt-pane, protocol-pane)
- * are private to the feature — only `TaskDetailComponent` is exported.
+ * are private to the feature. The epic rollup pane is exported for the
+ * app-level epic master/detail overlay because that overlay must preserve the
+ * current task context while showing the epic shell.
  * The lane-action primary button + overflow menu now render inside
  * `detail-header`; the catalogue is headless in `state/triage-actions.model.ts`.
  * Hygiene helpers + parsers used cross-feature stay exported.
  */
 export { TaskDetailComponent } from './task-detail';
+export { EpicRollupPaneComponent } from './components/epic-rollup-pane/epic-rollup-pane.component';
 export { TaskSelectionService } from './state/task-selection.service';
 export { TriageController } from './state/triage-controller.service';
 export { LanePagerService } from './state/lane-pager.service';
