@@ -406,10 +406,29 @@ const SUPPRESSED_CARD_TAG_TEXT = new Set([
   'autoreview',
   'autoreviewing',
   'humanreview',
+  'concern',
+  'concerns',
+  'classifier',
+  'classifierunknown',
+  'classification',
   'qas',
   'qandas',
   'questionsandanswers',
 ]);
+
+const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
+  '0-backlog': ['backlog'],
+  '1-preparation': ['preparation', 'prep'],
+  '1a-orchestrator-prep': ['orchestratorprep', 'orchestratorpreparation', 'prep'],
+  '2-ready': ['ready'],
+  '3-progress': ['progress', 'inprogress'],
+  '3a-failed-pickup': ['failedpickup', 'pickupfailed'],
+  '4-auto-review': ['autoreview', 'review'],
+  '4-review': ['review', 'autoreview'],
+  '5-human-review': ['humanreview', 'review', 'reviewready', 'readytosignoff'],
+  '6-completed': ['completed', 'complete', 'done'],
+  '7-archive': ['archive', 'archived'],
+};
 
 function compactTagText(value: string): string {
   return value
@@ -419,11 +438,13 @@ function compactTagText(value: string): string {
     .replace(/[^a-z0-9]+/g, '');
 }
 
-function isSuppressedCardTag(id: string, entry: TagRegistryEntry | undefined): boolean {
-  if (/^[a-z][a-z0-9-]*:concerns$/i.test(id)) return true;
-  if (/^review:unparseable$/i.test(id)) return true;
-  if (SUPPRESSED_CARD_TAG_TEXT.has(compactTagText(id))) return true;
-  return !!entry && SUPPRESSED_CARD_TAG_TEXT.has(compactTagText(entry.label));
+function isSuppressedCardTag(id: string, entry: TagRegistryEntry | undefined, state: string | undefined): boolean {
+  if (/^[a-z][a-z0-9-]*:(?:concerns?|unparseable)$/i.test(id)) return true;
+  const compactId = compactTagText(id);
+  const compactLabel = entry ? compactTagText(entry.label) : '';
+  if (SUPPRESSED_CARD_TAG_TEXT.has(compactId) || SUPPRESSED_CARD_TAG_TEXT.has(compactLabel)) return true;
+  const laneMirrors = state ? LANE_MIRROR_CARD_TAG_TEXT[state] ?? [] : [];
+  return laneMirrors.includes(compactId) || (compactLabel.length > 0 && laneMirrors.includes(compactLabel));
 }
 
 /**
@@ -431,12 +452,16 @@ function isSuppressedCardTag(id: string, entry: TagRegistryEntry | undefined): b
  * map; tags whose id no longer exists render as a faint "ghost" chip with the
  * raw id so the user knows to clean up.
  */
-export function buildTagChips(ids: readonly string[] | undefined, byId: Map<string, TagRegistryEntry>): TaskTagChip[] {
+export function buildTagChips(
+  ids: readonly string[] | undefined,
+  byId: Map<string, TagRegistryEntry>,
+  state?: string,
+): TaskTagChip[] {
   const list = ids ?? [];
   if (list.length === 0) return [];
   return list.flatMap((id) => {
     const entry = byId.get(id);
-    if (isSuppressedCardTag(id, entry)) return [];
+    if (isSuppressedCardTag(id, entry, state)) return [];
     if (entry) {
       return {
         id,

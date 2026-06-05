@@ -115,7 +115,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    */
   readonly modeBadge = computed(() => buildModeBadge(this.job().mode));
 
-  readonly tagChips = computed(() => buildTagChips(this.job().tags, this.tagRegistry.byId()));
+  readonly tagChips = computed(() => buildTagChips(this.job().tags, this.tagRegistry.byId(), this.job().state));
 
   onDeleteClick(event: Event) {
     event.stopPropagation();
