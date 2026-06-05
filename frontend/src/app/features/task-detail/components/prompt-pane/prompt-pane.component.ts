@@ -113,8 +113,8 @@ export class PromptPaneComponent {
     }
   }
 
-  /** Total evidence count for the tab badge. */
-  readonly evidenceCount = computed(() => this.reviewEvidence().length);
+  /** Total visual-evidence count for the Evidence-tab badge. */
+  readonly visualEvidenceCount = computed(() => this.screenshots().length);
 
   /** Total file count for the Files-tab badge (only shown when > 1). */
   readonly filesCount = computed(() => this.artifacts().length);
@@ -150,7 +150,7 @@ export class PromptPaneComponent {
       label: 'Evidence',
       icon: 'check',
       testid: 'prompt-tab-evidence',
-      badge: this.evidenceCount() > 0 ? this.evidenceCount() : null,
+      badge: this.visualEvidenceCount() > 0 ? this.visualEvidenceCount() : null,
     },
     {
       id: 'code-review',

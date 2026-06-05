@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
+import { CountBadgeComponent } from '../count-badge/count-badge.component';
 
 /**
  * Shape of a single tab in the shared {@link PaneTabsComponent} strip.
@@ -67,7 +68,7 @@ export type PaneTabsVariant = 'header' | 'pill';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
-  imports: [NgClass, StudioIconComponent],
+  imports: [NgClass, StudioIconComponent, CountBadgeComponent],
   templateUrl: './pane-tabs.component.html',
   styleUrl: './pane-tabs.component.scss',
 })

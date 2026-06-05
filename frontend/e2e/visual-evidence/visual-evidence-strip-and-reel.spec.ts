@@ -217,7 +217,7 @@ async function stubJobDetailForTask(page: Page) {
   const detail = {
     info: {
       id: TASK_JOB_ID,
-      jobKey: `${TASK_WATCH_PATH}::${TASK_JOB_ID}`,
+      taskKey: `${TASK_WATCH_PATH}::${TASK_JOB_ID}`,
       title: 'Visual evidence priority',
       state: '4-review',
       order: 0,
@@ -295,6 +295,9 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
     // clicking — the detail view loads the prompt pane asynchronously.
     const evidenceTab = page.getByTestId('prompt-tab-evidence');
     await expect(evidenceTab).toBeVisible({ timeout: 10_000 });
+    const evidenceBadge = page.getByTestId('prompt-tab-evidence-badge');
+    await expect(evidenceBadge).toHaveText('3');
+    await expect(evidenceBadge.locator('.count-badge')).toBeVisible();
     await evidenceTab.click();
     const strip = page.getByTestId('evidence-view').getByTestId('screenshot-strip');
     await expect(strip).toBeVisible({ timeout: 7_000 });
@@ -336,6 +339,19 @@ test.describe('Visual evidence: per-task strip + lightbox + workspace reel', () 
     // Close.
     await page.getByTestId('screenshot-lightbox-close').click();
     await expect(lightbox).not.toBeVisible();
+  });
+
+  test('evidence tab omits the badge when no visual evidence exists', async ({ page }) => {
+    await stubScreenshotApis(page, [], buildWorkspaceScreenshots());
+    await stubJobDetailForTask(page);
+
+    await page.goto(`http://localhost:4010/?job=${encodeURIComponent(TASK_JOB_ID)}&watchPath=${encodeURIComponent(TASK_WATCH_PATH)}`);
+    await page.waitForLoadState('domcontentloaded');
+    await dismissDevErrorDialog(page);
+
+    const evidenceTab = page.getByTestId('prompt-tab-evidence');
+    await expect(evidenceTab).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('prompt-tab-evidence-badge')).toHaveCount(0);
   });
 
   test('workspace reel groups entries by hour bucket and supports the lightbox', async ({ page }) => {

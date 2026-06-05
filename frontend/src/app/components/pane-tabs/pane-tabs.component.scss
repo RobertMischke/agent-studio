@@ -10,8 +10,8 @@
  *                         body. Active tab "raises" against the
  *                         surrounding elevated surface.
  *
- * Both variants share .pane-tab and .pane-tab__badge / .pane-tab__icon
- * so callers get identical typography, icon sizing, and spacing.
+ * Both variants share .pane-tab and .pane-tab__icon; counts are rendered
+ * by the canonical app-count-badge component.
  */
 
 .pane-tabs {
@@ -121,20 +121,6 @@
 .pane-tab__label {
   flex: 0 1 auto;
   min-width: 0;
-}
-
-.pane-tab__badge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 5px;
-  background: var(--studio-accent);
-  color: var(--studio-on-accent);
-  border-radius: 8px;
-  font-size: 10px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  line-height: 1;
 }
 
 .pane-tab__spinner {

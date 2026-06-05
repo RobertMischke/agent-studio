@@ -16,8 +16,10 @@
       }
       <span class="pane-tab__label">{{ tab.label }}</span>
       @if (tab.badge !== null && tab.badge !== undefined && tab.badge !== '' && tab.badge !== 0) {
-        <span class="pane-tab__badge"
-              [attr.data-testid]="tab.testid ? tab.testid + '-badge' : null">{{ tab.badge }}</span>
+        <app-count-badge class="pane-tab__badge"
+                         [value]="tab.badge"
+                         [tone]="tab.id === activeTabId() ? 'active' : 'default'"
+                         [attr.data-testid]="tab.testid ? tab.testid + '-badge' : null" />
       }
       @if (tab.indicator === 'spinner') {
         <span class="pane-tab__spinner" aria-hidden="true"></span>
