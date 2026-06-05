@@ -225,11 +225,6 @@
             <app-backlog-triage-screen
               (closeRequested)="backlogTriage.closeTriage()"
               (newTaskRequested)="onBacklogNewTask()" />
-          } @else if (epicOverviewOpen()) {
-            <app-epic-overview-screen
-              [scopedProject]="epicScopedProject()"
-              (closeRequested)="epicOverview.closeOverview()"
-              (openTask)="onEpicOverviewOpenTask($event)" />
           } @else {
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
@@ -337,6 +332,16 @@
                   <app-project-hub-view
                     [projectName]="tab.projectName"
                     [initialSection]="tab.section ?? 'overview'" />
+                }
+              }
+            }
+            @case ('epics') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'epics') {
+                  <app-epic-overview-screen
+                    [scopedProject]="activeEpicScopedProject()"
+                    (closeRequested)="closeStudioTab(tab)"
+                    (openTask)="onEpicOverviewOpenTask($event)" />
                 }
               }
             }

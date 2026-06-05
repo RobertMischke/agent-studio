@@ -162,6 +162,8 @@ export class StudioTabStateService {
     const before = this._tabs();
     const after = before.filter(t => {
       if (t.kind === 'board' && t.projectName !== '__all__') return validNames.has(t.projectName);
+      if (t.kind === 'backlog' && t.projectName !== null) return validNames.has(t.projectName);
+      if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
       return true;
     });
@@ -218,6 +220,10 @@ export class StudioTabStateService {
     switch (tab.kind) {
       case 'board':
         return { kind: 'board', projectName: tab.projectName };
+      case 'backlog':
+        return { kind: 'backlog', projectName: tab.projectName };
+      case 'epics':
+        return { kind: 'epics', projectName: tab.projectName };
       case 'task':
         return { kind: 'task', taskKey: tab.taskKey };
       case 'hub':

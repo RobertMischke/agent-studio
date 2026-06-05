@@ -28,7 +28,7 @@ export class StudioActivityBarComponent {
   readonly backlogActive = input<boolean>(false);
   /** Count of `0-backlog` tasks under the current project filter; renders a numeric badge. */
   readonly backlogCount = input<number>(0);
-  /** True while the epic overview screen is visible. Drives the active highlight. */
+  /** True while an Epics tab is active. Drives the active highlight. */
   readonly epicsActive = input<boolean>(false);
   /** Whether any epics exist. The Epics button is hidden when false. */
   readonly hasEpics = input<boolean>(false);

@@ -84,6 +84,8 @@ import {
   StudioActivityViewComponent,
   StudioTabStateService,
   StudioPanelStateService,
+  studioTabKey,
+  type StudioTab,
 } from './features/studio-shell';
 import { TaskService } from './services/task.service';
 import { ClientService } from './services/client.service';
@@ -1091,6 +1093,10 @@ export class App implements OnInit, OnDestroy {
       this.applyProjectShellHash();
       this.backlogTriage.syncFromHash(this.currentBacklogScopeProject());
       this.epicOverview.syncFromHash();
+      if (this.epicOverview.open()) {
+        this.studioTabState.open({ kind: 'epics', projectName: null });
+        this.epicOverview.closeOverview();
+      }
     };
     applyHash();
     this.hashListener = applyHash;
@@ -1107,7 +1113,7 @@ export class App implements OnInit, OnDestroy {
       if (this.workspaceOverlays.settingsOpen()) return;
       if (this.projectShellName() !== null) return;
       if (this.backlogTriage.open()) return;
-      if (this.epicOverview.open()) return;
+      if (this.studioTabState.activeTab()?.kind === 'epics') return;
       const target = ev.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -1379,22 +1385,29 @@ export class App implements OnInit, OnDestroy {
   toggleBacklogTriage(): void {
     if (this.backlogTriage.open()) {
       this.backlogTriage.closeTriage();
-      this.studioTabState.activateSticky();
+      this.studioTabState.open({ kind: 'board', projectName: '__all__' });
     } else {
-      // The two full-screen overlays are mutually exclusive.
-      if (this.epicOverview.open()) this.epicOverview.closeOverview();
       this.backlogTriage.openTriage(this.currentBacklogScopeProject());
     }
   }
 
   /**
    * Epic overview screen "open epic" / "open sub-task" click. Closes the
-   * overlay so the editor area is free, then routes to the card's detail
+   * tab so the editor area is free, then routes to the card's detail
    * via the same flow as the side-sheet "Open task" action.
    */
   onEpicOverviewOpenTask(event: { jobId: string; watchPath: string }): void {
-    this.epicOverview.closeOverview();
+    const tab = this.studioTabState.activeTab();
+    if (tab?.kind === 'epics') {
+      this.studioTabState.close(studioTabKey(tab));
+    } else {
+      this.epicOverview.closeOverview();
+    }
     this.openRelatedJob(event);
+  }
+
+  closeStudioTab(tab: StudioTab): void {
+    this.studioTabState.close(studioTabKey(tab));
   }
 
   /**
@@ -1501,17 +1514,13 @@ export class App implements OnInit, OnDestroy {
   });
 
   /**
-   * Project the epic overview is scoped to. The per-project Epics entry opens
-   * the overview after pinning exactly one active project (setSoleProject), so
-   * a single active project that resolves to a known watch path is the scope.
-   * Anything else (zero or many active projects) leaves the overview in the
-   * read-only cross-project view, where there is no single target to create
-   * an epic into.
+   * Project the active Epics tab is scoped to. Workspace-wide Epics tabs pass
+   * null, which keeps the overview read-only across projects.
    */
-  readonly epicScopedProject = computed<EpicOverviewScope | null>(() => {
-    const active = [...this.activeProjects()];
-    if (active.length !== 1) return null;
-    const name = active[0];
+  readonly activeEpicScopedProject = computed<EpicOverviewScope | null>(() => {
+    const tab = this.studioTabState.activeTab();
+    if (tab?.kind !== 'epics' || !tab.projectName) return null;
+    const name = tab.projectName;
     const entry = this.watchPaths().find((wp) => wp.name === name);
     if (!entry) return null;
     return { name, watchPath: entry.path };

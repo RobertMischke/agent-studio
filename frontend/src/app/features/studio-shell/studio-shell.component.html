@@ -132,7 +132,7 @@
       [badgeCounts]="activityBarBadgeCounts()"
       [backlogActive]="backlogTriage.open()"
       [backlogCount]="backlogCount()"
-      [epicsActive]="epicOverview.open()"
+      [epicsActive]="activeTab()?.kind === 'epics'"
       [hasEpics]="hasEpics()"
       (panelToggle)="togglePanel($event)"
       (openBacklogRequest)="onActivityBarOpenBacklog()"

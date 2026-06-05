@@ -27,7 +27,7 @@ import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
 import { TaskSelectionService } from '../task-detail';
 import { UiPreferencesService } from '../shell';
-import { BoardFiltersService, BacklogTriageService, EpicOverviewService, flattenGrouped } from '../board';
+import { BoardFiltersService, BacklogTriageService, flattenGrouped } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
@@ -126,7 +126,6 @@ export class StudioShellComponent {
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
   readonly backlogTriage = inject(BacklogTriageService);
-  readonly epicOverview = inject(EpicOverviewService);
   readonly updateClient = inject(UpdateClientService);
   readonly explorerSections = inject(ExplorerSectionsService);
   private readonly confirmDialog = inject(ConfirmDialogService);
@@ -255,6 +254,7 @@ export class StudioShellComponent {
     const tab = this.activeTab();
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    if (tab.kind === 'backlog' || tab.kind === 'epics') return tab.projectName;
     return this.currentProjectName();
   });
 
@@ -705,6 +705,7 @@ export class StudioShellComponent {
     const tab = this.activeTab();
     if (!tab) return null;
     if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    if (tab.kind === 'backlog' || tab.kind === 'epics') return tab.projectName;
     if (tab.kind === 'hub') return tab.projectName;
     if (tab.kind === 'task' || tab.kind === 'activity') {
       const job = this.findJob(tab.taskKey);
@@ -744,23 +745,17 @@ export class StudioShellComponent {
     if (this.backlogTriage.open()) {
       this.backlogTriage.closeTriage();
     } else {
-      // The two full-screen overlays are mutually exclusive.
-      if (this.epicOverview.open()) this.epicOverview.closeOverview();
       this.backlogTriage.openTriage(this.activeProjectName());
     }
   }
 
   /**
-   * Activity-bar Epics button click. Toggles the read-only epic overview
-   * screen at `#/epics`. Mutually exclusive with the backlog overlay.
+   * Activity-bar Epics button click. Opens or focuses the workspace-wide
+   * epic overview as a normal editor tab.
    */
   onActivityBarOpenEpics(): void {
-    if (this.epicOverview.open()) {
-      this.epicOverview.closeOverview();
-    } else {
-      if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
-      this.epicOverview.openOverview();
-    }
+    if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
+    this.tabState.open({ kind: 'epics', projectName: null });
   }
 
   /**
@@ -802,19 +797,16 @@ export class StudioShellComponent {
   openProjectBacklog(projectName: string): void {
     this.openBoard(projectName);
     this.boardFilters.setSoleProject(projectName);
-    if (this.epicOverview.open()) this.epicOverview.closeOverview();
     this.backlogTriage.openTriage(projectName);
   }
 
   /**
-   * Explorer "Epics" link for a single project (ASS-658). Scopes the board
-   * filter to that project so the epic overview narrows to it, then opens
-   * the overview screen. Mutually exclusive with the backlog overlay.
+   * Explorer "Epics" link for a single project (ASS-658). Opens the scoped
+   * epic overview as a normal editor tab.
    */
   openProjectEpics(projectName: string): void {
-    this.boardFilters.setSoleProject(projectName);
     if (this.backlogTriage.open()) this.backlogTriage.closeTriage();
-    if (!this.epicOverview.open()) this.epicOverview.openOverview();
+    this.tabState.open({ kind: 'epics', projectName });
   }
 
   selectTab(key: string): void {
@@ -1188,6 +1180,10 @@ export class StudioShellComponent {
     switch (tab.kind) {
       case 'board':
         return tab.projectName === '__all__' ? 'All projects · Board' : `${tab.projectName} · Board`;
+      case 'backlog':
+        return tab.projectName === null ? 'All projects · Backlog' : `${tab.projectName} · Backlog`;
+      case 'epics':
+        return tab.projectName === null ? 'All projects · Epics' : `${tab.projectName} · Epics`;
       case 'task': {
         const job = this.findJob(tab.taskKey);
         return job?.title || job?.id || tab.taskKey;
