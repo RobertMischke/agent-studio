@@ -131,7 +131,8 @@
     {
       "comment": "Shared SCSS mixins (icon-button, chip, empty-state, thin-scroll). The mixin file owns the px source-of-truth for the canonical shapes; consumers @include the mixin instead of duplicating the values. Exempt the spacing-unit rule on this file.",
       "files": [
-        "src/styles/_mixins.scss"
+        "src/styles/_mixins.scss",
+        "src/styles/_components-semantic.scss"
       ],
       "rules": {
         "declaration-property-unit-disallowed-list": null

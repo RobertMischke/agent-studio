@@ -248,6 +248,32 @@
   }
 }
 
+.ov-token-panel {
+  gap: var(--studio-spacing-2);
+
+  &--after {
+    margin-top: var(--studio-spacing-2);
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--studio-spacing-2);
+    min-width: 0;
+  }
+
+  &__pairs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--studio-spacing-2);
+  }
+
+  &__helper {
+    margin: 0;
+  }
+}
+
 .ov-row {
   // Fixed two-column grid (label | value). The label track is a hard width,
   // so a long label (e.g. "Last Activity") can never grow and shove its value

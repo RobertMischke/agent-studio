@@ -43,12 +43,15 @@
   // surface should switch to this so light-theme shells render as
   // paper-white instead of grey-50.
   --studio-bg-surface:      var(--color-mocha-base-0);    // surface-0 (dark)
+  --studio-surface:         var(--studio-bg-elevated);
+  --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-dim) 7%, var(--studio-bg-elevated));
 
   // ---------------------------------------------------------------------------
   // Borders
   // ---------------------------------------------------------------------------
   --studio-border:        var(--alpha-white-06);
   --studio-border-strong: var(--alpha-white-10);
+  --studio-border-muted:  color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
 
   // ---------------------------------------------------------------------------
   // Layout — theme-independent sizing contracts
@@ -75,6 +78,9 @@
   --studio-fg-strong: var(--color-slate-50);
   --studio-fg-dim:    var(--color-slate-400);
   --studio-fg-muted:  var(--color-slate-500);
+  --studio-text-primary:   var(--studio-fg-strong);
+  --studio-text-secondary: var(--studio-fg);
+  --studio-text-muted:     var(--studio-fg-dim);
 
   // ---------------------------------------------------------------------------
   // Accents (brand + semantic)
@@ -86,6 +92,11 @@
   --studio-accent-warn:    var(--color-yellow-vscode);
   --studio-accent-success: var(--color-green-600);
   --studio-accent-6:       var(--color-red-500);
+  --studio-success:        var(--studio-accent-success-strong);
+  --studio-warn:           var(--studio-accent-warn-strong);
+  --studio-error:          var(--studio-accent-6-strong);
+  --studio-mono:           var(--studio-fg-strong);
+  --studio-hash:           var(--studio-accent-success-strong);
 
   // F39: "Strong" text-pigment variants of the accent family. Use these for
   // text/icon foregrounds layered on a tinted background of the same accent
@@ -488,10 +499,13 @@
   // Sub-panes stay transparent so the white reads through; active tabs
   // and elevated chrome use --studio-bg-elevated for contrast.
   --studio-bg-surface:      #ffffff;
+  --studio-surface:         var(--studio-bg-surface);
+  --studio-surface-muted:   color-mix(in srgb, var(--studio-fg-muted) 6%, var(--studio-bg-surface));
 
   // Borders
   --studio-border:        var(--color-grey-400);
   --studio-border-strong: var(--color-grey-500);
+  --studio-border-muted:  color-mix(in srgb, var(--studio-fg-muted) 22%, transparent);
 
   // Scrim — lighter overlay over a white shell.
   --studio-scrim:         var(--alpha-black-40);
@@ -502,6 +516,9 @@
   --studio-fg-strong: var(--color-grey-950);
   --studio-fg-dim:    var(--color-grey-800);
   --studio-fg-muted:  var(--color-grey-600);
+  --studio-text-primary:   var(--studio-fg-strong);
+  --studio-text-secondary: var(--studio-fg);
+  --studio-text-muted:     var(--studio-fg-dim);
 
   // Accents — slightly darker on light so tinted-low-alpha pills stay legible.
   --studio-accent-warn:    var(--color-yellow-700);
@@ -518,6 +535,11 @@
   --studio-accent-success-strong: var(--color-green-700);
   --studio-accent-warn-strong:    var(--color-amber-700);
   --studio-accent-6-strong:       var(--color-red-700);
+  --studio-success:               var(--studio-accent-success-strong);
+  --studio-warn:                  var(--studio-accent-warn-strong);
+  --studio-error:                 var(--studio-accent-6-strong);
+  --studio-mono:                  var(--studio-fg-strong);
+  --studio-hash:                  var(--studio-accent-success-strong);
 
   // Teal status pigment — darker teal so teal-on-tint stays legible on white.
   --studio-accent-teal:           var(--color-teal-700);

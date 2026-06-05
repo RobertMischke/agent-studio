@@ -154,75 +154,85 @@
     <h3 class="ov-section__title">Tokens</h3>
 
     @if (hasOrchestratorTokens()) {
-      <div class="ov-grid" data-testid="overview-tokens-orchestrator">
-        <div class="ov-row ov-row--source">
-          <span class="ov-label">Source</span>
-          <span class="ov-value ov-dim"
-                [appTooltip]="'Auto-review summaries, title-generate, and other orchestrator-side Haiku calls attributed to this task. The agent\'s own CLI footer is shown separately below.'">
-            Orchestrator
+      <div class="studio-panel ov-token-panel" data-testid="overview-tokens-orchestrator">
+        <div class="ov-token-panel__header">
+          <span class="studio-label">Orchestrator</span>
+          <span class="studio-badge"
+                data-testid="overview-tokens-orchestrator-calls"
+                [appTooltip]="'Auto-review summaries, title-generate, and other orchestrator-side Haiku calls attributed to this task. The agent\\'s own CLI footer is shown separately below.'">
+            {{ tokenSummary()!.calls }} calls
           </span>
         </div>
-        <div class="ov-row">
-          <span class="ov-label">Input</span>
-          <span class="ov-value ov-value--mono">{{ formatTokens(tokenSummary()!.inputTokens) }}</span>
+        <div class="studio-metric-grid">
+        <div class="studio-metric">
+          <span class="studio-metric__label">Input</span>
+          <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.inputTokens) }}</span>
         </div>
-        <div class="ov-row">
-          <span class="ov-label">Output</span>
-          <span class="ov-value ov-value--mono">{{ formatTokens(tokenSummary()!.outputTokens) }}</span>
+        <div class="studio-metric">
+          <span class="studio-metric__label">Output</span>
+          <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.outputTokens) }}</span>
         </div>
         @if (tokenSummary()!.cacheReadTokens > 0) {
-          <div class="ov-row">
-            <span class="ov-label">Cache Read</span>
-            <span class="ov-value ov-value--mono">{{ formatTokens(tokenSummary()!.cacheReadTokens) }}</span>
+          <div class="studio-metric">
+            <span class="studio-metric__label">Cache Read</span>
+            <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.cacheReadTokens) }}</span>
           </div>
         }
-        <div class="ov-row">
-          <span class="ov-label">Total</span>
-          <span class="ov-value ov-value--mono ov-value--strong">{{ formatTokens(tokenSummary()!.totalTokens) }}</span>
+        @if (tokenSummary()!.cacheCreationTokens > 0) {
+          <div class="studio-metric">
+            <span class="studio-metric__label">Cache Write</span>
+            <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.cacheCreationTokens) }}</span>
+          </div>
+        }
+        <div class="studio-metric studio-metric--primary">
+          <span class="studio-metric__label">Total</span>
+          <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.totalTokens) }}</span>
         </div>
-        <div class="ov-row">
-          <span class="ov-label">LLM Calls</span>
-          <span class="ov-value ov-value--mono">{{ tokenSummary()!.calls }}</span>
         </div>
+        <p class="studio-helper ov-token-panel__helper">
+          Orchestrator-side LLM usage attributed to this task. The agent CLI footer is reported separately when available.
+        </p>
       </div>
     }
 
     @if (agentUsage(); as au) {
-      <div class="ov-grid" [class.ov-grid--perf]="hasOrchestratorTokens()" data-testid="overview-tokens-agent">
-        <div class="ov-row ov-row--source">
-          <span class="ov-label">Source</span>
-          <span class="ov-value ov-dim"
-                [appTooltip]="'Latest token / request count reported by the CLI agent itself in its terminal footer. Format varies per CLI; shown verbatim.'">
-            Agent (CLI footer)
-          </span>
+      <div class="studio-panel studio-panel--muted ov-token-panel" [class.ov-token-panel--after]="hasOrchestratorTokens()" data-testid="overview-tokens-agent">
+        <div class="ov-token-panel__header">
+          <span class="studio-label">Agent CLI Footer</span>
         </div>
+        <div class="ov-token-panel__pairs">
         @if (au.tokens) {
-          <div class="ov-row">
-            <span class="ov-label">Tokens</span>
-            <span class="ov-value ov-value--mono ov-value--strong">{{ au.tokens }}</span>
+          <div class="studio-label-value">
+            <span class="studio-label">Tokens</span>
+            <span class="studio-label-value__value studio-mono">{{ au.tokens }}</span>
           </div>
         }
         @if (au.requests) {
-          <div class="ov-row">
-            <span class="ov-label">Requests</span>
-            <span class="ov-value ov-value--mono">{{ au.requests }}</span>
+          <div class="studio-label-value">
+            <span class="studio-label">Requests</span>
+            <span class="studio-label-value__value studio-mono">{{ au.requests }}</span>
           </div>
         }
         @if (au.changes) {
-          <div class="ov-row">
-            <span class="ov-label">Changes</span>
-            <span class="ov-value ov-value--mono">{{ au.changes }}</span>
+          <div class="studio-label-value">
+            <span class="studio-label">Changes</span>
+            <span class="studio-label-value__value studio-mono">{{ au.changes }}</span>
           </div>
         }
         @if (au.at) {
-          <div class="ov-row">
-            <span class="ov-label">Reported</span>
-            <span class="ov-value">
+          <div class="studio-label-value">
+            <span class="studio-label">Reported</span>
+            <span class="studio-label-value__value">
               <span>{{ formatRelativeTime(au.at) }}</span>
-              <span class="ov-dim">({{ formatAbsoluteTime(au.at) }})</span>
+              <span class="studio-helper">({{ formatAbsoluteTime(au.at) }})</span>
             </span>
           </div>
         }
+        </div>
+        <p class="studio-helper ov-token-panel__helper"
+           [appTooltip]="'Latest token / request count reported by the CLI agent itself in its terminal footer. Format varies per CLI; shown verbatim.'">
+          CLI-reported usage is shown verbatim and is not merged with orchestrator-side tokens.
+        </p>
       </div>
     }
 
@@ -434,10 +444,10 @@
         @if (agentWork(); as aw) {
           <div class="ov-row">
             <span class="ov-label">Calls</span>
-            <span class="ov-value ov-value--mono" data-testid="agent-work-calls">
-              {{ aw.calls }}
+            <span class="ov-value" data-testid="agent-work-calls">
+              <span class="studio-count-badge">{{ aw.calls }} calls</span>
               @if (aw.recovered) {
-                <span class="ov-pill ov-pill--warn"
+                <span class="studio-pill studio-pill--warn"
                       [appTooltip]="'At least one CLI invocation could not resume the prior session and reconstructed context from disk.'">
                   recovered
                 </span>

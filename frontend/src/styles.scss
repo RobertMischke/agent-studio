@@ -5,6 +5,7 @@
 // hardcode hex / rgba literals (enforced by stylelint).
 @use 'styles/tokens-primitives';
 @use 'styles/tokens-semantic';
+@use 'styles/components-semantic';
 @use 'styles/markdown-body';
 @use 'styles/empty-state';
 
