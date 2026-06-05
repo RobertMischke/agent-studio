@@ -116,7 +116,40 @@ function pipelineBody() {
         { stepId: 'aspect-requirement-fit', kind: 'aspect', status: 'passed', durationMs: 4_200, inputTokens: 41_200, outputTokens: 39_900, cacheReadTokens: 0, cacheCreationTokens: 0, startedAt: '2026-06-03T09:30:00Z', completedAt: '2026-06-03T09:30:04Z' },
       ],
     },
-    cost: { steps: [], totalTokens: 86_220, totalCostUsd: 0, anyModelUnknown: false },
+    // Full PipelineCostSummary shape (per-step + totals). The real backend
+    // always populates every cost subfield; the per-step CORE entry is what
+    // surfaces the claude agent run's tokens + cost on the CORE pipeline row —
+    // the direct proof for symptom 1.
+    cost: {
+      steps: [
+        {
+          stepId: 'pre-loop-guard', kind: 'module', model: null, tokenUsageSource: null, modelKnown: true,
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0,
+          inputCostUsd: 0, outputCostUsd: 0, cacheReadCostUsd: 0, cacheCreationCostUsd: 0, costUsd: 0,
+        },
+        {
+          stepId: 'core-agent-run', kind: 'core', model: 'claude-opus-4-8', tokenUsageSource: 'cli-footer', modelKnown: true,
+          inputTokens: 12_840, outputTokens: 7_960, cacheReadTokens: 61_300, cacheCreationTokens: 4_120, totalTokens: 86_220,
+          inputCostUsd: 0.1926, outputCostUsd: 0.5970, cacheReadCostUsd: 0.0919, cacheCreationCostUsd: 0.0773, costUsd: 0.9588,
+        },
+        {
+          stepId: 'aspect-requirement-fit', kind: 'aspect', model: 'claude-haiku-4-5', tokenUsageSource: 'orchestrator', modelKnown: true,
+          inputTokens: 41_200, outputTokens: 39_900, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 81_100,
+          inputCostUsd: 0.0330, outputCostUsd: 0.1596, cacheReadCostUsd: 0, cacheCreationCostUsd: 0, costUsd: 0.1926,
+        },
+      ],
+      totalInputTokens: 54_040,
+      totalOutputTokens: 47_860,
+      totalCacheReadTokens: 61_300,
+      totalCacheCreationTokens: 4_120,
+      totalTokens: 167_320,
+      totalInputCostUsd: 0.2256,
+      totalOutputCostUsd: 0.7566,
+      totalCacheReadCostUsd: 0.0919,
+      totalCacheCreationCostUsd: 0.0773,
+      totalCostUsd: 1.1514,
+      anyModelUnknown: false,
+    },
     config: {},
   };
 }
@@ -323,6 +356,17 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     const runsDuration = page.getByTestId('overview-runs-duration');
     await expect(runsDuration).toBeVisible();
     await expect(runsDuration).toHaveText('2m 5s total');
+
+    // Symptom 1 (direct): the CORE Agent-execution row now carries the claude
+    // run's own token + cost values on the pipeline row, not "—".
+    const coreTokens = coreRow.getByTestId('overview-pipeline-step-tokens');
+    await expect(coreTokens).toHaveText('86.2k');
+    const coreCost = coreRow.getByTestId('overview-pipeline-step-cost');
+    await expect(coreCost).toHaveText('$0.96');
+
+    // The rendered Overview is clean: no runtime-error dialog over the pane
+    // (the fixture supplies a complete cost summary, as the real backend does).
+    await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
 
     if (RESULTS_DIR) {
       await page.screenshot({
