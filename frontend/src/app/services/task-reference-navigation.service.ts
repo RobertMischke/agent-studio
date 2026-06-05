@@ -3,11 +3,13 @@ import type { MarkdownTaskReference } from '../components/markdown-utils';
 import type { TaskInfo } from '../models/task.model';
 import { TaskService } from './task.service';
 import { TaskSelectionService } from '../features/task-detail';
+import { StudioTabStateService } from '../features/studio-shell';
 
 @Injectable({ providedIn: 'root' })
 export class TaskReferenceNavigationService {
   private readonly tasks = inject(TaskService);
   private readonly selection = inject(TaskSelectionService);
+  private readonly tabs = inject(StudioTabStateService);
 
   private readonly jobsByTaskKey = computed(() => {
     const map = new Map<string, TaskInfo>();
@@ -38,6 +40,7 @@ export class TaskReferenceNavigationService {
     if (!taskKey) return false;
     const job = this.jobsByTaskKey().get(taskKey);
     if (!job) return false;
+    this.tabs.open({ kind: 'task', taskKey: job.taskKey });
     this.selection.openDetail(job);
     return true;
   }

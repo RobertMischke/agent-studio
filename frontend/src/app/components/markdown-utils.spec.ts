@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markdownToHtml } from './markdown-utils';
+import { linkTaskReferencesInHtml, markdownToHtml } from './markdown-utils';
 
 describe('markdownToHtml', () => {
   it('renders headings, lists and inline formatting', () => {
@@ -245,6 +245,38 @@ describe('markdownToHtml', () => {
       expect(html).toContain('md-code--numbered');
       expect(html).toContain('md-code--lang-ts');
       expect(html).toContain('data-lang="ts"');
+    });
+  });
+
+  describe('task references', () => {
+    const refs = [
+      { label: 'ASS-738', taskKey: 'agent-taskboard::ass-738' },
+      { label: 'feature-clickable-task-references-open-task-tab', taskKey: 'agent-taskboard::feature-clickable-task-references-open-task-tab' },
+    ];
+
+    it('links only known task references in rendered prose', () => {
+      const html = markdownToHtml('See ASS-738 and ASS-999.', { taskReferences: refs });
+      expect(html).toContain('data-task-ref="true"');
+      expect(html).toContain('data-task-key="agent-taskboard::ass-738"');
+      expect(html).toContain('href="#task:agent-taskboard%3A%3Aass-738"');
+      expect(html).toContain('ASS-999');
+      expect(html).not.toContain('agent-taskboard::ass-999');
+    });
+
+    it('does not link task references inside code or existing links', () => {
+      const html = markdownToHtml('`ASS-738` and [ASS-738](https://example.com)', { taskReferences: refs });
+      expect(html).toContain('<code>ASS-738</code>');
+      expect(html).toContain('<a href="https://example.com"');
+      expect(html).not.toContain('data-task-ref="true"');
+    });
+
+    it('links known slug labels in pre-rendered html', () => {
+      const html = linkTaskReferencesInHtml(
+        '<p>Open feature-clickable-task-references-open-task-tab.</p>',
+        refs,
+      );
+      expect(html).toContain('data-task-ref="true"');
+      expect(html).toContain('data-task-key="agent-taskboard::feature-clickable-task-references-open-task-tab"');
     });
   });
 });

@@ -7,7 +7,12 @@ import {
 } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { MarkdownImageLightboxDirective } from '../../directives/markdown-image-lightbox.directive';
-import { markdownToHtml, type MarkdownImageOptions } from '../markdown-utils';
+import { TaskReferenceNavigationService } from '../../services/task-reference-navigation.service';
+import {
+  linkTaskReferencesInHtml,
+  markdownToHtml,
+  type MarkdownImageOptions,
+} from '../markdown-utils';
 
 /**
  * Canonical markdown render surface. Replaces the
@@ -101,13 +106,17 @@ export class MarkdownViewComponent {
   readonly testId = input<string | null>(null);
 
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly taskReferences = inject(TaskReferenceNavigationService);
 
   readonly safeHtml = computed<SafeHtml>(() => {
+    const references = this.taskReferences.markdownReferences();
     const preRendered = this.html();
     if (typeof preRendered === 'string') {
-      return this.sanitizer.bypassSecurityTrustHtml(preRendered);
+      return this.sanitizer.bypassSecurityTrustHtml(
+        linkTaskReferencesInHtml(preRendered, references),
+      );
     }
-    const options: MarkdownImageOptions = {};
+    const options: MarkdownImageOptions = { taskReferences: references };
     if (this.codeLineNumbers()) options.codeLineNumbers = true;
     const threshold = this.codeLineNumberThreshold();
     if (threshold != null) options.codeLineNumberThreshold = threshold;
@@ -117,4 +126,15 @@ export class MarkdownViewComponent {
       markdownToHtml(this.source() ?? '', options),
     );
   });
+
+  onMarkdownClick(event: MouseEvent): void {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest<HTMLAnchorElement>('a[data-task-ref="true"][data-task-key]');
+    if (!anchor) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.taskReferences.openTaskKey(anchor.dataset['taskKey']);
+  }
 }

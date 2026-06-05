@@ -1,19 +1,21 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import { MarkdownViewComponent } from './markdown-view.component';
+import { TaskReferenceNavigationService } from '../../services/task-reference-navigation.service';
 
 describe('MarkdownViewComponent', () => {
-  function setup() {
+  function setup(taskRefs?: Partial<TaskReferenceNavigationService>) {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        ...(taskRefs ? [{ provide: TaskReferenceNavigationService, useValue: taskRefs }] : []),
       ],
     });
     return TestBed.createComponent(MarkdownViewComponent);
@@ -58,5 +60,25 @@ describe('MarkdownViewComponent', () => {
     fixture.detectChanges();
     const body = (fixture.nativeElement as HTMLElement).querySelector('.markdown-body');
     expect(body!.innerHTML).toContain('md-code--numbered');
+  });
+
+  it('opens task references through the task-tab navigation service', () => {
+    let opened: string | null = null;
+    const fixture = setup({
+      markdownReferences: signal([{ label: 'ASS-738', taskKey: 'project::ass-738' }]).asReadonly(),
+      openTaskKey: (taskKey: string | null | undefined) => {
+        opened = taskKey ?? null;
+        return true;
+      },
+    });
+    fixture.componentRef.setInput('source', 'See ASS-738.');
+    fixture.detectChanges();
+
+    const body = (fixture.nativeElement as HTMLElement).querySelector('.markdown-body')!;
+    const anchor = body.querySelector<HTMLAnchorElement>('a[data-task-ref="true"]')!;
+    expect(anchor).toBeTruthy();
+    anchor.click();
+
+    expect(opened).toBe('project::ass-738');
   });
 });
