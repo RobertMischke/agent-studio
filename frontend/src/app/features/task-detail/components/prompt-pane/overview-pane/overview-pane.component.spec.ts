@@ -595,7 +595,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(guard.concernTooltip!.title).toBe('Loop check · Loop forming');
   });
 
-  it('pipeline block: parallel aspects carry a parallel badge and the orchestrator decision renders as a separate final-verdict step', async () => {
+  it('pipeline block: parallel aspects carry a muted parallel note and the orchestrator decision renders as a separate final-verdict step', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe: TaskPipelineResponse = {
       pipeline: {
@@ -625,7 +625,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     const c = fixture.componentInstance;
     const rows = c.pipelineRows();
 
-    // Aspect rows are flagged parallel so the template can badge them.
+    // Aspect rows are flagged parallel so the template can mark them quietly.
     const aspects = rows.filter(r => r.kind === 'aspect');
     expect(aspects.length).toBe(2);
     expect(aspects.every(r => r.runMode === 'parallel')).toBe(true);
@@ -637,10 +637,12 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decision.verdict).toBe('accept');
     expect(c.stepKindLabel(decision.kind)).toBe('Decision');
 
-    // The DOM carries the parallel badge on aspect rows and exactly one
+    // The DOM carries muted parallel metadata on aspect rows and exactly one
     // final-verdict chip on the orchestrator row.
-    const parallelBadges = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-parallel"]');
-    expect(parallelBadges.length).toBe(2);
+    const parallelNotes = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-parallel"]');
+    expect(parallelNotes.length).toBe(2);
+    expect(parallelNotes[0].textContent?.trim()).toBe('parallel');
+    expect(parallelNotes[0].classList.contains('ov-pl-step__parallel-note')).toBe(true);
     const finalChips = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-final-verdict"]');
     expect(finalChips.length).toBe(1);
 

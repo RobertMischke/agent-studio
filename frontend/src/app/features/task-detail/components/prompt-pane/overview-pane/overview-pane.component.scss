@@ -564,21 +564,14 @@
     animation: ov-pulse 1.3s ease-in-out infinite;
   }
 
-  // "Parallel" chip on each read-only aspect row, marking the steps that run
-  // concurrently in the orchestrator pool (vs the sequential core run + final
-  // verdict). Cursor:help because it carries an explanatory tooltip.
-  &__parallel-badge {
+  // Quiet metadata for read-only aspect rows that run concurrently in the
+  // orchestrator pool. The status column carries the row's visual weight.
+  &__parallel-note {
     flex: 0 0 auto;
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 6px;
-    border-radius: 999px;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--studio-fg-muted);
     cursor: help;
-    color: var(--studio-fg-strong);
-    background: color-mix(in srgb, var(--studio-accent-2) 16%, var(--studio-bg-elevated));
-    border: 1px solid color-mix(in srgb, var(--studio-accent-2) 38%, transparent);
   }
 
   // "Final verdict" chip on the orchestrator-decision row, naming it as the

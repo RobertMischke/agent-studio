@@ -7,8 +7,8 @@ import * as path from 'path';
  *
  * Acceptance ("die parallelen Aspekte UND das Orchestrator-Final-Verdict als
  * eigene, klar getrennte Schritte im Job-Details darstellen"): aspect reviews
- * run in a read-only parallel pool, so each aspect row carries a "Parallel"
- * badge. The orchestrator then makes ONE final ruling, recorded as its own
+ * run in a read-only parallel pool, so each aspect row carries a muted
+ * parallel note. The orchestrator then makes ONE final ruling, recorded as its own
  * `post-orchestrator-decision` step (kind `orchestrator`) and rendered as a
  * visually separated final-verdict row with a "Final verdict" chip.
  *
@@ -261,7 +261,7 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     });
   });
 
-  test('aspect rows are badged Parallel and the orchestrator decision is a separate final-verdict step', async ({ page }) => {
+  test('aspect rows show muted parallel metadata and the orchestrator decision is a separate final-verdict step', async ({ page }) => {
     await installRoutes(page, '4-auto-review', pipelineAcceptedFinalVerdict);
     await page.goto(
       `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
@@ -271,10 +271,10 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
 
-    // Each aspect row carries a "Parallel" badge (read-only pool, Req 1 + 3).
-    const parallelBadges = page.getByTestId('overview-pipeline-step-parallel');
-    await expect(parallelBadges).toHaveCount(3);
-    await expect(parallelBadges.first()).toContainText('Parallel');
+    // Each aspect row carries quiet parallel metadata (read-only pool, Req 1 + 3).
+    const parallelNotes = page.getByTestId('overview-pipeline-step-parallel');
+    await expect(parallelNotes).toHaveCount(3);
+    await expect(parallelNotes.first()).toHaveText('parallel');
 
     // The orchestrator decision is its own, clearly separated final-verdict row.
     const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');

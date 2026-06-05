@@ -279,10 +279,10 @@
                   data-testid="overview-pipeline-step-name"
                   [appTooltip]="row.explanation">{{ row.label }}</span>
             @if (row.runMode === 'parallel') {
-              <span class="ov-pl-step__parallel-badge"
+              <span class="ov-pl-step__parallel-note"
                     data-testid="overview-pipeline-step-parallel"
                     [appTooltip]="'Runs in parallel with the other aspect reviews (read-only pool)'">
-                Parallel
+                parallel
               </span>
             }
             @if (row.kind === 'orchestrator') {
