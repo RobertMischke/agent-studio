@@ -2327,41 +2327,34 @@ public class ProjectRunner
     /// </summary>
     private void ReportReadOnlyContainmentIfDirty(TaskInfo info)
     {
+        // Cheap mode short-circuit before paying for a git status on every
+        // coding run; the policy re-checks the mode defensively.
         if (!TaskModes.IsReadOnly(info.Mode)) return;
         try
         {
             var status = _git.GetStatus(info.Id, Entry.Path);
-            if (!status.IsRepo || status.Files.Count == 0) return;
-
-            // Cap the inlined file list so a runaway diff cannot bloat the
-            // ledger row; the count is the load-bearing signal.
-            const int maxFiles = 20;
-            var files = status.Files.Select(f => f.Path).ToList();
-            var fileList = string.Join(", ", files.Take(maxFiles));
-            if (files.Count > maxFiles) fileList += $", +{files.Count - maxFiles} more";
-
-            var summary =
-                $"Read-only {info.Mode} run left {status.Files.Count} changed file(s) - " +
-                "containment violation (not auto-reverted)";
+            var containment = ReadOnlyContainmentPolicy.Evaluate(
+                info.Mode, status.IsRepo, status.Files.Select(f => f.Path).ToList());
+            if (!containment.IsViolation) return;
 
             _logger.LogWarning(
                 "Read-only containment violation for {JobId} (mode {Mode}): {Count} changed file(s): {Files}",
-                info.Id, info.Mode, status.Files.Count, fileList);
+                info.Id, info.Mode, containment.ChangedFiles, containment.FileList);
 
             _timeline?.Append(
                 info.FolderPath,
                 TimelineEventKinds.ReadOnlyContainmentViolation,
                 TimelineActors.System,
-                summary: summary,
+                summary: containment.Summary,
                 details: new()
                 {
                     ["mode"] = info.Mode ?? string.Empty,
-                    ["changedFiles"] = status.Files.Count.ToString(),
-                    ["files"] = fileList,
+                    ["changedFiles"] = containment.ChangedFiles.ToString(),
+                    ["files"] = containment.FileList,
                 });
 
             _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                $"[containment] {summary}. Files: {fileList}.");
+                $"[containment] {containment.Summary}. Files: {containment.FileList}.");
         }
         catch (Exception ex)
         {
