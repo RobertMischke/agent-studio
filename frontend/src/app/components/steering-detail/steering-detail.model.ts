@@ -18,6 +18,8 @@
  * extraction live here so every host reads steering the same way.
  */
 import {
+  aspectVerdictTone,
+  parseAspectFindings,
   resolveAspectFindings,
   type AspectFinding,
   type AspectVerdictTone,
@@ -155,11 +157,30 @@ function buildContext(details: Record<string, string>): SteeringContextLine[] {
 }
 
 /**
+ * Build the short single-line headline shown next to the verdict chip when the
+ * step is aspect-driven. The per-aspect detail lives in the formatted OPEN
+ * ITEMS section, so this stays a terse summary — `multi-aspect-block: N aspects
+ * flagged` when any aspect blocks, else `N aspects flagged` — and never the raw
+ * `**{aspect}** [{verdict}]: …` blob (which would duplicate the open items as a
+ * raw markdown dump).
+ */
+function openItemsHeadline(items: AspectFinding[]): string {
+  const n = items.length;
+  const noun = n === 1 ? 'aspect' : 'aspects';
+  const blocking = items.some(i => aspectVerdictTone(i.verdict) === 'danger');
+  return blocking
+    ? `multi-aspect-block: ${n} ${noun} flagged`
+    : `${n} ${noun} flagged`;
+}
+
+/**
  * Project one timeline event into a {@link SteeringInfo}, or null when the
- * event is not a steering step. The reason prefers the structured `gap`
- * (reopen) / `reason` (escalate) detail and falls back to the event summary;
- * the open items come from the structured `findings` JSON with a parse-fallback
- * to the same blob.
+ * event is not a steering step. When the step is aspect-driven the headline is
+ * a terse summary (the per-aspect detail lives in the formatted OPEN ITEMS
+ * section); otherwise the reason prefers the structured `gap` (reopen) /
+ * `reason` (escalate) detail and falls back to the event summary. The open
+ * items come from the structured `findings` JSON with a parse-fallback to the
+ * same blob.
  */
 export function steeringInfoFromEvent(event: SteeringEventLike): SteeringInfo | null {
   const verdict = STEERING_KIND_VERDICT[event.kind];
@@ -167,8 +188,14 @@ export function steeringInfoFromEvent(event: SteeringEventLike): SteeringInfo | 
 
   const details = event.details ?? {};
   const blob = details['gap'] ?? details['reason'] ?? null;
-  const reason = (blob ?? event.summary ?? '').trim() || null;
   const openItems = resolveAspectFindings(details['findings'], blob);
+  // When the blob is itself the per-aspect findings dump, the formatted OPEN
+  // ITEMS section already carries it; collapse the headline to a terse summary
+  // so the step never shows the raw `**`/`[]` blob twice (ASS-776 contract).
+  const blobIsAspectDump = parseAspectFindings(blob).length > 0;
+  const reason = blobIsAspectDump
+    ? openItemsHeadline(openItems)
+    : (blob ?? event.summary ?? '').trim() || null;
   const prompt = (details['followUpPrompt'] ?? '').trim() || null;
 
   return {

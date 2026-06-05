@@ -68,6 +68,52 @@ describe('steering-detail.model', () => {
     ]);
   });
 
+  it('collapses an aspect-dump blob to a terse headline (no raw blob in reason)', () => {
+    const info = steeringInfoFromEvent({
+      kind: 'quality_loop_reopened',
+      details: {
+        gap:
+          '- **requirement-fit** [concerns]: missing edge case\n' +
+          '- **code-quality** [block]: zero net lines\n' +
+          '- **documentation-impact** [concerns]: stale doc',
+      },
+    });
+    // The per-aspect detail is carried by openItems; the headline must be a
+    // single-liner and never repeat the raw `**`/`[]` markdown blob.
+    expect(info?.openItems).toHaveLength(3);
+    expect(info?.reason).toBe('multi-aspect-block: 3 aspects flagged');
+    expect(info?.reason).not.toContain('**');
+    expect(info?.reason).not.toContain('[');
+  });
+
+  it('headlines aspect dumps without a block as "N aspects flagged"', () => {
+    const info = steeringInfoFromEvent({
+      kind: 'quality_loop_reopened',
+      details: {
+        gap:
+          '- **requirement-fit** [concerns]: missing edge case\n' +
+          '- **documentation-impact** [concerns]: stale doc',
+      },
+    });
+    expect(info?.reason).toBe('2 aspects flagged');
+  });
+
+  it('keeps a plain short gap as the reason headline even with structured findings', () => {
+    const info = steeringInfoFromEvent({
+      kind: 'quality_loop_reopened',
+      details: {
+        gap: 'diff churn without net change',
+        findings: JSON.stringify([
+          { aspect: 'code-quality', verdict: 'block', reason: 'zero net lines' },
+        ]),
+      },
+    });
+    // The gap is not an aspect dump, so it is a genuine short headline and is
+    // preserved; the structured finding still populates openItems.
+    expect(info?.reason).toBe('diff churn without net change');
+    expect(info?.openItems).toHaveLength(1);
+  });
+
   it('carries the verbatim steer prompt', () => {
     const info = steeringInfoFromEvent({
       kind: 'quality_loop_reopened',

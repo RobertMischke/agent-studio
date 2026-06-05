@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { SteeringDetailComponent } from './steering-detail.component';
-import type { SteeringInfo } from './steering-detail.model';
+import { steeringInfoFromEvent, type SteeringInfo } from './steering-detail.model';
 
 const FULL: SteeringInfo = {
   verdict: 'reissue',
@@ -94,5 +94,36 @@ describe('SteeringDetailComponent', () => {
     const fixture = await mount(FULL, true);
     const pre = fixture.nativeElement.querySelector('.steer__prompt');
     expect(pre?.textContent).toBe('STEER THE DIFF, DO NOT RESTART');
+  });
+
+  it('shows an aspect-dump step only once — formatted open items, headline reason, no raw blob', async () => {
+    // The orchestrator-review/decision step the bug is about: the gap detail is
+    // the per-aspect findings dump. End-to-end through steeringInfoFromEvent the
+    // reason head must be a terse headline and the detail must appear once, in
+    // the formatted OPEN ITEMS list — never as a raw `**`/`[]` text blob.
+    const info = steeringInfoFromEvent({
+      kind: 'quality_loop_reopened',
+      details: {
+        gap:
+          '- **requirement-fit** [concerns]: missing edge case\n' +
+          '- **code-quality** [block]: Diff reports 7 files changed with zero net lines\n' +
+          '- **documentation-impact** [concerns]: stale doc\n' +
+          '- **tests-and-evidence** [concerns]: no fresh evidence',
+      },
+    })!;
+    const fixture = await mount(info, true);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const reason = el.querySelector('[data-testid="steering-detail-reason"]');
+    expect(reason?.textContent?.trim()).toBe('multi-aspect-block: 4 aspects flagged');
+    expect(reason?.textContent).not.toContain('**');
+    expect(reason?.textContent).not.toContain('[concerns]');
+
+    // The formatted open-items list carries the per-aspect detail exactly once.
+    expect(el.querySelector('[data-testid="steering-detail-open-items"]')).not.toBeNull();
+
+    // No surface anywhere in the rendered step is the raw markdown dump.
+    expect(el.textContent).not.toContain('**requirement-fit**');
+    expect(el.textContent).not.toContain('[concerns]:');
   });
 });
