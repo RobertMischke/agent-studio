@@ -78,6 +78,27 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void StandardPipeline_CompletionGate_RunsBeforeTheAutoReviewDecision()
+    {
+        // Spec ASS-643/ASS-744 requirement #1: the completion gate must be visible
+        // "vor/um die Auto-Review-Decision". The gate's completeness-check row
+        // (OrchestratorReviewStepId) must therefore precede the final decision row
+        // (OrchestratorDecisionStepId). This is the resolved placement contract:
+        // commit-attribution runs at the 3->4 transition (before this gate, see
+        // the GitCommitAttributionStepId Stub), the gate runs post-core, and the
+        // decision is the last orchestrator ruling - so at runtime the gate sits
+        // after attribution and before the decision exactly as the spec asked.
+        var p = PipelineCatalogue.Standard;
+        var gateIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorReviewStepId);
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+
+        Assert.True(gateIndex >= 0, "completion-gate review row must exist in the post section");
+        Assert.True(decisionIndex >= 0, "orchestrator-decision row must exist in the post section");
+        Assert.True(gateIndex < decisionIndex,
+            $"completion gate (idx {gateIndex}) must run before the auto-review decision (idx {decisionIndex})");
+    }
+
+    [Fact]
     public void StandardPipeline_LoopGuard_IsFirstStep_Deterministic_AndDefaultOn()
     {
         // Ralph-loop early detection: the loop guard ships as the single Pre

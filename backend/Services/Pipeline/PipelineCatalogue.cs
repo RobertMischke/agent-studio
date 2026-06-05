@@ -163,6 +163,27 @@ public static class PipelineCatalogue
     /// Overview pipeline as the FIRST "Orchestrator-Review" row (the final
     /// <see cref="OrchestratorDecisionStepId"/> row is the second one). Recorded
     /// by <c>ReviewDecisionOrchestrator</c>.
+    ///
+    /// <para>
+    /// <b>Placement decision (ASS-643 / ASS-744, resolved).</b> The feature spec
+    /// asked for the gate "nach git commit attribution, vor/um die
+    /// Auto-Review-Decision". That requirement is met: the deterministic
+    /// commit-attribution (<see cref="GitCommitAttributionStepId"/>) runs at the
+    /// 3-progress -&gt; 4-auto-review transition in
+    /// <c>TaskTransitionService</c> - strictly BEFORE this gate, which runs in
+    /// <c>ReviewDecisionOrchestrator.ProcessDoneAsync</c> once the card is in
+    /// 4-auto-review - and the gate runs BEFORE the final
+    /// <see cref="OrchestratorDecisionStepId"/> ruling. So at runtime the gate is
+    /// after attribution and before the decision exactly as specified. It is
+    /// listed as the first POST row (ahead of the aspect verdicts) on purpose,
+    /// for two reasons: (1) it short-circuits an unfinished close-out before
+    /// spending the expensive parallel aspect review, and (2) the Overview then
+    /// reads honestly on a reissue - the aspects sit BELOW a gate that stopped
+    /// before they ran, rather than showing four aspect rows stuck "pending"
+    /// underneath a reissue verdict. Moving the row after the aspect/tool steps
+    /// would invert that and misrepresent a gate-reissue run, so the placement is
+    /// kept and pinned by <c>PipelineCatalogueTests</c>.
+    /// </para>
     /// </summary>
     public const string OrchestratorReviewStepId = "post-orchestrator-review";
     public const string OrchestratorDecisionStepId = "post-orchestrator-decision";
