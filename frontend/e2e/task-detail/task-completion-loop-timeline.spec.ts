@@ -105,6 +105,70 @@ test.describe('Task completion loop — Overview indicator + Timeline tab', () =
     }
   });
 
+  test('reopen event exposes the exact steering prompt + context (ASS-734 traceability)', async ({ page }) => {
+    const watchPath = await pickWatchPath();
+    const steeringPrompt = [
+      'STEER THE DIFF, DO NOT RESTART: Do ONLY the open remaining work.',
+      '',
+      'Commits already made for this task (build on these, do not repeat them):',
+      '- a1b2c3 feat: lane move',
+      '',
+      'Open items:',
+      '- [ ] colour token still wrong',
+    ].join('\n');
+    await seedTimeline(page, [
+      RUN_FINISHED,
+      {
+        ts: '2026-05-30T10:05:00Z', kind: 'quality_loop_reopened', actor: 'quality-loop',
+        summary: 'Re-opened: steered the diff, did not restart',
+        details: {
+          attempt: '2', maxAttempts: '3',
+          gap: 'colour token still wrong',
+          followUpPrompt: steeringPrompt,
+        },
+      },
+    ]);
+
+    const { id } = await createJob({
+      title: `completion-loop-steering-${Date.now()}`,
+      watchPath,
+      promptMarkdown: '# Task whose reissue carries a traceable steering prompt',
+      targetState: '4-auto-review',
+    });
+
+    try {
+      await page.goto(`/?job=${encodeURIComponent(id)}&watchPath=${encodeURIComponent(watchPath)}`);
+
+      await page.getByTestId('prompt-tab-timeline').click();
+      await expect(page.getByTestId('timeline-verdict-banner')).toBeVisible();
+
+      // The reopen event carries an expandable "Prompt + Context" block holding
+      // the verbatim steering prompt the orchestrator handed the agent.
+      const steering = page.getByTestId('timeline-event-steering-prompt');
+      await expect(steering).toBeVisible();
+      await expect(steering.locator('summary')).toContainText('Prompt + Context');
+      // Collapsed by default: the verbatim body is not yet rendered visibly.
+      await expect(steering.locator('.tl-item__steering-body')).toBeHidden();
+
+      await steering.locator('summary').click();
+      await expect(steering.locator('.tl-item__steering-body')).toBeVisible();
+      // Expanded: the diff-only rule + the prior-commits block are now visible,
+      // proving the operator can confirm the agent was told to steer the diff.
+      await expect(steering).toContainText('STEER THE DIFF, DO NOT RESTART');
+      await expect(steering).toContainText('Commits already made for this task');
+      await expect(steering).toContainText('a1b2c3 feat: lane move');
+
+      await steering.screenshot({
+        path: 'C:/Projects/agent-taskboard-workspace/projects/agent-taskboard/3-progress/fix-orchestrator-nur-das-diff-nachsteuern-statt-neu-von-vorn--nachvollziehbare-steuerungkontext/results/timeline-steering-prompt-expanded.png',
+      });
+    } finally {
+      await api(
+        `/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
+        { method: 'DELETE' },
+      );
+    }
+  });
+
   test('accepted-after-reopen: Overview + Timeline land on the accept verdict', async ({ page }) => {
     const watchPath = await pickWatchPath();
     await seedTimeline(page, [
