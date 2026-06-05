@@ -1182,6 +1182,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
+        // Evidence gate (ASS-764): a bare success claim is not acceptance. For a
+        // UI/bug task that left no visual proof, or when the tests-and-evidence
+        // aspect is not clean (failing build/tests, missing evidence, +0/-0
+        // "test" commit), demand verification instead of accepting with concerns:
+        // reissue with a screenshot/e2e + green-build demand while the shared
+        // reissue budget allows, otherwise escalate to 5-human-review.
+        var evidenceGate = EvidenceGate.Evaluate(
+            EvidenceGate.RequiresVisualEvidence(current.TaskType, current.Tags, current.Title),
+            EvidenceGate.HasVisualEvidence(current.FolderPath),
+            report,
+            CountPriorReissues(workspace, entry.Name, current.Id),
+            ConfiguredMaxReissues());
+        if (evidenceGate.IsBlocking)
+        {
+            await HandleEvidenceGateAsync(workspace, entry, pending, current, report, evidenceGate, ct);
+            return;
+        }
+
         // Reconcile (not merge-only): set the concern tags to exactly this
         // pass's set. A follow-up pass that now passes cleanly - or raises
         // fewer concerns than before - must STRIP the stale concern chips an
@@ -1333,6 +1351,110 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: "Multi-aspect block: " + AspectSummaryLine(report),
             Prompt: "(multi-aspect run; per-aspect prompts written to aspect-*.md)",
             Response: AspectSummaryLine(report),
+            FollowUp: followUp));
+    }
+
+    /// <summary>
+    /// Drive a blocking evidence-gate decision (ASS-764) to a conclusion. The
+    /// aspects passed (or only raised non-blocking concerns), but the run is
+    /// unverified: a UI/bug task with no visual proof, or an unclean
+    /// tests-and-evidence aspect. Reissue (budget left) sends the card back to
+    /// 2-ready with a verification demand foregrounded; escalate (budget spent)
+    /// hands it to 5-human-review. Records the final
+    /// <see cref="PipelineCatalogue.OrchestratorDecisionStepId"/> row so the
+    /// Overview pipeline shows the ruling. The in-flight pipeline run was already
+    /// completed by the caller, so the record travels with the lane move.
+    /// </summary>
+    private async Task HandleEvidenceGateAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        TaskInfo current,
+        AspectRunReport report,
+        EvidenceGate.Decision gate,
+        CancellationToken ct)
+    {
+        var findingsBlock = string.Join("; ", gate.Findings.Take(EvidenceGate.MaxFindings));
+        var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
+
+        if (gate.Action == EvidenceGate.EvidenceGateAction.Escalate)
+        {
+            // Reconcile the aspect-concern chips to this pass's set before
+            // handing to a human, same as the accept path, so the review starts
+            // from a current tag set rather than stale chips.
+            ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
+
+            _chatLog.AppendSupervisor(current, "escalate",
+                $"Auto-review could not verify this task's result. Reason: {gate.Reason}. Promoted to 5-human-review.");
+
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+            if (move.Status != MoveJobStatus.Success)
+            {
+                _logger.LogWarning(
+                    "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after evidence-gate escalate: {Status} {Message}",
+                    current.Id, move.Status, move.Message);
+            }
+
+            var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+            RecordOrchestratorDecisionStep(escalatedFolder, PipelineStepStatus.Failed,
+                DecisionVerdictEscalate, gate.Reason);
+
+            EmitVerdictTimeline(escalatedFolder,
+                TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
+                BuildEscalateDetails("evidence-gate", gate.Reason, priorReissues));
+
+            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow,
+                JobId: current.Id,
+                Project: entry.Name,
+                Kind: ReviewDecisionKind.Escalate,
+                Reason: gate.Reason,
+                Prompt: "(evidence-gate static check)",
+                Response: findingsBlock,
+                FollowUp: string.Empty));
+
+            _statusSnapshot.RecordEscalate();
+            return;
+        }
+
+        // Reissue: foreground the verification demand so the next run proves the
+        // result instead of re-asserting it.
+        var followUp = EvidenceGate.BuildFollowUp(gate);
+        var moved = MoveReissueToReadyTop(current, entry, "evidence-gate");
+        if (moved == null)
+        {
+            // Move failed -> no operator-facing banner; the DONE stays unresolved
+            // and the next tick retries.
+            return;
+        }
+
+        RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
+            DecisionVerdictReissue, gate.Reason);
+
+        await WriteFollowUpFileAsync(moved, followUp, ct);
+
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        var count = gate.Findings.Count;
+        var noun = count == 1 ? "item" : "items";
+        _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+            $"Auto-review sent \"{title}\" back to 2-ready ({count} unverified {noun}; evidence required).");
+
+        EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            $"Reopened: evidence gate requires verification for {count} {noun}.",
+            BuildReopenDetails("evidence-gate",
+                CountPriorReissues(workspace, entry.Name, current.Id), findingsBlock));
+
+        _statusSnapshot.RecordReissue();
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: gate.Reason,
+            Prompt: "(evidence-gate static check)",
+            Response: findingsBlock,
             FollowUp: followUp));
     }
 
