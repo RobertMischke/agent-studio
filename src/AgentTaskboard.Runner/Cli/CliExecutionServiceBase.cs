@@ -551,7 +551,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 }
                 else
                 {
-                    info.Process.Kill(entireProcessTree: true);
+                    KillProcessTree(info.Process, jobKey);
                 }
                 _logger.LogInformation("Killed {Cli} process for job {JobId} (reason={Reason})", CliType, jobKey, reason);
             }
@@ -967,6 +967,12 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }
 
+            // The runner's OnFinished subscriber has now read the in-memory
+            // buffer and merged the run JSONL into the job folder. Release the
+            // per-stream FileStreams immediately so the following lane move on
+            // Windows is not blocked by our own retained log handles.
+            ReleaseOutputResources(jobKey);
+
             _logger.LogInformation("{Cli} finished for job {JobId}: exit={ExitCode}, duration={Duration:F1}s",
                 CliType, jobKey, exitCode, duration);
 
@@ -1244,6 +1250,30 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             if (OperatingSystem.IsWindows() && TryOsTreeKill(entry.ProcessId)) return;
         }
         proc.Kill();
+    }
+
+    private void KillProcessTree(Process process, string jobKey)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("calling process", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Whole-tree kill refused for {Cli} job {JobId}; falling back to OS tree-kill.",
+                CliType, jobKey);
+            if (OperatingSystem.IsWindows() && TryOsTreeKill(process.Id)) return;
+            process.Kill();
+        }
+        catch (Exception ex) when (OperatingSystem.IsWindows())
+        {
+            _logger.LogWarning(
+                ex,
+                "Managed whole-tree kill failed for {Cli} job {JobId}; trying OS tree-kill.",
+                CliType, jobKey);
+            if (!TryOsTreeKill(process.Id)) throw;
+        }
     }
 
     /// <summary>

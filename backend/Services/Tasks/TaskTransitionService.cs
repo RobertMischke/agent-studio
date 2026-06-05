@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Tasks;
@@ -19,6 +20,7 @@ public sealed class TaskTransitionService
     private readonly TaskSessionLog? _sessions;
     private readonly CompletedPushQueue? _pushQueue;
     private readonly OrchestratorApi.Services.Drift.DriftPostStepRunner? _driftRunner;
+    private readonly CliRouter? _cliRouter;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -41,7 +43,8 @@ public sealed class TaskTransitionService
         ILogger<TaskTransitionService> logger,
         TaskSessionLog? sessions = null,
         CompletedPushQueue? pushQueue = null,
-        OrchestratorApi.Services.Drift.DriftPostStepRunner? driftRunner = null)
+        OrchestratorApi.Services.Drift.DriftPostStepRunner? driftRunner = null,
+        CliRouter? cliRouter = null)
     {
         _scanner = scanner;
         _states = states;
@@ -52,6 +55,7 @@ public sealed class TaskTransitionService
         _sessions = sessions;
         _pushQueue = pushQueue;
         _driftRunner = driftRunner;
+        _cliRouter = cliRouter;
     }
 
     /// <summary>
@@ -101,6 +105,7 @@ public sealed class TaskTransitionService
         var fromState = info.State;
         var projectName = info.ProjectName;
 
+        ReleaseCliOutputResourcesBeforeMove(info);
         var outcome = _states.MoveJob(jobId, targetState, watchPath);
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
@@ -250,11 +255,32 @@ public sealed class TaskTransitionService
                     new BatchMoveItemResult { JobId = item.JobId, Status = "not-found" },
                 MoveJobStatus.TargetFolderExists =>
                     new BatchMoveItemResult { JobId = item.JobId, Status = "conflict", Message = outcome.Message },
+                MoveJobStatus.DirectoryLocked =>
+                    new BatchMoveItemResult { JobId = item.JobId, Status = "locked", Message = outcome.Message },
                 _ =>
                     new BatchMoveItemResult { JobId = item.JobId, Status = "failed", Message = outcome.Message }
             });
         }
         return results;
+    }
+
+    private void ReleaseCliOutputResourcesBeforeMove(TaskInfo info)
+    {
+        if (_cliRouter == null) return;
+        try
+        {
+            _cliRouter.Get(info.CliType).ReleaseOutputResources(info.TaskKey);
+            _logger.LogDebug(
+                "task-transition-released-cli-output jobId={JobId} cliType={CliType} target={TaskKey}",
+                info.Id, info.CliType, info.TaskKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "task-transition-release-cli-output-failed jobId={JobId} cliType={CliType}",
+                info.Id, info.CliType);
+        }
     }
 
     /// <summary>
