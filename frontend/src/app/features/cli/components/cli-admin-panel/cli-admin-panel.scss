@@ -43,7 +43,7 @@
   margin: 0; font-size: 11px; letter-spacing: 0.10em;
   text-transform: uppercase; color: var(--studio-fg-dim); font-weight: 600;
 }
-.cli-admin__hint { font-size: 10px; color: var(--studio-fg-muted); }
+.cli-admin__hint { font-size: 10px; color: var(--studio-fg-dim); }
 .cli-admin__empty {
   font-size: 12px; color: var(--studio-fg-dim);
   padding: 12px 14px;
@@ -69,7 +69,10 @@
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
+  // Tint over the theme surface (not transparent) so the chip stays an opaque
+  // pale-blue pill on the light paper shell — blue-700 text on a transparent
+  // tint composited onto the grey card only cleared ~4.49:1.
+  background: color-mix(in srgb, var(--studio-accent-3) 18%, var(--studio-bg-surface));
   color: var(--studio-accent-3-strong);
   letter-spacing: 0.04em;
 }
