@@ -332,14 +332,46 @@ public static class AgentOutcomeAnalyzer
         @"\[\[\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>
+    /// Tolerant fallback for the real near-miss sentinel forms agents emit when
+    /// they do not reproduce the canonical <c>[[TASK_DONE]]</c> shape exactly:
+    /// a single bracket pair (<c>[TASK_DONE]</c>), no brackets at all
+    /// (<c>TASK_DONE</c>), or the token wrapped in markdown decoration
+    /// (<c>**[[TASK_DONE]]**</c>, <c>> [[TASK_BLOCKED: …]]</c>, a list bullet).
+    /// This is the load-bearing widening for the systemic
+    /// <c>missing-terminal-sentinel</c> / <c>classifier-unknown</c> failure mode:
+    /// a malformed-but-unambiguous sign-off should be treated as authoritative,
+    /// not dropped to the heuristic layer.
+    ///
+    /// <para>
+    /// False positives are contained by anchoring the whole token to a single
+    /// line (<see cref="RegexOptions.Multiline"/> <c>^…$</c>): the only
+    /// non-bracket text allowed around the token is markdown/quote decoration
+    /// and whitespace, so prose like "the task is done" or "I'll emit TASK_DONE
+    /// when finished" cannot match (those lines carry other words). The strict
+    /// double-bracket <see cref="SentinelRegex"/> is tried first and stays the
+    /// canonical contract; this regex only runs when it found nothing. The
+    /// public <see cref="SentinelRegex"/> is intentionally left strict so the
+    /// live-stream decision scanner and supervisor parsing are unaffected.
+    /// </para>
+    /// </summary>
+    private static readonly Regex TolerantSentinelRegex = new(
+        @"^[`*_>\-\s]*\[{0,2}\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]\r\n]*?))?\s*\]{0,2}[`*_\s]*$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Multiline);
+
     private static (AgentOutcomeKind Kind, string Keyword, string? Reason, string Summary)? FindLastSentinel(string agentText)
     {
         if (string.IsNullOrEmpty(agentText)) return null;
-        var matches = SentinelRegex.Matches(agentText);
-        if (matches.Count == 0) return null;
-        var last = matches[^1];
-        var keyword = Regex.Replace(last.Groups["keyword"].Value, @"[\s_-]+", "_").ToUpperInvariant();
-        var reason = last.Groups["reason"].Success ? last.Groups["reason"].Value.Trim() : null;
+
+        // Strict, canonical [[TASK_…]] form wins and is checked first.
+        var match = LastMatchOrNull(SentinelRegex.Matches(agentText));
+        // Fall back to the tolerant line-anchored form so a single-bracket or
+        // bare-token sign-off still counts as an authoritative sentinel.
+        match ??= LastMatchOrNull(TolerantSentinelRegex.Matches(agentText));
+        if (match == null) return null;
+
+        var keyword = Regex.Replace(match.Groups["keyword"].Value, @"[\s_-]+", "_").ToUpperInvariant();
+        var reason = match.Groups["reason"].Success ? match.Groups["reason"].Value.Trim() : null;
         if (string.IsNullOrWhiteSpace(reason)) reason = null;
         return keyword switch
         {
@@ -351,16 +383,29 @@ public static class AgentOutcomeAnalyzer
         };
     }
 
+    private static Match? LastMatchOrNull(MatchCollection matches)
+        => matches.Count == 0 ? null : matches[^1];
+
+    // The done/blocked/needs-input shapes mirror the real tail-of-reply prose
+    // claude and codex produce when they finish without a parseable sentinel.
+    // Widened past the original verb list (ASS-643) so the common
+    // summary-style sign-offs ("Summary of changes", "Here's what I did",
+    // "I've refactored…", "all tests pass", a leading ✓/✅) classify as Done
+    // instead of dropping to Unknown -> classifier-unknown.
     private static readonly Regex DonePattern = new(
-        @"\b(committ?ed|merged|landed|shipped|deployed|fixed|resolved|implemented|completed|finished|done|ready for review|verification|tests?\s+(?:run|passed|green)|changed|updated|added|created|wrote)\b",
+        @"\b(committ?ed|merged|landed|shipped|deployed|fixed|resolved|implemented|completed|finished|done|ready\s+for\s+review|verif(?:ied|ication)|validated|tests?\s+(?:run|pass(?:ed|ing)?|green)|build\s+(?:succeeds?|passes|green)|changed|updated|added|created|wrote|refactored|removed|renamed|migrated|configured|replaced|extracted|introduced|documented|here'?s\s+what|summary\s+of\s+(?:changes|the\s+changes)|i'?ve\s+(?:made|added|implemented|updated|fixed|created|refactored|removed)|i\s+have\s+(?:made|added|implemented|updated|fixed)|successfully)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex DoneCheckmarkPattern = new(
+        @"[✓✔✅]",
+        RegexOptions.Compiled);
+
     private static readonly Regex BlockedPattern = new(
-        @"\b(cannot\s+(?:proceed|continue|find|access|determine)|blocked\s+by|unable\s+to|do(?:\s+not|n'?t)\s+have\s+(?:access|permission))\b",
+        @"\b(cannot\s+(?:proceed|continue|find|access|determine|complete)|could\s+not\s+(?:proceed|continue|complete)|blocked\s+by|i'?m\s+blocked|unable\s+to|do(?:\s+not|n'?t)\s+have\s+(?:access|permission)|no\s+permission\s+to)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex NeedsInputPattern = new(
-        @"\b(?:please\s+(?:provide|share|paste|attach|specify|clarify)|which\s+(?:one|file|option)|do\s+you\s+want|should\s+I|would\s+you\s+like|what\s+would\s+you\s+like|i'?ll\s+wait\s+for)\b",
+        @"\b(?:please\s+(?:provide|share|paste|attach|specify|clarify|confirm|let\s+me\s+know)|which\s+(?:one|file|option|approach)|do\s+you\s+want|should\s+I|would\s+you\s+like|what\s+would\s+you\s+like|how\s+would\s+you\s+like|let\s+me\s+know|i'?ll\s+wait\s+for|waiting\s+for\s+your)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ProgressPattern = new(
@@ -376,7 +421,8 @@ public static class AgentOutcomeAnalyzer
         var endsWithQuestion = tail.TrimEnd().EndsWith("?", StringComparison.Ordinal);
         if (endsWithQuestion || NeedsInputPattern.IsMatch(tail))
             return (AgentOutcomeKind.NeedsInput, "Agent appears to be waiting for input (heuristic).");
-        if (DonePattern.IsMatch(TailLines(agentText, 8)))
+        var doneTail = TailLines(agentText, 8);
+        if (DonePattern.IsMatch(doneTail) || DoneCheckmarkPattern.IsMatch(doneTail))
             return (AgentOutcomeKind.Done, "Agent text suggests the task is done (heuristic).");
         if (BlockedPattern.IsMatch(tail))
             return (AgentOutcomeKind.Blocked, "Agent text suggests the task is blocked (heuristic).");

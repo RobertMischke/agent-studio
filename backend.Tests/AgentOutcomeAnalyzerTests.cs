@@ -290,4 +290,127 @@ public class AgentOutcomeAnalyzerTests
         Assert.Equal(RunIssueKind.MissingTerminalSentinel, outcome.IssueKind);
         Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
     }
+
+    // ---- Tolerant sentinel recognition (ASS-643) --------------------------
+    // The systemic classifier-unknown / missing-terminal-sentinel failure mode
+    // is dominated by agents that DID sign off but not in the exact
+    // [[TASK_DONE]] shape. A malformed-but-unambiguous sign-off on its own line
+    // must be treated as an authoritative sentinel, not dropped to heuristic.
+
+    [Theory]
+    [InlineData("[TASK_DONE]")]                       // single bracket pair (claude near-miss)
+    [InlineData("TASK_DONE")]                          // bare whole-line token (codex near-miss)
+    [InlineData("**[[TASK_DONE]]**")]                  // markdown bold decoration
+    [InlineData("`[[TASK_DONE]]`")]                    // inline-code decoration
+    [InlineData("> [[TASK_DONE]]")]                    // blockquote decoration
+    [InlineData("- [[TASK_DONE]]")]                    // list-bullet decoration
+    [InlineData("[[ TASK DONE ]]")]                    // spaced separators
+    public void TolerantSentinel_DoneNearMiss_MatchesAuthoritatively(string sentinelLine)
+    {
+        var lines = Lines("I implemented the change and verified it.", sentinelLine);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 30.0);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+        Assert.Equal("DONE", outcome.SentinelKeyword);
+        Assert.Equal(RunIssueKind.None, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void TolerantSentinel_BlockedSingleBracket_CapturesReasonAuthoritatively()
+    {
+        var lines = Lines("I could not find the credentials file.", "[TASK_BLOCKED: missing credentials]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 12.0);
+        Assert.Equal(AgentOutcomeKind.Blocked, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+        Assert.Equal("missing credentials", outcome.Reason);
+    }
+
+    [Fact]
+    public void TolerantSentinel_BareNeedsInput_MatchesAuthoritatively()
+    {
+        var lines = Lines("Which database should I target?", "TASK_NEEDS_INPUT: pick a target db");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 8.0);
+        Assert.Equal(AgentOutcomeKind.NeedsInput, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void TolerantSentinel_DoubleBracketStillWinsAndIsPreferred()
+    {
+        // A canonical [[TASK_DONE]] anywhere must still match exactly as before -
+        // the tolerant path is a fallback, never a regression of the strict one.
+        var lines = Lines("Some prose.", "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 20.0);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+    }
+
+    // ---- False-positive guard: tolerant matching is line-anchored ----------
+    // Prose that merely mentions the token mid-sentence must NOT be read as a
+    // sentinel. This is the reason the tolerant regex anchors the whole token
+    // to one line: loosening it to a substring match would mis-classify the
+    // contract being quoted or discussed.
+
+    [Theory]
+    [InlineData("The task is done so far, but I want to keep going.")]
+    [InlineData("I will emit TASK_DONE on its own line when the work is finished.")]
+    [InlineData("Next I should mark TASK_DONE in the tracker once tests are green.")]
+    public void TolerantSentinel_TokenMentionedMidProse_DoesNotMatchSentinel(string prose)
+    {
+        var lines = Lines(prose);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 18.0);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    // ---- Heuristic shape coverage for real claude/codex sign-offs ----------
+    // Real "done" replies rarely match the original verb list verbatim. These
+    // pin the widened shapes so a clear completion summary classifies as Done
+    // (MissingTerminalSentinel - non-terminal) rather than Unknown
+    // (classifier-unknown).
+
+    [Theory]
+    [InlineData("## Summary of changes\n\nI refactored the runner policy and split the read-only containment out.")]
+    [InlineData("Here's what I did: renamed the helper, migrated the call sites, and updated the docs.")]
+    [InlineData("I've refactored the analyzer and all tests pass.")]
+    [InlineData("Done - the build succeeds and the new spec is green.")]
+    [InlineData("Validated the change against the contract test; everything is green.")]
+    [InlineData("All set. Removed the dead branch and documented the new flow.")]
+    public void Heuristic_RealDoneShapes_ClassifyAsDone(string reply)
+    {
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 45.0);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+        Assert.Equal(RunIssueKind.MissingTerminalSentinel, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void Heuristic_LeadingCheckmark_ClassifiesAsDone()
+    {
+        var lines = Lines("✅ Implementation finished and the suite is green.");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 40.0);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
+
+    [Theory]
+    [InlineData("I could not complete this - the upstream API is down.")]
+    [InlineData("I'm blocked by a missing migration that only the user can run.")]
+    [InlineData("Unable to proceed: no permission to write outside the job folder.")]
+    public void Heuristic_RealBlockedShapes_ClassifyAsBlocked(string reply)
+    {
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 25.0);
+        Assert.Equal(AgentOutcomeKind.Blocked, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Theory]
+    [InlineData("Which approach would you like me to take?")]
+    [InlineData("Let me know whether to target staging or prod before I continue.")]
+    public void Heuristic_RealNeedsInputShapes_ClassifyAsNeedsInput(string reply)
+    {
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 14.0);
+        Assert.Equal(AgentOutcomeKind.NeedsInput, outcome.Kind);
+    }
 }
