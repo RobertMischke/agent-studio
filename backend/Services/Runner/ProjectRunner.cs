@@ -125,6 +125,11 @@ public class ProjectRunner
     private string? _activeJobId;
     private string? _activeCliType;
     private bool _processing;
+    // ADR-0052: the pick-gate rationale recorded the last time a task was
+    // admitted into a runner slot. Surfaced on the status payload + the
+    // runner_slot_admission timeline event so the UI can show the pick
+    // decision + slot occupancy. Pure observability; never gates execution.
+    private string? _lastPickReason;
     // Tracks the last run's intent and follow-up so OnCliFinished can apply
     // the post-run policy without re-deriving them from job state.
     private RunIntent _activeIntent;
@@ -498,7 +503,10 @@ public class ProjectRunner
             PendingModeWillApplyAfter = _pendingModeWillApplyAfter,
             ModeReason = _modeReason,
             ModeChangedAt = _modeChangedAt,
-            ModeSource = _modeSource
+            ModeSource = _modeSource,
+            MaxParallelism = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism),
+            OccupiedSlots = _activeJobId != null ? 1 : 0,
+            LastPickReason = _lastPickReason
         };
     }
 
@@ -854,6 +862,30 @@ public class ProjectRunner
                     ["cli"] = cli.CliType ?? string.Empty,
                     ["intent"] = plan.EventKind ?? string.Empty,
                     ["resumed"] = plan.ResumeFlag ? "true" : "false",
+                });
+
+            // ADR-0052: surface the slot pick-decision + occupancy on the
+            // timeline. At MaxParallelism == 1 this is the single sequential
+            // slot (one admit, all others serialized); the slot model
+            // generalizes to N without changing this emission site.
+            var slotMax = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism);
+            var slotDecision = ParallelSlotPolicy.Decide(
+                jobId, TaskParallelism.Default, Array.Empty<RunningTask>(), slotMax);
+            _lastPickReason = slotDecision.Reason;
+            _logger.LogInformation(
+                "[taskboard] slot admission for {JobId} on {Project}: {Decision} ({Reason}); occupancy 1/{Max}",
+                jobId, ProjectName, slotDecision.Decision, slotDecision.Reason, slotMax);
+            _timeline?.Append(
+                info.FolderPath,
+                TimelineEventKinds.RunnerSlotAdmission,
+                TimelineActors.System,
+                summary: $"Slot 1/{slotMax}: {slotDecision.Reason}",
+                runId: plan.EventInputSessionId,
+                details: new()
+                {
+                    ["maxParallelism"] = slotMax.ToString(),
+                    ["occupied"] = "1",
+                    ["decision"] = slotDecision.Decision.ToString(),
                 });
 
             _activeCliType = cli.CliType;

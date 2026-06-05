@@ -79,6 +79,14 @@ public static class TimelineEventKinds
     public const string PromptCreated = "prompt_created";
     /// <summary>One CLI invocation started (start / continue / recovery).</summary>
     public const string AgentRunStarted = "agent_run_started";
+    /// <summary>
+    /// ADR-0052: the parallel pick-gate admitted this task into a runner slot.
+    /// <see cref="TimelineEvent.Summary"/> carries the occupancy
+    /// ("slot N/M") and the <c>ParallelSlotPolicy</c> rationale, so the
+    /// Timeline shows the pick decision + slot belegung the moment a task is
+    /// picked. At MaxParallelism == 1 this is the single sequential slot.
+    /// </summary>
+    public const string RunnerSlotAdmission = "runner_slot_admission";
     /// <summary>The CLI invocation ended; <see cref="TimelineEvent.Summary"/> carries the outcome.</summary>
     public const string AgentRunFinished = "agent_run_finished";
     /// <summary>A pipeline pre-step started (ADR-0045).</summary>

@@ -2139,6 +2139,27 @@ public record ProjectRunnerStatus
     /// so the UI can render "after &lt;slug&gt;" in the tooltip.
     /// </summary>
     public string? PendingModeWillApplyAfter { get; init; }
+    /// <summary>
+    /// ADR-0052: the project's configured concurrency cap (clamped to
+    /// <c>&gt;= 1</c>). <c>1</c> is the sequential default. Surfaced so the
+    /// project view can render slot occupancy ("<see cref="OccupiedSlots"/> /
+    /// MaxParallelism") next to the lane pill.
+    /// </summary>
+    public int MaxParallelism { get; init; } = 1;
+    /// <summary>
+    /// ADR-0052: how many of the <see cref="MaxParallelism"/> slots are
+    /// currently filled by a running task. <c>0</c> when idle, <c>1</c> while a
+    /// task is active under the sequential model.
+    /// </summary>
+    public int OccupiedSlots { get; init; }
+    /// <summary>
+    /// ADR-0052: the most recent pick-gate rationale
+    /// (<see cref="OrchestratorApi.Services.Runner.SlotAdmission.Reason"/>) the
+    /// runner recorded when it admitted a task into a slot. Mirrors the
+    /// <c>runner_slot_admission</c> timeline event so the UI can show "why this
+    /// task was picked" without re-deriving it.
+    /// </summary>
+    public string? LastPickReason { get; init; }
 }
 
 public record StartJobRequest
