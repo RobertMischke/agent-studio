@@ -49,7 +49,7 @@ public static class ReviewDecisionsEndpoints
             return Results.Ok(new PendingDecisionsResponse(projectName, pending));
         });
 
-        // Live-status snapshot for the kanban 4-auto-review lane header.
+        // Live-status snapshot for compact auto-review indicators.
         // Polled by the FE at the orchestrator's tick cadence (default 30s)
         // so the user can see the orchestrator is alive and forming
         // opinions instead of silently waving jobs through. Returns the

@@ -2,12 +2,12 @@ namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
 /// Rolling status snapshot of the multi-aspect auto-review tick.
-/// Surfaced in the kanban <c>4-auto-review</c> lane header so the user
-/// sees that the orchestrator is alive and forming opinions, not
-/// silently waving jobs through. The snapshot is intentionally tiny:
-/// last tick time, last tick's per-outcome counts, and the job slug
-/// that the current tick is mid-way through (if any). The header polls
-/// it via a small REST endpoint; nothing pushes.
+/// Surfaced in compact board indicators so the user sees that the
+/// orchestrator is alive and forming opinions, not silently waving jobs
+/// through. The snapshot is intentionally tiny: last tick time, last
+/// tick's per-outcome counts, and the job slug that the current tick is
+/// mid-way through (if any). Consumers poll it via a small REST endpoint;
+/// nothing pushes.
 /// </summary>
 public sealed class AutoReviewStatusSnapshot
 {

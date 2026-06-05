@@ -1,11 +1,10 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { TaskInfo, TaskOrderItem, ProjectRunnerStatus } from '../../../../models/task.model';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { TooltipDirective } from '../../../../components/tooltip';
 import { groupReviewJobs } from '../review-grouping.util';
-import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
 import { laneSortStrategyMeta, isManualStrategy, allowsDragReorder } from '../../../../services/lane-sort.util';
@@ -26,9 +25,7 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
   templateUrl: './task-column.html',
   styleUrl: './task-column.scss'
 })
-export class TaskColumnComponent implements OnInit, OnDestroy {
-  private readonly autoReviewStatus = inject(AutoReviewStatusStore);
-
+export class TaskColumnComponent {
   readonly title = input.required<string>();
   readonly icon = input<string>('');
   readonly state = input.required<string>();
@@ -359,23 +356,6 @@ export class TaskColumnComponent implements OnInit, OnDestroy {
     // Accept both ADR-0025 and legacy archive lane names so a transitional
     // payload (legacy backend, new frontend) keeps rendering correctly.
     return this.state() === '7-archive' || this.state() === '6-archive';
-  }
-
-  /** ADR-0025: 4-auto-review carries the lane-level "machine pass" controls. */
-  isAutoReview(): boolean {
-    return this.state() === '4-auto-review';
-  }
-
-  ngOnInit(): void {
-    if (this.isAutoReview()) {
-      this.autoReviewStatus.subscribe();
-    }
-  }
-
-  ngOnDestroy(): void {
-    if (this.isAutoReview()) {
-      this.autoReviewStatus.release();
-    }
   }
 
   /**
