@@ -58,8 +58,10 @@
                     [attr.aria-expanded]="expanded"
                     [attr.data-testid]="'epic-overview-expand'"
                     [appTooltip]="expanded ? 'Hide sub-tasks' : 'Show sub-tasks'"
-                    aria-label="Toggle sub-tasks"
-                    (click)="toggleExpanded(epic.id)">▸</button>
+                    [attr.aria-label]="expanded ? 'Hide sub-tasks' : 'Show sub-tasks'"
+                    (click)="toggleExpanded(epic.id)">
+              <app-studio-icon name="chevron-right" [size]="14"></app-studio-icon>
+            </button>
             <button type="button"
                     class="epic-overview__epic-title"
                     data-testid="epic-overview-open-epic"
@@ -107,7 +109,14 @@
                             [appTooltip]="'Open sub-task'"
                             (click)="openSubTask(epic, sub.id)">
                       <span class="epic-overview__sub-title">{{ sub.title || sub.id }}</span>
-                      <span class="epic-overview__sub-state" [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
+                      <span class="epic-overview__sub-meta">
+                        <span class="epic-overview__sub-state" [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
+                        @if (verdictLabel(sub.orchestratorVerdict); as verdict) {
+                          <span class="epic-overview__sub-verdict"
+                                data-testid="epic-overview-sub-verdict"
+                                [attr.data-verdict]="sub.orchestratorVerdict">{{ verdict }}</span>
+                        }
+                      </span>
                     </button>
                   </li>
                 }

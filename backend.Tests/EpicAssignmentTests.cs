@@ -151,6 +151,21 @@ public class EpicAssignmentTests : IDisposable
     }
 
     [Fact]
+    public void BuildRollup_CarriesSubTaskOrchestratorVerdict()
+    {
+        var epic = new TaskInfo { Id = "epic-verdict", Title = "Epic", Kind = TaskKinds.Epic, State = TaskStates.Ready };
+        var all = new List<TaskInfo>
+        {
+            epic,
+            Sub("s-review", "epic-verdict", TaskStates.HumanReview, 1) with { OrchestratorVerdict = "escalate" },
+        };
+
+        var rollup = EpicEndpoints.BuildRollup(epic, all);
+
+        Assert.Equal("escalate", rollup.SubTasks[0].OrchestratorVerdict);
+    }
+
+    [Fact]
     public void BuildRollup_IgnoresOtherEpicsSubTasks()
     {
         var epicC = new TaskInfo { Id = "epic-c", Title = "Epic C", Kind = TaskKinds.Epic, State = TaskStates.Ready };

@@ -80,7 +80,7 @@ public static class EpicEndpoints
             epic.Id, epic.Key, epic.Title, epic.ProjectName, epic.WatchPath, epic.State,
             subs.Count, completed, inProgress, open, byState,
             subs.OrderBy(s => s.Order)
-                .Select(s => new EpicSubTaskRef(s.Id, s.Title, s.State, s.Order))
+                .Select(s => new EpicSubTaskRef(s.Id, s.Title, s.State, s.Order, s.OrchestratorVerdict))
                 .ToList());
     }
 }

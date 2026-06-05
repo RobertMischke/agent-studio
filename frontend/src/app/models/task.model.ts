@@ -627,6 +627,7 @@ export interface EpicSubTaskRef {
   title: string;
   state: string;
   order: number;
+  orchestratorVerdict?: 'pending' | 'reissue' | 'escalate' | 'accept' | null;
 }
 
 /** Body for POST /api/epics/{id}/sub-tasks (assignment way 3, deterministic half). */

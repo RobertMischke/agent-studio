@@ -126,13 +126,20 @@
     background: transparent;
     color: var(--studio-fg-muted);
     cursor: pointer;
-    font-size: 0.85rem;
-    line-height: 1;
-    padding: 2px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition: transform 150ms ease;
 
     &--open {
       transform: rotate(90deg);
+    }
+
+    &:hover {
+      color: var(--studio-fg);
     }
   }
 
@@ -255,18 +262,33 @@
   }
 
   &__sub-title {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 0.85rem;
   }
 
-  &__sub-state {
+  &__sub-meta {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--studio-spacing-2);
+  }
+
+  &__sub-state {
     font-size: 0.68rem;
     font-weight: 600;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
     color: var(--studio-fg-muted);
+    white-space: nowrap;
+  }
+
+  &__sub-verdict {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--studio-accent);
     white-space: nowrap;
   }
 

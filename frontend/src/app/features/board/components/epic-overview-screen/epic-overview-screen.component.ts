@@ -133,6 +133,11 @@ export class EpicOverviewScreenComponent implements OnInit {
     return name.replace(/-/g, ' ');
   }
 
+  verdictLabel(verdict: string | null | undefined): string | null {
+    if (!verdict) return null;
+    return verdict.replace(/-/g, ' ');
+  }
+
   openEpic(epic: EpicRollup): void {
     this.openTask.emit({ jobId: epic.id, watchPath: epic.watchPath });
   }

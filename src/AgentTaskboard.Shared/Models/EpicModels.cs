@@ -22,7 +22,12 @@ public sealed record EpicRollup(
     IReadOnlyList<EpicSubTaskRef> SubTasks);
 
 /// <summary>One sub-task reference inside an <see cref="EpicRollup"/>.</summary>
-public sealed record EpicSubTaskRef(string Id, string Title, string State, int Order);
+public sealed record EpicSubTaskRef(
+    string Id,
+    string Title,
+    string State,
+    int Order,
+    string? OrchestratorVerdict = null);
 
 /// <summary>
 /// Body for <c>POST /api/epics/{id}/sub-tasks</c> (assignment way 3, the

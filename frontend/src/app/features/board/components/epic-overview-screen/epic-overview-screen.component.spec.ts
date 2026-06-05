@@ -38,6 +38,10 @@ function testid(fixture: { nativeElement: HTMLElement }, id: string): HTMLElemen
   return fixture.nativeElement.querySelector(`[data-testid="${id}"]`);
 }
 
+function testids(fixture: { nativeElement: HTMLElement }, id: string): HTMLElement[] {
+  return [...fixture.nativeElement.querySelectorAll<HTMLElement>(`[data-testid="${id}"]`)];
+}
+
 describe('EpicOverviewScreenComponent', () => {
   it('invites creation when a scoped project has no epics', () => {
     const { fixture, http } = mount({ name: 'Acme', watchPath: '/repo/acme' }, []);
@@ -74,6 +78,39 @@ describe('EpicOverviewScreenComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.showCreate()).toBe(true);
     expect(testid(host, 'epic-create-dialog')).toBeTruthy();
+    http.verify();
+  });
+
+  it('expands an epic, renders inline sub-task status, and opens the selected sub-task', () => {
+    const epics = [
+      rollup({
+        id: 'E1',
+        subTaskTotal: 2,
+        open: 1,
+        completed: 1,
+        subTasks: [
+          { id: 'S1', title: 'First sub-task', state: '2-ready', order: 1, orchestratorVerdict: null },
+          { id: 'S2', title: 'Reviewed sub-task', state: '5-human-review', order: 2, orchestratorVerdict: 'escalate' },
+        ],
+      }),
+    ];
+    const { fixture, http } = mount({ name: 'Acme', watchPath: '/repo/acme' }, epics);
+    const host = { nativeElement: fixture.nativeElement as HTMLElement };
+    const opened: { jobId: string; watchPath: string }[] = [];
+    fixture.componentInstance.openTask.subscribe((event) => opened.push(event));
+
+    expect(testid(host, 'epic-overview-subs')).toBeNull();
+
+    (testid(host, 'epic-overview-expand') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(testid(host, 'epic-overview-subs')).toBeTruthy();
+    expect(testids(host, 'epic-overview-open-sub')).toHaveLength(2);
+    expect(testids(host, 'epic-overview-open-sub')[0].textContent).toContain('ready');
+    expect(testids(host, 'epic-overview-sub-verdict')[0].textContent).toContain('escalate');
+
+    testids(host, 'epic-overview-open-sub')[1].click();
+    expect(opened).toEqual([{ jobId: 'S2', watchPath: '/repo/acme' }]);
     http.verify();
   });
 });
