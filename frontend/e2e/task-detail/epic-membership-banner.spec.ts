@@ -2,11 +2,11 @@ import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
 /**
- * Task-detail epic-membership banner + quick back-jump.
+ * Task-detail epic-membership banner + parent-epic open request.
  *
  * When the open card is a sub-task of an epic (epicId set, kind != epic) the
  * detail view shows a clickable banner under the header with the epic's
- * key + title; clicking it opens the epic's own detail. Epics themselves and
+ * key + title; clicking it asks the app to open the epic. Epics themselves and
  * epic-less tasks show no banner.
  *
  * The spec drives the live frontend (proxied to a real backend): it picks a
@@ -56,34 +56,77 @@ async function mockEpic(page: Page, epicId: string, watchPath: string): Promise<
     route.fulfill({ status: 200, contentType: 'application/json', body }));
 }
 
+async function mockEpicDetail(page: Page, epicId: string, watchPath: string, onRequest: () => void): Promise<void> {
+  const body = JSON.stringify({
+    info: {
+      id: epicId,
+      taskKey: `${watchPath}::${epicId}`,
+      title: MOCK_TITLE,
+      state: '2-ready',
+      agent: 'claude',
+      cliType: 'claude',
+      model: null,
+      watchPath,
+      projectName: 'agent-taskboard',
+      folderPath: '',
+      execution: null,
+      kind: 'epic',
+      epicId: null,
+    },
+    promptMarkdown: '# Mock epic',
+    statusMarkdown: null,
+    log: [],
+  });
+  await page.route(`**/api/tasks/${encodeURIComponent(epicId)}**`, (route) => {
+    onRequest();
+    return route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
+}
+
 async function openTask(page: Page, t: TaskLite): Promise<void> {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/?job=${encodeURIComponent(t.id)}&watchPath=${encodeURIComponent(t.watchPath)}`);
 }
 
 test.describe('Task-detail epic-membership banner', () => {
-  test('sub-task shows its epic (key + title) and jumps back to the epic', async ({ page }) => {
+  test('sub-task shows its epic as a flat band and requests the parent epic on click', async ({ page }) => {
     const sub = pick(await fetchTasks(page), (t) => !!t.epicId && t.kind !== 'epic');
     if (!sub) { test.skip(true, 'No sub-task with an epicId on the board.'); return; }
     const epicId = sub.epicId!;
+    let epicDetailRequests = 0;
     await mockEpic(page, epicId, sub.watchPath);
+    await mockEpicDetail(page, epicId, sub.watchPath, () => { epicDetailRequests++; });
     await openTask(page, sub);
 
     const banner = page.getByTestId('epic-membership-banner');
     await expect(banner).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('epic-membership-key')).toHaveText(MOCK_KEY);
     await expect(page.getByTestId('epic-membership-title')).toContainText('Epics-Feature Ausbau');
+    const chrome = await banner.evaluate(el => {
+      const bannerStyle = getComputedStyle(el);
+      const key = el.querySelector('[data-testid="epic-membership-key"]');
+      const keyStyle = key ? getComputedStyle(key) : null;
+      return {
+        background: bannerStyle.backgroundColor,
+        borderTopWidth: bannerStyle.borderTopWidth,
+        borderRadius: bannerStyle.borderRadius,
+        keyBorderTopWidth: keyStyle?.borderTopWidth ?? null,
+      };
+    });
+    expect(chrome.background).not.toBe('rgba(0, 0, 0, 0)');
+    expect(chrome.borderTopWidth).toBe('0px');
+    expect(chrome.borderRadius).toBe('0px');
+    expect(chrome.keyBorderTopWidth).toBe('0px');
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'sub-task-epic-banner.png'), fullPage: false });
 
-    // Back-jump: clicking opens the epic's own detail. The epic is kind=epic,
-    // so the membership banner disappears and the URL points at the epic.
+    // Clicking the flat band delegates to the app-level related-job opener.
+    // Epic targets are kept out of the current task URL by design.
     await banner.click();
-    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 15_000 })
-      .toBe(epicId);
-    await expect(page.getByTestId('epic-membership-banner')).toHaveCount(0);
+    await expect.poll(() => epicDetailRequests, { timeout: 15_000 }).toBeGreaterThan(0);
+    expect(new URL(page.url()).searchParams.get('job')).toBe(sub.id);
 
-    await page.screenshot({ path: path.join(SHOTS_DIR, 'after-jump-to-epic.png'), fullPage: false });
+    await page.screenshot({ path: path.join(SHOTS_DIR, 'after-parent-epic-request.png'), fullPage: false });
   });
 
   test('a task without an epic shows no banner', async ({ page }) => {
