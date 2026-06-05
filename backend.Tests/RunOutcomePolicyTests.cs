@@ -276,14 +276,15 @@ public class RunOutcomePolicyTests
     }
 
     /// <summary>
-    /// Run produced *some* agent text but the deterministic classifier could
-    /// not map it to a known outcome. This used to be the generic
-    /// heuristicfallback bucket; it now surfaces as the concrete
-    /// classifier-unknown category so the project-level observability
-    /// counters can distinguish it from permission and watchdog issues.
+    /// A bare Unknown outcome with text but no typed issue kind (the residual
+    /// after the analyzer's typed routing) must accept silently. classifier-
+    /// unknown is never a terminal, user-visible FAILURE, so the policy does
+    /// not pile a "could not classify" dead-end onto an already-visible run.
+    /// The concrete <see cref="RunIssueKind.ClassifierUnknown"/> path (failed
+    /// run with real text) is covered by the re-issue tests below.
     /// </summary>
     [Fact]
-    public void RealRun_UnknownWithText_AcceptedWithWarning()
+    public void BareUnknownWithText_AcceptedSilently()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
@@ -292,11 +293,93 @@ public class RunOutcomePolicyTests
             followupPrompt: null,
             reissueAttempt: 0);
 
+        Assert.Equal(OutcomeActionKind.Accept, action.Kind);
+        Assert.Equal(string.Empty, action.MetaMessage);
+    }
+
+    /// <summary>
+    /// Case (a): a CLI launch / resume failure (codex rejected the resume
+    /// target, exit 2, ~0s) is routed to Recovery, never a terminal
+    /// classifier-unknown FAILURE. The policy accepts the run quietly with a
+    /// typed CliLaunchFailed marker so the runner's existing recovery machinery
+    /// rebuilds from disk on the next pickup. This is the core ASS-755 fix.
+    /// </summary>
+    [Fact]
+    public void CliLaunchFailed_RoutesToRecovery_NotTerminalFailure()
+    {
+        var diagnosis = "The agent CLI rejected the resume target; rebuilding from disk on the next attempt.";
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 0.0, agentChars: 10) with
+            {
+                IssueKind = RunIssueKind.CliLaunchFailed,
+                Summary = diagnosis
+            },
+            followupPrompt: "please continue",
+            reissueAttempt: 0);
+
         Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.CliLaunchFailed, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.CliLaunchFailed, action.MessageKind);
         Assert.False(action.IsHeuristicFallback);
+        Assert.Equal(diagnosis, action.MetaMessage);
+        // Must not masquerade as the old terminal classifier-unknown verdict.
+        Assert.NotEqual(OrchestratorMessageKind.ClassifierUnknown, action.MessageKind);
+    }
+
+    /// <summary>
+    /// Case (b): a failed run with a real (but unclassifiable) agent turn.
+    /// classifier-unknown is never terminal: the orchestrator re-issues once
+    /// with a structured close-out prompt, exactly like
+    /// missing-terminal-sentinel, rather than ending on "could not classify".
+    /// </summary>
+    [Fact]
+    public void ClassifierUnknown_FirstOccurrence_ReissuesOnce()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
+            {
+                IssueKind = RunIssueKind.ClassifierUnknown,
+                Summary = "Agent text did not match any known shape."
+            },
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Equal(1, action.RetryAttempt);
+        Assert.True(action.IsPreframedRetryPrompt);
+        Assert.Equal(RunIssueKind.ClassifierUnknown, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.SoftIntervention, action.MessageKind);
+        Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
+    }
+
+    /// <summary>
+    /// Case (b) after the one intervention is spent: accept with a visible
+    /// classifier-unknown marker so the lane moves forward for review. Still
+    /// an Accept (not a NotifyUserAndStop) - never a terminal FAILURE.
+    /// </summary>
+    [Fact]
+    public void ClassifierUnknown_AfterIntervention_AcceptsWithVisibleMarker_NotTerminal()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
+            {
+                IssueKind = RunIssueKind.ClassifierUnknown,
+                Summary = "Agent text did not match any known shape."
+            },
+            followupPrompt: null,
+            reissueAttempt: RunOutcomePolicy.MaxSoftInterventionAttempts);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, action.Kind);
         Assert.Equal(RunIssueKind.ClassifierUnknown, action.IssueKind);
         Assert.Equal(OrchestratorMessageKind.ClassifierUnknown, action.MessageKind);
-        Assert.Contains("classify", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

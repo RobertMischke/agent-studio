@@ -137,6 +137,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.MissingTerminalSentinel => "Warn",
             OrchestratorMessageKind.HeuristicDone     => "Warn",
             OrchestratorMessageKind.ClassifierUnknown => "Warn",
+            OrchestratorMessageKind.CliLaunchFailed   => "Warn",
             OrchestratorMessageKind.Steer             => "Warn",
             _                                         => "Info"
         };

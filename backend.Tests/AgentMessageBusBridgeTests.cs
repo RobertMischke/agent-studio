@@ -79,6 +79,7 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.WatchdogTimeout, "High", "watchdog-timeout")]
     [InlineData(OrchestratorMessageKind.MissingTerminalSentinel, "Warn", "missing-terminal-sentinel")]
     [InlineData(OrchestratorMessageKind.ClassifierUnknown, "Warn", "classifier-unknown")]
+    [InlineData(OrchestratorMessageKind.CliLaunchFailed, "Warn", "cli-launch-failed")]
     [InlineData(OrchestratorMessageKind.GiveUp, "High", "giveup")]
     public async Task EmitOrchestratorChatAsync_MapsKindToSeverityAndTopic(OrchestratorMessageKind kind, string expectedSeverity, string expectedTopic)
     {

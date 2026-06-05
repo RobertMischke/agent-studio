@@ -216,4 +216,78 @@ public class AgentOutcomeAnalyzerTests
         Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
         Assert.False(outcome.MatchedSentinel);
     }
+
+    // ---- Case (a): CLI / launch / resume failure --------------------------
+    // A resume run that fails the instant it starts (exit != 0, ~0s) and
+    // leaves only a CLI error fragment behind must NOT become a terminal
+    // classifier-unknown FAILURE. It is a host/CLI failure, routed to the
+    // typed CliLaunchFailed issue so the policy rebuilds from disk. This is
+    // the exact ASS-755 shape: status=failed, duration=0.0s, only a
+    // truncated CLI fragment as "agent" text.
+
+    [Fact]
+    public void FailedResume_ZeroDuration_OnlyCliFragment_IsCliLaunchFailed()
+    {
+        // The truncated codex fragment the user saw ("...orchestrator)").
+        var lines = Lines("hestrator)");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 0.0);
+        Assert.Equal(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void FailedResume_RejectedResumeTargetNeedle_IsCliLaunchFailed_RegardlessOfDuration()
+    {
+        // The capture-fail decision line can leak into the consolidated buffer.
+        // The needle is definitive even if the duration is not near-zero.
+        var lines = new List<CliOutputLine>
+        {
+            new() { Timestamp = DateTime.UtcNow, Stream = "stdout", Text = "starting up" },
+            new() { Timestamp = DateTime.UtcNow.AddSeconds(1), Stream = "system",
+                Text = "[capture-fail] codex rejected the resume target (abc-123); next follow-up will rebuild from disk via Recovery." }
+        };
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 12.0);
+        Assert.Equal(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void FailedResume_NoConversationFound_ClaudeNeedle_IsCliLaunchFailed()
+    {
+        var lines = Lines("No conversation found with session ID: 11111111-2222-3333-4444-555555555555");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 1.0);
+        Assert.Equal(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+    }
+
+    // ---- Case (b): failed run WITH a real agent turn ----------------------
+    // A run that produced a genuine, substantial agent turn before failing is
+    // NOT a launch failure - it is an unclassifiable agent reply. It stays
+    // ClassifierUnknown so the policy re-issues with context (never a
+    // terminal FAILURE), but the analyzer must not swallow it into the
+    // launch-failure bucket.
+
+    [Fact]
+    public void FailedRun_WithRealAgentText_StaysClassifierUnknown_NotCliLaunchFailed()
+    {
+        var prose = new string('x', 400) + " I made several edits and ran a long investigation across the module.";
+        var lines = Lines(prose);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 120.0);
+        Assert.Equal(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.CliLaunchFailed, outcome.IssueKind);
+    }
+
+    // ---- Case (c): successful run, no sentinel, inconclusive text ---------
+    // A clean exit whose text the heuristic cannot map to any shape stays
+    // MissingTerminalSentinel so the orchestrator drives it to a structured
+    // close-out, never a terminal classifier-unknown FAILURE.
+
+    [Fact]
+    public void SuccessfulRun_InconclusiveText_IsMissingTerminalSentinel()
+    {
+        var lines = Lines("The weather over the harbour was unusually calm this morning.");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 18.0);
+        Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
+        Assert.Equal(RunIssueKind.MissingTerminalSentinel, outcome.IssueKind);
+        Assert.NotEqual(RunIssueKind.ClassifierUnknown, outcome.IssueKind);
+    }
 }

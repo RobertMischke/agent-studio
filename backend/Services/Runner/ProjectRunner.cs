@@ -3342,6 +3342,7 @@ public class ProjectRunner
         RunIssueKind.MissingTerminalSentinel  => "missing-terminal-sentinel",
         RunIssueKind.HeuristicDone             => "heuristic-done",
         RunIssueKind.ClassifierUnknown        => "classifier-unknown",
+        RunIssueKind.CliLaunchFailed          => "cli-launch-failed",
         RunIssueKind.NoAgentOutput            => "no-agent-output",
         RunIssueKind.EnvironmentBlocker       => "environment-blocker",
         RunIssueKind.SilentCompletion         => "codex-silent-completion",

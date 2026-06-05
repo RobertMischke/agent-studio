@@ -42,6 +42,19 @@ public enum RunIssueKind
     ClassifierUnknown,
     NoAgentOutput,
     /// <summary>
+    /// The agent CLI itself failed before any real agent turn could happen:
+    /// it could not launch, or its <c>--resume</c> target was rejected
+    /// (e.g. codex exits non-zero in ~0s, claude prints "No conversation
+    /// found with session ID"). The run finished <c>failed</c> with no
+    /// classifiable agent reply - only a CLI error fragment. This is a
+    /// recoverable host/CLI condition, NOT an agent decision and NOT an
+    /// unclassifiable agent reply. The runner has already marked the
+    /// session chain for Recovery, so the policy routes this to the
+    /// rebuild-from-disk path instead of surfacing a terminal
+    /// <see cref="ClassifierUnknown"/> FAILURE.
+    /// </summary>
+    CliLaunchFailed,
+    /// <summary>
     /// An OS / sandbox / host-permission error blocked the agent from
     /// making progress. Recognised in-stream by
     /// <see cref="AgentEnvironmentDetector"/>, which writes a synthetic
@@ -119,6 +132,23 @@ public static class AgentOutcomeAnalyzer
 {
     /// <summary>Sub-threshold duration below which a run with no agent text is treated as no-op.</summary>
     public const double NoOpDurationThresholdSeconds = 10.0;
+
+    /// <summary>
+    /// Sub-threshold duration below which a <em>failed</em> run with no real
+    /// agent turn is treated as a CLI launch / resume failure rather than an
+    /// unclassifiable agent reply. A genuine agent turn takes meaningfully
+    /// longer than a CLI that rejects its launch/resume arguments and exits
+    /// immediately (the observed shape is ~0.0s, exit != 0).
+    /// </summary>
+    public const double CliLaunchFailureDurationThresholdSeconds = 3.0;
+
+    /// <summary>
+    /// Largest agent-text length still consistent with "no real agent turn"
+    /// when a short CLI launch/resume error fragment leaked onto the agent
+    /// stream. Above this we assume an actual turn happened and let the
+    /// failed-with-text path classify it instead.
+    /// </summary>
+    private const int CliLaunchFailureMaxAgentTextChars = 200;
 
     /// <summary>
     /// Analyze a completed run. <paramref name="lines"/> is the full output
@@ -226,6 +256,29 @@ public static class AgentOutcomeAnalyzer
                 OutputLineCount: lineCount,
                 DurationSeconds: durationSeconds)
             { IssueKind = RunIssueKind.WatchdogTimeout };
+        }
+
+        // 1.5) CLI launch / resume failure. A failed run that produced no
+        //    real agent turn - it died almost instantly (~0s) or the only
+        //    output is a recognised CLI launch/resume error fragment (e.g.
+        //    codex rejected the --resume target and exited 2 in 0.0s) - is a
+        //    host/CLI failure, not an unclassifiable agent reply. Routed to
+        //    the typed CliLaunchFailed issue so the policy rebuilds from disk
+        //    via Recovery instead of dead-ending in a terminal
+        //    classifier-unknown FAILURE. Gated on `failed` so a healthy run
+        //    that merely mentions a session id in its prose is unaffected.
+        if (failed && IsCliLaunchOrResumeFailure(rawText, agentText, durationSeconds))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildCliLaunchFailureSummary(rawText),
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "CLI launch/resume failed before an agent turn produced classifiable output",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.CliLaunchFailed };
         }
 
         // 2) Structural no-op - the CLI exited cleanly without producing
@@ -406,6 +459,50 @@ public static class AgentOutcomeAnalyzer
             && (text.Contains("Killed after", StringComparison.OrdinalIgnoreCase)
                 || text.Contains("auto-cancelled after", StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// Recognised CLI launch / resume error fragments. These are emitted by
+    /// the CLI itself or by the runner's capture-fail decision message, never
+    /// by an agent mid-task, so a match is a definitive launch/resume-failure
+    /// signal regardless of duration. Kept short and specific to avoid
+    /// matching an agent's own prose.
+    /// </summary>
+    private static readonly string[] CliLaunchFailureNeedles =
+    {
+        "rejected the resume target",
+        "rebuild from disk",
+        "no conversation found with session id",
+        "session id not found",
+    };
+
+    /// <summary>
+    /// A <em>failed</em> run is a CLI launch / resume failure when either a
+    /// recognised CLI error fragment is present (definitive) or the run died
+    /// almost instantly without producing a real agent turn (no/short agent
+    /// text plus sub-threshold duration). Callers must only invoke this when
+    /// the run status is failed.
+    /// </summary>
+    private static bool IsCliLaunchOrResumeFailure(string rawText, string agentText, double durationSeconds)
+    {
+        if (HasCliLaunchFailureNeedle(rawText)) return true;
+        return durationSeconds < CliLaunchFailureDurationThresholdSeconds
+            && agentText.Length < CliLaunchFailureMaxAgentTextChars;
+    }
+
+    private static bool HasCliLaunchFailureNeedle(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in CliLaunchFailureNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static string BuildCliLaunchFailureSummary(string rawText)
+        => HasCliLaunchFailureNeedle(rawText)
+            ? "The agent CLI rejected the resume target; rebuilding from disk on the next attempt."
+            : "The agent CLI failed to launch or resume before producing any agent output; rebuilding from disk on the next attempt.";
 
     /// <summary>
     /// Joins the parts of the buffer that look like agent (assistant) text.

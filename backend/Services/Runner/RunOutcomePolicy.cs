@@ -121,6 +121,28 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.CliLaunchFailed)
+        {
+            // The agent CLI failed to launch or its --resume target was
+            // rejected before any agent turn happened (exit != 0, ~0s, only a
+            // CLI error fragment). This is a recoverable host/CLI condition,
+            // NOT an agent decision and NEVER a terminal classifier-unknown
+            // FAILURE. The runner has already cleared the dead session id and
+            // marked the session chain for Recovery, so the next pickup
+            // rebuilds from disk. We accept the run quietly with a typed
+            // marker (no crash modal, no "could not classify" dead-end) and
+            // let that existing recovery machinery drive the rebuild.
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndAccept,
+                MetaMessage: outcome.Summary
+                    ?? "The agent CLI could not launch or resume the prior session. The orchestrator will rebuild from disk on the next attempt.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.CliLaunchFailed,
+                MessageKind = OrchestratorMessageKind.CliLaunchFailed
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.PermissionBlocked)
         {
             if (reissueAttempt < MaxSoftInterventionAttempts)
@@ -187,6 +209,42 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.ClassifierUnknown)
+        {
+            // The run failed with real agent text that the deterministic
+            // classifier could not map to a known shape. classifier-unknown
+            // is NEVER a terminal, user-visible FAILURE: like
+            // missing-terminal-sentinel, the orchestrator drives the task to
+            // a clear conclusion. One soft intervention asks the agent to
+            // continue or close out with a structured sentinel; if that is
+            // exhausted we accept the run with a visible marker so the lane
+            // can move to review rather than dead-ending on "could not
+            // classify".
+            if (reissueAttempt < MaxSoftInterventionAttempts)
+            {
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.ReissueWithStrongerFraming,
+                    MetaMessage: "The previous run failed before its reply could be classified. The orchestrator is re-issuing once with a sharper framing so the task drives to a clear conclusion.",
+                    IsHeuristicFallback: false,
+                    FollowupRetryPrompt: BuildMissingSentinelInterventionPrompt(outcome),
+                    RetryAttempt: reissueAttempt + 1)
+                {
+                    IssueKind = RunIssueKind.ClassifierUnknown,
+                    MessageKind = OrchestratorMessageKind.SoftIntervention,
+                    IsPreframedRetryPrompt = true
+                };
+            }
+
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndAccept,
+                MetaMessage: "The run could not be classified after one orchestrator intervention. Continuing with a visible classifier-unknown marker so the lane can move forward for review.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.ClassifierUnknown,
+                MessageKind = OrchestratorMessageKind.ClassifierUnknown
+            };
+        }
+
         // No-effort completion: agent exited fast with little or no text.
         // Graceful Recovery (ADR-0006 supersedes ADR-0003): even when the
         // prior session is unrecoverable, we re-issue ONCE with a sharper
@@ -250,28 +308,20 @@ public static class RunOutcomePolicy
 
         if (outcome.Kind == AgentOutcomeKind.Unknown)
         {
-            // When the run produced no agent text at all, the user is
-            // already seeing the cause (a CLI-side system error block,
-            // and likely a [capture-fail] decision message right next to
-            // it). Adding "[heuristic] Could not classify the agent's
-            // reply." on top is redundant noise - there is no reply to
-            // classify. The frontend's protocol-pane banner surfaces the
-            // failed-run state explicitly. Skip the meta message.
-            if (outcome.AgentTextChars == 0)
-            {
-                return new OutcomeAction(
-                    Kind: OutcomeActionKind.Accept,
-                    MetaMessage: string.Empty,
-                    IsHeuristicFallback: false);
-            }
+            // Any Unknown that needs the user's attention has already been
+            // routed by a typed issue kind above (CliLaunchFailed for a CLI
+            // launch/resume failure, ClassifierUnknown for a failed run with
+            // real text, MissingTerminalSentinel for a successful run with
+            // inconclusive text). What reaches here is the residual: no agent
+            // text to classify (NoAgentOutput) or a long-but-silent run. The
+            // cause is already visible in the chat (system-error block,
+            // [capture-fail] decision, protocol-pane banner), so piling a
+            // terminal "could not classify" FAILURE on top is just noise.
+            // classifier-unknown is never a terminal, user-visible FAILURE.
             return new OutcomeAction(
-                Kind: OutcomeActionKind.NotifyUserAndAccept,
-                MetaMessage: "Could not classify the agent's reply after deterministic checks.",
-                IsHeuristicFallback: false)
-            {
-                IssueKind = RunIssueKind.ClassifierUnknown,
-                MessageKind = OrchestratorMessageKind.ClassifierUnknown
-            };
+                Kind: OutcomeActionKind.Accept,
+                MetaMessage: string.Empty,
+                IsHeuristicFallback: false);
         }
 
         return new OutcomeAction(

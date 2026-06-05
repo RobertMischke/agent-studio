@@ -159,6 +159,14 @@ public enum OrchestratorMessageKind
     HeuristicDone,
     /// <summary>The classifier could not map the agent text to a known outcome.</summary>
     ClassifierUnknown,
+    /// <summary>
+    /// The agent CLI failed to launch or its <c>--resume</c> target was
+    /// rejected before any agent turn happened (exit != 0, ~0s, only a CLI
+    /// error fragment). The orchestrator treats this as a recoverable
+    /// host/CLI condition and rebuilds from disk via Recovery on the next
+    /// attempt, rather than surfacing a terminal classifier-unknown FAILURE.
+    /// </summary>
+    CliLaunchFailed,
     /// <summary>The orchestrator gave up after a retry budget; user attention required.</summary>
     GiveUp,
     /// <summary>The orchestrator could not pick a path on its own but identified a concrete unblocking ask the user can resolve. Renders distinctly so the user sees a productive escalation, not a silent deferral.</summary>
@@ -196,6 +204,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
         OrchestratorMessageKind.GiveUp            => "giveup",
         OrchestratorMessageKind.Steer             => "steer",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
@@ -213,6 +222,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         _ => kind.ToString().ToLowerInvariant()
