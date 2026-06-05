@@ -17,12 +17,14 @@
   // values share one second-column edge by construction.
   --ov-label-col: 100px;
 
-  padding: 8px 16px;
+  padding: var(--studio-spacing-2) var(--studio-spacing-4);
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--studio-section-gap);
-  max-width: 640px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .ov-section {
@@ -476,12 +478,14 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  max-width: 100%;
 }
 
 .ov-pl-step {
   display: flex;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
   min-height: var(--studio-row-min-h);
   padding-block: var(--studio-row-pad-block);
   font-size: 12px;

@@ -24,6 +24,19 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
+
+// Reusable content-width primitive. Components opt into the content type
+// (`--prose` for paragraphs, `--tabular` for grids/tables) while this global
+// class owns the left-aligned max-width behaviour.
+.studio-measure {
+  width: min(100%, var(--studio-measure-max, var(--studio-measure-tabular)));
+  max-width: var(--studio-measure-max, var(--studio-measure-tabular));
+  margin-inline-start: 0;
+  margin-inline-end: auto;
+}
+.studio-measure--prose { --studio-measure-max: var(--studio-measure-prose); }
+.studio-measure--tabular { --studio-measure-max: var(--studio-measure-tabular); }
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }

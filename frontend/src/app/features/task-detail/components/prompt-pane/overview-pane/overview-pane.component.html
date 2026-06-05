@@ -1,6 +1,6 @@
 <div class="overview" data-testid="overview-tab">
 
-  <section class="ov-section ov-title-block" data-testid="overview-title-block">
+  <section class="ov-section ov-title-block studio-measure studio-measure--prose" data-testid="overview-title-block">
     @if (editingTitle()) {
       <input #titleInput class="ov-title-input" data-testid="overview-title-input" type="text"
              [value]="titleDraft()" maxlength="200" placeholder="Task title"
@@ -63,7 +63,7 @@
   </section>
 
   <!-- Status block -->
-  <section class="ov-section" data-testid="overview-status">
+  <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-status">
     <h3 class="ov-section__title">Status</h3>
     <div class="ov-grid">
       @if (failureInfo(); as reason) {
@@ -90,10 +90,12 @@
     </div>
   </section>
 
-  <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
+  <div class="studio-measure studio-measure--tabular">
+    <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
+  </div>
 
   <!-- Agent block -->
-  <section class="ov-section" data-testid="overview-agent">
+  <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-agent">
     <h3 class="ov-section__title">Agent</h3>
     <div class="ov-grid">
       <div class="ov-row ov-row--wide">
@@ -147,7 +149,7 @@
        canonical run representation. Rendered only when there is token data to
        show; an empty task hides the whole section rather than show a placeholder. -->
   @if (hasTokens()) {
-  <section class="ov-section" data-testid="overview-tokens">
+  <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-tokens">
     <h3 class="ov-section__title">Tokens</h3>
 
     @if (hasOrchestratorTokens()) {
@@ -234,7 +236,7 @@
        / re-open counters) is consolidated into this section's header as a
        strip rather than a separate block — it is the pipeline's outcome. -->
   @if (hasPipelineSection()) {
-    <section class="ov-section" data-testid="overview-pipeline">
+    <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-pipeline">
       <h3 class="ov-section__title"
           [appTooltip]="'Pre / core / post processing steps for this task. Per-step model and enable/disable are configured in project Settings.'">
         Pipeline
@@ -400,7 +402,7 @@
        Aggregates session-events.jsonl + tool-calls.jsonl for a meaningful
        at-a-glance "what did the agent actually do" view. -->
   @if (hasAgentWork()) {
-    <section class="ov-section" data-testid="overview-agent-work">
+    <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-agent-work">
       <h3 class="ov-section__title"
           [appTooltip]="sessionDebugTooltip()">
         Agent Work
@@ -470,7 +472,7 @@
   }
 
   <!-- Regression Radar block -->
-  <section class="ov-section" data-testid="overview-regression-radar">
+  <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-regression-radar">
     <app-regression-radar [jobId]="job().id" [watchPath]="job().watchPath" />
   </section>
 
@@ -481,7 +483,7 @@
        "Attempt N/M" is a distinct counter (the auto-review completion loop),
        not a CLI-run count, and stays there. -->
   @if (hasRunsSection()) {
-    <section class="ov-section" data-testid="overview-runs">
+    <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-runs">
       <h3 class="ov-section__title">Runs</h3>
       @if (runCount() > 0 || totalDuration() > 0) {
         <div class="ov-runs-summary" data-testid="overview-runs-summary">

@@ -346,6 +346,15 @@
   --studio-modal-width-lg: min(90vw, 880px);
 
   // ---------------------------------------------------------------------------
+  // Content measures — reusable left-aligned width caps for readable panes.
+  // Prose uses character measure; tabular / definition-grid content gets a
+  // wider pixel cap so values stay visually connected to their row without
+  // sprawling across ultrawide displays.
+  // ---------------------------------------------------------------------------
+  --studio-measure-prose: 74ch;
+  --studio-measure-tabular: 960px;
+
+  // ---------------------------------------------------------------------------
   // Layout sizes
   // ---------------------------------------------------------------------------
   --studio-activitybar-w: 48px;
