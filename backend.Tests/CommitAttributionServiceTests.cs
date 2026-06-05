@@ -68,7 +68,6 @@ public class CommitAttributionServiceTests
         Assert.Empty(result.Attributed);
         var ex = Assert.Single(result.Excluded);
         Assert.Equal(CommitExclusionReasons.CrashRecoveryOfOtherTask, ex.Reason);
-        Assert.False(ex.Manual);
     }
 
     [Fact]

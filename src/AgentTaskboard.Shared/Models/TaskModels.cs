@@ -97,14 +97,6 @@ public record TaskInfo
     /// without <c>commits</c> are surfaced as <c>[commit]</c> by the scanner.
     /// </summary>
     public List<TaskCommitInfo> Commits { get; init; } = [];
-    /// <summary>
-    /// SHAs the attribution rule withheld from this task (e.g. a crash-recovery
-    /// commit for another task that landed inside this run window). Kept for
-    /// build compatibility with the commit-aggregation consumers; UI exposure
-    /// of manual exclude/include was removed (ASS-761) and pending a clean
-    /// follow-up. Default empty.
-    /// </summary>
-    public List<TaskExcludedCommitInfo> ExcludedCommits { get; init; } = [];
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to
     /// <see cref="DefaultClientIdentity.Id"/> for legacy jobs whose
@@ -130,7 +122,8 @@ public record TaskInfo
     /// persisted. Lets the UI distinguish an analysis-only task (no activity
     /// -&gt; "no code changes") from a task where code landed but the
     /// attribution chain is still empty (activity present yet
-    /// <see cref="Commits"/> and <see cref="ExcludedCommits"/> are both empty
+    /// <see cref="Commits"/> is empty
+    /// -&gt; "commit discovery pending / failed"). Without this signal the two
     /// -&gt; "commit discovery pending / failed"). Without this signal the two
     /// cases are indistinguishable, which is exactly bug (3) from the task.
     /// </summary>
@@ -2002,10 +1995,10 @@ public record TaskCommitInfo
 
 /// <summary>
 /// One commit that the deterministic attribution rule subtracted from a
-/// task's commit set (see ADR "Commit-Attribution-Regel"). Persisted under
-/// <c>excludedCommits</c> in <c>job.json</c>. Surfaced under a
-/// "(N excluded)" expander in the protocol-pane git view with the reason
-/// tooltip; lets the operator see *why* a commit was withheld.
+/// task's commit set (see ADR "Commit-Attribution-Regel"). An internal
+/// rule-engine value: the engine emits these so the post-step can log how
+/// many commits it withheld and why. Not persisted onto <see cref="TaskInfo"/>
+/// and not surfaced in the UI.
 /// </summary>
 public record TaskExcludedCommitInfo
 {
@@ -2013,15 +2006,9 @@ public record TaskExcludedCommitInfo
     public string ShortSha { get; init; } = "";
     /// <summary>One of <see cref="CommitExclusionReasons"/>. Free-form on read.</summary>
     public string Reason { get; init; } = CommitExclusionReasons.Other;
-    /// <summary>Commit subject (first line). Optional; carried so the UI can render the row without re-querying git.</summary>
+    /// <summary>Commit subject (first line). Optional.</summary>
     public string? Subject { get; init; }
     public DateTime At { get; init; }
-    /// <summary>
-    /// True when the operator excluded a commit that the rule engine had
-    /// originally attributed to this task. Used by the UI to render a
-    /// "manual" marker so the operator can see where they intervened.
-    /// </summary>
-    public bool Manual { get; init; }
 }
 
 /// <summary>
@@ -2038,11 +2025,8 @@ public static class CommitAttributionKinds
     /// attribution step). Treated as "trust the existing stamp" by readers.
     /// </summary>
     public const string Legacy = "legacy";
-    /// <summary>Operator manually re-included a commit that the rule had excluded.
-    /// Kept for build compatibility; manual exclude/include UI was removed (ASS-761).</summary>
-    public const string ManualIncludeAfterExclude = "manual-include-after-exclude";
 
-    public static readonly string[] All = [Automatic, Legacy, ManualIncludeAfterExclude];
+    public static readonly string[] All = [Automatic, Legacy];
 
     public static string Normalize(string? value)
     {
@@ -2069,13 +2053,11 @@ public static class CommitExclusionReasons
     public const string MergeCommit = "merge-commit";
     /// <summary>Commit landed before the task's first start; outside the window.</summary>
     public const string OutsideTaskWindow = "outside-task-window";
-    /// <summary>Operator manually excluded the commit via the UI.</summary>
-    public const string ManualExclude = "manual-exclude";
     /// <summary>Unrecognized exclusion reason.</summary>
     public const string Other = "other";
 
     public static readonly string[] All =
-        [CrashRecoveryOfOtherTask, UpdateStableBump, MergeCommit, OutsideTaskWindow, ManualExclude, Other];
+        [CrashRecoveryOfOtherTask, UpdateStableBump, MergeCommit, OutsideTaskWindow, Other];
 
     public static string Normalize(string? value)
     {

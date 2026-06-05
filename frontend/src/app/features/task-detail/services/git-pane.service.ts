@@ -5,8 +5,6 @@ import type {
   GitStatus,
   TaskCommitDetail,
   TaskCommitInfo,
-  TaskExcludedCommitInfo,
-  RecentCommit,
 } from '../../../features/git';
 import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
@@ -102,33 +100,6 @@ export class GitPaneService implements OnDestroy {
   /** SHA of the commit currently rendered in the commit detail view. Defaults to the newest entry. */
   readonly selectedCommitSha = signal<string | null>(null);
 
-  /**
-   * Commits the attribution rule withheld from this task (ADR
-   * "Commit-Attribution-Regel"). Mirrors <c>TaskInfo.excludedCommits</c>;
-   * surfaced under the git-pane "(N excluded)" expander so the operator can
-   * see why each was held back and restore it if the rule got it wrong.
-   */
-  readonly excludedCommits = signal<TaskExcludedCommitInfo[]>([]);
-  /** True while an exclude/include override round-trip is in flight. */
-  readonly overrideBusy = signal(false);
-
-  /**
-   * "+ Add commit" picker state: recent branch commits the operator can
-   * attach to this task plus the open/loading flags driving the dropdown.
-   * Commits already on the chain or excluded list are filtered out by
-   * {@link addableCommits} so the picker only offers genuinely new ones.
-   */
-  readonly addPickerOpen = signal(false);
-  readonly recentCommits = signal<RecentCommit[]>([]);
-  readonly recentLoading = signal(false);
-  readonly addableCommits = computed<RecentCommit[]>(() => {
-    const taken = new Set<string>([
-      ...this.commitChain().map((c) => c.sha),
-      ...this.excludedCommits().map((c) => c.sha),
-    ]);
-    return this.recentCommits().filter((c) => !taken.has(c.sha));
-  });
-
   private currentJob: TaskInfo | null = null;
   private refreshTimer: VisibleIntervalHandle | null = null;
 
@@ -173,7 +144,6 @@ export class GitPaneService implements OnDestroy {
       const oldChainLen = this.commitChain().length;
       this.currentJob = info!;
       this.commitChain.set(info!.commits ?? (info!.commit ? [info!.commit] : []));
-      this.excludedCommits.set(info!.excludedCommits ?? []);
       // The auto-commit lands on the progress→review transition, so a
       // refresh of the same job can flip from "no commit" to "has commit".
       // Load the snapshot lazily when that happens. Also reload when a
@@ -201,7 +171,6 @@ export class GitPaneService implements OnDestroy {
     this.clearDiffCache();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
     this.commitChain.set(chain);
-    this.excludedCommits.set(info?.excludedCommits ?? []);
     this.selectedCommitSha.set(chain.length > 0 ? chain[chain.length - 1].sha : null);
     if (info?.commit || chain.length > 0) this.loadCommitDetail();
   }
@@ -394,144 +363,6 @@ export class GitPaneService implements OnDestroy {
         this.errorDialog.show(err, { title: 'Commit failed', source: `Task ${info.id}` });
       },
     });
-  }
-
-  /**
-   * Operator override: withhold a commit the rule engine attributed to this
-   * task. Optimistically moves it from the chain into the excluded list so
-   * the pane updates immediately; the backend Updated() push later reconciles
-   * the persisted truth. ADR "Commit-Attribution-Regel".
-   */
-  excludeCommit(sha: string): void {
-    const info = this.currentJob;
-    if (!info || this.overrideBusy()) return;
-    const entry = this.commitChain().find((c) => c.sha === sha);
-    if (!entry) return;
-    this.overrideBusy.set(true);
-    this.jobService.excludeCommit(info.id, sha, info.watchPath).subscribe({
-      next: () => {
-        this.overrideBusy.set(false);
-        this.commitChain.update((chain) => chain.filter((c) => c.sha !== sha));
-        this.excludedCommits.update((ex) => [
-          ...ex,
-          {
-            sha: entry.sha,
-            shortSha: entry.shortSha,
-            reason: 'manual-exclude',
-            subject: (entry.message ?? '').split('\n')[0],
-            at: entry.at,
-            manual: true,
-          },
-        ]);
-        if (this.selectedCommitSha() === sha) {
-          const next = this.commitChain();
-          const newest = next.length > 0 ? next[next.length - 1].sha : null;
-          this.selectedCommitSha.set(newest);
-          if (newest) this.selectChainCommit(newest);
-          else this.commitDetail.set(null);
-        }
-      },
-      error: (err) => {
-        this.overrideBusy.set(false);
-        this.errorDialog.show(err, { title: 'Exclude commit failed', source: `Task ${info.id}` });
-      },
-    });
-  }
-
-  /**
-   * Operator override: restore an excluded commit back into this task's set.
-   * Optimistically moves it from the excluded list onto the chain; the
-   * backend push reconciles attribution kind + ordering.
-   */
-  includeCommit(sha: string): void {
-    const info = this.currentJob;
-    if (!info || this.overrideBusy()) return;
-    const ex = this.excludedCommits().find((c) => c.sha === sha);
-    if (!ex) return;
-    this.overrideBusy.set(true);
-    this.jobService
-      .includeCommit(info.id, sha, { message: ex.subject, at: ex.at }, info.watchPath)
-      .subscribe({
-        next: () => {
-          this.overrideBusy.set(false);
-          this.excludedCommits.update((list) => list.filter((c) => c.sha !== sha));
-          this.commitChain.update((chain) => [
-            ...chain,
-            {
-              sha: ex.sha,
-              shortSha: ex.shortSha,
-              message: ex.subject ?? '',
-              filesChanged: 0,
-              files: [],
-              at: ex.at ?? new Date().toISOString(),
-              attribution: 'manual-include-after-exclude',
-            },
-          ]);
-        },
-        error: (err) => {
-          this.overrideBusy.set(false);
-          this.errorDialog.show(err, { title: 'Include commit failed', source: `Task ${info.id}` });
-        },
-      });
-  }
-
-  /** Toggle the "+ Add commit" picker, lazily loading recent commits on open. */
-  toggleAddPicker(): void {
-    const next = !this.addPickerOpen();
-    this.addPickerOpen.set(next);
-    if (next && this.recentCommits().length === 0) this.loadRecentCommits();
-  }
-
-  /** Fetch recent branch commits for the picker. */
-  loadRecentCommits(): void {
-    const info = this.currentJob;
-    if (!info) return;
-    this.recentLoading.set(true);
-    this.jobService.getRecentCommits(info.id, info.watchPath).subscribe({
-      next: (res) => {
-        this.recentCommits.set(res?.commits ?? []);
-        this.recentLoading.set(false);
-      },
-      error: () => {
-        this.recentCommits.set([]);
-        this.recentLoading.set(false);
-      },
-    });
-  }
-
-  /**
-   * Operator override: attach a recent commit the rule engine never saw
-   * ("+ Add commit" -> manual-add). Optimistically appends it to the chain;
-   * the backend enriches the stored entry with a real file list + subject.
-   */
-  addRecentCommit(commit: RecentCommit): void {
-    const info = this.currentJob;
-    if (!info || this.overrideBusy()) return;
-    this.overrideBusy.set(true);
-    this.jobService
-      .includeCommit(info.id, commit.sha, { message: commit.subject, at: commit.authorDateUtc }, info.watchPath)
-      .subscribe({
-        next: () => {
-          this.overrideBusy.set(false);
-          this.addPickerOpen.set(false);
-          this.commitChain.update((chain) => [
-            ...chain,
-            {
-              sha: commit.sha,
-              shortSha: commit.shortSha,
-              message: commit.subject,
-              filesChanged: commit.filesChanged,
-              files: [],
-              at: commit.authorDateUtc,
-              attribution: 'manual-add',
-            },
-          ]);
-        },
-        error: (err) => {
-          this.overrideBusy.set(false);
-          this.errorDialog.show(err, { title: 'Add commit failed', source: `Task ${info.id}` });
-        },
-      });
   }
 
   openInVsCode(): void {

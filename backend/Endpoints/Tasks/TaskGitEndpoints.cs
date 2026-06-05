@@ -77,7 +77,7 @@ public static class TaskGitEndpoints
 
             // Lazy attribution backfill for legacy folders. A job that left
             // 3-progress before the commit-attribution step existed carries an
-            // empty commits[] / excludedCommits[] even though its runs moved
+            // empty commits[] even though its runs moved
             // HEAD; the kanban card's commit total (derived from commits[]) then
             // reads 0 while the change set below clearly shows work. On first
             // view we run the same deterministic rule engine the transition
@@ -226,35 +226,6 @@ public static class TaskGitEndpoints
             return Results.Ok(new { commit = commitInfo });
         });
 
-        // Operator override: exclude a commit the rule engine attributed to
-        // this task (e.g. the operator recognizes it belongs to a sibling
-        // task). Moves it into excludedCommits with a manual marker. ADR
-        // "Commit-Attribution-Regel". Mutation goes through TaskMutationService
-        // so the API-only job-folder rule holds.
-        group.MapPost("/{jobId}/commits/{sha}/exclude", (
-            string jobId, string sha, string? watchPath,
-            TaskScannerService scanner, TaskMutationService mutations) =>
-        {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-            return mutations.ExcludeCommit(jobId, sha, watchPath)
-                ? Results.Ok(new { sha, excluded = true })
-                : Results.BadRequest(new { error = "Could not exclude commit." });
-        });
-
-        // Operator override: restore a commit the rule engine excluded.
-        group.MapPost("/{jobId}/commits/{sha}/include", (
-            string jobId, string sha, string? watchPath,
-            TaskScannerService scanner, TaskMutationService mutations) =>
-        {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
-
-            return mutations.IncludeCommit(jobId, sha, watchPath)
-                ? Results.Ok(new { sha, included = true })
-                : Results.BadRequest(new { error = "Could not include commit." });
-        });
-
         group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? watchPath, GitService git) =>
         {
             return git.OpenInVsCode(jobId, watchPath, out var error)
@@ -275,12 +246,12 @@ public static class TaskGitEndpoints
     };
 
     /// <summary>
-    /// Repopulates <c>commits[]</c> / <c>excludedCommits[]</c> for a legacy
-    /// job whose attribution never ran, then returns the refreshed
-    /// <see cref="TaskInfo"/>. A no-op (returns <paramref name="info"/>
-    /// unchanged) unless the job is in an attribution-final lane, has both
-    /// lists empty, and shows code activity. Best-effort: any failure is
-    /// swallowed so a read never fails on a backfill hiccup.
+    /// Repopulates <c>commits[]</c> for a legacy job whose attribution never
+    /// ran, then returns the refreshed <see cref="TaskInfo"/>. A no-op (returns
+    /// <paramref name="info"/> unchanged) unless the job is in an
+    /// attribution-final lane, has an empty chain, and shows code activity.
+    /// Best-effort: any failure is swallowed so a read never fails on a
+    /// backfill hiccup.
     /// </summary>
     private static TaskInfo TryBackfillAttribution(
         TaskInfo info, string? watchPath,
@@ -288,7 +259,7 @@ public static class TaskGitEndpoints
         TaskMutationService mutations)
     {
         if (!AttributionFinalLanes.Contains(info.State)) return info;
-        if (info.Commits.Count > 0 || info.ExcludedCommits.Count > 0) return info;
+        if (info.Commits.Count > 0) return info;
         if (!info.CodeActivityDetected) return info;
 
         try
@@ -297,7 +268,7 @@ public static class TaskGitEndpoints
             if (result == null) return info;
             if (result.Attributed.Count == 0 && result.Excluded.Count == 0) return info;
 
-            mutations.SetCommitAttributionOnFolder(info.FolderPath, result.Attributed, result.Excluded);
+            mutations.SetCommitAttributionOnFolder(info.FolderPath, result.Attributed);
             return scanner.FindJob(info.Id, watchPath) ?? info;
         }
         catch

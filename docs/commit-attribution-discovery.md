@@ -31,8 +31,11 @@ Persisted in each task's `job.json`:
 | Field | Meaning | Source |
 |-------|---------|--------|
 | `commits[]` | The attributed commit chain, oldest to newest. Each `TaskCommitInfo` carries `attribution` (kind) and `confidence`. | Attribution write surface. |
-| `excludedCommits[]` | Commits the rule engine or an operator removed, each `TaskExcludedCommitInfo` with a `reason`. | Same write surface. |
 | `commit` (legacy singular) | Kept pointing at the newest attributed entry so old readers still resolve a commit. | Same write surface. |
+
+The rule engine's exclusion verdict (`AttributionResult.Excluded`) shapes which
+commits land in `commits[]` and is logged, but is **not** persisted onto
+`TaskInfo` and is not surfaced in the UI. There is no operator override.
 
 Derived, never persisted separately:
 
@@ -66,17 +69,16 @@ the result, keeping the API-only job-folder rule.
 | # | Path | Trigger | Persists via | Notes |
 |---|------|---------|--------------|-------|
 | 1 | `TaskTransitionService.TryAutoCommitAsync` -> `SetJobCommitOnFolder` | `3-progress` -> `4-auto-review` move when `settings.AutoCommit` | `TaskMutationService.SetJobCommitOnFolder` | Creates the commit via `GitService.AutoCommitAsync` (the one HEAD-moving writer) and stamps the produced `TaskCommitInfo`. Pre-flight guard skips it when the dirty paths predate the task's first run. |
-| 2 | `TaskTransitionService.RunCommitAttribution` -> `SetCommitAttributionOnFolder` | Same transition, immediately after path 1 | `TaskMutationService.SetCommitAttributionOnFolder` | Runs the shared runner over the just-stamped chain, replacing `commits[]` + `excludedCommits[]` with the attributed result. Emits the structured log `commit-attribution jobId=... attributed=... excluded=...`. |
-| 3 | `JobGitEndpoints` GET `/api/tasks/{id}/commits` -> `TryBackfillAttribution` | Read of a legacy folder | `TaskMutationService.SetCommitAttributionOnFolder` | Lazy, idempotent backfill. No-op unless the lane is attribution-final (`AttributionFinalLanes`), both lists are empty, and `codeActivityDetected` is true. Runs the same runner; best-effort (failures swallowed, read never fails). |
+| 2 | `TaskTransitionService.RunCommitAttribution` -> `SetCommitAttributionOnFolder` | Same transition, immediately after path 1 | `TaskMutationService.SetCommitAttributionOnFolder` | Runs the shared runner over the just-stamped chain, replacing `commits[]` with the attributed result. Emits the structured log `commit-attribution jobId=... attributed=... excluded=...`. |
+| 3 | `JobGitEndpoints` GET `/api/tasks/{id}/commits` -> `TryBackfillAttribution` | Read of a legacy folder | `TaskMutationService.SetCommitAttributionOnFolder` | Lazy, idempotent backfill. No-op unless the lane is attribution-final (`AttributionFinalLanes`), `commits[]` is empty, and `codeActivityDetected` is true. Runs the same runner; best-effort (failures swallowed, read never fails). |
 | 4 | `JobGitEndpoints` POST `/{jobId}/git/commit-accepted-evidence` -> `SetJobCommitOnFolder` | Operator "commit accepted evidence" action | `TaskMutationService.SetJobCommitOnFolder` | Manual sibling of path 1: creates an auto-commit and stamps the same `TaskCommitInfo` shape, then logs a `[commit]` chat entry. |
-| 5 | `TaskMutationService.ExcludeCommit` / `IncludeCommit` | Operator override (exclude / re-include / add) | `TaskMutationService.WriteCommitState` | Moves a SHA between `commits[]` and `excludedCommits[]` with a manual marker. Same schema, same file. |
 
 ### One write surface
 
-Paths 1-5 all reach disk through `TaskMutationService.WriteCommitState` (directly
-or via `SetCommitAttributionOnFolder` / `SetJobCommitOnFolder` /
-`ExcludeCommit` / `IncludeCommit`). Each is a replace-all write of `commits[]` +
-`excludedCommits[]` with the legacy singular `commit` kept in sync. There is no
+Paths 1-4 all reach disk through `TaskMutationService.WriteCommitState` (directly
+or via `SetCommitAttributionOnFolder` / `SetJobCommitOnFolder`). Each is a
+replace-all write of `commits[]` with the legacy singular `commit` kept in sync,
+and clears any stale `excludedCommits` field left by an older build. There is no
 other writer of a task's commit set, so every path produces a consistent schema
 entry by construction.
 

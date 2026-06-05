@@ -153,18 +153,11 @@ public class TaskCommitsAggregatorTests
     }
 
     [Fact]
-    public void Aggregate_SubtractsExcludedShas_FromRunRanges()
+    public void Aggregate_SurfacesEveryInRangeCommit()
     {
-        // A crash-recovery for another task landed inside this task's run
-        // window. Once attribution records it in ExcludedCommits, the
-        // aggregate must drop it even though git still reaches it.
-        var info = new TaskInfo
-        {
-            ExcludedCommits =
-            [
-                new TaskExcludedCommitInfo { Sha = "noise", ShortSha = "noise", Reason = CommitExclusionReasons.CrashRecoveryOfOtherTask }
-            ]
-        };
+        // The operator-override exclusion was removed: the aggregate no longer
+        // subtracts any SHA, so every commit a run range reaches is surfaced.
+        var info = new TaskInfo();
         var run = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "h1" };
         var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
         {
@@ -172,10 +165,9 @@ public class TaskCommitsAggregatorTests
             new("noise", "noise", DateTime.UtcNow, "boot", "chore(crash-recovery): rescue orphan changes for other", 1, 9, 0)
         });
 
-        Assert.Equal(1, result.Count);
-        Assert.Equal("real", result.Commits[0].Sha);
-        var excluded = Assert.Single(result.Excluded);
-        Assert.Equal("noise", excluded.ShortSha);
+        Assert.Equal(2, result.Count);
+        Assert.Contains(result.Commits, c => c.Sha == "real");
+        Assert.Contains(result.Commits, c => c.Sha == "noise");
     }
 
     [Fact]

@@ -6,7 +6,5 @@ export type {
   GitHygieneStatus,
   TaskHygieneContext,
   TaskCommitInfo,
-  TaskExcludedCommitInfo,
   TaskCommitDetail,
-  RecentCommit,
 } from './models/git.model';

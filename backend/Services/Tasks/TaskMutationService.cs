@@ -227,143 +227,32 @@ public class TaskMutationService
     /// <summary>
     /// Persist the result of the deterministic commit-attribution post-step
     /// (ADR "Commit-Attribution-Regel"): a replace-all write of the
-    /// <c>commits</c> chain (now carrying attribution + confidence) and the
-    /// <c>excludedCommits</c> array. The singular legacy <c>commit</c> field
-    /// is kept pointing at the newest attributed entry so old readers still
-    /// see the latest commit. Idempotent: re-running with the same git state
-    /// rewrites identical content.
+    /// <c>commits</c> chain (now carrying attribution + confidence). The
+    /// singular legacy <c>commit</c> field is kept pointing at the newest
+    /// attributed entry so old readers still see the latest commit. Idempotent:
+    /// re-running with the same git state rewrites identical content.
     /// </summary>
     public bool SetCommitAttributionOnFolder(
         string folderPath,
-        IReadOnlyList<TaskCommitInfo> attributed,
-        IReadOnlyList<TaskExcludedCommitInfo> excluded)
+        IReadOnlyList<TaskCommitInfo> attributed)
     {
         if (!Directory.Exists(folderPath)) return false;
         var ordered = attributed
             .Where(c => !string.IsNullOrWhiteSpace(c.Sha))
             .OrderBy(c => c.At)
             .ToList();
-        var excl = excluded.Where(e => !string.IsNullOrWhiteSpace(e.Sha)).ToList();
-        return WriteCommitState(folderPath, ordered, excl);
+        return WriteCommitState(folderPath, ordered);
     }
 
-    /// <summary>
-    /// Operator override: exclude a commit the rule engine had attributed to
-    /// this task. Moves it from <c>commits</c> to <c>excludedCommits</c> with
-    /// <see cref="TaskExcludedCommitInfo.Manual"/> set and reason
-    /// <see cref="CommitExclusionReasons.ManualExclude"/>. No-op (returns
-    /// true) when the SHA is already excluded or unknown, so the UI can fire
-    /// the action without first reconciling state.
-    /// </summary>
-    public bool ExcludeCommit(string jobId, string sha, string? watchPath = null)
-    {
-        if (string.IsNullOrWhiteSpace(sha)) return false;
-        var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) return false;
-        var (chain, excluded) = ReadCommitState(info.FolderPath);
-
-        if (excluded.Any(e => string.Equals(e.Sha, sha, StringComparison.OrdinalIgnoreCase)))
-            return true;
-
-        var idx = chain.FindIndex(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase));
-        var moved = idx >= 0 ? chain[idx] : null;
-        if (idx >= 0) chain.RemoveAt(idx);
-
-        excluded.Add(new TaskExcludedCommitInfo
-        {
-            Sha = sha,
-            ShortSha = moved?.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
-            Reason = CommitExclusionReasons.ManualExclude,
-            Subject = (moved?.Message ?? "").Split('\n')[0],
-            At = moved?.At ?? DateTime.UtcNow,
-            Manual = true,
-        });
-        return WriteCommitState(info.FolderPath, chain, excluded);
-    }
-
-    /// <summary>
-    /// Operator override: restore a commit the rule engine previously
-    /// excluded from this task. Unknown SHAs are rejected so there is no
-    /// backend path for manually assigning arbitrary commits to a task.
-    /// </summary>
-    public bool IncludeCommit(string jobId, string sha, string? watchPath = null)
-    {
-        if (string.IsNullOrWhiteSpace(sha)) return false;
-        var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) return false;
-        var (chain, excluded) = ReadCommitState(info.FolderPath);
-
-        var exIdx = excluded.FindIndex(e => string.Equals(e.Sha, sha, StringComparison.OrdinalIgnoreCase));
-        if (exIdx < 0) return false;
-        var prior = excluded[exIdx];
-        excluded.RemoveAt(exIdx);
-
-        if (chain.Any(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase)))
-            return WriteCommitState(info.FolderPath, chain, excluded);
-
-        chain.Add(new TaskCommitInfo
-        {
-            Sha = sha,
-            ShortSha = prior.ShortSha ?? (sha.Length > 8 ? sha[..8] : sha),
-            Message = prior.Subject ?? "",
-            FilesChanged = 0,
-            Files = [],
-            At = prior.At == default ? DateTime.UtcNow : prior.At,
-            Attribution = CommitAttributionKinds.ManualIncludeAfterExclude,
-            Confidence = null,
-        });
-        return WriteCommitState(info.FolderPath, chain, excluded);
-    }
-
-    private (List<TaskCommitInfo> chain, List<TaskExcludedCommitInfo> excluded) ReadCommitState(string folderPath)
-    {
-        var chain = new List<TaskCommitInfo>();
-        var excluded = new List<TaskExcludedCommitInfo>();
-        var jobJsonPath = Path.Combine(folderPath, "job.json");
-        if (!File.Exists(jobJsonPath)) return (chain, excluded);
-        try
-        {
-            var json = File.ReadAllText(jobJsonPath);
-            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, TaskJsonFile.ReadOpts)
-                      ?? new Dictionary<string, JsonElement>();
-            if (doc.TryGetValue("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in commitsEl.EnumerateArray())
-                {
-                    if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
-                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
-                }
-            }
-            else if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
-            {
-                var parsed = JsonSerializer.Deserialize<TaskCommitInfo>(legacyEl.GetRawText(), TaskJsonFile.ReadOpts);
-                if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
-            }
-            if (doc.TryGetValue("excludedCommits", out var exEl) && exEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in exEl.EnumerateArray())
-                {
-                    if (item.ValueKind != JsonValueKind.Object) continue;
-                    var parsed = JsonSerializer.Deserialize<TaskExcludedCommitInfo>(item.GetRawText(), TaskJsonFile.ReadOpts);
-                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) excluded.Add(parsed);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read commit state from {Folder}", folderPath);
-        }
-        return (chain, excluded);
-    }
-
-    private bool WriteCommitState(string folderPath, List<TaskCommitInfo> chain, List<TaskExcludedCommitInfo> excluded)
+    private bool WriteCommitState(string folderPath, List<TaskCommitInfo> chain)
     {
         try
         {
             TaskJsonFile.UpdateField(folderPath, "commits", chain, _logger);
             TaskJsonFile.UpdateField(folderPath, "commit", chain.Count > 0 ? chain[^1] : null, _logger);
-            TaskJsonFile.UpdateField(folderPath, "excludedCommits", excluded, _logger);
+            // Drop the obsolete operator-override array (removed feature) so the
+            // file is not left carrying a dead field after a rewrite.
+            TaskJsonFile.RemoveField(folderPath, "excludedCommits", _logger);
             return Updated();
         }
         catch (Exception ex)

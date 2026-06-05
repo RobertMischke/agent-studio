@@ -43,93 +43,12 @@
                         data-testid="git-commit-confidence"
                         [appTooltip]="attributionTooltip(entry)">{{ pct }}</span>
                 }
-                @if (isManualAttribution(entry)) {
-                  <span class="git-view__commit-manual"
-                        data-testid="git-commit-manual-marker"
-                        [appTooltip]="attributionTooltip(entry)">{{ attributionMarker(entry) }}</span>
-                }
                 <span class="git-view__commit-chain-meta">{{ entry.filesChanged }}f · {{ entry.at | date:'shortTime' }}</span>
               </button>
-              <button type="button"
-                      class="git-view__commit-exclude"
-                      data-testid="git-commit-exclude"
-                      [disabled]="git.overrideBusy()"
-                      [appTooltip]="'Exclude this commit from the task (operator override)'"
-                      aria-label="Exclude this commit from the task"
-                      (click)="git.excludeCommit(entry.sha)">−</button>
             </li>
           }
         </ol>
       }
-      @if (git.excludedCommits().length > 0) {
-        <div class="git-view__excluded" data-testid="git-excluded">
-          <button type="button"
-                  class="git-view__excluded-toggle"
-                  data-testid="git-excluded-toggle"
-                  [attr.aria-expanded]="excludedExpanded()"
-                  (click)="toggleExcluded()">
-            {{ excludedExpanded() ? '▾' : '▸' }} ({{ git.excludedCommits().length }} excluded)
-          </button>
-          @if (excludedExpanded()) {
-            <ul class="git-view__excluded-list" role="list">
-              @for (ex of git.excludedCommits(); track ex.sha) {
-                <li class="git-view__excluded-item"
-                    [attr.data-testid]="'git-excluded-item'"
-                    [attr.data-sha]="ex.sha">
-                  <span class="git-view__excluded-sha"
-                        [appTooltip]="excludedTooltip(ex)">{{ ex.shortSha }}</span>
-                  <span class="git-view__excluded-subject">{{ ex.subject || '(no subject)' }}</span>
-                  <span class="git-view__excluded-reason"
-                        [appTooltip]="excludedTooltip(ex)">{{ exclusionReasonLabel(ex.reason) }}</span>
-                  <button type="button"
-                          class="git-view__excluded-include"
-                          data-testid="git-commit-include"
-                          [disabled]="git.overrideBusy()"
-                          [appTooltip]="'Restore this commit to the task (operator override)'"
-                          aria-label="Restore this commit to the task"
-                          (click)="git.includeCommit(ex.sha)">+</button>
-                </li>
-              }
-            </ul>
-          }
-        </div>
-      }
-      <div class="git-view__add" data-testid="git-add-commit">
-        <button type="button"
-                class="git-view__add-toggle"
-                data-testid="git-add-commit-toggle"
-                [attr.aria-expanded]="git.addPickerOpen()"
-                [disabled]="git.overrideBusy()"
-                [appTooltip]="'Attach a recent commit the rule engine did not pick up (operator override)'"
-                (click)="git.toggleAddPicker()">+ Add commit</button>
-        @if (git.addPickerOpen()) {
-          <div class="git-view__add-picker" data-testid="git-add-commit-picker">
-            @if (git.recentLoading()) {
-              <div class="git-view__add-empty">Loading recent commits…</div>
-            } @else if (git.addableCommits().length === 0) {
-              <div class="git-view__add-empty">No further recent commits to add.</div>
-            } @else {
-              <ul class="git-view__add-list" role="list">
-                @for (rc of git.addableCommits(); track rc.sha) {
-                  <li class="git-view__add-item"
-                      [attr.data-testid]="'git-add-commit-item'"
-                      [attr.data-sha]="rc.sha">
-                    <button type="button"
-                            class="git-view__add-pick"
-                            [disabled]="git.overrideBusy()"
-                            [appTooltip]="rc.sha + ' · ' + rc.subject"
-                            (click)="git.addRecentCommit(rc)">
-                      <span class="git-view__add-sha">{{ rc.shortSha }}</span>
-                      <span class="git-view__add-subject">{{ rc.subject }}</span>
-                      <span class="git-view__add-meta">{{ rc.filesChanged }}f · {{ rc.authorDateUtc | date:'shortDate' }}</span>
-                    </button>
-                  </li>
-                }
-              </ul>
-            }
-          </div>
-        }
-      </div>
       @if (git.commitDetail()?.commit; as c) {
         <div class="git-view__commit-header"
              [class.git-view__commit-header--collapsed]="commitHeaderCollapsed()"
@@ -147,20 +66,6 @@
               <span class="git-view__commit-confidence"
                     data-testid="git-commit-header-confidence"
                     [appTooltip]="attributionTooltip(c)">{{ pct }}</span>
-            }
-            @if (isManualAttribution(c)) {
-              <span class="git-view__commit-manual"
-                    data-testid="git-commit-header-manual"
-                    [appTooltip]="attributionTooltip(c)">{{ attributionMarker(c) }}</span>
-            }
-            @if (git.commitChain().length <= 1) {
-              <button type="button"
-                      class="git-view__commit-exclude"
-                      data-testid="git-commit-header-exclude"
-                      [disabled]="git.overrideBusy()"
-                      [appTooltip]="'Exclude this commit from the task (operator override)'"
-                      aria-label="Exclude this commit from the task"
-                      (click)="git.excludeCommit(c.sha)">−</button>
             }
             <button type="button"
                     class="git-view__commit-collapse"

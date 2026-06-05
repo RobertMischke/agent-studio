@@ -297,14 +297,14 @@ public sealed class TaskTransitionService
         {
             if (_sessions == null) return;
 
-            // Pre-attribution candidate set: at this point moved.ExcludedCommits
-            // is empty, so the aggregate the runner builds is the raw union of
-            // run-range commits and the just-stamped auto-commit - exactly the
-            // noisy input the rule engine is meant to clean up.
+            // Pre-attribution candidate set: the aggregate the runner builds is
+            // the raw union of run-range commits and the just-stamped
+            // auto-commit - exactly the noisy input the rule engine is meant to
+            // clean up.
             var result = CommitAttributionRunner.Run(moved, watchPath, _sessions, _git);
             if (result == null) return;
 
-            _mutations.SetCommitAttributionOnFolder(moved.FolderPath, result.Attributed, result.Excluded);
+            _mutations.SetCommitAttributionOnFolder(moved.FolderPath, result.Attributed);
             _logger.LogInformation(
                 "commit-attribution jobId={JobId} attributed={Attributed} excluded={Excluded}",
                 moved.Id, result.Attributed.Count, result.Excluded.Count);

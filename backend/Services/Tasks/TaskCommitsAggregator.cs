@@ -40,13 +40,6 @@ public sealed record TaskCommitsAggregate
     public int TotalRemoved { get; init; }
     public int TotalFilesChanged { get; init; }
     public List<TaskCommitRecord> Commits { get; init; } = [];
-    /// <summary>
-    /// Commits the attribution rule withheld from this task (ADR
-    /// "Commit-Attribution-Regel"). Surfaced under the "(N excluded)"
-    /// expander in the protocol-pane git view; carries the reason so the
-    /// operator can see why each was held back.
-    /// </summary>
-    public List<TaskExcludedCommitInfo> Excluded { get; init; } = [];
 }
 
 /// <summary>
@@ -73,16 +66,7 @@ public static class TaskCommitsAggregator
         var ordered = new List<TaskCommitRecord>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // SHAs the attribution rule withheld: subtracted from every source
-        // below so a range commit the rule excluded (e.g. a crash-recovery
-        // for another task that landed inside this task's run window) never
-        // re-surfaces just because it is still reachable in git history.
-        var excludedShas = new HashSet<string>(
-            info.ExcludedCommits.Where(e => !string.IsNullOrWhiteSpace(e.Sha)).Select(e => e.Sha),
-            StringComparer.OrdinalIgnoreCase);
-
-        // Attribution overlay keyed by SHA from the persisted chain. Last
-        // write wins so a manual re-include refreshes the kind.
+        // Attribution overlay keyed by SHA from the persisted chain.
         var attrBySha = new Dictionary<string, TaskCommitInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var cm in info.Commits)
             if (!string.IsNullOrWhiteSpace(cm.Sha)) attrBySha[cm.Sha] = cm;
@@ -99,7 +83,6 @@ public static class TaskCommitsAggregator
             foreach (var c in commits)
             {
                 if (string.IsNullOrWhiteSpace(c.Sha)) continue;
-                if (excludedShas.Contains(c.Sha)) continue;
                 if (!seen.Add(c.Sha)) continue;
                 attrBySha.TryGetValue(c.Sha, out var meta);
                 ordered.Add(new TaskCommitRecord
@@ -120,12 +103,11 @@ public static class TaskCommitsAggregator
         }
 
         // Fold in persisted chain entries that no run range surfaced - the
-        // platform auto-commit and any operator manual-add. Attribution and
-        // confidence come straight from the stored entry.
+        // platform auto-commit. Attribution and confidence come straight from
+        // the stored entry.
         foreach (var cm in info.Commits)
         {
             if (string.IsNullOrWhiteSpace(cm.Sha)) continue;
-            if (excludedShas.Contains(cm.Sha)) continue;
             if (!seen.Add(cm.Sha)) continue;
             ordered.Add(new TaskCommitRecord
             {
@@ -148,7 +130,7 @@ public static class TaskCommitsAggregator
         // it stays for callers that build TaskInfo with only the singular field
         // set (legacy job.json read paths and unit fixtures).
         if (info.Commit != null && !string.IsNullOrWhiteSpace(info.Commit.Sha)
-            && !excludedShas.Contains(info.Commit.Sha) && seen.Add(info.Commit.Sha))
+            && seen.Add(info.Commit.Sha))
         {
             ordered.Add(new TaskCommitRecord
             {
@@ -175,7 +157,6 @@ public static class TaskCommitsAggregator
             TotalRemoved = ordered.Sum(c => c.Removed),
             TotalFilesChanged = ordered.Sum(c => c.FilesChanged),
             Commits = ordered,
-            Excluded = info.ExcludedCommits.ToList()
         };
     }
 

@@ -235,7 +235,6 @@ public static class CommitAttributionService
         Reason = reason,
         Subject = c.Subject,
         At = c.AuthorDateUtc,
-        Manual = false,
     };
 
     /// <summary>
