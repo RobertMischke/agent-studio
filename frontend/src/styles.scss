@@ -26,6 +26,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+:root {
+  --studio-z-overlay-backdrop: 2147483000;
+  --studio-z-overlay-panel: 2147483001;
+  --studio-z-overlay-modal: 2147483002;
+}
+
+.studio-overlay-layer {
+  position: relative;
+  z-index: var(--studio-z-overlay-panel);
+  isolation: isolate;
+}
+
 // Reusable content-width primitive. Components opt into the content type
 // (`--prose` for paragraphs, `--tabular` for grids/tables) while this global
 // class owns the left-aligned max-width behaviour.

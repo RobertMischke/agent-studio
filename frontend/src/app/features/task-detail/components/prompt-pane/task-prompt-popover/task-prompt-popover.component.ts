@@ -4,6 +4,7 @@ import {
   DestroyRef,
   ElementRef,
   HostListener,
+  ViewChild,
   computed,
   effect,
   inject,
@@ -13,6 +14,7 @@ import {
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
+import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { resolveProtocolImageSrc } from '../../protocol-pane/protocol-image-resolver';
 
 /**
@@ -23,7 +25,9 @@ import { resolveProtocolImageSrc } from '../../protocol-pane/protocol-image-reso
  * tokens and pipeline but never the prompt itself; this is the in-place way to
  * read what the task was actually asked to do without leaving for the Files tab.
  *
- * Closes on click-outside (document listener scoped to the host) and on Escape
+ * The popover panel is portaled to the central body overlay layer and anchored
+ * back to the trigger. That keeps it above sibling panes and out of ancestor
+ * overflow clipping. Closes on click-outside and on Escape
  * (routed through {@link ModalStackService} so a real modal above wins first,
  * and so Escape does not bubble out and close the whole detail panel). The body
  * is scrollable for long prompts. The trigger hides itself when there is no
@@ -59,8 +63,18 @@ export class TaskPromptPopoverComponent {
 
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly modalStack = inject(ModalStackService);
+  private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
+  private portalRef: OverlayPortalRef | null = null;
+  private repositionAttached = false;
+  private readonly reposition = () => this.positionPanel();
+
+  readonly panelPos = signal<{ left: number; top: number }>({ left: 0, top: 0 });
+
+  @ViewChild('triggerBtn') private triggerBtnRef?: ElementRef<HTMLButtonElement>;
+  @ViewChild('portalRoot') private portalRootRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('panelEl') private panelElRef?: ElementRef<HTMLDivElement>;
 
   toggle(event: Event): void {
     event.stopPropagation();
@@ -77,6 +91,8 @@ export class TaskPromptPopoverComponent {
     if (!this.open()) return;
     const root = this.host.nativeElement as HTMLElement;
     if (root && event.target instanceof Node && root.contains(event.target)) return;
+    const portalRoot = this.portalRootRef?.nativeElement;
+    if (portalRoot && event.target instanceof Node && portalRoot.contains(event.target)) return;
     this.close();
   }
 
@@ -89,10 +105,59 @@ export class TaskPromptPopoverComponent {
         this.close();
         return true;
       });
+      queueMicrotask(() => this.acquirePortalAndPosition());
     } else if (!isOpen && this.modalStackDispose) {
+      this.releasePortal();
       this.modalStackDispose();
       this.modalStackDispose = null;
     }
   });
-  private readonly stackTeardown = this.destroyRef.onDestroy(() => this.modalStackDispose?.());
+  private readonly stackTeardown = this.destroyRef.onDestroy(() => {
+    this.releasePortal();
+    this.modalStackDispose?.();
+  });
+
+  private acquirePortalAndPosition(): void {
+    if (!this.open()) return;
+    if (!this.portalRef) {
+      const root = this.portalRootRef?.nativeElement;
+      if (!root) return;
+      this.portalRef = this.overlayPortal.attach(root);
+    }
+    this.attachReposition();
+    this.positionPanel();
+  }
+
+  private positionPanel(): void {
+    const trigger = this.triggerBtnRef?.nativeElement;
+    const panel = this.panelElRef?.nativeElement;
+    if (!trigger || !panel) return;
+    const pos = this.overlayPortal.positionConnected(trigger, panel, {
+      preferredPlacement: 'below',
+      alignment: 'start',
+      gap: 6,
+      viewportPadding: 8,
+    });
+    this.panelPos.set({ left: pos.left, top: pos.top });
+  }
+
+  private releasePortal(): void {
+    this.detachReposition();
+    this.portalRef?.dispose();
+    this.portalRef = null;
+  }
+
+  private attachReposition(): void {
+    if (this.repositionAttached) return;
+    this.repositionAttached = true;
+    window.addEventListener('scroll', this.reposition, true);
+    window.addEventListener('resize', this.reposition);
+  }
+
+  private detachReposition(): void {
+    if (!this.repositionAttached) return;
+    this.repositionAttached = false;
+    window.removeEventListener('scroll', this.reposition, true);
+    window.removeEventListener('resize', this.reposition);
+  }
 }
