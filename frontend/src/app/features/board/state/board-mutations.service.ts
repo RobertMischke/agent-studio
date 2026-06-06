@@ -204,6 +204,50 @@ export class BoardMutationsService {
     });
   }
 
+  // ---------- lane change from the triage screen ----------
+
+  /**
+   * Triage-screen state change. Same optimistic move + undo toast as the
+   * detail-view path, but it deliberately leaves `TaskSelectionService`
+   * untouched: the triage list is a standalone editor tab, so selecting
+   * or pager-advancing the moved task would yank the user into the
+   * task-detail view. The optimistic snapshot drops the card from the
+   * `0-backlog`-scoped list immediately; polling reconciles the rest.
+   */
+  changeStateFromTriage(info: TaskInfo, targetState: string): void {
+    if (!targetState || targetState === info.state) return;
+    const prevState = info.state;
+    const prevIndex = this.jobService.findLaneIndex(info.id, info.watchPath, prevState);
+    const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, targetState);
+    this.jobService.beginOptimisticPersist();
+    this.jobService.moveJob(info.id, targetState, info.watchPath).subscribe({
+      next: () => {
+        this.jobService.endOptimisticPersist();
+        if (prevIndex >= 0) {
+          this.undo.offerLaneRevert({
+            jobId: info.id,
+            watchPath: info.watchPath,
+            jobLabel: info.title || info.id,
+            actionLabel: 'Promoted',
+            targetLaneLabel: laneLabelFor(targetState),
+            prevState,
+            prevIndex,
+          });
+        }
+      },
+      error: (err) => {
+        this.jobService.endOptimisticPersist();
+        if (snapshot) this.jobService.revertOptimisticMove(snapshot);
+        this.jobService.error.set(err.message || 'Failed to move job');
+        this.errorDialog.show(err, {
+          title: 'Failed to move task',
+          fallbackMessage: 'Failed to move task',
+          source: `Task ${info.id}`,
+        });
+      },
+    });
+  }
+
   // ---------- bulk archive ----------
 
   /**

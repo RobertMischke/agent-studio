@@ -21,10 +21,12 @@ async function firstWatchPath(): Promise<WatchPath> {
   return paths[0];
 }
 
+const CLIENT_ID = process.env.PW_CLIENT_ID?.trim() || 'local-default';
+
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
   await fetch(
     `${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`,
-    { method: 'DELETE' },
+    { method: 'DELETE', headers: { 'x-client-id': CLIENT_ID } },
   );
 }
 
@@ -43,7 +45,7 @@ async function seedBacklogJob(opts: {
 }): Promise<void> {
   const res = await fetch(`${BACKEND}/api/tasks`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID },
     body: JSON.stringify({
       id: opts.id,
       title: opts.title,
@@ -122,6 +124,13 @@ test.describe('Backlog dedicated triage screen (#/backlog)', () => {
     // Row disappears from the backlog triage list (no full reload — the
     // list is signals-driven off the same source as the kanban).
     await expect(row).toHaveCount(0, { timeout: 10_000 });
+
+    // The status change must NOT yank the user into the task-detail view:
+    // the triage screen stays put on #/backlog and the detail panes never
+    // mount. (Regression for the changeStateFromDetail navigation bug.)
+    await expect(page.getByTestId('backlog-triage-screen')).toBeVisible();
+    await expect(page.getByTestId('detail-panes')).toHaveCount(0);
+    expect(page.url()).toContain('#/backlog');
 
     // Backend confirms the job is now in 1-preparation.
     const job = await api<{ state: string }>(

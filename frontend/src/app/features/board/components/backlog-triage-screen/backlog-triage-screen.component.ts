@@ -150,7 +150,7 @@ export class BacklogTriageScreenComponent implements OnDestroy {
   }
 
   promote(task: TaskInfo, target: '1-preparation' | '2-ready'): void {
-    this.boardMutations.changeStateFromDetail(task, target);
+    this.boardMutations.changeStateFromTriage(task, target);
   }
 
   onDelete(task: TaskInfo): void {
