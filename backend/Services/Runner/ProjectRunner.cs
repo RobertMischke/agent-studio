@@ -141,6 +141,15 @@ public class ProjectRunner
     private RunPlan? _activePlan => _activeRuns.Single?.Plan;
     private int _activeReissueAttempt => _activeRuns.Single?.ReissueAttempt ?? 0;
     private bool _processing;
+    // ADR-0052 slice 2: worktree-isolated parallel execution. Lazily built from
+    // the injected GitService. _integrateLock is the per-project merge-queue:
+    // it serializes integrations into the work branch so concurrent slot merges
+    // never race. Only engaged when MaxParallelism > 1; the max==1 path never
+    // touches a worktree (byte-identical to the sequential runner).
+    private WorktreeTaskLifecycle? _worktreeLifecycle;
+    private WorktreeTaskLifecycle Worktree => _worktreeLifecycle ??=
+        new WorktreeTaskLifecycle(_git, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorktreeTaskLifecycle>.Instance);
+    private readonly System.Threading.SemaphoreSlim _integrateLock = new(1, 1);
     // ADR-0052: the pick-gate rationale recorded the last time a task was
     // admitted into a runner slot. Surfaced on the status payload + the
     // runner_slot_admission timeline event so the UI can show the pick
@@ -560,10 +569,14 @@ public class ProjectRunner
         if (_role == RunnerRole.TestSubject) return;
 
         if (_mode is "manual" or "paused") return;
-        if (_processing || _activeJobId != null) return;
+        var slotMax = SlotMax();
+        if (_processing || !_activeRuns.HasFreeSlot(slotMax)) return;
 
-        // Check if there's a running process for this project on any CLI
-        if (_router.All.Any(c => c.IsRunningForProject(Entry.RootPath))) return;
+        // Check if there's a running process for this project on any CLI. Only
+        // meaningful at slotMax==1 (sequential, main checkout). At >1, parallel
+        // runs live in isolated worktrees, not Entry.RootPath, so this guard is
+        // skipped and the slot/admission logic governs concurrency instead.
+        if (slotMax == 1 && _router.All.Any(c => c.IsRunningForProject(Entry.RootPath))) return;
 
         // Pickup gating ends here. The picker below considers 3-progress and
         // 2-ready only; jobs sitting in 1-preparation, 1a-orchestrator-prep,
@@ -583,30 +596,57 @@ public class ProjectRunner
         // case, not the most-skippable. Folders that have failed silently
         // for the configured retry budget get dead-lettered into 7-archive
         // here so the iteration drains and falls through to the ready queue.
-        var nextJob = TryPickProgressJobOrDeadLetter();
-        if (nextJob == null)
+        // ADR-0052 slice 2 admit-loop: fill free slots. At slotMax==1 this runs
+        // exactly once and admits one job (byte-identical to the old single-job
+        // latch). At >1 it admits additional ready tasks that the admission
+        // policy proves disjoint from (or, under worktree isolation, optimistic
+        // about) what is already running.
+        while (_activeRuns.HasFreeSlot(slotMax))
         {
-            // Only when no in-flight 3-progress folder needs resuming: sweep
-            // any human-decision-needed card out of 2-ready into 5-human-review
-            // before the ready picker runs. Placed after the progress pickup so
-            // its scan does not perturb the mtime-ordered resume walk above.
-            RelocateStrayHumanDecisionCards();
-            nextJob = GetNextReadyJob();
-        }
-
-        if (nextJob == null)
-        {
-            if (_mode == "auto-single")
+            TaskInfo? nextJob;
+            if (_activeRuns.Count == 0)
             {
-                // Route through SetMode so the revert is persisted - otherwise a
-                // backend restart right after this would resurrect "auto-single"
-                // and immediately pick up another job.
-                SetMode("manual", "auto-single revert: pickup queue empty");
+                // First slot: strict progress-first pickup (resume 3-progress
+                // oldest-first), else sweep stray human-decision cards + take the
+                // next ready job.
+                nextJob = TryPickProgressJobOrDeadLetter();
+                if (nextJob == null)
+                {
+                    RelocateStrayHumanDecisionCards();
+                    nextJob = GetNextReadyJob();
+                }
             }
-            return;
-        }
+            else
+            {
+                // Additional parallel slot: only fresh ready work. Progress
+                // resumes belong to the slot that already owns that folder.
+                nextJob = GetNextReadyJob();
+            }
 
-        await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
+            if (nextJob == null)
+            {
+                if (_mode == "auto-single")
+                    SetMode("manual", "auto-single revert: pickup queue empty");
+                break;
+            }
+
+            // Never double-claim a folder already occupying a slot.
+            if (_activeRuns.Contains(nextJob.Id)) break;
+
+            // Admission against running tasks (skip for the empty first slot).
+            if (_activeRuns.Count > 0)
+            {
+                var adm = DecideAdmission(nextJob.Id, PredictParallelism(nextJob), slotMax);
+                _lastPickReason = adm.Reason;
+                if (!adm.Admitted)
+                {
+                    _logger.LogInformation("[taskboard] holding {Job} (slot busy): {Reason}", nextJob.Id, adm.Reason);
+                    break;
+                }
+            }
+
+            await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
+        }
     }
 
     public Task<RunOutcome> StartJobManualAsync(string jobId, CancellationToken ct)
@@ -630,13 +670,118 @@ public class ProjectRunner
     /// endpoint route through here so a fix in one path can never miss its
     /// sibling - that divergence is the bug class this design exists to prevent.
     /// </summary>
+    // ── ADR-0052 slice 2: parallel admission + worktree/merge helpers ──────────
+
+    /// <summary>Effective, clamped MaxParallelism for this project (live setting).</summary>
+    private int SlotMax() => ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism);
+
+    private static readonly System.Text.RegularExpressions.Regex ScopePathRegex =
+        new(@"\b((?:backend|frontend|src|docs|tools)/[A-Za-z0-9_./-]+)",
+            System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Predict a task's parallelisability facts so the pick-gate can prove it
+    /// disjoint from running tasks. Heuristic: repo-relative path prefixes
+    /// mentioned in the title + prompt.md form the predicted scope; none found =
+    /// unknown scope (the pick-gate then serializes, or admits optimistically
+    /// under worktree isolation - see <see cref="DecideAdmission"/>). The
+    /// orchestrator can later replace this with an LLM scope prediction.
+    /// </summary>
+    private TaskParallelism PredictParallelism(TaskInfo info)
+    {
+        var text = info.Title ?? string.Empty;
+        try
+        {
+            var pf = Path.Combine(info.FolderPath, "prompt.md");
+            if (File.Exists(pf)) text += "\n" + File.ReadAllText(pf);
+        }
+        catch { /* best-effort */ }
+        var scope = ScopePathRegex.Matches(text)
+            .Select(m => m.Groups[1].Value)
+            .Select(p => { var i = p.LastIndexOf('/'); return i > 0 ? p.Substring(0, i) : p; })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(24)
+            .ToArray();
+        return new TaskParallelism(false, scope);
+    }
+
+    /// <summary>
+    /// Pick-gate admission for one candidate against what is already running.
+    /// Wraps <see cref="ParallelSlotPolicy.Decide"/> and, under worktree
+    /// isolation (max&gt;1), upgrades the conservative "unknown-scope" serialize
+    /// to an optimistic admit: a real file conflict then surfaces deterministically
+    /// at integrate-merge (-&gt; escalate), never as corruption. Exclusive tasks and
+    /// proven scope conflicts are still serialized.
+    /// </summary>
+    private SlotAdmission DecideAdmission(string jobId, TaskParallelism p, int slotMax)
+    {
+        var dec = ParallelSlotPolicy.Decide(jobId, p, _activeRuns.RunningTasks(), slotMax);
+        if (!dec.Admitted && slotMax > 1 && _activeRuns.Count > 0
+            && dec.Reason.Contains("unknown-scope", StringComparison.OrdinalIgnoreCase))
+            return new SlotAdmission(SlotDecision.Admit, "parallel-ok (optimistic: unknown scope, worktree-isolated)");
+        return dec;
+    }
+
+    /// <summary>Where parallel task worktrees live (sibling temp root, off the repo).</summary>
+    private string WorktreeRoot()
+        => Path.Combine(Path.GetTempPath(), "ass-worktrees", System.Text.RegularExpressions.Regex.Replace(ProjectName, "[^A-Za-z0-9_.-]", "-"));
+
+    /// <summary>
+    /// Post-run integration for a worktree (parallel-slot) run: commit the agent's
+    /// edits on the task branch, then under the per-project merge-queue lock merge
+    /// the branch into the work branch (develop). On clean merge, tear the worktree
+    /// down; on conflict, leave it for resolution (the post-run policy escalates).
+    /// No-op for the sequential (max==1) path.
+    /// </summary>
+    private void IntegrateWorktreeRun(ActiveRun run, TaskInfo info)
+    {
+        if (!run.IsWorktreeRun) return;
+        var settings = _projectSettings.Get(ProjectName);
+        var workBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch) ? "develop" : settings.IntegrationBranch!;
+        var strategy = string.IsNullOrWhiteSpace(settings.IntegrationStrategy) ? IntegrationStrategies.DirectMerge : settings.IntegrationStrategy!;
+        try
+        {
+            // 1) commit the agent's work inside the worktree (no-op if clean)
+            _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
+                $"{info.Title}\n\n[parallel-slot worktree run; jobId={run.JobId}]");
+            // 2) serialize integration into the shared work branch (merge-queue)
+            _integrateLock.Wait();
+            try
+            {
+                var res = Worktree.Integrate(Entry.RootPath, run.WorktreePath!, run.Branch!, workBranch, strategy);
+                if (res.Outcome == IntegrationOutcome.Merged)
+                {
+                    _logger.LogInformation("[taskboard] parallel run {Job} integrated into {Branch} at {Sha}",
+                        run.JobId, workBranch, res.IntegratedSha ?? "<unknown>");
+                    Worktree.Teardown(Entry.RootPath, run.WorktreePath!, run.Branch, deleteBranch: true, force: true);
+                }
+                else if (res.Outcome == IntegrationOutcome.Conflict)
+                {
+                    _logger.LogWarning("[taskboard] parallel run {Job} merge conflict into {Branch}: {Err} (left for resolution)",
+                        run.JobId, workBranch, res.Error);
+                }
+                else
+                {
+                    _logger.LogWarning("[taskboard] parallel run {Job} integration outcome {Outcome}: {Err}",
+                        run.JobId, res.Outcome, res.Error);
+                    Worktree.Teardown(Entry.RootPath, run.WorktreePath!, run.Branch, deleteBranch: false, force: true);
+                }
+            }
+            finally { _integrateLock.Release(); }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[taskboard] worktree integration failed for {Job}", run.JobId);
+        }
+    }
+
     private async Task<RunOutcome> RunCliAsync(
         string jobId, RunIntent intent, string? followupPrompt, int reissueAttempt, string? mode, CancellationToken ct)
     {
-        if (_activeJobId != null)
+        if (!_activeRuns.HasFreeSlot(SlotMax()) || _activeRuns.Contains(jobId))
         {
             if (intent == RunIntent.ManualStart)
-                _logger.LogWarning("Runner '{Project}' already has active job {JobId}", ProjectName, _activeJobId);
+                _logger.LogWarning("Runner '{Project}' has no free slot / job already active {JobId}", ProjectName, _activeJobId);
             // Look up the active job's title for the queued response so the
             // TaskRunnerService can shape a friendly meta message without
             // re-scanning. Best-effort; null title is fine.
@@ -799,6 +944,26 @@ public class ProjectRunner
                 Plan = plan,
                 ReissueAttempt = reissueAttempt,
             });
+            // ADR-0052 slice 2: isolate parallel runs in a git worktree off the
+            // work branch so concurrent agents never share a checkout. Sequential
+            // (max==1) runs stay in Entry.RootPath, byte-identical to before.
+            if (SlotMax() > 1 && _activeRuns.Get(jobId) is { } claimed)
+            {
+                claimed.Parallelism = PredictParallelism(info);
+                var wtSettings = _projectSettings.Get(ProjectName);
+                var workBranch = string.IsNullOrWhiteSpace(wtSettings.IntegrationBranch) ? "develop" : wtSettings.IntegrationBranch!;
+                var prep = Worktree.Prepare(Entry.RootPath, jobId, workBranch, WorktreeRoot());
+                if (prep.Success)
+                {
+                    claimed.WorktreePath = prep.WorktreePath;
+                    claimed.Branch = prep.Branch;
+                    _logger.LogInformation("[taskboard] parallel slot for {Job}: worktree {Path} on {Branch}", jobId, prep.WorktreePath, prep.Branch);
+                }
+                else
+                {
+                    _logger.LogWarning("[taskboard] worktree prepare failed for {Job}: {Err} - running in main checkout", jobId, prep.Error);
+                }
+            }
             NotifyStatus();
 
             Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
@@ -910,7 +1075,7 @@ public class ProjectRunner
             // a toggle take effect on the next run without a backend restart.
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
             var (execution, cliError) = await cli.StartAsync(
-                jobId, GetJobKey(jobId), prompt, Entry.RootPath,
+                jobId, GetJobKey(jobId), prompt, (_activeRuns.Get(jobId)?.WorktreePath ?? Entry.RootPath),
                 plan.SessionToResume, plan.ResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, ct);
 
             if (execution == null)
@@ -2639,11 +2804,13 @@ public class ProjectRunner
 
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {
-        var activeJobId = _activeJobId;
-        if (GetActiveJobKey() != jobKey || activeJobId == null) return;
-        if (_activeCliType != null && !string.Equals(cliType, _activeCliType, StringComparison.OrdinalIgnoreCase)) return;
+        // Find the slot whose run this finish belongs to (by job key), so a
+        // second parallel slot's finish is not dropped by a Single-based check.
+        var finishedRun = _activeRuns.ByJobKey(GetJobKey, jobKey);
+        if (finishedRun == null) return;
+        if (finishedRun.CliType != null && !string.Equals(cliType, finishedRun.CliType, StringComparison.OrdinalIgnoreCase)) return;
 
-        _ = Task.Run(() => OnCliFinishedAsync(cliType, jobKey, execution, activeJobId));
+        _ = Task.Run(() => OnCliFinishedAsync(cliType, jobKey, execution, finishedRun.JobId));
     }
 
     private async Task OnCliFinishedAsync(string cliType, string jobKey, CliExecution execution, string jobId)
@@ -2655,17 +2822,28 @@ public class ProjectRunner
         // before the capture-fail block reads them. Reading from a local
         // snapshot makes the recovery decision deterministic w.r.t. THIS
         // run, regardless of what other paths do concurrently.
-        var planSnapshot = _activePlan;
-        var intentSnapshot = _activeIntent;
-        var followupSnapshot = _activeFollowup;
-        var reissueAttemptSnapshot = _activeReissueAttempt;
+        var snapRun = _activeRuns.Get(jobId);
+        var planSnapshot = snapRun?.Plan;
+        var intentSnapshot = snapRun?.Intent ?? default;
+        var followupSnapshot = snapRun?.Followup;
+        var reissueAttemptSnapshot = snapRun?.ReissueAttempt ?? 0;
         try
         {
-            if (GetActiveJobKey() != jobKey || _activeJobId != jobId) return;
-            if (_activeCliType != null && !string.Equals(cliType, _activeCliType, StringComparison.OrdinalIgnoreCase)) return;
+            if (_activeRuns.Get(jobId) is not { } run) return;
+            if (run.CliType != null && !string.Equals(cliType, run.CliType, StringComparison.OrdinalIgnoreCase)) return;
 
             _logger.LogInformation("Job {JobId} finished in project '{Project}' on {Cli} with status {Status}",
                 jobId, ProjectName, cliType, execution.Status);
+
+            // ADR-0052 slice 2: a parallel (worktree) run commits its edits on the
+            // task branch and integrates them into the work branch BEFORE the
+            // post-run review reads the result; a merge conflict is left for the
+            // review to escalate. No-op for the sequential (max==1) path.
+            if (run.IsWorktreeRun)
+            {
+                var wtInfo = _scanner.FindJob(jobId, Entry.Path);
+                if (wtInfo != null) IntegrateWorktreeRun(run, wtInfo);
+            }
 
             var cli = _router.Get(cliType);
 
