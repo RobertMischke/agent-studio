@@ -26,6 +26,39 @@ Hard rules:
 
 Phasing is detailed in the queued task `task-access-api-layer-extraction`: ADR + skeleton, in-memory store, mutations and subscribers, consumer migration, default-on with multi-instance preparation.
 
+### Assisted Coding Harness Around CLI Runs
+
+Provider pricing and usage boundaries can change quickly. The June 15, 2026 Claude Code Agent SDK credit change makes the product boundary more important, not less: agent-orchestrator should remain a CLI-conformant assisted-coding harness around task runs, while provider CLIs remain the execution engines.
+
+The product model is a pre/core/post pipeline around one task:
+
+- **Pre-step**: cut the work into a bounded task, gather context, choose the CLI/model, set acceptance criteria, prepare worktree/branch isolation when the project needs it, and state the review bar before a model starts editing.
+- **Core step**: start the configured coding-agent CLI in the user's controlled environment. Claude Code, Codex, Copilot, Gemini, or another supported CLI owns the provider session, model routing, tool loop, approvals, and coding behavior.
+- **Post-step**: collect the run output, stdout/stderr, structured markers, diffs, screenshots, test/check results, token or usage data where the CLI exposes it, review findings, and the human accept/reject/split/reissue decision.
+
+What this enables:
+
+- **Provider portability**: a task can move between Claude Code, Codex, Copilot, Gemini, or a future CLI without changing the task lifecycle.
+- **Pricing resilience**: provider usage changes affect the core execution step; the task, evidence, review and routing layer stays useful.
+- **Forum-ready positioning**: when developers discuss Agent SDK, `claude -p`, subscriptions or CLI harnesses, the product can say exactly where it sits: assisted coding around the provider CLI, not a hidden replacement agent runtime.
+- **Usage accountability**: token and usage signals become post-run evidence where available, not a loose terminal memory.
+
+Hard rules:
+
+- No hidden Agent SDK dependency for the orchestration layer when the configured contract is a provider CLI.
+- No promise that the product bypasses provider pricing, plan limits, terms, or enforcement.
+- No raw model API coding runtime in the default product path.
+- The app may prepare and inspect a run, but the provider CLI owns the code-writing loop.
+- Usage capture must be explicit about source and confidence: CLI-reported, parsed from logs, inferred, or unavailable.
+
+First implementation order:
+
+1. Keep the README and website language aligned on "assisted-coding harness around provider CLIs".
+2. Add a compact pre/core/post timeline to the task detail or run timeline surface.
+3. Normalize per-run usage records so post-run evidence can say which provider, CLI mode, model, source and confidence produced the numbers.
+4. Add a forum/FAQ-ready doc under `docs/` that explains Agent SDK, `claude -p`, interactive CLI and managed taskboard runs without making policy claims.
+5. Add regression tests around CLI invocation paths so headless SDK-like execution cannot silently replace the configured CLI contract.
+
 ### Security First
 
 Make security a first-class project dimension, not a one-off task:
