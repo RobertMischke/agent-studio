@@ -11,6 +11,7 @@ import { StickToBottomDirective } from './stick-to-bottom.directive';
       <section appStickToBottom #stick="stickToBottom">
         <div class="content"></div>
       </section>
+      <textarea class="composer"></textarea>
     </div>
   `,
 })
@@ -120,6 +121,15 @@ describe('StickToBottomDirective', () => {
     scroller.scrollTop = 0;
     resizeCallback!();
     expect(scroller.scrollTop).toBe(0); // stayed put — user's scroll position respected
+  });
+
+  it('does NOT re-pin on content growth while the composer has focus', async () => {
+    const { fixture, scroller } = await mount();
+    const textarea = fixture.nativeElement.querySelector('.composer') as HTMLTextAreaElement;
+    scroller.scrollTop = 500;
+    textarea.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    resizeCallback!();
+    expect(scroller.scrollTop).toBe(500);
   });
 
   // Requirement 2 (no excess whitespace): the pin requests the maximum scroll

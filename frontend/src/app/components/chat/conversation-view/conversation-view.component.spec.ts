@@ -94,6 +94,14 @@ async function makeFixture(events: ConversationEvent[]) {
   return fixture;
 }
 
+async function makeFixtureWithState(events: ConversationEvent[], state: { isRunning?: boolean; queuedFollowUp?: boolean }) {
+  const fixture = await makeFixture(events);
+  fixture.componentRef.setInput('isRunning', state.isRunning ?? false);
+  fixture.componentRef.setInput('queuedFollowUp', state.queuedFollowUp ?? false);
+  fixture.detectChanges();
+  return fixture;
+}
+
 describe('ConversationViewComponent', () => {
   it('renders an empty placeholder when there are no events', async () => {
     const fixture = await makeFixture([]);
@@ -393,6 +401,25 @@ describe('ConversationViewComponent', () => {
     expect(
       el.querySelector('[data-testid="conversation-feedback-open-followup"]')
     ).toBeTruthy();
+  });
+
+  it('renders a queued follow-up status band immediately when supplied by the host', async () => {
+    const fixture = await makeFixtureWithState([userMessage()], { queuedFollowUp: true });
+    const el: HTMLElement = fixture.nativeElement;
+    const status = el.querySelector('[data-testid="conversation-status-queued"]');
+    expect(status).toBeTruthy();
+    expect(status?.textContent).toContain('Queued');
+    expect(status?.textContent).toContain('next pickup');
+  });
+
+  it('renders the working status band ahead of queued state while the run is active', async () => {
+    const fixture = await makeFixtureWithState([userMessage()], {
+      isRunning: true,
+      queuedFollowUp: true,
+    });
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('[data-testid="conversation-status-working"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="conversation-status-queued"]')).toBeFalsy();
   });
 
   it('emits openFollowUp with the follow-up job id when the queue link is clicked', async () => {

@@ -68,6 +68,50 @@
   font-size: 12.5px;
 }
 
+.conv__status {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2, 8px);
+  padding: var(--studio-spacing-2, 8px) var(--studio-spacing-3, 12px);
+  border: 1px solid color-mix(in srgb, var(--severity-pending) 36%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--severity-pending) 10%, var(--studio-bg-surface));
+  color: color-mix(in srgb, currentColor 88%, transparent);
+  font-size: 12px;
+}
+
+.conv__status[data-status='working'] {
+  border-color: color-mix(in srgb, var(--accent-blue, #38bdf8) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-blue, #38bdf8) 10%, var(--studio-bg-surface));
+}
+
+.conv__status-pulse {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--severity-pending);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--severity-pending) 40%, transparent);
+  animation: conv-status-pulse 1.4s ease-out infinite;
+}
+
+.conv__status[data-status='working'] .conv__status-pulse {
+  background: var(--accent-blue, #38bdf8);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-blue, #38bdf8) 40%, transparent);
+}
+
+.conv__status-title { font-weight: 700; }
+.conv__status-detail { color: color-mix(in srgb, currentColor 68%, transparent); }
+
+@keyframes conv-status-pulse {
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
 /* One continuous, theme-aware surface (paper-white on light, the cleanest
  * body tone on dark) — the whole thread lives on it and rows are split by
  * hairline dividers instead of each message owning its own card. */

@@ -249,6 +249,7 @@ export class TaskDetailComponent implements OnDestroy {
   private regenPollTimer: ReturnType<typeof setInterval> | null = null;
   private regenStartedAt = 0;
   readonly followupPrompt = signal('');
+  readonly queuedFollowUp = signal(false);
   readonly continueMode = signal<ContinueMode>('continue');
   readonly modelDraft = signal('');
   readonly thinkingLevelDraft = signal<string | null>(null);
@@ -455,6 +456,7 @@ export class TaskDetailComponent implements OnDestroy {
       this.editingTitle.set(false);
       this.savingTitle.set(false);
       this.followupPrompt.set('');
+      this.queuedFollowUp.set(false);
       this.setupExpandedDuringRun.set(false);
       this.cliPoll.resetForJobSwitch();
       this.lastShownFailureKey = null;
@@ -499,6 +501,9 @@ export class TaskDetailComponent implements OnDestroy {
 
     this.cliPoll.setJob({ id: d.info.id, watchPath: d.info.watchPath });
     this.applyExecutionState(d.info.execution);
+    if (d.info.execution?.status === 'running') {
+      this.queuedFollowUp.set(false);
+    }
 
     // The endpoint returns the live buffer while a process is active and falls
     // back to logs/cli-output.log for completed tasks.
@@ -694,6 +699,11 @@ export class TaskDetailComponent implements OnDestroy {
     return project?.activeJobId === info.id;
   });
 
+  readonly showQueuedFollowUp = computed<boolean>(() => {
+    if (this.isRunning()) return false;
+    return this.queuedFollowUp() || !!this.detail().info.pendingIntent;
+  });
+
   startJob(): void {
     this.errorMsg.set(null);
     this.starting.set(true);
@@ -752,13 +762,16 @@ export class TaskDetailComponent implements OnDestroy {
         next: (resp) => {
           this.continuing.set(false);
           if (resp.status === 'started' && resp.execution) {
+            this.queuedFollowUp.set(false);
             this.cliPoll.beginContinuation(new Date(resp.execution.startedAt));
             this.sessionEventsPoll.refresh();
+          } else if (resp.status === 'queued') {
+            this.queuedFollowUp.set(true);
           }
           // status === 'queued': the project was busy. The backend already
           // saved the user's intent + posted a [queued] orchestrator line
-          // into the chat; nothing more for us to do here. The optimistic
-          // user-message echo above stays so the chat reads forward.
+          // into the chat. The optimistic user-message echo above and the
+          // queued status band keep the conversation readable until pickup.
         },
         error: (err) => {
           this.continuing.set(false);

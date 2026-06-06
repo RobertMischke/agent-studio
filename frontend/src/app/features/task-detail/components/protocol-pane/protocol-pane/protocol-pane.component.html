@@ -398,6 +398,7 @@
                   @case ('conversation') {
                     <app-conversation-view [events]="nextGenChatEvents()"
                                            [isRunning]="isRunning()"
+                                           [queuedFollowUp]="queuedFollowUp()"
                                            variant="embedded"
                                            (openTrace)="onConversationOpenTrace($event)"
                                            (openFollowUp)="onOpenFollowup($event)"

@@ -49,6 +49,18 @@
       }
     </div>
   } @else {
+    @if (statusKind(); as status) {
+      <div class="conv__status"
+           [attr.data-status]="status"
+           [attr.data-testid]="'conversation-status-' + status"
+           role="status">
+        <span class="conv__status-pulse" aria-hidden="true"></span>
+        <span class="conv__status-title">{{ status === 'working' ? 'Working' : 'Queued' }}</span>
+        <span class="conv__status-detail">
+          {{ status === 'working' ? 'Agent is active on this task.' : 'Will run on the next pickup.' }}
+        </span>
+      </div>
+    }
     <ol class="conv__feed" data-testid="conversation-feed">
       @for (row of rows(); track trackByEvent($index, row)) {
         @switch (row.kind) {

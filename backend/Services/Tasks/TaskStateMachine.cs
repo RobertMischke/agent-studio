@@ -435,112 +435,72 @@ public class TaskStateMachine
             }
         }
 
-        // Orphan-folder fallback. The scanner only sees folders that
-        // have a parseable job.json; a folder that lost or never had
-        // one is invisible to FindJob, but it still occupies a lane
-        // slug and shows up as a zombie card / collision source. The
-        // previous behaviour returned 404 here, leaving the operator
-        // with no API-first way to clear the stuck folder and pushing
-        // them toward the forbidden manual `rm` (see AGENTS.md "Job
-        // organization rule: API first"). Search the configured watch
-        // paths for a single folder named jobId that lacks a job.json
-        // and delete it.
-        return TryDeleteOrphanFolder(jobId, watchPath);
+        return false;
     }
 
     /// <summary>
-    /// Best-effort delete for a job-shaped folder that the scanner does
-    /// not see (no job.json). The folder name must equal
-    /// <paramref name="jobId"/> exactly; the slug is rejected if it
-    /// contains a path separator or <c>..</c> so a caller cannot escape
-    /// the lane structure.
+    /// Delete a scanner-invisible residue folder from a terminal lane.
     /// </summary>
-    /// <remarks>
-    /// Only runs when no live job with the same id was found. To stay
-    /// conservative, the call refuses to delete when more than one lane
-    /// across the candidate watch paths has a folder with this slug
-    /// (the operator should disambiguate by passing
-    /// <paramref name="watchPath"/>), and refuses to delete any folder
-    /// that does in fact contain a job.json (that would be a scanner
-    /// regression, not an orphan).
-    /// </remarks>
-    private bool TryDeleteOrphanFolder(string jobId, string? watchPath)
+    public OrphanFolderDeleteResult DeleteOrphanFolder(string watchPath, string lane, string folder)
     {
-        if (string.IsNullOrWhiteSpace(jobId)) return false;
-        if (jobId.Contains('/') || jobId.Contains('\\')
-            || jobId.Contains("..", StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(watchPath)
+            || string.IsNullOrWhiteSpace(lane)
+            || string.IsNullOrWhiteSpace(folder)
+            || folder.Contains('/') || folder.Contains('\\')
+            || folder.Contains("..", StringComparison.Ordinal)
+            || folder.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
-            _logger.LogWarning("Orphan-folder delete rejected: invalid slug '{JobId}'", jobId);
-            return false;
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.InvalidRequest, "watchPath, lane, and folder are required; folder must be a single folder name.");
         }
 
-        var entries = _scanner.GetWatchPaths();
-        if (!string.IsNullOrWhiteSpace(watchPath))
+        if (!IsOrphanDeleteLane(lane))
         {
-            entries = entries
-                .Where(e => string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.NonTerminalLane, "Orphan folder deletion is only allowed under terminal lanes.");
         }
 
-        var candidates = new List<(WatchPathEntry entry, string folder)>();
-        foreach (var entry in entries)
+        var entry = _scanner.GetWatchPaths()
+            .FirstOrDefault(e => string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase));
+        if (entry == null)
         {
-            if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
-            foreach (var state in TaskStates.All)
-            {
-                var folder = Path.Combine(entry.Path, state, jobId);
-                if (Directory.Exists(folder))
-                {
-                    candidates.Add((entry, folder));
-                }
-            }
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.NotFound, "Watch path not found.");
         }
 
-        if (candidates.Count == 0) return false;
-        if (candidates.Count > 1)
+        var lanePath = Path.GetFullPath(Path.Combine(entry.Path, lane));
+        var target = Path.GetFullPath(Path.Combine(lanePath, folder));
+        var lanePrefix = lanePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!target.StartsWith(lanePrefix, StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning(
-                "Orphan-folder delete refused: slug '{JobId}' matches {Count} folders; supply watchPath to disambiguate",
-                jobId, candidates.Count);
-            return false;
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.InvalidRequest, "Folder must resolve inside the requested lane.");
         }
 
-        var (chosenEntry, chosenFolder) = candidates[0];
-
-        // Defensive: never delete a folder that does carry a job.json -
-        // that would be a scanner regression (a parse failure that
-        // looks like an orphan). The live-job branch above is the
-        // right entry point for jobs the scanner can see.
-        if (File.Exists(Path.Combine(chosenFolder, "job.json")))
-        {
-            _logger.LogWarning(
-                "Orphan-folder delete refused: '{Folder}' has a job.json but the scanner did not surface it",
-                chosenFolder);
-            return false;
-        }
-
-        using var _ = _laneMutex.Acquire(chosenEntry.Path);
-        // Re-check after taking the mutex: a concurrent writer may have
-        // moved or filled the folder while we were queued.
-        if (!Directory.Exists(chosenFolder)) return false;
-        if (File.Exists(Path.Combine(chosenFolder, "job.json"))) return false;
+        using var _ = _laneMutex.Acquire(entry.Path);
+        if (!Directory.Exists(target))
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.NotFound, "Folder not found.");
+        if (File.Exists(Path.Combine(target, "job.json")))
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.HasJobJson, "Folder contains job.json; use normal task deletion.");
 
         try
         {
-            Directory.Delete(chosenFolder, true);
+            Directory.Delete(target, true);
             _scanner.InvalidateCache();
-            _notifier?.PublishDeleted(chosenEntry.Name, jobId, chosenEntry.Path);
+            _notifier?.PublishDeleted(entry.Name, folder, entry.Path);
             _logger.LogInformation(
-                "Deleted orphan folder '{Folder}' (no job.json) under {Project}",
-                chosenFolder, chosenEntry.Name);
-            return true;
+                "task-orphan-folder-deleted watchPath={WatchPath} lane={Lane} folder={Folder} path={Path}",
+                entry.Path, lane, folder, target);
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.Success);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete orphan folder '{Folder}'", chosenFolder);
-            return false;
+            _logger.LogError(ex,
+                "task-orphan-folder-delete-failed watchPath={WatchPath} lane={Lane} folder={Folder} path={Path}",
+                entry.Path, lane, folder, target);
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.Failure, ex.Message);
         }
     }
+
+    private static bool IsOrphanDeleteLane(string lane)
+        => string.Equals(lane, TaskStates.Archive, StringComparison.Ordinal)
+           || string.Equals(lane, TaskStates.Completed, StringComparison.Ordinal);
 
     public bool ChangeProject(string jobId, string targetWatchPath, string? watchPath = null)
     {
@@ -1095,3 +1055,17 @@ public sealed record SlugDedupeGroup(
     string KeptLane,
     long KeptSizeBytes,
     IReadOnlyList<string> Neutralised);
+
+public sealed record OrphanFolderDeleteResult(
+    OrphanFolderDeleteStatus Status,
+    string? Message = null);
+
+public enum OrphanFolderDeleteStatus
+{
+    Success,
+    InvalidRequest,
+    NonTerminalLane,
+    NotFound,
+    HasJobJson,
+    Failure
+}

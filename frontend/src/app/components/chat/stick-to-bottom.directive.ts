@@ -56,12 +56,18 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
   private resizeObserver: ResizeObserver | null = null;
   private scrollFrame: number | null = null;
   private suppressScrollEvent = false;
+  private editableFocused = false;
+  private editableAnchorTop: number | null = null;
   private readonly onScroll = (): void => this.handleScroll();
+  private readonly onFocusIn = (event: FocusEvent): void => this.handleFocusIn(event);
+  private readonly onFocusOut = (): void => this.handleFocusOut();
 
   ngAfterViewInit(): void {
     this.container = this.resolveScrollContainer();
     if (this.container) {
       this.container.addEventListener('scroll', this.onScroll, { passive: true });
+      this.container.addEventListener('focusin', this.onFocusIn);
+      this.container.addEventListener('focusout', this.onFocusOut);
     }
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.onContentResize());
@@ -73,7 +79,11 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.container) this.container.removeEventListener('scroll', this.onScroll);
+    if (this.container) {
+      this.container.removeEventListener('scroll', this.onScroll);
+      this.container.removeEventListener('focusin', this.onFocusIn);
+      this.container.removeEventListener('focusout', this.onFocusOut);
+    }
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.scrollFrame !== null && typeof cancelAnimationFrame !== 'undefined') {
@@ -89,6 +99,10 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
   }
 
   private onContentResize(): void {
+    if (this.editableFocused) {
+      this.preserveEditableAnchor();
+      return;
+    }
     if (!this._stuck()) return;
     this.scheduleScrollToBottom();
   }
@@ -99,6 +113,50 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     this._stuck.set(distanceFromBottom <= this.threshold());
+  }
+
+  private handleFocusIn(event: FocusEvent): void {
+    const target = event.target;
+    this.editableFocused = target instanceof HTMLElement && this.isEditable(target);
+    this.editableAnchorTop = this.editableFocused && target instanceof HTMLElement
+      ? target.getBoundingClientRect().top
+      : null;
+  }
+
+  private handleFocusOut(): void {
+    // Focus may move between textarea descendants during the same turn.
+    // Defer the check so the next activeElement is settled before resuming.
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      this.editableFocused = active instanceof HTMLElement && this.isEditable(active);
+      this.editableAnchorTop = active instanceof HTMLElement && this.editableFocused
+        ? active.getBoundingClientRect().top
+        : null;
+      this.handleScroll();
+    });
+  }
+
+  private preserveEditableAnchor(): void {
+    const el = this.container;
+    const active = document.activeElement;
+    if (!el || !(active instanceof HTMLElement) || !this.isEditable(active)) return;
+    const before = this.editableAnchorTop ?? active.getBoundingClientRect().top;
+    const after = active.getBoundingClientRect().top;
+    const delta = after - before;
+    if (Math.abs(delta) > 1) {
+      this.suppressScrollEvent = true;
+      el.scrollTop += delta;
+      requestAnimationFrame(() => {
+        this.suppressScrollEvent = false;
+      });
+    }
+    this.editableAnchorTop = active.getBoundingClientRect().top;
+  }
+
+  private isEditable(el: HTMLElement): boolean {
+    if (el.isContentEditable) return true;
+    const tag = el.tagName.toLowerCase();
+    return tag === 'textarea' || tag === 'input' || tag === 'select';
   }
 
   private scheduleScrollToBottom(): void {

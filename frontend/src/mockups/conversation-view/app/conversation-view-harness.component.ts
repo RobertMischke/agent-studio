@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, signal } from '@angular/core';
 
 import { ConversationViewComponent } from '../../../app/components/chat/conversation-view/conversation-view.component';
 import type { ConversationEvent } from '../../../app/components/chat/conversation-event';
@@ -128,7 +128,29 @@ const EVENTS: readonly ConversationEvent[] = [
   template: `
     <div class="harness">
       <div class="harness__pane">
-        <app-conversation-view [events]="events" variant="framed" />
+        <div class="harness__controls" data-testid="mock-controls">
+          <button type="button" data-testid="mock-status-idle" (click)="setStatus('idle')">Idle</button>
+          <button type="button" data-testid="mock-status-queued" (click)="setStatus('queued')">Queued</button>
+          <button type="button" data-testid="mock-status-working" (click)="setStatus('working')">Working</button>
+          <button type="button" data-testid="mock-append-event" (click)="appendEvent()">Append event</button>
+          <button type="button" data-testid="mock-toggle-stream" (click)="toggleStream()">
+            {{ streaming() ? 'Stop stream' : 'Start stream' }}
+          </button>
+        </div>
+        <app-conversation-view
+          [events]="events()"
+          [isRunning]="status() === 'working'"
+          [queuedFollowUp]="status() === 'queued'"
+          variant="framed" />
+        <label class="harness__composer">
+          <span>Follow-up composer</span>
+          <textarea
+            data-testid="mock-composer"
+            rows="4"
+            [value]="draft()"
+            (input)="onDraft($any($event.target).value)"
+            placeholder="Type here while events stream in..."></textarea>
+        </label>
       </div>
     </div>
   `,
@@ -139,8 +161,8 @@ const EVENTS: readonly ConversationEvent[] = [
         min-height: 100vh;
       }
       .harness {
-        min-height: 100vh;
-        padding: 24px;
+        height: 100vh;
+        padding: var(--studio-spacing-6, 32px);
         background: var(--studio-bg-editor);
         display: flex;
         justify-content: center;
@@ -148,16 +170,111 @@ const EVENTS: readonly ConversationEvent[] = [
       .harness__pane {
         width: 100%;
         max-width: 860px;
-        min-height: 0;
+        height: calc(100vh - 64px);
         display: flex;
+        flex-direction: column;
+        gap: var(--studio-spacing-3, 12px);
+        overflow-y: auto;
       }
       app-conversation-view {
-        flex: 1;
         min-width: 0;
+      }
+      .harness__controls {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--studio-spacing-2, 8px);
+        padding: var(--studio-spacing-2, 8px);
+        border: 1px solid var(--studio-border);
+        border-radius: 8px;
+        background: var(--studio-bg-surface);
+      }
+      .harness__controls button {
+        padding: var(--studio-spacing-1, 4px) var(--studio-spacing-2, 8px);
+        border: 1px solid var(--studio-border);
+        border-radius: 6px;
+        background: color-mix(in srgb, currentColor 5%, transparent);
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      .harness__composer {
+        display: flex;
+        flex-direction: column;
+        gap: var(--studio-spacing-2, 8px);
+        padding: var(--studio-spacing-3, 12px);
+        border: 1px solid var(--studio-border);
+        border-radius: 8px;
+        background: var(--studio-bg-surface);
+        font-family: var(--font-ui);
+        font-size: 13px;
+      }
+      .harness__composer textarea {
+        min-height: 92px;
+        resize: vertical;
+        border: 1px solid var(--studio-border);
+        border-radius: 6px;
+        background: var(--studio-bg-editor);
+        color: inherit;
+        padding: var(--studio-spacing-2, 8px);
+        font: inherit;
       }
     `,
   ],
 })
-export class ConversationViewHarnessComponent {
-  readonly events = EVENTS;
+export class ConversationViewHarnessComponent implements OnDestroy {
+  readonly baseEvents = EVENTS;
+  readonly extraEvents = signal<readonly ConversationEvent[]>([]);
+  readonly status = signal<'idle' | 'queued' | 'working'>('idle');
+  readonly draft = signal('');
+  readonly streaming = signal(false);
+  private streamTimer: ReturnType<typeof setInterval> | null = null;
+
+  readonly events = computed(() => [...this.baseEvents, ...this.extraEvents()]);
+
+  setStatus(status: 'idle' | 'queued' | 'working'): void {
+    this.status.set(status);
+  }
+
+  onDraft(value: string): void {
+    this.draft.set(value);
+  }
+
+  appendEvent(): void {
+    const next = this.extraEvents().length + 1;
+    this.extraEvents.update((events) => [
+      ...events,
+      {
+        id: `stream-${next}`,
+        kind: 'message.taskAgent',
+        timestamp: new Date().toISOString(),
+        actor: 'Agent',
+        body: `Streaming update ${next}: still working while the composer keeps focus.`,
+        rawRange: range(40 + next, 40 + next),
+      },
+    ]);
+  }
+
+  toggleStream(): void {
+    if (this.streaming()) {
+      this.stopStream();
+      return;
+    }
+    this.streaming.set(true);
+    this.streamTimer = setInterval(() => this.appendEvent(), 700);
+  }
+
+  private stopStream(): void {
+    this.streaming.set(false);
+    if (this.streamTimer !== null) {
+      clearInterval(this.streamTimer);
+      this.streamTimer = null;
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.stopStream();
+  }
 }

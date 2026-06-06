@@ -125,6 +125,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly continueMode = input<ContinueMode>('continue');
   readonly canSendChat = input(false);
   readonly chatSendLabel = input<string>('Send');
+  readonly queuedFollowUp = input<boolean>(false);
 
   readonly regenerating = input(false);
   // F44: forwarded straight to <app-cli-model-selector>.

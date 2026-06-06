@@ -201,6 +201,7 @@ function classifyMessageBody(body: string): ClassifiedBody {
 export class ConversationViewComponent {
   readonly events = input.required<readonly ConversationEvent[]>();
   readonly isRunning = input<boolean>(false);
+  readonly queuedFollowUp = input<boolean>(false);
   readonly variant = input<'framed' | 'embedded'>('embedded');
 
   readonly openTrace = output<RawLineRange | null>();
@@ -474,6 +475,11 @@ export class ConversationViewComponent {
   });
 
   readonly hasContent = computed(() => this.rows().length > 0);
+  readonly statusKind = computed<'working' | 'queued' | null>(() => {
+    if (this.isRunning()) return 'working';
+    if (this.queuedFollowUp()) return 'queued';
+    return null;
+  });
 
   trackByEvent = (_: number, row: RenderRow): string => row.id;
 
