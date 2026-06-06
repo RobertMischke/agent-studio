@@ -1,6 +1,6 @@
 # Agent Task Contract
 
-agent-orchestrator owns the queue. A CLI agent owns only the single task that the application starts.
+agent-orchestrator owns the queue. A CLI agent owns only the task slot that the application starts.
 
 This contract is copied into watched target projects so Claude Code, Codex, GitHub Copilot, Gemini, and other coding agents understand the boundary.
 
@@ -11,7 +11,7 @@ The application owns:
 - Selecting the next ready task.
 - Moving task folders between state lanes.
 - Starting, stopping, and continuing CLI runs.
-- Enforcing one active coding task per project.
+- Enforcing per-project slot admission (`maxParallelism`), including the default one-active-coding-task behavior.
 - Recording CLI execution state, session ids, logs, summaries, and review transitions.
 
 The agent owns:
@@ -41,7 +41,7 @@ Agents must not:
 - Move task folders between state lanes.
 - Edit the `state` or `phase` fields in job.json, or write to `lifecycle.json`. These are application-owned.
 - Start or continue another task on their own.
-- Create branches, switch branches, merge branches, or manage worktrees unless the user explicitly changes the product boundary.
+- Create branches, switch branches, merge branches, or manage worktrees. When parallel mode is enabled, branch and worktree lifecycle is still application/pipeline-owned.
 
 ## State Model
 

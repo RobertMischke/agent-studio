@@ -22,7 +22,7 @@ Non-goals (do not add, even if asked offhandedly):
 
 - **Not a workflow engine.** A message records that something happened. It does not move a job between state lanes, queue another task, or fan out coding work. Routine outcomes still flow through `RunOutcomePolicy`; emergency primitives still route through `TaskRunnerService.StopJob` / `SetMode`. The bus is what those layers write into; it is not their replacement.
 - **Not a parallel orchestrator.** Producing an `intervention` message does not perform the intervention. The supervisor calls the runner, the runner is the single state-machine authority, and the supervisor also writes a bus message so the user can see why.
-- **Not branch orchestration, not workspaces, not parallel coding agents within one project.** The hard product boundary in [AGENTS.md](../AGENTS.md#product-goal--non-goals) and [ROADMAP.md](../ROADMAP.md#hard-boundaries) holds. The bus visualises a sequential pipeline; it does not enable a parallel one.
+- **Not the slot or branch orchestrator.** The hard product boundary in [AGENTS.md](../AGENTS.md#product-goal--non-goals) and [ROADMAP.md](../ROADMAP.md#hard-boundaries) holds. ADR-0052 owns whether a project may run several coding tasks in isolated worktrees; the bus only records and visualises the resulting events.
 - **Not a database.** Source of truth is many small JSON or JSONL documents on disk. An in-memory projection serves query and aggregation; it never owns the data.
 - **Not a chat history store.** User and agent text already live in `logs/cli-output.log` and the orchestrator chat log. The bus carries decisions, observations, and references to those logs. It does not duplicate raw transcripts.
 
@@ -37,7 +37,7 @@ Eight participant kinds:
 | `User` | `user` | Workspace | Owns prompts and decisions; the bus never speaks on the user's behalf. |
 | `Orchestrator` | `orchestrator`, `orchestrator:my-project` | Workspace and per-project | Owns queue movement and the deterministic post-run policy. The bus mirrors its decisions; it does not replace them. |
 | `Supervisor` | `supervisor:my-project` | Per-project | Layer 2 health watcher. Writes advisories and (rarely) intervention records. |
-| `CodingAgent` | `agent:claude`, `agent:codex` | Per-project, per-job | The active CLI editing the repository. One per project at any time, by hard boundary. |
+| `CodingAgent` | `agent:claude`, `agent:codex` | Per-project, per-job | The CLI editing the repository for one admitted task slot. One per project by default; more only when ADR-0052 parallel slots are enabled and isolated. |
 | `SupportingAgent` | `support:security-audit`, `support:ux-council` | Per-project or per-job | User-triggered meta worker; runs in its own CLI process when the work is non-trivial. Never edits source code on its own. |
 | `SystemReview` | `system-review`, `master-of-disaster` | Workspace | Layer 3 stand-alone monitor; reads bus + disk, writes Markdown reports. |
 | `Runtime` | `runtime:taskboard`, `runtime:supervisor-host` | Workspace | The application code itself when it emits lifecycle, error, or heartbeat messages. |

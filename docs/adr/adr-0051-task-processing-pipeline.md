@@ -247,7 +247,7 @@ SELECT step_id,
 ## 8. Non-goals
 
 - **EF Core / a DB as source of truth.** Explicitly rejected. The DB is a derived, rebuildable index over JSONL/JSON truth (ADR-0023/0024 hold). If the `.db` is deleted it rebuilds; it never holds the only copy of anything.
-- **Intra-project parallelism of pipelines.** One task runs per project at a time (ADR-0001). Steps *within* a pipeline may run in parallel (ADR-0045's bounded fan-out), but two tasks' pipelines never run concurrently in one project.
+- **Cross-task admission policy.** Pipeline definitions do not decide whether two task pipelines may run in one project. ADR-0052 and the runner slot policy own that decision; steps *within* a pipeline may run in parallel (ADR-0045's bounded fan-out).
 - **A YAML pipeline file checked into the watched repo.** Definitions live in `.metadata/` as versioned JSON owned by the app, not as a `.ci.yml` in the target project. The product configures pipelines; it does not ask the target repo to.
 - **A general workflow/DAG engine.** Steps are an ordered list per phase with intra-phase `dependsOn` edges (ADR-0045). No cross-task fan-in, no multi-branch, no conditional matrices.
 - **Arbitrary shell as an LLM-proposed config.** AI-assisted config proposes steps the operator confirms; script commands run with the same trust boundary as today's runner, and a future hardening pass may add a command allow-list (cf. ADR-0032 `selfHealCommands`). Out of scope for the concept.

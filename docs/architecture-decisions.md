@@ -28,6 +28,8 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 
 ## ADR-0001 - Sequential per-project, parallel across projects (2026-04-15)
 
+**Status.** Superseded by [ADR-0052](#adr-0052---intra-project-parallelism-is-now-an-opt-in-orchestrator-gated-capability-2026-05-31) for current coding-task parallelism. This entry remains as historical context for why the product started with a serial default.
+
 **Decision.** A single coding task runs per project at a time. Different watched projects run independently and may execute concurrently. No intra-project parallelism, no worktrees, no branch-per-task.
 
 **Context.** Modern coding agents can run for hours, but multi-agent fan-out inside one project produces conflicts that cost more than the parallel speed-up wins back. The product is a workbench for keeping one project moving, scaled across many projects.
@@ -40,7 +42,7 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 
 **Reasoning style.** Hard product boundary, not a defaulted setting. Any feature request that implies intra-project parallelism is surfaced to the user before implementing.
 
-**Implementation pointers.** [README.md](../README.md) "Sequential within a project, never parallel"; [ROADMAP.md](../ROADMAP.md) "Hard Boundaries"; [AGENTS.md](../AGENTS.md) "Product Goal & Non-Goals".
+**Implementation pointers.** Historical pointers were [README.md](../README.md), [ROADMAP.md](../ROADMAP.md), and [AGENTS.md](../AGENTS.md). Current implementation guidance is ADR-0052 plus the Product Goal / Hard Boundaries sections that now describe sequential-by-default, opt-in parallel slots.
 
 **Status.** Accepted.
 
@@ -902,8 +904,8 @@ Polling, bounded buffers, and visibility-aware timers are already enforced by [`
 **Context.** The dev and stable checkouts under `agent-taskboard-devspace/` point at the same `agent-taskboard-workspace`. With dev's backend running and its runner on `auto-continuous`, both backends' pickup ticks saw the same `3-progress` folder and both decided to start it. Real-world consequences observed on 2026-05-28: duplicate CLI spawns racing on the same job folder, watchdog circuit-breakers cascading because the second spawn produced no usable output, mode-switch requests on dev returning 200 while the active job continued to run (the operator could not tell whether the flip had taken), and stable picking the same task immediately when finally flipped to auto. AGENTS.md "Dev backend lifecycle: Playwright-only" already named the policy ("dev offline by default; only Playwright fixtures bring it up"), but the rule lived in documentation only - no code path enforced it and no `start-dev.sh` warning surfaced it. The role concept replaces the documentation-only contract with a structural one: a `test-subject` backend that comes up for any reason (Playwright fixture, manual debugging, a `start-dev.sh` that the operator confirmed via env-flag) cannot accidentally race the orchestrator on a shared workspace because the pickup branch is unreachable.
 
 **Non-goals.**
-- Distributed lock services / external coordinators. The `.pickup-lock.json` file is the simplest primitive that works for a 2-backend single-host topology and is the only topology the product supports (AGENTS.md "intra-project parallelism is out of scope"). A redis lease or zookeeper coordinator would solve a problem that does not exist for this product.
-- Multi-machine workspaces. The lock checks `Environment.MachineName` and refuses to verify a remote pid; cross-host workspaces are not supported and would need a separate design.
+- Distributed lock services / external coordinators. The `.pickup-lock.json` file is the simplest primitive that works for the dev/stable same-host race this ADR solved. ADR-0052 and the runner lease contracts extend the execution model, but they do not turn this lock into Redis, ZooKeeper, or a global scheduler.
+- Transparent multi-machine pickup with the old pid lock. The lock checks `Environment.MachineName` and refuses to verify a remote pid; any remote-runner topology must go through the explicit lease/runner contract, not by pretending a local pid proves cross-host ownership.
 - Auto-failover. When stable is down, the dev backend does NOT promote to orchestrator. The role is a static config decision: an outage of stable is an operator intervention, not a runtime re-election.
 - Killing the in-flight job on a manual / paused request. The deferred-on-active semantics are deliberate - the operator's intent is "stop the auto-pickup loop after this job finishes", not "kill what is currently running". `POST /api/jobs/{id}/stop` is the explicit kill path; `PUT /api/runner/{project}/mode` to manual only stops *future* pickups.
 - Surfacing the role anywhere except the runner status DTO. No new env probe endpoint, no new banner; the existing project tile mode-pill is the surface and grows a "TEST SUBJECT" variant for the dev backend.

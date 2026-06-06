@@ -214,7 +214,7 @@ Answers "what are agents told today, and where has that drifted?". Inventories t
   - `POST ...` runs the action. Without `agentResponse` it produces an Unstructured "evidence + prompt" report. With `agentResponse` it parses the agent's reply (Markdown body plus an optional fenced JSON sidecar) and emits the typed verdict.
 - Constraints enforced by the service:
   - Follow-up suggestions land in `1-preparation` only; agent-supplied `targetState = "2-ready"` is silently coerced.
-  - The action is analysis and proposal generation, not state mutation. It never rewrites a steering doc, never moves a job, and never relaxes the "one active coding task per project" boundary.
+  - The action is analysis and proposal generation, not state mutation. It never rewrites a steering doc, never moves a job, and never changes the runner's slot policy, `maxParallelism`, or parallelisability decision.
 - Tests: [`backend.Tests/SteeringDocsSummaryDriftServiceTests.cs`](../backend.Tests/SteeringDocsSummaryDriftServiceTests.cs) covers scope selection (inventory of canonical sources, missing-file warnings, critical-source severity), prompt construction, JSON parse fallback (Structured / Unstructured / MalformedJson, plus targetState coercion and kind/schemaVersion validation), and report assembly.
 
 #### 10.2.1 Bus mirror (supporting-agent)

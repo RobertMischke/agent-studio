@@ -311,7 +311,7 @@ Queued at `agent-taskboard/2-ready/chat-layout-integration-bridge/`, `agent-task
 
 ### Expanded Lifecycle Lanes
 
-Separate human intent from orchestrator and AI processing without breaking the sequential per-project execution model. Today a task in `2-ready` means both "the human says this can run" and "the runner may pick it up". That is too coarse once the app starts doing intake checks, duplicate detection, prompt shaping, post-processing, security feedback, QA checks, and orchestrator review.
+Separate human intent from orchestrator and AI processing without breaking the runner's slot-admission model. Today a task in `2-ready` means both "the human says this can run" and "the runner may pick it up". That is too coarse once the app starts doing intake checks, duplicate detection, prompt shaping, post-processing, security feedback, QA checks, and orchestrator review.
 
 The board should make these phases visible:
 
@@ -327,7 +327,7 @@ V1 implements this as virtual lanes derived from a hybrid model: the six existin
 
 The UI should support lane grouping and collapse. Users should be able to collapse orchestration-only lanes into a slim left-side rail or compact group, while keeping the main human decision lanes visible. The board should preserve scanability when there are many lanes: group headers, counters, active-run badges, CLI badges, post-processing indicators, and a quick way to expand only the lanes that currently need attention.
 
-Hard boundary: expanded lanes do not permit parallel coding work inside one project. Intake and post-processing are sequential phases in the same project pipeline. If a post-processing check uses another CLI, it must be visible as a distinct supporting or orchestrator run and must not edit the same code concurrently with the main task execution run.
+Hard boundary: expanded lanes do not bypass ADR-0052. Intake and post-processing are visible phases in the same project pipeline. If a post-processing check uses another CLI, it must be visible as a distinct supporting or orchestrator run and must not edit the same code concurrently with the main task execution run unless it has been admitted through the same slot policy and isolation model.
 
 First implementation order:
 
@@ -417,7 +417,7 @@ Realistic role catalogue, derived from observed work patterns:
 
 Hard rules:
 
-- **Sequential rotation per task, not parallel.** Within one task, roles run one after another on the same artifact: Task Executor writes, Code Reviewer audits, Architecture Custodian checks drift, Security Auditor inspects last. Parallel within a task produces conflicts that erase the throughput gain. The parallelism axis is across projects or across worktrees, consistent with ADR-0001.
+- **Sequential rotation per task, bounded parallelism across tasks.** Within one task, roles run one after another on the same artifact: Task Executor writes, Code Reviewer audits, Architecture Custodian checks drift, Security Auditor inspects last. Parallel within a task produces conflicts that erase the throughput gain. Throughput parallelism happens across projects or across orchestrator-admitted worktree slots (ADR-0052).
 - **The human stays the manager.** Role architecture (which roles exist, what they own, who escalates to whom) and tradeoff decisions (more security vs more speed, refactor phase vs feature phase) stay human. The workforce executes; the manager structures.
 - **Roles are versioned artifacts in the repository**, like skills (ADR-0026). Not config, not prompts on the fly. A role definition that lives in the repo is reviewable, diffable, comparable across runs.
 - **Per-role budgets and routing.** Each role declares a token-budget tier, a wall-clock cap per run, an allowed model list, and a downgrade strategy when quota is tight. First-class, code-level constants; not implicit.
@@ -425,7 +425,7 @@ Hard rules:
 
 Today's state: building blocks exist (per-job token spend in `tool-calls.jsonl`, cliType per job, Subagent concept in skills architecture, Aspect Runner for multi-aspect review). What is not yet a first-class surface: per-role budgets as configuration, per-role performance dashboards, per-role model routing as a deliberate setting, and the allowance-per-phase lever.
 
-The full marketing context lives in `agent-studio-marketing/06-website-planung/agent-workforce-und-rollen.md`. The roadmap entry here is the engineering counterpart: build the missing surfaces incrementally, in a sequence that always respects the sequential-per-task rule from ADR-0001.
+The full marketing context lives in `agent-studio-marketing/06-website-planung/agent-workforce-und-rollen.md`. The roadmap entry here is the engineering counterpart: build the missing surfaces incrementally, in a sequence that respects the sequential-per-task role rule and the ADR-0052 slot-admission model.
 
 ### Analysis Reports and Meta-Actions
 
@@ -698,7 +698,7 @@ The core execution model stays intentionally narrow:
 - The app does not implement its own API-backed coding-agent runtime while subscription CLI agents remain the primary value path.
 - Runtime job artifacts belong in watched task folders, not in this source repository.
 
-Planning and research tasks may eventually have a different concurrency model because they do not change source code. That distinction must stay explicit. Coding tasks keep the one-at-a-time rule.
+Planning and research tasks have a read-only fast path in the slot model because they do not change source code. That distinction must stay explicit. Coding tasks stay one-at-a-time by default and require ADR-0052 worktree isolation plus orchestrator admission when `maxParallelism` is greater than 1.
 
 ## Agent Decision Principles
 
@@ -708,8 +708,8 @@ When changing this product, prefer work that:
 - Makes security review more repeatable, evidence-backed, and frequent.
 - Improves review quality.
 - Makes the current task state easier to see.
-- Preserves the sequential per-project execution model.
-- Uses local files and existing subscriptions instead of new hosted infrastructure.
+- Preserves the default-simple slot model while allowing bounded, explained parallelism.
+- Uses owned files, controlled runner environments, and existing subscriptions instead of a hidden hosted model broker.
 - Treats Codex, Claude Code, and other provider-owned agents as the primary execution engines.
 - Keeps the UI compact, legible, and calm.
 

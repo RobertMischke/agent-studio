@@ -1,12 +1,12 @@
 # agent-orchestrator
 
-**Stop being the bottleneck.** A local Kanban board that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions you already pay for, on the machine you already own.
+**Stop being the bottleneck.** A task workbench that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions and execution environments you already trust.
 
 > **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-orchestrator" as a follow-up cleanup; see [docs/architecture-decisions.md](docs/architecture-decisions.md) for the load-bearing rename note.
 
 ![Board overview](docs/images/board-overview.png)
 
-> .NET 10 backend + Angular 21 PWA. Task state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, and scripts read and mutate through one boundary. Runs tasks sequentially through Claude Code, Codex, GitHub Copilot, or Gemini.
+> .NET 10 backend + Angular 21 PWA. Task state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, remote clients, and scripts read and mutate through one boundary. Runs tasks through Claude Code, Codex, GitHub Copilot, or Gemini. Coding work is sequential by default and can opt into bounded, orchestrator-gated parallelism via `maxParallelism`.
 
 ---
 
@@ -58,7 +58,7 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which tasks and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/orchestrator-chat.md](docs/orchestrator-chat.md).
 
-**Sequential within a project, never parallel.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
+**Sequential by default, bounded parallelism when opted in.** A project starts with one coding task at a time (`maxParallelism = 1`). When a project deliberately opts in, the orchestrator may admit several safe tasks at once, each isolated in its own git worktree on a short-lived `task/<id>` branch. Parallelism is capped, explained, and rejected for exclusive or cross-cutting work.
 
 **Security is a first-class workstream.** Security review is not a side quest at the end of a feature. It is a repeatable project-level activity with its own skills, evidence, history, and review surface. The board should make it normal to ask "when was this last reviewed, what was checked, what changed since then, and what evidence supports the conclusion?"
 
@@ -70,17 +70,17 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 Building a custom coding agent is not a forbidden idea. Many projects do it. It is out of scope for this product while the best price/performance sits in polished subscription coding agents, especially Codex and Claude Code. This boundary can be revisited if model economics or provider capabilities make API-native execution clearly better.
 
-**Maximize token utilization, minimize bookkeeping.** Skip the things that burn time and tokens for marginal benefit:
+**Maximize token utilization, keep bookkeeping load-bearing.** The default path stays small, and extra machinery appears only when it protects real throughput:
 
 | What it skips | Why |
 |---|---|
-| Worktrees | Spinning up a worktree per task triples I/O for no gain when work is sequential. |
+| Default worktrees | Worktrees are only created for opted-in parallel coding tasks; a normal serial project keeps the low-overhead path. |
 | Virtualization / sandboxes | Adds startup latency and forces the agent to re-discover the workspace every run. |
-| Cross-task orchestration | Workflow engines, branch coordination, merge bots. The sequential model removes this overhead by construction. |
+| General workflow engines | Task admission, branch/worktree setup, commit, merge, and cleanup are explicit pipeline steps, not an unbounded DAG product. |
 | API-key-based execution | Subscriptions already cover this. Paying twice is silly. |
 | Custom API-backed coding agent loop | Existing agents already package the hard product work: tools, approvals, session history, auth, model routing, and IDE fallback. |
 
-The product is small on purpose. Any feature that pulls toward "let's run two agents on one project" is out of scope. That's where complexity (and bills) explode.
+The product is small on purpose. Parallel coding is a controlled mode, not a blanket invitation to fan out agents until conflicts become inevitable.
 
 ---
 
@@ -136,7 +136,7 @@ Project-scoped virtualised chat history with full-text search and a right-rail c
 
 .NET 10 backend (port 5030) + Angular 21 PWA (port 4010). Twenty-four JSON schemas under [`docs/schemas/`](docs/schemas/) cover Agent Message Bus events, supervisor advisories + interventions, drift reports, analysis reports, architecture model, product runtime events, token aggregates, task find / mutate, orchestrator decisions, and update-run snapshots. Twenty frontend feature folders under [`frontend/src/app/features/`](frontend/src/app/features/) carry the per-feature components / state / models with public APIs exported via barrel files (ADR-0034). Append-only Agent Message Bus persists every cross-cutting structured signal as JSONL.
 
-Out of scope on purpose: API-key billing, worktrees, sandboxes, branch-per-task, cross-task workflow engines, custom coding-agent runtimes. The product is small by design; every capability above answers a question the existing CLI agents do not, while leaving them to do the actual coding.
+Out of scope on purpose: API-key billing, mandatory sandboxes, general workflow engines, custom coding-agent runtimes, or unbounded fan-out. Worktrees and short-lived task branches are in scope only as the isolation mechanism for opted-in parallel coding (ADR-0052). The product is small by design; every capability above answers a question the existing CLI agents do not, while leaving them to do the actual coding.
 
 ### Review handoff: what makes a task review-ready
 
@@ -144,7 +144,7 @@ Out of scope on purpose: API-key billing, worktrees, sandboxes, branch-per-task,
 
 When a CLI run completes successfully, the application captures the run log, moves the task to `4-review`, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the task's `results/` folder.
 
-Failed or stopped runs stay in `3-progress` so the user can inspect, restart, or continue them. The agent works on the selected task. The application owns pickup, continuation, stopping, state movement, protocol generation, and the one-active-task rule. That boundary is the point: the queue keeps moving without asking the model to decide what should run next.
+Failed or stopped runs stay in `3-progress` so the user can inspect, restart, or continue them. The agent works on the selected task. The application owns pickup, continuation, stopping, state movement, protocol generation, slot admission, and worktree/branch lifecycle when parallel mode is enabled. That boundary is the point: the queue keeps moving without asking the model to decide what should run next.
 
 ---
 
@@ -168,7 +168,7 @@ The next layer of this thinking is *supervision*: a meta-loop that watches the o
 
 ## Meta documentation, task evidence, and commits
 
-Meta-level work is allowed to run as small, parallel CLI interactions when it is truly independent from the active coding task. Examples: analyze the orchestration model, update README or ROADMAP, write a research note under `docs/`, then commit that documentation immediately. These commits are normal product-memory commits. They do not violate the one-active-task rule because they do not execute task work inside a watched target project.
+Meta-level work is allowed to run as small, parallel CLI interactions when it is truly independent from active coding work. Examples: analyze the orchestration model, update README or ROADMAP, write a research note under `docs/`, then commit that documentation immediately. These commits are normal product-memory commits. They do not consume a coding slot because they do not execute task work inside a watched target project.
 
 Recurring or manual meta-analyses are also product memory. Examples: "are we on track?", "what changed in the last few hours?", "which jobs are stale?", "does the queue match the roadmap?", "which docs drifted?", or "what should become follow-up work?" Their result should be a Markdown report for humans plus structured JSON when the app needs to aggregate, filter, or trend the findings. These reports belong in a project-level analysis area or in the relevant task evidence, depending on scope. They should reference raw evidence rather than copying entire logs, and any implementation follow-up becomes a normal queued task.
 
@@ -231,7 +231,7 @@ The system is layered:
 | `agent-taskboard/` | App source, prompts, docs, Task Access API host |
 | `<target-project>/.orchestrator/jobs/` | `job.json`, `prompt.md`, `status.md`, `logs/` per task |
 
-One task processor, many targets. The board watches several projects in parallel; inside each project, work is strictly serial.
+One task processor, many targets. The board watches several projects in parallel. Inside each project, coding is serial by default and may become bounded parallel work only when the project opts into `maxParallelism`, the orchestrator admits the task, and the worktree isolation steps are active.
 
 ---
 
