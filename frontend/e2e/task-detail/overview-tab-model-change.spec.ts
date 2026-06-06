@@ -10,7 +10,7 @@ import { createJob, getJob } from '../helpers/jobs';
  *
  * The Overview tab renders the same <app-chat-model-badge> as the chat
  * composer. The badge's Done button must drive the canonical
- * `PUT /api/jobs/{id}/model` round-trip via the overview-pane ->
+ * `PUT /api/tasks/{id}/model` round-trip via the overview-pane ->
  * prompt-pane -> task-detail event forwarding chain, AND the rendered
  * badge text must reflect the new model after the parent re-fetches
  * the detail (no manual reload required).
@@ -26,7 +26,7 @@ async function pickWatchPath(): Promise<string> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE',
     });
   } catch { /* best-effort cleanup */ }
@@ -61,7 +61,7 @@ test.describe('Overview tab — model picker', () => {
       // actually written the new model before we poll for it.
       const modelPutResponsePromise = page.waitForResponse((res) =>
         res.request().method() === 'PUT' &&
-        /\/api\/jobs\/.+\/model(\?|$)/.test(res.url()),
+        /\/api\/(?:jobs|tasks)\/.+\/model(\?|$)/.test(res.url()),
       );
 
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
@@ -90,7 +90,7 @@ test.describe('Overview tab — model picker', () => {
       // persisted state. Without this gate the GET races the PUT and may
       // see the pre-change snapshot.
       const res = await modelPutResponsePromise;
-      expect(res.url()).toContain(`/api/jobs/${encodeURIComponent(job.id)}/model`);
+      expect(res.url()).toContain(`/api/tasks/${encodeURIComponent(job.id)}/model`);
       expect(res.status()).toBe(200);
 
       // Overview badge re-renders to the new model. The operator-visible

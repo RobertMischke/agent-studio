@@ -30,7 +30,7 @@ async function pickWatchPath(): Promise<string> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch { /* best-effort cleanup */ }
@@ -118,9 +118,9 @@ test.describe('CLI + model picker flow', () => {
       page.on('request', (req) => {
         const url = req.url();
         if (req.method() !== 'PUT') return;
-        if (/\/api\/jobs\/[^/]+\/cli-type(\?|$)/.test(url)) {
+        if (/\/api\/(?:jobs|tasks)\/[^/]+\/cli-type(\?|$)/.test(url)) {
           puts.push({ kind: 'cli-type', t: Date.now() });
-        } else if (/\/api\/jobs\/[^/]+\/model(\?|$)/.test(url)) {
+        } else if (/\/api\/(?:jobs|tasks)\/[^/]+\/model(\?|$)/.test(url)) {
           puts.push({ kind: 'model', t: Date.now() });
         }
       });
@@ -177,7 +177,7 @@ test.describe('CLI + model picker flow', () => {
       page.on('request', (req) => {
         if (req.method() === 'PUT' || req.method() === 'POST') {
           const url = req.url();
-          if (/\/api\/jobs\/[^/]+\/(cli-type|model)(\?|$)/.test(url)) {
+          if (/\/api\/(?:jobs|tasks)\/[^/]+\/(cli-type|model)(\?|$)/.test(url)) {
             writeUrls.push(`${req.method()} ${url}`);
           }
         }
@@ -241,7 +241,7 @@ test.describe('CLI + model picker flow', () => {
       page.on('request', (req) => {
         if (req.method() === 'PUT') {
           const url = req.url();
-          if (/\/api\/jobs\/[^/]+\/(cli-type|model)(\?|$)/.test(url)) {
+          if (/\/api\/(?:jobs|tasks)\/[^/]+\/(cli-type|model)(\?|$)/.test(url)) {
             writeUrls.push(url);
           }
         }

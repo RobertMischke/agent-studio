@@ -23,7 +23,7 @@ async function pickWatchPath(): Promise<string> {
 
 async function deleteJob(id: string, watchPath: string): Promise<void> {
   try {
-    await api(`/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    await api(`/api/tasks/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`, {
       method: 'DELETE'
     });
   } catch { /* best-effort cleanup */ }
@@ -128,7 +128,7 @@ test.describe('F44 — chat-composer model badge', () => {
 
     try {
       const modelPutPromise = page.waitForRequest((req) =>
-        req.method() === 'PUT' && /\/api\/jobs\/.+\/model/.test(req.url())
+        req.method() === 'PUT' && /\/api\/(?:jobs|tasks)\/.+\/model/.test(req.url())
       );
 
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
@@ -157,7 +157,7 @@ test.describe('F44 — chat-composer model badge', () => {
       await expect(picker).toBeHidden({ timeout: 5_000 });
 
       const req = await modelPutPromise;
-      expect(req.url()).toContain(`/api/jobs/${encodeURIComponent(job.id)}/model`);
+      expect(req.url()).toContain(`/api/tasks/${encodeURIComponent(job.id)}/model`);
 
       await expect(badge).toContainText(/sonnet\s+4\.6/i, { timeout: 10_000 });
     } finally {
