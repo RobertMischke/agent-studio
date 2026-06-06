@@ -131,6 +131,34 @@ public class ReviewDecisionOrchestratorEvidenceGateTests : IDisposable
         Assert.Contains("\"verdict\": \"escalate\"", pipelineJson);
     }
 
+    [Fact]
+    public async Task AspectBlock_BudgetExhausted_EscalatesInsteadOfReissuingToReady()
+    {
+        // ASS-794 loop-breaker on the multi-aspect BLOCK path. A finished task
+        // (clean close-out: Open Items None, Result Success) is BLOCKed by an
+        // aspect, but the shared reissue budget is already spent (maxReissues=0).
+        // The block path must NOT loop back to 2-ready; it escalates to
+        // 5-human-review so the card cannot pendulum 2-ready <-> run forever.
+        SeedReviewJobWithDone("loop-block", CleanStatus, taskType: TaskTypes.Chore);
+        var orchestrator = BuildOrchestrator(aspect => aspect switch
+        {
+            "requirement-fit" => "[[ASPECT_VERDICT: status=block; summary=Verified a doc but made no code changes.]]\n[[TASK_DONE]]",
+            _ => PassVerdict,
+        }, maxReissues: 0);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "loop-block")),
+            "a blocked task with no reissue budget left must escalate to 5-human-review, not reissue");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "loop-block")),
+            "the loop-breaker must prevent a pendulum back to 2-ready");
+
+        var pipelineJson = File.ReadAllText(
+            Path.Combine(_watchPath, TaskStates.HumanReview, "loop-block", PipelineExecutionLog.FileName));
+        Assert.Contains("\"stepId\": \"" + PipelineCatalogue.OrchestratorDecisionStepId + "\"", pipelineJson);
+        Assert.Contains("\"verdict\": \"escalate\"", pipelineJson);
+    }
+
     private const string PassVerdict = "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]";
 
     private void SeedReviewJobWithDone(string slug, string status, string taskType, bool withScreenshot = false)

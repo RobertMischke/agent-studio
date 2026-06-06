@@ -1439,6 +1439,29 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (report.Overall == AspectStatus.Block)
         {
+            // Reissue-loop breaker (ASS-794). The aspect-block path is the one
+            // reissue branch that did not enforce the shared reissue budget, so a
+            // finished task whose re-run produced an empty follow-up diff (nothing
+            // left to do) could be BLOCKed on the unchanged/+0-0 diff and reissued
+            // forever. The completion gate already passed above, so the close-out
+            // is acceptable here; pass that plus the empty-diff probe to the pure
+            // breaker, which accepts an empty clean re-run and otherwise escalates
+            // once the budget is spent rather than penduluming 2-ready <-> run.
+            var loopBreak = ReissueLoopBreaker.Evaluate(
+                CountPriorReissues(workspace, entry.Name, current.Id),
+                ConfiguredMaxReissues(),
+                emptyFollowupDiff: IsLatestRunEmptyDiff(current, entry.Path),
+                stateAcceptable: true);
+            switch (loopBreak.Action)
+            {
+                case ReissueLoopBreaker.LoopBreakAction.AcceptEmptyDiff:
+                    await AcceptOnLoopBreakAsync(workspace, entry, current, report, loopBreak, ct);
+                    return;
+                case ReissueLoopBreaker.LoopBreakAction.Escalate:
+                    EscalateOnLoopBreak(workspace, entry, current, report, loopBreak);
+                    return;
+            }
+
             await ReissueOnBlockAsync(workspace, entry, pending, current, report, ct);
             return;
         }
@@ -1624,6 +1647,156 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Prompt: "(multi-aspect run; per-aspect prompts written to aspect-*.md)",
             Response: AspectSummaryLine(report),
             FollowUp: followUp));
+    }
+
+    /// <summary>
+    /// True when the LATEST run for this task produced no new commit - HEAD was
+    /// unchanged across the run (<see cref="RunRecord.HeadShaBefore"/> equals
+    /// <see cref="RunRecord.HeadShaAfter"/>). That is the "empty follow-up diff"
+    /// signal the <see cref="ReissueLoopBreaker"/> reads: a re-issued run that
+    /// found nothing left to do and committed nothing. Conservative by design -
+    /// when the timeline, session events, or the before/after SHAs are missing or
+    /// unresolvable, it returns <c>false</c> so the empty-diff accept never fires
+    /// on a guess; the budget rule still breaks the loop.
+    /// </summary>
+    private bool IsLatestRunEmptyDiff(TaskInfo job, string? watchPath)
+    {
+        if (_sessions == null) return false;
+        try
+        {
+            var events = _sessions.ReadSessionEvents(job.Id, watchPath);
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(job.FolderPath));
+            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+            if (timeline.Runs.Count == 0) return false;
+            var last = timeline.Runs[^1];
+            return !string.IsNullOrWhiteSpace(last.HeadShaBefore)
+                && !string.IsNullOrWhiteSpace(last.HeadShaAfter)
+                && string.Equals(last.HeadShaBefore, last.HeadShaAfter, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: empty-diff probe failed for {JobId}; treating as non-empty",
+                job.Id);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Loop-break accept (ASS-794): a re-issued card came back with an empty
+    /// follow-up diff while its close-out was already clean, so the aspect block
+    /// is the +0/-0 diff-attribution false negative, not real missing work.
+    /// Accept it to <c>5-human-review</c> (ADR-0025 - the human still confirms),
+    /// reconciling the aspect-concern chips and recording the final
+    /// Orchestrator-Review decision row so the Overview pipeline shows the ruling.
+    /// </summary>
+    private async Task AcceptOnLoopBreakAsync(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        AspectRunReport report,
+        ReissueLoopBreaker.Decision loopBreak,
+        CancellationToken ct)
+    {
+        await Task.CompletedTask;
+
+        ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
+
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after loop-break accept: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+            return;
+        }
+
+        var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+        var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        if (!string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
+        {
+            ConcernTagWriter.ReconcileConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
+        }
+
+        RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Passed,
+            DecisionVerdictAccept, loopBreak.Reason);
+
+        // Provenance: the orchestrator (not a human) advanced this card.
+        ConcernTagWriter.MergeConcernTags(movedFolderPath, new[] { OrchestratorMovedTagId }, _logger);
+
+        var title = string.IsNullOrWhiteSpace(movedInfo.Title) ? movedInfo.Id : movedInfo.Title;
+        var note =
+            $"Auto-review accepted \"{title}\" as done (loop-break: empty follow-up diff on a clean re-run). " +
+            "Moved to 5-human-review for your approval.";
+        _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision, note);
+
+        EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorVerdictAccepted,
+            TimelineActors.Orchestrator, note, new Dictionary<string, string>
+            {
+                ["verdict"] = "accept",
+                ["loopBreak"] = "empty-diff",
+                ["reason"] = Truncate(loopBreak.Reason, 600),
+            });
+
+        _statusSnapshot.RecordAccept();
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.AcceptAsDone,
+            Reason: loopBreak.Reason,
+            Prompt: "(loop-break: empty follow-up diff on clean re-run)",
+            Response: AspectSummaryLine(report),
+            FollowUp: string.Empty));
+    }
+
+    /// <summary>
+    /// Loop-break escalate (ASS-794): the shared reissue budget is spent, so the
+    /// card must not loop back to <c>2-ready</c> again. Hand it to
+    /// <c>5-human-review</c> with the blocking aspect concerns surfaced and record
+    /// the final Orchestrator-Review escalate row.
+    /// </summary>
+    private void EscalateOnLoopBreak(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        AspectRunReport report,
+        ReissueLoopBreaker.Decision loopBreak)
+    {
+        ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
+
+        _chatLog.AppendSupervisor(current, "escalate",
+            $"Auto-review reissue budget spent; not reissuing again. Reason: {loopBreak.Reason}. Promoted to 5-human-review.");
+
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after loop-break escalate: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
+        var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+        RecordOrchestratorDecisionStep(escalatedFolder, PipelineStepStatus.Failed,
+            DecisionVerdictEscalate, loopBreak.Reason);
+
+        EmitVerdictTimeline(escalatedFolder, TimelineEventKinds.OrchestratorEscalated,
+            TimelineActors.Orchestrator, loopBreak.Reason,
+            BuildEscalateDetails("reissue-budget-exhausted", loopBreak.Reason,
+                CountPriorReissues(workspace, entry.Name, current.Id)));
+
+        _statusSnapshot.RecordEscalate();
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: loopBreak.Reason,
+            Prompt: "(loop-break: reissue budget exhausted)",
+            Response: AspectSummaryLine(report),
+            FollowUp: string.Empty));
     }
 
     /// <summary>
