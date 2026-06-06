@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { TaskInfo } from '../../../../models/task.model';
+import { stateLabel } from '../../../../services/format.util';
 import { buildEpicGroups, EpicGroupView } from '../epic-grouping.util';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -12,10 +13,10 @@ import { StudioIconComponent, StudioIconName } from '../../../../components/stud
  * `GET /api/epics`. Ordinary tasks with no epic and orphaned sub-tasks get
  * their own synthetic sections via `buildEpicGroups`.
  *
- * Read-only and additive: it reuses `<app-job-card>` for every card so the
- * EPIC badge, sub-task chip, drag affordance, and context-menu epic assignment
- * (way 2) all keep working unchanged. Clicking a card opens its detail, same as
- * the lane view.
+ * Read-only and additive: it keeps the epic itself as a normal card so the
+ * EPIC badge and card-level actions stay available, then renders sub-tasks as
+ * compact text rows. Clicking the epic card or a sub-task row opens detail,
+ * same as the lane view.
  */
 @Component({
   selector: 'app-epic-group-board',
@@ -51,5 +52,13 @@ export class EpicGroupBoardComponent {
   groupIcon(group: EpicGroupView): StudioIconName {
     if (group.epic) return 'epic';
     return group.id === '__orphan__' ? 'warn' : 'folder';
+  }
+
+  laneLabel(state: string): string {
+    return stateLabel(state).replace(/-/g, ' ');
+  }
+
+  verdictLabel(verdict: TaskInfo['orchestratorVerdict']): string | null {
+    return verdict ? verdict.replace(/-/g, ' ') : null;
   }
 }
