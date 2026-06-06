@@ -25,7 +25,7 @@ export class TaskReferenceNavigationService {
 
   private readonly jobsByTaskKey = computed(() => {
     const map = new Map<string, TaskInfo>();
-    for (const job of this.tasks.jobs()) {
+    for (const job of this.currentJobs()) {
       map.set(job.taskKey, job);
     }
     return map;
@@ -33,7 +33,7 @@ export class TaskReferenceNavigationService {
 
   readonly markdownReferences = computed<readonly MarkdownTaskReference[]>(() => {
     const references: MarkdownTaskReference[] = [];
-    for (const job of this.tasks.jobs()) {
+    for (const job of this.currentJobs()) {
       const labels = new Set<string>();
       if (job.key) labels.add(job.key);
       if (job.id) labels.add(job.id);
@@ -41,6 +41,8 @@ export class TaskReferenceNavigationService {
         ? job.taskKey.slice(job.taskKey.lastIndexOf('::') + 2)
         : job.taskKey;
       if (taskKeyTail) labels.add(taskKeyTail);
+      const folderSlug = folderName(job.folderPath);
+      if (folderSlug) labels.add(folderSlug);
       for (const label of labels) {
         references.push({ label, taskKey: job.taskKey });
       }
@@ -56,4 +58,17 @@ export class TaskReferenceNavigationService {
     this.selection.openDetail(job);
     return true;
   }
+
+  private currentJobs(): readonly TaskInfo[] {
+    const source = this.tasks.jobs as unknown;
+    if (typeof source === 'function') return source() as readonly TaskInfo[];
+    return Array.isArray(source) ? source as readonly TaskInfo[] : [];
+  }
+}
+
+function folderName(path: string | null | undefined): string | null {
+  const trimmed = (path ?? '').trim().replace(/[\\/]+$/, '');
+  if (!trimmed) return null;
+  const parts = trimmed.split(/[\\/]+/);
+  return parts[parts.length - 1] || null;
 }
