@@ -11,6 +11,7 @@ import { TaskReferenceNavigationService } from '../../services/task-reference-na
 import {
   linkTaskReferencesInHtml,
   markdownToHtml,
+  sanitizeHtml,
   type MarkdownImageOptions,
 } from '../markdown-utils';
 
@@ -113,7 +114,7 @@ export class MarkdownViewComponent {
     const preRendered = this.html();
     if (typeof preRendered === 'string') {
       return this.sanitizer.bypassSecurityTrustHtml(
-        linkTaskReferencesInHtml(preRendered, references),
+        sanitizeHtml(linkTaskReferencesInHtml(preRendered, references)),
       );
     }
     const options: MarkdownImageOptions = { taskReferences: references };

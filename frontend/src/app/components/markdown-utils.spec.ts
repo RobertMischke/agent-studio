@@ -278,5 +278,25 @@ describe('markdownToHtml', () => {
       expect(html).toContain('data-task-ref="true"');
       expect(html).toContain('data-task-key="agent-taskboard::feature-clickable-task-references-open-task-tab"');
     });
+
+    it('leaves duplicate labels unlinked so ambiguous references do not open the wrong task', () => {
+      const html = markdownToHtml('See ASS-738.', {
+        taskReferences: [
+          { label: 'ASS-738', taskKey: 'agent-taskboard::first' },
+          { label: 'ASS-738', taskKey: 'agent-taskboard::second' },
+        ],
+      });
+
+      expect(html).toBe('<p>See ASS-738.</p>');
+    });
+
+    it('does not link task references embedded in longer words or slugs', () => {
+      const html = markdownToHtml('See XASS-738, ASS-738-extra, and ASS-738.', { taskReferences: refs });
+
+      expect(html).toContain('XASS-738');
+      expect(html).toContain('ASS-738-extra');
+      expect(html).toContain('data-task-key="agent-taskboard::ass-738"');
+      expect(html.match(/data-task-ref="true"/g)?.length).toBe(1);
+    });
   });
 });

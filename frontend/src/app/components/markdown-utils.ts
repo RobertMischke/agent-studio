@@ -214,7 +214,7 @@ function renderImage(alt: string, src: string, title: string | null, options: Ma
   return `<img src="${escapeAttribute(resolved)}" alt="${escapeAttribute(alt)}"${titleAttr}>`;
 }
 
-function sanitizeHtml(raw: string): string {
+export function sanitizeHtml(raw: string): string {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return raw;
   }
