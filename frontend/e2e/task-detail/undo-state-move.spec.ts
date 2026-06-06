@@ -30,10 +30,13 @@ async function listForProject(watchPath: string, projectName: string, state: str
 /**
  * Undo for state-changing actions triggered from the task-detail header.
  * The user's spec: every Complete / lane-move / lane-dropdown move from
- * the top-right detail header shows a non-blocking toast in the same
- * top-right notification stack as the rest of the app's notifications,
- * with a working Undo that returns the card to its prior lane AND order
- * slot.
+ * the top-right detail header shows a non-blocking toast with a working
+ * Undo that returns the card to its prior lane AND order slot.
+ *
+ * The Move/Undo toast docks in the BOTTOM-RIGHT notification pile so it
+ * cannot cover the context menu that opens in the top-right corner; the
+ * "Restored" confirmation (a plain success toast) lands in the default
+ * top-right pile.
  *
  * Locks the load-bearing pieces of that contract.
  */
@@ -67,10 +70,10 @@ test.describe('Detail header — state-change undo toast', () => {
         timeout: 10_000,
       }).toBe('0-backlog');
 
-      // Toast appears in the top-right notification stack with an Undo action.
-      const stack = page.getByTestId('notification-stack');
-      await expect(stack).toBeVisible({ timeout: 5_000 });
-      const undoBtn = stack.getByTestId('undo-action');
+      // Move/Undo toast appears in the BOTTOM-RIGHT pile with an Undo action.
+      const bottomStack = page.getByTestId('notification-stack-bottom-right');
+      await expect(bottomStack).toBeVisible({ timeout: 5_000 });
+      const undoBtn = bottomStack.getByTestId('undo-action');
       await expect(undoBtn).toBeVisible({ timeout: 5_000 });
       await expect(undoBtn).toContainText('Undo');
 
@@ -87,11 +90,13 @@ test.describe('Detail header — state-change undo toast', () => {
         return sorted.indexOf(target.id);
       }, { timeout: 10_000 }).toBe(prevIndex);
 
-      // Undo's own confirmation toast appears (success kind, no second Undo).
-      await expect(stack.getByTestId('notification-success').first()).toBeVisible({ timeout: 5_000 });
+      // Undo's own confirmation toast is a plain success toast in the
+      // default top-right pile (not bottom-right, no second Undo).
+      const topStack = page.getByTestId('notification-stack');
+      await expect(topStack.getByTestId('notification-success').first()).toBeVisible({ timeout: 5_000 });
       // Critical anti-regression: clicking Undo MUST NOT spawn another
       // undo toast (would create an infinite ping-pong of toasts).
-      await expect(stack.getByTestId('undo-action')).toHaveCount(0);
+      await expect(page.getByTestId('undo-action')).toHaveCount(0);
     } finally {
       await deleteJob(target.id, wp.path).catch(() => {});
       await deleteJob(siblingA.id, wp.path).catch(() => {});
@@ -118,9 +123,9 @@ test.describe('Detail header — state-change undo toast', () => {
         timeout: 10_000,
       }).toBe('0-backlog');
 
-      // Toast is up.
-      const stack = page.getByTestId('notification-stack');
-      await expect(stack.getByTestId('undo-action')).toBeVisible({ timeout: 5_000 });
+      // Toast is up (bottom-right pile).
+      const bottomStack = page.getByTestId('notification-stack-bottom-right');
+      await expect(bottomStack.getByTestId('undo-action')).toBeVisible({ timeout: 5_000 });
 
       // The header dropdown is still the visible+enabled element it was
       // before; the toast renders alongside it, not on top of it. We

@@ -10,6 +10,15 @@
 
 export type NotificationKind = 'success' | 'info' | 'warning' | 'error' | 'accent';
 
+/**
+ * Where the toast docks on screen. Defaults to `top-right` (the shared
+ * notification pile). `bottom-right` is reserved for toasts that would
+ * otherwise collide with a top-right surface — e.g. the Move/Undo action
+ * toast, which must not cover the task-detail context menu that opens in
+ * the same top-right corner.
+ */
+export type NotificationPosition = 'top-right' | 'bottom-right';
+
 export type ConfirmDialogKind = 'danger' | 'primary';
 
 export interface NotificationAction {
@@ -69,6 +78,12 @@ export interface NotificationOptions {
   details?: string[];
   /** Action buttons rendered in the toast footer. */
   actions?: NotificationAction[];
+  /**
+   * Where the toast docks. Omit for the default `top-right` pile; set
+   * `bottom-right` to keep a toast clear of a top-right surface it would
+   * otherwise occlude (see {@link NotificationPosition}).
+   */
+  position?: NotificationPosition;
 }
 
 export interface NotificationState extends NotificationOptions {

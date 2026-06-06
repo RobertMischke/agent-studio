@@ -1140,6 +1140,14 @@
       pointer-events: none;
       max-width: min(520px, 92vw);
     }
+    /* Bottom-right pile: action toasts (Move/Undo) docked away from the
+       top-right corner so they never cover the context menu that opens
+       there. Newest toast nearest the bottom edge for thumb reach. */
+    .app-notify-stack--bottom-right {
+      top: auto;
+      bottom: 14px;
+      flex-direction: column-reverse;
+    }
     .app-notify {
       pointer-events: auto;
       display: block;

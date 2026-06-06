@@ -1,5 +1,5 @@
-<div class="app-notify-stack" data-testid="notification-stack">
-  @for (n of notifications(); track n.id) {
+<ng-template #toasts let-items>
+  @for (n of items; track n.id) {
     <app-notification
       class="app-notify"
       [kind]="n.kind"
@@ -32,4 +32,12 @@
       }
     </app-notification>
   }
+</ng-template>
+
+<div class="app-notify-stack" data-testid="notification-stack">
+  <ng-container [ngTemplateOutlet]="toasts" [ngTemplateOutletContext]="{ $implicit: topRight() }"></ng-container>
+</div>
+
+<div class="app-notify-stack app-notify-stack--bottom-right" data-testid="notification-stack-bottom-right">
+  <ng-container [ngTemplateOutlet]="toasts" [ngTemplateOutletContext]="{ $implicit: bottomRight() }"></ng-container>
 </div>

@@ -70,6 +70,10 @@ export class UndoController {
     const id = this.notifications.notify({
       kind: 'info',
       message,
+      // Dock bottom-right so the Move/Undo toast never covers the
+      // task-detail context menu, which opens in the same top-right
+      // corner as the default notification pile.
+      position: 'bottom-right',
       actions: [
         {
           label: 'Undo',

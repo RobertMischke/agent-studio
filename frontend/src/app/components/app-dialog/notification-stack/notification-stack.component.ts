@@ -2,11 +2,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   inject,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { NotificationService } from '../../../services/notification.service';
 import { NotificationComponent } from '../../notification/notification.component';
-import { NotificationAction } from '../../../models/app-dialog.model';
+import { NotificationAction, NotificationState } from '../../../models/app-dialog.model';
 
 /**
  * Stack of persistent notification toasts (success / info / warning / error).
@@ -16,17 +18,32 @@ import { NotificationAction } from '../../../models/app-dialog.model';
  * F56: all notifications render as toasts in a top-right stack. Click-to-dismiss
  * is the default; auto-dismiss only for short success/info without actions.
  * Escape dismisses the topmost toast (when no modal has consumed the event).
+ *
+ * Toasts are routed into two positioned containers by their `position`
+ * field: the default `top-right` pile and a `bottom-right` pile reserved
+ * for action toasts (Move/Undo) that must not occlude the top-right
+ * context menu.
  */
 @Component({
   selector: 'app-notification-stack',
   standalone: true,
-  imports: [NotificationComponent],
+  imports: [NotificationComponent, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './notification-stack.component.html',
 })
 export class NotificationStackComponent {
   private readonly service = inject(NotificationService);
   readonly notifications = this.service.notifications;
+
+  /** Default pile (top-right): everything without an explicit bottom-right. */
+  readonly topRight = computed<NotificationState[]>(() =>
+    this.notifications().filter((n) => (n.position ?? 'top-right') === 'top-right'),
+  );
+
+  /** Bottom-right pile: action toasts that would otherwise cover top-right UI. */
+  readonly bottomRight = computed<NotificationState[]>(() =>
+    this.notifications().filter((n) => n.position === 'bottom-right'),
+  );
 
   constructor() {
     if (typeof document !== 'undefined') {
