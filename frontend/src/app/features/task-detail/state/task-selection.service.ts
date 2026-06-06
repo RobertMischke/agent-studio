@@ -5,6 +5,7 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { NotificationService } from '../../../services/notification.service';
 import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { LanePagerService } from './lane-pager.service';
+import { BoardFiltersService } from '../../board/state/board-filters.service';
 import { laneLabelFor } from './triage-actions.model';
 import { perfMark, perfMeasure } from '../../../utils/perf-tracker';
 
@@ -33,6 +34,7 @@ export class TaskSelectionService {
   private readonly notifications = inject(NotificationService);
   private readonly pager = inject(LanePagerService);
   private readonly prefetch = inject(TaskDetailPrefetchService);
+  private readonly boardFilters = inject(BoardFiltersService);
 
   /** How many slots ahead of the current pager index to warm. */
   private static readonly PREFETCH_LOOKAHEAD = 2;
@@ -171,9 +173,17 @@ export class TaskSelectionService {
    * the lane-pager snapshot at the moment of click, where `selected` is
    * still the previous detail (or null) and the lookup must key off the
    * incoming job's state, not the stale signal.
+   *
+   * Reads the project-scoped + faceted-filtered feed (`filteredGrouped`),
+   * NOT the raw `jobService.grouped()`. This is the single source of truth
+   * the lane-count badge already counts (`displayGrouped` → `filteredGrouped`),
+   * so the detail pager's "N / M" total matches the lane badge under every
+   * scope/filter combination. Reading the raw feed here was the bug: with a
+   * project filter active the pager captured every project's lane peers (e.g.
+   * 126) while the badge showed only the scoped subset (e.g. 116).
    */
   peersForLane(state: string): TaskInfo[] {
-    const g = this.jobService.grouped();
+    const g = this.boardFilters.filteredGrouped();
     switch (state) {
       case '0-backlog':              return g.backlog ?? [];
       case '1-preparation':          return g.preparation ?? [];
