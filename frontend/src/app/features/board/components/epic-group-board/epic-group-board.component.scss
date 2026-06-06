@@ -1,7 +1,7 @@
 .epic-board {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-2);
+  gap: var(--studio-spacing-3);
   padding: var(--studio-spacing-2);
   overflow-y: auto;
   height: 100%;
@@ -88,8 +88,8 @@
 .epic-board__body {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-1);
-  padding: var(--studio-spacing-2);
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
 }
 
 .epic-board__epic-card {
@@ -99,7 +99,7 @@
 .epic-board__subtasks {
   display: flex;
   flex-direction: column;
-  gap: var(--studio-spacing-1);
+  gap: var(--studio-spacing-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -111,18 +111,23 @@
   justify-content: space-between;
   gap: var(--studio-spacing-2);
   width: 100%;
-  border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  background: var(--studio-bg-surface);
+  border: 1px solid var(--studio-card-state-border);
+  border-radius: var(--studio-card-radius);
+  background: var(--studio-card-bg);
   color: var(--studio-fg);
-  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  padding: var(--studio-card-padding);
+  box-shadow:
+    0 0 0 1px var(--studio-card-state-border),
+    var(--studio-card-shadow);
   text-align: left;
   cursor: pointer;
 }
 
 .epic-board__subtask-button:hover {
-  border-color: var(--studio-border-strong);
-  background: var(--studio-bg-hover);
+  border-color: var(--studio-card-border-hover);
+  box-shadow:
+    0 0 0 1px var(--studio-card-state-border),
+    var(--studio-card-shadow-hover);
 }
 
 .epic-board__subtask--highlight .epic-board__subtask-button {

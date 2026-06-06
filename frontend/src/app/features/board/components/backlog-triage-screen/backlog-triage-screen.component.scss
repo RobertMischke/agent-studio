@@ -168,7 +168,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: var(--studio-spacing-2);
+    gap: var(--studio-spacing-3);
     flex: 1;
   }
 
@@ -177,13 +177,19 @@
     grid-template-columns: 1fr auto;
     align-items: center;
     gap: var(--studio-spacing-4);
-    padding: var(--studio-spacing-3) var(--studio-spacing-4);
-    background: var(--studio-bg-elevated);
-    border: 1px solid var(--studio-border);
-    border-radius: 10px;
+    padding: var(--studio-card-padding);
+    background: var(--studio-card-bg);
+    border: 1px solid var(--studio-card-state-border);
+    border-radius: var(--studio-card-radius);
+    box-shadow:
+      0 0 0 1px var(--studio-card-state-border),
+      var(--studio-card-shadow);
 
     &:hover {
-      border-color: var(--studio-border-strong);
+      border-color: var(--studio-card-border-hover);
+      box-shadow:
+        0 0 0 1px var(--studio-card-state-border),
+        var(--studio-card-shadow-hover);
     }
   }
 
@@ -203,18 +209,24 @@
 
   &__key-chip {
     font-family: var(--studio-font-mono, ui-monospace, monospace);
-    font-size: 0.75rem;
-    background: var(--studio-bg-selected);
-    color: var(--studio-fg-strong);
-    /* stylelint-disable-next-line scale-unlimited/declaration-strict-value -- chip padding intentionally below 4px scale */
-    padding: 2px 6px;
-    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+    background: var(--studio-card-muted-bg);
+    color: var(--studio-fg-dim);
+    padding: 0 var(--studio-spacing-2);
+    border: 1px solid var(--studio-card-muted-border);
+    border-radius: 999px;
+    min-height: 18px;
     flex-shrink: 0;
   }
 
   &__title-text {
     color: var(--studio-fg-strong);
-    font-weight: 500;
+    font-size: var(--studio-card-title-size);
+    font-weight: var(--studio-card-title-weight);
+    line-height: var(--studio-card-title-lh);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -225,18 +237,21 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--studio-spacing-2);
-    font-size: 0.8rem;
+    font-size: var(--studio-card-meta-size);
   }
 
   &__type-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
+    gap: var(--studio-spacing-1);
+    min-height: var(--studio-card-pill-height);
+    padding: 0 var(--studio-card-pill-padding-x);
     border-radius: 999px;
-    background: var(--studio-bg-selected);
+    background: var(--studio-card-muted-bg);
+    border: 1px solid var(--studio-card-muted-border);
     color: var(--studio-fg-dim);
-    font-size: 0.78rem;
+    font-size: var(--studio-card-meta-size);
+    font-weight: 600;
 
     &--bug   { color: var(--studio-accent-6-strong, var(--studio-accent-6)); }
     &--feature { color: var(--studio-accent-3-strong, var(--studio-accent-3)); }
@@ -246,12 +261,14 @@
   &__tag-chip {
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
+    min-height: var(--studio-card-pill-height);
+    padding: 0 var(--studio-card-pill-padding-x);
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 50%, transparent);
     background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 12%, transparent);
     color: var(--studio-fg);
-    font-size: 0.78rem;
+    font-size: var(--studio-card-meta-size);
+    font-weight: 600;
 
     &--ghost {
       opacity: 0.55;
@@ -263,13 +280,15 @@
   &__project-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
+    gap: var(--studio-spacing-1);
+    min-height: var(--studio-card-pill-height);
+    padding: 0 var(--studio-card-pill-padding-x);
     border-radius: 999px;
     border: 1px solid var(--studio-border-strong);
-    background: var(--studio-bg-selected);
+    background: var(--studio-card-muted-bg);
     color: var(--studio-fg);
-    font-size: 0.78rem;
+    font-size: var(--studio-card-meta-size);
+    font-weight: 600;
   }
 
   &__project-chip {

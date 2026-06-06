@@ -208,7 +208,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly humanReviewBadge = computed(() => buildHumanReviewBadge(this.job()));
 
   /**
-   * Host-level "this card needs a human" flag. Drives the red left ribbon +
+   * Host-level "this card needs a human" flag. Drives the red uniform ring +
    * faint tint that visually separates an escalated / reissue card from the
    * Completed/Archive cards it shares the "Done & Decide" column with.
    */

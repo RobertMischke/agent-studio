@@ -99,7 +99,7 @@
        idle ones. The new design stacks three theme-aware semantic tokens:
          - --studio-bg-running  (tint over --studio-bg-elevated)
          - --shadow-running     (outline ring + soft outer cast)
-         - --studio-accent-3    (left ribbon + progress-bar pigment)
+         - --studio-accent-3    (progress-bar pigment)
        The motion role moves from a breathing box-shadow (poor perf, easy
        to overlook on white) to a constant indeterminate progress bar at
        the top edge - see .task-card__progress below.
@@ -129,7 +129,7 @@
     /* "Failed-Cards sehen aus wie Done" fix (Option C): an escalated /
        reissue card parked in 5-human-review shares the "Done & Decide"
        column with Completed and Archive cards and used to read as just
-       another finished card. The attention treatment — red left ribbon +
+       another finished card. The attention treatment — red uniform ring +
        faint red tint — visually pulls it out of the "done" cluster so the
        operator sees at a glance that a human still has to act.
 
@@ -1250,7 +1250,7 @@
     /* In compact mode the running pulse animation would move every row in
        a busy column; the indeterminate progress stripe is hidden too
        because a stack of sliding bars in a dense lane is more noise than
-       signal. The steady accent (tinted bg + left ribbon + outline ring
+       signal. The steady accent (tinted bg + uniform outline ring
        from --shadow-running) still marks the row as the active one. */
     .task-card.task-card--compact.task-card--running {
       background: var(--studio-bg-running);

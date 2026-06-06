@@ -14,7 +14,7 @@
       // step radius by ~2-4 px between nesting levels rather than
       // jumping by 6.
       border-radius: 12px;
-      padding: 14px 14px 16px;
+      padding: var(--studio-spacing-4);
       /*
        * Columns share whatever horizontal space the dashboard has left
        * after gaps and group padding. The 220px floor matches the
@@ -27,7 +27,7 @@
       flex: 1 1 220px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: var(--studio-spacing-3);
       transition: outline 0.15s;
       /*
        * CSS containment: scrolling a single lane's body or polling a
@@ -72,8 +72,8 @@
     .column__header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding-bottom: 8px;
+      gap: var(--studio-spacing-2);
+      padding-bottom: var(--studio-spacing-3);
       border-bottom: 1px solid var(--studio-border, rgba(255,255,255,0.06));
       /*
        * Clip header content to the column. With min-width: 200 on
@@ -123,7 +123,7 @@
     .column__body {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--studio-spacing-3);
       flex: 1;
       min-height: 0;
       /*
@@ -170,8 +170,8 @@
     .column__subsection {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      padding: 8px;
+      gap: var(--studio-spacing-3);
+      padding: var(--studio-spacing-3);
       border-radius: 10px;
       background: rgba(255, 255, 255, 0.02);
       border: 1px solid rgba(255, 255, 255, 0.04);

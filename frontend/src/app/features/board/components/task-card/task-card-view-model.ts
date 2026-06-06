@@ -706,7 +706,7 @@ export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
 }
 
 /** Host-level "this card needs a human" flag: an escalate/reissue verdict in a
- *  human-decision lane. Drives the red left ribbon + faint tint. */
+ *  human-decision lane. Drives the red uniform ring + faint tint. */
 export function cardNeedsAttention(job: TaskInfo): boolean {
   if (!HUMAN_DECISION_LANES.has(job.state)) return false;
   return job.orchestratorVerdict === 'escalate' || job.orchestratorVerdict === 'reissue';

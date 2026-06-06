@@ -237,6 +237,29 @@ describe('TaskCardComponent (smoke)', () => {
     expect(barAfter).toBeNull();
   });
 
+  it('uses a uniform card border and whole-card ring instead of a left-only accent', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({ state: '2-ready' }));
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host).not.toBeNull();
+    expect(findCssDeclaration('.task-card', 'border')).toContain('1px solid var(--studio-card-state-border');
+    expect(hasExplicitCssDeclaration('.task-card', 'border-left')).toBe(false);
+    expect(findCssDeclaration('.task-card', '--task-card-ring')).toBe('0 0 0 1px var(--studio-card-state-border)');
+    expect(findCssDeclaration('.task-card', 'box-shadow')).toContain('var(--task-card-ring)');
+  });
+
   it('suppresses the "Running live" pill on cards outside 3-progress (lane is source of truth)', async () => {
     // Regression: a stale `execution.status === 'running'` snapshot on a
     // card whose lane has already moved past 3-progress (4-auto-review,
@@ -1016,4 +1039,30 @@ function findDeclarationInRules(rules: CSSRuleList, selectorFragment: string, pr
     }
   }
   return null;
+}
+
+function hasExplicitCssDeclaration(selectorFragment: string, property: string): boolean {
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    if (hasExplicitDeclarationInRules(rules, selectorFragment, property)) return true;
+  }
+  return false;
+}
+
+function hasExplicitDeclarationInRules(rules: CSSRuleList, selectorFragment: string, property: string): boolean {
+  for (const rule of Array.from(rules)) {
+    if ('selectorText' in rule && typeof rule.selectorText === 'string' && rule.selectorText.includes(selectorFragment)) {
+      const cssText = (rule as CSSStyleRule).cssText;
+      if (cssText.includes(`${property}:`)) return true;
+    }
+    if ('cssRules' in rule && hasExplicitDeclarationInRules((rule as CSSGroupingRule).cssRules, selectorFragment, property)) {
+      return true;
+    }
+  }
+  return false;
 }
