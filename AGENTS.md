@@ -468,6 +468,7 @@ See `docs/filesystem-contract.md` for full details.
 - Keep the existing dark Catppuccin-inspired UI direction.
 - Keep the detail view as a simple protocol view, without tabs or metrics grids unless the product direction changes.
 - Prefer small, scoped changes and avoid rewriting unrelated code.
+- Before adding a new button, icon button, pill, badge, modal, tab strip, card, or form-control style, check [docs/style-guide/](docs/style-guide/). Reuse an existing token, mixin, or component variant when it fits; if it does not, update the relevant style-guide page and [docs/style-guide/migration-status.md](docs/style-guide/migration-status.md) instead of shipping an undocumented one-off.
 
 ### Optimistic-UI for mutations + boot-hydrated catalog caches (ADR-0046)
 

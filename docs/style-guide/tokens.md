@@ -125,4 +125,4 @@ Tracked in [migration-status.md](migration-status.md). Highlights:
 
 - `frontend/src/app/app.scss` still ships `.btn`, `.btn--primary`, `.btn--danger`, `.btn--ghost`, `.btn--create` with raw `rgba(...)` and px values; baseline debt.
 - `frontend/src/styles.scss` is the legacy light-theme bridge; raw hex by design, scheduled to shrink as components migrate.
-- Several `*.scss` files under `frontend/src/app/features/` are in the Stylelint `severity: "warning"` override list; each removed entry is a migration win.
+- Several `*.scss` files under `frontend/src/app/features/` are in the [`frontend/.stylelintrc.json`](../../frontend/.stylelintrc.json) `severity: "warning"` override list; each removed entry is a migration win.

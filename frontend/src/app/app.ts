@@ -37,6 +37,7 @@ import {
   splitReadyByPhase,
 } from './features/board';
 import {
+  EpicRollupPaneComponent,
   TaskDetailComponent,
   TaskSelectionService,
   TriageController,
@@ -176,6 +177,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     StudioDiffViewComponent,
     StudioActivityViewComponent,
     StudioIconComponent,
+    EpicRollupPaneComponent,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
@@ -1673,6 +1675,10 @@ export class App implements OnInit, OnDestroy {
   }
 
   openEpicOverlay(event: { jobId: string; watchPath: string }): void {
+    this.openRelatedJob(event);
+  }
+
+  openEpicOverlaySubTask(event: { jobId: string; watchPath: string }): void {
     this.openRelatedJob(event);
   }
 

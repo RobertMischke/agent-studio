@@ -66,7 +66,7 @@ When you migrate a surface, update the audit row (or mark it ✅) and add the mi
 
 ## Hard rules
 
-- **No new hex / rgb / hsl values in component SCSS.** Color tokens live in [`_tokens-primitives.scss`](../../frontend/src/styles/_tokens-primitives.scss); aliases in [`_tokens-semantic.scss`](../../frontend/src/styles/_tokens-semantic.scss). Stylelint's `color-no-hex` + `scale-unlimited/declaration-strict-value` enforce this on new SCSS; legacy files are baseline debt (see `.stylelintrc.json` overrides).
+- **No new hex / rgb / hsl values in component SCSS.** Color tokens live in [`_tokens-primitives.scss`](../../frontend/src/styles/_tokens-primitives.scss); aliases in [`_tokens-semantic.scss`](../../frontend/src/styles/_tokens-semantic.scss). Stylelint's `color-no-hex` + `scale-unlimited/declaration-strict-value` enforce this on new SCSS; legacy files are baseline debt (see [`frontend/.stylelintrc.json`](../../frontend/.stylelintrc.json) overrides).
 - **No new hardcoded spacing px in component SCSS** when the surface is part of the canonical vocabulary (modal padding, row gap, card inset). Use `--studio-spacing-*` tokens. Stylelint will surface common-literal violations as a warning starting from this guide's first version; promotion to error is a follow-up slice.
 - **No inline `style="..."` in component templates** for design-system attributes (color, font-size, padding, margin). One-off geometry like `[style.width.px]` for a programmatic side-sheet width is fine; a `style="color: #d97757"` is not.
 - **Light + Dark must both work.** If you add a token, add the light theme override in `[data-studio-theme='light']` in `_tokens-semantic.scss`. If you add a component, screenshot both themes in the PR.

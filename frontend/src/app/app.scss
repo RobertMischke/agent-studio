@@ -2032,3 +2032,125 @@
       text-align: center;
       pointer-events: none;
     }
+
+    .epic-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1800;
+      display: flex;
+      justify-content: flex-end;
+      background: transparent;
+      pointer-events: none;
+    }
+    .epic-overlay__scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.34);
+      pointer-events: auto;
+    }
+    .epic-overlay__panel {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: min(1120px, calc(100vw - 48px));
+      height: calc(100vh - 32px);
+      margin: 16px;
+      overflow: hidden;
+      border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.12));
+      border-radius: 8px;
+      background: var(--studio-bg, #111318);
+      color: var(--studio-fg, #e8e8e8);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
+      pointer-events: auto;
+    }
+    .epic-overlay__header {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--studio-border, rgba(255, 255, 255, 0.12));
+      background: var(--studio-surface, #181b22);
+    }
+    .epic-overlay__title-block {
+      min-width: 0;
+    }
+    .epic-overlay__eyebrow {
+      display: block;
+      color: var(--studio-fg-muted, #9ca3af);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .epic-overlay__title {
+      margin: 2px 0 0;
+      overflow: hidden;
+      color: var(--studio-fg-strong, #ffffff);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .epic-overlay__close {
+      flex: 0 0 auto;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.14));
+      border-radius: 6px;
+      background: var(--studio-surface-2, rgba(255, 255, 255, 0.06));
+      color: var(--studio-fg, #e8e8e8);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .epic-overlay__close:hover {
+      background: var(--studio-surface-hover, rgba(255, 255, 255, 0.1));
+      color: var(--studio-fg-strong, #ffffff);
+    }
+    .epic-overlay__master {
+      flex: 0 0 auto;
+      max-height: 42vh;
+      overflow: auto;
+      border-bottom: 1px solid var(--studio-border, rgba(255, 255, 255, 0.12));
+      background: var(--studio-bg, #111318);
+    }
+    .epic-overlay__master .epic-rollup {
+      min-height: 0;
+      padding: 12px 16px;
+    }
+    .epic-overlay__detail {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .epic-overlay__detail > app-job-detail,
+    .epic-overlay__detail .detail {
+      display: flex;
+      min-height: 0;
+      height: 100%;
+    }
+    .epic-overlay__empty {
+      flex: 1 1 auto;
+      display: grid;
+      place-items: center;
+      min-height: 160px;
+      color: var(--studio-fg-muted, #9ca3af);
+      font-size: 13px;
+      background: var(--studio-bg, #111318);
+    }
+
+    @media (max-width: 720px) {
+      .epic-overlay__panel {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        border-radius: 0;
+      }
+      .epic-overlay__master {
+        max-height: 48vh;
+      }
+    }

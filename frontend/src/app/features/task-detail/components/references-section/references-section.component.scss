@@ -98,8 +98,8 @@
   max-width: 100%;
 }
 .refs__chip--waiting {
-  border-color: color-mix(in srgb, #e0a800 55%, var(--studio-border));
-  background: color-mix(in srgb, #e0a800 14%, var(--studio-bg-elevated));
+  border-color: color-mix(in srgb, var(--studio-accent-warn) 55%, var(--studio-border));
+  background: color-mix(in srgb, var(--studio-accent-warn) 14%, var(--studio-bg-elevated));
 }
 
 .refs__chip-link {
@@ -132,7 +132,7 @@
 }
 .refs__chip-remove:hover:not(:disabled) {
   opacity: 1;
-  color: var(--studio-danger, #e5534b);
+  color: var(--studio-accent-6);
 }
 .refs__chip-remove:disabled {
   cursor: not-allowed;
