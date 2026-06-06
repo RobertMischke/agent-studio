@@ -680,4 +680,28 @@ public class RunOutcomePolicyTests
         Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
         Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
     }
+
+    /// <summary>
+    /// A context-overflow run is NON-RETRYABLE: re-issuing resends the same or
+    /// a larger context and overflows identically. This is the exact failure
+    /// that looped forever ("Prompt too long" re-issued without limit), so the
+    /// policy must stop and route to human review on first detection - never
+    /// re-issue.
+    /// </summary>
+    [Fact]
+    public void ContextOverflow_StopsAndRoutesToHumanReview()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown) with { IssueKind = RunIssueKind.ContextOverflow },
+            followupPrompt: "please continue",
+            reissueAttempt: 0,
+            codexEvidence: null);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.ContextOverflow, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.ContextOverflow, action.MessageKind);
+        Assert.False(action.IsHeuristicFallback);
+    }
 }

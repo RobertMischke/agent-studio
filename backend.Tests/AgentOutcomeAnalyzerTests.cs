@@ -413,4 +413,32 @@ public class AgentOutcomeAnalyzerTests
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 14.0);
         Assert.Equal(AgentOutcomeKind.NeedsInput, outcome.Kind);
     }
+
+    [Theory]
+    [InlineData("Prompt too long")]
+    [InlineData("Error: prompt is too long: 250000 tokens > 200000 maximum")]
+    [InlineData("This model's maximum context length is 200000 tokens")]
+    [InlineData("context_length_exceeded")]
+    [InlineData("HTTP 413 Payload Too Large")]
+    public void ContextOverflow_OnFailedRun_TypesAsContextOverflow(string reply)
+    {
+        // The exact failure behind the endless-reissue loop: a "Prompt too
+        // long" failure was being classified as classifier-unknown and
+        // re-issued forever. It must now be typed so policy routes it to
+        // human review instead.
+        var lines = Lines(reply);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 8.0);
+        Assert.Equal(RunIssueKind.ContextOverflow, outcome.IssueKind);
+    }
+
+    [Fact]
+    public void ContextOverflow_PhraseOnSuccessfulRun_IsNotTyped()
+    {
+        // An agent quoting "prompt too long" mid-success must not be hijacked;
+        // the detection is gated on a failed run.
+        var lines = Lines("I shortened the prompt because the prompt was too long for the test fixture.", "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 20.0);
+        Assert.NotEqual(RunIssueKind.ContextOverflow, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+    }
 }

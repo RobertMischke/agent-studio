@@ -74,7 +74,26 @@ public enum RunIssueKind
     /// we flag it explicitly so the auto-review aspect calls and the
     /// human-reviewer in the lane see why no sentinel landed.
     /// </summary>
-    SilentCompletion
+    SilentCompletion,
+    /// <summary>
+    /// The agent CLI rejected the request because the prompt / accumulated
+    /// conversation context exceeded the model's input window ("Prompt too
+    /// long", "context length exceeded", an HTTP 413 / request-too-large).
+    /// This is NON-RETRYABLE by re-issue: resending the same (or larger)
+    /// context overflows identically, which is exactly the endless-reissue
+    /// loop this issue class exists to break. The orchestrator routes it
+    /// straight to human review on first detection (like
+    /// <see cref="EnvironmentBlocker"/>), never spending a retry.
+    /// </summary>
+    ContextOverflow,
+    /// <summary>
+    /// The per-task circuit breaker tripped: the same task produced
+    /// <c>N</c> consecutive failed runs without any progress (no new commit
+    /// / diff between attempts). Synthetic - set by the runner's breaker,
+    /// not by <see cref="AgentOutcomeAnalyzer"/> - to stop an endless
+    /// reissue/leave-in-progress loop and park the task in human review.
+    /// </summary>
+    Quarantined
 }
 
 /// <summary>
@@ -256,6 +275,29 @@ public static class AgentOutcomeAnalyzer
                 OutputLineCount: lineCount,
                 DurationSeconds: durationSeconds)
             { IssueKind = RunIssueKind.WatchdogTimeout };
+        }
+
+        // 1.4) Context-overflow. A failed run whose output carries a
+        //    prompt-too-long / context-length / request-too-large signal is
+        //    NON-RETRYABLE: re-issuing the same (or a larger) context
+        //    overflows identically. This is the exact shape behind the
+        //    endless-reissue loop (a "Prompt too long" failure was being
+        //    classified as classifier-unknown and re-issued forever). Gated
+        //    on `failed` so an agent quoting one of these phrases mid-success
+        //    is unaffected, and checked BEFORE the CLI-launch / heuristic
+        //    paths so it wins over the generic classifier-unknown route.
+        if (failed && IsContextOverflow(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: "The agent CLI rejected the run because the prompt/context exceeded the model's input window (prompt too long / context length). Re-issuing would overflow identically.",
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "context overflow detected in CLI output",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.ContextOverflow };
         }
 
         // 1.5) CLI launch / resume failure. A failed run that produced no
@@ -533,6 +575,47 @@ public static class AgentOutcomeAnalyzer
         if (HasCliLaunchFailureNeedle(rawText)) return true;
         return durationSeconds < CliLaunchFailureDurationThresholdSeconds
             && agentText.Length < CliLaunchFailureMaxAgentTextChars;
+    }
+
+    /// <summary>
+    /// Phrases an agent CLI / model API emits when the prompt or accumulated
+    /// conversation context is larger than the model's input window. Kept
+    /// specific so a match (combined with a <c>failed</c> status) is an
+    /// unambiguous context-overflow signal rather than incidental prose. The
+    /// canonical claude form is the bare "Prompt too long" carried in the
+    /// failing <c>result</c> frame; the others cover codex/gemini and the
+    /// underlying provider API messages.
+    /// </summary>
+    private static readonly string[] ContextOverflowNeedles =
+    {
+        "prompt too long",
+        "prompt is too long",
+        "input is too long",
+        "context length exceeded",
+        "maximum context length",
+        "context window exceeded",
+        "exceeds the context window",
+        "exceeds the maximum context",
+        "too many tokens",
+        "request too large",
+        "payload too large",
+        "context_length_exceeded",
+        "prompt_too_long",
+    };
+
+    /// <summary>
+    /// True when the run output carries a recognised context-overflow signal.
+    /// Callers must only invoke this for a <c>failed</c> run so an agent that
+    /// merely discusses token limits in a healthy turn does not trip it.
+    /// </summary>
+    private static bool IsContextOverflow(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return false;
+        foreach (var needle in ContextOverflowNeedles)
+        {
+            if (rawText.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     private static bool HasCliLaunchFailureNeedle(string rawText)

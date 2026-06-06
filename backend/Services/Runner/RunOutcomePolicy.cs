@@ -146,6 +146,26 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.ContextOverflow)
+        {
+            // Context overflow (prompt too long / context length exceeded) is
+            // NON-RETRYABLE: re-issuing resends the same or a larger context
+            // and overflows identically. This is the precise failure that was
+            // looping forever (a "Prompt too long" failure re-issued without
+            // limit). Route straight to human review on first detection - no
+            // soft intervention, no retry budget to spend - so a human can
+            // re-scope or split the task. Mirrors EnvironmentBlocker.
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: outcome.Summary
+                    ?? "The run exceeded the model's context window (prompt too long). This cannot be fixed by re-issuing; the task needs to be re-scoped or split. Routing to human review.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.ContextOverflow,
+                MessageKind = OrchestratorMessageKind.ContextOverflow
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.EnvironmentBlocker)
         {
             // Environment blockers are unrecoverable by the agent. The

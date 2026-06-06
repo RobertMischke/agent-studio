@@ -713,6 +713,19 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("watchdog-timeout", "Watchdog timeout", "High", line, lastSeenAt);
             return true;
         }
+        // Quarantined / context-overflow are terminal, non-retryable circuit-breaker
+        // outcomes (the run was parked in human review to stop an endless reissue
+        // loop), so they rank High like the other unrecoverable runner outcomes.
+        if (lower.Contains("quarantined"))
+        {
+            issue = BuildOutcomeIssue("quarantined", "Quarantined", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("context-overflow"))
+        {
+            issue = BuildOutcomeIssue("context-overflow", "Context overflow", "High", line, lastSeenAt);
+            return true;
+        }
         if (lower.Contains("missing-terminal-sentinel"))
         {
             issue = BuildOutcomeIssue("missing-terminal-sentinel", "Missing sentinel", "Warn", line, lastSeenAt);

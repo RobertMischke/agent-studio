@@ -18,6 +18,16 @@ public static class HumanReviewEscalationCategories
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
 
+    /// <summary>The run exceeded the model's input window (prompt too long /
+    /// context length). Non-retryable, so it is routed straight to human review
+    /// instead of being re-issued into the same overflow.</summary>
+    public const string ContextOverflow = "context-overflow";
+
+    /// <summary>The per-task circuit breaker tripped after N consecutive failed
+    /// runs without progress; the task was parked to stop an endless reissue
+    /// loop.</summary>
+    public const string Quarantined = "quarantined";
+
     /// <summary>A card carrying the human-decision-needed marker: it exists for
     /// a person to decide, never for an agent to run. Routed to 5-human-review
     /// after the retired 1b-needs-human-review lane was removed.</summary>

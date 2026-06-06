@@ -187,7 +187,19 @@ public enum OrchestratorMessageKind
     /// the auto-review aspect calls still run and the user sees why no
     /// sentinel landed.
     /// </summary>
-    SilentCompletion
+    SilentCompletion,
+    /// <summary>
+    /// The run exceeded the model's input window (prompt too long / context
+    /// length). Non-retryable: the orchestrator routes it straight to human
+    /// review instead of re-issuing into the same overflow.
+    /// </summary>
+    ContextOverflow,
+    /// <summary>
+    /// The per-task circuit breaker tripped after N consecutive failed runs
+    /// without progress; the task was parked in human review to stop an
+    /// endless reissue loop.
+    /// </summary>
+    Quarantined
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -209,6 +221,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Steer             => "steer",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
+        OrchestratorMessageKind.ContextOverflow   => "context-overflow",
+        OrchestratorMessageKind.Quarantined       => "quarantined",
         _ => "info"
     };
 
@@ -225,6 +239,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
+        OrchestratorMessageKind.ContextOverflow   => "context-overflow",
+        OrchestratorMessageKind.Quarantined       => "quarantined",
         _ => kind.ToString().ToLowerInvariant()
     };
 }

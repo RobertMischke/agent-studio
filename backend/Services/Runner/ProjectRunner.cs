@@ -210,6 +210,19 @@ public class ProjectRunner
     private int _consecutiveCaptureFailCount;
     internal const int CaptureFailHaltThreshold = 3;
 
+    // Per-task anti-endless-reissue circuit breaker. Counts consecutive runs
+    // for the same task that finished as a no-progress soft failure (did not
+    // reach review, produced no commit, was not a deliberate stop) across BOTH
+    // the auto-pickup run and the UserContinue re-issue it spawns - the
+    // ping-pong that bypassed every existing breaker. Once a task reaches
+    // QuarantineFailThreshold it is parked in 5-human-review instead of being
+    // re-issued again. Reset on any progress (a new commit) or on reaching
+    // review. In-memory by design: a backend restart is a recovery boundary
+    // and clears the streak, mirroring the capture-fail breaker above. See
+    // RunQuarantineBreaker for the pure decision.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _consecutiveFailNoProgress = new(StringComparer.Ordinal);
+    internal const int QuarantineFailThreshold = RunQuarantineBreaker.DefaultFailThreshold;
+
     // Continuous decision review: while a job sits in 3-progress, we scan
     // its live output buffer every tick for an unresolved interruptive
     // sentinel ([[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]). The latch is
@@ -3185,6 +3198,54 @@ public class ProjectRunner
             OutcomeAction? action = capturedPlan != null
                 ? RunOutcomePolicy.Decide(capturedIntent, capturedPlan, outcome, capturedFollowup, capturedAttempt, codexEvidence)
                 : null;
+
+            // Per-task anti-endless-reissue circuit breaker. A run that did not
+            // reach review and produced no commit is a "no-progress failure".
+            // Count these per task (across the auto-pickup run AND the
+            // UserContinue re-issue it spawns - the loop that bypassed every
+            // other breaker); once the streak reaches QuarantineFailThreshold,
+            // override the action to a terminal quarantine so we STOP
+            // re-issuing and park the task in 5-human-review. Progress (a new
+            // commit) or reaching review resets the streak below, so a healthy
+            // long-running task that keeps committing is never quarantined.
+            var deliberateStop = WasDeliberatelyStopped(execution.Status);
+            var movedToReview = RunCompletionPolicy.ShouldMoveToReview(terminalOutcome);
+            if (action != null && activeInfo != null
+                && !movedToReview && !deliberateStop && commitsDuringRun == 0
+                && RunQuarantineBreaker.CountsAsNoProgressFailure(action.IssueKind))
+            {
+                var fails = _consecutiveFailNoProgress.AddOrUpdate(jobId, 1, (_, n) => n + 1);
+                if (RunQuarantineBreaker.ShouldQuarantine(fails, QuarantineFailThreshold))
+                {
+                    var priorTopic = ToIssueTopic(action.IssueKind);
+                    _logger.LogWarning(
+                        "[circuit-breaker] quarantined {JobId} after {N} fails (reason={Reason})",
+                        jobId, fails, priorTopic);
+                    _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
+                    {
+                        Kind = OrchestratorLogKinds.Intervention,
+                        Topic = "quarantined",
+                        JobId = jobId,
+                        Summary = $"Quarantined \"{activeInfo.Title}\" after {fails} consecutive failed runs without progress (last: {priorTopic}).",
+                        Reasoning = "Per-task circuit breaker: repeated no-progress failures (no new commit between attempts) would otherwise re-issue forever. Parking in human review to stop the loop."
+                    });
+                    action = new OutcomeAction(
+                        Kind: OutcomeActionKind.NotifyUserAndStop,
+                        MetaMessage: $"quarantined after {fails} consecutive failed runs without progress (last issue: {priorTopic}). Re-issuing would loop; the task is parked for human review.",
+                        IsHeuristicFallback: false)
+                    {
+                        IssueKind = RunIssueKind.Quarantined,
+                        MessageKind = OrchestratorMessageKind.Quarantined
+                    };
+                    _consecutiveFailNoProgress.TryRemove(jobId, out _);
+                }
+            }
+            else if (commitsDuringRun > 0 || movedToReview)
+            {
+                // Progress or a clean finish breaks the streak.
+                _consecutiveFailNoProgress.TryRemove(jobId, out _);
+            }
+
             if (action != null && activeInfo != null)
             {
                 // Build a short signature so we can suppress the second
@@ -3267,6 +3328,11 @@ public class ProjectRunner
                 if (action.Kind == OutcomeActionKind.NotifyUserAndStop
                     && activeInfo != null
                     && ShouldRouteIssueToHumanReview(action.IssueKind)
+                    // Non-retryable verdicts skip abort-review entirely: rerunning
+                    // a context-overflow walks straight back into the same input
+                    // window, and the quarantine breaker exists precisely to STOP
+                    // re-running this task. Both go directly to human review.
+                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.Quarantined)
                     && _postAbortReview != null
                     && OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
@@ -3347,6 +3413,10 @@ public class ProjectRunner
                     // any spent completion-loop budget so a future run starts
                     // fresh (mirrors the abort-review reset).
                     _completionRetriggerUsed.TryRemove(jobId, out _);
+                    // Same for the per-task quarantine streak: once a human owns
+                    // the card, a later run should start from zero rather than
+                    // inherit a near-trip count.
+                    _consecutiveFailNoProgress.TryRemove(jobId, out _);
                     // Terminal: tear down the parallel worktree+branch (kept only
                     // if its work is unmerged, so a human can still resolve it).
                     TeardownWorktreeForJob(jobId);
@@ -3387,7 +3457,7 @@ public class ProjectRunner
             // job starts a fresh loop with a fresh budget.
             _stuckLoops.TryRemove(jobId, out _);
 
-            var movedToReview = RunCompletionPolicy.ShouldMoveToReview(terminalOutcome);
+            // movedToReview was computed up-front for the circuit breaker.
 
             // Way 3 (non-deterministic half): an epic's planning run just
             // finished successfully. Parse the authored plan and create the
@@ -3595,7 +3665,9 @@ public class ProjectRunner
     private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)
         => issueKind is RunIssueKind.PermissionBlocked
                      or RunIssueKind.WatchdogTimeout
-                     or RunIssueKind.EnvironmentBlocker;
+                     or RunIssueKind.EnvironmentBlocker
+                     or RunIssueKind.ContextOverflow
+                     or RunIssueKind.Quarantined;
 
     /// <summary>Remaining completion-loop re-trigger budget for a job
     /// (loop id completion.retrigger-transient-abort-per-job). Counts down
@@ -3633,6 +3705,8 @@ public class ProjectRunner
         RunIssueKind.NoAgentOutput            => "no-agent-output",
         RunIssueKind.EnvironmentBlocker       => "environment-blocker",
         RunIssueKind.SilentCompletion         => "codex-silent-completion",
+        RunIssueKind.ContextOverflow          => "context-overflow",
+        RunIssueKind.Quarantined              => "quarantined",
         _                                     => "none"
     };
 
@@ -3644,6 +3718,8 @@ public class ProjectRunner
         RunIssueKind.WatchdogTimeout    => HumanReviewEscalationCategories.WatchdogKill,
         RunIssueKind.PermissionBlocked  => HumanReviewEscalationCategories.PermissionBlocked,
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
+        RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
+        RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
 
