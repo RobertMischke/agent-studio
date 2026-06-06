@@ -222,15 +222,7 @@ export class App implements OnInit, OnDestroy {
   readonly selectedJob = this.jobSelection.selected;
   readonly triageToast = this.jobSelection.triageToast;
   readonly epicOverlayDetail = signal<TaskDetail | null>(null);
-  readonly epicOverlayTaskDetail = computed<TaskDetail | null>(() => {
-    const epic = this.epicOverlayDetail();
-    const selected = this.selectedJob();
-    if (!epic || !selected) return null;
-    if (selected.info.kind === 'epic') return null;
-    if (selected.info.epicId !== epic.info.id) return null;
-    if (selected.info.watchPath !== epic.info.watchPath) return null;
-    return selected;
-  });
+  readonly epicOverlayTaskDetail = signal<TaskDetail | null>(null);
 
   @ViewChild('jobDetail') private jobDetailRef?: TaskDetailComponent;
   @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
@@ -1062,6 +1054,23 @@ export class App implements OnInit, OnDestroy {
       });
     });
 
+    effect(() => {
+      const epic = this.epicOverlayDetail();
+      const selected = this.selectedJob();
+      if (!epic || !selected) return;
+
+      if (
+        selected.info.kind !== 'epic' &&
+        selected.info.epicId === epic.info.id &&
+        selected.info.watchPath === epic.info.watchPath
+      ) {
+        untracked(() => this.epicOverlayTaskDetail.set(selected));
+        return;
+      }
+
+      untracked(() => this.epicOverlayTaskDetail.set(null));
+    });
+
     // F43: clear the user's rail-open compact override the moment the
     // rail closes. Without this, opening the rail a second time would
     // skip the auto-compact rule because the override flag from the
@@ -1650,6 +1659,13 @@ export class App implements OnInit, OnDestroy {
       next: (detail) => {
         if (requestToken !== this.relatedOpenToken) return;
         if (detail.info.kind === 'epic') {
+          const currentEpic = this.epicOverlayDetail();
+          if (
+            currentEpic?.info.id !== detail.info.id ||
+            currentEpic?.info.watchPath !== detail.info.watchPath
+          ) {
+            this.epicOverlayTaskDetail.set(null);
+          }
           this.epicOverlayDetail.set(detail);
           return;
         }
@@ -1679,11 +1695,41 @@ export class App implements OnInit, OnDestroy {
   }
 
   openEpicOverlaySubTask(event: { jobId: string; watchPath: string }): void {
-    this.openRelatedJob(event);
+    const epic = this.epicOverlayDetail();
+    if (!epic) return;
+    const requestToken = ++this.relatedOpenToken;
+    this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
+      next: (detail) => {
+        if (requestToken !== this.relatedOpenToken) return;
+        const currentEpic = this.epicOverlayDetail();
+        if (!currentEpic) return;
+        if (
+          detail.info.kind === 'epic' ||
+          detail.info.epicId !== currentEpic.info.id ||
+          detail.info.watchPath !== currentEpic.info.watchPath
+        ) {
+          this.errorDialog.show(new Error('The selected task is not part of this epic.'), {
+            title: 'Failed to open sub-task',
+            source: `task ${event.jobId}`,
+          });
+          return;
+        }
+        this.epicOverlayTaskDetail.set(detail);
+        this.selectFetchedDetail(detail);
+      },
+      error: (err) => {
+        if (requestToken !== this.relatedOpenToken) return;
+        this.errorDialog.show(err, {
+          title: 'Failed to open sub-task',
+          source: `task ${event.jobId}`,
+        });
+      },
+    });
   }
 
   closeEpicOverlay(): void {
     this.epicOverlayDetail.set(null);
+    this.epicOverlayTaskDetail.set(null);
   }
 
   refreshEpicOverlay(): void {

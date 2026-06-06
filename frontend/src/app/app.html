@@ -815,7 +815,10 @@
                role="dialog"
                aria-modal="false"
                [attr.aria-label]="'Epic: ' + (epic.info.title || epic.info.id)">
-        <div class="epic-overlay__scrim" (click)="closeEpicOverlay()"></div>
+        <button type="button"
+                class="epic-overlay__scrim"
+                aria-label="Close epic overlay"
+                (click)="closeEpicOverlay()"></button>
         <aside class="epic-overlay__panel">
           <header class="epic-overlay__header">
             <div class="epic-overlay__title-block">
