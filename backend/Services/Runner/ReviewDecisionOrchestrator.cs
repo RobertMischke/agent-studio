@@ -377,6 +377,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             continue;
                         }
 
+                        if (pending.Kind == ReviewSignalKind.UnworkedNoCoreRun)
+                        {
+                            // Deterministic: a review-lane card with no core run
+                            // is bounced to 2-ready. No fast-model call, no
+                            // per-hour rate consumption.
+                            ProcessUnworkedCard(workspace, entry, pending);
+                            _statusSnapshot.RecordReissue();
+                            continue;
+                        }
+
                         if (pending.Kind == ReviewSignalKind.NoOp)
                         {
                             // NOOP is fully deterministic: no fast-model call,
@@ -1222,6 +1232,65 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             FollowUp: string.Empty));
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Bounce an unworked card out of <c>4-auto-review</c> back to
+    /// <c>2-ready</c> (ASS-693 / ASS-716). A card reaches the orchestrator's
+    /// review lane with no <c>cli-output.log</c> only when it was mis-placed
+    /// there without ever running a core agent run (a decomposition that
+    /// targeted the review lane, a hand move). Auto-review presupposes a
+    /// completed run; an unworked card has nothing to review and would
+    /// otherwise be swept to <c>7-archive</c> unworked. Move it to
+    /// <c>2-ready</c> (needs-work) so the pickup loop actually runs it, and
+    /// never let it reach the archive. Deterministic and re-bill-safe: the move
+    /// takes the card out of this lane, so the next tick no longer sees it; a
+    /// move that fails is logged and retried next tick.
+    /// </summary>
+    private void ProcessUnworkedCard(string workspace, WatchPathEntry entry, PendingDecision pending)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Ready, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to bounce unworked card {Project}/{JobId} from 4-auto-review to 2-ready: {Status} {Message}; leaving for next-tick retry",
+                entry.Name, current.Id, move.Status, move.Message);
+            return;
+        }
+
+        var movedFolderPath = move.NewFolderPath
+            ?? Path.Combine(entry.Path, TaskStates.Ready, Path.GetFileName(current.FolderPath));
+        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Ready };
+        _scanner.InvalidateCache();
+
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        _chatLog.AppendSupervisor(moved, "requeued-unworked",
+            $"\"{title}\" reached 4-auto-review with no core run (no run output, 0 commits). " +
+            "Auto-review presupposes a completed run; bounced to 2-ready so the orchestrator runs it. " +
+            "An unworked card is never archived.");
+
+        EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            "Bounced: card reached 4-auto-review with no core run; sent to 2-ready to be worked.",
+            new Dictionary<string, string>
+            {
+                ["cause"] = "unworked-no-core-run",
+            });
+
+        _logger.LogInformation(
+            "ReviewDecisionOrchestrator: bounced unworked card {Project}/{JobId} from 4-auto-review to 2-ready (no core run)",
+            entry.Name, current.Id);
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: "Card reached 4-auto-review with no core run (0 commits, no run output); bounced to 2-ready.",
+            Prompt: "(unworked-no-core-run sweep-guard)",
+            Response: string.Empty,
+            FollowUp: string.Empty));
     }
 
     /// <summary>
@@ -3266,7 +3335,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, TaskStates.AutoReview))
         {
             var logPath = TaskPaths.CliOutputLog(info.FolderPath);
-            if (!File.Exists(logPath)) continue;
+            if (!File.Exists(logPath))
+            {
+                // Sweep-guard (ASS-693 / ASS-716): a card in 4-auto-review with
+                // no cli-output.log never had a core run - auto-review has
+                // nothing to evaluate and the card would otherwise linger until
+                // a sweep wiped it to 7-archive unworked. Bounce it to 2-ready
+                // instead of silently skipping. Re-bill-safe: the move takes the
+                // card out of this lane, so the next tick no longer sees it.
+                yield return new PendingDecision(info, ReviewSignalKind.UnworkedNoCoreRun, LineNumber: -1, Reason: "no-core-run", NeedsInput: null);
+                continue;
+            }
 
             string log;
             try { log = File.ReadAllText(logPath); }
@@ -3671,7 +3750,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         /// <see cref="GetStaleVerdictNeedingMove"/>; the due verdict travels on
         /// <see cref="PendingDecision.StaleVerdict"/>.
         /// </summary>
-        StaleWithVerdict
+        StaleWithVerdict,
+
+        /// <summary>
+        /// A card sits in 4-auto-review with no core run behind it at all: no
+        /// <c>cli-output.log</c> exists, so no agent run ever streamed output
+        /// (0 commits, no run). Auto-review presupposes a completed core run;
+        /// such a card was mis-placed here (a decomposition that targeted the
+        /// review lane, a hand move) and must never be silently swept to
+        /// 7-archive unworked - the ASS-693 / ASS-716 incident. It is bounced
+        /// back to 2-ready (needs-work) so the pickup loop actually runs it.
+        /// </summary>
+        UnworkedNoCoreRun
     }
 
     private sealed record PendingDecision(

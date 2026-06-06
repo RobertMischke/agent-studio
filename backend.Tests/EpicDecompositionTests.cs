@@ -248,6 +248,39 @@ public class EpicDecompositionTests : IDisposable
     }
 
     [Fact]
+    public void CreateSubTasks_ClampsAutoReviewTargetToBacklog()
+    {
+        // ASS-693 / ASS-716 root cause: an epic decomposition that aimed
+        // sub-tasks at 4-auto-review left unworked cards in the orchestrator's
+        // review lane, where a sweep wiped them to 7-archive without ever
+        // running them. Decomposition must never land a fresh sub-task in
+        // 4-auto-review; the factory clamps the target to a safe lane.
+        var (scanner, mutations) = Build();
+        var epic = CreateEpic("epic-clamp");
+
+        var created = EpicSubTaskFactory.CreateSubTasks(
+            mutations, epic, new List<EpicSubTaskSpec> { new("Sub", "do it") }, TaskStates.AutoReview);
+
+        var sub = scanner.FindJob(Assert.Single(created), _watchPath);
+        Assert.Equal(TaskStates.Backlog, sub!.State);
+        Assert.NotEqual(TaskStates.AutoReview, sub.State);
+    }
+
+    [Theory]
+    [InlineData(TaskStates.Ready, TaskStates.Ready)]
+    [InlineData(TaskStates.Backlog, TaskStates.Backlog)]
+    [InlineData(TaskStates.AutoReview, TaskStates.Backlog)]
+    [InlineData(TaskStates.HumanReview, TaskStates.Backlog)]
+    [InlineData(TaskStates.Progress, TaskStates.Backlog)]
+    [InlineData(TaskStates.Archive, TaskStates.Backlog)]
+    [InlineData("", TaskStates.Backlog)]
+    [InlineData(null, TaskStates.Backlog)]
+    public void ClampTargetState_OnlyAllowsBacklogOrReady(string? input, string expected)
+    {
+        Assert.Equal(expected, EpicSubTaskFactory.ClampTargetState(input));
+    }
+
+    [Fact]
     public void CreateSubTasks_InheritsEpicCliAndModel_UnlessOverridden()
     {
         var (scanner, mutations) = Build();

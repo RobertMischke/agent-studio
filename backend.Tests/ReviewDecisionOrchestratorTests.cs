@@ -361,6 +361,52 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task UnworkedCardWithNoCoreRun_BouncesToReady_NotArchive()
+    {
+        // ASS-693 / ASS-716: an epic decomposition placed sub-tasks directly in
+        // 4-auto-review. A card that never ran a core agent run (no
+        // cli-output.log) has nothing to review; left there, a sweep wiped it to
+        // 7-archive unworked. The sweep-guard bounces it to 2-ready instead -
+        // deterministically, with no fast-model call - so the pickup loop runs it.
+        var calls = 0;
+        SeedReviewJobWithoutCoreRun("unworked-subtask");
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "unworked-subtask")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "unworked-subtask")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "unworked-subtask")));
+
+        // Deterministic bounce: no fast-model decision call was made.
+        Assert.Equal(0, calls);
+
+        // An operator-facing note explains the bounce on the moved card.
+        var log = ReadCliLog(TaskStates.Ready, "unworked-subtask");
+        Assert.Contains("no core run", log);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
+        Assert.Equal("unworked-subtask", record.JobId);
+    }
+
+    [Fact]
+    public async Task UnworkedCardBounce_IsIdempotent_AcrossTicks()
+    {
+        // Re-bill safety: a successful bounce takes the card out of
+        // 4-auto-review, so a second tick finds nothing to do.
+        SeedReviewJobWithoutCoreRun("unworked-once");
+        var orchestrator = BuildOrchestrator(cliResponse: "");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "unworked-once")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "unworked-once")));
+        Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project));
+    }
+
+    [Fact]
     public async Task StaleWithVerdict_BackfillIsIdempotent_AcrossTicks()
     {
         // Re-bill safety / move-retry semantics: the backfill appends no new
@@ -1619,6 +1665,18 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.Progress}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
+    }
+
+    private void SeedReviewJobWithoutCoreRun(string slug)
+    {
+        // A card placed in 4-auto-review with job.json + prompt.md but NO
+        // logs/cli-output.log: the decomposition-bug fingerprint (a freshly
+        // created sub-task that never ran a core agent run). 0 commits, no run.
+        var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
     }
 

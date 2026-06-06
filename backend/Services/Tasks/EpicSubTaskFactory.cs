@@ -29,6 +29,7 @@ public static class EpicSubTaskFactory
     {
         var created = new List<string>();
         if (specs is null) return created;
+        var safeTargetState = ClampTargetState(targetState);
         foreach (var spec in specs)
         {
             if (string.IsNullOrWhiteSpace(spec.Title)) continue;
@@ -40,10 +41,28 @@ public static class EpicSubTaskFactory
                 PromptMarkdown = spec.PromptMarkdown,
                 CliType = spec.CliType ?? epic.CliType,
                 Model = spec.Model ?? epic.Model,
-                TargetState = targetState,
+                TargetState = safeTargetState,
             });
             if (id is not null) created.Add(id);
         }
         return created;
     }
+
+    /// <summary>
+    /// Clamp a decomposition target lane to the only two lanes a freshly minted
+    /// sub-task may legitimately land in: <see cref="TaskStates.Backlog"/>
+    /// (triage) or <see cref="TaskStates.Ready"/> (queued to run). A sub-task
+    /// has never been worked, so any other target - above all
+    /// <see cref="TaskStates.AutoReview"/>, the orchestrator's post-core review
+    /// lane - is a category error: an unworked card there has no run to review
+    /// and gets swept toward <see cref="TaskStates.Archive"/> without ever being
+    /// touched (the ASS-693 / ASS-716 incident). Anything that is not exactly
+    /// <c>2-ready</c> is forced to the conservative <c>0-backlog</c> triage lane,
+    /// which auto-pickup never reaches into, so a mis-targeted decomposition can
+    /// never run or vanish unvetted.
+    /// </summary>
+    public static string ClampTargetState(string? targetState)
+        => string.Equals(targetState, TaskStates.Ready, StringComparison.Ordinal)
+            ? TaskStates.Ready
+            : TaskStates.Backlog;
 }
