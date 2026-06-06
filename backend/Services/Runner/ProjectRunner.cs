@@ -122,20 +122,33 @@ public class ProjectRunner
     private string? _pendingMode;
     private string? _pendingModeReason;
     private string? _pendingModeWillApplyAfter;
-    private string? _activeJobId;
-    private string? _activeCliType;
+    // ADR-0052 slice 2: the former single-active scalar fields
+    // (_activeJobId/_activeCliType/_activeIntent/_activeFollowup/_activePlan/
+    // _activeReissueAttempt) are consolidated into this slot registry — the
+    // single point of change for the admit latch + run state. At
+    // MaxParallelism==1 it holds at most one run (byte-identical to the old
+    // latch); going to N slots is localized to ActiveRuns.
+    private readonly ActiveRuns _activeRuns = new();
+    // Transitional read accessors over the registry so the many read-sites stay
+    // byte-identical at MaxParallelism==1; assignment sites are migrated to
+    // _activeRuns.TryClaim / Release / Get. (Per-run read-correctness for N>1 is
+    // wired in the admission + worktree slices, where the single-active reads
+    // are replaced by per-job lookups.)
+    private string? _activeJobId => _activeRuns.SingleJobId;
+    private string? _activeCliType => _activeRuns.Single?.CliType;
+    private RunIntent _activeIntent => _activeRuns.Single?.Intent ?? default;
+    private string? _activeFollowup => _activeRuns.Single?.Followup;
+    private RunPlan? _activePlan => _activeRuns.Single?.Plan;
+    private int _activeReissueAttempt => _activeRuns.Single?.ReissueAttempt ?? 0;
     private bool _processing;
     // ADR-0052: the pick-gate rationale recorded the last time a task was
     // admitted into a runner slot. Surfaced on the status payload + the
     // runner_slot_admission timeline event so the UI can show the pick
     // decision + slot occupancy. Pure observability; never gates execution.
     private string? _lastPickReason;
-    // Tracks the last run's intent and follow-up so OnCliFinished can apply
-    // the post-run policy without re-deriving them from job state.
-    private RunIntent _activeIntent;
-    private string? _activeFollowup;
-    private RunPlan? _activePlan;
-    private int _activeReissueAttempt;
+    // Run intent / follow-up / plan / reissue-attempt now live on the
+    // ActiveRun record inside _activeRuns (see ActiveRuns.cs), so OnCliFinished
+    // reads them per-run rather than from shared single-active scalars.
     // Suppression state for repeated meta messages. When the same heuristic
     // verdict fires twice in a row in Recovery, we skip the second meta
     // message so the chat does not pile orchestrator notes on a stuck run.
@@ -778,11 +791,14 @@ public class ProjectRunner
                 _activePickupLockFolder = jobFolder;
             }
 
-            _activeJobId = jobId;
-            _activeIntent = intent;
-            _activeFollowup = followupPrompt;
-            _activePlan = plan;
-            _activeReissueAttempt = reissueAttempt;
+            _activeRuns.TryClaim(new ActiveRun
+            {
+                JobId = jobId,
+                Intent = intent,
+                Followup = followupPrompt,
+                Plan = plan,
+                ReissueAttempt = reissueAttempt,
+            });
             NotifyStatus();
 
             Directory.CreateDirectory(TaskPaths.LogsDir(info.FolderPath));
@@ -888,7 +904,7 @@ public class ProjectRunner
                     ["decision"] = slotDecision.Decision.ToString(),
                 });
 
-            _activeCliType = cli.CliType;
+            if (_activeRuns.Get(jobId) is { } claimedRun) claimedRun.CliType = cli.CliType;
             // Resolve the per-project permission mode at spawn time (default
             // YOLO). Reading the live ProjectSettingsService here is what makes
             // a toggle take effect on the next run without a backend restart.
@@ -899,8 +915,7 @@ public class ProjectRunner
 
             if (execution == null)
             {
-                _activeJobId = null;
-                _activeCliType = null;
+                _activeRuns.Release(jobId);
                 // Mandatory diagnostic: a spawn failure used to leave ZERO
                 // trace in the job folder (no cli-output.log, empty logs/),
                 // so an operator could only guess why the run "finished
@@ -1761,12 +1776,7 @@ public class ProjectRunner
 
             // Release the active-job latch so the orchestrator's spawned
             // Continue can claim it; we mirror the re-issue path's release.
-            _activeJobId = null;
-            _activeCliType = null;
-            _activeIntent = default;
-            _activeFollowup = null;
-            _activePlan = null;
-            _activeReissueAttempt = 0;
+            _activeRuns.Release(jobId);
             NotifyStatus();
 
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
@@ -2983,8 +2993,7 @@ public class ProjectRunner
                     // Release the active-job latch on the original run so the
                     // re-issue can claim it. We then schedule the re-issue on
                     // the thread pool so OnCliFinished returns promptly.
-                    _activeJobId = null;
-                    _activeCliType = null;
+                    _activeRuns.Release(jobId);
                     NotifyStatus();
                     var wasRecovery = string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase);
                     var retryPrompt = action.IsPreframedRetryPrompt
@@ -3075,8 +3084,7 @@ public class ProjectRunner
                     // Release the active-job latch so the re-issue can claim
                     // it, then schedule on the thread pool so OnCliFinished
                     // returns promptly (mirrors the abort-review rerun path).
-                    _activeJobId = null;
-                    _activeCliType = null;
+                    _activeRuns.Release(jobId);
                     NotifyStatus();
                     var retryPrompt = BuildCompletionRetriggerPrompt(activeInfo);
                     _ = Task.Run(async () =>
@@ -3266,12 +3274,7 @@ public class ProjectRunner
         {
             if (_activeJobId == jobId)
             {
-                _activeJobId = null;
-                _activeCliType = null;
-                _activeIntent = default;
-                _activeFollowup = null;
-                _activePlan = null;
-                _activeReissueAttempt = 0;
+                _activeRuns.Release(jobId);
                 ReleasePickupLockIfHeld();
                 ApplyPendingModeIfAny(jobId);
                 NotifyStatus();
@@ -3492,8 +3495,7 @@ public class ProjectRunner
                 // Release the active-job latch so the re-issue can claim it,
                 // then schedule on the thread pool so OnCliFinished returns
                 // promptly (mirrors the ReissueWithStrongerFraming path).
-                _activeJobId = null;
-                _activeCliType = null;
+                _activeRuns.Release(jobId);
                 NotifyStatus();
                 var stronger = report.Action == PostAbortAction.RerunWithStrongerFraming;
                 var retryPrompt = BuildAbortReviewRerunPrompt(activeInfo, report, stronger);
@@ -3790,12 +3792,7 @@ public class ProjectRunner
             }
         }
 
-        _activeJobId = null;
-        _activeCliType = null;
-        _activeIntent = default;
-        _activeFollowup = null;
-        _activePlan = null;
-        _activeReissueAttempt = 0;
+        _activeRuns.Release(jobId);
         ReleasePickupLockIfHeld();
         ApplyPendingModeIfAny(jobId);
 
@@ -3852,8 +3849,7 @@ public class ProjectRunner
     /// without spinning up a real CLI run.</summary>
     internal void SetActiveJobForTest(string jobId, string? cliType = null)
     {
-        _activeJobId = jobId;
-        _activeCliType = cliType;
+        _activeRuns.TryClaim(new ActiveRun { JobId = jobId, CliType = cliType });
     }
 
     private string RenderPrompt(RunPlan plan, TaskInfo info)
