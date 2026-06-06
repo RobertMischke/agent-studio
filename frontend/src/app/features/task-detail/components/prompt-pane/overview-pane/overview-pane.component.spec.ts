@@ -413,6 +413,7 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(core.tokenTooltip?.body).toContain('Cache creation: 1.00M');
     expect(core.tokenTooltip?.body).toContain('Total API price estimate: $20.40');
     expect(core.tokenTooltip?.body).toContain('Actual CLI billing uses the subscription or plan');
+    expect(core.tokenTooltip?.body).toContain('not these API rates');
     expect(c.agentRunCountLabel()).toBe('8 runs');
     expect(c.pipelineTotal()?.tokenTooltip?.title).toBe('Task total tokens (SUM)');
     expect(c.pipelineTotal()?.tokenTooltip?.body).toContain('Source: SUM of pipeline steps');
