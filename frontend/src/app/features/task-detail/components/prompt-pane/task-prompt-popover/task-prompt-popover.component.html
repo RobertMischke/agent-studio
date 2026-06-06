@@ -13,12 +13,16 @@
       Prompt
     </button>
 
+    <div #portalRoot class="prompt-pop__portal">
     @if (open()) {
       <div
+        #panelEl
         class="prompt-pop__panel"
         role="dialog"
         aria-label="Task prompt"
         data-testid="overview-prompt-popover"
+        [style.left.px]="panelPos().left"
+        [style.top.px]="panelPos().top"
         (click)="$event.stopPropagation()">
         <header class="prompt-pop__head">
           <h4 class="prompt-pop__title">Task prompt</h4>
@@ -37,5 +41,6 @@
         </div>
       </div>
     }
+    </div>
   </span>
 }

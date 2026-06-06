@@ -13,7 +13,7 @@
   &__backdrop {
     position: fixed;
     inset: 0;
-    z-index: 90;
+    z-index: var(--studio-z-overlay-backdrop);
     background: transparent;
   }
 
@@ -22,7 +22,7 @@
   // ---------------------------------------------------------------------------
   &__panel {
     position: fixed;
-    z-index: 100;
+    z-index: var(--studio-z-overlay-panel);
     min-width: 200px;
     max-width: 360px;
     padding: 6px;

@@ -1,7 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
+  ElementRef,
   OnDestroy,
+  ViewChild,
   computed,
   effect,
   inject,
@@ -64,6 +67,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
 import { PaneTabsComponent } from '../../../../../components/pane-tabs/pane-tabs.component';
 import type { PaneTabDef } from '../../../../../components/pane-tabs/pane-tabs.component';
+import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 export type InspectorTab = 'protocol' | 'activity';
 
 /**
@@ -163,6 +167,16 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly planPoll = inject(PlanPollService);
   private readonly nowTick = inject(NowTickService).now;
   private readonly jobs = inject(TaskService);
+  private readonly overlayPortal = inject(OverlayPortalService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  @ViewChild('outcomeIssuePortalRoot')
+  private outcomeIssuePortalRoot?: ElementRef<HTMLDivElement>;
+  @ViewChild('runsPortalRoot')
+  private runsPortalRoot?: ElementRef<HTMLDivElement>;
+
+  private outcomeIssuePortalRef: OverlayPortalRef | null = null;
+  private runsPortalRef: OverlayPortalRef | null = null;
 
   /** Tracks the job whose Activity sub-view override is currently held. */
   private activityViewJobId: string | null = null;
@@ -177,6 +191,24 @@ export class ProtocolPaneComponent implements OnDestroy {
         this.activityViewJobId = id;
         this.activityViewOverride.set(null);
       }
+    });
+    effect(() => {
+      if (this.outcomeIssueModalOpen()) {
+        queueMicrotask(() => this.acquireOutcomeIssuePortal());
+      } else {
+        this.releaseOutcomeIssuePortal();
+      }
+    });
+    effect(() => {
+      if (this.runsModalOpen()) {
+        queueMicrotask(() => this.acquireRunsPortal());
+      } else {
+        this.releaseRunsPortal();
+      }
+    });
+    this.destroyRef.onDestroy(() => {
+      this.releaseOutcomeIssuePortal();
+      this.releaseRunsPortal();
     });
   }
 
@@ -798,6 +830,32 @@ export class ProtocolPaneComponent implements OnDestroy {
       clearTimeout(this.copyResetTimer);
       this.copyResetTimer = null;
     }
+    this.releaseOutcomeIssuePortal();
+    this.releaseRunsPortal();
+  }
+
+  private acquireOutcomeIssuePortal(): void {
+    if (!this.outcomeIssueModalOpen() || this.outcomeIssuePortalRef) return;
+    const root = this.outcomeIssuePortalRoot?.nativeElement;
+    if (!root) return;
+    this.outcomeIssuePortalRef = this.overlayPortal.attach(root, 'studio-overlay-layer studio-overlay-layer--modal');
+  }
+
+  private releaseOutcomeIssuePortal(): void {
+    this.outcomeIssuePortalRef?.dispose();
+    this.outcomeIssuePortalRef = null;
+  }
+
+  private acquireRunsPortal(): void {
+    if (!this.runsModalOpen() || this.runsPortalRef) return;
+    const root = this.runsPortalRoot?.nativeElement;
+    if (!root) return;
+    this.runsPortalRef = this.overlayPortal.attach(root, 'studio-overlay-layer studio-overlay-layer--modal');
+  }
+
+  private releaseRunsPortal(): void {
+    this.runsPortalRef?.dispose();
+    this.runsPortalRef = null;
   }
 
   copyLabel(): string {

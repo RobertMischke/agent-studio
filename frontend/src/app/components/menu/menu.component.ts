@@ -86,6 +86,8 @@ export class MenuComponent implements OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
   private portalRef: OverlayPortalRef | null = null;
+  private repositionAttached = false;
+  private readonly reposition = () => this.recomputePosition();
 
   /** Computed list of focusable row indices (skips header / separator / disabled). */
   readonly focusableIndices = computed<readonly number[]>(() => {
@@ -169,10 +171,12 @@ export class MenuComponent implements OnDestroy {
   private acquirePortal(): void {
     if (this.portalRef !== null) return;
     this.portalRef = this.overlayPortal.attach(this.host.nativeElement);
+    this.attachReposition();
   }
 
   private releasePortal(): void {
     if (this.portalRef === null) return;
+    this.detachReposition();
     this.portalRef.dispose();
     this.portalRef = null;
   }
@@ -323,48 +327,35 @@ export class MenuComponent implements OnDestroy {
       return;
     }
 
-    const anchorRect = anchor.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
-    let top: number;
-    let left: number;
-
-    switch (this.placement()) {
-      case 'above': {
-        top = anchorRect.top - panelRect.height - 6;
-        left = anchorRect.left;
-        break;
-      }
-      case 'right': {
-        top = anchorRect.top;
-        left = anchorRect.right + 6;
-        break;
-      }
-      case 'below':
-      default: {
-        top = anchorRect.bottom + 6;
-        // Right-align under the anchor when the panel is wider than the
-        // trigger (devtools menu pattern). Falls back to left-aligned when
-        // the panel is narrower so picker menus still hug the trigger.
-        if (panelRect.width > anchorRect.width) {
-          left = anchorRect.right - panelRect.width;
-        } else {
-          left = anchorRect.left;
-        }
-        break;
-      }
-    }
-
-    // Viewport clamp.
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    left = Math.max(4, Math.min(left, vw - panelRect.width - 4));
-    top = Math.max(4, Math.min(top, vh - panelRect.height - 4));
+    const anchorRect = anchor.getBoundingClientRect();
+    const pos = this.overlayPortal.positionConnected(anchor, panel, {
+      preferredPlacement: this.placement(),
+      alignment: this.placement() === 'below' && panelRect.width > anchorRect.width ? 'end' : 'start',
+      gap: 6,
+      viewportPadding: 4,
+      minWidth: this.minWidth(),
+    });
 
     this.panelStyle.set({
-      top: `${top}px`,
-      left: `${left}px`,
+      top: `${pos.top}px`,
+      left: `${pos.left}px`,
       minWidth: this.minWidthCss(),
     });
+  }
+
+  private attachReposition(): void {
+    if (this.repositionAttached) return;
+    this.repositionAttached = true;
+    window.addEventListener('scroll', this.reposition, true);
+    window.addEventListener('resize', this.reposition);
+  }
+
+  private detachReposition(): void {
+    if (!this.repositionAttached) return;
+    this.repositionAttached = false;
+    window.removeEventListener('scroll', this.reposition, true);
+    window.removeEventListener('resize', this.reposition);
   }
 
   private minWidthCss(): string | undefined {
