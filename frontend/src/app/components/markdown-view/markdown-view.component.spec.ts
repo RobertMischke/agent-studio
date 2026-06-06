@@ -81,4 +81,18 @@ describe('MarkdownViewComponent', () => {
 
     expect(opened).toBe('project::ass-738');
   });
+
+  it('links task references in pre-rendered html without trusting unsafe html', () => {
+    const fixture = setup({
+      markdownReferences: signal([{ label: 'ASS-738', taskKey: 'project::ass-738' }]).asReadonly(),
+      openTaskKey: () => true,
+    });
+    fixture.componentRef.setInput('html', '<img src=x onerror="alert(1)"><p>See ASS-738.</p><script>alert(2)</script>');
+    fixture.detectChanges();
+
+    const body = (fixture.nativeElement as HTMLElement).querySelector('.markdown-body')!;
+    expect(body.querySelector('script')).toBeNull();
+    expect(body.querySelector('img')?.getAttribute('onerror')).toBeNull();
+    expect(body.querySelector('a[data-task-ref="true"]')?.textContent).toBe('ASS-738');
+  });
 });

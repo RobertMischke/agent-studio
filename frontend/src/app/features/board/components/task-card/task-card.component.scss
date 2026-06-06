@@ -361,6 +361,40 @@
       font-weight: 600;
       color: var(--studio-fg);
     }
+    .task-card__epic-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      margin: 0 var(--studio-spacing-1) 0 0;
+      padding: 0;
+      border: 1px solid var(--studio-border);
+      border-radius: 5px;
+      background: var(--studio-bg-surface);
+      color: var(--studio-fg-muted);
+      cursor: pointer;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .task-card__epic-toggle span {
+      display: inline-block;
+      transform: rotate(0deg);
+      transition: transform 0.15s ease;
+    }
+    .task-card__epic-toggle--open span {
+      transform: rotate(90deg);
+    }
+    .task-card__epic-toggle:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+    .task-card__epic-toggle:not(:disabled):hover,
+    .task-card__epic-toggle:not(:disabled):focus-visible {
+      color: var(--studio-fg);
+      border-color: var(--studio-border-strong);
+      background: var(--studio-bg-hover);
+    }
     .task-card__key-chip {
       display: inline-block;
       padding: 1px 5px;
@@ -409,6 +443,71 @@
       margin-right: 4px;
       user-select: none;
       white-space: nowrap;
+    }
+    .task-card__epic-subtasks {
+      margin: var(--studio-spacing-2) 0 var(--studio-spacing-1);
+      padding: var(--studio-spacing-1);
+      border: 1px solid var(--studio-border);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--studio-bg-surface) 72%, transparent);
+    }
+    .task-card__epic-subtask-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--studio-spacing-1);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .task-card__epic-subtask-btn {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--studio-spacing-2);
+      width: 100%;
+      padding: var(--studio-spacing-1) var(--studio-spacing-2);
+      border: 1px solid transparent;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--studio-fg);
+      text-align: left;
+      cursor: pointer;
+    }
+    .task-card__epic-subtask-btn:hover,
+    .task-card__epic-subtask-btn:focus-visible {
+      border-color: var(--studio-border);
+      background: var(--studio-bg-hover);
+    }
+    .task-card__epic-subtask-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 550;
+    }
+    .task-card__epic-subtask-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--studio-spacing-1);
+      color: var(--studio-fg-muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .task-card__epic-subtask-lane,
+    .task-card__epic-subtask-verdict {
+      font-variant-numeric: tabular-nums;
+    }
+    .task-card__epic-subtask-verdict::before {
+      content: "/";
+      padding-right: var(--studio-spacing-1);
+      color: var(--studio-fg-dim);
+    }
+    .task-card__epic-subtasks-empty {
+      color: var(--studio-fg-muted);
+      font-size: 12px;
+      font-style: italic;
+      padding: var(--studio-spacing-1) var(--studio-spacing-2);
     }
     .task-card__badges {
       display: flex;
@@ -1068,6 +1167,7 @@
     .task-card--compact .task-card__header,
     .task-card--compact .task-card__badges,
     .task-card--compact .task-card__meta,
+    .task-card--compact .task-card__epic-subtasks,
     .task-card--compact .task-card__git,
     .task-card--compact .task-card__commits,
     .task-card--compact .task-card__no-commits,

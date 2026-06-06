@@ -161,9 +161,11 @@
               @for (job of group.jobs; track job.taskKey) {
                 <app-job-card
                   [job]="job"
+                  [epicSubTasks]="allBoardJobs()"
                   [compact]="compact()"
                   [highlightJobId]="highlightJobId()"
                   (click)="jobClick.emit(job)"
+                  (subTaskClick)="jobClick.emit($event)"
                   (deleteRequested)="jobDeleteRequest.emit($event)"
                   draggable="true"
                   (dragstart)="onDragStart($event, job)" />
@@ -185,9 +187,11 @@
             }
             <app-job-card
               [job]="job"
+              [epicSubTasks]="allBoardJobs()"
               [compact]="compact()"
               [highlightJobId]="highlightJobId()"
               (click)="jobClick.emit(job)"
+              (subTaskClick)="jobClick.emit($event)"
               (deleteRequested)="jobDeleteRequest.emit($event)"
               (pickNextRequested)="jobPickNextRequest.emit($event)"
               draggable="true"

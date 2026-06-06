@@ -398,6 +398,59 @@ describe('TaskCardComponent (smoke)', () => {
     expect(pill?.className).toContain('task-card__issue-pill--high');
   });
 
+  it('expands an epic card to show inline sub-tasks and opens a clicked sub-task', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const epic = makeJob({
+      id: 'epic-1',
+      taskKey: 'test::epic-1',
+      title: 'Epic container',
+      kind: 'epic',
+      state: '2-ready',
+    });
+    const subTask = makeJob({
+      id: 'sub-1',
+      taskKey: 'test::sub-1',
+      title: 'Inline child task',
+      state: '4-auto-review',
+      epicId: epic.id,
+      orchestratorVerdict: 'reissue',
+    });
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    const opened: TaskInfo[] = [];
+    fixture.componentInstance.subTaskClick.subscribe((value) => opened.push(value));
+    fixture.componentRef.setInput('job', epic);
+    fixture.componentRef.setInput('epicSubTasks', [subTask]);
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    const toggle = host.querySelector<HTMLButtonElement>('[data-testid="task-card-epic-toggle"]');
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('[data-testid="task-card-epic-subtasks"]')).toBeNull();
+
+    toggle?.click();
+    fixture.detectChanges();
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('[data-testid="task-card-epic-subtasks"]')).not.toBeNull();
+    expect(host.textContent).toContain('Inline child task');
+    expect(host.textContent).toContain('auto review');
+    expect(host.querySelector('[data-testid="task-card-epic-subtask-verdict"]')?.textContent?.trim()).toBe('reissue');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="task-card-epic-subtask"]')?.click();
+
+    expect(opened).toEqual([subTask]);
+  });
+
   // ── Mode badge (planning / research recognizable at a glance) ──────────
 
   it('renders a mode pill naming the mode for a planning card', async () => {

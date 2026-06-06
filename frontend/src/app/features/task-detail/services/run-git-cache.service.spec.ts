@@ -46,43 +46,43 @@ describe('RunGitCacheService', () => {
 
   it('serves a second getFiles from the cache (zero extra requests)', () => {
     service.getFiles('job-a', 1, '/wp').subscribe();
-    const req = http.expectOne(r => r.url.endsWith('/api/jobs/job-a/runs/1/files'));
+    const req = http.expectOne(r => r.url.endsWith('/api/tasks/job-a/runs/1/files'));
     req.flush(filesFixture);
 
     let payload: RunFilesResponse | null = null;
     service.getFiles('job-a', 1, '/wp').subscribe(r => (payload = r));
-    http.expectNone(r => r.url.endsWith('/api/jobs/job-a/runs/1/files'));
+    http.expectNone(r => r.url.endsWith('/api/tasks/job-a/runs/1/files'));
     expect(payload).not.toBeNull();
     expect(payload!.files[0].path).toBe('src/x.ts');
   });
 
   it('keys diffs by path so different files still round-trip', () => {
     service.getDiff('job-b', 1, 'src/a.ts', '/wp').subscribe();
-    http.expectOne(r => r.url.includes('/api/jobs/job-b/runs/1/diff') && r.params.get('path') === 'src/a.ts')
+    http.expectOne(r => r.url.includes('/api/tasks/job-b/runs/1/diff') && r.params.get('path') === 'src/a.ts')
       .flush(diffFixture);
 
     service.getDiff('job-b', 1, 'src/b.ts', '/wp').subscribe();
     // Sibling path is uncached and must round-trip.
-    http.expectOne(r => r.url.includes('/api/jobs/job-b/runs/1/diff') && r.params.get('path') === 'src/b.ts')
+    http.expectOne(r => r.url.includes('/api/tasks/job-b/runs/1/diff') && r.params.get('path') === 'src/b.ts')
       .flush(diffFixture);
 
     // Re-asking for the original path is a cache hit.
     service.getDiff('job-b', 1, 'src/a.ts', '/wp').subscribe();
-    http.expectNone(r => r.url.includes('/api/jobs/job-b/runs/1/diff') && r.params.get('path') === 'src/a.ts');
+    http.expectNone(r => r.url.includes('/api/tasks/job-b/runs/1/diff') && r.params.get('path') === 'src/a.ts');
   });
 
   it('invalidate drops every entry for one job, leaves siblings alone', () => {
     service.getFiles('job-c', 1, '/wp').subscribe();
-    http.expectOne(r => r.url.endsWith('/api/jobs/job-c/runs/1/files')).flush(filesFixture);
+    http.expectOne(r => r.url.endsWith('/api/tasks/job-c/runs/1/files')).flush(filesFixture);
     service.getFiles('job-d', 1, '/wp').subscribe();
-    http.expectOne(r => r.url.endsWith('/api/jobs/job-d/runs/1/files')).flush(filesFixture);
+    http.expectOne(r => r.url.endsWith('/api/tasks/job-d/runs/1/files')).flush(filesFixture);
 
     service.invalidate('job-c', '/wp');
 
     // After invalidate, job-c must re-fetch; job-d still hits the cache.
     service.getFiles('job-c', 1, '/wp').subscribe();
-    http.expectOne(r => r.url.endsWith('/api/jobs/job-c/runs/1/files')).flush(filesFixture);
+    http.expectOne(r => r.url.endsWith('/api/tasks/job-c/runs/1/files')).flush(filesFixture);
     service.getFiles('job-d', 1, '/wp').subscribe();
-    http.expectNone(r => r.url.endsWith('/api/jobs/job-d/runs/1/files'));
+    http.expectNone(r => r.url.endsWith('/api/tasks/job-d/runs/1/files'));
   });
 });

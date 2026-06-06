@@ -275,6 +275,7 @@
                           [icon]="lane.icon"
                           [state]="lane.state"
                           [jobs]="lane.jobs"
+                          [allBoardJobs]="epicBoardTasks()"
                           [collapsed]="isLaneCollapsed(lane.state)"
                           [compact]="effectiveCompactCards()"
                           [archiving]="archivingInProgress()"
