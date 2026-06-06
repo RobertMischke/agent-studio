@@ -77,6 +77,24 @@ Anti-patterns to reject in review:
 
 When you add a new right-edge side sheet, follow the same three-piece contract and add it to the regression spec.
 
+## Detail-view lane control: dropdown navigates, context menu moves
+
+The task-detail header carries a lane `<select>` (studio shell: `data-testid="studio-lane-select"`; legacy kanban header: the projected `<app-detail-header>` lane select). It is **navigation-only**: picking a lane re-points the Prev/Next pager at that lane and pages to a task already living there — it never changes the current task's lane. The single source of this behaviour is `TaskSelectionService.navigateToLane` (`features/task-detail/state/task-selection.service.ts`); the studio shell wires it through `App.onStudioLaneChange`.
+
+**Moving a task to another lane** lives in the `⋯` overflow context menu (`data-testid="triage-overflow-btn"` → `triage-overflow-item-*`), built by `overflowActionsFor` in `features/task-detail/state/triage-actions.model.ts`. Per the menu-text-only rule above, these rows carry no icons.
+
+**Orchestrator-controlled lanes are never manual targets.** `3-progress` (In Progress) and `4-auto-review` (Auto Review) are owned by the runner / `ReviewDecisionOrchestrator` — a task lands there because it was picked up or is being judged, never because an operator parked it. They are therefore excluded from **both** surfaces:
+- the navigation dropdown options (`App.studioLaneOptions`, and the legacy `DetailHeaderComponent.laneOptions`) omit them;
+- the context-menu move targets are stripped by `overflowActionsFor`, which filters any move action whose target is in `ORCHESTRATOR_CONTROLLED_LANES` (the canonical set in `triage-actions.model.ts`).
+
+When you add a new manual-target lane or a new move affordance, route it through `ORCHESTRATOR_CONTROLLED_LANES` / `studioLaneOptions` rather than re-deriving the exclusion list inline, so the two surfaces stay in lockstep.
+
+**Pager position is stable across a lane move.** The Prev/Next pager iterates a snapshot captured on detail entry (`LanePagerService`), not the live lane. Moving the current task out of its lane shrinks that snapshot by one and auto-advances to the next captured slug in the *original* lane — the `X / N` context does not jump to the destination lane. See `advanceAfterMutation` / `removeAndAdvance`.
+
+Regression coverage (run with `PW_TARGET=stable`):
+- `e2e/task-detail/detail-lane-dropdown.spec.ts` — dropdown pages without moving; orchestrator lanes absent from the nav options.
+- `e2e/task-detail/detail-view-lane-pager.spec.ts` — context-menu moves keep the pager anchored on the original lane with the count shrinking by one.
+
 ## Feature folders + barrel imports (ADR-0034, Cycle 9h)
 
 The frontend is organised by **feature** under `app/features/<name>/` with a uniform shape: `models/`, `state/`, `components/`, `services/`, plus a top-level `index.ts` barrel. Cross-cutting capabilities (e.g. `polling/`) follow the same shape.
