@@ -1534,7 +1534,7 @@ public record PipelineStepCondition
 /// <summary>
 /// Per-step project override stored in <see cref="ProjectSettings.PipelineSteps"/>.
 /// Every field is nullable: null means "no override, use the pipeline /
-/// runtime default" so a partial entry (e.g. only a model choice) leaves
+    /// runtime default" so a partial entry (e.g. only a model choice) leaves
 /// the other dimensions on their defaults.
 /// </summary>
 public record PipelineStepSetting
@@ -1571,10 +1571,15 @@ public record PipelineStepSetting
     public string? ThinkingLevel { get; init; }
 
     /// <summary>
+    /// Prompt override for LLM-backed steps. Null means "use the catalogue
+    /// prompt template"; deterministic tool steps ignore it.
+    /// </summary>
+    public string? Prompt { get; init; }
+
+    /// <summary>
     /// Run condition gating whether this step executes for a given task run.
     /// Null (or an <see cref="PipelineStepConditions.Always"/> condition) means
-    /// "run whenever the step is enabled". Only honoured for steps the runtime
-    /// evaluates conditions for (today: the abort-review step).
+    /// "run whenever the step is enabled".
     /// </summary>
     public PipelineStepCondition? Condition { get; init; }
 }
@@ -1884,6 +1889,7 @@ public record SetOrchestratorModelRequest
 {
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
+    public string? Prompt { get; init; }
 }
 
 /// <summary>

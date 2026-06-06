@@ -167,7 +167,8 @@ public sealed class AspectRunnerService
         TimeSpan perAspectTimeout,
         CancellationToken ct,
         Func<string, string>? modelForAspect = null,
-        Func<string, string?>? thinkingLevelForAspect = null)
+        Func<string, string?>? thinkingLevelForAspect = null,
+        Func<string, string?>? promptForAspect = null)
     {
         var now = DateTime.UtcNow;
 
@@ -202,8 +203,9 @@ public sealed class AspectRunnerService
                 var stepModel = modelForAspect?.Invoke(entry.Def.Id);
                 if (string.IsNullOrWhiteSpace(stepModel)) stepModel = model;
                 var stepThinkingLevel = thinkingLevelForAspect?.Invoke(entry.Def.Id);
+                var stepPrompt = promptForAspect?.Invoke(entry.Def.Id);
                 return RunOneAspectAsync(entry.Index, entry.Def, inputs, cliBinary, stepModel, stepThinkingLevel,
-                    perAspectTimeout, gate, now, ct);
+                    stepPrompt, perAspectTimeout, gate, now, ct);
             })
             .ToArray();
 
@@ -228,6 +230,7 @@ public sealed class AspectRunnerService
         string cliBinary,
         string model,
         string? thinkingLevel,
+        string? promptOverride,
         TimeSpan perAspectTimeout,
         SemaphoreSlim gate,
         DateTime now,
@@ -247,7 +250,9 @@ public sealed class AspectRunnerService
                 StartedAt = startedAt,
             });
 
-            var prompt = BuildAspectPrompt(def, inputs);
+            var prompt = !string.IsNullOrWhiteSpace(promptOverride)
+                ? promptOverride!
+                : BuildAspectPrompt(def, inputs);
             string response;
             OrchestratorTokenUsage? callUsage = null;
             long durationMs = 0;

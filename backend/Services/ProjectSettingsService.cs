@@ -285,9 +285,10 @@ public class ProjectSettingsService
                 ? null
                 : setting!.ThinkingLevel!.Trim().ToLowerInvariant();
             var normalizedMode = string.IsNullOrWhiteSpace(setting?.Mode) ? null : setting!.Mode!.Trim().ToLowerInvariant();
+            var normalizedPrompt = string.IsNullOrWhiteSpace(setting?.Prompt) ? null : setting!.Prompt!.Trim();
             var normalizedCondition = NormalizeCondition(setting?.Condition);
             var isEmpty = setting is null
-                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedCondition is null);
+                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedPrompt is null && normalizedCondition is null);
 
             if (isEmpty)
             {
@@ -301,6 +302,7 @@ public class ProjectSettingsService
                     Mode = normalizedMode,
                     Model = normalizedModel,
                     ThinkingLevel = normalizedThinkingLevel,
+                    Prompt = normalizedPrompt,
                     Condition = normalizedCondition,
                 };
             }

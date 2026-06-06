@@ -107,6 +107,7 @@ public static class ProjectSettingsEndpoints
                 // steps invoke an LLM so they accept a model; tool/orchestrator
                 // gate steps accept a mode.
                 usesModel = s.Kind is StepKind.Aspect or StepKind.Drift,
+                usesPrompt = s.Kind is StepKind.Aspect or StepKind.Drift,
                 supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
                 // The loop guard is a safety net that always runs (the
                 // StuckLoopGuard circuit-breaker fires regardless of this row);
@@ -122,7 +123,7 @@ public static class ProjectSettingsEndpoints
                 // Run conditions are only evaluated by the abort-review gate
                 // this slice; the linear steps ignore them, so the UI hides the
                 // condition control for every step here.
-                supportsCondition = false,
+                supportsCondition = s.Kind != StepKind.Core,
             }).ToList();
 
             // The abort-triggered review step lives off the linear AllSteps list
@@ -137,6 +138,7 @@ public static class ProjectSettingsEndpoints
                 displayName = abort.DisplayName,
                 kind = abort.Kind.ToString(),
                 usesModel = true,
+                usesPrompt = true,
                 supportsMode = false,
                 canDisable = true,
                 defaultEnabled = abort.DefaultEnabled,
@@ -180,16 +182,10 @@ public static class ProjectSettingsEndpoints
                 if (when is null)
                     return Results.BadRequest(new { error = $"Unsupported condition '{condition.When}'" });
 
-                if (when != PipelineStepConditions.Always)
-                {
-                    var conditionCapable = string.Equals(
-                        PipelineCatalogue.AbortReviewStep.Id, req.StepId, StringComparison.OrdinalIgnoreCase);
-                    if (!conditionCapable)
-                        return Results.BadRequest(new { error = $"Step '{req.StepId}' does not support run conditions" });
-
-                    if (PipelineStepConditions.RequiresValue(when) && string.IsNullOrWhiteSpace(condition.Value))
-                        return Results.BadRequest(new { error = $"Condition '{when}' requires a value" });
-                }
+                if (when != PipelineStepConditions.Always
+                    && PipelineStepConditions.RequiresValue(when)
+                    && string.IsNullOrWhiteSpace(condition.Value))
+                    return Results.BadRequest(new { error = $"Condition '{when}' requires a value" });
             }
 
             settings.SetPipelineStep(projectName, req.StepId, new PipelineStepSetting
@@ -198,6 +194,7 @@ public static class ProjectSettingsEndpoints
                 Mode = req.Mode,
                 Model = req.Model,
                 ThinkingLevel = req.ThinkingLevel,
+                Prompt = req.Prompt,
                 Condition = req.Condition,
             });
             return Results.Ok(new

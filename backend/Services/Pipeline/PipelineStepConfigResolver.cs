@@ -263,6 +263,19 @@ public static class PipelineStepConfigResolver
         => Lookup(settings, step.Id)?.Condition;
 
     /// <summary>
+    /// Resolve an optional LLM prompt override. Null means the runner should use
+    /// the catalogue prompt template or its runtime-built default.
+    /// </summary>
+    public static string? ResolvePrompt(ProjectSettings? settings, string stepId)
+        => Normalize(Lookup(settings, stepId)?.Prompt);
+
+    /// <summary>
+    /// Resolve an optional LLM prompt override for a catalogue step.
+    /// </summary>
+    public static string? ResolvePrompt(ProjectSettings? settings, PipelineStep step)
+        => ResolvePrompt(settings, step.Id);
+
+    /// <summary>
     /// Whether a catalogue step should actually run for this task run: the step
     /// must be enabled (honouring its <see cref="PipelineStep.DefaultEnabled"/>)
     /// and its configured run condition must match the run facts in
