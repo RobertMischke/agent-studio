@@ -30,6 +30,7 @@ export class TaskColumnComponent {
   readonly icon = input<string>('');
   readonly state = input.required<string>();
   readonly jobs = input.required<TaskInfo[]>();
+  readonly allBoardJobs = input<readonly TaskInfo[]>([]);
   readonly reorderDisabled = input<boolean>(false);
   /**
    * F35: resolved sort strategy governing this lane's card order. Drives

@@ -54,6 +54,19 @@
   <h3 class="task-card__title"
       [appTaskStatusPopover]="job()"
       data-testid="task-card-title">
+    @if (isEpic()) {
+      <button type="button"
+              class="task-card__epic-toggle"
+              data-testid="task-card-epic-toggle"
+              [class.task-card__epic-toggle--open]="epicExpanded()"
+              [attr.aria-expanded]="epicExpanded()"
+              [disabled]="!hasInlineEpicSubTasks()"
+              [appTooltip]="hasInlineEpicSubTasks() ? (epicExpanded() ? 'Hide sub-tasks' : 'Show sub-tasks') : 'No sub-tasks yet'"
+              [attr.aria-label]="hasInlineEpicSubTasks() ? (epicExpanded() ? 'Hide sub-tasks' : 'Show sub-tasks') : 'No sub-tasks yet'"
+              (click)="toggleEpicExpanded($event)">
+        <span aria-hidden="true">›</span>
+      </button>
+    }
     @if (compact()) {
       <span class="task-card__compact-disk"
             [attr.aria-label]="job().projectName"
@@ -255,6 +268,37 @@
               [attr.data-testid]="tg.concern ? 'task-card-concern-chip' : (tg.unparseable ? 'task-card-unparseable-chip' : null)"
               [style.--tag-color]="tg.color"
               [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="task-card__tag-chip-warn" aria-hidden="true">⚠</span> } @else if (tg.unparseable) { <span class="task-card__tag-chip-unparseable-glyph" aria-hidden="true">📝</span> }{{ tg.label }}</span>
+      }
+    </div>
+  }
+  @if (isEpic() && epicExpanded()) {
+    <div class="task-card__epic-subtasks" data-testid="task-card-epic-subtasks">
+      @if (inlineEpicSubTasks().length > 0) {
+        <ul class="task-card__epic-subtask-list" role="list">
+          @for (sub of inlineEpicSubTasks(); track sub.taskKey) {
+            <li class="task-card__epic-subtask-item">
+              <button type="button"
+                      class="task-card__epic-subtask-btn"
+                      data-testid="task-card-epic-subtask"
+                      [attr.data-sub-id]="sub.id"
+                      [appTooltip]="'Open sub-task'"
+                      (click)="onInlineSubTaskClick($event, sub)">
+                <span class="task-card__epic-subtask-title">{{ sub.title || sub.id }}</span>
+                <span class="task-card__epic-subtask-meta">
+                  <span class="task-card__epic-subtask-lane"
+                        [attr.data-state]="sub.state">{{ laneLabel(sub.state) }}</span>
+                  @if (verdictLabel(sub.orchestratorVerdict); as verdict) {
+                    <span class="task-card__epic-subtask-verdict"
+                          data-testid="task-card-epic-subtask-verdict"
+                          [attr.data-verdict]="sub.orchestratorVerdict">{{ verdict }}</span>
+                  }
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="task-card__epic-subtasks-empty">No sub-tasks yet</div>
       }
     </div>
   }

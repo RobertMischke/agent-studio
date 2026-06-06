@@ -67,6 +67,7 @@ if (typeof window !== 'undefined') {
 })
 export class TaskCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<TaskInfo>();
+  readonly epicSubTasks = input<readonly TaskInfo[]>([]);
   readonly compact = input<boolean>(false);
   /**
    * F2: when set and matches this card's job id, the card renders the
@@ -75,6 +76,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    */
   readonly highlightJobId = input<string | null>(null);
   readonly deleteRequested = output<TaskInfo>();
+  readonly subTaskClick = output<TaskInfo>();
   /**
    * F5: emitted when the user clicks the inline "Pick next" affordance
    * on a 2-ready card. The host wires this to `moveJobToTop` so the
@@ -261,12 +263,43 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   /** Epic container card: drives the "EPIC" badge in the title row. */
   readonly isEpic = computed(() => this.job().kind === 'epic');
+  readonly inlineEpicSubTasks = computed(() => {
+    const job = this.job();
+    if (job.kind !== 'epic') return [] as TaskInfo[];
+    return this.epicSubTasks()
+      .filter((task) => task.kind !== 'epic' && task.epicId === job.id && task.watchPath === job.watchPath)
+      .sort((a, b) => {
+        const state = (a.state ?? '').localeCompare(b.state ?? '');
+        if (state !== 0) return state;
+        return (a.title || a.id).localeCompare(b.title || b.id);
+      });
+  });
+  readonly hasInlineEpicSubTasks = computed(() => this.inlineEpicSubTasks().length > 0);
+  readonly epicExpanded = signal(false);
 
   /** Parent epic id when this card is a sub-task, else null (drives the "↳ epic" chip). */
   readonly subTaskEpicId = computed(() => {
     const id = this.job().epicId;
     return id && id.trim().length > 0 ? id : null;
   });
+
+  toggleEpicExpanded(event: Event): void {
+    event.stopPropagation();
+    this.epicExpanded.update((value) => !value);
+  }
+
+  onInlineSubTaskClick(event: Event, subTask: TaskInfo): void {
+    event.stopPropagation();
+    this.subTaskClick.emit(subTask);
+  }
+
+  laneLabel(state: string): string {
+    return stateLabel(state).replace(/-/g, ' ');
+  }
+
+  verdictLabel(verdict: TaskInfo['orchestratorVerdict']): string | null {
+    return verdict ? verdict.replace(/-/g, ' ') : null;
+  }
 
   readonly isRunning = computed(() =>
     this.job().state === '3-progress' && this.job().execution?.status === 'running'
