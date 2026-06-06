@@ -33,6 +33,15 @@
   line-height: 1;
 }
 
+.epic-board__collapse app-studio-icon {
+  display: inline-flex;
+  transition: transform 0.15s ease;
+}
+
+.epic-board__collapse--open app-studio-icon {
+  transform: rotate(90deg);
+}
+
 .epic-board__collapse:hover {
   color: var(--studio-fg);
 }
@@ -85,6 +94,67 @@
 
 .epic-board__epic-card {
   display: block;
+}
+
+.epic-board__subtasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.epic-board__subtask-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-2);
+  width: 100%;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-surface);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.epic-board__subtask-button:hover {
+  border-color: var(--studio-border-strong);
+  background: var(--studio-bg-hover);
+}
+
+.epic-board__subtask--highlight .epic-board__subtask-button {
+  border-color: var(--studio-accent);
+  background: var(--studio-bg-selected);
+}
+
+.epic-board__subtask-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epic-board__subtask-meta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-muted);
+  font-size: 0.75rem;
+}
+
+.epic-board__subtask-lane,
+.epic-board__subtask-verdict {
+  white-space: nowrap;
+}
+
+.epic-board__subtask-verdict::before {
+  content: "/";
+  color: var(--studio-fg-dim);
+  padding-right: var(--studio-spacing-1);
 }
 
 .epic-board__empty {

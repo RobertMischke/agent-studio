@@ -6,8 +6,10 @@
       <header class="epic-board__header">
         <button type="button"
                 class="epic-board__collapse"
+                [class.epic-board__collapse--open]="!isCollapsed(group.id)"
                 [attr.data-testid]="'epic-group-collapse-' + group.id"
                 [attr.aria-expanded]="!isCollapsed(group.id)"
+                [attr.aria-controls]="'epic-group-body-' + group.id"
                 [appTooltip]="isCollapsed(group.id) ? 'Expand epic' : 'Collapse epic'"
                 [attr.aria-label]="isCollapsed(group.id) ? 'Expand epic' : 'Collapse epic'"
                 (click)="toggleCollapse(group.id)">
@@ -26,7 +28,8 @@
       </header>
 
       @if (!isCollapsed(group.id)) {
-        <div class="epic-board__body">
+        <div class="epic-board__body"
+             [id]="'epic-group-body-' + group.id">
           @if (group.epic; as epic) {
             <app-job-card
               class="epic-board__epic-card"
