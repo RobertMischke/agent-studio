@@ -194,6 +194,85 @@ Codex-specific differences worth flagging during a hang:
 - Codex does not emit Claude's `rate_limit_event` shape; the rate-limit-aware budget multiplier (an ADR-0030 follow-up) will need its own probe before it can flip on for Codex runs.
 - Codex has no equivalent of Claude's `~/.claude/projects/<cwd>/<uuid>.jsonl` side-channel session file. The heartbeat helper documented for Claude does not have a Codex analogue today; the same pipe-buffer hypothesis would need a different signal (e.g. polling `codex` IPC or a process-level CPU heartbeat).
 
+## Silent-completion detector (Codex-only)
+
+Codex sometimes stops emitting frames after a successful `item.completed`
+(`type=command_execution`, `exit_code=0`) without producing a closing
+`turn.completed` or a terminal sentinel. The process stays alive and
+stdout-silent; the watchdog would eventually kill it as a hard failure even
+though the on-disk work is real. The detector recognises that shape
+explicitly so the run finalizes as a graceful `Completed` instead.
+
+**Trigger contract** (pure function in
+[`src/AgentTaskboard.Runner/Cli/CodexSilentCompletionDetector.cs`](../../src/AgentTaskboard.Runner/Cli/CodexSilentCompletionDetector.cs)):
+
+- CLI type is `codex`.
+- Phase is one of `TurnInProgress`, `OutputDelta`, `ToolExecuting`.
+- The last observed `item.completed` had a nested `item.type=command_execution`
+  with `exit_code=0` (parsed by `CodexCliService.TryExtractCommandExecution`).
+- Silence since that frame is >= `DefaultSilenceSeconds` (60 s).
+- The per-run `SilentCompletionTripped` latch on `ProcInfo` is not set.
+
+**Per-tick wiring**
+([`ProjectRunner.TickSilentCompletion`](../../backend/Services/Runner/ProjectRunner.cs)
+runs BEFORE `TickWatchdog` so it always wins the race when the shape matches):
+
+1. Writes the synthetic `[codex-silent-completion] <diagnosis>` system line
+   to the run's output buffer + persisted log (the canonical text the
+   `status.md` regenerator picks up).
+2. Posts a typed chat note via `OrchestratorMessageKind.SilentCompletion`
+   so the activity log shows why the run was finalized early.
+3. Emits a `kind:observation severity:Warn topic:codex-silent-completion`
+   bus event via
+   [`AgentMessageBusBridge.EmitCodexSilentCompletionAsync`](../../backend/Services/Bus/AgentMessageBusBridge.cs)
+   carrying the last command + output tail.
+4. Stamps the `outcome-silent-finish` tag on the job via
+   `TaskMutationService.AddJobTag` (seeded with friendly label
+   "Outcome: silent finish" in `TagRegistryService`).
+5. Asks the CLI base class to `TripSilentCompletion(jobKey, diagnosis)`,
+   which sets the latch and calls `Stop(jobKey, RunStopReason.SilentCompletion)`.
+
+**Why this finalizes as Completed.** `RunStopReason.SilentCompletion` is a
+typed "stop reason that maps to Completed", same shape as
+`SentinelDetected`. `RunStatusClassifier.Classify` returns
+`RunStatuses.Completed`, the standard `OnCliFinishedAsync` path runs the
+analyzer, and `AgentOutcomeAnalyzer` recognises the
+`[codex-silent-completion]` marker (gated like the
+`[environment-blocker]` marker) and surfaces
+`RunIssueKind.SilentCompletion` with `AgentOutcomeKind.Done` +
+`MatchedSentinel=false`. `RunOutcomePolicy.Decide` routes that to
+`OutcomeActionKind.NotifyUserAndAccept`, so the run moves to
+`4-auto-review` and aspect calls run normally - the chat just sees a
+typed note distinguishing "agent finished and signed off" from "agent
+likely finished but never said so".
+
+**Tag and bus contract**
+
+| Surface | Stable id |
+|---|---|
+| Tag (persisted in `job.json`) | `outcome-silent-finish` |
+| Bus topic | `codex-silent-completion` |
+| Bus kind / severity | `observation` / `Warn` |
+| Synthetic marker line prefix | `[codex-silent-completion] ` |
+| Chat message kind | `OrchestratorMessageKind.SilentCompletion` |
+| RunStopReason value | `SilentCompletion` (maps to `Completed`) |
+
+**Calibration knobs.** Override the silence threshold in tests via
+`CodexSilentCompletionDetector.Decide(inputs, silenceThresholdSeconds: ...)`.
+There is no per-project config knob today; if you need to widen / tighten
+the default, edit `DefaultSilenceSeconds`. Other CLIs (Claude, Gemini,
+Copilot) have different completion contracts and are deliberately excluded
+from this detector.
+
+**Tests.** The pure detector + capture + analyzer + policy paths are
+locked by:
+
+- [`backend.Tests/CodexSilentCompletionDetectorTests.cs`](../../backend.Tests/CodexSilentCompletionDetectorTests.cs) (25 cases including the canonical 60 s boundary).
+- `AgentOutcomeAnalyzerTests.SilentCompletionMarker_Output_IsClassifiedAsSilentCompletion`.
+- `RunStatusClassifierTests.SilentCompletion_AnyExitCode_IsCompleted` (5 cases).
+- `RunOutcomePolicyTests.SilentCompletion_NotifiesUserAndAccepts_RoutesThroughAutoReview`.
+- `CodexCliServiceTests.TryExtractCommandExecution_*` (canonical Codex 0.128 frame shape, truncation, malformed-frame safety).
+
 ## Quota probe
 
 [`CodexQuotaProbe`](../../backend/Services/Quota/CodexQuotaProbe.cs) returns two windows: a 5-hour bucket and a weekly bucket. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, scrapes the panel.
