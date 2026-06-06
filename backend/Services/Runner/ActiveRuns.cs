@@ -22,6 +22,26 @@ internal sealed class ActiveRun
     public string? Followup { get; init; }
     public RunPlan? Plan { get; init; }
     public int ReissueAttempt { get; init; }
+
+    /// <summary>
+    /// ADR-0052 slice 2: parallelisability facts (exclusive / predicted scope /
+    /// read-only) so <see cref="ParallelSlotPolicy"/> can prove this run disjoint
+    /// from a candidate before a second slot is admitted. Default = unknown scope.
+    /// </summary>
+    public TaskParallelism Parallelism { get; set; } = TaskParallelism.Default;
+
+    /// <summary>
+    /// Isolated git worktree this run executes in when in a parallel slot
+    /// (MaxParallelism &gt; 1). Null for the sequential (max==1) path, which runs
+    /// in the project's main checkout exactly as before.
+    /// </summary>
+    public string? WorktreePath { get; set; }
+
+    /// <summary>The ephemeral <c>task/&lt;id&gt;</c> branch backing the worktree, when isolated.</summary>
+    public string? Branch { get; set; }
+
+    /// <summary>True when this run is isolated in its own worktree (parallel slot).</summary>
+    public bool IsWorktreeRun => !string.IsNullOrEmpty(WorktreePath);
 }
 
 /// <summary>
@@ -66,6 +86,14 @@ internal sealed class ActiveRuns
 
     /// <summary>Snapshot of all active runs (stable copy for iteration).</summary>
     public IReadOnlyCollection<ActiveRun> Snapshot() => _runs.Values.ToArray();
+
+    /// <summary>
+    /// The currently-running tasks as <see cref="RunningTask"/> facts for
+    /// <see cref="ParallelSlotPolicy.Decide"/> — lets the pick-gate prove a
+    /// candidate disjoint from everything already in a slot.
+    /// </summary>
+    public IReadOnlyList<RunningTask> RunningTasks()
+        => _runs.Values.Select(r => new RunningTask(r.JobId, r.Parallelism ?? TaskParallelism.Default)).ToArray();
 
     /// <summary>Find the active run whose job key matches, or null.</summary>
     public ActiveRun? ByJobKey(Func<string, string> jobKeyOf, string jobKey)
