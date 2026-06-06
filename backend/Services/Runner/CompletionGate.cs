@@ -30,6 +30,20 @@ public static class CompletionGate
 
     private static readonly Regex WhitespaceRun = new(@"\s+", RegexOptions.Compiled);
 
+    // An echoed SOURCE-CODE line, not the agent's own close-out prose: a
+    // grep -n / cat -n / file-read line with a "NNN:" (or "NNN<tab>") line-number
+    // marker followed by code that carries call/brace/statement punctuation.
+    // Optional leading bracketed tokens absorb a CLI log prefix like
+    // "[12:00:00.000] [stdout] ". These lines are scanned out of the
+    // unfinished-work evidence: an incomplete-work keyword inside one is an
+    // identifier or comment in the printed source (e.g. a parameter literally
+    // named "pending"), not a status the run is reporting about itself. Without
+    // this guard a run that merely greps its own code is reissued forever on a
+    // word it never claimed (ASS-794, Epic-776 orchestrator hardening).
+    private static readonly Regex ToolSourceEchoRegex = new(
+        @"^(?:\[[^\]]*\]\s*)*\s*\d{1,6}[:\t]\s*\S.*[(){};]",
+        RegexOptions.Compiled);
+
     // The build / compile / test-failure vocabulary. Kept as one fragment so the
     // generic incomplete-work scan and the "claims success but build failed"
     // contradiction check (see BuildErrorEvidenceRegex) share exactly one
@@ -282,6 +296,10 @@ public static class CompletionGate
             var line = raw.Trim();
             if (line.Length == 0) continue;
             if (IsNoneLine(line)) continue;
+            // Drop echoed source code (grep/cat line-number output): its keywords
+            // are identifiers/comments in printed source, not the run's own
+            // close-out claims. See ToolSourceEchoRegex.
+            if (ToolSourceEchoRegex.IsMatch(line)) continue;
             yield return line;
         }
     }

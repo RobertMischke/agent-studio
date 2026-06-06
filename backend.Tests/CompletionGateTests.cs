@@ -121,6 +121,55 @@ public class CompletionGateTests
     }
 
     [Fact]
+    public void ExtractFindings_GreppedSourceLineWithKeyword_InLogTail_IsNotReported()
+    {
+        // ASS-794 regression: the previous run grepped its own source and echoed
+        // a line whose only "incomplete" token is a PARAMETER named `pending`.
+        // The gate must not read an identifier in printed code as unfinished work
+        // and reissue the task forever.
+        var status = "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n";
+        var log = string.Join('\n',
+            "[17:15:20.243] [stdout] running grep",
+            "[17:15:20.243] [stdout]   814:                HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict);",
+            "[17:15:21.000] [stdout] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_RealPendingProse_StillReported()
+    {
+        // Guard the guard: a genuine status sentence using "pending" as a status
+        // word (no line-number/code-echo shape) must still be caught.
+        var status = string.Join('\n',
+            "## Notes",
+            "The route wiring is still pending.");
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.NotEmpty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_GreppedBuildErrorString_InLogTail_IsNotReported()
+    {
+        // A grepped source line that merely contains the literal "build failed"
+        // inside code (e.g. an error-message string) is an echo, not the run's
+        // own close-out, so it must not trip the build-error vocabulary.
+        var status = "## Summary\nDone.\n\nResult: Success\n";
+        var log = string.Join('\n',
+            "[12:00] grep build",
+            "[12:00]   42:    throw new Exception(\"build failed unexpectedly\");",
+            "[12:01] [[TASK_DONE]]");
+
+        var findings = CompletionGate.ExtractFindings(status, log);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
     public void Evaluate_NoFindings_Passes()
     {
         var decision = CompletionGate.Evaluate("Result: Success", recentLog: null, priorReissues: 0, maxReissues: MaxReissues);
