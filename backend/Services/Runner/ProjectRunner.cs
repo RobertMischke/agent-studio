@@ -1146,9 +1146,23 @@ public class ProjectRunner
             // YOLO). Reading the live ProjectSettingsService here is what makes
             // a toggle take effect on the next run without a backend restart.
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
+            // ADR-0052 slice 2: an ADDITIONAL parallel slot runs in a fresh git
+            // worktree cut off the work branch. The CLI session captured in the
+            // main checkout does NOT exist inside that worktree, so `--resume
+            // <id>` waits for a session marker that never comes -> StartAsync
+            // never returns -> `_processing` stays latched -> no further slots
+            // are ever admitted (observed: occ stuck at 1, 2nd slot never spawns).
+            // Worktree runs therefore ALWAYS start FRESH: the agent re-derives
+            // context from the task spec + the current code in the worktree
+            // (per the design assumption that agent conversation carry-over is
+            // not required for an isolated parallel run). The primary slot
+            // (main checkout) keeps its normal resume behaviour unchanged.
+            var isWorktreeRun = _activeRuns.Get(jobId)?.IsWorktreeRun == true;
+            var effSessionToResume = isWorktreeRun ? null : plan.SessionToResume;
+            var effResumeFlag = isWorktreeRun ? false : plan.ResumeFlag;
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, runWorkingDir,
-                plan.SessionToResume, plan.ResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, ct);
+                effSessionToResume, effResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, ct);
 
             if (execution == null)
             {
