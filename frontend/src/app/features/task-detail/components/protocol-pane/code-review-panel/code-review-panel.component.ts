@@ -14,6 +14,7 @@ import { CodeReviewListEntry, TaskService } from '../../../../../services/task.s
 import { CodeReviewActivityStore } from '../../../../../services/code-review-activity.store';
 
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
+import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -49,7 +50,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, CliModelSelectorComponent],
+  imports: [FormsModule, CliModelSelectorComponent, MarkdownViewComponent],
   templateUrl: './code-review-panel.component.html',
   styleUrl: './code-review-panel.component.scss',
 })

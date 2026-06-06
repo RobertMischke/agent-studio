@@ -211,6 +211,53 @@ describe('CodeReviewPanelComponent', () => {
     httpCtrl.verify();
   });
 
+  it('renders an expanded review body as formatted markdown, not a raw blob', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(CodeReviewPanelComponent);
+    fixture.componentRef.setInput('job', seedJob());
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    httpCtrl
+      .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
+      .flush({ cliType: 'claude', model: 'claude-opus-4-7' });
+    httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({
+      entries: [
+        {
+          fileName: 'code-review-2026-05-14T12-00-00Z.md',
+          verdict: 'concerns',
+          summary: 'Helper duplicated.',
+          model: 'claude-opus-4-7',
+          cliType: 'claude',
+          commit: '0aa4c5d',
+          runAt: '2026-05-14T12:00:00Z',
+        },
+      ],
+    });
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    (root.querySelector('.cr-row-toggle') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const read = httpCtrl.expectOne((r) => r.url.includes('/code-review/code-review-2026-05-14T12-00-00Z.md'));
+    read.flush({
+      fileName: 'code-review-2026-05-14T12-00-00Z.md',
+      content: '# Verdict: concerns\n\n- duplicated `helper`\n- second point',
+    });
+    fixture.detectChanges();
+
+    const body = root.querySelector('[data-testid="code-review-body"]');
+    expect(body).toBeTruthy();
+    // No raw <pre> dark blob; the canonical markdown surface rendered structure.
+    expect(body?.querySelector('pre')).toBeNull();
+    expect(body?.querySelector('app-markdown')).toBeTruthy();
+    expect(body?.querySelector('h1')?.textContent).toMatch(/Verdict: concerns/);
+    expect(body?.querySelectorAll('li').length).toBe(2);
+    expect(body?.querySelector('code')?.textContent).toBe('helper');
+    httpCtrl.verify();
+  });
+
   it('surfaces an error message when the run POST fails', async () => {
     await setup();
     const fixture = TestBed.createComponent(CodeReviewPanelComponent);

@@ -70,7 +70,16 @@
             </span>
           </button>
           @if (expandedFile() === entry.fileName) {
-            <pre class="cr-body">{{ expandedBody() ?? 'Loading...' }}</pre>
+            <div class="cr-body" data-testid="code-review-body">
+              @if (expandedBody(); as body) {
+                <app-markdown
+                  [source]="body"
+                  [dense]="true"
+                  testId="code-review-body-markdown" />
+              } @else {
+                <p class="cr-body-state">Loading...</p>
+              }
+            </div>
           }
         </li>
       }
