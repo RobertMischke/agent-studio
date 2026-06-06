@@ -107,7 +107,7 @@ describe('EpicGroupBoardComponent (smoke)', () => {
 });
 
 describe('EpicGroupBoardComponent epic expansion', () => {
-  it('starts collapsed, expands inline sub-tasks, and collapses again', async () => {
+  it('starts expanded with inline sub-tasks, collapses, and re-expands', async () => {
     const epic = task({ id: 'epic-1', taskKey: 'ASS-597', title: 'Epic Ausbau', kind: 'epic' });
     const subTask = task({
       id: 'sub-1',
@@ -122,6 +122,15 @@ describe('EpicGroupBoardComponent epic expansion', () => {
     const toggle = host.querySelector<HTMLButtonElement>('[data-testid="epic-group-collapse-epic-1"]');
 
     expect(toggle).toBeTruthy();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('[data-testid="epic-group-subtasks-epic-1"]')).toBeTruthy();
+    expect(host.textContent).toContain('Epic overlay navigation');
+    expect(host.textContent).toContain('auto review');
+    expect(host.querySelector('[data-testid="epic-group-subtask-verdict"]')?.textContent?.trim()).toBe('reissue');
+
+    toggle?.click();
+    fixture.detectChanges();
+
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelector('[data-testid="epic-group-subtasks-epic-1"]')).toBeNull();
 
@@ -130,15 +139,6 @@ describe('EpicGroupBoardComponent epic expansion', () => {
 
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector('[data-testid="epic-group-subtasks-epic-1"]')).toBeTruthy();
-    expect(host.textContent).toContain('Epic overlay navigation');
-    expect(host.textContent).toContain('Auto review');
-    expect(host.querySelector('[data-testid="epic-group-subtask-verdict"]')?.textContent?.trim()).toBe('reissue');
-
-    toggle?.click();
-    fixture.detectChanges();
-
-    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
-    expect(host.querySelector('[data-testid="epic-group-subtasks-epic-1"]')).toBeNull();
   });
 
   it('emits the sub-task when an inline row is opened', async () => {
@@ -154,8 +154,6 @@ describe('EpicGroupBoardComponent epic expansion', () => {
     fixture.componentInstance.jobClick.subscribe((value) => opened.push(value));
     const host: HTMLElement = fixture.nativeElement;
 
-    host.querySelector<HTMLButtonElement>('[data-testid="epic-group-collapse-epic-1"]')?.click();
-    fixture.detectChanges();
     host.querySelector<HTMLButtonElement>('[data-testid="epic-group-open-subtask"]')?.click();
 
     expect(opened).toEqual([subTask]);

@@ -34,18 +34,18 @@ export class EpicGroupBoardComponent {
 
   readonly groups = computed<EpicGroupView[]>(() => buildEpicGroups(this.tasks()));
 
-  /** Ids of expanded sections. Local view state; not persisted. */
-  private readonly expanded = signal<ReadonlySet<string>>(new Set());
+  /** Ids the operator collapsed in this local view. New epic sections start open. */
+  private readonly collapsed = signal<ReadonlySet<string>>(new Set());
 
   isCollapsed(id: string): boolean {
-    return !this.expanded().has(id);
+    return this.collapsed().has(id);
   }
 
   toggleCollapse(id: string): void {
-    const next = new Set(this.expanded());
+    const next = new Set(this.collapsed());
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    this.expanded.set(next);
+    this.collapsed.set(next);
   }
 
   /** Header glyph: epic puzzle piece, a folder for "No epic", a warning for orphans. */
