@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewEncapsulation, inject, input, output } from '@angular/core';
 import { StudioIconComponent } from '../studio-icon/studio-icon.component';
+import { OverlayPortalRef, OverlayPortalService } from '../../services/overlay-portal.service';
 
 /**
  * Reusable modal dialog skeleton.
@@ -87,26 +88,24 @@ export class DialogComponent implements OnInit, OnDestroy {
    * paint` for scroll perf), the overlay is positioned against that tall,
    * scrolled box and then clipped off-screen by its `overflow: hidden`
    * parents instead of covering the viewport. Hosting at `<body>` escapes
-   * both the containing block and the clipping. Off by default so the
-   * many in-flow dialog callers are unaffected.
+   * both the containing block and the clipping. On by default because all
+   * modal dialogs belong on the central overlay layer.
    */
-  readonly portalToBody = input(false);
+  readonly portalToBody = input(true);
 
   private readonly host = inject(ElementRef).nativeElement as HTMLElement;
+  private readonly overlayPortal = inject(OverlayPortalService);
+  private portalRef: OverlayPortalRef | null = null;
 
   ngOnInit(): void {
     if (this.portalToBody()) {
-      document.body.appendChild(this.host);
+      this.portalRef = this.overlayPortal.attach(this.host);
     }
   }
 
   ngOnDestroy(): void {
-    // The host was moved out of its declared @if view, so remove it
-    // explicitly; Angular's own teardown reads the live parent and skips
-    // the already-detached node, so there is no double removal.
-    if (this.portalToBody()) {
-      this.host.remove();
-    }
+    this.portalRef?.dispose();
+    this.portalRef = null;
   }
 
   readonly closeRequest = output<void>();

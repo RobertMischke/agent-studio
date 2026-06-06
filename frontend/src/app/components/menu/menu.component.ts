@@ -12,9 +12,11 @@ import {
   output,
   signal,
   ChangeDetectorRef,
+  OnDestroy,
 } from '@angular/core';
 import { TooltipDirective } from '../tooltip';
 import { ModalStackService } from '../../services/modal-stack.service';
+import { OverlayPortalRef, OverlayPortalService } from '../../services/overlay-portal.service';
 import {
   MenuItem,
   MenuItemClickEvent,
@@ -60,7 +62,7 @@ import {
   templateUrl: './menu.component.html',
   styleUrl: './menu.component.scss',
 })
-export class MenuComponent {
+export class MenuComponent implements OnDestroy {
   readonly items = input.required<readonly MenuItem[]>();
   readonly open = input<boolean>(false);
   readonly anchorEl = input<HTMLElement | null>(null);
@@ -78,9 +80,12 @@ export class MenuComponent {
   private panelRef: ElementRef<HTMLDivElement> | null = null;
 
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly host = inject(ElementRef<HTMLElement>);
   private readonly modalStack = inject(ModalStackService);
+  private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
+  private portalRef: OverlayPortalRef | null = null;
 
   /** Computed list of focusable row indices (skips header / separator / disabled). */
   readonly focusableIndices = computed<readonly number[]>(() => {
@@ -110,6 +115,7 @@ export class MenuComponent {
       if (!open) {
         this.focusedIndex.set(null);
         this.releaseModalStack();
+        this.releasePortal();
         return;
       }
       // Register with the modal-stack so Escape closes the menu first instead
@@ -119,6 +125,7 @@ export class MenuComponent {
       // host before the menu sees the keystroke, and the host would unmount
       // the menu's anchor along with itself.
       this.acquireModalStack();
+      this.acquirePortal();
       // Defer to next microtask so the panel exists in the DOM before we
       // measure it / move focus into it.
       queueMicrotask(() => {
@@ -134,6 +141,11 @@ export class MenuComponent {
         this.cdr.markForCheck();
       });
     });
+  }
+
+  ngOnDestroy(): void {
+    this.releasePortal();
+    this.releaseModalStack();
   }
 
   private acquireModalStack(): void {
@@ -152,6 +164,17 @@ export class MenuComponent {
     if (this.modalStackDispose === null) return;
     this.modalStackDispose();
     this.modalStackDispose = null;
+  }
+
+  private acquirePortal(): void {
+    if (this.portalRef !== null) return;
+    this.portalRef = this.overlayPortal.attach(this.host.nativeElement);
+  }
+
+  private releasePortal(): void {
+    if (this.portalRef === null) return;
+    this.portalRef.dispose();
+    this.portalRef = null;
   }
 
   // ---------------------------------------------------------------------------

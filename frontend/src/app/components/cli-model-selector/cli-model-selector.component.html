@@ -17,21 +17,19 @@
 </button>
 
 @if (pickerOpen()) {
-  <div class="cli-model-picker__backdrop"
-       #backdropEl
-       popover="manual"
-       [attr.data-testid]="pickerTestidPrefix() + '-backdrop'"
-       (mousedown)="onBackdropClick(); $event.preventDefault()"></div>
-  <div class="cli-model-picker"
-       #pickerEl
-       popover="manual"
-       role="dialog"
-       aria-modal="false"
-       [style.left.px]="pickerPos().left"
-       [style.top.px]="pickerPos().top"
-       [attr.data-testid]="pickerTestidPrefix()"
-       [attr.aria-label]="eyebrow() + ': ' + draftHeaderText()"
-       (mousedown)="$event.stopPropagation()">
+  <div #portalRoot class="cli-model-picker-portal">
+    <div class="cli-model-picker__backdrop"
+         [attr.data-testid]="pickerTestidPrefix() + '-backdrop'"
+         (mousedown)="onBackdropClick(); $event.preventDefault()"></div>
+    <div class="cli-model-picker"
+         #pickerEl
+         role="dialog"
+         aria-modal="false"
+         [style.left.px]="pickerPos().left"
+         [style.top.px]="pickerPos().top"
+         [attr.data-testid]="pickerTestidPrefix()"
+         [attr.aria-label]="eyebrow() + ': ' + draftHeaderText()"
+         (mousedown)="$event.stopPropagation()">
     <div class="cli-model-picker__header">
       <span class="cli-model-picker__eyebrow">{{ eyebrow() }}</span>
       <span class="cli-model-picker__current"
@@ -142,5 +140,6 @@
               [disabled]="!hasChanges() || loadingCatalog()"
               (click)="onDoneClick()">Done</button>
     </footer>
+    </div>
   </div>
 }

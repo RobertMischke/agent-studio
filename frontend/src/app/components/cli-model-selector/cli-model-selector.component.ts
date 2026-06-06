@@ -22,6 +22,7 @@ import {
 import { TooltipDirective } from '../tooltip';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
+import { OverlayPortalRef, OverlayPortalService } from '../../services/overlay-portal.service';
 
 /**
  * Unified CLI + model selector. One reusable chip-with-popover control
@@ -101,19 +102,18 @@ export class CliModelSelectorComponent {
   readonly pickerOpen = signal<boolean>(false);
 
   /**
-   * Viewport-relative coordinates for the popover. The popover renders in the
-   * browser top layer (native Popover API) so it can never be clipped by an
-   * ancestor's `overflow`, paint containment, or transform - the failure mode
-   * that left the picker cut off in the epic detail pane. Top-layer elements
-   * are positioned against the viewport, so we compute `left`/`top` from the
-   * trigger's bounding rect and flip below when there is no room above.
+   * Viewport-relative coordinates for the popover. The picker is portaled to
+   * <body>, so fixed positioning escapes ancestor overflow, paint containment,
+   * transforms, and sibling stacking contexts.
    */
   readonly pickerPos = signal<{ left: number; top: number }>({ left: 0, top: 0 });
 
   private readonly modalStack = inject(ModalStackService);
   private readonly catalogStore = inject(CliCatalogStore);
+  private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
+  private portalRef: OverlayPortalRef | null = null;
   private repositionAttached = false;
   private readonly reposition = () => this.position();
 
@@ -187,20 +187,20 @@ export class CliModelSelectorComponent {
   });
 
   @ViewChild('triggerBtn') private triggerBtnRef?: ElementRef<HTMLButtonElement>;
+  @ViewChild('portalRoot') private portalRootRef?: ElementRef<HTMLDivElement>;
   @ViewChild('pickerEl') private pickerElRef?: ElementRef<HTMLDivElement>;
-  @ViewChild('backdropEl') private backdropElRef?: ElementRef<HTMLDivElement>;
 
   constructor() {
     effect(() => {
       const open = this.pickerOpen();
       if (open) {
         this.acquireModalStack();
-        // The popover elements are added by the `@if` in the same change
-        // detection pass; show + position them on the next microtask once
+        // The picker elements are added by the `@if` in the same change
+        // detection pass; portal + position them on the next microtask once
         // they exist in the DOM.
         queueMicrotask(() => this.showAndPosition());
       } else {
-        this.hidePopovers();
+        this.releasePortal();
         this.releaseModalStack();
       }
     });
@@ -233,7 +233,7 @@ export class CliModelSelectorComponent {
   }
 
   closePicker(): void {
-    this.hidePopovers();
+    this.releasePortal();
     this.pickerOpen.set(false);
     this.releaseModalStack();
     queueMicrotask(() => this.triggerBtnRef?.nativeElement.focus());
@@ -362,15 +362,12 @@ export class CliModelSelectorComponent {
   }
 
   // ---------------------------------------------------------------------------
-  // Top-layer popover lifecycle + positioning
+  // Body-portal lifecycle + positioning
   // ---------------------------------------------------------------------------
 
   private showAndPosition(): void {
     if (!this.pickerOpen()) return;
-    // Backdrop first, picker second: top-layer stacking is insertion-ordered,
-    // so the picker paints above the transparent click-catching backdrop.
-    this.showPopover(this.backdropElRef?.nativeElement);
-    this.showPopover(this.pickerElRef?.nativeElement);
+    this.acquirePortal();
     this.attachReposition();
     this.position();
   }
@@ -399,34 +396,18 @@ export class CliModelSelectorComponent {
     this.pickerPos.set({ left: Math.round(left), top: Math.round(top) });
   }
 
-  private showPopover(el?: HTMLElement | null): void {
-    if (!el) return;
-    const api = el as HTMLElement & { showPopover?: () => void };
-    if (typeof api.showPopover !== 'function') return;
-    if (el.matches?.(':popover-open')) return;
-    try {
-      api.showPopover();
-    } catch {
-      /* unsupported / already-open state - the fixed-position CSS fallback still renders it */
-    }
-  }
-
-  private hidePopovers(): void {
+  private releasePortal(): void {
     this.detachReposition();
-    this.hidePopover(this.pickerElRef?.nativeElement);
-    this.hidePopover(this.backdropElRef?.nativeElement);
+    if (this.portalRef === null) return;
+    this.portalRef.dispose();
+    this.portalRef = null;
   }
 
-  private hidePopover(el?: HTMLElement | null): void {
-    if (!el) return;
-    const api = el as HTMLElement & { hidePopover?: () => void };
-    if (typeof api.hidePopover !== 'function') return;
-    if (!el.matches?.(':popover-open')) return;
-    try {
-      api.hidePopover();
-    } catch {
-      /* not open - ignore */
-    }
+  private acquirePortal(): void {
+    if (this.portalRef !== null) return;
+    const root = this.portalRootRef?.nativeElement;
+    if (!root) return;
+    this.portalRef = this.overlayPortal.attach(root);
   }
 
   private attachReposition(): void {
