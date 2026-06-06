@@ -18,7 +18,7 @@ If the canonical component fits, use it. If it does not fit, the audit pages lis
 
 Three layers, low-to-high. Lower layers are the source of truth; higher layers consume them.
 
-1. **Tokens** — `--studio-spacing-*`, `--studio-bg-*`, `--studio-fg-*`, `--studio-accent`, `--studio-modal-padding-*`, `--elevation-*`, `--shadow-*`. Declared in [`frontend/src/styles/_tokens-primitives.scss`](../../frontend/src/styles/_tokens-primitives.scss) (Tier 1, raw palette) and [`frontend/src/styles/_tokens-semantic.scss`](../../frontend/src/styles/_tokens-semantic.scss) (Tier 2, semantic aliases that flip per theme). See [tokens.md](tokens.md) for the full list with use cases.
+1. **Tokens** — `--studio-spacing-*`, `--studio-bg-*`, `--studio-fg-*`, `--studio-accent`, `--studio-modal-padding`, `--studio-modal-padding-*`, `--elevation-*`, `--shadow-*`. Declared in [`frontend/src/styles/_tokens-primitives.scss`](../../frontend/src/styles/_tokens-primitives.scss) (Tier 1, raw palette) and [`frontend/src/styles/_tokens-semantic.scss`](../../frontend/src/styles/_tokens-semantic.scss) (Tier 2, semantic aliases that flip per theme). See [tokens.md](tokens.md) for the full list with use cases.
 2. **Primitives** — small reusable shapes the components compose. Today: SCSS mixins in [`frontend/src/styles/_mixins.scss`](../../frontend/src/styles/_mixins.scss) (`icon-button`, `chip`, `empty-state`, `thin-scroll`).
 3. **Components** — the standalone Angular components callers reach for. See the canonical-component table below.
 

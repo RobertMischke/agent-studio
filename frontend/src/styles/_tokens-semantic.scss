@@ -340,7 +340,8 @@
   // dominate the panel. The `--sm` variant is for confirm-style dialogs that
   // intentionally stay compact (a one-line message + two buttons).
   // ---------------------------------------------------------------------------
-  --studio-modal-padding-body:    var(--studio-spacing-5); // 24px
+  --studio-modal-padding:         var(--studio-spacing-5); // 24px
+  --studio-modal-padding-body:    var(--studio-modal-padding);
   --studio-modal-padding-header:  var(--studio-spacing-4); // 16px
   --studio-modal-padding-footer:  var(--studio-spacing-4); // 16px
   --studio-modal-padding-body-sm: var(--studio-spacing-4); // 16px

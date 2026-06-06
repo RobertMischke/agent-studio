@@ -45,18 +45,19 @@ For the **non-blocking right-edge panel** (orchestrator chat, CLI usage, kanban 
 - `closeRequest`: emitted by Esc or the close button.
 - `backdropClick`: emitted when the backdrop (overlay area) is clicked. Opt-in so callers can keep full control over cancellation semantics.
 
-## Padding contract — `--studio-modal-padding-*`
+## Padding contract — `--studio-modal-padding*`
 
-The dialog reads four padding tokens:
+The dialog reads one base body-padding token plus slot-specific aliases:
 
 | Token                              | Default                          | Slot           |
 | ---------------------------------- | -------------------------------- | -------------- |
-| `--studio-modal-padding-body`      | `var(--studio-spacing-5)` 24px   | `<app-dialog size="md">` body |
+| `--studio-modal-padding`           | `var(--studio-spacing-5)` 24px   | Base body-padding knob |
+| `--studio-modal-padding-body`      | `var(--studio-modal-padding)`    | `<app-dialog size="md">` body |
 | `--studio-modal-padding-body-sm`   | `var(--studio-spacing-4)` 16px   | `<app-dialog size="sm">` body |
 | `--studio-modal-padding-header`    | `var(--studio-spacing-4)` 16px   | header (every dialog) |
 | `--studio-modal-padding-footer`    | `var(--studio-spacing-4)` 16px   | footer (every dialog) |
 
-**To widen every dialog**, change `--studio-modal-padding-body` in `_tokens-semantic.scss`. The new value applies to every consumer in light + dark. This is the **single knob** the operator can dial.
+**To widen every default dialog body**, change `--studio-modal-padding` in `_tokens-semantic.scss`. The new value applies to every consumer in light + dark. This is the **single knob** the operator can dial.
 
 **To narrow a specific dialog**, set `size="sm"`. Do not override the token from a per-feature SCSS.
 

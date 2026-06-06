@@ -4,7 +4,7 @@ Inventory of overlay surfaces. The shell separates **modal** (centred, blocking,
 
 ## Modal — canonical: `<app-dialog>`
 
-Lives in [`frontend/src/app/components/dialog/dialog.component.ts`](../../frontend/src/app/components/dialog/dialog.component.ts). Inputs: `eyebrow`, `title`, `subtitle`, `role`, `width`, `closable`, `kind=default|danger|primary`, `size=sm|md` (new), `testid`. Reads `--studio-modal-padding-*` for body / header / footer paddings; `--studio-scrim` for the backdrop; `--elevation-modal` for the lift.
+Lives in [`frontend/src/app/components/dialog/dialog.component.ts`](../../frontend/src/app/components/dialog/dialog.component.ts). Inputs: `eyebrow`, `title`, `subtitle`, `role`, `width`, `closable`, `kind=default|danger|primary`, `size=sm|md` (new), `testid`. Reads `--studio-modal-padding` plus `--studio-modal-padding-*` for body / header / footer paddings; `--studio-scrim` for the backdrop; `--elevation-modal` for the lift.
 
 | Consumer                                              | Where                                                                                                                          | Size  |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----- |
@@ -21,7 +21,7 @@ Lives in [`frontend/src/app/components/dialog/dialog.component.ts`](../../fronte
 
 **Findings.** Six of the ten consumers use `<app-dialog>` directly. Four (verbose-debug, orchestrator-settings, cli-usage-detail, update-center, media-lightbox) have a per-feature overlay class (`.vdbg__overlay`, `.update-center__overlay`, `.lightbox__overlay`, ...) that re-implements the modal shape. Per-feature reasons exist (the media lightbox needs a full-viewport surface; the update-center wants a wider panel) but the body padding question is the same one.
 
-**Modal-padding fix in this run** updates `<app-dialog>` body / header / footer to read `--studio-modal-padding-*`. Per-feature overlays do not benefit automatically — they need to opt in. Tracked in [migration-status.md](migration-status.md).
+**Modal-padding fix in this run** updates `<app-dialog>` body / header / footer to read `--studio-modal-padding` / `--studio-modal-padding-*`. Per-feature overlays do not benefit automatically — they need to opt in. Tracked in [migration-status.md](migration-status.md).
 
 ## Popover / Dropdown — canonical: `<app-menu>`
 

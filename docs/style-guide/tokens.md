@@ -44,12 +44,13 @@ Single knob the operator can dial without touching every consumer.
 
 | Token                              | Default                       | Used by                          |
 | ---------------------------------- | ----------------------------- | -------------------------------- |
-| `--studio-modal-padding-body`      | `var(--studio-spacing-5)` 24px | `<app-dialog size="md">` body   |
+| `--studio-modal-padding`           | `var(--studio-spacing-5)` 24px | Base modal body padding knob     |
+| `--studio-modal-padding-body`      | `var(--studio-modal-padding)` | `<app-dialog size="md">` body   |
 | `--studio-modal-padding-header`    | `var(--studio-spacing-4)` 16px | `<app-dialog>` header           |
 | `--studio-modal-padding-footer`    | `var(--studio-spacing-4)` 16px | `<app-dialog>` footer           |
 | `--studio-modal-padding-body-sm`   | `var(--studio-spacing-4)` 16px | `<app-dialog size="sm">` body (confirm-style) |
 
-Bumping `--studio-modal-padding-body` widens every dialog the shell renders. Picking `size="sm"` is for confirm-style dialogs that intentionally stay tight (one-line message + two buttons).
+Bumping `--studio-modal-padding` widens every default dialog body the shell renders. `--studio-modal-padding-body` aliases that base token so older call sites and docs stay readable. Picking `size="sm"` is for confirm-style dialogs that intentionally stay tight (one-line message + two buttons).
 
 ## Color
 

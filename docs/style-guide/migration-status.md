@@ -16,7 +16,7 @@ Tracker for the design-system convergence work. Each row is a **queueable task**
 | Slice                                                             | Status | Notes                                                                                       |
 | ----------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
 | `--studio-spacing-1..7` shipped                                   | 🟢     | Added in this PR; `_tokens-semantic.scss`                                                    |
-| `--studio-modal-padding-body / -header / -footer / -body-sm` shipped | 🟢  | Added in this PR; `<app-dialog>` reads them                                                  |
+| `--studio-modal-padding / -body / -header / -footer / -body-sm` shipped | 🟢  | Added in this PR; `<app-dialog>` reads them                                                  |
 | Promote shape scale to `--studio-radius-xs..2xl` tokens           | ⚪     | Today the scale is documented in `docs/design-system.md` but radii are still raw px         |
 | Promote type ramp to `--studio-font-size-*` tokens                | ⚪     | Same as radii — documented, not tokenised                                                   |
 | Lift `--header-btn-*` from `app.scss` into `_tokens-semantic.scss` as `--studio-chrome-btn-*` | ⚪ | Small slice; benefits every chrome control       |
