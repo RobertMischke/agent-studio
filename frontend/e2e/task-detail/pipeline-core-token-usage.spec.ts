@@ -196,7 +196,10 @@ async function installFixtureRoutes(page: Page) {
   })));
   await page.route('**/api/clients', route => route.fulfill(json([])));
   await page.route('**/api/cli/usage**', route => route.fulfill(json({ items: [] })));
-  await page.route('**/api/cli/quota**', route => route.fulfill(json({ items: [] })));
+  await page.route('**/api/cli/quota**', route => route.fulfill(json({
+    snapshots: [],
+    ttlSeconds: 600,
+  })));
 
   const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route => route.fulfill(json(pipeline())));
