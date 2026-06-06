@@ -11,7 +11,9 @@ namespace OrchestratorApi.Services.Review;
 /// User-triggered code review step. Sits next to <see cref="AspectRunnerService"/>
 /// but is a separate, single-shot review that the user explicitly plans
 /// against a job: pick a model (default from configuration), run one
-/// review pass against the job's most recent commit, write a fresh
+/// review pass against the task's full change set (the aggregate diff of
+/// every commit the task owns; an explicit commit pins a single one),
+/// write a fresh
 /// <c>code-review-{utc-ts}.md</c> into the job folder, and merge a
 /// <c>code-review:&lt;verdict&gt;</c> tag onto the job so the card shows
 /// the outcome. The aspect-runner pipeline that runs in 4-auto-review is

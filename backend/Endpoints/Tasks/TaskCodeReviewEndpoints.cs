@@ -9,10 +9,11 @@ namespace OrchestratorApi.Endpoints.Tasks;
 
 /// <summary>
 /// User-triggered code-review step. Posts a single review pass against
-/// the job's most recent commit using the chosen model (or the
-/// configured default), writes <c>code-review-{utc-ts}.md</c> into the
-/// job folder, and merges a <c>code-review:&lt;verdict&gt;</c> tag onto
-/// the job.
+/// the task's full change set - the aggregate diff of every commit the
+/// task owns - using the chosen model (or the configured default), writes
+/// <c>code-review-{utc-ts}.md</c> into the job folder, and merges a
+/// <c>code-review:&lt;verdict&gt;</c> tag onto the job. An explicit
+/// <c>body.Commit</c> pins the review to that single commit instead.
 ///
 /// Sibling to the auto-review pipeline that runs in 4-auto-review:
 /// auto-review is policy-driven and aggregates four narrow aspects;
@@ -161,6 +162,7 @@ public static class TaskCodeReviewEndpoints
                    string? watchPath,
                    CodeReviewStepEndpointRequest? body,
                    TaskScannerService scanner,
+                   TaskSessionLog sessions,
                    GitService git,
                    CodeReviewStepService service,
                    IConfiguration configuration,
@@ -173,20 +175,24 @@ public static class TaskCodeReviewEndpoints
             var detail = scanner.GetJobDetail(jobId, resolvedWatchPath);
             var taskBody = detail?.PromptMarkdown ?? string.Empty;
 
-            var commit = !string.IsNullOrWhiteSpace(body?.Commit)
-                ? body!.Commit!
-                : git.GetHeadSha(jobId, resolvedWatchPath) ?? string.Empty;
+            // Default scope = the aggregate diff of every commit the task owns,
+            // not just HEAD. An explicit body.Commit pins the review to one
+            // commit (override); when the task has no attributed commits yet we
+            // fall back to HEAD, then the working tree. See ASS-794 / the
+            // regression-radar per-task scoping.
+            var taskShas = ResolveTaskCommitShas(info, resolvedWatchPath, sessions, git);
+            var scope = CodeReviewScopeResolver.Resolve(
+                body?.Commit, taskShas, git.GetHeadSha(jobId, resolvedWatchPath));
 
-            string diff;
-            if (string.IsNullOrWhiteSpace(commit))
+            string diff = scope.Mode switch
             {
-                diff = "(no commit resolved; reviewing working-tree diff)\n\n" +
-                       git.GetDiff(jobId, resolvedWatchPath, path: null);
-            }
-            else
-            {
-                diff = git.GetCommitDiff(jobId, resolvedWatchPath, commit, path: null);
-            }
+                CodeReviewScopeMode.WorkingTree =>
+                    "(no commit resolved; reviewing working-tree diff)\n\n" +
+                    git.GetDiff(jobId, resolvedWatchPath, path: null),
+                CodeReviewScopeMode.AggregateCommits =>
+                    git.GetAggregateCommitDiff(jobId, resolvedWatchPath, scope.Shas, path: null),
+                _ => git.GetCommitDiff(jobId, resolvedWatchPath, scope.Shas[0], path: null),
+            };
 
             var cli = !string.IsNullOrWhiteSpace(body?.CliType)
                 ? body!.CliType!
@@ -209,7 +215,7 @@ public static class TaskCodeReviewEndpoints
                 Model: model)
             {
                 ThinkingLevel = thinkingLevel,
-                Commit = string.IsNullOrWhiteSpace(commit) ? null : commit,
+                Commit = scope.Label,
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds),
             };
 
@@ -229,6 +235,38 @@ public static class TaskCodeReviewEndpoints
                 StartedAt = report.StartedAt,
             });
         });
+    }
+
+    /// <summary>
+    /// Every commit SHA the task owns, newest-first, deduped. Built from the
+    /// same run-range + persisted-chain aggregation the protocol-pane change
+    /// set uses (<see cref="TaskCommitsAggregator"/>), so an in-progress task
+    /// whose commits[] chain has not been stamped yet still surfaces the
+    /// commits its runs produced. Returns an empty list when the task has no
+    /// resolvable commits; the resolver then falls back to HEAD.
+    /// </summary>
+    private static IReadOnlyList<string> ResolveTaskCommitShas(
+        TaskInfo info, string? watchPath, TaskSessionLog sessions, GitService git)
+    {
+        try
+        {
+            var events = sessions.ReadSessionEvents(info.Id, watchPath);
+            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
+            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+            var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
+                (before, after) => git.GetCommitsInShaRange(info.Id, watchPath, before, after));
+
+            return aggregate.Commits
+                .Select(c => c.Sha)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch
+        {
+            // Aggregation is best-effort: any failure degrades to HEAD scope.
+            return Array.Empty<string>();
+        }
     }
 }
 
