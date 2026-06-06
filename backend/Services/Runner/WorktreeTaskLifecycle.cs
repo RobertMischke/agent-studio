@@ -76,7 +76,7 @@ public sealed class WorktreeTaskLifecycle
             return new WorktreePreparation(false, null, null, "Worktree root is required.");
 
         var branch = BranchFor(taskId);
-        var path = Path.Combine(worktreeRoot, SanitizeId(taskId));
+        var path = Path.Combine(worktreeRoot, WorktreeDirName(taskId));
 
         var add = _git.WorktreeAdd(repoRoot, path, branch, integrationBranch);
         if (!add.Success)
@@ -114,7 +114,7 @@ public sealed class WorktreeTaskLifecycle
             return new WorktreePreparation(false, null, null, "Worktree root is required.");
 
         var branch = BranchFor(taskId);
-        var path = Path.Combine(worktreeRoot, SanitizeId(taskId));
+        var path = Path.Combine(worktreeRoot, WorktreeDirName(taskId));
 
         // Clear any dead registrations a crash left behind so a deterministic
         // path can be reused rather than colliding with a stale admin entry.
@@ -258,7 +258,7 @@ public sealed class WorktreeTaskLifecycle
         }
 
         var path = _git.WorktreePathForBranch(repoRoot, branch)
-                   ?? Path.Combine(worktreeRoot, SanitizeId(taskId));
+                   ?? Path.Combine(worktreeRoot, WorktreeDirName(taskId));
         return Teardown(repoRoot, path, branch, deleteBranch: true, force: true);
     }
 
@@ -276,5 +276,26 @@ public sealed class WorktreeTaskLifecycle
             .ToArray();
         var s = new string(chars).Trim('-', '.', '/');
         return string.IsNullOrEmpty(s) ? "task" : s;
+    }
+
+    /// <summary>
+    /// On-disk worktree DIRECTORY name for a task. The branch keeps the full
+    /// sanitized slug, but the worktree dir must stay SHORT: the agent builds
+    /// INSIDE it (bin/obj/.../net10.0/runtimes/linux-arm64/native/...) and task
+    /// slugs run up to ~160 chars, so the full slug plus deep build/node_modules
+    /// paths blow past Windows MAX_PATH (260) -> "Filename too long" git/build
+    /// failures -> the parallel run fails/wedges. Short ids keep their readable
+    /// name; long ids become 24 readable chars + an 8-hex stable hash of the FULL
+    /// id (deterministic, so Prepare / PrepareOrReuse / Teardown all resolve to
+    /// the same directory).
+    /// </summary>
+    private static string WorktreeDirName(string taskId)
+    {
+        var sane = SanitizeId(taskId);
+        if (sane.Length <= 40) return sane;
+        var hash = System.Convert.ToHexString(
+            System.Security.Cryptography.SHA1.HashData(
+                System.Text.Encoding.UTF8.GetBytes(taskId)))[..8].ToLowerInvariant();
+        return sane[..24] + "-" + hash;
     }
 }
