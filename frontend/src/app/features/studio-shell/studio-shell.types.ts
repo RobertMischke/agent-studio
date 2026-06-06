@@ -15,7 +15,7 @@ export type StudioTabKind = 'board' | 'backlog' | 'epics' | 'task' | 'hub' | 'di
 export type StudioPanelKind = 'explorer' | 'filters' | 'cli' | 'activity' | 'runbook' | 'settings';
 
 /** Board tab - one per project; key `board:<projectName>` or `board:__all__`. */
-export interface BoardTab { kind: 'board'; projectName: string; sticky?: boolean; }
+export interface BoardTab { kind: 'board'; projectName: string; }
 
 /** Backlog triage tab - project-scoped or workspace-wide; key `backlog:<projectName|__all__>`. */
 export interface BacklogTab { kind: 'backlog'; projectName: string | null; }

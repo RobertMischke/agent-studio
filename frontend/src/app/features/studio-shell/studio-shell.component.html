@@ -242,13 +242,10 @@
                       [testid]="'studio-explorer-open-tab-' + tabKey(t)"
                       [appTaskStatusPopover]="tabJob(t)"
                       [appTaskStatusPopoverOnlyTruncated]="false"
-                      [attr.data-sticky]="isTabSticky(t) ? 'true' : null"
                       (activated)="selectTab(tabKey(t))">
-                      @if (!isTabSticky(t)) {
-                        <span trail class="studio-tree-row__close"
-                              (click)="closeTab(tabKey(t), $event)"
-                              aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>
-                      }
+                      <span trail class="studio-tree-row__close"
+                            (click)="closeTab(tabKey(t), $event)"
+                            aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>
                     </app-list-row>
                   }
                   }
@@ -627,15 +624,13 @@
             <div class="studio-tab"
                  role="tab"
                  tabindex="0"
-                 [attr.draggable]="isTabSticky(t) ? 'false' : 'true'"
+                 draggable="true"
                  [class.studio-tab--active]="activeKey() === tabKey(t)"
-                 [class.studio-tab--sticky]="isTabSticky(t)"
                  [class.studio-tab--dragging]="draggingTabKey() === tabKey(t)"
                  [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
                  [attr.aria-selected]="activeKey() === tabKey(t) ? 'true' : 'false'"
                  [attr.aria-label]="tabLabel(t)"
                  [attr.data-tab-key]="tabKey(t)"
-                 [attr.data-sticky]="isTabSticky(t) ? 'true' : null"
                  (click)="selectTab(tabKey(t))"
                  (keydown.enter)="selectTab(tabKey(t))"
                  (keydown.space)="selectTab(tabKey(t)); $event.preventDefault()"
@@ -648,21 +643,11 @@
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
-              @if (isTabSticky(t)) {
-                <span class="studio-tab__pin"
-                      aria-label="Pinned tab"
-                      appTooltip="This tab is pinned and cannot be closed"
-                      data-testid="studio-tab-pin">
-                  <app-studio-icon name="pin" [size]="11"></app-studio-icon>
-                </span>
-              }
               <span class="studio-tab__title">{{ tabLabel(t) }}</span>
-              @if (!isTabSticky(t)) {
-                <button type="button"
-                        class="studio-tab__close"
-                        aria-label="Close tab"
-                        (click)="closeTab(tabKey(t), $event)">×</button>
-              }
+              <button type="button"
+                      class="studio-tab__close"
+                      aria-label="Close tab"
+                      (click)="closeTab(tabKey(t), $event)">×</button>
             </div>
           }
           <!-- Invisible spacer that catches drops past the last tab so users can
@@ -690,6 +675,7 @@
         <ng-content select="[studioContent]"></ng-content>
         @if (activeTab() === null) {
           <div class="studio-welcome" data-testid="studio-welcome">
+            <app-studio-empty-state class="studio-welcome__idle" />
             <div class="studio-welcome__card">
               <h2 class="studio-welcome__title">Agent Software Studio</h2>
               <p class="studio-welcome__sub">No tab open. Pick a project to open its board, or jump straight to a new task.</p>

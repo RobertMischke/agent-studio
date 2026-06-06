@@ -1991,12 +1991,21 @@
 // Tab content placeholders + welcome screen
 // -------------------------------------------------------------------------
 .studio-welcome {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
   height: 100%;
   padding: 24px;
+  overflow: auto;
+
+  &__idle {
+    flex: 0 0 auto;
+  }
 
   &__card {
+    flex: 0 0 auto;
     max-width: 640px;
     width: 100%;
     padding: 28px 32px;

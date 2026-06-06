@@ -4,9 +4,9 @@ import { studioTabKey } from '../studio-shell.types';
 
 const STORAGE_KEY = 'atp.studio.tabs.v1';
 const STORAGE_VERSION = 1;
-const STICKY_PROJECT = '__all__';
-const STICKY_TAB: BoardTab = { kind: 'board', projectName: STICKY_PROJECT, sticky: true };
-const STICKY_KEY = studioTabKey(STICKY_TAB);
+const ALL_PROJECTS = '__all__';
+const ALL_BOARD_TAB: BoardTab = { kind: 'board', projectName: ALL_PROJECTS };
+const ALL_BOARD_KEY = studioTabKey(ALL_BOARD_TAB);
 
 interface PersistedState {
   v: number;
@@ -19,14 +19,20 @@ interface PersistedState {
  *
  * Behaviour mirrors the VS-Code editor surface: opening a tab that is
  * already present focuses it instead of duplicating; closing the active
- * tab falls back to the last remaining tab (or the welcome screen when
- * the list goes empty). Drag-reorder is supported through {@link move}.
+ * tab falls back to the last remaining tab. When the list goes empty the
+ * editor surface shows the creative idle empty-state (no tab is active).
+ * Drag-reorder is supported through {@link move}.
+ *
+ * Every tab is a first-class, closable tab - including the cross-project
+ * "All projects" board (`board:__all__`). On a fresh boot (no persisted
+ * snapshot) that board is seeded so first-run users land somewhere useful;
+ * once the user closes it, the choice persists and the empty-state shows.
  *
  * State is persisted to <code>localStorage</code> under the versioned
  * key {@link STORAGE_KEY} so the editor surface looks the same after a
  * reload. The version prefix lets us evolve the tab shape without
  * silently breaking older snapshots; a payload with an unknown version
- * is dropped rather than crashing the boot.
+ * is dropped (and the default board re-seeded) rather than crashing boot.
  */
 @Injectable({ providedIn: 'root' })
 export class StudioTabStateService {
@@ -43,25 +49,20 @@ export class StudioTabStateService {
   });
 
   constructor() {
-    this.restore();
-    this.ensureStickyTab();
-    if (!this._activeKey()) this._activeKey.set(STICKY_KEY);
+    const hadSnapshot = this.restore();
+    if (!hadSnapshot) {
+      // Fresh boot / dropped payload: seed the cross-project board so the
+      // user isn't dropped straight onto the empty-state on first run.
+      this._tabs.set([ALL_BOARD_TAB]);
+      this._activeKey.set(ALL_BOARD_KEY);
+    }
     this.persist();
   }
 
-  stickyKey(): string {
-    return STICKY_KEY;
-  }
-
-  isStickyKey(key: string | null | undefined): boolean {
-    return key === STICKY_KEY;
-  }
-
-  activateSticky(): string {
-    this.ensureStickyTab();
-    this._activeKey.set(STICKY_KEY);
-    this.persist();
-    return STICKY_KEY;
+  /** Open (creating if missing) and focus the cross-project All-projects board. */
+  activateAllProjectsBoard(): string {
+    this.open(ALL_BOARD_TAB);
+    return ALL_BOARD_KEY;
   }
 
   /** Open the tab if it's not already there, then focus it. */
@@ -83,29 +84,19 @@ export class StudioTabStateService {
 
   /** Close the tab; if it was active, fall back to the last remaining tab. */
   close(key: string): void {
-    if (this.isStickyKey(key)) return;
-    const list = this._tabs();
-    const next = list.filter(t => studioTabKey(t) !== key);
-    this._tabs.set(this.withSticky(next));
+    const next = this._tabs().filter(t => studioTabKey(t) !== key);
+    this._tabs.set(next);
     if (this._activeKey() === key) {
-      const tabs = this._tabs();
-      this._activeKey.set(tabs.length ? studioTabKey(tabs[tabs.length - 1]) : STICKY_KEY);
+      this._activeKey.set(next.length ? studioTabKey(next[next.length - 1]) : null);
     }
     this.persist();
   }
 
   /** Close every tab except the one given. */
   closeOthers(keepKey: string): void {
-    const list = this._tabs();
-    const next = this.withSticky(list.filter(t => studioTabKey(t) === keepKey));
+    const next = this._tabs().filter(t => studioTabKey(t) === keepKey);
     this._tabs.set(next);
-    if (next.some(t => studioTabKey(t) === keepKey)) {
-      this._activeKey.set(keepKey);
-    } else if (next.length) {
-      this._activeKey.set(studioTabKey(next[next.length - 1]));
-    } else {
-      this._activeKey.set(null);
-    }
+    this._activeKey.set(next.length ? keepKey : null);
     this.persist();
   }
 
@@ -114,7 +105,7 @@ export class StudioTabStateService {
     const list = this._tabs();
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
-    const next = this.withSticky(list.filter((t, i) => i <= idx || this.isStickyKey(studioTabKey(t))));
+    const next = list.filter((_, i) => i <= idx);
     this._tabs.set(next);
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
@@ -127,7 +118,7 @@ export class StudioTabStateService {
     const list = this._tabs();
     const idx = list.findIndex(t => studioTabKey(t) === anchorKey);
     if (idx < 0) return;
-    const next = this.withSticky(list.filter((t, i) => i >= idx || this.isStickyKey(studioTabKey(t))));
+    const next = list.filter((_, i) => i >= idx);
     this._tabs.set(next);
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
@@ -135,10 +126,10 @@ export class StudioTabStateService {
     this.persist();
   }
 
-  /** Close every tab. */
+  /** Close every tab. The editor surface falls back to the empty-state. */
   closeAll(): void {
-    this._tabs.set([STICKY_TAB]);
-    this._activeKey.set(STICKY_KEY);
+    this._tabs.set([]);
+    this._activeKey.set(null);
     this.persist();
   }
 
@@ -152,7 +143,6 @@ export class StudioTabStateService {
    * focused; moving a non-active tab leaves the focus where it was.
    */
   move(sourceKey: string, targetKey: string | null): void {
-    if (this.isStickyKey(sourceKey) || this.isStickyKey(targetKey)) return;
     const list = this._tabs();
     const fromIdx = list.findIndex(t => studioTabKey(t) === sourceKey);
     if (fromIdx < 0) return;
@@ -185,7 +175,7 @@ export class StudioTabStateService {
   purgeStaleProjectTabs(validNames: ReadonlySet<string>): void {
     const before = this._tabs();
     const after = before.filter(t => {
-      if (t.kind === 'board' && t.projectName !== '__all__') return validNames.has(t.projectName);
+      if (t.kind === 'board' && t.projectName !== ALL_PROJECTS) return validNames.has(t.projectName);
       if (t.kind === 'backlog' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'epics' && t.projectName !== null) return validNames.has(t.projectName);
       if (t.kind === 'hub') return validNames.has(t.projectName);
@@ -201,14 +191,20 @@ export class StudioTabStateService {
 
   // ---- persistence ----------------------------------------------------
 
-  private restore(): void {
-    if (typeof window === 'undefined') return;
+  /**
+   * Hydrate from localStorage. Returns whether a usable snapshot was found
+   * so the constructor can decide whether to seed the default board.
+   * A valid-but-empty tab list counts as a snapshot: it means the user
+   * deliberately closed every tab and should land on the empty-state.
+   */
+  private restore(): boolean {
+    if (typeof window === 'undefined') return false;
     try {
       const raw = window.localStorage?.getItem(STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) return false;
       const parsed = JSON.parse(raw) as PersistedState;
-      if (!parsed || parsed.v !== STORAGE_VERSION) return;
-      if (!Array.isArray(parsed.tabs)) return;
+      if (!parsed || parsed.v !== STORAGE_VERSION) return false;
+      if (!Array.isArray(parsed.tabs)) return false;
       // Drop any tab entries that don't round-trip through studioTabKey;
       // a future StudioTabKind variant the running build doesn't recognise
       // would otherwise live as a ghost row in the tab bar.
@@ -216,13 +212,19 @@ export class StudioTabStateService {
         try { return typeof studioTabKey(t) === 'string'; }
         catch { return false; }
       });
-      this._tabs.set(this.withSticky(safeTabs.map(t => this.normalizeTab(t))));
+      this._tabs.set(this.dedupe(safeTabs.map(t => this.normalizeTab(t))));
       // Only restore the active key if it points at a surviving tab.
       const normalizedTabs = this._tabs();
       const validKey = normalizedTabs.some(t => studioTabKey(t) === parsed.activeKey);
-      this._activeKey.set(validKey ? parsed.activeKey : (normalizedTabs.length ? studioTabKey(normalizedTabs[normalizedTabs.length - 1]) : STICKY_KEY));
+      this._activeKey.set(
+        validKey
+          ? parsed.activeKey
+          : (normalizedTabs.length ? studioTabKey(normalizedTabs[normalizedTabs.length - 1]) : null),
+      );
+      return true;
     } catch {
-      // Corrupt payload — drop it. The effect will overwrite next write.
+      // Corrupt payload — drop it. The constructor re-seeds the default.
+      return false;
     }
   }
 
@@ -243,7 +245,6 @@ export class StudioTabStateService {
   private normalizeTab(tab: StudioTab): StudioTab {
     switch (tab.kind) {
       case 'board':
-        if (tab.projectName === STICKY_PROJECT) return STICKY_TAB;
         return { kind: 'board', projectName: tab.projectName };
       case 'backlog':
         return { kind: 'backlog', projectName: tab.projectName };
@@ -262,16 +263,10 @@ export class StudioTabStateService {
     }
   }
 
-  private ensureStickyTab(): void {
-    this._tabs.set(this.withSticky(this._tabs()));
-    if (!this._tabs().some(t => studioTabKey(t) === this._activeKey())) {
-      this._activeKey.set(STICKY_KEY);
-    }
-  }
-
-  private withSticky(tabs: readonly StudioTab[]): StudioTab[] {
-    const next: StudioTab[] = [STICKY_TAB];
-    const seen = new Set<string>([STICKY_KEY]);
+  /** Collapse duplicate keys, preserving first-seen order. */
+  private dedupe(tabs: readonly StudioTab[]): StudioTab[] {
+    const next: StudioTab[] = [];
+    const seen = new Set<string>();
     for (const tab of tabs) {
       const normalized = this.normalizeTab(tab);
       const key = studioTabKey(normalized);
