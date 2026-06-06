@@ -3599,7 +3599,15 @@ public class ProjectRunner
         }
         finally
         {
-            if (_activeJobId == jobId)
+            // Release THIS finished run's slot, addressed by job id. The old
+            // guard `_activeJobId == jobId` was a single-slot assumption:
+            // `_activeJobId` is SingleJobId (FirstOrDefault), so at
+            // MaxParallelism>1 it matches only ONE of the concurrent runs - when
+            // the finishing job was not that "first" one the release was skipped
+            // and its slot LEAKED (occ stayed high, eventually no free slot ->
+            // no further pickups). Contains(jobId) is byte-identical at max==1
+            // (one slot) and correct for N slots.
+            if (_activeRuns.Contains(jobId))
             {
                 _activeRuns.Release(jobId);
                 ReleasePickupLockIfHeld();
