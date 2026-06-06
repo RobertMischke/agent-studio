@@ -34,8 +34,10 @@
             <app-job-card
               class="epic-board__epic-card"
               [job]="epic"
+              [epicSubTasks]="tasks()"
               [compact]="compact()"
               [highlightJobId]="highlightJobId()"
+              (subTaskClick)="jobClick.emit($event)"
               (click)="jobClick.emit(epic)" />
           }
           <ul class="epic-board__subtasks"

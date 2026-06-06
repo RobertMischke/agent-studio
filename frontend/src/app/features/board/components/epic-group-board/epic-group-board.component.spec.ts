@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { Component, input, provideZonelessChangeDetection } from '@angular/core';
+import { Component, input, output, provideZonelessChangeDetection } from '@angular/core';
 import { EpicGroupBoardComponent } from './epic-group-board.component';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import type { TaskInfo } from '../../../../models/task.model';
@@ -15,8 +15,10 @@ import type { TaskInfo } from '../../../../models/task.model';
 })
 class StubJobCardComponent {
   readonly job = input.required<TaskInfo>();
+  readonly epicSubTasks = input<readonly TaskInfo[]>([]);
   readonly compact = input<boolean>(false);
   readonly highlightJobId = input<string | null>(null);
+  readonly subTaskClick = output<TaskInfo>();
 }
 
 function task(overrides: Partial<TaskInfo>): TaskInfo {

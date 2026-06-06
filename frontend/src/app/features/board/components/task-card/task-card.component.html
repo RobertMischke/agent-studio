@@ -3,6 +3,7 @@
      [class.task-card--running]="isRunning()"
      [class.task-card--attention]="needsAttention()"
      [class.task-card--compact]="compact()"
+     [class.task-card--epic-expanded]="isEpic() && epicExpanded()"
      [class.task-card--just-created]="isJustCreated()"
      [style.--project-color]="identity().color"
      [style.--project-border]="identity().border"
