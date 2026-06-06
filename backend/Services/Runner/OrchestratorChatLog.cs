@@ -199,7 +199,12 @@ public enum OrchestratorMessageKind
     /// without progress; the task was parked in human review to stop an
     /// endless reissue loop.
     /// </summary>
-    Quarantined
+    Quarantined,
+    /// <summary>
+    /// A worktree-isolated run modified the shared main checkout. The runner
+    /// skipped integration and surfaced the harness integrity violation.
+    /// </summary>
+    WorktreeContainment
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -223,6 +228,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
+        OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         _ => "info"
     };
 
@@ -241,6 +247,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
+        OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         _ => kind.ToString().ToLowerInvariant()
     };
 }

@@ -167,6 +167,19 @@ public static class AgentEnvironmentDetector
         => IsAgentToolEcho(line) ? null : Match(line);
 
     /// <summary>
+    /// True when a later CLI line shows the operation recovered after an
+    /// ambiguous permission-looking error. The runtime hook uses this to avoid
+    /// killing a run for transient file-lock EACCES when the edit then succeeds.
+    /// </summary>
+    public static bool IsRecoverySignal(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return false;
+        return line.Contains("file has been updated successfully", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("file updated successfully", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("has been updated successfully", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Render a one-paragraph diagnosis for a matched blocker, suitable
     /// for display in the chat log and on the job card tooltip. Includes
     /// the originating CLI type so the suggested recovery is specific.

@@ -721,6 +721,11 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("quarantined", "Quarantined", "High", line, lastSeenAt);
             return true;
         }
+        if (lower.Contains("worktree-containment") || lower.Contains("main-checkout-modified"))
+        {
+            issue = BuildOutcomeIssue("worktree-containment", "Worktree containment", "High", line, lastSeenAt);
+            return true;
+        }
         if (lower.Contains("context-overflow"))
         {
             issue = BuildOutcomeIssue("context-overflow", "Context overflow", "High", line, lastSeenAt);

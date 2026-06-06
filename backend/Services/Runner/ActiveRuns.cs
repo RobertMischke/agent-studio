@@ -40,6 +40,13 @@ internal sealed class ActiveRun
     /// <summary>The ephemeral <c>task/&lt;id&gt;</c> branch backing the worktree, when isolated.</summary>
     public string? Branch { get; set; }
 
+    /// <summary>
+    /// Main-checkout git status captured immediately before an isolated run
+    /// starts. Used as a containment guard: worktree runs may mutate their
+    /// worktree only, never the shared checkout.
+    /// </summary>
+    public string? MainCheckoutStatusBefore { get; set; }
+
     /// <summary>True when this run is isolated in its own worktree (parallel slot).</summary>
     public bool IsWorktreeRun => !string.IsNullOrEmpty(WorktreePath);
 }

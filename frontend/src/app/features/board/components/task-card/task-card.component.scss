@@ -1,8 +1,11 @@
     .task-card {
-      background: var(--card-bg, #1e1e2e);
-      border: 1px solid var(--border, #333);
-      border-radius: 10px;
-      padding: 14px 16px;
+      --task-card-state-color: var(--state-color, var(--studio-card-border));
+      --task-card-ring: 0 0 0 1px var(--studio-card-state-border);
+
+      background: var(--studio-card-bg, var(--card-bg, #1e1e2e));
+      border: 1px solid var(--studio-card-state-border, var(--border, #333));
+      border-radius: var(--studio-card-radius);
+      padding: var(--studio-card-padding);
       cursor: pointer;
       // Card is the positioning context for absolutely-placed children
       // (running progress bar, token popover anchor stays unaffected
@@ -27,14 +30,15 @@
         transform 180ms cubic-bezier(0, 0, 0.2, 1),
         box-shadow 0.15s ease,
         opacity 0.18s ease;
-      border-left: 4px solid var(--state-color, #555);
       /* Resting shadow — barely-there elevation that gives cards
          depth against the lane surface. The light-theme bridge in
          styles.scss already swaps `--card-bg` to white so this is
          the missing piece for the premium "floating cards" look on
          a white surface. Subtle enough that dark theme also picks it
          up without looking blown out. */
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      box-shadow:
+        var(--task-card-ring),
+        var(--studio-card-shadow);
     }
     /* Drag-source: while a card is being dragged, dim it to ~55% so the
        drag-image (browser-rendered ghost) reads as the active object.
@@ -72,9 +76,10 @@
       // surfaces. Lower alphas than the previous single 0.30 stop
       // because Light theme magnified the old shadow into a hard
       // grey haze around the card.
+      border-color: var(--studio-card-border-hover);
       box-shadow:
-        0 2px 4px rgba(0, 0, 0, 0.10),
-        0 6px 16px rgba(0, 0, 0, 0.14);
+        var(--task-card-ring),
+        var(--studio-card-shadow-hover);
     }
     .task-card--1-preparation { --state-color: #8b5cf6; }
     .task-card--2-ready { --state-color: #06b6d4; }
@@ -108,14 +113,15 @@
        declaration to (0,3,0) so it wins on both themes without !important. */
     .task-card.task-card--running {
       background: var(--studio-bg-running);
-      border-color: color-mix(in srgb, var(--studio-accent-3) 45%, transparent);
-      border-left-width: 6px;
-      border-left-color: var(--studio-accent-3);
-      box-shadow: var(--shadow-running);
+      border-color: var(--studio-card-running-border);
+      box-shadow:
+        0 0 0 1px var(--studio-card-running-border),
+        var(--shadow-running);
     }
     .task-card.task-card--running:hover {
       transform: translateY(-2px);
       box-shadow:
+        0 0 0 1px var(--studio-card-running-border),
         var(--shadow-running),
         0 14px 32px color-mix(in srgb, var(--studio-accent-3) 25%, transparent);
     }
@@ -135,14 +141,16 @@
        !important and overrides the calm sky --state-color from the
        5-human-review lane rule. */
     .task-card.task-card--attention {
-      background: color-mix(in srgb, var(--studio-accent-6) 9%, var(--studio-bg-elevated));
-      border-color: color-mix(in srgb, var(--studio-accent-6) 45%, transparent);
-      border-left-width: 6px;
-      border-left-color: var(--studio-accent-6);
+      background: var(--studio-card-attention-bg);
+      border-color: var(--studio-card-attention-border);
+      box-shadow:
+        0 0 0 1px var(--studio-card-attention-border),
+        var(--studio-card-shadow);
     }
     .task-card.task-card--attention:hover {
       transform: translateY(-2px);
       box-shadow:
+        0 0 0 1px var(--studio-card-attention-border),
         0 2px 4px rgba(0, 0, 0, 0.10),
         0 10px 24px color-mix(in srgb, var(--studio-accent-6) 22%, transparent);
     }
@@ -164,8 +172,8 @@
       right: 0;
       height: 3px;
       overflow: hidden;
-      border-top-left-radius: 9px;
-      border-top-right-radius: 9px;
+      border-top-left-radius: calc(var(--studio-card-radius) - 1px);
+      border-top-right-radius: calc(var(--studio-card-radius) - 1px);
       pointer-events: none;
       background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
     }
@@ -205,12 +213,12 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: var(--studio-card-section-gap);
     }
     .task-card__project {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: var(--studio-spacing-2);
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -218,7 +226,8 @@
       font-weight: 600;
       background: var(--project-soft, rgba(139,92,246,0.10));
       border: 1px solid var(--project-border, transparent);
-      padding: 2px 8px 2px 3px;
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x) 0 var(--studio-spacing-1);
       border-radius: 999px;
       max-width: 100%;
       overflow: hidden;
@@ -245,8 +254,9 @@
     .task-card__owner-chip {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 2px 8px 2px 4px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x) 0 var(--studio-spacing-1);
       border-radius: 999px;
       font-size: 11px;
       font-weight: 600;
@@ -356,9 +366,10 @@
     }
 
     .task-card__title {
-      margin: 0 0 8px;
-      font-size: 15px;
-      font-weight: 600;
+      margin: 0 0 var(--studio-card-section-gap);
+      font-size: var(--studio-card-title-size);
+      font-weight: var(--studio-card-title-weight);
+      line-height: var(--studio-card-title-lh);
       color: var(--studio-fg);
     }
     .task-card__epic-toggle {
@@ -396,16 +407,18 @@
       background: var(--studio-bg-hover);
     }
     .task-card__key-chip {
-      display: inline-block;
-      padding: 1px 5px;
-      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+      min-height: 18px;
+      padding: 0 var(--studio-spacing-2);
+      border-radius: 999px;
       font-size: 10px;
-      font-weight: 700;
+      font-weight: 650;
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.03em;
-      color: var(--studio-fg-muted);
-      background: var(--studio-bg-hover);
-      border: 1px solid var(--studio-border);
+      color: var(--studio-fg-dim);
+      background: var(--studio-card-muted-bg);
+      border: 1px solid var(--studio-card-muted-border);
       vertical-align: middle;
       margin-right: 4px;
       user-select: none;
@@ -512,20 +525,28 @@
     .task-card__badges {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 10px;
+      gap: var(--studio-spacing-2);
+      margin-bottom: var(--studio-card-section-gap);
     }
     .task-card__execution-pill,
     .task-card__pending-pill,
     .task-card__waiting-pill,
     .task-card__mode-pill,
-    .task-card__type-pill {
+    .task-card__type-pill,
+    .task-card__loop-pill,
+    .task-card__review-pill,
+    .task-card__code-review-pill,
+    .task-card__auto-review-pill,
+    .task-card__issue-pill,
+    .task-card__human-review-pill,
+    .task-card__phase-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
     }
@@ -574,10 +595,11 @@
     .task-card__loop-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
       color: var(--studio-accent-3-strong);
@@ -599,10 +621,11 @@
     .task-card__review-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
       border: 1px solid transparent;
@@ -640,10 +663,11 @@
     .task-card__code-review-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 600;
       letter-spacing: 0.02em;
       border: 1px solid transparent;
@@ -663,10 +687,11 @@
     .task-card__auto-review-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 650;
       letter-spacing: 0;
       border: 1px solid transparent;
@@ -705,10 +730,11 @@
     .task-card__issue-pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 8px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 650;
       letter-spacing: 0;
       border: 1px solid transparent;
@@ -737,10 +763,11 @@
     .task-card__human-review-pill {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 8px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 650;
       letter-spacing: 0.02em;
       border: 1px solid transparent;
@@ -845,14 +872,15 @@
     .task-card__tags {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
-      margin: 2px 0 6px;
+      gap: var(--studio-spacing-1);
+      margin: 0 0 var(--studio-card-section-gap);
     }
     .task-card__tag-chip {
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.02em;
-      padding: 1px 7px;
+      min-height: 18px;
+      padding: 0 var(--studio-spacing-2);
       border-radius: 999px;
       color: var(--studio-fg-strong);
       background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 22%, rgba(0,0,0,0));
@@ -899,17 +927,17 @@
     .task-card__meta {
       display: flex;
       justify-content: space-between;
-      gap: 6px;
+      gap: var(--studio-spacing-2);
       flex-wrap: wrap;
-      font-size: 12px;
+      font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-dim);
-      margin-bottom: 4px;
+      margin-bottom: var(--studio-card-section-gap);
     }
     .task-card__effective-model {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      font-size: 11px;
+      gap: var(--studio-spacing-1);
+      font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-dim);
     }
     .task-card__effective-model-icon {
@@ -933,19 +961,22 @@
       font-style: italic;
     }
     .task-card__activity {
-      font-size: 11px;
+      padding-top: var(--studio-spacing-2);
+      border-top: 1px solid var(--studio-card-muted-border);
+      font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-muted);
     }
     .task-card__git {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 2px 8px;
-      margin: 2px 0 6px;
+      gap: var(--studio-spacing-2);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
+      margin: 0 0 var(--studio-card-section-gap);
       border-radius: 999px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.06);
-      font-size: 11px;
+      background: var(--studio-card-muted-bg);
+      border: 1px solid var(--studio-card-muted-border);
+      font-size: var(--studio-card-meta-size);
       color: var(--studio-fg-dim);
     }
     .task-card__git-branch { color: #a5b4fc; font-family: var(--font-mono, monospace); }
@@ -958,20 +989,20 @@
     .task-card__commits {
       display: flex;
       flex-direction: column;
-      gap: 3px;
-      margin: 0 0 6px;
-      padding: 4px 8px;
+      gap: var(--studio-spacing-1);
+      margin: 0 0 var(--studio-card-section-gap);
+      padding: var(--studio-spacing-2);
       border-radius: 10px;
       background: var(--studio-commit-bg);
       border: 1px solid var(--studio-commit-border);
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       color: var(--studio-commit-fg);
     }
     .task-card__commit-row {
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: baseline;
-      gap: 6px;
+      gap: var(--studio-spacing-2);
       min-width: 0;
     }
     .task-card__commit-sha {
@@ -1000,11 +1031,12 @@
     .task-card__no-commits {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 2px 8px;
-      margin: 0 0 6px;
+      gap: var(--studio-spacing-1);
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
+      margin: 0 0 var(--studio-card-section-gap);
       border-radius: 999px;
-      font-size: 11px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 600;
     }
     .task-card__no-commits-glyph { font-weight: 700; }

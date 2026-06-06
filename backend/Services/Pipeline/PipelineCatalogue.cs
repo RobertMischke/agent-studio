@@ -133,6 +133,7 @@ public static class PipelineCatalogue
     };
 
     public const string GitCommitAttributionStepId = "post-git-commit-attribution";
+    public const string WorktreeContainmentStepId = "post-worktree-containment";
     /// <summary>
     /// Post-step that runs <c>npx stylelint</c> over the frontend SCSS tree
     /// after the agent run finishes. Verdict drives the
@@ -263,6 +264,7 @@ public static class PipelineCatalogue
     public static readonly HashSet<string> GitStepIds = new(StringComparer.Ordinal)
     {
         GitCommitAttributionStepId,
+        WorktreeContainmentStepId,
     };
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -388,6 +390,15 @@ public static class PipelineCatalogue
                     Idempotent = true,
                 },
                 .. aspects,
+                new PipelineStep
+                {
+                    Id = WorktreeContainmentStepId,
+                    DisplayName = "Worktree containment",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                },
                 new PipelineStep
                 {
                     Id = GitCommitAttributionStepId,

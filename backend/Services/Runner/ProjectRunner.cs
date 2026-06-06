@@ -751,6 +751,19 @@ public class ProjectRunner
     private void IntegrateWorktreeRun(ActiveRun run, TaskInfo info)
     {
         if (!run.IsWorktreeRun) return;
+        if (MainCheckoutChangedDuringWorktreeRun(run))
+        {
+            var summary = $"Worktree run {run.JobId} changed the shared main checkout `{Entry.RootPath}`; integration skipped.";
+            _logger.LogWarning("[taskboard] worktree containment violation for {Job}: main checkout changed; skipping integration", run.JobId);
+            RecordWorktreeContainment(info, PipelineStepStatus.Failed, "main-checkout-modified", summary);
+            _chatLog.Append(info, OrchestratorMessageKind.WorktreeContainment,
+                "[worktree-containment] " + summary);
+            return;
+        }
+
+        RecordWorktreeContainment(info, PipelineStepStatus.Passed, "contained",
+            $"Worktree run stayed contained in `{run.WorktreePath}`.");
+
         var settings = _projectSettings.Get(ProjectName);
         var workBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch) ? "develop" : settings.IntegrationBranch!;
         var strategy = string.IsNullOrWhiteSpace(settings.IntegrationStrategy) ? IntegrationStrategies.DirectMerge : settings.IntegrationStrategy!;
@@ -787,6 +800,49 @@ public class ProjectRunner
         catch (Exception ex)
         {
             _logger.LogError(ex, "[taskboard] worktree integration failed for {Job}", run.JobId);
+        }
+    }
+
+    private bool MainCheckoutChangedDuringWorktreeRun(ActiveRun run)
+    {
+        if (!run.IsWorktreeRun) return false;
+        var before = run.MainCheckoutStatusBefore;
+        var after = _git.GetPorcelainStatus(Entry.RootPath);
+        if (before == null || after == null)
+        {
+            _logger.LogDebug(
+                "[taskboard] worktree containment status unavailable for {Job} (before={Before} after={After})",
+                run.JobId, before == null ? "null" : "ok", after == null ? "null" : "ok");
+            return false;
+        }
+        return !string.Equals(before, after, StringComparison.Ordinal);
+    }
+
+    private void RecordWorktreeContainment(
+        TaskInfo info,
+        PipelineStepStatus status,
+        string verdict,
+        string summary)
+    {
+        if (_pipelineLog == null) return;
+        try
+        {
+            var now = DateTime.UtcNow;
+            _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+            {
+                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.WorktreeContainmentStepId,
+                Kind = StepKind.Tool,
+                Status = status,
+                StartedAt = now,
+                CompletedAt = now,
+                Verdict = verdict,
+                VerdictSummary = summary,
+                Reason = summary,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to record worktree-containment step for {JobId}", info.Id);
         }
     }
 
@@ -923,30 +979,6 @@ public class ProjectRunner
                     jobId, runModel ?? "<task-default>", runThinkingLevel ?? "<model-default>");
             }
 
-            var prompt = RenderPrompt(plan, info);
-
-            // Reissue open-items pre-check (deterministic pre-pipeline step):
-            // when this run is an auto-review re-issue that still carries open
-            // items from the previous run, foreground those items at the head of
-            // the run prompt so the rerun resolves them first instead of
-            // restarting blind. Gated to fresh-start reruns (no user follow-up,
-            // not an epic planning run); the pure ReissueOpenItemsPreCheck owns
-            // the detection. The pipeline-step recording lands after spawn,
-            // alongside the loop guard.
-            ReissueOpenItemsPreCheck.PreCheckDecision? reissueOpenItems = null;
-            if (!isEpicPlanningRun && string.IsNullOrWhiteSpace(followupPrompt))
-            {
-                reissueOpenItems = EvaluateReissueOpenItems(info);
-                if (reissueOpenItems.Intervenes && reissueOpenItems.ForegroundBlock != null)
-                {
-                    prompt = reissueOpenItems.ForegroundBlock + prompt;
-                    var interventionKind = reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
-                        ? OrchestratorMessageKind.Steer
-                        : OrchestratorMessageKind.SoftIntervention;
-                    _chatLog.Append(info, interventionKind, $"[reissue-open-items] {reissueOpenItems.Note}");
-                }
-            }
-
             // Disk-backed pickup lock (ADR-0044). When the lock is configured
             // and an attempt to acquire it shows a foreign live owner, refuse
             // to spawn: another backend on the same workspace is already on
@@ -1048,6 +1080,32 @@ public class ProjectRunner
             // path and hiding shared-checkout fallbacks in the log.)
             var runWorkingDir = _activeRuns.Get(jobId)?.WorktreePath ?? Entry.RootPath;
             _logger.LogInformation("[taskboard] using working directory {Path}", runWorkingDir);
+            if (_activeRuns.Get(jobId) is { IsWorktreeRun: true } worktreeRun)
+                worktreeRun.MainCheckoutStatusBefore = _git.GetPorcelainStatus(Entry.RootPath);
+
+            var prompt = RenderPrompt(plan, info, runWorkingDir);
+
+            // Reissue open-items pre-check (deterministic pre-pipeline step):
+            // when this run is an auto-review re-issue that still carries open
+            // items from the previous run, foreground those items at the head of
+            // the run prompt so the rerun resolves them first instead of
+            // restarting blind. Gated to fresh-start reruns (no user follow-up,
+            // not an epic planning run); the pure ReissueOpenItemsPreCheck owns
+            // the detection. The pipeline-step recording lands after spawn,
+            // alongside the loop guard.
+            ReissueOpenItemsPreCheck.PreCheckDecision? reissueOpenItems = null;
+            if (!isEpicPlanningRun && string.IsNullOrWhiteSpace(followupPrompt))
+            {
+                reissueOpenItems = EvaluateReissueOpenItems(info);
+                if (reissueOpenItems.Intervenes && reissueOpenItems.ForegroundBlock != null)
+                {
+                    prompt = reissueOpenItems.ForegroundBlock + prompt;
+                    var interventionKind = reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
+                        ? OrchestratorMessageKind.Steer
+                        : OrchestratorMessageKind.SoftIntervention;
+                    _chatLog.Append(info, interventionKind, $"[reissue-open-items] {reissueOpenItems.Note}");
+                }
+            }
 
             if (plan.ClearStaleSessionName)
                 _sessions.SetJobSessionName(jobId, null, Entry.Path);
@@ -4195,25 +4253,56 @@ public class ProjectRunner
         _activeRuns.TryClaim(new ActiveRun { JobId = jobId, CliType = cliType });
     }
 
-    private string RenderPrompt(RunPlan plan, TaskInfo info)
+    private string RenderPrompt(RunPlan plan, TaskInfo info, string runWorkingDir)
     {
-        if (plan.PromptOverride != null) return plan.PromptOverride;
+        if (plan.PromptOverride != null) return RewriteMainCheckoutPathsForRun(plan.PromptOverride, runWorkingDir);
         if (string.IsNullOrWhiteSpace(plan.PromptTemplate))
             throw new InvalidOperationException("Run plan has neither a prompt template nor a prompt override.");
 
         var promptPath = Path.Combine(info.FolderPath, "prompt.md");
+        var repositoryPath = string.IsNullOrWhiteSpace(Entry.RepositoryPath) ? Entry.RootPath : Entry.RepositoryPath;
+        var effectiveRepositoryPath = IsWorktreePath(runWorkingDir) ? runWorkingDir : repositoryPath;
         var values = new Dictionary<string, string?>(plan.PromptVariables)
         {
             ["prompt_path"] = promptPath,
-            ["prompt_text"] = ReadPromptText(promptPath),
+            ["prompt_text"] = RewriteMainCheckoutPathsForRun(ReadPromptText(promptPath), runWorkingDir),
             ["job_folder"] = info.FolderPath,
             ["title"] = string.IsNullOrWhiteSpace(info.Title) ? "(untitled)" : info.Title,
-            ["working_directory"] = Entry.RootPath,
-            ["repository_path"] = string.IsNullOrWhiteSpace(Entry.RepositoryPath) ? Entry.RootPath : Entry.RepositoryPath,
+            ["working_directory"] = runWorkingDir,
+            ["repository_path"] = effectiveRepositoryPath,
             ["attachments_list"] = BuildAttachmentsList(info.FolderPath),
             ["mode_framing"] = _prompts.RenderModeFraming(info.Mode, info.AllowWebAccess)
         };
-        return _prompts.Render(plan.PromptTemplate, values);
+        var rendered = _prompts.Render(plan.PromptTemplate, values);
+        rendered = RewriteMainCheckoutPathsForRun(rendered, runWorkingDir);
+        return IsWorktreePath(runWorkingDir)
+            ? BuildWorktreeContainmentNotice(runWorkingDir) + rendered
+            : rendered;
+    }
+
+    private bool IsWorktreePath(string? path)
+        => !string.IsNullOrWhiteSpace(path)
+           && !string.Equals(NormalizePath(path), NormalizePath(Entry.RootPath), StringComparison.OrdinalIgnoreCase);
+
+    private string RewriteMainCheckoutPathsForRun(string text, string runWorkingDir)
+    {
+        if (string.IsNullOrEmpty(text) || !IsWorktreePath(runWorkingDir)) return text;
+
+        var result = text.Replace(Entry.RootPath, runWorkingDir, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(Entry.RepositoryPath))
+            result = result.Replace(Entry.RepositoryPath, runWorkingDir, StringComparison.OrdinalIgnoreCase);
+        return result;
+    }
+
+    private string BuildWorktreeContainmentNotice(string runWorkingDir)
+        => "## Worktree containment\n\n"
+         + $"Your repository checkout for this run is `{runWorkingDir}`. Do all file edits, reads, builds, tests, and git commands in that worktree. "
+         + $"The main checkout `{Entry.RootPath}` is shared by other slots and is off limits for this run; do not edit it, build from it, test from it, or pass it to tools.\n\n";
+
+    private static string NormalizePath(string path)
+    {
+        try { return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar); }
+        catch { return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar); }
     }
 
     private static string ReadPromptText(string promptPath)

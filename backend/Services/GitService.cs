@@ -526,6 +526,25 @@ public class GitService
         return output.Split('\n').Any(l => !string.IsNullOrWhiteSpace(l));
     }
 
+    /// <summary>
+    /// Stable porcelain status snapshot for containment checks. Returns null on
+    /// git failure so callers can fail open for observability-only guards.
+    /// </summary>
+    public string? GetPorcelainStatus(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        var (output, _, code) = RunGit(repoRoot, "status --porcelain=v1");
+        return code == 0 ? NormalizePorcelainStatus(output) : null;
+    }
+
+    private static string NormalizePorcelainStatus(string output)
+        => string.Join("\n",
+            (output ?? string.Empty)
+                .Split('\n')
+                .Select(l => l.TrimEnd('\r'))
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .OrderBy(l => l, StringComparer.Ordinal));
+
     public GitStatusResult GetStatus(string jobId, string? watchPath)
     {
         var configured = ResolveRepoRoot(jobId, watchPath);

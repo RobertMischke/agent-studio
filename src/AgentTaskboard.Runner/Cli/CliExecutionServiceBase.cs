@@ -722,6 +722,12 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     private void CheckEnvironmentBlocker(string jobKey, ProcInfo info, CliOutputLine rawLine)
     {
         if (info.EnvironmentBlockerTripped) return;
+        if (AgentEnvironmentDetector.IsRecoverySignal(rawLine.Text))
+        {
+            info.EnvironmentBlockerHitCount = 0;
+            return;
+        }
+
         AgentEnvironmentDetector.EnvironmentBlockerPattern? match;
         // MatchRuntimeBlocker (not Match) so an agent that greps/reads blocker
         // strings into its own command_execution / tool-result output cannot
