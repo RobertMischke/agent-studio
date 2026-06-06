@@ -1,0 +1,85 @@
+@if (manager.onboardProjectOpen()) {
+  <app-dialog
+    eyebrow="Project"
+    title="New project"
+    subtitle="The backend chooses the storage folder."
+    kind="primary"
+    testid="onboard-project-dialog"
+    (closeRequest)="onCancel()"
+    (backdropClick)="onCancel()">
+    <div class="opd__form">
+      <label class="opd__field">
+        <span class="opd__label">Workspace</span>
+        <select class="opd__input"
+                data-testid="onboard-project-workspace"
+                [ngModel]="workspaceId()"
+                (ngModelChange)="workspaceId.set($event)">
+          @for (ws of registryWorkspaces(); track ws.id) {
+            <option [value]="ws.id">{{ ws.displayName }}</option>
+          }
+        </select>
+      </label>
+      <label class="opd__field">
+        <span class="opd__label">Display Name</span>
+        <input #nameInput class="opd__input" type="text"
+               data-testid="onboard-project-display-name"
+               [ngModel]="displayName()"
+               (ngModelChange)="onNameChange($event)" />
+      </label>
+      <label class="opd__field">
+        <span class="opd__label">Short Code</span>
+        <input class="opd__input" type="text" maxlength="6"
+               data-testid="onboard-project-short-code"
+               [ngModel]="shortCode()"
+               (ngModelChange)="onCodeChange($event)" />
+      </label>
+      <label class="opd__field">
+        <span class="opd__label">CLI Default</span>
+        <select class="opd__input"
+                data-testid="onboard-project-cli"
+                [ngModel]="cliDefault()"
+                (ngModelChange)="cliDefault.set($event)">
+          @for (cli of cliTypes; track cli) {
+            <option [value]="cli">{{ cli }}</option>
+          }
+        </select>
+      </label>
+      <label class="opd__field">
+        <span class="opd__label">Model Default</span>
+        <select class="opd__input"
+                data-testid="onboard-project-model"
+                [ngModel]="modelDefault()"
+                (ngModelChange)="modelDefault.set($event)">
+          @for (model of models(); track model.id) {
+            <option [value]="model.id">{{ model.label || model.id }}</option>
+          }
+        </select>
+      </label>
+      <div class="opd__field">
+        <span class="opd__label">Color</span>
+        <div class="opd__swatches" data-testid="onboard-project-color">
+          @for (swatch of swatches; track swatch) {
+            <button type="button"
+                    class="opd__swatch"
+                    [class.opd__swatch--selected]="color() === swatch"
+                    [style.background]="swatch"
+                    [attr.aria-label]="'Use color ' + swatch"
+                    (click)="color.set(swatch)"></button>
+          }
+        </div>
+      </div>
+      <div class="opd__preview" data-testid="onboard-project-preview">
+        Will create as {{ previewProjectId() }} in workspace "{{ currentWorkspaceName() }}".
+      </div>
+      @if (errorMsg(); as msg) {
+        <p class="opd__error" data-testid="onboard-project-error">{{ msg }}</p>
+      }
+    </div>
+    <div footer class="opd__actions">
+      <button type="button" class="opd__btn" data-testid="onboard-project-cancel" (click)="onCancel()">Cancel</button>
+      <button type="button" class="opd__btn opd__btn--primary" data-testid="onboard-project-submit" [disabled]="!canSubmit()" (click)="onSubmit()">
+        {{ submitting() ? 'Creating...' : 'Create project' }}
+      </button>
+    </div>
+  </app-dialog>
+}

@@ -78,6 +78,7 @@ export interface TaskInfo {
   id: string;
   taskKey: string;
   key?: string | null;
+  displayKey?: string | null;
   title: string;
   state: string;
   order: number;
@@ -682,6 +683,15 @@ export interface RegistryProjectSummary {
   storageLocation: string;
   archived: boolean;
   createdAt: string;
+}
+
+export interface CreateRegistryProjectRequest {
+  workspaceId: string;
+  displayName: string;
+  shortCode?: string;
+  cliDefault?: CliType;
+  modelDefault?: string | null;
+  color?: string | null;
 }
 
 /**

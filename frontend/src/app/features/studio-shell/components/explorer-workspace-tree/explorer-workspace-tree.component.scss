@@ -52,3 +52,21 @@
   border-radius: 4px;
   outline: none;
 }
+
+.studio-explorer-tree__add-project {
+  width: calc(100% - var(--studio-spacing-4));
+  margin: var(--studio-spacing-1) var(--studio-spacing-2) var(--studio-spacing-2);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px dashed var(--studio-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-explorer-tree__add-project:hover,
+.studio-explorer-tree__add-project:focus-visible {
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+}

@@ -25,6 +25,8 @@ export class WorkspaceManagerService {
   private readonly jobService = inject(TaskService);
 
   readonly createOpen = signal(false);
+  readonly onboardProjectOpen = signal(false);
+  readonly onboardWorkspaceId = signal<string | null>(null);
   readonly knownNames = signal<readonly string[]>([]);
   readonly registryChanged = signal(0);
 
@@ -49,6 +51,17 @@ export class WorkspaceManagerService {
     this.createOpen.set(false);
   }
 
+  openProjectOnboard(workspaceId: string): void {
+    this.prime();
+    this.onboardWorkspaceId.set(workspaceId);
+    this.onboardProjectOpen.set(true);
+  }
+
+  closeProjectOnboard(): void {
+    this.onboardProjectOpen.set(false);
+    this.onboardWorkspaceId.set(null);
+  }
+
   /** Called by the dialog after a successful create. Bumps the
    *  registry-changed counter so the studio-shell reloads its tree,
    *  refreshes the known-names snapshot, and closes the dialog. */
@@ -57,6 +70,13 @@ export class WorkspaceManagerService {
     this.prime();
     this.jobService.refresh(true);
     this.createOpen.set(false);
+  }
+
+  refreshAfterProjectCreate(): void {
+    this.registryChanged.update(n => n + 1);
+    this.prime();
+    this.jobService.refresh(true);
+    this.closeProjectOnboard();
   }
 
   /** Mirrors `refreshAndClose` for the delete path: refresh the

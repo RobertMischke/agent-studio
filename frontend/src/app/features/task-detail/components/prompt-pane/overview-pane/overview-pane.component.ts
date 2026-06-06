@@ -1150,14 +1150,31 @@ export class OverviewPaneComponent {
 
   private buildStepTokenTooltip(label: string, cost: PipelineStepCost | null): StructuredTooltip | null {
     if (!cost || cost.totalTokens <= 0) return null;
+    const source = cost.tokenUsageSource?.trim();
+    const costLines = cost.modelKnown
+      ? [
+          `Input API price: ${this.formatCost(cost.inputCostUsd)}`,
+          `Output API price: ${this.formatCost(cost.outputCostUsd)}`,
+          `Cache read API price: ${this.formatCost(cost.cacheReadCostUsd)}`,
+          `Cache creation API price: ${this.formatCost(cost.cacheCreationCostUsd)}`,
+          `Total API price estimate: ${this.formatCost(cost.costUsd)}`,
+        ]
+      : [
+          `Model: ${cost.model ?? 'unknown'}`,
+          'No API price on file for this model.',
+        ];
     return {
       title: `${label} tokens`,
       body: [
+        ...(source ? [`Source: ${source}`] : []),
         `Input: ${this.formatTokens(cost.inputTokens)}`,
         `Output: ${this.formatTokens(cost.outputTokens)}`,
         `Cache read: ${this.formatTokens(cost.cacheReadTokens)}`,
         `Cache creation: ${this.formatTokens(cost.cacheCreationTokens)}`,
         `Total: ${this.formatTokens(cost.totalTokens)}`,
+        '',
+        ...costLines,
+        API_PRICE_DISCLAIMER,
       ].join('\n'),
     };
   }
@@ -1185,15 +1202,27 @@ export class OverviewPaneComponent {
 
   private buildTotalTokenTooltip(cost: PipelineCostSummary): StructuredTooltip | null {
     if (cost.totalTokens <= 0) return null;
+    const lines = [
+      'Source: SUM of pipeline steps',
+      `Input: ${this.formatTokens(cost.totalInputTokens)}`,
+      `Output: ${this.formatTokens(cost.totalOutputTokens)}`,
+      `Cache read: ${this.formatTokens(cost.totalCacheReadTokens)}`,
+      `Cache creation: ${this.formatTokens(cost.totalCacheCreationTokens)}`,
+      `Total: ${this.formatTokens(cost.totalTokens)}`,
+      '',
+      `Input API price: ${this.formatCost(cost.totalInputCostUsd)}`,
+      `Output API price: ${this.formatCost(cost.totalOutputCostUsd)}`,
+      `Cache read API price: ${this.formatCost(cost.totalCacheReadCostUsd)}`,
+      `Cache creation API price: ${this.formatCost(cost.totalCacheCreationCostUsd)}`,
+      `Total API price estimate: ${this.formatCost(cost.totalCostUsd)}`,
+    ];
+    if (cost.anyModelUnknown) {
+      lines.push('One or more steps used a model with no price on file; the total excludes them.');
+    }
+    lines.push(API_PRICE_DISCLAIMER);
     return {
-      title: 'Task total tokens',
-      body: [
-        `Input: ${this.formatTokens(cost.totalInputTokens)}`,
-        `Output: ${this.formatTokens(cost.totalOutputTokens)}`,
-        `Cache read: ${this.formatTokens(cost.totalCacheReadTokens)}`,
-        `Cache creation: ${this.formatTokens(cost.totalCacheCreationTokens)}`,
-        `Total: ${this.formatTokens(cost.totalTokens)}`,
-      ].join('\n'),
+      title: 'Task total tokens (SUM)',
+      body: lines.join('\n'),
     };
   }
 

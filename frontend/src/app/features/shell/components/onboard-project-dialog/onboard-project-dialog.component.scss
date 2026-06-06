@@ -1,0 +1,76 @@
+.opd__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--studio-spacing-3);
+  min-width: min(640px, 80vw);
+}
+
+.opd__field {
+  display: grid;
+  gap: var(--studio-spacing-1);
+}
+
+.opd__label {
+  color: var(--studio-fg-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.opd__input {
+  min-height: 32px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-surface);
+  color: var(--studio-fg);
+  padding: 0 var(--studio-spacing-2);
+}
+
+.opd__swatches {
+  display: flex;
+  gap: var(--studio-spacing-1);
+}
+
+.opd__swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.opd__swatch--selected {
+  border-color: var(--studio-fg);
+}
+
+.opd__preview,
+.opd__error {
+  grid-column: 1 / -1;
+  padding: var(--studio-spacing-2);
+  border-radius: 6px;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-muted);
+}
+
+.opd__error {
+  color: var(--studio-accent-6-strong);
+}
+
+.opd__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--studio-spacing-2);
+}
+
+.opd__btn {
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-surface);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+}
+
+.opd__btn--primary {
+  background: var(--studio-accent);
+  color: var(--studio-on-accent);
+  border-color: var(--studio-accent);
+}

@@ -18,6 +18,8 @@ import type {
   ContinueTaskResponse,
   ProjectSnapshot,
   PromoteToCodingResponse,
+  CreateRegistryProjectRequest,
+  RegistryProjectSummary,
 } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
@@ -503,6 +505,11 @@ export class TaskService {
     archived?: boolean;
   }) {
     return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projId)}`, patch);
+  }
+
+  /** F46 — create a registry project. Backend chooses projects/PROJ-NNN; no path is accepted from the UI. */
+  createRegistryProject(body: CreateRegistryProjectRequest) {
+    return this.http.post<RegistryProjectSummary>(`${this.baseUrl}/projects`, body);
   }
 
   /**

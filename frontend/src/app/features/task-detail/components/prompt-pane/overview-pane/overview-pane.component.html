@@ -382,15 +382,17 @@
                     data-testid="overview-pipeline-step-duration">{{ formatStepDuration(liveStepDurationMs(row)) }}</span>
             </span>
             <span class="ov-pl-step__tokens ov-value--mono"
-                  data-testid="overview-pipeline-step-tokens">
+                  data-testid="overview-pipeline-step-tokens"
+                  [appTooltip]="row.tokenTooltip">
               {{ row.totalTokens > 0 ? formatTokens(row.totalTokens) : '—' }}
             </span>
             <span class="ov-pl-step__cost ov-value--mono"
-                  data-testid="overview-pipeline-step-cost">
+                  data-testid="overview-pipeline-step-cost"
+                  [appTooltip]="row.costTooltip">
               @if (row.totalTokens <= 0) {
                 —
               } @else if (!row.costKnown) {
-                <span class="ov-dim" [appTooltip]="'No price on file for this model'">n/a</span>
+                <span class="ov-dim">n/a</span>
               } @else {
                 {{ formatCost(row.costUsd) }}
               }
@@ -422,13 +424,15 @@
 
       @if (pipelineTotal(); as total) {
         <div class="ov-pl-total" data-testid="overview-pipeline-total">
-          <span class="ov-pl-total__label">Task total</span>
+          <span class="ov-pl-total__label">Task total <span class="ov-dim">SUM</span></span>
           <span class="ov-pl-total__tokens ov-value--mono ov-value--strong"
-                data-testid="overview-pipeline-total-tokens">
+                data-testid="overview-pipeline-total-tokens"
+                [appTooltip]="total.tokenTooltip">
             {{ formatTokens(total.totalTokens) }}
           </span>
           <span class="ov-pl-total__cost ov-value--mono ov-value--strong"
-                data-testid="overview-pipeline-total-cost">
+                data-testid="overview-pipeline-total-cost"
+                [appTooltip]="total.costTooltip">
             {{ formatCost(total.totalCostUsd) }}
             @if (total.anyModelUnknown) {
               <span class="ov-dim"

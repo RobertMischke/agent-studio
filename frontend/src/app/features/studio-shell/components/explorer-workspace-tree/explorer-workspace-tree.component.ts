@@ -103,6 +103,8 @@ export class ExplorerWorkspaceTreeComponent {
   readonly openBacklogRequest = output<string>();
   /** Project-scoped epic overview open for the named project (ASS-658). */
   readonly openEpicsRequest = output<string>();
+  /** Open the project onboarding modal preselected to this workspace. */
+  readonly onboardProjectRequest = output<string>();
   /** Project row dropped onto a different real workspace; the shell PUTs
    *  /api/projects/{projectId} `{ workspaceId }` and reloads (no folder move). */
   readonly projectDrop = output<{ projectId: string; targetWorkspaceId: string }>();

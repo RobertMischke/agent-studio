@@ -35,6 +35,7 @@ import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
 import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
+import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { ExplorerWorkspaceTreeComponent } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
@@ -132,6 +133,7 @@ export class StudioShellComponent {
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly workspaceManager = inject(WorkspaceManagerService);
+  private readonly projectLookup = inject(ProjectLookupService);
   readonly wsSettings = inject(WorkspaceSettingsService);
 
   /** Tab list + active selection re-exposed for the template. */
@@ -359,6 +361,7 @@ export class StudioShellComponent {
     this.jobService.getRegistryWorkspaces({ includeArchived: this.showArchivedProjects() }).subscribe({
       next: (ws) => {
         this.registryWorkspaces.set(ws ?? []);
+        this.projectLookup.setWorkspaces(ws ?? []);
         this.registryWorkspacesLoading.set(false);
       },
       error: (err: unknown) => {
@@ -1099,6 +1102,10 @@ export class StudioShellComponent {
    */
   onAddWorkspace(): void {
     this.workspaceManager.openCreate();
+  }
+
+  onAddProjectToWorkspace(workspaceId: string): void {
+    this.workspaceManager.openProjectOnboard(workspaceId);
   }
 
   /** Forces a fresh /api/tasks/grouped pull so the Explorer re-counts. */

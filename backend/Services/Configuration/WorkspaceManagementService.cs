@@ -305,6 +305,75 @@ public sealed class WorkspaceManagementService
             match ?? new WatchPathEntry { Name = "", Path = target, RootPath = "" });
     }
 
+    /// <summary>
+    /// F46 — add a WatchPaths entry for a newly-created registry project.
+    /// The registry owns the stable PROJ id and display metadata; this helper
+    /// only materialises the storage folder and makes the project visible to
+    /// the existing scanner until all consumers are registry-native.
+    /// </summary>
+    public WorkspaceManagementResult CreateProjectStorage(string displayName, string projectId)
+    {
+        var name = (displayName ?? "").Trim();
+        var id = (projectId ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name)) return WorkspaceManagementResult.BadRequest("displayName is required.");
+        if (string.IsNullOrWhiteSpace(id)) return WorkspaceManagementResult.BadRequest("projectId is required.");
+
+        var taskRepository = _configuration["TaskRepository"];
+        if (string.IsNullOrWhiteSpace(taskRepository))
+        {
+            return WorkspaceManagementResult.BadRequest(
+                "TaskRepository is not configured; cannot create a new project.");
+        }
+
+        var resolvedPath = Path.GetFullPath(Path.Combine(taskRepository, "projects", id));
+        if (_scanner.GetWatchPaths().Any(e =>
+                string.Equals(NormalizePath(e.Path), NormalizePath(resolvedPath), StringComparison.OrdinalIgnoreCase)))
+        {
+            return WorkspaceManagementResult.Conflict(
+                $"A project already maps to the folder '{resolvedPath}'.");
+        }
+
+        try
+        {
+            Directory.CreateDirectory(resolvedPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "project-storage-create-failed id={Id} path={Path}", id, resolvedPath);
+            return WorkspaceManagementResult.BadRequest(
+                $"Could not create project folder: {ex.Message}");
+        }
+
+        var entry = new WatchPathEntry
+        {
+            Name = name,
+            Path = resolvedPath,
+            RootPath = "",
+            RepositoryPath = "",
+        };
+
+        lock (FileLock)
+        {
+            var root = ReadOrCreateRoot();
+            var array = (root["WatchPaths"] as JsonArray) ?? new JsonArray();
+            array.Add(new JsonObject
+            {
+                ["Name"] = name,
+                ["Path"] = resolvedPath,
+            });
+            root["WatchPaths"] = array;
+            WriteAtomic(root);
+            ReloadConfiguration();
+        }
+
+        _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        _logger.LogInformation(
+            "project-storage-created id={Id} displayName={DisplayName} path={Path}",
+            id, name, resolvedPath);
+
+        return WorkspaceManagementResult.Created(entry);
+    }
+
     private static string NormalizePath(string? p) =>
         string.IsNullOrWhiteSpace(p) ? "" : p.Replace('\\', '/').TrimEnd('/').ToLowerInvariant();
 

@@ -132,6 +132,63 @@ public static class RegistryEndpoints
 
         // ----- F45b project mutations (ADR-0042) -----
 
+        app.MapPost("/api/projects", (RegistryCreateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces, WorkspaceManagementService workspaceManagement, ILoggerFactory loggerFactory) =>
+        {
+            if (body == null || string.IsNullOrWhiteSpace(body.DisplayName))
+                return Results.BadRequest(new { error = "displayName is required" });
+            if (string.IsNullOrWhiteSpace(body.WorkspaceId))
+                return Results.BadRequest(new { error = "workspaceId is required" });
+            if (workspaces.Find(body.WorkspaceId) == null)
+                return Results.NotFound(new { error = $"Unknown workspaceId '{body.WorkspaceId}'" });
+
+            var displayName = body.DisplayName.Trim();
+            var allProjects = projects.List();
+            var existingCodes = allProjects.Select(p => p.ShortCode);
+            var shortCode = string.IsNullOrWhiteSpace(body.ShortCode)
+                ? ShortCodeGenerator.Derive(displayName, existingCodes)
+                : body.ShortCode.Trim().ToUpperInvariant();
+            if (!ShortCodeGenerator.ValidateFormat(shortCode))
+                return Results.BadRequest(new { error = "shortCode must be 2-6 chars, start with A-Z, and use A-Z or 0-9" });
+            if (allProjects.Any(p => string.Equals(p.ShortCode, shortCode, StringComparison.OrdinalIgnoreCase)))
+                return Results.Conflict(new { error = $"shortCode '{shortCode}' is already used." });
+
+            var id = projects.AllocateNextId();
+            var storage = workspaceManagement.CreateProjectStorage(displayName, id);
+            if (storage.Outcome == WorkspaceManagementOutcome.BadRequest)
+                return Results.BadRequest(new { error = storage.Error });
+            if (storage.Outcome == WorkspaceManagementOutcome.Conflict)
+                return Results.Conflict(new { error = storage.Error });
+
+            var record = new ProjectRecord
+            {
+                Id = id,
+                DisplayName = displayName,
+                ShortCode = shortCode,
+                WorkspaceId = body.WorkspaceId.Trim(),
+                Color = string.IsNullOrWhiteSpace(body.Color) ? null : body.Color.Trim(),
+                CliDefault = string.IsNullOrWhiteSpace(body.CliDefault) ? null : body.CliDefault.Trim(),
+                ModelDefault = string.IsNullOrWhiteSpace(body.ModelDefault) ? null : body.ModelDefault.Trim(),
+                SortOrder = allProjects.Count,
+                NextTaskKeySeq = 1,
+                StorageLocation = storage.Entry?.Path ?? "",
+                Archived = false,
+                CreatedAt = DateTime.UtcNow,
+            };
+
+            try
+            {
+                var created = projects.Append(record);
+                loggerFactory.CreateLogger("ProjectCreate").LogInformation(
+                    "project-created id={Id} workspaceId={WorkspaceId} storage={Storage}",
+                    created.Id, created.WorkspaceId, created.StorageLocation);
+                return Results.Created($"/api/projects/{created.Id}", ProjectSummary.From(created));
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         app.MapPut(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}", (string projId, UpdateProjectRequest body, ProjectRegistry projects, WorkspaceRegistry workspaces) =>
         {
             if (body == null) return Results.BadRequest(new { error = "body required" });
@@ -220,6 +277,17 @@ public sealed record WorkspaceReorderRequest
 {
     /// <summary>-1 = move up one slot; +1 = move down one slot.</summary>
     public int Direction { get; init; }
+}
+
+/// <summary>F46 — POST /api/projects payload.</summary>
+public sealed record RegistryCreateProjectRequest
+{
+    public string WorkspaceId { get; init; } = "";
+    public string DisplayName { get; init; } = "";
+    public string? ShortCode { get; init; }
+    public string? CliDefault { get; init; }
+    public string? ModelDefault { get; init; }
+    public string? Color { get; init; }
 }
 
 /// <summary>

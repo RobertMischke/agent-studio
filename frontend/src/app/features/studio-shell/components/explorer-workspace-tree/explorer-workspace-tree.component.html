@@ -147,6 +147,14 @@
             }
           </div>
         }
+        @if (g.id !== '__all__' && g.id !== '__unassigned__') {
+          <button type="button"
+                  class="studio-explorer-tree__add-project"
+                  [attr.data-testid]="'studio-workspace-' + g.id + '-add-project'"
+                  (click)="onboardProjectRequest.emit(g.id)">
+            + New project
+          </button>
+        }
       }
       </div>
     }

@@ -351,6 +351,78 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.formatCost(1.5)).toBe('$1.50');
   });
 
+  it('pipeline block: CORE CLI-footer tokens render with source, API-price tooltip, run count, and SUM footer', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('claude-opus-4-8');
+    pipe.execution!.steps[0] = {
+      ...pipe.execution!.steps[0],
+      status: 'passed',
+      durationMs: 125_000,
+      inputTokens: 2_500,
+      outputTokens: 195_600,
+      cacheReadTokens: 18_500_000,
+      cacheCreationTokens: 1_000_000,
+      tokenUsageSource: 'AGENT (CLI FOOTER) / reported',
+    };
+    pipe.cost = emptyCost({
+      steps: [
+        stepCost({
+          stepId: 'core-agent-run',
+          kind: 'core',
+          model: 'claude-opus-4-8',
+          tokenUsageSource: 'AGENT (CLI FOOTER) / reported',
+          modelKnown: true,
+          inputTokens: 2_500,
+          outputTokens: 195_600,
+          cacheReadTokens: 18_500_000,
+          cacheCreationTokens: 1_000_000,
+          totalTokens: 19_698_100,
+          inputCostUsd: 0.0125,
+          outputCostUsd: 4.89,
+          cacheReadCostUsd: 9.25,
+          cacheCreationCostUsd: 6.25,
+          costUsd: 20.4025,
+        }),
+      ],
+      totalInputTokens: 2_500,
+      totalOutputTokens: 195_600,
+      totalCacheReadTokens: 18_500_000,
+      totalCacheCreationTokens: 1_000_000,
+      totalTokens: 19_698_100,
+      totalInputCostUsd: 0.0125,
+      totalOutputCostUsd: 4.89,
+      totalCacheReadCostUsd: 9.25,
+      totalCacheCreationCostUsd: 6.25,
+      totalCostUsd: 20.4025,
+    });
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    TestBed.inject(RunTimelinePollService).timeline.set(
+      runTimeline(8, [runRecord({ durationSeconds: 10 })]),
+    );
+
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    const core = c.pipelineRows().find(r => r.id === 'core-agent-run')!;
+    expect(core.totalTokens).toBe(19_698_100);
+    expect(core.tokenUsageSource).toBe('AGENT (CLI FOOTER) / reported');
+    expect(core.tokenTooltip?.body).toContain('Source: AGENT (CLI FOOTER) / reported');
+    expect(core.tokenTooltip?.body).toContain('Input: 2.5k');
+    expect(core.tokenTooltip?.body).toContain('Output: 195.6k');
+    expect(core.tokenTooltip?.body).toContain('Cache read: 18.50M');
+    expect(core.tokenTooltip?.body).toContain('Cache creation: 1.00M');
+    expect(core.tokenTooltip?.body).toContain('Total API price estimate: $20.40');
+    expect(core.tokenTooltip?.body).toContain('Actual CLI billing uses the subscription or plan');
+    expect(c.agentRunCountLabel()).toBe('8 runs');
+    expect(c.pipelineTotal()?.tokenTooltip?.title).toBe('Task total tokens (SUM)');
+    expect(c.pipelineTotal()?.tokenTooltip?.body).toContain('Source: SUM of pipeline steps');
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="overview-pipeline-step-tokens"]')?.textContent?.trim()).toBe('19.70M');
+    expect(el.querySelector('[data-testid="overview-pipeline-agent-runs"]')?.textContent?.trim()).toBe('8 runs');
+    expect(el.querySelector('.ov-pl-total__label')?.textContent).toContain('SUM');
+  });
+
   it('pipeline block: an in-flight execution row surfaces a running status the template can highlight', async () => {
     const fixture = await build(baseJob({ state: '3-progress' }));
     const pipe: TaskPipelineResponse = {
