@@ -1939,6 +1939,11 @@ public record SetPipelineStepRequest
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
 
+    /// <summary>Per-step prompt override (pipeline-admin: editable tool/LLM step
+    /// prompts). Null leaves the step's built-in prompt. Added to match the
+    /// endpoint that already reads <c>req.Prompt</c> (build break CS1061 otherwise).</summary>
+    public string? Prompt { get; init; }
+
     /// <summary>
     /// Run condition for this step (see <see cref="PipelineStepConditions"/>).
     /// Null leaves the condition on its built-in default; an
