@@ -901,31 +901,53 @@ export class App implements OnInit, OnDestroy {
     // it doesn't dereference jobDetailRef until invoked.
     this.triage.setClearActingCallback(() => this.jobDetailRef?.clearTriageActing());
 
-    // Studio-shell mirror: when a board tab is opened in the studio shell,
-    // sync the BoardFiltersService.activeProjects so the projected
-    // dashboard actually narrows to that project. Without this the
-    // titlebar pill (and explorer click) felt cosmetic — the lanes still
-    // showed all projects' jobs.
+    // Studio-shell mirror: keep BoardFiltersService.activeProjects in
+    // lock-step with the project the active tab is contextually "in" —
+    // for EVERY project-bound tab kind, not just boards. Without this the
+    // filter/count surfaces (filteredTaskCount, the filter panel, the
+    // projected lanes) kept the previous scope when the user opened a
+    // Hub / Backlog / Epics / Task tab, leaking foreign-project elements
+    // and an all-projects total (e.g. "193") while the breadcrumb named
+    // the selected project. setSoleProject is idempotent so repeated tab
+    // activations don't toggle the filter off.
     effect(() => {
       if (!this.featureFlags.vsCodeLayout()) return;
       const tab = this.studioTabState.activeTab();
       if (!tab) return;
+      // `null`  → workspace-wide ("All projects"): clear the project filter.
+      // string  → narrow to exactly that project.
+      // `undefined` → context unknown (diff/welcome, or a task whose job
+      //               hasn't loaded yet): leave the current scope untouched.
+      let project: string | null | undefined;
+      switch (tab.kind) {
+        case 'board':
+          project = tab.projectName === '__all__' ? null : tab.projectName;
+          break;
+        case 'hub':
+          project = tab.projectName;
+          break;
+        case 'backlog':
+        case 'epics':
+          project = tab.projectName;
+          break;
+        case 'task':
+        case 'activity':
+          project = this.jobService.jobs().find(j => j.taskKey === tab.taskKey)?.projectName ?? undefined;
+          break;
+        default:
+          project = undefined;
+      }
+      if (project === undefined) return;
       untracked(() => {
-        if (tab.kind === 'board') {
-          if (tab.projectName === '__all__') {
-            // Clear project filter for the "All projects" pill.
-            this.boardFilters.activeProjects.set(new Set<string>());
-            try {
-              localStorage.setItem('activeProjects', JSON.stringify([]));
-            } catch {
-              /* storage may be blocked */
-            }
-          } else {
-            // Idempotent set: only this project's jobs render in the lanes.
-            // Uses setSoleProject (not selectProject) so repeated tab
-            // activations don't toggle the filter off.
-            this.boardFilters.setSoleProject(tab.projectName);
+        if (project === null) {
+          this.boardFilters.activeProjects.set(new Set<string>());
+          try {
+            localStorage.setItem('activeProjects', JSON.stringify([]));
+          } catch {
+            /* storage may be blocked */
           }
+        } else {
+          this.boardFilters.setSoleProject(project);
         }
       });
     });
