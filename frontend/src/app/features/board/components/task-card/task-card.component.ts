@@ -43,6 +43,7 @@ import { MenuComponent, MenuItemClickEvent } from '../../../../components/menu';
 import { TokenPopoverDirective } from './token-popover.directive';
 import { NotificationService } from '../../../../services/notification.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
+import { stateLabel } from '../../../../services/format.util';
 import { BoardFiltersService } from '../../state/board-filters.service';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
