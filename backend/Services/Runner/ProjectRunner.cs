@@ -985,13 +985,20 @@ public class ProjectRunner
                 Plan = plan,
                 ReissueAttempt = reissueAttempt,
             });
-            // ADR-0052 slice 2: isolate parallel runs in a git worktree off the
-            // work branch so concurrent agents never share a checkout. The
-            // worktree is per-TASK, not per-run: a resume/reissue REUSES the
-            // existing task/<id> worktree+branch (PrepareOrReuse) rather than
-            // re-cutting it. Sequential (max==1) runs stay in Entry.RootPath,
-            // byte-identical to before (no worktree, no extra git).
-            if (SlotMax() > 1 && _activeRuns.Get(jobId) is { } claimed)
+            // ADR-0052 slice 2: isolate ADDITIONAL concurrent runs in a git
+            // worktree off the work branch so concurrent agents never share a
+            // checkout. Only the 2nd+ slot is isolated: the first/primary active
+            // run stays in Entry.RootPath because it may be a progress RESUME
+            // whose CLI session was created in the main checkout - resuming that
+            // session inside a fresh worktree leaves `claude --resume` unable to
+            // find it and the spawn hangs (observed: occ=1 phantom, no CLI start,
+            // 2nd slot never runs). `_activeRuns.Count` already includes this
+            // just-claimed run, so Count>1 means another run is already
+            // executing => this is a genuine additional slot. The worktree is
+            // per-TASK, not per-run: a resume/reissue REUSES the existing
+            // task/<id> worktree+branch (PrepareOrReuse). Sequential (max==1) and
+            // the primary slot stay in Entry.RootPath, byte-identical to before.
+            if (SlotMax() > 1 && _activeRuns.Count > 1 && _activeRuns.Get(jobId) is { } claimed)
             {
                 claimed.Parallelism = PredictParallelism(info);
                 var wtSettings = _projectSettings.Get(ProjectName);

@@ -145,6 +145,15 @@ public sealed class WorktreeTaskLifecycle
         }
 
         // 3) First run for this task -> fresh cut off the integration branch.
+        //    A stale dir at the canonical path (leftover from a crashed/partial
+        //    run whose branch was already pruned/deleted) makes `git worktree
+        //    add` fail with "already exists"; clear it so the fresh cut succeeds.
+        if (Directory.Exists(path))
+        {
+            _git.WorktreeRemove(repoRoot, path);
+            if (Directory.Exists(path))
+                try { Directory.Delete(path, recursive: true); } catch { /* best-effort */ }
+        }
         return Prepare(repoRoot, taskId, integrationBranch, worktreeRoot);
     }
 
