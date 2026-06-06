@@ -7,6 +7,7 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { ProjectDetailComponent } from '../project-detail/project-detail';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -56,6 +57,11 @@ export class ProjectSettingsPanelComponent implements OnInit {
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly quotaApi = inject(QuotaApiService);
   private readonly overlays = inject(WorkspaceOverlaysService);
+  private readonly http = inject(HttpClient);
+
+  /** ADR-0052: per-project max parallel coding slots (1 = sequential). */
+  readonly maxParallelism = signal<number>(1);
+  readonly parallelOptions = [1, 2, 3, 4];
 
   /** Global default agent, read-only — the value the orchestrator inherits. */
   readonly defaultCli = signal<CliType | null>(null);
@@ -109,6 +115,22 @@ export class ProjectSettingsPanelComponent implements OnInit {
       },
       error: () => { /* keep the default-cap fallback */ },
     });
+    this.http.get<Record<string, { maxParallelism?: number }>>('/api/projects/settings').subscribe({
+      next: (all) => {
+        const n = all?.[this.projectName()]?.maxParallelism;
+        if (typeof n === 'number' && n >= 1) this.maxParallelism.set(n);
+      },
+      error: () => { /* default 1 */ },
+    });
+  }
+
+  /** Persist the per-project max parallelism (ADR-0052; PUT /api/projects/{name}/max-parallelism). */
+  setMaxParallelism(n: number): void {
+    const v = Math.max(1, Math.floor(n || 1));
+    this.maxParallelism.set(v);
+    this.http
+      .put(`/api/projects/${encodeURIComponent(this.projectName())}/max-parallelism`, { maxParallelism: v })
+      .subscribe({ next: () => { /* applied live */ }, error: () => { /* surfaced on next load */ } });
   }
 
   private readStoredCli(): CliType | null {
