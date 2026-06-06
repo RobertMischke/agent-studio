@@ -84,12 +84,22 @@ function detailFor(task: ReturnType<typeof makeTask>) {
 }
 
 async function installRoutes(page: Page) {
+  // Playwright runs the LAST-registered matching handler first, so the
+  // broad catch-all must be installed BEFORE the specific routes below;
+  // otherwise it would swallow `/api/tasks/grouped` and the board renders
+  // empty (badge 0). Benign empty for anything the shell pings on boot.
+  await page.route('**/api/**', (route) => {
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
+  });
+
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED_PAYLOAD) }));
 
-  // Task-detail GET: `/api/tasks/<id>?watchPath=...`. Match before the bare
-  // `/api/tasks` list route below.
-  await page.route(/\/api\/tasks\/[^/?]+(\?|$)/, (route) => {
+  // Task-detail GET: `/api/tasks/<id>?watchPath=...`. The negative lookahead
+  // keeps this off `/api/tasks/grouped` - without it this later-registered
+  // route wins (Playwright runs the most-recently-added match first) and 404s
+  // the grouped feed, leaving the board empty (badge 0).
+  await page.route(/\/api\/tasks\/(?!grouped)[^/?]+(\?|$)/, (route) => {
     const url = new URL(route.request().url());
     const id = decodeURIComponent(url.pathname.split('/').pop() ?? '');
     const all = [...ALPHA_TASKS, ...BETA_TASKS];
@@ -144,21 +154,19 @@ async function installRoutes(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ at: '2026-06-03T07:00:00Z', ttlSeconds: 600, snapshots: [] }) }));
   await page.route('**/api/tags', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-
-  // Catch-all for any other /api call so nothing 404s into an error modal.
-  await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
-  });
 }
 
 async function gotoScopedBoard(page: Page): Promise<void> {
-  // Seed an "all projects" board tab + an ACTIVE alpha-only project filter so
-  // the Review badge is project-scoped from first paint.
+  // Seed an alpha-scoped board tab so the Review badge is project-scoped from
+  // first paint. The shell's tab->filter effect (app.ts) drives
+  // `activeProjects` off the active board tab: a `board:__all__` tab CLEARS the
+  // project filter, so scoping must come from a project board tab, not a
+  // seeded `activeProjects` value (which that effect would overwrite).
   await page.addInitScript(({ alpha }) => {
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
       v: 1,
-      tabs: [{ kind: 'board', projectName: '__all__' }],
-      activeKey: 'board:__all__',
+      tabs: [{ kind: 'board', projectName: alpha }],
+      activeKey: `board:${alpha}`,
     }));
     localStorage.setItem('activeProjects', JSON.stringify([alpha]));
   }, { alpha: ALPHA });
@@ -176,25 +184,33 @@ test.describe('Lane badge == pager total (project-scoped Review)', () => {
     // Badge: scoped to alpha → 3 (not the raw 5 across both projects).
     const badge = page.locator('[data-testid="lane-5-human-review"] .column__count');
     await expect(badge).toHaveText('3');
+    // Capture the badge count BEFORE opening the task: the studio shell swaps
+    // the board out for the task tab on open, so the lane column leaves the DOM.
+    const badgeText = (await badge.textContent())?.trim();
 
     // Open an alpha Review task → pager captures the SCOPED peers.
     await page.locator('[data-testid="lane-5-human-review"] app-job-card', { hasText: 'Alpha review one' })
       .first().click();
 
-    const pager = page.getByTestId('lane-pager-count');
+    // The studio-shell tab strip carries the visible pager; the legacy
+    // detail-header `lane-pager-count` is rendered but hidden in this layout.
+    // Both read the same LanePagerService total, so either proves the contract.
+    const pager = page.getByTestId('studio-task-pager-position');
     await expect(pager).toBeVisible({ timeout: 10_000 });
     // Single source of truth: pager total mirrors the badge.
     await expect(pager).toHaveText(/\/\s*3$/);
 
-    const badgeText = (await badge.textContent())?.trim();
     const pagerText = (await pager.textContent())?.trim();
     const pagerTotal = pagerText?.split('/').pop()?.trim();
     expect(pagerTotal).toBe(badgeText);
 
     // Visual evidence for review.
     await page.setViewportSize({ width: 1600, height: 1100 });
+    // Strip the dev overlay plus any benign error-dialog a 404'd sub-resource
+    // popped, so the evidence frame shows the scoped header (badge) and pager
+    // unobstructed.
     await page.evaluate(() => {
-      document.querySelectorAll('vite-error-overlay').forEach((n) => n.remove());
+      document.querySelectorAll('vite-error-overlay, app-error-dialog').forEach((n) => n.remove());
     });
     const resultsDir = process.env.JOB_RESULTS_DIR;
     if (resultsDir) {
