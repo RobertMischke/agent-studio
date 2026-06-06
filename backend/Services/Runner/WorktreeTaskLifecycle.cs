@@ -90,6 +90,65 @@ public sealed class WorktreeTaskLifecycle
     }
 
     /// <summary>
+    /// Pre-step variant that is <b>idempotent across resume / reissue</b>. A task's
+    /// worktree is owned by the TASK, not the run: the first run cuts a fresh
+    /// <c>task/&lt;id&gt;</c> branch + worktree (delegates to <see cref="Prepare"/>),
+    /// and every later run for the same task REUSES it. This is what stops a
+    /// <c>continue</c>/reissue from failing with "branch already exists" and then
+    /// falling back to the shared main checkout (the corruption bug ADR-0052 §3-§4
+    /// exists to prevent at <c>MaxParallelism &gt; 1</c>).
+    ///
+    /// <para>
+    /// Reuse order: (1) the branch is already checked out in a live worktree ->
+    /// reuse that path as-is; (2) the branch exists but is not checked out
+    /// anywhere -> attach it to the task's deterministic worktree path
+    /// (<see cref="GitService.WorktreeAddExisting"/>), preserving its commits;
+    /// (3) no branch yet -> fresh cut off <paramref name="integrationBranch"/>.
+    /// </para>
+    /// </summary>
+    public WorktreePreparation PrepareOrReuse(string repoRoot, string taskId, string integrationBranch, string worktreeRoot)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+            return new WorktreePreparation(false, null, null, "Task id is required.");
+        if (string.IsNullOrWhiteSpace(worktreeRoot))
+            return new WorktreePreparation(false, null, null, "Worktree root is required.");
+
+        var branch = BranchFor(taskId);
+        var path = Path.Combine(worktreeRoot, SanitizeId(taskId));
+
+        // Clear any dead registrations a crash left behind so a deterministic
+        // path can be reused rather than colliding with a stale admin entry.
+        _git.WorktreePrune(repoRoot);
+
+        // 1) Branch is live in a worktree already -> reuse it unchanged.
+        var live = _git.WorktreePathForBranch(repoRoot, branch);
+        if (!string.IsNullOrEmpty(live) && Directory.Exists(live))
+        {
+            _logger.LogInformation("Reusing live worktree for task {TaskId}: branch {Branch} at {Path}", taskId, branch, live);
+            return new WorktreePreparation(true, live, branch, null);
+        }
+
+        // 2) Branch exists but is detached from any worktree -> re-attach it.
+        if (_git.BranchExists(repoRoot, branch))
+        {
+            // A stale dir at the canonical path (registered-but-orphaned, or a
+            // leftover from a partial teardown) would block the attach; clear it.
+            if (Directory.Exists(path)) _git.WorktreeRemove(repoRoot, path);
+            var attach = _git.WorktreeAddExisting(repoRoot, path, branch);
+            if (attach.Success)
+            {
+                _logger.LogInformation("Re-attached worktree for task {TaskId}: existing branch {Branch} at {Path}", taskId, branch, attach.Path);
+                return new WorktreePreparation(true, attach.Path, branch, null);
+            }
+            _logger.LogWarning("Re-attach of existing branch {Branch} for task {TaskId} failed: {Error}", branch, taskId, attach.Error);
+            return new WorktreePreparation(false, null, branch, attach.Error);
+        }
+
+        // 3) First run for this task -> fresh cut off the integration branch.
+        return Prepare(repoRoot, taskId, integrationBranch, worktreeRoot);
+    }
+
+    /// <summary>
     /// Merge post-step: fold the finished <paramref name="taskBranch"/> back into
     /// <paramref name="integrationBranch"/> per <paramref name="strategy"/>.
     /// For <c>direct-merge</c>: rebase the worktree onto the integration tip, then
@@ -158,6 +217,40 @@ public sealed class WorktreeTaskLifecycle
         if (error != null)
             _logger.LogWarning("Worktree teardown for {Path} reported: {Error}", worktreePath, error);
         return new TeardownResult(error is null, error);
+    }
+
+    /// <summary>
+    /// Terminal cleanup for a task that is leaving the run loop (accepted into
+    /// review or escalated). Resolves the task's branch + worktree from disk (so
+    /// it works without an in-memory run record on resume) and tears them down
+    /// ONLY when the branch is already an ancestor of
+    /// <paramref name="integrationBranch"/> - i.e. fully folded in. Unmerged work
+    /// (a conflict left for resolution) is preserved, never force-dropped.
+    /// Idempotent + best-effort: a task that never ran in a worktree, or whose
+    /// branch is already gone, is a clean no-op. This is the deferred counterpart
+    /// to <see cref="Teardown"/>: the runner no longer tears down per run so a
+    /// resume/reissue can reuse the worktree (<see cref="PrepareOrReuse"/>).
+    /// </summary>
+    public TeardownResult TeardownIfIntegrated(string repoRoot, string taskId, string integrationBranch, string worktreeRoot)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+            return new TeardownResult(true, null);
+
+        var branch = BranchFor(taskId);
+        if (!_git.BranchExists(repoRoot, branch))
+            return new TeardownResult(true, null); // never isolated / already cleaned
+
+        if (!_git.IsAncestor(repoRoot, branch, integrationBranch))
+        {
+            _logger.LogInformation(
+                "Deferring teardown for task {TaskId}: branch {Branch} not yet merged into {Integration} (left for resolution)",
+                taskId, branch, integrationBranch);
+            return new TeardownResult(true, null);
+        }
+
+        var path = _git.WorktreePathForBranch(repoRoot, branch)
+                   ?? Path.Combine(worktreeRoot, SanitizeId(taskId));
+        return Teardown(repoRoot, path, branch, deleteBranch: true, force: true);
     }
 
     /// <summary>

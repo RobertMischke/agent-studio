@@ -728,9 +728,11 @@ public class ProjectRunner
 
     /// <summary>
     /// Post-run integration for a worktree (parallel-slot) run: commit the agent's
-    /// edits on the task branch, then under the per-project merge-queue lock merge
-    /// the branch into the work branch (develop). On clean merge, tear the worktree
-    /// down; on conflict, leave it for resolution (the post-run policy escalates).
+    /// edits onto the task branch, then under the per-project merge-queue lock
+    /// merge the branch into the work branch (develop). Teardown is DEFERRED to
+    /// <see cref="TeardownWorktreeForJob"/> at the terminal accept/escalate point
+    /// so a resume/reissue can reuse this worktree+branch (the worktree is owned
+    /// by the task, not the run). On conflict the branch is left for resolution.
     /// No-op for the sequential (max==1) path.
     /// </summary>
     private void IntegrateWorktreeRun(ActiveRun run, TaskInfo info)
@@ -741,37 +743,63 @@ public class ProjectRunner
         var strategy = string.IsNullOrWhiteSpace(settings.IntegrationStrategy) ? IntegrationStrategies.DirectMerge : settings.IntegrationStrategy!;
         try
         {
-            // 1) commit the agent's work inside the worktree (no-op if clean)
-            _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
+            // 1) commit the agent's work inside the worktree onto task/<id>
+            //    (no-op if clean). This is what guarantees the agent's edits land
+            //    on the task branch before the merge reads them - in a managed run
+            //    the agent itself does not commit, so without this the branch tip
+            //    stays at develop and Integrate would merge nothing.
+            var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
                 $"{info.Title}\n\n[parallel-slot worktree run; jobId={run.JobId}]");
-            // 2) serialize integration into the shared work branch (merge-queue)
+            if (commit.Success)
+                _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
+                    run.JobId, run.Branch, commit.Sha ?? "<unknown>");
+            // 2) serialize integration into the shared work branch (merge-queue).
+            //    Do NOT tear down here: the worktree survives for resume/reissue.
             _integrateLock.Wait();
             try
             {
                 var res = Worktree.Integrate(Entry.RootPath, run.WorktreePath!, run.Branch!, workBranch, strategy);
                 if (res.Outcome == IntegrationOutcome.Merged)
-                {
                     _logger.LogInformation("[taskboard] parallel run {Job} integrated into {Branch} at {Sha}",
                         run.JobId, workBranch, res.IntegratedSha ?? "<unknown>");
-                    Worktree.Teardown(Entry.RootPath, run.WorktreePath!, run.Branch, deleteBranch: true, force: true);
-                }
                 else if (res.Outcome == IntegrationOutcome.Conflict)
-                {
                     _logger.LogWarning("[taskboard] parallel run {Job} merge conflict into {Branch}: {Err} (left for resolution)",
                         run.JobId, workBranch, res.Error);
-                }
                 else
-                {
                     _logger.LogWarning("[taskboard] parallel run {Job} integration outcome {Outcome}: {Err}",
                         run.JobId, res.Outcome, res.Error);
-                    Worktree.Teardown(Entry.RootPath, run.WorktreePath!, run.Branch, deleteBranch: false, force: true);
-                }
             }
             finally { _integrateLock.Release(); }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[taskboard] worktree integration failed for {Job}", run.JobId);
+        }
+    }
+
+    /// <summary>
+    /// Terminal worktree cleanup: when a task leaves the run loop (accepted into
+    /// review or escalated to human review) tear down its task/&lt;id&gt; worktree
+    /// + branch - but only if the branch is already folded into the work branch,
+    /// so unresolved conflict work is never dropped (the gate lives in
+    /// <see cref="WorktreeTaskLifecycle.TeardownIfIntegrated"/>). Deferred here,
+    /// not per-run, so resume/reissue can reuse the worktree. Guarded to max&gt;1
+    /// so the sequential path issues no extra git and stays byte-identical.
+    /// </summary>
+    private void TeardownWorktreeForJob(string jobId)
+    {
+        if (SlotMax() <= 1) return;
+        try
+        {
+            var settings = _projectSettings.Get(ProjectName);
+            var workBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch) ? "develop" : settings.IntegrationBranch!;
+            var res = Worktree.TeardownIfIntegrated(Entry.RootPath, jobId, workBranch, WorktreeRoot());
+            if (!res.Success)
+                _logger.LogWarning("[taskboard] worktree teardown for {Job} reported: {Err}", jobId, res.Error);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[taskboard] worktree teardown failed for {Job}", jobId);
         }
     }
 
@@ -945,14 +973,17 @@ public class ProjectRunner
                 ReissueAttempt = reissueAttempt,
             });
             // ADR-0052 slice 2: isolate parallel runs in a git worktree off the
-            // work branch so concurrent agents never share a checkout. Sequential
-            // (max==1) runs stay in Entry.RootPath, byte-identical to before.
+            // work branch so concurrent agents never share a checkout. The
+            // worktree is per-TASK, not per-run: a resume/reissue REUSES the
+            // existing task/<id> worktree+branch (PrepareOrReuse) rather than
+            // re-cutting it. Sequential (max==1) runs stay in Entry.RootPath,
+            // byte-identical to before (no worktree, no extra git).
             if (SlotMax() > 1 && _activeRuns.Get(jobId) is { } claimed)
             {
                 claimed.Parallelism = PredictParallelism(info);
                 var wtSettings = _projectSettings.Get(ProjectName);
                 var workBranch = string.IsNullOrWhiteSpace(wtSettings.IntegrationBranch) ? "develop" : wtSettings.IntegrationBranch!;
-                var prep = Worktree.Prepare(Entry.RootPath, jobId, workBranch, WorktreeRoot());
+                var prep = Worktree.PrepareOrReuse(Entry.RootPath, jobId, workBranch, WorktreeRoot());
                 if (prep.Success)
                 {
                     claimed.WorktreePath = prep.WorktreePath;
@@ -961,7 +992,23 @@ public class ProjectRunner
                 }
                 else
                 {
-                    _logger.LogWarning("[taskboard] worktree prepare failed for {Job}: {Err} - running in main checkout", jobId, prep.Error);
+                    // NEVER fall back to the shared main checkout at max>1: two
+                    // tasks running in Entry.RootPath would overwrite each other
+                    // (the failure this fix exists to prevent). Release the slot
+                    // and serialize - the next auto-pickup tick retries once a
+                    // worktree can be prepared/reused.
+                    _logger.LogWarning(
+                        "[taskboard] worktree prepare/reuse failed for {Job}: {Err} - serializing (refusing shared main checkout at max>1)",
+                        jobId, prep.Error);
+                    _activeRuns.Release(jobId);
+                    ReleasePickupLockIfHeld();
+                    _mutations.RollbackStashedPendingIntent(info.FolderPath);
+                    NotifyStatus();
+                    return RunOutcome.Reject(new RunRejection(
+                        Reason: RunRejectReason.ProjectBusy,
+                        Message: $"Worktree isolation unavailable for '{jobId}' ({prep.Error}); deferring to keep parallel runs off the shared checkout.",
+                        BusyJobId: jobId,
+                        BusyJobTitle: info.Title));
                 }
             }
             NotifyStatus();
@@ -975,7 +1022,12 @@ public class ProjectRunner
                 "[taskboard] {Intent} for job {JobId} on {Cli}: kind={Kind} resume={Resume} session={Session} reason={Reason}",
                 intent, jobId, cli.CliType, plan.EventKind, plan.ResumeFlag,
                 plan.SessionToResume ?? "<none>", plan.EventReason ?? "<none>");
-            _logger.LogInformation("[taskboard] using working directory {Path}", Entry.RootPath);
+            // Log the ACTUAL working directory the CLI will run in: a parallel
+            // slot runs inside its isolated worktree, not the shared checkout.
+            // (Previously this always printed Entry.RootPath, masking the worktree
+            // path and hiding shared-checkout fallbacks in the log.)
+            var runWorkingDir = _activeRuns.Get(jobId)?.WorktreePath ?? Entry.RootPath;
+            _logger.LogInformation("[taskboard] using working directory {Path}", runWorkingDir);
 
             if (plan.ClearStaleSessionName)
                 _sessions.SetJobSessionName(jobId, null, Entry.Path);
@@ -1075,7 +1127,7 @@ public class ProjectRunner
             // a toggle take effect on the next run without a backend restart.
             var permissionMode = _projectSettings.ResolveCliMode(ProjectName, cli.CliType).Mode;
             var (execution, cliError) = await cli.StartAsync(
-                jobId, GetJobKey(jobId), prompt, (_activeRuns.Get(jobId)?.WorktreePath ?? Entry.RootPath),
+                jobId, GetJobKey(jobId), prompt, runWorkingDir,
                 plan.SessionToResume, plan.ResumeFlag, runModel, runThinkingLevel, info.FolderPath, permissionMode, ct);
 
             if (execution == null)
@@ -3295,6 +3347,9 @@ public class ProjectRunner
                     // any spent completion-loop budget so a future run starts
                     // fresh (mirrors the abort-review reset).
                     _completionRetriggerUsed.TryRemove(jobId, out _);
+                    // Terminal: tear down the parallel worktree+branch (kept only
+                    // if its work is unmerged, so a human can still resolve it).
+                    TeardownWorktreeForJob(jobId);
                     var move = await _humanReviewEscalation.EscalateAsync(
                         jobId, activeInfo.WatchPath, ProjectName,
                         ToEscalationCategory(action.IssueKind),
@@ -3377,6 +3432,9 @@ public class ProjectRunner
                     // so a future run starts fresh.
                     _abortReviewRerunsUsed.TryRemove(jobId, out _);
                     _completionRetriggerUsed.TryRemove(jobId, out _);
+                    // Terminal: the task left the loop into review, so tear down
+                    // its parallel worktree+branch (deferred from per-run).
+                    TeardownWorktreeForJob(jobId);
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
                     if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
                     // Fire-and-forget Haiku summary on successful completion.
@@ -3701,6 +3759,8 @@ public class ProjectRunner
                 var move = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, Entry.Path, CancellationToken.None);
                 if (move.Status == MoveJobStatus.Success)
                 {
+                    // Terminal accept: tear down the parallel worktree+branch.
+                    TeardownWorktreeForJob(jobId);
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);
                     if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
                 }

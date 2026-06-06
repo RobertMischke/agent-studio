@@ -1162,6 +1162,111 @@ public class GitService
     }
 
     /// <summary>
+    /// True when the local branch <paramref name="branch"/> exists in
+    /// <paramref name="repoRoot"/>. ADR-0052: the parallel runner uses this to
+    /// decide whether a task already has a <c>task/&lt;id&gt;</c> branch from an
+    /// earlier run (which must be REUSED on resume/reissue, not re-cut).
+    /// </summary>
+    public bool BranchExists(string repoRoot, string branch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        if (!IsLikelyBranchName(branch)) return false;
+        var (_, _, code) = RunGitArgs(repoRoot, "rev-parse", "--verify", "--quiet", $"refs/heads/{branch}");
+        return code == 0;
+    }
+
+    /// <summary>
+    /// Attaches an <b>existing</b> local branch into a fresh worktree
+    /// (<c>git worktree add &lt;path&gt; &lt;branch&gt;</c>, no <c>-b</c>). The
+    /// reuse counterpart to <see cref="WorktreeAdd"/>: a task that already owns a
+    /// <c>task/&lt;id&gt;</c> branch from a prior run gets that branch (with all
+    /// its commits) checked back out so resume/reissue continues where it left
+    /// off, instead of failing with "branch already exists".
+    /// </summary>
+    public GitWorktreeResult WorktreeAddExisting(string repoRoot, string worktreePath, string branch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (string.IsNullOrWhiteSpace(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path is required.");
+        if (!IsLikelyBranchName(branch))
+            return new GitWorktreeResult(false, null, $"Invalid branch name '{branch}'.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "worktree", "add", worktreePath, branch);
+        if (code != 0)
+        {
+            _logger.LogWarning("Worktree attach failed for existing branch {Branch} at {Path}: {Error}", branch, worktreePath, err.Trim());
+            return new GitWorktreeResult(false, null, err.Trim());
+        }
+        _logger.LogInformation("Worktree attached: existing branch {Branch} at {Path}", branch, worktreePath);
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// The filesystem path of the worktree that currently has
+    /// <paramref name="branch"/> checked out, or null when the branch is not
+    /// checked out in any registered worktree. Parses
+    /// <c>git worktree list --porcelain</c>. Used by the parallel runner to find
+    /// (and reuse) a live task worktree on resume.
+    /// </summary>
+    public string? WorktreePathForBranch(string repoRoot, string branch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(branch)) return null;
+        var (output, _, code) = RunGitArgs(repoRoot, "worktree", "list", "--porcelain");
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return null;
+
+        var wanted = $"refs/heads/{branch}";
+        string? currentPath = null;
+        foreach (var raw in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            var line = raw.TrimEnd();
+            if (line.StartsWith("worktree ", StringComparison.Ordinal))
+                currentPath = line.Substring("worktree ".Length).Trim();
+            else if (line.StartsWith("branch ", StringComparison.Ordinal))
+            {
+                var refName = line.Substring("branch ".Length).Trim();
+                if (string.Equals(refName, wanted, StringComparison.Ordinal) && currentPath != null)
+                {
+                    // git emits forward-slash paths even on Windows; normalize to
+                    // the platform separator so callers can compare/round-trip it.
+                    try { return Path.GetFullPath(currentPath); } catch { return currentPath; }
+                }
+            }
+            else if (line.Length == 0)
+                currentPath = null;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// True when <paramref name="ancestor"/> is an ancestor of
+    /// <paramref name="descendant"/> (<c>git merge-base --is-ancestor</c>) - i.e.
+    /// the descendant already contains the ancestor's commit. ADR-0052 terminal
+    /// teardown uses this to confirm a task branch is fully folded into the work
+    /// branch before dropping it, so unmerged conflict work is never discarded.
+    /// </summary>
+    public bool IsAncestor(string repoRoot, string ancestor, string descendant)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        if (!IsLikelyBranchName(ancestor) || !IsLikelyBranchName(descendant)) return false;
+        var (_, _, code) = RunGitArgs(repoRoot, "merge-base", "--is-ancestor", ancestor, descendant);
+        return code == 0;
+    }
+
+    /// <summary>
+    /// Prunes stale worktree administrative entries (<c>git worktree prune</c>)
+    /// whose working directory was removed out-of-band. Best-effort: lets a
+    /// reuse/attach succeed at a deterministic path after a crash left a dead
+    /// registration behind.
+    /// </summary>
+    public void WorktreePrune(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return;
+        RunGitArgs(repoRoot, "worktree", "prune");
+    }
+
+    /// <summary>
     /// Returns the working tree's current HEAD SHA, or null when the path
     /// is not a git repository or git is unavailable. Used by the run
     /// timeline to capture the deterministic "before / after" SHAs that

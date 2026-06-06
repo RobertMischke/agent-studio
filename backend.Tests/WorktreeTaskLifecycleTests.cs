@@ -156,6 +156,145 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         Assert.False(prep.Success);
     }
 
+    [Fact]
+    public void PrepareOrReuse_FreshCut_WhenNoBranchExists()
+    {
+        var (repo, life) = SeedWithDevelop("por-fresh");
+        var wtRoot = WorktreeRoot();
+
+        var prep = life.PrepareOrReuse(repo, "ATP-201", "develop", wtRoot);
+
+        Assert.True(prep.Success, prep.Error);
+        Assert.Equal("task/ATP-201", prep.Branch);
+        Assert.True(Directory.Exists(prep.WorktreePath));
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/ATP-201").Code);
+    }
+
+    [Fact]
+    public void PrepareOrReuse_ReusesLiveWorktree_OnResume_NoBranchExistsFailure()
+    {
+        // The resume bug: the second prepare must NOT fail with "branch already
+        // exists" and must hand back the SAME worktree, preserving the branch's
+        // commits (no fallback to a fresh checkout).
+        var (repo, life) = SeedWithDevelop("por-resume");
+        var wtRoot = WorktreeRoot();
+
+        var first = life.PrepareOrReuse(repo, "task-resume", "develop", wtRoot);
+        Assert.True(first.Success, first.Error);
+        File.WriteAllText(Path.Combine(first.WorktreePath!, "work.txt"), "run 1 work");
+        Commit(first.WorktreePath!, "feat: run 1");
+        var tipAfterRun1 = RunGit(first.WorktreePath!, "rev-parse HEAD").Out.Trim();
+
+        var second = life.PrepareOrReuse(repo, "task-resume", "develop", wtRoot);
+
+        Assert.True(second.Success, second.Error);
+        Assert.Equal(first.WorktreePath, second.WorktreePath);
+        Assert.Equal("task/task-resume", second.Branch);
+        // The reused worktree still carries run 1's commit (history preserved).
+        Assert.Equal(tipAfterRun1, RunGit(second.WorktreePath!, "rev-parse HEAD").Out.Trim());
+        Assert.True(File.Exists(Path.Combine(second.WorktreePath!, "work.txt")));
+    }
+
+    [Fact]
+    public void PrepareOrReuse_ReAttachesExistingBranch_AfterWorktreeRemoved()
+    {
+        // Worktree torn down but branch kept (e.g. an unmerged run): a resume
+        // must re-attach the existing branch, not re-cut it off develop.
+        var (repo, life) = SeedWithDevelop("por-reattach");
+        var wtRoot = WorktreeRoot();
+
+        var first = life.PrepareOrReuse(repo, "task-reattach", "develop", wtRoot);
+        Assert.True(first.Success, first.Error);
+        File.WriteAllText(Path.Combine(first.WorktreePath!, "work.txt"), "kept work");
+        Commit(first.WorktreePath!, "feat: kept work");
+        var tip = RunGit(first.WorktreePath!, "rev-parse HEAD").Out.Trim();
+
+        // Remove the worktree but keep the branch (mirrors a partial teardown).
+        Assert.True(life.Teardown(repo, first.WorktreePath!, first.Branch, deleteBranch: false, force: true).Success);
+        Assert.False(Directory.Exists(first.WorktreePath));
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/task-reattach").Code);
+
+        var second = life.PrepareOrReuse(repo, "task-reattach", "develop", wtRoot);
+
+        Assert.True(second.Success, second.Error);
+        Assert.Equal("task/task-reattach", second.Branch);
+        // Re-attached the SAME branch with its commit, not a fresh cut off develop.
+        Assert.Equal(tip, RunGit(second.WorktreePath!, "rev-parse HEAD").Out.Trim());
+    }
+
+    [Fact]
+    public void CommitInWorktree_ThenIntegrate_BringsTaskCommitToDevelop()
+    {
+        // Fix-acceptance #3: after a worktree run the task branch has >= 1 commit
+        // over develop, and Integrate folds it into develop.
+        var (repo, life) = SeedWithDevelop("commit-integrate");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-ci", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+        var developBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        // Simulate the agent's (uncommitted) edits, then the runner's
+        // commit-in-worktree onto the task branch.
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "agent.txt"), "agent edits");
+        Commit(prep.WorktreePath!, "feat: agent work");
+
+        // The task branch is now ahead of develop by exactly one commit.
+        Assert.NotEqual(developBefore, RunGit(prep.WorktreePath!, "rev-parse HEAD").Out.Trim());
+        Assert.Equal("1", RunGit(repo, "rev-list --count develop..task/task-ci").Out.Trim());
+
+        var res = life.Integrate(repo, prep.WorktreePath!, prep.Branch!, "develop", IntegrationStrategies.DirectMerge);
+
+        Assert.Equal(IntegrationOutcome.Merged, res.Outcome);
+        Assert.True(File.Exists(Path.Combine(repo, "agent.txt")));
+    }
+
+    [Fact]
+    public void TeardownIfIntegrated_RemovesWorktreeAndBranch_WhenMerged()
+    {
+        var (repo, life) = SeedWithDevelop("tdi-merged");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-tdi", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "f.txt"), "work");
+        Commit(prep.WorktreePath!, "feat: work");
+        Assert.Equal(IntegrationOutcome.Merged,
+            life.Integrate(repo, prep.WorktreePath!, prep.Branch!, "develop", IntegrationStrategies.DirectMerge).Outcome);
+
+        var td = life.TeardownIfIntegrated(repo, "task-tdi", "develop", wtRoot);
+
+        Assert.True(td.Success, td.Error);
+        Assert.False(Directory.Exists(prep.WorktreePath));
+        Assert.NotEqual(0, RunGit(repo, "rev-parse --verify task/task-tdi").Code);
+    }
+
+    [Fact]
+    public void TeardownIfIntegrated_KeepsUnmergedBranch_ForResolution()
+    {
+        // A branch whose work never landed on develop must survive terminal
+        // teardown so a human / conflict agent can still pick it up.
+        var (repo, life) = SeedWithDevelop("tdi-unmerged");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-keep", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "f.txt"), "unmerged work");
+        Commit(prep.WorktreePath!, "feat: unmerged");
+
+        // No Integrate -> branch is ahead of develop, not an ancestor.
+        var td = life.TeardownIfIntegrated(repo, "task-keep", "develop", wtRoot);
+
+        Assert.True(td.Success, td.Error);
+        // Branch preserved (work not dropped).
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify task/task-keep").Code);
+    }
+
+    [Fact]
+    public void TeardownIfIntegrated_NoBranch_IsCleanNoOp()
+    {
+        var (repo, life) = SeedWithDevelop("tdi-noop");
+        var td = life.TeardownIfIntegrated(repo, "never-ran", "develop", WorktreeRoot());
+        Assert.True(td.Success, td.Error);
+    }
+
     // --- harness ------------------------------------------------------------
 
     private string WorktreeRoot()
