@@ -540,7 +540,7 @@ public class ProjectRunner
             ModeChangedAt = _modeChangedAt,
             ModeSource = _modeSource,
             MaxParallelism = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism),
-            OccupiedSlots = _activeJobId != null ? 1 : 0,
+            OccupiedSlots = _activeRuns.Count,
             LastPickReason = _lastPickReason
         };
     }
