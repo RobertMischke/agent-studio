@@ -280,6 +280,9 @@ public class ProjectSettingsService
                 ? new Dictionary<string, PipelineStepSetting>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, PipelineStepSetting>(current.PipelineSteps, StringComparer.OrdinalIgnoreCase);
 
+            var normalizedCliType = string.IsNullOrWhiteSpace(setting?.CliType)
+                ? null
+                : setting!.CliType!.Trim().ToLowerInvariant();
             var normalizedModel = string.IsNullOrWhiteSpace(setting?.Model) ? null : setting!.Model!.Trim();
             var normalizedThinkingLevel = string.IsNullOrWhiteSpace(setting?.ThinkingLevel)
                 ? null
@@ -288,7 +291,7 @@ public class ProjectSettingsService
             var normalizedPrompt = string.IsNullOrWhiteSpace(setting?.Prompt) ? null : setting!.Prompt!.Trim();
             var normalizedCondition = NormalizeCondition(setting?.Condition);
             var isEmpty = setting is null
-                || (setting.Enabled is null && normalizedMode is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedPrompt is null && normalizedCondition is null);
+                || (setting.Enabled is null && normalizedMode is null && normalizedCliType is null && normalizedModel is null && normalizedThinkingLevel is null && normalizedPrompt is null && normalizedCondition is null);
 
             if (isEmpty)
             {
@@ -300,6 +303,7 @@ public class ProjectSettingsService
                 {
                     Enabled = setting!.Enabled,
                     Mode = normalizedMode,
+                    CliType = normalizedCliType,
                     Model = normalizedModel,
                     ThinkingLevel = normalizedThinkingLevel,
                     Prompt = normalizedPrompt,

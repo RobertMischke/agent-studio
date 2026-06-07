@@ -1,1 +1,8 @@
 Prebundling has been configured but will not be used because caching has been disabled.
+X [ERROR] NG8113: OverlayPortalDirective is not used within the template of CliModelSelectorComponent [plugin angular-compiler]
+
+    src/app/components/cli-model-selector/cli-model-selector.component.ts:56:30:
+      56 │   imports: [TooltipDirective, OverlayPortalDirective],
+         ╵                               ~~~~~~~~~~~~~~~~~~~~~~
+
+

@@ -276,6 +276,19 @@ public static class PipelineStepConfigResolver
         => ResolvePrompt(settings, step.Id);
 
     /// <summary>
+    /// Resolve an optional per-step CLI override. Null means the runner should
+    /// keep the catalogue or runtime default CLI for that step.
+    /// </summary>
+    public static string? ResolveCliType(ProjectSettings? settings, string stepId)
+        => Normalize(Lookup(settings, stepId)?.CliType);
+
+    /// <summary>
+    /// Resolve an optional per-step CLI override for a catalogue step.
+    /// </summary>
+    public static string? ResolveCliType(ProjectSettings? settings, PipelineStep step)
+        => ResolveCliType(settings, step.Id);
+
+    /// <summary>
     /// Whether a catalogue step should actually run for this task run: the step
     /// must be enabled (honouring its <see cref="PipelineStep.DefaultEnabled"/>)
     /// and its configured run condition must match the run facts in

@@ -160,6 +160,8 @@ export interface PipelineCatalogueStep {
   usesModel: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;
+  cliType?: string | null;
+  promptTemplate?: string | null;
   canDisable: boolean;
   /**
    * Initial toggle state when the project has no explicit override. Drift
@@ -209,6 +211,7 @@ export interface PipelineCatalogue {
 export interface PipelineStepSetting {
   enabled?: boolean | null;
   mode?: string | null;
+  cliType?: string | null;
   model?: string | null;
   thinkingLevel?: string | null;
   prompt?: string | null;

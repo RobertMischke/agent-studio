@@ -103,12 +103,14 @@ public static class ProjectSettingsEndpoints
                 displayName = s.DisplayName,
                 kind = s.Kind.ToString(),
                 // The core agent run cannot be disabled or model-overridden
-                // here (it uses the task's own CLI + model); aspect and drift
-                // steps invoke an LLM so they accept a model; tool/orchestrator
-                // gate steps accept a mode.
-                usesModel = s.Kind is StepKind.Aspect or StepKind.Drift,
-                usesPrompt = s.Kind is StepKind.Aspect or StepKind.Drift,
+                // here (it uses the task's own CLI + model). Aspect, drift,
+                // and orchestrator review/decision rows invoke LLMs, so the
+                // admin exposes the shared CLI/model/thinking/prompt controls.
+                usesModel = s.Kind is StepKind.Aspect or StepKind.Drift or StepKind.Orchestrator,
+                usesPrompt = s.Kind is StepKind.Aspect or StepKind.Drift or StepKind.Orchestrator,
                 supportsMode = s.Kind is StepKind.Tool or StepKind.Orchestrator,
+                cliType = s.CliType,
+                promptTemplate = s.PromptTemplate,
                 // The loop guard is a safety net that always runs (the
                 // StuckLoopGuard circuit-breaker fires regardless of this row);
                 // the pipeline step only mirrors its state, so it is not an
@@ -135,6 +137,8 @@ public static class ProjectSettingsEndpoints
                 usesModel = true,
                 usesPrompt = true,
                 supportsMode = false,
+                cliType = abort.CliType,
+                promptTemplate = abort.PromptTemplate,
                 canDisable = true,
                 defaultEnabled = abort.DefaultEnabled,
                 supportsCondition = true,
@@ -185,6 +189,7 @@ public static class ProjectSettingsEndpoints
             {
                 Enabled = req.Enabled,
                 Mode = req.Mode,
+                CliType = req.CliType,
                 Model = req.Model,
                 ThinkingLevel = req.ThinkingLevel,
                 Prompt = req.Prompt,

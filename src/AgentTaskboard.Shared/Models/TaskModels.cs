@@ -1565,6 +1565,12 @@ public record PipelineStepSetting
     public string? Model { get; init; }
 
     /// <summary>
+    /// Optional CLI type for LLM-backed steps. Null means "use the step /
+    /// runtime default". Deterministic tool steps ignore it.
+    /// </summary>
+    public string? CliType { get; init; }
+
+    /// <summary>
     /// Optional thinking / reasoning level for this step's LLM call. Null
     /// falls through to the selected model's default level.
     /// </summary>
@@ -1936,6 +1942,7 @@ public record SetPipelineStepRequest
     public string StepId { get; init; } = "";
     public bool? Enabled { get; init; }
     public string? Mode { get; init; }
+    public string? CliType { get; init; }
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
 

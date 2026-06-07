@@ -1384,6 +1384,7 @@ export class TaskService {
       stepId: string;
       enabled?: boolean | null;
       mode?: string | null;
+      cliType?: string | null;
       model?: string | null;
       thinkingLevel?: string | null;
       prompt?: string | null;
