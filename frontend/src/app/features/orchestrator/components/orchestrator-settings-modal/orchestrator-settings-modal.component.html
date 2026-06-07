@@ -1,4 +1,5 @@
 <div class="settings-modal__backdrop"
+     appOverlayPortal="modal"
      data-testid="orchestrator-settings-modal"
      (click)="onBackdropClick($event)" tabindex="0" (keydown.enter)="onBackdropClick($event)" (keydown.space)="onBackdropClick($event); $event.preventDefault()">
   <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="orch-settings-title">

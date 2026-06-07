@@ -1,4 +1,4 @@
-    <div class="vdbg" data-testid="verbose-debug-overlay" [attr.data-theme]="theme()" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()">
+    <div class="vdbg" appOverlayPortal="modal" data-testid="verbose-debug-overlay" [attr.data-theme]="theme()" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()">
       <section class="vdbg__panel" role="dialog" aria-label="Verbose debug" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header class="vdbg__header">
           <div class="vdbg__title-block">
@@ -360,4 +360,3 @@
         </div>
       </section>
     </div>
-  

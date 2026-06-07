@@ -12,6 +12,7 @@ import { DevToolsService } from '../../../../services/dev-tools.service';
 import { ErrorDialogService } from '../../../../services/error-dialog.service';
 import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Drawer-style overlay opened from the version badge. Three sections:
@@ -26,7 +27,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 @Component({
   selector: 'app-update-center',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, OverlayPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-center.component.html',
   styleUrl: './update-center.component.scss',

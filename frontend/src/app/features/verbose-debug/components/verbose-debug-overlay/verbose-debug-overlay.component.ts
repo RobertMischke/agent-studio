@@ -31,6 +31,7 @@ import {
 } from '../../../workforce';
 import { formatTokens as fmtTokens } from '../../../../services/format.util';
 
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from '../../../../components/tooltip';
 export type VerboseDebugTab =
   | 'overview'
@@ -106,7 +107,7 @@ const TOOL_LABELS: Record<ToolFamily, string> = {
   selector: 'app-verbose-debug-overlay',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, OverlayPortalDirective],
   templateUrl: './verbose-debug-overlay.component.html',
   styleUrl: './verbose-debug-overlay.component.scss',
 })

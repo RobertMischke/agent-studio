@@ -1,5 +1,10 @@
 @if (isRunning()) {
-  <div class="upd-block" data-testid="update-block-modal" role="dialog" aria-live="assertive" aria-label="Update in progress">
+  <div class="upd-block"
+       appOverlayPortal="modal"
+       data-testid="update-block-modal"
+       role="dialog"
+       aria-live="assertive"
+       aria-label="Update in progress">
     <div class="upd-block__panel">
       <div class="upd-block__spinner" aria-hidden="true">
         <span class="upd-block__spinner-ring"></span>

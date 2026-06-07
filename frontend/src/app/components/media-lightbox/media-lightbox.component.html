@@ -1,5 +1,6 @@
 @if (lightbox.active(); as media) {
   <div class="media-lightbox"
+       appOverlayPortal="modal"
        role="dialog"
        aria-modal="true"
        aria-label="Image preview"
@@ -42,7 +43,11 @@
              [src]="media.src"
              [alt]="media.alt"
              [attr.title]="zoomed() ? 'Klick: einpassen' : 'Klick: Originalgröße'"
-             (click)="toggleZoom($event)" />
+             role="button"
+             tabindex="0"
+             (click)="toggleZoom($event)"
+             (keydown.enter)="toggleZoom($event)"
+             (keydown.space)="toggleZoom($event); $event.preventDefault()" />
       </div>
       @if (media.alt) {
         <figcaption class="media-lightbox__caption"
@@ -65,7 +70,7 @@
 
     <div class="media-lightbox__hint"
          data-testid="media-lightbox-hint"
-         (click)="$event.stopPropagation()">
+         (pointerdown)="$event.stopPropagation()">
       @if (lightbox.count() > 1) {
         <span class="media-lightbox__hint-pos" data-testid="media-lightbox-position"
           >Bild {{ lightbox.position() }} / {{ lightbox.count() }}</span>

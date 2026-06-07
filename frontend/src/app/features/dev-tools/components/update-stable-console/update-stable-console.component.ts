@@ -1,5 +1,6 @@
 import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, signal, ViewChild, output } from '@angular/core';
 
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from '../../../../components/tooltip';
 interface ConsoleLine {
   kind: 'log' | 'stdout' | 'stderr' | 'error' | 'done';
@@ -17,7 +18,7 @@ interface ConsoleLine {
 @Component({
   selector: 'app-update-stable-console',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, OverlayPortalDirective],
   templateUrl: './update-stable-console.component.html',
   styleUrl: './update-stable-console.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

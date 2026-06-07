@@ -33,6 +33,7 @@ describe('OverlayPortalService', () => {
     expect(first.parentElement).toBe(roots[0]);
     expect(second.parentElement).toBe(roots[0]);
     expect(roots[0].parentElement).toBe(document.body);
+    expect(roots[0].getAttribute('data-testid')).toBe('studio-overlay-root');
 
     firstRef.dispose();
     secondRef.dispose();
@@ -52,11 +53,13 @@ describe('OverlayPortalService', () => {
     expect(overlay.parentElement).toBe(document.body.querySelector('.studio-overlay-root'));
     expect(overlay.classList.contains('studio-overlay-layer')).toBe(true);
     expect(overlay.classList.contains('studio-overlay-layer--panel')).toBe(true);
+    expect(overlay.style.zIndex).toBe('var(--studio-z-overlay-panel)');
 
     ref.dispose();
     expect(overlay.parentElement).toBe(host);
     expect(host.children[1]).toBe(overlay);
     expect(overlay.classList.contains('studio-overlay-layer')).toBe(false);
+    expect(overlay.style.zIndex).toBe('');
 
     host.remove();
     document.body.querySelector('.studio-overlay-root')?.remove();
@@ -70,6 +73,7 @@ describe('OverlayPortalService', () => {
     const ref = service.attachModal(overlay);
     expect(overlay.parentElement).toBe(document.body.querySelector('.studio-overlay-root'));
     expect(overlay.classList.contains('studio-overlay-layer--modal')).toBe(true);
+    expect(overlay.style.zIndex).toBe('var(--studio-z-overlay-modal)');
 
     ref.dispose();
     overlay.remove();

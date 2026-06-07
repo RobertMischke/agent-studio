@@ -1,8 +1,14 @@
+.upd-center__portal {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
 .upd-center__backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  z-index: 200;
+  pointer-events: auto;
 }
 .upd-center {
   position: fixed;
@@ -13,8 +19,8 @@
   background: #161624;
   color: #cdd6f4;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 201;
   overflow-y: auto;
+  pointer-events: auto;
   padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;

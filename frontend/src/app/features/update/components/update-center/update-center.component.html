@@ -1,7 +1,8 @@
 @if (open()) {
-  <div class="upd-center__backdrop" data-testid="update-center-backdrop" (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
-  <aside class="upd-center" data-testid="update-center" role="dialog" aria-label="Update center">
-    <header class="upd-center__head">
+  <div class="upd-center__portal" appOverlayPortal="modal">
+    <div class="upd-center__backdrop" data-testid="update-center-backdrop" (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
+    <aside class="upd-center" data-testid="update-center" role="dialog" aria-label="Update center">
+      <header class="upd-center__head">
       <div>
         <h2 class="upd-center__title">Update Center</h2>
         <p class="upd-center__lead">Stable updates run through the standalone UpdateService on port 5039.</p>
@@ -18,15 +19,15 @@
         </button>
         <button type="button" class="upd-center__close" data-testid="update-center-close" (click)="close()" aria-label="Close">×</button>
       </div>
-    </header>
+      </header>
 
-    @if (serviceUnreachable()) {
-      <section class="upd-center__service-warning" data-testid="update-center-service-warning">
-        UpdateService is not reachable. Start or repair the service before triggering a Stable update.
-      </section>
-    }
+      @if (serviceUnreachable()) {
+        <section class="upd-center__service-warning" data-testid="update-center-service-warning">
+          UpdateService is not reachable. Start or repair the service before triggering a Stable update.
+        </section>
+      }
 
-    <section class="upd-center__id">
+      <section class="upd-center__id">
       <div class="upd-center__row">
         <span class="upd-center__label">Version</span>
         <span class="upd-center__value">v{{ status()?.productVersion ?? '—' }}</span>
@@ -47,43 +48,43 @@
           <span class="upd-center__pill upd-center__pill--behind">{{ status()!.behindBy }} commit{{ status()!.behindBy === 1 ? '' : 's' }} behind</span>
         }
       </div>
-    </section>
-
-    @if ((status()?.pendingCommits?.length ?? 0) > 0) {
-      <section class="upd-center__commits">
-        <h3 class="upd-center__sub">Pending on origin/main</h3>
-        <ul class="upd-center__list" data-testid="update-center-pending">
-          @for (c of status()!.pendingCommits; track c.sha) {
-            <li class="upd-center__commit">
-              <code>{{ c.sha }}</code>
-              <span class="upd-center__subject">{{ c.subject }}</span>
-            </li>
-          }
-        </ul>
       </section>
-    }
 
-    @if (history().length > 0) {
-      <section class="upd-center__history">
-        <h3 class="upd-center__sub">Recent runs</h3>
-        <ul class="upd-center__list" data-testid="update-center-history">
-          @for (h of history(); track h.runId) {
-            <li class="upd-center__run">
-              <span class="upd-center__pill"
-                    [class.upd-center__pill--ok]="h.status === 'ok'"
-                    [class.upd-center__pill--fail]="h.status === 'failed'">
-                {{ h.status }}
-              </span>
-              <code>{{ h.headBefore }} → {{ h.headAfter }}</code>
-              <span class="upd-center__dim">{{ h.durationSeconds }}s</span>
-            </li>
-          }
-        </ul>
-      </section>
-    }
+      @if ((status()?.pendingCommits?.length ?? 0) > 0) {
+        <section class="upd-center__commits">
+          <h3 class="upd-center__sub">Pending on origin/main</h3>
+          <ul class="upd-center__list" data-testid="update-center-pending">
+            @for (c of status()!.pendingCommits; track c.sha) {
+              <li class="upd-center__commit">
+                <code>{{ c.sha }}</code>
+                <span class="upd-center__subject">{{ c.subject }}</span>
+              </li>
+            }
+          </ul>
+        </section>
+      }
 
-    @if (isDev()) {
-      <footer class="upd-center__foot">
+      @if (history().length > 0) {
+        <section class="upd-center__history">
+          <h3 class="upd-center__sub">Recent runs</h3>
+          <ul class="upd-center__list" data-testid="update-center-history">
+            @for (h of history(); track h.runId) {
+              <li class="upd-center__run">
+                <span class="upd-center__pill"
+                      [class.upd-center__pill--ok]="h.status === 'ok'"
+                      [class.upd-center__pill--fail]="h.status === 'failed'">
+                  {{ h.status }}
+                </span>
+                <code>{{ h.headBefore }} → {{ h.headAfter }}</code>
+                <span class="upd-center__dim">{{ h.durationSeconds }}s</span>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      @if (isDev()) {
+        <footer class="upd-center__foot">
         <button
           type="button"
           class="upd-center__btn"
@@ -96,8 +97,9 @@
           @else if ((status()?.behindBy ?? 0) > 0) { Update now }
           @else { Re-run update (no changes) }
         </button>
-      </footer>
-    }
-  </aside>
+        </footer>
+      }
+    </aside>
+  </div>
 }
   

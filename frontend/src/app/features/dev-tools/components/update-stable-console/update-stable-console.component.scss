@@ -1,4 +1,4 @@
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: grid; place-items: center; z-index: 200; }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: grid; place-items: center; }
 .panel { background: #11111b; border: 1px solid rgba(245,158,11,0.45); border-radius: 14px; width: min(900px, 94vw); max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 30px 100px rgba(0,0,0,0.5); }
 .panel__head { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.06); gap: 16px; }
 .panel__eyebrow { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #f59e0b; margin-bottom: 4px; }

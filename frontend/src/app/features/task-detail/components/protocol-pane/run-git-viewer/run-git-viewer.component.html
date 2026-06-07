@@ -6,10 +6,11 @@
 -->
 <!-- Per-run diff overlay (existing F20 behavior) -->
 @if (visible()) {
-  <div class="rgv__backdrop" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()"></div>
-  <div class="rgv" role="dialog" aria-label="Run git viewer"
-       data-testid="run-git-viewer"
-       (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
+  <div class="rgv__portal" appOverlayPortal="modal">
+    <div class="rgv__backdrop" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()"></div>
+    <div class="rgv" role="dialog" aria-label="Run git viewer"
+         data-testid="run-git-viewer"
+         (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
     <header class="rgv__header">
       <div class="rgv__title">
         <span class="rgv__title-main">Run #{{ run()?.index }} · git changes</span>
@@ -98,6 +99,7 @@
 </span>}}</code></pre>
         }
       </section>
+    </div>
     </div>
   </div>
 }

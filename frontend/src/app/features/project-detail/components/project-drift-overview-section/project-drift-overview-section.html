@@ -265,6 +265,7 @@
 
       @if (reportDetail(); as detail) {
         <section class="pdov__report-modal"
+                 appOverlayPortal="modal"
                  data-testid="project-drift-overview-report-modal"
                  (click)="closeReport($event)" tabindex="0" (keydown.enter)="closeReport($event)" (keydown.space)="closeReport($event); $event.preventDefault()">
           <article class="pdov__report-card" (click)="stop($event)" tabindex="0" (keydown.enter)="stop($event)" (keydown.space)="stop($event); $event.preventDefault()">
@@ -309,4 +310,3 @@
         </section>
       }
     </section>
-

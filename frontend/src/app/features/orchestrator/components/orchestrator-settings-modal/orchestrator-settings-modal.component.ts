@@ -6,6 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import { OrchestratorLogicPanelComponent } from '../orchestrator-logic-panel/orchestrator-logic-panel.component';
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from '../../../../components/tooltip';
 
 type SettingsRailKey = 'orchestrator' | 'general';
@@ -41,7 +42,7 @@ const RAIL_ITEMS: readonly SettingsRailItem[] = [
 @Component({
   selector: 'app-orchestrator-settings-modal',
   standalone: true,
-  imports: [OrchestratorLogicPanelComponent, TooltipDirective],
+  imports: [OrchestratorLogicPanelComponent, TooltipDirective, OverlayPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-settings-modal.component.html',
   styleUrl: './orchestrator-settings-modal.component.scss',

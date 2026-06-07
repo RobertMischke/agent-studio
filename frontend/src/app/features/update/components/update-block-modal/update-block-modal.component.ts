@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 
 import { UpdateClientService } from '../../../../services/update.service';
 import { UpdatePhase } from '../../../../models/update-service.model';
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 
 /**
  * Full-screen, click-blocking modal that takes over the UI while an update
@@ -21,7 +22,7 @@ import { UpdatePhase } from '../../../../models/update-service.model';
 @Component({
   selector: 'app-update-block-modal',
   standalone: true,
-  imports: [],
+  imports: [OverlayPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-block-modal.component.html',
   styleUrl: './update-block-modal.component.scss',

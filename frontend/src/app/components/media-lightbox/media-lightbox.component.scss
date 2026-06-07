@@ -4,7 +4,6 @@
 .media-lightbox {
   position: fixed;
   inset: 0;
-  z-index: 1100; /* above modal dialogs (z=1000) but below confirm (z=1200) */
   background: rgba(17, 17, 27, 0.92);
   display: flex;
   align-items: center;

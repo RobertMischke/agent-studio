@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { MediaLightboxService } from '../../services/media-lightbox.service';
 import { ModalStackService } from '../../services/modal-stack.service';
+import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
 import { TooltipDirective } from '../tooltip';
 
 /**
@@ -32,7 +33,7 @@ import { TooltipDirective } from '../tooltip';
   selector: 'app-media-lightbox',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, OverlayPortalDirective],
   templateUrl: './media-lightbox.component.html',
   styleUrl: './media-lightbox.component.scss',
 })
@@ -126,7 +127,7 @@ export class MediaLightboxComponent {
   }
 
   /** Toggle intrinsic-size ("Originalgröße") view; click on the image. */
-  toggleZoom(event: MouseEvent): void {
+  toggleZoom(event: Event): void {
     event.stopPropagation();
     this.zoomed.update((v) => !v);
   }

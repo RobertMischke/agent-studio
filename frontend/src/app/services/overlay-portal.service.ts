@@ -51,21 +51,33 @@ export class OverlayPortalService {
   }
 
   attachPanel(element: HTMLElement): OverlayPortalRef {
-    return this.attach(element, 'studio-overlay-layer studio-overlay-layer--panel');
+    return this.attach(
+      element,
+      'studio-overlay-layer studio-overlay-layer--panel',
+      'var(--studio-z-overlay-panel)',
+    );
   }
 
   attachModal(element: HTMLElement): OverlayPortalRef {
-    return this.attach(element, 'studio-overlay-layer studio-overlay-layer--modal');
+    return this.attach(
+      element,
+      'studio-overlay-layer studio-overlay-layer--modal',
+      'var(--studio-z-overlay-modal)',
+    );
   }
 
-  attach(element: HTMLElement, layerClass = 'studio-overlay-layer studio-overlay-layer--panel'): OverlayPortalRef {
+  attach(
+    element: HTMLElement,
+    layerClass = 'studio-overlay-layer studio-overlay-layer--panel',
+    layerZIndex = 'var(--studio-z-overlay-panel)',
+  ): OverlayPortalRef {
     const parent = element.parentNode;
     const next = element.nextSibling;
     const previousPosition = element.style.position;
     const previousZIndex = element.style.zIndex;
     const classes = layerClass.split(/\s+/).filter(Boolean);
     for (const cls of classes) element.classList.add(cls);
-    element.style.zIndex = '';
+    element.style.zIndex = layerZIndex;
     this.overlayRoot().appendChild(element);
 
     let disposed = false;

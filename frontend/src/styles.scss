@@ -27,6 +27,7 @@ body {
 }
 
 :root {
+  --studio-z-overlay-root: 2147483647;
   --studio-z-overlay-backdrop: 2147483000;
   --studio-z-overlay-panel: 2147483001;
   --studio-z-overlay-modal: 2147483002;
@@ -35,7 +36,7 @@ body {
 .studio-overlay-root {
   position: fixed;
   inset: 0;
-  z-index: var(--studio-z-overlay-modal);
+  z-index: var(--studio-z-overlay-root);
   pointer-events: none;
   isolation: isolate;
 }

@@ -11,6 +11,7 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import type { TaskInfo } from '../../../../../models/task.model';
 import type { RunFileChange, RunRecord } from '../../../../../features/run-timeline';
+import { OverlayPortalDirective } from '../../../../../directives/overlay-portal.directive';
 import { RunGitCacheService } from '../../../services/run-git-cache.service';
 import { highlightBlock } from '../../beautiful-results/highlight-lazy';
 import { perfMark, perfMeasure } from '../../../../../utils/perf-tracker';
@@ -29,7 +30,7 @@ import {
   selector: 'app-run-git-viewer',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, OverlayPortalDirective],
   templateUrl: './run-git-viewer.component.html',
   styleUrl: './run-git-viewer.component.scss',
 })

@@ -1,6 +1,6 @@
 @use '../../../../../styles/mixins' as m;
 
-    :host { position: fixed; inset: 0; z-index: 6000; display: block; }
+    :host { display: contents; }
     .vdbg {
       position: fixed;
       inset: 0;
@@ -380,4 +380,3 @@
       .vdbg__tabs { padding: 6px 8px; }
       .vdbg__tab { padding: 5px 8px; }
     }
-  

@@ -284,7 +284,6 @@
       inset: 0;
       background: var(--studio-scrim);
       display: flex; align-items: center; justify-content: center;
-      z-index: 80;
       padding: 24px;
     }
     .pdov__report-card {
@@ -311,4 +310,3 @@
       color: var(--studio-fg);
       white-space: pre-wrap;
     }
-  
