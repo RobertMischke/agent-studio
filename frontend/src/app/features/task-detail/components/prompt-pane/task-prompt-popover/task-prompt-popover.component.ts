@@ -122,7 +122,7 @@ export class TaskPromptPopoverComponent {
     if (!this.portalRef) {
       const root = this.portalRootRef?.nativeElement;
       if (!root) return;
-      this.portalRef = this.overlayPortal.attach(root);
+      this.portalRef = this.overlayPortal.attachPanel(root);
     }
     this.attachReposition();
     this.positionPanel();

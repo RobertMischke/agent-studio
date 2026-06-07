@@ -175,7 +175,8 @@
     }
     @if (outcomeIssueModalOpen()) {
       @if (outcomeIssue(); as issue) {
-        <div class="outcome-dialog-backdrop"
+        <div #outcomeIssuePortalRoot
+             class="outcome-dialog-backdrop"
              data-testid="protocol-outcome-issue-modal"
              (click)="outcomeIssueModalOpen.set(false)" tabindex="0" (keydown.enter)="outcomeIssueModalOpen.set(false)" (keydown.space)="outcomeIssueModalOpen.set(false); $event.preventDefault()">
           <section class="outcome-dialog"
@@ -344,7 +345,8 @@
               </div>
 
               @if (runsModalOpen()) {
-                <div class="runs-modal-backdrop"
+                <div #runsPortalRoot
+                     class="runs-modal-backdrop"
                      data-testid="runs-modal"
                      (click)="runsModalOpen.set(false)" tabindex="0"
                      (keydown.enter)="runsModalOpen.set(false)"

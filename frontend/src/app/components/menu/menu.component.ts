@@ -170,7 +170,7 @@ export class MenuComponent implements OnDestroy {
 
   private acquirePortal(): void {
     if (this.portalRef !== null) return;
-    this.portalRef = this.overlayPortal.attach(this.host.nativeElement);
+    this.portalRef = this.overlayPortal.attachPanel(this.host.nativeElement);
     this.attachReposition();
   }
 

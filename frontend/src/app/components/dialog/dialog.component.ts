@@ -99,7 +99,7 @@ export class DialogComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     if (this.portalToBody()) {
-      this.portalRef = this.overlayPortal.attach(this.host);
+      this.portalRef = this.overlayPortal.attachModal(this.host);
     }
   }
 

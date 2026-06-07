@@ -838,7 +838,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (!this.outcomeIssueModalOpen() || this.outcomeIssuePortalRef) return;
     const root = this.outcomeIssuePortalRoot?.nativeElement;
     if (!root) return;
-    this.outcomeIssuePortalRef = this.overlayPortal.attach(root, 'studio-overlay-layer studio-overlay-layer--modal');
+    this.outcomeIssuePortalRef = this.overlayPortal.attachModal(root);
   }
 
   private releaseOutcomeIssuePortal(): void {
@@ -850,7 +850,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (!this.runsModalOpen() || this.runsPortalRef) return;
     const root = this.runsPortalRoot?.nativeElement;
     if (!root) return;
-    this.runsPortalRef = this.overlayPortal.attach(root, 'studio-overlay-layer studio-overlay-layer--modal');
+    this.runsPortalRef = this.overlayPortal.attachModal(root);
   }
 
   private releaseRunsPortal(): void {

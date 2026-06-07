@@ -36,7 +36,15 @@ export interface ConnectedOverlayPosition {
  */
 @Injectable({ providedIn: 'root' })
 export class OverlayPortalService {
-  attach(element: HTMLElement, layerClass = 'studio-overlay-layer'): OverlayPortalRef {
+  attachPanel(element: HTMLElement): OverlayPortalRef {
+    return this.attach(element, 'studio-overlay-layer studio-overlay-layer--panel');
+  }
+
+  attachModal(element: HTMLElement): OverlayPortalRef {
+    return this.attach(element, 'studio-overlay-layer studio-overlay-layer--modal');
+  }
+
+  attach(element: HTMLElement, layerClass = 'studio-overlay-layer studio-overlay-layer--panel'): OverlayPortalRef {
     const parent = element.parentNode;
     const next = element.nextSibling;
     const classes = layerClass.split(/\s+/).filter(Boolean);

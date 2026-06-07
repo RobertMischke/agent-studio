@@ -117,10 +117,6 @@ export class CliModelSelectorComponent {
   private repositionAttached = false;
   private readonly reposition = () => this.position();
 
-  /** Gap between the trigger and the popover edge, and minimum viewport inset. */
-  private static readonly GAP = 6;
-  private static readonly VIEWPORT_PAD = 8;
-
   /** Draft state initialised when the picker opens. */
   readonly draftCliType = signal<CliType | null>(null);
   readonly draftModel = signal<string>('');
@@ -376,24 +372,13 @@ export class CliModelSelectorComponent {
     const picker = this.pickerElRef?.nativeElement;
     const trigger = this.triggerBtnRef?.nativeElement;
     if (!picker || !trigger) return;
-    const a = trigger.getBoundingClientRect();
-    const r = picker.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const { GAP, VIEWPORT_PAD: PAD } = CliModelSelectorComponent;
-
-    // Left-aligned with the trigger (matches the historical anchor), clamped so
-    // a trigger near the right edge never pushes the popover off-screen.
-    let left = a.left;
-    left = clamp(left, PAD, Math.max(PAD, vw - PAD - r.width));
-
-    // Prefer opening above the trigger (the established direction for the chat
-    // composer + status bar); flip below when there is no room above.
-    let top = a.top - GAP - r.height;
-    if (top < PAD) top = a.bottom + GAP;
-    top = clamp(top, PAD, Math.max(PAD, vh - PAD - r.height));
-
-    this.pickerPos.set({ left: Math.round(left), top: Math.round(top) });
+    const pos = this.overlayPortal.positionConnected(trigger, picker, {
+      preferredPlacement: 'above',
+      alignment: 'start',
+      gap: 6,
+      viewportPadding: 8,
+    });
+    this.pickerPos.set({ left: pos.left, top: pos.top });
   }
 
   private releasePortal(): void {
@@ -407,7 +392,7 @@ export class CliModelSelectorComponent {
     if (this.portalRef !== null) return;
     const root = this.portalRootRef?.nativeElement;
     if (!root) return;
-    this.portalRef = this.overlayPortal.attach(root);
+    this.portalRef = this.overlayPortal.attachPanel(root);
   }
 
   private attachReposition(): void {
@@ -455,9 +440,4 @@ function buildBadgeText(cliType: CliType | null, model: string | null, thinkingL
   const cli = cliType ? fmtCliTypeLabel(cliType) : 'no CLI';
   const mTrim = model && model.trim() ? model.trim() : 'CLI default';
   return thinkingLevel ? `${cli} · ${mTrim} · ${thinkingLevel}` : `${cli} · ${mTrim}`;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (max < min) return min;
-  return Math.min(Math.max(value, min), max);
 }

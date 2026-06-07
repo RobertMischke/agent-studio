@@ -38,6 +38,14 @@ body {
   isolation: isolate;
 }
 
+.studio-overlay-layer--panel {
+  z-index: var(--studio-z-overlay-panel);
+}
+
+.studio-overlay-layer--modal {
+  z-index: var(--studio-z-overlay-modal);
+}
+
 // Reusable content-width primitive. Components opt into the content type
 // (`--prose` for paragraphs, `--tabular` for grids/tables) while this global
 // class owns the left-aligned max-width behaviour.
