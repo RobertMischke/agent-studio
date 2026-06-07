@@ -17,7 +17,7 @@ import * as path from 'path';
  *  - the post-core review row carries its own early-gate result, NOT a final verdict,
  *  - the two rows carry DISTINCT display names ("Post-Core Orchestrator-Review"
  *    vs "Final Orchestrator-Review"),
- *  - no "DECISION" group header above the orchestrator rows,
+ *  - PRE / CORE / ASPECT / TOOL / DECISION / DRIFT group headers split the list,
  *  - the accepted completion-loop strip shows no redundant "Note" banner.
  *
  * Fully mocked — no backend or git repository needed.
@@ -74,6 +74,7 @@ const post = [
   step('aspect-tests-and-evidence', 'Tests and evidence', 'aspect', 'parallel'),
   step('post-lint-scss', 'Frontend stylelint', 'tool', 'sequential'),
   step('post-orchestrator-decision', 'Final Orchestrator-Review', 'orchestrator', 'sequential'),
+  step('post-drift-adr-code', 'Drift: ADR / Code', 'drift', 'sequential'),
 ];
 const allSteps = [...pre, ...core, ...post];
 
@@ -226,7 +227,7 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
     });
   });
 
-  test('one final-verdict chip, distinct names, no DECISION header, no redundant accepted Note', async ({ page }) => {
+  test('one final-verdict chip, distinct names, grouped phases, no redundant accepted Note', async ({ page }) => {
     await installRoutes(page, '4-auto-review');
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
     await dismissErrorDialog(page);
@@ -252,9 +253,17 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
     await expect(reviewRow.getByTestId('overview-pipeline-step-name')).toHaveText('Post-Core Orchestrator-Review');
     await expect(decisionRow.getByTestId('overview-pipeline-step-name')).toHaveText('Final Orchestrator-Review');
 
-    // No "DECISION" group header anywhere in the pipeline.
-    const decisionHeaders = page.locator('[data-testid="overview-pipeline-phase"][data-phase="decision"]');
-    await expect(decisionHeaders).toHaveCount(0);
+    // Phase headers group the flat pipeline list without changing row order.
+    const phaseHeaders = page.getByTestId('overview-pipeline-phase');
+    await expect(phaseHeaders).toHaveText([
+      /PRE\s+Preparation checks before the agent gets the task\./,
+      /CORE\s+The coding agent run\./,
+      /ASPECT\s+Parallel review passes over the finished work\./,
+      /TOOL\s+Deterministic post-run tooling and evidence steps\./,
+      /DECISION\s+The orchestrator ruling that accepts, reissues, or escalates\./,
+      /DRIFT\s+Optional drift-analysis passes\./,
+    ]);
+    await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="decision"]')).toHaveCount(1);
 
     // The accepted completion-loop strip shows the verdict but no redundant Note.
     await expect(page.getByTestId('overview-loop-verdict')).toHaveAttribute('data-verdict', 'accepted');

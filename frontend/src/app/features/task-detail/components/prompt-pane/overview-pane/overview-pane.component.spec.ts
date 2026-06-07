@@ -761,6 +761,57 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(decisionEl!.getAttribute('data-run-mode')).toBe('sequential');
   });
 
+  it('pipeline block: renders visual phase groups in pipeline order including the decision phase', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const mkStep = (
+      id: string,
+      displayName: string,
+      kind: NonNullable<TaskPipelineResponse['pipeline']['allSteps']>[number]['kind'],
+    ) => ({ id, displayName, kind, runMode: 'sequential' as const, dependsOn: [], idempotent: true, stub: false });
+    const pipe: TaskPipelineResponse = {
+      pipeline: {
+        id: 'standard-task-pipeline', displayName: 'Standard', version: 1,
+        pre: [], core: [], post: [],
+        allSteps: [
+          mkStep('pre-loop-guard', 'Loop check', 'module'),
+          mkStep('core-agent-run', 'Agent execution', 'core'),
+          mkStep('aspect-code-quality', 'Code quality', 'aspect'),
+          mkStep('post-lint-scss', 'Frontend stylelint', 'tool'),
+          mkStep('post-orchestrator-decision', 'Final verdict', 'orchestrator'),
+          mkStep('post-drift-adr-code', 'Drift: ADR / Code', 'drift'),
+        ],
+      },
+      execution: null,
+      cost: emptyCost(),
+      config: {},
+    };
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const groups = Array.from(
+      fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-phase"]'),
+    ) as HTMLElement[];
+    expect(groups.map(g => g.querySelector('.ov-pl-phase__label')?.textContent?.trim())).toEqual([
+      'PRE', 'CORE', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
+    ]);
+    expect(groups.map(g => g.querySelector('.ov-pl-phase__description')?.textContent?.trim())).toEqual([
+      'Preparation checks before the agent gets the task.',
+      'The coding agent run.',
+      'Parallel review passes over the finished work.',
+      'Deterministic post-run tooling and evidence steps.',
+      'The orchestrator ruling that accepts, reissues, or escalates.',
+      'Optional drift-analysis passes.',
+    ]);
+    expect(groups.map(g => g.getAttribute('data-phase'))).toEqual([
+      'pre', 'core', 'aspect', 'tool', 'decision', 'drift',
+    ]);
+
+    const stepPhases = Array.from(
+      fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step"]'),
+    ).map(el => (el as HTMLElement).getAttribute('data-phase'));
+    expect(stepPhases).toEqual(['pre', 'core', 'aspect', 'tool', 'decision', 'drift']);
+  });
+
   it('pipeline block: every step row carries a "what happens here" explanation tooltip keyed by step id', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     type Step = NonNullable<TaskPipelineResponse['pipeline']['allSteps']>[number];

@@ -515,6 +515,9 @@
 }
 
 .ov-pl-phase {
+  --ov-pl-phase-accent: var(--studio-accent-2);
+  --ov-pl-phase-tint: color-mix(in srgb, var(--ov-pl-phase-accent) 12%, transparent);
+
   display: flex;
   align-items: center;
   gap: var(--studio-spacing-2);
@@ -522,7 +525,10 @@
   margin-top: var(--studio-spacing-2);
   padding: var(--studio-row-pad-block) var(--studio-spacing-2);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--studio-bg-hover) 62%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--ov-pl-phase-accent) 34%, transparent), transparent 72px),
+    color-mix(in srgb, var(--studio-bg-hover) 62%, transparent);
+  box-shadow: inset 2px 0 0 var(--ov-pl-phase-accent);
   color: var(--studio-fg-dim);
 
   &:first-child {
@@ -535,13 +541,13 @@
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.08em;
-    color: var(--studio-fg-strong);
+    color: color-mix(in srgb, var(--ov-pl-phase-accent) 55%, var(--studio-fg-strong));
   }
 
   &__rule {
     flex: 0 1 42px;
     height: 1px;
-    background: var(--studio-border);
+    background: color-mix(in srgb, var(--ov-pl-phase-accent) 48%, var(--studio-border));
   }
 
   &__description {
@@ -552,6 +558,12 @@
     font-size: 10.5px;
     color: var(--studio-fg-muted);
   }
+
+  &[data-phase='core'] { --ov-pl-phase-accent: var(--studio-accent-3); }
+  &[data-phase='aspect'] { --ov-pl-phase-accent: var(--severity-pass); }
+  &[data-phase='tool'] { --ov-pl-phase-accent: var(--severity-pending); }
+  &[data-phase='decision'] { --ov-pl-phase-accent: var(--studio-accent-4); }
+  &[data-phase='drift'] { --ov-pl-phase-accent: var(--severity-warn); }
 }
 
 // Header row for the per-step metric columns. Sits once above the steps; its
@@ -619,6 +631,8 @@
 }
 
 .ov-pl-step {
+  --ov-pl-phase-accent: var(--studio-accent-2);
+
   display: grid;
   grid-template-columns:
     var(--ov-pipeline-status-col)
@@ -636,7 +650,18 @@
   max-width: 100%;
   min-height: var(--studio-row-min-h);
   padding-block: var(--studio-row-pad-block);
+  padding-inline: var(--studio-spacing-2);
+  margin-inline: calc(-1 * var(--studio-spacing-2));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ov-pl-phase-accent) 5%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--ov-pl-phase-accent) 38%, transparent);
   font-size: 12px;
+
+  &[data-phase='core'] { --ov-pl-phase-accent: var(--studio-accent-3); }
+  &[data-phase='aspect'] { --ov-pl-phase-accent: var(--severity-pass); }
+  &[data-phase='tool'] { --ov-pl-phase-accent: var(--severity-pending); }
+  &[data-phase='decision'] { --ov-pl-phase-accent: var(--studio-accent-4); }
+  &[data-phase='drift'] { --ov-pl-phase-accent: var(--severity-warn); }
 
   &--disabled {
     opacity: 0.5;
@@ -653,11 +678,10 @@
   // what "running" looks like. The status glyph pulses, matching the card's
   // execution dot.
   &--running {
-    background: var(--studio-bg-running);
-    border-radius: 6px;
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--lane-progress) 16%, transparent), transparent 110px),
+      var(--studio-bg-running);
     box-shadow: inset 2px 0 0 var(--lane-progress);
-    padding-inline: 6px;
-    margin-inline: -6px;
 
     .ov-pl-step__status {
       animation: ov-pulse 1.3s ease-in-out infinite;
@@ -678,8 +702,6 @@
     padding-top: 5px;
     border-top: 1px solid var(--studio-border);
     box-shadow: inset 2px 0 0 var(--studio-accent-4);
-    padding-inline: 6px;
-    margin-inline: -6px;
 
     .ov-pl-step__name {
       color: var(--studio-fg-strong);

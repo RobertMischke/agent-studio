@@ -286,7 +286,7 @@
           <span class="ov-pl-header__cell ov-pl-header__cost">Cost</span>
         </div>
         @for (row of pipelineRows(); track row.id) {
-          @if (row.startsPhase && row.phaseKey !== 'decision') {
+          @if (row.startsPhase) {
             <div class="ov-pl-phase"
                  [attr.data-phase]="row.phaseKey"
                  data-testid="overview-pipeline-phase">
