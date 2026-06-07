@@ -37,5 +37,5 @@ The Playwright spec:
 ## Marketing Usage
 
 This image is used as `homeBoardWorkbench` in the marketing site. It should
-support copy about Angular Studio as a visible workbench for reviewable
+support copy about Agent Studio as a visible workbench for reviewable
 agent-task work.

@@ -45,7 +45,7 @@
           "component": "homeCapture",
           "pages": ["/", "/product"],
           "role": "Primary workbench proof image",
-          "copyIntent": "Show that Angular Studio turns agent work into a visible board with reviewable tasks."
+          "copyIntent": "Show that Agent Studio turns agent work into a visible board with reviewable tasks."
         }
       ]
     },
