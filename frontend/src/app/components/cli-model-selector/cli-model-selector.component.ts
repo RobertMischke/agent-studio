@@ -22,7 +22,8 @@ import {
 import { TooltipDirective } from '../tooltip';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
-import { OverlayPortalRef, OverlayPortalService } from '../../services/overlay-portal.service';
+import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
+import { OverlayPortalService } from '../../services/overlay-portal.service';
 
 /**
  * Unified CLI + model selector. One reusable chip-with-popover control
@@ -52,7 +53,7 @@ import { OverlayPortalRef, OverlayPortalService } from '../../services/overlay-p
   selector: 'app-cli-model-selector',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, OverlayPortalDirective],
   templateUrl: './cli-model-selector.component.html',
   styleUrls: ['./cli-model-selector.component.scss'],
 })
@@ -113,7 +114,6 @@ export class CliModelSelectorComponent {
   private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
-  private portalRef: OverlayPortalRef | null = null;
   private repositionAttached = false;
   private readonly reposition = () => this.position();
 
@@ -191,12 +191,12 @@ export class CliModelSelectorComponent {
       const open = this.pickerOpen();
       if (open) {
         this.acquireModalStack();
-        // The picker elements are added by the `@if` in the same change
-        // detection pass; portal + position them on the next microtask once
-        // they exist in the DOM.
+        // The picker elements are added and portaled by the `@if` in the same
+        // change detection pass; position them on the next microtask once they
+        // exist in the central overlay layer.
         queueMicrotask(() => this.showAndPosition());
       } else {
-        this.releasePortal();
+        this.detachReposition();
         this.releaseModalStack();
       }
     });
@@ -229,7 +229,7 @@ export class CliModelSelectorComponent {
   }
 
   closePicker(): void {
-    this.releasePortal();
+    this.detachReposition();
     this.pickerOpen.set(false);
     this.releaseModalStack();
     queueMicrotask(() => this.triggerBtnRef?.nativeElement.focus());
@@ -363,7 +363,6 @@ export class CliModelSelectorComponent {
 
   private showAndPosition(): void {
     if (!this.pickerOpen()) return;
-    this.acquirePortal();
     this.attachReposition();
     this.position();
   }
@@ -379,20 +378,6 @@ export class CliModelSelectorComponent {
       viewportPadding: 8,
     });
     this.pickerPos.set({ left: pos.left, top: pos.top });
-  }
-
-  private releasePortal(): void {
-    this.detachReposition();
-    if (this.portalRef === null) return;
-    this.portalRef.dispose();
-    this.portalRef = null;
-  }
-
-  private acquirePortal(): void {
-    if (this.portalRef !== null) return;
-    const root = this.portalRootRef?.nativeElement;
-    if (!root) return;
-    this.portalRef = this.overlayPortal.attachPanel(root);
   }
 
   private attachReposition(): void {

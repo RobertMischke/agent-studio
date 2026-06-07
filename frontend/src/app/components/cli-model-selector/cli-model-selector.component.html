@@ -17,7 +17,7 @@
 </button>
 
 @if (pickerOpen()) {
-  <div #portalRoot class="cli-model-picker-portal">
+  <div #portalRoot class="cli-model-picker-portal" appOverlayPortal="panel">
     <div class="cli-model-picker__backdrop"
          [attr.data-testid]="pickerTestidPrefix() + '-backdrop'"
          (mousedown)="onBackdropClick(); $event.preventDefault()"></div>
