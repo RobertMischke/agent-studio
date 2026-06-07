@@ -1,4 +1,8 @@
 using System.Diagnostics;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Endpoints.Tasks;
@@ -164,6 +168,59 @@ public class JobsEndpointPerfTests : IDisposable
             Assert.True(sw.ElapsedMilliseconds < 5_000,
                 $"Grouped token lookup over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
                 + "the grouped endpoint must stay below the post-restart verifier budget.");
+        }
+        finally
+        {
+            try { Directory.Delete(workspace, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task GroupedEndpoint_Over300SyntheticJobs_ReturnsWithinVerifierBudget()
+    {
+        const int jobCount = 300;
+        const int messageCount = 50_000;
+        const string projectName = "grouped-http-warm-bus";
+        var workspace = Path.Combine(Path.GetTempPath(), "atp-grouped-http-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        try
+        {
+            for (var i = 0; i < jobCount; i++)
+            {
+                WriteJob(TaskStates.Progress, $"job-{i:D4}");
+            }
+            WriteBusTokenMessages(workspace, projectName, jobCount, messageCount);
+
+            using var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(b =>
+                {
+                    b.UseEnvironment("Test");
+                    b.ConfigureAppConfiguration((_, cfg) =>
+                    {
+                        cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                        {
+                            ["TaskRepository"] = workspace,
+                            ["WatchPaths:0:Name"] = projectName,
+                            ["WatchPaths:0:Path"] = _watchPath,
+                            ["WatchPaths:0:RootPath"] = _watchPath,
+                        });
+                    });
+                });
+
+            using var client = factory.CreateClient();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+            var sw = Stopwatch.StartNew();
+            using var response = await client.GetAsync("/api/tasks/grouped", timeout.Token);
+            sw.Stop();
+
+            response.EnsureSuccessStatusCode();
+            var grouped = await response.Content.ReadFromJsonAsync<Dictionary<string, JsonElement>>(cancellationToken: timeout.Token);
+            Assert.NotNull(grouped);
+            Assert.Contains(grouped!.Keys, key => string.Equals(key, "progress", StringComparison.OrdinalIgnoreCase));
+            Assert.True(sw.ElapsedMilliseconds < 10_000,
+                $"/api/tasks/grouped over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
+                + "the grouped endpoint must answer inside the UpdateVerifier budget.");
         }
         finally
         {
