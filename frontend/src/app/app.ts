@@ -118,6 +118,7 @@ import type { TaskScreenshot } from './features/screenshots';
 import { TooltipDirective } from './components/tooltip';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
 import type { TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
+import { OverlayPortalDirective } from './directives/overlay-portal.directive';
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
@@ -179,6 +180,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     StudioActivityViewComponent,
     StudioIconComponent,
     EpicRollupPaneComponent,
+    OverlayPortalDirective,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole

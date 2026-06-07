@@ -23,6 +23,8 @@ export interface ConnectedOverlayPosition {
   readonly placement: OverlayPlacement;
 }
 
+const OVERLAY_ROOT_CLASS = 'studio-overlay-root';
+
 /**
  * Central append-to-body primitive for floating UI.
  *
@@ -37,6 +39,8 @@ export interface ConnectedOverlayPosition {
  */
 @Injectable({ providedIn: 'root' })
 export class OverlayPortalService {
+  private root: HTMLElement | null = null;
+
   attachLayer(element: HTMLElement, layer: OverlayPortalLayer = 'panel'): OverlayPortalRef {
     return layer === 'modal' ? this.attachModal(element) : this.attachPanel(element);
   }
@@ -57,7 +61,7 @@ export class OverlayPortalService {
     const classes = layerClass.split(/\s+/).filter(Boolean);
     for (const cls of classes) element.classList.add(cls);
     element.style.zIndex = '';
-    document.body.appendChild(element);
+    this.overlayRoot().appendChild(element);
 
     let disposed = false;
     return {
@@ -76,6 +80,21 @@ export class OverlayPortalService {
         }
       },
     };
+  }
+
+  private overlayRoot(): HTMLElement {
+    if (this.root?.isConnected) return this.root;
+    const existing = document.body.querySelector<HTMLElement>(`:scope > .${OVERLAY_ROOT_CLASS}`);
+    if (existing) {
+      this.root = existing;
+      return existing;
+    }
+    const root = document.createElement('div');
+    root.className = OVERLAY_ROOT_CLASS;
+    root.setAttribute('data-testid', 'studio-overlay-root');
+    document.body.appendChild(root);
+    this.root = root;
+    return root;
   }
 
   positionConnected(

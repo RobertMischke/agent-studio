@@ -20,6 +20,25 @@ function rect(init: Partial<DOMRect>): DOMRect {
 }
 
 describe('OverlayPortalService', () => {
+  it('creates one body-level overlay root for every portaled layer', () => {
+    const service = new OverlayPortalService();
+    const first = document.createElement('section');
+    const second = document.createElement('section');
+
+    const firstRef = service.attachPanel(first);
+    const secondRef = service.attachModal(second);
+    const roots = Array.from(document.body.querySelectorAll('.studio-overlay-root'));
+
+    expect(roots.length).toBe(1);
+    expect(first.parentElement).toBe(roots[0]);
+    expect(second.parentElement).toBe(roots[0]);
+    expect(roots[0].parentElement).toBe(document.body);
+
+    firstRef.dispose();
+    secondRef.dispose();
+    roots[0].remove();
+  });
+
   it('moves a panel to body and restores it to its original DOM position', () => {
     const service = new OverlayPortalService();
     const host = document.createElement('div');
@@ -30,7 +49,7 @@ describe('OverlayPortalService', () => {
     document.body.appendChild(host);
 
     const ref = service.attachPanel(overlay);
-    expect(overlay.parentElement).toBe(document.body);
+    expect(overlay.parentElement).toBe(document.body.querySelector('.studio-overlay-root'));
     expect(overlay.classList.contains('studio-overlay-layer')).toBe(true);
     expect(overlay.classList.contains('studio-overlay-layer--panel')).toBe(true);
 
@@ -40,6 +59,7 @@ describe('OverlayPortalService', () => {
     expect(overlay.classList.contains('studio-overlay-layer')).toBe(false);
 
     host.remove();
+    document.body.querySelector('.studio-overlay-root')?.remove();
   });
 
   it('marks modal overlays with the modal layer class', () => {
@@ -48,11 +68,12 @@ describe('OverlayPortalService', () => {
     document.body.appendChild(overlay);
 
     const ref = service.attachModal(overlay);
-    expect(overlay.parentElement).toBe(document.body);
+    expect(overlay.parentElement).toBe(document.body.querySelector('.studio-overlay-root'));
     expect(overlay.classList.contains('studio-overlay-layer--modal')).toBe(true);
 
     ref.dispose();
     overlay.remove();
+    document.body.querySelector('.studio-overlay-root')?.remove();
   });
 
   it('positions connected panels at the anchor and flips when the preferred side is clipped', () => {

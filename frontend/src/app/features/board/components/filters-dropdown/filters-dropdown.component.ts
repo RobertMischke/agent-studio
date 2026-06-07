@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, ViewChild, computed, inject, input, output, signal } from '@angular/core';
 import { TagRegistryEntry } from '../../../../models/task.model';
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
+import { OverlayPortalService } from '../../../../services/overlay-portal.service';
 
 export interface TypeFilterOption {
   /** Backend-side value, e.g. `bug`, `feature`, `chore`. */
@@ -24,10 +26,11 @@ export interface TypeFilterOption {
   selector: 'app-filters-dropdown',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [OverlayPortalDirective],
   templateUrl: './filters-dropdown.component.html',
   styleUrls: ['./filters-dropdown.component.scss']
 })
-export class FiltersDropdownComponent {
+export class FiltersDropdownComponent implements OnDestroy {
   readonly typeOptions = input.required<readonly TypeFilterOption[]>();
   readonly activeType = input<string | null>(null);
   readonly tags = input<readonly TagRegistryEntry[]>([]);
@@ -37,6 +40,14 @@ export class FiltersDropdownComponent {
   readonly toggleTag = output<string>();
 
   readonly open = signal(false);
+  readonly panelStyle = signal<{ top: string; left: string }>({ top: '0px', left: '0px' });
+
+  @ViewChild('triggerBtn') private triggerBtn?: ElementRef<HTMLButtonElement>;
+  @ViewChild('panel') private panel?: ElementRef<HTMLDivElement>;
+
+  private readonly overlayPortal = inject(OverlayPortalService);
+  private repositionAttached = false;
+  private readonly reposition = () => this.positionPanel();
 
   readonly badgeCount = computed(() => {
     const types = this.activeType() ? 1 : 0;
@@ -45,10 +56,23 @@ export class FiltersDropdownComponent {
 
   toggle(): void {
     this.open.update(v => !v);
+    if (this.open()) {
+      queueMicrotask(() => {
+        this.attachReposition();
+        this.positionPanel();
+      });
+    } else {
+      this.detachReposition();
+    }
   }
 
   close(): void {
     this.open.set(false);
+    this.detachReposition();
+  }
+
+  ngOnDestroy(): void {
+    this.detachReposition();
   }
 
   isTypeActive(value: string): boolean {
@@ -73,5 +97,33 @@ export class FiltersDropdownComponent {
 
   emitToggleTag(id: string): void {
     this.toggleTag.emit(id);
+  }
+
+  private positionPanel(): void {
+    const trigger = this.triggerBtn?.nativeElement;
+    const panel = this.panel?.nativeElement;
+    if (!trigger || !panel) return;
+    const pos = this.overlayPortal.positionConnected(trigger, panel, {
+      preferredPlacement: 'below',
+      alignment: 'end',
+      gap: 6,
+      viewportPadding: 8,
+      minWidth: 280,
+    });
+    this.panelStyle.set({ top: `${pos.top}px`, left: `${pos.left}px` });
+  }
+
+  private attachReposition(): void {
+    if (this.repositionAttached) return;
+    this.repositionAttached = true;
+    window.addEventListener('scroll', this.reposition, true);
+    window.addEventListener('resize', this.reposition);
+  }
+
+  private detachReposition(): void {
+    if (!this.repositionAttached) return;
+    this.repositionAttached = false;
+    window.removeEventListener('scroll', this.reposition, true);
+    window.removeEventListener('resize', this.reposition);
   }
 }

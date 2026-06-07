@@ -32,9 +32,18 @@ body {
   --studio-z-overlay-modal: 2147483002;
 }
 
+.studio-overlay-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--studio-z-overlay-modal);
+  pointer-events: none;
+  isolation: isolate;
+}
+
 .studio-overlay-layer {
   position: relative;
   z-index: var(--studio-z-overlay-panel);
+  pointer-events: auto;
   isolation: isolate;
 }
 

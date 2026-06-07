@@ -1,5 +1,6 @@
 <div class="filters-dropdown" data-testid="filters-dropdown">
-  <button type="button"
+  <button #triggerBtn
+          type="button"
           class="filters-dropdown__trigger"
           [class.filters-dropdown__trigger--active]="badgeCount() > 0"
           [class.filters-dropdown__trigger--open]="open()"
@@ -15,62 +16,67 @@
     }
   </button>
   @if (open()) {
-    <div class="filters-dropdown__backdrop"
-         data-testid="filters-dropdown-backdrop"
-         (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
-    <div class="filters-dropdown__panel"
-         data-testid="filters-dropdown-panel"
-         role="dialog"
-         (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
-      <section class="filters-dropdown__section" data-testid="type-filter">
-        <h3 class="filters-dropdown__section-title">Task type</h3>
-        <div class="filters-dropdown__type-pills">
-          <button type="button"
-                  class="type-filter__pill"
-                  [class.type-filter__pill--active]="!activeType()"
-                  data-testid="type-filter-all"
-                  (click)="pickAll()">All</button>
-          @for (opt of typeOptions(); track opt.value) {
+    <div class="filters-dropdown__portal" appOverlayPortal="panel">
+      <div class="filters-dropdown__backdrop"
+           data-testid="filters-dropdown-backdrop"
+           (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
+      <div #panel
+           class="filters-dropdown__panel"
+           data-testid="filters-dropdown-panel"
+           role="dialog"
+           [style.top]="panelStyle().top"
+           [style.left]="panelStyle().left"
+           (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
+        <section class="filters-dropdown__section" data-testid="type-filter">
+          <h3 class="filters-dropdown__section-title">Task type</h3>
+          <div class="filters-dropdown__type-pills">
             <button type="button"
                     class="type-filter__pill"
-                    [class]="'type-filter__pill type-filter__pill--' + opt.kind"
-                    [class.type-filter__pill--active]="isTypeActive(opt.value)"
-                    [attr.data-testid]="'type-filter-' + opt.kind"
-                    [attr.data-task-type-value]="opt.value"
-                    (click)="pickType(opt.value)">{{ opt.icon }} {{ opt.label }}</button>
-          }
-        </div>
-      </section>
-      @if (tags().length > 0) {
-        <section class="filters-dropdown__section" data-testid="tag-filter">
-          <h3 class="filters-dropdown__section-title">Tags
-            <span class="filters-dropdown__section-hint">all selected</span>
-          </h3>
-          <ul class="filters-dropdown__tags">
-            @for (t of tags(); track t.id) {
-              <li class="filters-dropdown__tag-row">
-                <label class="filters-dropdown__tag-label"
-                       [attr.data-testid]="'tag-filter-row-' + t.id">
-                  <input type="checkbox"
-                         class="filters-dropdown__tag-checkbox"
-                         [attr.data-testid]="'tag-filter-' + t.id"
-                         [checked]="isTagActive(t.id)"
-                         (change)="emitToggleTag(t.id)" />
-                  <span class="filters-dropdown__tag-swatch"
-                        aria-hidden="true"
-                        [style.background]="t.color"></span>
-                  <span class="filters-dropdown__tag-body">
-                    <span class="filters-dropdown__tag-name">{{ t.label }}</span>
-                    @if (t.description) {
-                      <span class="filters-dropdown__tag-desc">{{ t.description }}</span>
-                    }
-                  </span>
-                </label>
-              </li>
+                    [class.type-filter__pill--active]="!activeType()"
+                    data-testid="type-filter-all"
+                    (click)="pickAll()">All</button>
+            @for (opt of typeOptions(); track opt.value) {
+              <button type="button"
+                      class="type-filter__pill"
+                      [class]="'type-filter__pill type-filter__pill--' + opt.kind"
+                      [class.type-filter__pill--active]="isTypeActive(opt.value)"
+                      [attr.data-testid]="'type-filter-' + opt.kind"
+                      [attr.data-task-type-value]="opt.value"
+                      (click)="pickType(opt.value)">{{ opt.icon }} {{ opt.label }}</button>
             }
-          </ul>
+          </div>
         </section>
-      }
+        @if (tags().length > 0) {
+          <section class="filters-dropdown__section" data-testid="tag-filter">
+            <h3 class="filters-dropdown__section-title">Tags
+              <span class="filters-dropdown__section-hint">all selected</span>
+            </h3>
+            <ul class="filters-dropdown__tags">
+              @for (t of tags(); track t.id) {
+                <li class="filters-dropdown__tag-row">
+                  <label class="filters-dropdown__tag-label"
+                         [attr.data-testid]="'tag-filter-row-' + t.id">
+                    <input type="checkbox"
+                           class="filters-dropdown__tag-checkbox"
+                           [attr.data-testid]="'tag-filter-' + t.id"
+                           [checked]="isTagActive(t.id)"
+                           (change)="emitToggleTag(t.id)" />
+                    <span class="filters-dropdown__tag-swatch"
+                          aria-hidden="true"
+                          [style.background]="t.color"></span>
+                    <span class="filters-dropdown__tag-body">
+                      <span class="filters-dropdown__tag-name">{{ t.label }}</span>
+                      @if (t.description) {
+                        <span class="filters-dropdown__tag-desc">{{ t.description }}</span>
+                      }
+                    </span>
+                  </label>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+      </div>
     </div>
   }
 </div>
