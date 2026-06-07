@@ -116,6 +116,8 @@ public class TaskFolderAccessIsolationTest
             // the prompt for this task.
             ["backend/Services/Runner/CrashRecoveryService.cs"] =
                 "Boot-time recovery; runs before ITaskAccess could be available.",
+            ["backend/Services/Runner/WorktreeTaskLifecycle.cs"] =
+                "Git worktree cleanup under configured worktree roots, not task storage.",
 
             // NOTE: NpmShimHealer.cs used to be whitelisted here for its
             // npm staging-orphan Directory.Delete (under %AppData%/Roaming/npm,

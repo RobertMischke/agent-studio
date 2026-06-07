@@ -465,21 +465,27 @@ public class TaskMutationService
             : req.Id;
         if (string.IsNullOrEmpty(baseSlug)) return null;
 
-        // Root-cause fix for duplicate-slug folders: a slug must be unique
-        // across ALL lanes of this watch path (including 7-archive), not just
-        // the target lane. ToSlug is deterministic, so the same title always
-        // produces the same base slug; without this check a job whose title
-        // slugifies to a name already parked in another lane creates a second
-        // folder with the same slug, and any later cross-lane move (archive,
-        // complete) collides on the occupied slug -> 409. Reserve the resolved
-        // slug + create the folder under the lane mutex so two concurrent
-        // creates cannot pick the same suffix.
+        var taskKey = MintTaskKey(entry.Path);
+        var storageId = taskKey ?? baseSlug;
+        TaskStorageLayout.TryParseKeyNumber(storageId, out var storageNumber);
+
+        // Root-cause fix for duplicate-slug folders: the external id must be
+        // unique across the project even though it is no longer the physical
+        // folder name. Reserve the resolved id + create the jobs/<bucket>/<key>
+        // folder under the lane mutex so concurrent creates cannot pick the
+        // same external id or storage id.
         string jobId;
         string jobDir;
         using (_laneMutex.Acquire(entry.Path))
         {
-            jobId = LaneSlug.EnsureUnique(entry.Path, baseSlug);
-            jobDir = Path.Combine(entry.Path, targetState, jobId);
+            jobId = EnsureUniqueJobId(entry.Path, baseSlug);
+            jobDir = TaskStorageLayout.JobDir(entry.Path, storageNumber, storageId);
+            for (var suffix = 2; Directory.Exists(jobDir); suffix++)
+            {
+                storageId = $"{taskKey ?? baseSlug}-{suffix}";
+                TaskStorageLayout.TryParseKeyNumber(storageId, out storageNumber);
+                jobDir = TaskStorageLayout.JobDir(entry.Path, storageNumber, storageId);
+            }
             Directory.CreateDirectory(jobDir);
         }
         if (!string.Equals(jobId, baseSlug, StringComparison.Ordinal))
@@ -582,15 +588,15 @@ public class TaskMutationService
                 .ToList();
         }
 
-        var taskKey = MintTaskKey(entry.Path);
-        if (taskKey != null)
-            jobJson["key"] = taskKey;
+        jobJson["key"] = storageId;
 
         File.WriteAllText(Path.Combine(jobDir, "job.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
 
         if (!string.IsNullOrWhiteSpace(req.PromptMarkdown))
             File.WriteAllText(Path.Combine(jobDir, "prompt.md"), req.PromptMarkdown);
+
+        TaskLayoutIndex.Rebuild(entry.Path, _logger);
 
         // ADR-0049: open the per-job timeline with prompt_created so the
         // Overview strip has something to render before the first agent run.
@@ -614,6 +620,20 @@ public class TaskMutationService
         var created = _scanner.FindJob(jobId, entry.Path);
         _notifier.PublishCreated(created?.ProjectName ?? string.Empty, jobId, entry.Path);
         return jobId;
+    }
+
+    private string EnsureUniqueJobId(string watchPath, string baseSlug)
+    {
+        var used = _scanner.ScanAllJobs()
+            .Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase))
+            .Select(j => j.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (!used.Contains(baseSlug)) return baseSlug;
+        for (var suffix = 2; ; suffix++)
+        {
+            var candidate = $"{baseSlug}-{suffix}";
+            if (!used.Contains(candidate)) return candidate;
+        }
     }
 
     public bool UpdateJobFile(string jobId, string fileName, string content, string? watchPath = null)

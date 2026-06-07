@@ -56,10 +56,14 @@ public class DuplicateSlugRootCauseTests : IDisposable
         Assert.Equal("same-title-2", second);
         Assert.NotEqual(first, second);
 
-        // Both folders exist, each under its own slug, in the backlog lane.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Backlog, "same-title")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Backlog, "same-title-2")));
-        Assert.NotNull(scanner.FindJob("same-title-2", _watchPath));
+        var firstInfo = scanner.FindJob("same-title", _watchPath);
+        var secondInfo = scanner.FindJob("same-title-2", _watchPath);
+        Assert.NotNull(firstInfo);
+        Assert.NotNull(secondInfo);
+        Assert.Equal(TaskStates.Backlog, firstInfo.State);
+        Assert.Equal(TaskStates.Backlog, secondInfo.State);
+        Assert.Contains(Path.Combine("jobs", "000", "same-title"), firstInfo.FolderPath);
+        Assert.Contains(Path.Combine("jobs", "000", "same-title-2"), secondInfo.FolderPath);
     }
 
     [Fact]
@@ -80,11 +84,13 @@ public class DuplicateSlugRootCauseTests : IDisposable
         var outcome = machine.MoveJob("dup-title-2", TaskStates.Archive, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
-        Assert.Equal(
-            Path.Combine(_watchPath, TaskStates.Archive, "dup-title-2"),
-            outcome.NewFolderPath);
+        var archived = scanner.FindJob("dup-title-2", _watchPath);
+        Assert.NotNull(archived);
+        Assert.Equal(TaskStates.Archive, archived.State);
+        Assert.Equal(outcome.NewFolderPath, archived.FolderPath);
+        Assert.Contains(Path.Combine("jobs", "000", "dup-title"), archived.FolderPath);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "dup-title")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "dup-title-2")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "dup-title-2")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "dup-title-2")));
     }
 

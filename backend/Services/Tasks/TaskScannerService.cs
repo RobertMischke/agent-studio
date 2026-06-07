@@ -170,9 +170,11 @@ public class TaskScannerService : ITaskScanner
     {
         var sw = Stopwatch.StartNew();
 
-        // Phase 1 — cheap directory enumeration. Collect every candidate job
-        // folder across all (watchPath, state) pairs. This part is a handful
-        // of Directory.GetDirectories calls and stays sequential.
+        // Phase 1 — cheap directory enumeration. The flat layout is
+        // authoritative when present: jobs live under jobs/<bucket>/<key>/ and
+        // the lane comes from job.json.state. The legacy lane scan remains as a
+        // read fallback for pre-migration tests and partially initialized
+        // workspaces.
         var candidates = new List<(string jobDir, WatchPathEntry entry, string state)>();
         foreach (var entry in GetWatchPaths())
         {
@@ -187,6 +189,14 @@ public class TaskScannerService : ITaskScanner
             // Path is present again — clear the latch so a future disappearance
             // is surfaced rather than silently swallowed.
             _warnedMissingWatchPaths.TryRemove(entry.Path, out _);
+
+            var flatJobs = TaskStorageLayout.EnumerateJobDirs(entry.Path).ToList();
+            if (flatJobs.Count > 0)
+            {
+                foreach (var jobDir in flatJobs)
+                    candidates.Add((jobDir, entry, ""));
+                continue;
+            }
 
             foreach (var state in TaskStates.All)
             {
@@ -245,22 +255,46 @@ public class TaskScannerService : ITaskScanner
 
             var lastActivity = GetLastActivityTime(jobDir);
 
-            // The folder name is the canonical job id. Anything else (URL slugs,
-            // log paths, MoveJob targets, the runner's job lookups) keys off the
-            // folder name, so a divergent `id` field in job.json silently breaks
-            // those paths. If we see one, surface a warning and self-heal the
-            // file so the divergence does not survive the next scan.
             var folderId = Path.GetFileName(jobDir);
-            if (raw.TryGetProperty("id", out var id)
-                && id.GetString() is { Length: > 0 } jsonId
-                && jsonId != folderId)
-            {
-                _logger.LogWarning(
-                    "Job folder '{Dir}' has divergent id '{JsonId}' in job.json — rewriting to match folder name '{FolderId}'.",
-                    jobDir, jsonId, folderId);
-                TaskJsonFile.UpdateField(jobDir, "id", folderId, _logger);
-            }
+            var isFlatLayout = IsFlatLayoutJobDir(jobDir);
             var resolvedId = folderId;
+            if (isFlatLayout)
+            {
+                // New layout: folder name is the stable key, while job.json.id
+                // remains the external slug/id. Lane is metadata too, so prefer
+                // job.json.state over the enumeration context.
+                resolvedId = raw.TryGetProperty("id", out var flatId)
+                             && flatId.ValueKind == JsonValueKind.String
+                             && flatId.GetString() is { Length: > 0 } flatJsonId
+                    ? flatJsonId
+                    : folderId;
+            }
+            else
+            {
+                // Legacy layout: the folder name is the canonical job id.
+                // Anything else silently breaks URL slugs, log paths, MoveJob
+                // targets, and the runner's job lookups, so self-heal it.
+                if (raw.TryGetProperty("id", out var id)
+                    && id.GetString() is { Length: > 0 } jsonId
+                    && jsonId != folderId)
+                {
+                    _logger.LogWarning(
+                        "Job folder '{Dir}' has divergent id '{JsonId}' in job.json - rewriting to match folder name '{FolderId}'.",
+                        jobDir, jsonId, folderId);
+                    TaskJsonFile.UpdateField(jobDir, "id", folderId, _logger);
+                }
+            }
+
+            var resolvedState = raw.TryGetProperty("state", out var stateEl)
+                                && stateEl.ValueKind == JsonValueKind.String
+                                && stateEl.GetString() is { Length: > 0 } jsonState
+                ? jsonState
+                : state;
+
+            // If a flat-layout folder was scanned but lacks usable state, it is
+            // corrupt. Do not surface a lane-less card; the index rebuild/migrator
+            // path logs the underlying bad job.json separately.
+            if (string.IsNullOrWhiteSpace(resolvedState)) return null;
 
             var ownerClientId = ResolveOwnerClientId(raw, jobDir);
             var (commitChain, legacyCommit) = ReadCommitChain(raw);
@@ -272,7 +306,7 @@ public class TaskScannerService : ITaskScanner
                 Key = ReadReferenceKey(raw),
                 OwnerClientId = ownerClientId,
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
-                State = state,
+                State = resolvedState,
                 Order = raw.TryGetProperty("order", out var ord) && ord.TryGetInt32(out var orderVal) ? orderVal : 999,
                 Agent = raw.TryGetProperty("agent", out var agent) ? agent.GetString() ?? "" : "",
                 CreatedAt = raw.TryGetProperty("createdAt", out var created) && created.TryGetDateTime(out var dt) ? dt : File.GetCreationTime(jobJsonPath),
@@ -303,10 +337,10 @@ public class TaskScannerService : ITaskScanner
                 CodeActivityDetected = DetectCodeActivity(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
-                OutcomeIssue = ResolveOutcomeIssue(jobDir, state),
+                OutcomeIssue = ResolveOutcomeIssue(jobDir, resolvedState),
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
-                Phase = ReadPhase(raw, state, jobDir),
+                Phase = ReadPhase(raw, resolvedState, jobDir),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
                 References = ReadReferences(raw)
@@ -317,6 +351,13 @@ public class TaskScannerService : ITaskScanner
             _logger.LogError(ex, "Failed to parse job.json in {Dir}", jobDir);
             return null;
         }
+    }
+
+    private static bool IsFlatLayoutJobDir(string jobDir)
+    {
+        var bucketDir = Path.GetDirectoryName(jobDir);
+        var jobsDir = bucketDir == null ? null : Path.GetDirectoryName(bucketDir);
+        return string.Equals(Path.GetFileName(jobsDir), TaskStorageLayout.JobsDirName, StringComparison.Ordinal);
     }
 
     public TaskInfo? FindJob(string jobId, string? watchPath = null)

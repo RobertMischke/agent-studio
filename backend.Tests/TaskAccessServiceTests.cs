@@ -204,7 +204,7 @@ public class TaskAccessServiceTests : IDisposable
     }
 
     [Fact]
-    public void SlugExistsInLane_ReturnsTrueOnlyForRealFolder()
+    public void SlugExistsInLane_ReturnsTrueOnlyForPhysicalLaneFolder()
     {
         var (taskAccess, machine, mutations, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
@@ -217,7 +217,9 @@ public class TaskAccessServiceTests : IDisposable
             WatchPath = _watchPath,
         });
 
-        Assert.True(taskAccess.SlugExistsInLane(_watchPath, TaskStates.Ready, "zeta"));
+        Assert.False(taskAccess.SlugExistsInLane(_watchPath, TaskStates.Ready, "zeta"));
+        Directory.CreateDirectory(Path.Combine(_watchPath, TaskStates.Ready, "orphan-zeta"));
+        Assert.True(taskAccess.SlugExistsInLane(_watchPath, TaskStates.Ready, "orphan-zeta"));
         Assert.False(taskAccess.SlugExistsInLane(_watchPath, TaskStates.Progress, "zeta"));
         Assert.False(taskAccess.SlugExistsInLane(_watchPath, "not-a-lane", "zeta"));
     }

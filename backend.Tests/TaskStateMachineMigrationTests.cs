@@ -39,21 +39,22 @@ public class TaskStateMachineMigrationTests : IDisposable
         SeedLegacyJob("5-completed", "gamma");
         SeedLegacyJob("6-archive", "delta");
 
-        var (machine, _) = BuildMachine();
+        var (machine, scanner) = BuildMachine();
         machine.EnsureStateFoldersAndMigrate();
 
-        // Legacy lanes are gone (or at least empty enough to be cleaned up).
+        // Legacy lanes are gone after the old lane names are normalized and
+        // then swept into the flat jobs/ layout.
         Assert.False(Directory.Exists(Path.Combine(_watchPath, "4-review")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, "5-completed")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, "6-archive")));
 
-        // The new lanes hold the moved jobs and the canonical state name
-        // is written back into each job.json so the in-memory view stays
+        // The flat jobs/ layout holds the moved jobs and the canonical state
+        // name is written into each job.json so the in-memory view stays
         // aligned with disk.
         AssertMovedAndStateMatches(TaskStates.AutoReview, "alpha");
         AssertMovedAndStateMatches(TaskStates.AutoReview, "beta");
         AssertMovedAndStateMatches(TaskStates.Completed, "gamma");
-        AssertMovedAndStateMatches(TaskStates.Archive,   "delta");
+        AssertMovedAndStateMatches(TaskStates.Archive, "delta");
 
         // The migration counter mirrors the "moved 4 jobs" log line.
         Assert.Equal(4, machine.LastNumberedLaneMigrationCount);
@@ -63,7 +64,7 @@ public class TaskStateMachineMigrationTests : IDisposable
     public void Migrate_IsIdempotent_OnSecondCall()
     {
         SeedLegacyJob("4-review", "alpha");
-        var (machine, _) = BuildMachine();
+        var (machine, scanner) = BuildMachine();
 
         machine.EnsureStateFoldersAndMigrate();
         Assert.Equal(1, machine.LastNumberedLaneMigrationCount);
@@ -71,35 +72,30 @@ public class TaskStateMachineMigrationTests : IDisposable
         // Second call sees no legacy lane and does not rewrite anything.
         machine.EnsureStateFoldersAndMigrate();
         Assert.Equal(0, machine.LastNumberedLaneMigrationCount);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "alpha")));
+        Assert.NotNull(scanner.FindJob("alpha", _watchPath));
     }
 
     [Fact]
     public void Migrate_CreatesAdr0026Lane_OrchestratorPrep()
     {
-        // ADR-0026's surviving lane (1a-orchestrator-prep) is created on boot
-        // so the move endpoint can accept it and the kanban can render it. The
-        // sibling 1b-needs-human-review lane was retired (see
-        // Migrate_RetiredNeedsHumanReviewLane_MovesStrayCardsToReady).
-        // Idempotent on a second call.
-        var (machine, _) = BuildMachine();
+        // The folder restructure stops pre-creating lane folders. The kanban
+        // lanes are metadata values, and the derived index is the boot-created
+        // project structure.
+        var (machine, scanner) = BuildMachine();
         machine.EnsureStateFoldersAndMigrate();
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)),
-            "expected 1a-orchestrator-prep folder to be created on boot");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, "jobs")),
+            "expected jobs/ to be created on boot");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, "index")),
+            "expected index/ to be created on boot");
 
-        // The retired lane is NOT recreated on boot.
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)),
+            "metadata lanes must not be created as folders on boot");
         Assert.False(Directory.Exists(Path.Combine(_watchPath, "1b-needs-human-review")),
             "the retired 1b-needs-human-review lane must not be created on boot");
 
-        // Existing lanes still present.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Preparation)));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready)));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview)));
-
-        // Idempotent: calling again does not alter the workspace state.
         machine.EnsureStateFoldersAndMigrate();
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.OrchestratorPrep)));
     }
 
     [Fact]
@@ -115,17 +111,19 @@ public class TaskStateMachineMigrationTests : IDisposable
         File.WriteAllText(Path.Combine(cardDir, "job.json"),
             "{\"id\":\"stranded-card\",\"title\":\"Stranded\",\"state\":\"1b-needs-human-review\",\"order\":1,\"agent\":\"claude\"}");
 
-        var (machine, _) = BuildMachine();
+        var (machine, scanner) = BuildMachine();
         machine.EnsureStateFoldersAndMigrate();
 
         Assert.False(Directory.Exists(legacyLane),
             "the emptied legacy 1b-needs-human-review folder should be removed");
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stranded-card")),
-            "the stray card should land in 2-ready");
+        var stranded = scanner.FindJob("stranded-card", _watchPath);
+        Assert.NotNull(stranded);
+        Assert.Equal(TaskStates.Ready, stranded.State);
+        Assert.Contains(Path.Combine("jobs", "000"), stranded.FolderPath);
 
         // Idempotent: a second boot finds no legacy lane and rewrites nothing.
         machine.EnsureStateFoldersAndMigrate();
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stranded-card")));
+        Assert.NotNull(scanner.FindJob("stranded-card", _watchPath));
     }
 
     [Fact]
@@ -162,10 +160,13 @@ public class TaskStateMachineMigrationTests : IDisposable
 
     private void AssertMovedAndStateMatches(string newLane, string slug)
     {
-        var dir = Path.Combine(_watchPath, newLane, slug);
-        Assert.True(Directory.Exists(dir), $"expected {slug} under {newLane}");
+        var (_, scanner) = BuildMachine();
+        var job = scanner.FindJob(slug, _watchPath);
+        Assert.NotNull(job);
+        Assert.Equal(newLane, job.State);
+        Assert.Contains(Path.Combine("jobs", "000"), job.FolderPath);
 
-        var json = File.ReadAllText(Path.Combine(dir, "job.json"));
+        var json = File.ReadAllText(Path.Combine(job.FolderPath, "job.json"));
         Assert.Contains($"\"state\": \"{newLane}\"", json);
     }
 

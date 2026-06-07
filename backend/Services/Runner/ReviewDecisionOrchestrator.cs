@@ -1270,8 +1270,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        var movedFolderPath = move.NewFolderPath
-            ?? Path.Combine(entry.Path, TaskStates.Ready, Path.GetFileName(current.FolderPath));
+        var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Ready };
         _scanner.InvalidateCache();
 
@@ -4000,8 +3999,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // through OrchestratorChatLog auto-create their parent, so a
         // stale path would resurrect 4-auto-review as a one-line skeleton
         // (see HandleAcceptAsDone for the same fix).
-        var movedFolderPath = move.NewFolderPath
-            ?? Path.Combine(entry.Path, TaskStates.Ready, Path.GetFileName(current.FolderPath));
+        var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Ready };
 
         // Order 0 lifts the reissue ahead of any fresh ready job (which

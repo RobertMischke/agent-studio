@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Registry;
 
 namespace OrchestratorApi.Services.Tasks;
 
@@ -19,10 +20,12 @@ public class TaskStateMachine
 {
     private const int DirectoryMoveMaxAttempts = 8;
     private static readonly int[] DirectoryMoveBackoffMs = [50, 100, 200, 400, 800, 1200, 1600];
+    private static int _fallbackMigrationKeyCounter;
 
     private readonly TaskScannerService _scanner;
     private readonly LaneMutexRegistry _laneMutex;
     private readonly ILogger<TaskStateMachine> _logger;
+    private readonly ProjectRegistry? _projectRegistry;
     // Optional so the many tests that construct TaskStateMachine with the
     // original 2/3-arg signature keep compiling. Production DI always
     // supplies it; when null the SignalR push is simply skipped (the
@@ -33,7 +36,8 @@ public class TaskStateMachine
         TaskScannerService scanner,
         ILogger<TaskStateMachine> logger,
         LaneMutexRegistry? laneMutex = null,
-        TaskChangeNotifier? notifier = null)
+        TaskChangeNotifier? notifier = null,
+        ProjectRegistry? projectRegistry = null)
     {
         _scanner = scanner;
         _logger = logger;
@@ -42,6 +46,7 @@ public class TaskStateMachine
         // keep compiling. Production wiring always passes the singleton.
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
         _notifier = notifier;
+        _projectRegistry = projectRegistry;
     }
 
     public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null)
@@ -63,6 +68,36 @@ public class TaskStateMachine
         var recheck = _scanner.FindJob(jobId, watchPath);
         if (recheck == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
         if (recheck.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
+
+        if (IsFlatLayoutJobDir(recheck.FolderPath))
+        {
+            try
+            {
+                var key = FlatStorageKey(recheck);
+                if (string.IsNullOrWhiteSpace(key))
+                    return new MoveJobOutcome(MoveJobStatus.Failure, "Flat-layout task has no key");
+
+                // If the index is missing or stale after a crash, rebuild it
+                // before applying the metadata-only transition.
+                var byKey = TaskLayoutIndex.ReadByKey(recheck.WatchPath);
+                if (!byKey.ContainsKey(key))
+                    TaskLayoutIndex.Rebuild(recheck.WatchPath, _logger);
+
+                var result = TaskLayoutTransition.ChangeState(recheck.WatchPath, key, targetState, _logger);
+                if (result.Location == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+                if (result.Changed)
+                {
+                    TaskJsonFile.UpdateField(recheck.FolderPath, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
+                    _scanner.InvalidateCache();
+                }
+                return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to metadata-move job {JobId} to {State}", jobId, targetState);
+                return new MoveJobOutcome(MoveJobStatus.Failure, ex.Message);
+            }
+        }
 
         var jobFolderName = Path.GetFileName(recheck.FolderPath);
         var targetSlug = jobFolderName;
@@ -424,6 +459,8 @@ public class TaskStateMachine
             try
             {
                 Directory.Delete(recheck.FolderPath, true);
+                if (IsUnderFlatLayout(recheck.FolderPath))
+                    TaskLayoutIndex.Rebuild(recheck.WatchPath, _logger);
                 _scanner.InvalidateCache();
                 _notifier?.PublishDeleted(recheck.ProjectName, recheck.Id, recheck.WatchPath);
                 return true;
@@ -659,6 +696,7 @@ public class TaskStateMachine
             {
                 Directory.CreateDirectory(watchPath);
             }
+            Directory.CreateDirectory(TaskStorageLayout.JobsRoot(watchPath));
 
             // Rename old unnumbered state folders to numbered ones
             foreach (var (oldName, newName) in TaskStates.LegacyFolderMap)
@@ -703,12 +741,6 @@ public class TaskStateMachine
             // are then herded to 5-human-review by the runner's pickup sweep.
             MigrateNumberedLane(watchPath, "1b-needs-human-review", TaskStates.Ready);
 
-            // Create state folders
-            foreach (var state in TaskStates.All)
-            {
-                Directory.CreateDirectory(Path.Combine(watchPath, state));
-            }
-
             // Migrate existing flat job folders into state subfolders
             foreach (var jobDir in Directory.GetDirectories(watchPath))
             {
@@ -749,8 +781,74 @@ public class TaskStateMachine
                     _logger.LogError(ex, "Failed to migrate job folder {Dir}", dirName);
                 }
             }
+
+            TaskLayoutMigrator.Migrate(watchPath, () => MintMigrationKey(watchPath), _logger);
         }
     }
+
+    private string MintMigrationKey(string watchPath)
+    {
+        var project = _projectRegistry?.FindByStorageLocation(watchPath);
+        if (project != null)
+        {
+            var floor = HighestExistingKeyNumber(watchPath, project.ShortCode) + 1;
+            _projectRegistry!.EnsureTaskKeyFloor(project.Id, floor);
+            var seq = _projectRegistry!.IssueNextTaskKey(project.Id);
+            return $"{project.ShortCode}-{seq}";
+        }
+        var fallbackSeq = Interlocked.Increment(ref _fallbackMigrationKeyCounter);
+        return "TASK-" + fallbackSeq.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static int HighestExistingKeyNumber(string watchPath, string shortCode)
+    {
+        var max = 0;
+        foreach (var jobDir in EnumerateAnyJobDirs(watchPath))
+        {
+            var jobJson = Path.Combine(jobDir, "job.json");
+            if (!File.Exists(jobJson)) continue;
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(jobJson));
+                if (!doc.RootElement.TryGetProperty("key", out var keyEl)) continue;
+                var key = keyEl.GetString();
+                if (TaskKeyNumbers.TryParse(key, shortCode, out var n) && n > max)
+                    max = n;
+            }
+            catch
+            {
+                // Migration is best-effort per folder; an unreadable job.json
+                // will be logged by the migrator/index rebuild path.
+            }
+        }
+        return max;
+    }
+
+    private static IEnumerable<string> EnumerateAnyJobDirs(string watchPath)
+    {
+        foreach (var dir in TaskStorageLayout.EnumerateJobDirs(watchPath))
+            yield return dir;
+        foreach (var state in TaskStates.All)
+        {
+            var laneDir = Path.Combine(watchPath, state);
+            if (!Directory.Exists(laneDir)) continue;
+            foreach (var dir in Directory.EnumerateDirectories(laneDir))
+                yield return dir;
+        }
+    }
+
+    private static bool IsFlatLayoutJobDir(string jobDir)
+        => IsUnderFlatLayout(jobDir) && File.Exists(Path.Combine(jobDir, "job.json"));
+
+    private static bool IsUnderFlatLayout(string jobDir)
+    {
+        var bucketDir = Path.GetDirectoryName(jobDir);
+        var jobsDir = bucketDir == null ? null : Path.GetDirectoryName(bucketDir);
+        return string.Equals(Path.GetFileName(jobsDir), TaskStorageLayout.JobsDirName, StringComparison.Ordinal);
+    }
+
+    private static string FlatStorageKey(TaskInfo info)
+        => !string.IsNullOrWhiteSpace(info.Key) ? info.Key! : Path.GetFileName(info.FolderPath);
 
     /// <summary>
     /// Place <paramref name="jobId"/> at slot <paramref name="targetIndex"/>
