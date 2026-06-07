@@ -71,7 +71,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string? permissionMode)
     {
         // For Codex, sessionName is the session UUID (or null for a fresh session).
-        // codex exec [resume <uuid>] [--json] [-m <model>] -
+        // codex exec [resume <uuid>] [--experimental-json] [-m <model>] -
         //
         // 2026-05-12: Codex 0.130 changed positional-PROMPT semantics so a
         // rules-heavy prompt got interpreted as "initial instructions" and
@@ -98,9 +98,10 @@ public sealed class CodexCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(sessionName);
         }
 
-        // --json keeps stdout machine-readable so we can extract the session UUID
-        // from the first thread.started (or legacy session_meta) frame.
-        psi.ArgumentList.Add("--json");
+        // --experimental-json is the SDK-backed exec protocol: stdout stays
+        // machine-readable, while completion is the process exit after the
+        // stream closes, not a model-authored sentinel.
+        psi.ArgumentList.Add("--experimental-json");
 
         // Sandbox posture is resolved per-project (default YOLO ==
         // --sandbox danger-full-access). This replaces the global
@@ -421,7 +422,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     }
 
     /// <summary>
-    /// Translate a single <c>codex exec --json</c> JSONL frame into the marker
+    /// Translate a single <c>codex exec --experimental-json</c> JSONL frame into the marker
     /// vocabulary the frontend activity-log parser classifies, e.g.
     /// <c>● Run &lt;cmd&gt;</c> or <c>● Edit &lt;path&gt;</c>. Delegates to the pure,
     /// dependency-free <see cref="Rendering.CodexOutputRenderer"/> (the
@@ -468,7 +469,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     }
 
     /// <summary>
-    /// Parses a single <c>codex exec --json</c> stdout line and returns the
+    /// Parses a single <c>codex exec --experimental-json</c> stdout line and returns the
     /// session UUID iff the line is a <c>thread.started</c> (preferred) or
     /// legacy <c>session_meta</c> frame carrying a canonical UUID. Returns
     /// <c>null</c> for every other line shape (other frame types, malformed

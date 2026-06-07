@@ -8,7 +8,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Locks <see cref="CodexCliService"/>'s session-UUID capture path. The
-/// fixtures are real <c>codex exec --json</c> frame shapes; without this
+/// fixtures are real <c>codex exec --experimental-json</c> frame shapes; without this
 /// regression the per-job session store stays empty and every follow-up
 /// rebuilds context from disk via Recovery, discarding Codex's own
 /// prompt-cache (see bug-codex-session-id-not-captured-from-thread-started).
@@ -165,6 +165,8 @@ public class CodexCliServiceTests
 
         Assert.DoesNotContain(prompt, psi.ArgumentList);
         Assert.Contains("-", psi.ArgumentList);
+        Assert.Contains("--experimental-json", psi.ArgumentList);
+        Assert.DoesNotContain("--json", psi.ArgumentList);
         Assert.Contains("gpt-5-codex", psi.ArgumentList);
         Assert.DoesNotContain("claude-opus-4-7", psi.ArgumentList);
 
@@ -235,6 +237,7 @@ public class CodexCliServiceTests
             model: "gpt-5-codex",
             thinkingLevel: "high").ArgumentList.ToArray();
 
+        Assert.Contains("--experimental-json", args);
         Assert.Contains("-c", args);
         Assert.Contains("model_reasoning_effort=\"high\"", args);
     }

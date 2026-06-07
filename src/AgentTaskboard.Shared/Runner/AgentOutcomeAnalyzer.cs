@@ -64,15 +64,9 @@ public enum RunIssueKind
     /// </summary>
     EnvironmentBlocker,
     /// <summary>
-    /// Codex stopped emitting frames after a successful tool call but never
-    /// produced a closing <c>turn.completed</c> or terminal sentinel.
-    /// The runner detected the stale silence (see
-    /// <c>CodexSilentCompletionDetector</c>), wrote a synthetic
-    /// <c>[codex-silent-completion]</c> marker, and killed the lingering
-    /// process so the regular post-run pipeline could run. The work is
-    /// likely complete - the missing sign-off is a Codex-side quirk - but
-    /// we flag it explicitly so the auto-review aspect calls and the
-    /// human-reviewer in the lane see why no sentinel landed.
+    /// Legacy Codex silent-completion marker. Codex now completes through
+    /// process exit with <c>exec --experimental-json</c>; this issue kind is
+    /// kept so archived runs and transitional markers still render cleanly.
     /// </summary>
     SilentCompletion,
     /// <summary>

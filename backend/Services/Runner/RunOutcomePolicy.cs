@@ -247,13 +247,23 @@ public static class RunOutcomePolicy
 
         if (outcome.IssueKind == RunIssueKind.MissingTerminalSentinel)
         {
-            // Evidence-based completion for Codex: the main silent-finish shape
-            // (turn.completed / exit without a sentinel) lands here. With real
-            // commits + a clean self-reported status we accept directly instead
-            // of burning a reissue; with open items / a mid-task timeout we run
-            // a bounded continuation (codex exec resume) to close it out.
+            // Codex completion is process-exit based: exec
+            // --experimental-json stream close + exit code is the completion
+            // gate. A missing sentinel remains a review hint, but must not
+            // trigger the legacy "ask once for a structured close-out" loop.
             var codexAction = TryCodexEvidenceAction(codexEvidence, outcome, reissueAttempt, RunIssueKind.MissingTerminalSentinel);
             if (codexAction != null) return codexAction;
+            if (codexEvidence is { } evidence && evidence.IsCodex)
+            {
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.NotifyUserAndAccept,
+                    MetaMessage: "Codex exited after the experimental-json stream closed without a terminal sentinel. Treating process exit as completion and surfacing the missing sentinel as a review marker.",
+                    IsHeuristicFallback: false)
+                {
+                    IssueKind = RunIssueKind.MissingTerminalSentinel,
+                    MessageKind = OrchestratorMessageKind.MissingTerminalSentinel
+                };
+            }
 
             if (reissueAttempt < MaxSoftInterventionAttempts)
             {
