@@ -233,7 +233,7 @@ public static class TaskCrudEndpoints
             }
         });
 
-        group.MapDelete("/orphan-folder", (OrphanFolderDeleteRequest req, TaskStateMachine states) =>
+        group.MapDelete("/orphan-folder", ([Microsoft.AspNetCore.Mvc.FromBody] OrphanFolderDeleteRequest req, TaskStateMachine states) =>
         {
             var outcome = states.DeleteOrphanFolder(req.WatchPath ?? "", req.Lane ?? "", req.Folder ?? "");
             return outcome.Status switch
