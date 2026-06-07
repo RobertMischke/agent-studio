@@ -42,6 +42,7 @@ import {
   TaskSelectionService,
   TriageController,
   LanePagerService,
+  LANE_LABELS,
   overflowActionsFor,
   primaryActionFor,
   type TriageButton,
@@ -223,6 +224,24 @@ export class App implements OnInit, OnDestroy {
   readonly triageToast = this.jobSelection.triageToast;
   readonly epicOverlayDetail = signal<TaskDetail | null>(null);
   readonly epicOverlayTaskDetail = signal<TaskDetail | null>(null);
+  readonly epicOverlaySubTaskPeers = computed<TaskInfo[]>(() => {
+    const epic = this.epicOverlayDetail();
+    if (!epic) return [];
+    const laneRank = new Map(Object.keys(LANE_LABELS).map((state, index) => [state, index]));
+    return this.jobService.jobs()
+      .filter((job) =>
+        job.kind !== 'epic' &&
+        job.epicId === epic.info.id &&
+        job.watchPath === epic.info.watchPath
+      )
+      .sort((a, b) => {
+        const stateDelta = (laneRank.get(a.state) ?? 999) - (laneRank.get(b.state) ?? 999);
+        if (stateDelta !== 0) return stateDelta;
+        const orderDelta = a.order - b.order;
+        if (orderDelta !== 0) return orderDelta;
+        return (a.title || a.id).localeCompare(b.title || b.id);
+      });
+  });
 
   @ViewChild('jobDetail') private jobDetailRef?: TaskDetailComponent;
   @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
@@ -1714,8 +1733,7 @@ export class App implements OnInit, OnDestroy {
           });
           return;
         }
-        this.epicOverlayTaskDetail.set(detail);
-        this.selectFetchedDetail(detail);
+        this.selectEpicOverlaySubTask(detail);
       },
       error: (err) => {
         if (requestToken !== this.relatedOpenToken) return;
@@ -1725,6 +1743,46 @@ export class App implements OnInit, OnDestroy {
         });
       },
     });
+  }
+
+  private selectEpicOverlaySubTask(detail: TaskDetail): void {
+    this.epicOverlayTaskDetail.set(detail);
+    this.captureEpicOverlayPager(detail);
+    this.selectFetchedDetail(detail);
+  }
+
+  private captureEpicOverlayPager(detail: TaskDetail): void {
+    const peers = this.epicOverlaySubTaskPeers();
+    if (peers.length === 0) return;
+    this.lanePager.capture('epic', peers, detail.info.taskKey);
+  }
+
+  closeEpicOverlayTaskDetail(): void {
+    this.epicOverlayTaskDetail.set(null);
+  }
+
+  onEpicOverlayNavigateLane(targetState: string): void {
+    const next = this.epicOverlaySubTaskPeers().find((job) => job.state === targetState);
+    if (!next) return;
+    this.openEpicOverlaySubTask({ jobId: next.id, watchPath: next.watchPath });
+  }
+
+  onEpicOverlayNextSubTask(info: TaskInfo): void {
+    this.openAdjacentEpicOverlaySubTask(info, 1);
+  }
+
+  onEpicOverlayPrevSubTask(info: TaskInfo): void {
+    this.openAdjacentEpicOverlaySubTask(info, -1);
+  }
+
+  private openAdjacentEpicOverlaySubTask(info: TaskInfo, delta: -1 | 1): void {
+    const peers = this.epicOverlaySubTaskPeers();
+    if (peers.length === 0) return;
+    const idx = peers.findIndex((job) => job.taskKey === info.taskKey);
+    const nextIdx = idx < 0 ? 0 : idx + delta;
+    if (nextIdx < 0 || nextIdx >= peers.length || nextIdx === idx) return;
+    const next = peers[nextIdx];
+    this.openEpicOverlaySubTask({ jobId: next.id, watchPath: next.watchPath });
   }
 
   closeEpicOverlay(): void {

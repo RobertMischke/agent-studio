@@ -54,6 +54,8 @@ export class EpicRollupPaneComponent {
   readonly availableModels = input<readonly CliModelInfo[]>([]);
   /** True while a CLI run is in flight: gates description + model edits. */
   readonly isRunning = input(false);
+  /** Sub-task currently open in the host's master/detail area. */
+  readonly selectedSubTaskId = input<string | null>(null);
 
   /** Bubbles a click on a sub-task so the host opens its detail. */
   readonly openSubTask = output<{ jobId: string; watchPath: string }>();

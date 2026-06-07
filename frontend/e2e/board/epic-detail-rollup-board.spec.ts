@@ -6,10 +6,10 @@
  * spanning the full pane width - replacing the old single narrow column list.
  *
  * The test seeds one epic + four sub-tasks via the API and spreads them across
- * three lanes (two stay 2-ready, one -> 3-progress, one -> 6-completed), deep
- * links to the epic's detail, and asserts the mini-board renders exactly those
- * three lanes in kanban order (Ready, In Progress, Completed) with the right
- * per-lane counts. Clicking a sub-task card opens that card's detail.
+ * three lanes (two stay 2-ready, one -> 3-progress, one -> 6-completed), opens
+ * the epic from the board, and asserts the mini-board renders inside the
+ * closable overlay without changing board context. Clicking a sub-task keeps
+ * the epic master section mounted and swaps the nested detail below it.
  *
  * Routes are `/api/tasks*`; this spec inlines the task API calls it needs so it
  * does not depend on the still-`/api/jobs` shared helpers/jobs.ts.
@@ -120,18 +120,25 @@ test.describe('Epic detail: sub-tasks grouped by lane', () => {
     await moveTask(subIds[0], watchPath, '6-completed');
     await moveTask(subIds[1], watchPath, '3-progress');
 
-    // Deep-link straight to the epic's detail (?job=&watchPath= is the open-
-    // detail URL contract restored on boot).
-    await page.goto(`/?job=${encodeURIComponent(epicId)}&watchPath=${encodeURIComponent(watchPath)}`);
+    await page.goto('/');
+    await expect(page.locator('[data-testid="studio-board"]')).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
+      .toBeNull();
 
-    await expect(page.locator('[data-testid="studio-task"]')).toBeVisible({ timeout: 20_000 });
+    await page.locator('app-job-card').filter({ hasText: `${PREFIX}Checkout revamp` }).first().click();
 
-    const pane = page.locator('[data-testid="epic-rollup-pane"]');
+    const overlay = page.locator('[data-testid="epic-overlay"]');
+    await expect(overlay).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="studio-board"]')).toBeVisible();
+    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
+      .toBeNull();
+
+    const pane = overlay.locator('[data-testid="epic-rollup-pane"]');
     await expect(pane).toBeVisible({ timeout: 15_000 });
     await expect(pane.locator('[data-testid="epic-rollup-count"]'))
       .toHaveText('1 / 4 done', { timeout: 15_000 });
 
-    const board = page.locator('[data-testid="epic-rollup-board"]');
+    const board = overlay.locator('[data-testid="epic-rollup-board"]');
     await expect(board).toBeVisible({ timeout: 10_000 });
 
     // Exactly the three populated lanes, in kanban order. Empty lanes are hidden.
@@ -177,10 +184,20 @@ test.describe('Epic detail: sub-tasks grouped by lane', () => {
     await page.screenshot({ path: boardShot, fullPage: false });
     await testInfo.attach('epic-detail-lane-board', { path: boardShot, contentType: 'image/png' });
 
-    // Clicking a sub-task card opens that card's detail (epic pane goes away).
+    // Clicking a sub-task swaps the nested detail while the epic master stays
+    // mounted, so the operator can keep navigating within the epic.
     await board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[1]}"]`).click();
-    await expect(pane).toHaveCount(0, { timeout: 15_000 });
+    await expect(overlay).toBeVisible({ timeout: 15_000 });
+    await expect(pane).toBeVisible();
+    await expect(board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[1]}"]`))
+      .toHaveAttribute('aria-current', 'true', { timeout: 10_000 });
+    await expect(overlay.locator('[data-testid="epic-overlay-detail"]')).toBeVisible({ timeout: 15_000 });
+    await expect(overlay.locator('[data-testid="overview-title"]')).toContainText(`${PREFIX}sub 2`, { timeout: 15_000 });
     await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
       .toBe(subIds[1]);
+
+    await page.locator('[data-testid="epic-overlay-close"]').click();
+    await expect(overlay).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.locator('[data-testid="studio-task"]')).toBeVisible({ timeout: 10_000 });
   });
 });

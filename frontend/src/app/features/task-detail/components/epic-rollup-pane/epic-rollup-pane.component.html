@@ -130,8 +130,10 @@
                 <li>
                   <button type="button"
                           class="epic-rollup__card"
+                          [class.epic-rollup__card--selected]="selectedSubTaskId() === sub.id"
                           data-testid="epic-rollup-card"
                           [attr.data-sub-id]="sub.id"
+                          [attr.aria-current]="selectedSubTaskId() === sub.id ? 'true' : null"
                           [appTooltip]="'Open sub-task'"
                           (click)="openSub(sub)">{{ sub.title || sub.id }}</button>
                 </li>

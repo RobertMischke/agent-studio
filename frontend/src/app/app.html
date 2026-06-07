@@ -840,6 +840,7 @@
               [promptMarkdown]="epic.promptMarkdown || ''"
               [availableModels]="availableModels()"
               [isRunning]="epic.info.execution?.status === 'running'"
+              [selectedSubTaskId]="epicOverlayTaskDetail()?.info?.id ?? null"
               (openSubTask)="openEpicOverlaySubTask($event)"
               (saveTitle)="saveEpicOverlayTitle($event)"
               (saveDescription)="saveEpicOverlayDescription($event)"
@@ -852,20 +853,20 @@
               <app-job-detail
                 [detail]="subDetail"
                 [watchPaths]="watchPaths()"
-                [lanePeers]="triageLanePeers()"
+                [lanePeers]="epicOverlaySubTaskPeers()"
                 [mutationsBlocked]="updateClient.mutationsBlocked()"
-                (back)="closeDetail()"
+                (back)="closeEpicOverlayTaskDetail()"
                 (fileSaved)="onFileSaved()"
                 (projectChanged)="onProjectChanged($event)"
                 (deleteRequested)="onDeleteFromDetail(subDetail.info)"
-                (navigateLaneRequested)="onNavigateLane($event)"
+                (navigateLaneRequested)="onEpicOverlayNavigateLane($event)"
                 (openEpicRequested)="onOpenJobDetailFromSheet($event)"
                 (triageMoveRequested)="onTriageMove(subDetail.info, $event)"
                 (triageMoveToTopRequested)="onTriageMoveToTop(subDetail.info, $event)"
                 (triageDeleteRequested)="onTriageDelete(subDetail.info, $event)"
                 (triageStartRequested)="onTriageStart(subDetail.info, $event)"
-                (nextInLaneRequested)="onTriageNext(subDetail.info)"
-                (prevInLaneRequested)="onTriagePrev(subDetail.info)" />
+                (nextInLaneRequested)="onEpicOverlayNextSubTask(subDetail.info)"
+                (prevInLaneRequested)="onEpicOverlayPrevSubTask(subDetail.info)" />
             </section>
           } @else {
             <div class="epic-overlay__empty" data-testid="epic-overlay-empty">
