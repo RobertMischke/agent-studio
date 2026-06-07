@@ -27,6 +27,7 @@ public class CodeReviewDefaultsEndpointTests
 
         Assert.Equal(TaskCodeReviewEndpoints.DefaultCliFallback, cli);
         Assert.Equal(TaskCodeReviewEndpoints.DefaultModelFallback, model);
+        Assert.Equal("claude-opus-4-8", model);
     }
 
     [Fact]

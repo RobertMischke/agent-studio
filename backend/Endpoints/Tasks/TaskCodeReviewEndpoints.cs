@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Review;
 using OrchestratorApi.Services.Runner;
@@ -36,7 +37,7 @@ public static class TaskCodeReviewEndpoints
     public const string DefaultCliFallback = "claude";
 
     /// <summary>Hard fallback when neither config nor request specifies a model.</summary>
-    public const string DefaultModelFallback = "claude-haiku-4-5";
+    public const string DefaultModelFallback = ClaudeCliService.DefaultOpusModel;
 
     /// <summary>Default per-run wall-clock cap when configuration omits it.</summary>
     public const int DefaultTimeoutSecondsFallback = 600;

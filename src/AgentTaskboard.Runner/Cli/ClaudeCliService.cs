@@ -32,6 +32,8 @@ public record ClaudeRateLimitSnapshot(
 /// </summary>
 public sealed class ClaudeCliService : CliExecutionServiceBase
 {
+    public const string DefaultOpusModel = "claude-opus-4-8";
+
     private string? _cliPathOverride;
     private readonly CliUsageParserRegistry? _usageParsers;
     private readonly ICliModelRegistry _modelRegistry;
@@ -702,7 +704,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // user picks one, the CLI validates. Empty list also works (default).
         var models = new List<CliModelInfo>
         {
-            Model("claude-opus-4-8",   "Claude Opus 4.8",   isDefault: true),
+            Model(DefaultOpusModel,    "Claude Opus 4.8",   isDefault: true),
             Model("claude-opus-4-7",   "Claude Opus 4.7"),
             Model("claude-sonnet-4-6", "Claude Sonnet 4.6"),
             Model("claude-haiku-4-5",  "Claude Haiku 4.5")
