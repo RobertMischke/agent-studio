@@ -177,3 +177,55 @@ No output file changes.
 
 Application bundle generation complete. [1.691 seconds] - 2026-06-07T10:28:09.022Z
 
+❯ Changes detected. Rebuilding...
+✔ Changes detected. Rebuilding...
+Initial chunk files | Names | Raw size
+main.js             | main  |  8.24 MB | 
+
+Application bundle generation complete. [2.519 seconds] - 2026-06-07T10:30:13.977Z
+
+Page reload sent to client(s).
+❯ Changes detected. Rebuilding...
+✔ Changes detected. Rebuilding...
+Application bundle generation failed. [1.441 seconds] - 2026-06-07T10:30:32.473Z
+
+❯ Changes detected. Rebuilding...
+✔ Changes detected. Rebuilding...
+Initial chunk files | Names         |  Raw size
+main.js             | main          |   8.24 MB | 
+chunk-DZHNFMAD.js   | -             |  93.05 kB | 
+styles.css          | styles        |  81.20 kB | 
+chunk-7WUTQBRG.js   | -             |   3.15 kB | 
+chunk-6CLNTEVW.js   | -             | 797 bytes | 
+
+                    | Initial total |   8.41 MB
+
+Lazy chunk files    | Names         |  Raw size
+chunk-B4BRCBEA.js   | -             | 636.45 kB | 
+chunk-YKXVGQV7.js   | index         | 166.68 kB | 
+chunk-HATKHCL2.js   | core          |  51.47 kB | 
+chunk-E5UI376K.js   | typescript    |  19.00 kB | 
+chunk-2PBZL3JU.js   | scss          |  18.99 kB | 
+chunk-NWN7QI6H.js   | javascript    |  16.23 kB | 
+chunk-TYLYI524.js   | python        |   8.58 kB | 
+chunk-ME2KUTHZ.js   | csharp        |   8.39 kB | 
+chunk-4IN2J6GN.js   | bash          |   6.31 kB | 
+chunk-D3KSWUUN.js   | xml           |   5.18 kB | 
+chunk-NEQNAJE4.js   | markdown      |   5.00 kB | 
+chunk-TZPF6U2K.js   | index         |   4.81 kB | 
+chunk-SHJA4RM4.js   | yaml          |   4.55 kB | 
+chunk-MXPRZK53.js   | index         |   4.17 kB | 
+chunk-RDH4B7SB.js   | diff          |   1.14 kB | 
+...and 4 more lazy chunks files. Use "--verbose" to show all the files.
+
+Application bundle generation complete. [1.236 seconds] - 2026-06-07T10:30:39.486Z
+
+Page reload sent to client(s).
+❯ Changes detected. Rebuilding...
+✔ Changes detected. Rebuilding...
+Initial chunk files | Names | Raw size
+main.js             | main  |  8.24 MB | 
+
+Application bundle generation complete. [1.911 seconds] - 2026-06-07T10:33:17.885Z
+
+Component update sent to client(s).

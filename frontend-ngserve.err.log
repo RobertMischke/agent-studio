@@ -6,3 +6,10 @@ X [ERROR] NG8113: OverlayPortalDirective is not used within the template of CliM
          ╵                               ~~~~~~~~~~~~~~~~~~~~~~
 
 
+X [ERROR] TS2339: Property 'position' does not exist on type 'CliModelSelectorComponent'. [plugin angular-compiler]
+
+    src/app/components/cli-model-selector/cli-model-selector.component.ts:210:55:
+      210 │       if (this.pickerOpen()) queueMicrotask(() => this.position());
+          ╵                                                        ~~~~~~~~
+
+
