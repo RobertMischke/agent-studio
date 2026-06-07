@@ -4,4 +4,4 @@ Fix attempts and their status. Status vocabulary: `tried`, `applied`, `works`, `
 
 | Status | Date (UTC) | Measure | Owner | Outcome |
 |---|---|---|---|---|
-| TODO | TODO | TODO | TODO | TODO |
+| applied | 2026-06-05 | Add Codex silent-completion handling and foreground silent finishes as suspicious. | ASS-744, ASS-755, ASS-734, ASS-780 | Recovery exists; entry remains open until recurrence rate drops. |

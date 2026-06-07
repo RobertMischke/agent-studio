@@ -140,6 +140,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
+    private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly RegressionRadarService? _regressionRadar;
 
     /// <summary>
@@ -185,6 +186,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PipelineExecutionLog? pipelineLog = null,
         ILintScssRunner? lintScssRunner = null,
         IBuildTestGateRunner? buildTestGateRunner = null,
+        WikiMaintenancePostStepRunner? wikiMaintenance = null,
         TimelineLog? timeline = null,
         ProjectSettingsService? projectSettings = null,
         HumanReviewEscalation? humanReviewEscalation = null,
@@ -206,6 +208,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _pipelineLog = pipelineLog;
         _lintScssRunner = lintScssRunner;
         _buildTestGateRunner = buildTestGateRunner;
+        _wikiMaintenance = wikiMaintenance;
         _timeline = timeline;
         _projectSettings = projectSettings;
         _humanReviewEscalation = humanReviewEscalation;
@@ -1530,6 +1533,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Complete mark and feeds nothing into the decision branches below.
         RunRegressionRadarPostStep(entry, current);
 
+        // Wiki maintenance post-step: opt-in project-scoped knowledge upkeep.
+        // It dedupes recurring problem entries by slug, records this task as
+        // occurrence evidence, and regenerates the project wiki index. It is
+        // reporting-only and never changes the task lane decision.
+        RunWikiMaintenancePostStep(entry, current);
+
         _pipelineLog?.Complete(current.FolderPath);
 
         if (report.Overall == AspectStatus.Block)
@@ -2569,6 +2578,86 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
         {
             StepId = PipelineCatalogue.RegressionRadarStepId,
+            Kind = StepKind.Tool,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Verdict = verdictToken,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
+    /// Run the opt-in project wiki maintenance post-step. It is deliberately
+    /// non-gating: any failure records a failed/skipped step and the review
+    /// decision continues from the task's actual aspect/evidence verdict.
+    /// </summary>
+    private void RunWikiMaintenancePostStep(WatchPathEntry entry, TaskInfo current)
+    {
+        if (_wikiMaintenance == null) return;
+
+        var settings = _projectSettings?.Get(entry.Name);
+        var wikiStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, PipelineCatalogue.WikiMaintenanceStepId, StringComparison.OrdinalIgnoreCase));
+        var ctx = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = false,
+            TaskType = current.TaskType,
+            Tags = current.Tags,
+        };
+        var shouldRun = wikiStep is null
+            ? PipelineStepConfigResolver.ShouldRun(settings, PipelineCatalogue.WikiMaintenanceStepId, ctx)
+            : PipelineStepConfigResolver.ShouldRun(settings, wikiStep, ctx);
+        if (!shouldRun)
+        {
+            RecordWikiMaintenanceStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config or condition");
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+        WikiMaintenanceResult result;
+        try
+        {
+            result = _wikiMaintenance.Run(current, entry);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: wiki-maintenance post-step threw for {Project}/{JobId}; recording failure",
+                entry.Name, current.Id);
+            RecordWikiMaintenanceStep(current.FolderPath, PipelineStepStatus.Failed,
+                sw.ElapsedMilliseconds, "error", ex.Message);
+            return;
+        }
+        sw.Stop();
+
+        var status = result.Verdict == WikiMaintenanceVerdict.Error
+            ? PipelineStepStatus.Failed
+            : result.Verdict == WikiMaintenanceVerdict.Skipped
+                ? PipelineStepStatus.Skipped
+                : PipelineStepStatus.Passed;
+        var verdict = result.Verdict.ToString().ToLowerInvariant();
+        var reason = result.Slug == null ? result.Reason : $"{result.Reason}: {result.Slug}";
+        RecordWikiMaintenanceStep(current.FolderPath, status, sw.ElapsedMilliseconds, verdict, reason);
+    }
+
+    private void RecordWikiMaintenanceStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string? reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.WikiMaintenanceStepId,
             Kind = StepKind.Tool,
             Status = status,
             StartedAt = now - TimeSpan.FromMilliseconds(durationMs),

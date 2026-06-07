@@ -4,4 +4,4 @@ Fix attempts and their status. Status vocabulary: `tried`, `applied`, `works`, `
 
 | Status | Date (UTC) | Measure | Owner | Outcome |
 |---|---|---|---|---|
-| TODO | TODO | TODO | TODO | TODO |
+| applied | 2026-06-05 | Add follow-up work for verdict-without-move repair. | ASS-779 | Open until the repair is verified against stuck cards. |

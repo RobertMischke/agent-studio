@@ -1,20 +1,22 @@
 ---
 id: classifier-unknown-on-cli-resume-failure
-title: "TODO: one-line human-readable title"
-status: open
-first-seen: 2026-06-07T10:37:37Z
-last-seen: 2026-06-07T10:37:37Z
-severity: minor
-category: misc
-tags: []
-affects: []
-related-tasks: []
+title: "Codex resume rejection is routed as classifier-unknown"
+status: fixed
+first-seen: 2026-06-05T00:00:00Z
+last-seen: 2026-06-05T00:00:00Z
+severity: major
+category: cli
+tags: [codex, resume, classifier-unknown, exit-2]
+affects:
+  - "codex exec resume"
+  - "runner outcome classification"
+related-tasks: [ASS-775]
 related-adrs: []
 ---
 
-# classifier-unknown-on-cli-resume-failure
+# Codex resume rejection is routed as classifier-unknown
 
-**What.** TODO: one-sentence symptom description.
-**Why.** TODO: best current understanding of root cause.
-**Workaround.** TODO: shortest reliable mitigation today.
-**Long-term.** TODO: the fix or design change that would retire this entry.
+**What.** codex exec resume rejects a resume attempt with exit code 2, but the runner surfaces a terminal classifier-unknown instead of recovery guidance.
+**Why.** The resume failure was not classified as a known recoverable Codex session problem.
+**Workaround.** Treat exit 2 from Codex resume as a resume/session failure and start a recovery path instead of accepting classifier-unknown at face value.
+**Long-term.** ASS-775 fixed and deployed the classifier path.

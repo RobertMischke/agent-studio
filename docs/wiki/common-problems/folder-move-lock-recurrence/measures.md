@@ -4,4 +4,4 @@ Fix attempts and their status. Status vocabulary: `tried`, `applied`, `works`, `
 
 | Status | Date (UTC) | Measure | Owner | Outcome |
 |---|---|---|---|---|
-| TODO | TODO | TODO | TODO | TODO |
+| works | 2026-06-05 | Restart backend / clear orphan process handles. | ASS-759 | Mitigated the observed lock recurrence. |

@@ -1,3 +1,5 @@
 # Root-cause protocol
 
-TODO: detailed analyses, reproducers, log excerpts. Cite job slugs and commit hashes.
+The gate implementation and the review execution path diverged; the presence of the class did not mean it was actually invoked.
+
+Protocol: search this entry before repeating diagnosis, then add task-specific logs and reproduction notes when a new occurrence appears.

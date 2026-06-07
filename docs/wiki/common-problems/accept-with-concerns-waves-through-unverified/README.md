@@ -1,20 +1,22 @@
 ---
 id: accept-with-concerns-waves-through-unverified
-title: "TODO: one-line human-readable title"
-status: open
-first-seen: 2026-06-07T10:37:39Z
-last-seen: 2026-06-07T10:37:39Z
-severity: minor
-category: misc
-tags: []
-affects: []
-related-tasks: []
+title: "Accept-with-concerns allowed unverified UI or bug work"
+status: fixed
+first-seen: 2026-06-05T00:00:00Z
+last-seen: 2026-06-05T00:00:00Z
+severity: major
+category: runner
+tags: [accept-with-concerns, evidence-gate, visual-evidence, tests]
+affects:
+  - "auto-review"
+  - "UI and bug tasks"
+related-tasks: [ASS-764, ASS-773]
 related-adrs: []
 ---
 
-# accept-with-concerns-waves-through-unverified
+# Accept-with-concerns allowed unverified UI or bug work
 
-**What.** TODO: one-sentence symptom description.
-**Why.** TODO: best current understanding of root cause.
-**Workaround.** TODO: shortest reliable mitigation today.
-**Long-term.** TODO: the fix or design change that would retire this entry.
+**What.** UI or bug work could be accepted with concerns even when visual evidence was missing or tests/builds were red.
+**Why.** The review path treated concerns as non-blocking without a deterministic evidence gate for high-risk task types.
+**Workaround.** Require screenshot/e2e evidence for UI tasks and green build/test evidence for bug tasks before accepting.
+**Long-term.** ASS-773 added the evidence gate and fixed the deployed review path.

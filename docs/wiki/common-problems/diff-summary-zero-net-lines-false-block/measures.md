@@ -4,4 +4,4 @@ Fix attempts and their status. Status vocabulary: `tried`, `applied`, `works`, `
 
 | Status | Date (UTC) | Measure | Owner | Outcome |
 |---|---|---|---|---|
-| TODO | TODO | TODO | TODO | TODO |
+| works | 2026-06-05 | Fix false block handling for zero-net diff summaries. | ASS-770, ASS-778 | Fixed and deployed per session evidence. |

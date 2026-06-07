@@ -1,3 +1,4 @@
 # Related
 
-Cross-references to other problems (`[[slug]]`), tasks, ADRs, code paths.
+- Related problems: [[codex-silent-finish]], [[completion-gate-dead-code]]
+- Tasks: `ASS-764, ASS-773`

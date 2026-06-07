@@ -1,3 +1,4 @@
 # Related
 
-Cross-references to other problems (`[[slug]]`), tasks, ADRs, code paths.
+- Related problems: [[stale-progress-orphan-race]]
+- Tasks: `ASS-759`

@@ -1,3 +1,4 @@
 # Related
 
-Cross-references to other problems (`[[slug]]`), tasks, ADRs, code paths.
+- Related problems: [[completion-gate-dead-code]], [[verdict-stuck-in-auto-review]]
+- Tasks: `ASS-770, ASS-778`

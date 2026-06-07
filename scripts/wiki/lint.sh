@@ -74,6 +74,10 @@ for dir in "$root"/*/; do
     continue
   fi
 
+  if grep -Eq 'TODO: one-line human-readable title|TODO: one-sentence symptom description|TODO: best current understanding|TODO: shortest reliable mitigation|TODO: the fix or design change' "$readme"; then
+    fail "$rel" "README.md still contains scaffold placeholder text"
+  fi
+
   for k in $required_keys; do
     # Special-case list-shaped keys: presence-check only.
     case "$k" in
@@ -116,6 +120,10 @@ for dir in "$root"/*/; do
       fail "$rel" "sibling file missing: $f"
     fi
   done
+
+  if [ -f "$dir/occurrences.md" ] && grep -Eq '\|[[:space:]]*TODO[[:space:]]*\|' "$dir/occurrences.md"; then
+    fail "$rel" "occurrences.md still contains scaffold TODO row"
+  fi
 done
 
 if [ "$errors" -gt 0 ]; then
