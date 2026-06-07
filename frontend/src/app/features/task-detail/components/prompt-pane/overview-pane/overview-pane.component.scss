@@ -18,6 +18,11 @@
   --ov-label-col: 100px;
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 64px;
+  // Keep the metric columns visually attached to the step row on wide panes.
+  // The surrounding `.studio-measure--tabular-compact` still owns the section
+  // cap; this track stops the step name from absorbing all spare width inside
+  // that cap and pushing time / tokens / cost to the far edge.
+  --ov-pipeline-name-col: fit-content(360px);
   --ov-pipeline-meta-col: minmax(0, max-content);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
@@ -575,7 +580,7 @@
   grid-template-columns:
     var(--ov-pipeline-status-col)
     var(--ov-pipeline-kind-col)
-    minmax(180px, 1fr)
+    var(--ov-pipeline-name-col)
     var(--ov-pipeline-meta-col)
     var(--ov-pipeline-meta-col)
     var(--ov-pipeline-meta-col)
@@ -637,7 +642,7 @@
   grid-template-columns:
     var(--ov-pipeline-status-col)
     var(--ov-pipeline-kind-col)
-    minmax(180px, 1fr)
+    var(--ov-pipeline-name-col)
     var(--ov-pipeline-meta-col)
     var(--ov-pipeline-meta-col)
     var(--ov-pipeline-meta-col)
