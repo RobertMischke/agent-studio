@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "updatedAt": "2026-06-07",
+  "sourceOfTruth": "docs/visual/manifest.json",
+  "existingDataOnly": true,
+  "captureSuite": {
+    "tool": "Playwright",
+    "spec": "frontend/e2e/visual-evidence/readme-screenshots.spec.ts",
+    "command": "cd frontend && PW_TARGET=dev npx playwright test e2e/visual-evidence/readme-screenshots.spec.ts --project=chromium",
+    "dataState": "Existing Sample Shop demo workspace exposed by /api/watch-paths with name \"Sample Shop\".",
+    "notes": "The spec skips itself when the Sample Shop workspace is not configured."
+  },
+  "images": [
+    {
+      "id": "task-board-overview",
+      "feature": "Task board",
+      "title": "Task board overview",
+      "purpose": "Shows the board as the place where agent work becomes visible, grouped, and reviewable.",
+      "featureDoc": "features/task-board.md",
+      "image": {
+        "path": "../images/board-overview.png",
+        "alt": "Agent Task Processor board overview with project tree, task lanes, job cards, runner state, and usage summary.",
+        "caption": "Task board overview from the existing Sample Shop demo workspace."
+      },
+      "state": {
+        "route": "/",
+        "viewport": "1440x900",
+        "relevantState": "Board is loaded with visible job cards from the Sample Shop demo workspace.",
+        "dataSource": "Existing watch path named Sample Shop; no synthetic route stubs."
+      },
+      "capture": {
+        "test": "readme screenshots - board, detail, protocol pane",
+        "steps": [
+          "Open /.",
+          "Wait for the first job card.",
+          "Capture docs/images/board-overview.png."
+        ]
+      },
+      "marketingUsages": [
+        {
+          "id": "homeBoardWorkbench",
+          "repo": "agent-studio-for-software-website",
+          "assetPath": "04-angular-static-final/public/product-screenshots/home-board-workbench.png",
+          "publicPath": "/product-screenshots/home-board-workbench.png",
+          "component": "homeCapture",
+          "pages": ["/", "/product"],
+          "role": "Primary workbench proof image",
+          "copyIntent": "Show that Angular Studio turns agent work into a visible board with reviewable tasks."
+        }
+      ]
+    },
+    {
+      "id": "task-detail-protocol",
+      "feature": "Task detail protocol",
+      "title": "Task detail with protocol pane",
+      "purpose": "Shows that one task keeps prompt, protocol status, and review evidence in one inspectable place.",
+      "featureDoc": "features/task-detail-protocol.md",
+      "image": {
+        "path": "../images/detail-protocol.png",
+        "alt": "Task detail page with prompt and protocol panes visible for one Sample Shop task.",
+        "caption": "Task detail protocol view from an existing Sample Shop task."
+      },
+      "state": {
+        "route": "/tasks/<sample-shop-task>",
+        "viewport": "1440x900",
+        "relevantState": "A Sample Shop task containing the word coffee is open and the protocol pane is visible.",
+        "dataSource": "Existing Sample Shop task selected by the Playwright spec."
+      },
+      "capture": {
+        "test": "readme screenshots - board, detail, protocol pane",
+        "steps": [
+          "Open /.",
+          "Click the first job card containing coffee.",
+          "Wait for pane-protocol.",
+          "Capture docs/images/detail-protocol.png."
+        ]
+      },
+      "marketingUsages": [
+        {
+          "id": "taskDetailProtocol",
+          "repo": "agent-studio-for-software-website",
+          "assetPath": "04-angular-static-final/public/product-screenshots/task-detail-protocol.png",
+          "publicPath": "/product-screenshots/task-detail-protocol.png",
+          "component": "visualDocumentationCapture",
+          "pages": ["/product", "/software-quality"],
+          "role": "Visual documentation example",
+          "copyIntent": "Show a real screenshot that can be tied back to route, state, and Playwright recipe."
+        }
+      ]
+    },
+    {
+      "id": "task-detail-three-panes",
+      "feature": "Task detail evidence",
+      "title": "Task detail with protocol and Git panes",
+      "purpose": "Shows that implementation evidence, protocol status, and Git context can be reviewed together.",
+      "featureDoc": "features/task-detail-three-panes.md",
+      "image": {
+        "path": "../images/detail-three-panes.png",
+        "alt": "Task detail view with prompt, protocol, and Git panes visible side by side.",
+        "caption": "Task detail view with prompt, protocol, and Git context open together."
+      },
+      "state": {
+        "route": "/tasks/<sample-shop-task>",
+        "viewport": "1440x900",
+        "relevantState": "A Sample Shop task is open and the Git pane has been toggled on.",
+        "dataSource": "Existing Sample Shop task selected by the Playwright spec."
+      },
+      "capture": {
+        "test": "readme screenshots - board, detail, protocol pane",
+        "steps": [
+          "Open /.",
+          "Click the first job card containing coffee.",
+          "Wait for pane-protocol.",
+          "Click pane-toggle-git.",
+          "Wait for pane-git.",
+          "Capture docs/images/detail-three-panes.png."
+        ]
+      },
+      "marketingUsages": [
+        {
+          "id": "reviewTaskEvidenceGit",
+          "repo": "agent-studio-for-software-website",
+          "assetPath": "04-angular-static-final/public/product-screenshots/review-task-evidence-git.png",
+          "publicPath": "/product-screenshots/review-task-evidence-git.png",
+          "component": "reviewTaskCapture",
+          "pages": ["/", "/context-management", "/patterns/plus-one-developer"],
+          "role": "Review evidence proof image",
+          "copyIntent": "Show that a reviewable task keeps protocol and Git evidence visible at the same time."
+        }
+      ]
+    },
+    {
+      "id": "quality-gate-review",
+      "feature": "Quality gate review",
+      "title": "Task detail quality gate",
+      "purpose": "Shows a review state where task evidence and quality-gate context are visible before a human decision.",
+      "featureDoc": "features/quality-gate-review.md",
+      "image": {
+        "path": "../images/detail-quality-gate.png",
+        "alt": "Task detail view for a quality-gate task with protocol, Git evidence, and review context.",
+        "caption": "Quality-gate task detail from the existing Sample Shop screenshot set."
+      },
+      "state": {
+        "route": "/tasks/<sample-shop-quality-task>",
+        "viewport": "1440x900",
+        "relevantState": "A Sample Shop task containing wishlist is open and the protocol pane is visible.",
+        "dataSource": "Existing Sample Shop task selected by the Playwright spec."
+      },
+      "capture": {
+        "test": "readme screenshots - board, detail, protocol pane",
+        "steps": [
+          "Return to the board.",
+          "Click the first job card containing wishlist.",
+          "Wait for pane-protocol.",
+          "Capture docs/images/detail-quality-gate.png."
+        ]
+      },
+      "marketingUsages": [
+        {
+          "id": "taskDetailQualityGate",
+          "repo": "agent-studio-for-software-website",
+          "assetPath": "04-angular-static-final/public/product-screenshots/task-detail-quality-gate.png",
+          "publicPath": "/product-screenshots/task-detail-quality-gate.png",
+          "component": "taskDetailCapture",
+          "pages": ["/product", "/software-quality", "/patterns/angular-quality-rails"],
+          "role": "Quality and review proof image",
+          "copyIntent": "Show that quality checks and review state are part of one task detail."
+        }
+      ]
+    }
+  ]
+}
