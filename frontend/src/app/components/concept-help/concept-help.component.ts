@@ -13,8 +13,7 @@ import {
 } from '@angular/core';
 import { ConceptKey, getConceptEntry } from '../../concept-docs/concept-doc-registry';
 import { ModalStackService } from '../../services/modal-stack.service';
-import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
-import { ConnectedOverlayPositionRef, OverlayPortalService } from '../../services/overlay-portal.service';
+import { ConnectedOverlayDirective } from '../../directives/connected-overlay.directive';
 
 import { TooltipDirective } from '../tooltip';
 const REPO_BLOB_BASE = 'https://github.com/RobertMischke/agent-taskboard/blob/main/';
@@ -32,7 +31,7 @@ const REPO_BLOB_BASE = 'https://github.com/RobertMischke/agent-taskboard/blob/ma
 @Component({
   selector: 'app-concept-help',
   standalone: true,
-  imports: [TooltipDirective, OverlayPortalDirective],
+  imports: [TooltipDirective, ConnectedOverlayDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './concept-help.component.html',
   styleUrl: './concept-help.component.scss'
@@ -50,10 +49,7 @@ export class ConceptHelpComponent {
   private readonly popover = viewChild<ElementRef<HTMLElement>>('popover');
   private readonly trigger = viewChild<ElementRef<HTMLButtonElement>>('trigger');
   private readonly host = inject(ElementRef<HTMLElement>);
-  private readonly overlayPortal = inject(OverlayPortalService);
-  private positionRef: ConnectedOverlayPositionRef | null = null;
-
-  readonly popoverPos = signal<{ left: number; top: number }>({ left: 0, top: 0 });
+  readonly triggerEl = computed(() => this.trigger()?.nativeElement ?? null);
 
   toggle(event: Event): void {
     event.stopPropagation();
@@ -82,34 +78,12 @@ export class ConceptHelpComponent {
     const isOpen = this.open();
     if (isOpen && !this.modalStackDispose) {
       this.modalStackDispose = this.modalStack.push('concept-help', () => this.close());
-      queueMicrotask(() => this.positionPopover());
     } else if (!isOpen && this.modalStackDispose) {
-      this.releasePositioner();
       this.modalStackDispose();
       this.modalStackDispose = null;
     }
   });
   private readonly stackTeardown = this.destroyRef.onDestroy(() => {
-    this.releasePositioner();
     this.modalStackDispose?.();
   });
-
-  private positionPopover(): void {
-    if (!this.open()) return;
-    const trigger = this.trigger()?.nativeElement;
-    const popover = this.popover()?.nativeElement;
-    if (!trigger || !popover) return;
-    this.releasePositioner();
-    this.positionRef = this.overlayPortal.watchConnectedPosition(trigger, popover, {
-      preferredPlacement: 'below',
-      alignment: 'start',
-      gap: 8,
-      viewportPadding: 8,
-    }, pos => this.popoverPos.set({ left: pos.left, top: pos.top }));
-  }
-
-  private releasePositioner(): void {
-    this.positionRef?.dispose();
-    this.positionRef = null;
-  }
 }

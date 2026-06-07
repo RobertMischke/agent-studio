@@ -15,10 +15,11 @@
     <div
       #popover
       class="concept-help__popover"
-      appOverlayPortal="panel"
+      [appConnectedOverlay]="triggerEl()"
+      connectedOverlayPlacement="below"
+      connectedOverlayAlignment="start"
+      [connectedOverlayGap]="8"
       role="dialog"
-      [style.left.px]="popoverPos().left"
-      [style.top.px]="popoverPos().top"
       [attr.aria-label]="entry().title"
       [attr.data-testid]="'concept-help-popover-' + concept()">
       <header class="concept-help__head">
