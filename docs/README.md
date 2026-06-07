@@ -74,6 +74,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [agent-message-bus.md](agent-message-bus.md) | The message-bus channel between supporting agents (orchestrator, supervisor, runners). |
 | [analysis-reports.md](analysis-reports.md) | Markdown-plus-structured-block report contract for any spawnable analysis (security review, drift, council critique). |
 | [drift-reports.md](drift-reports.md) | Drift dimensions, scoring, the report shape used by the project Drift surface. |
+| [visual/](visual/README.md) | Visual Documentation Library: screenshot manifest, feature pages, Playwright reproduction recipes, and downstream marketing usage mapping. |
 | [companion-app-design.md](companion-app-design.md) | The outbound-only companion-app relay (ADR-0018). |
 | [concept-docs/](concept-docs/) | Short in-product explainers, one per topic. Served by `GET /api/concept-docs/{topic}` and rendered in the `<app-info-button>` side-drawer next to surfaces whose behaviour is non-obvious (e.g. lane headers). |
 
