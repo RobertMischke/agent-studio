@@ -105,10 +105,27 @@ export class BacklogTriageScreenComponent implements OnDestroy {
 
   readonly tagsById = this.tagStore.byId;
 
-  /** Backlog jobs after BoardFiltersService narrows by the explicit page project. */
-  readonly filteredBacklog = computed<TaskInfo[]>(
-    () => this.boardFilters.filteredGroupedForProject(this.scopedProject()).backlog ?? [],
-  );
+  /**
+   * True once the screen has a concrete project scope. The backlog is a
+   * strictly per-project view (ASS-689 / ASS-707): without a selected
+   * project we render the prompt below instead of leaking every project's
+   * `0-backlog` tasks into one list. Mirrors the activity-bar badge, which
+   * already reports 0 when no project is active — the two must agree.
+   */
+  readonly hasProjectScope = computed(() => this.scopedProject() !== null);
+
+  /**
+   * Backlog jobs after BoardFiltersService narrows by the explicit page
+   * project. Guarded on the scope: with no selected project we return an
+   * empty list rather than `filteredGroupedForProject(null)`, which would
+   * fall through to an unfiltered (all-projects) feed and surface foreign
+   * tasks.
+   */
+  readonly filteredBacklog = computed<TaskInfo[]>(() => {
+    const project = this.scopedProject();
+    if (!project) return [];
+    return this.boardFilters.filteredGroupedForProject(project).backlog ?? [];
+  });
 
   /** Sorted list driven by the persisted sort mode. */
   readonly visibleJobs = computed<TaskInfo[]>(() => {

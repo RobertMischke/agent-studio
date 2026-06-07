@@ -45,7 +45,11 @@
     </div>
   </header>
 
-  @if (visibleJobs().length === 0) {
+  @if (!hasProjectScope()) {
+    <div class="backlog-triage__empty" data-testid="backlog-triage-no-project">
+      <p class="backlog-triage__empty-text">Select a project to triage its backlog.</p>
+    </div>
+  } @else if (visibleJobs().length === 0) {
     <div class="backlog-triage__empty" data-testid="backlog-triage-empty">
       @if (hasActiveFiltersOrSearch()) {
         <p class="backlog-triage__empty-text">No backlog tasks match the current filter.</p>
