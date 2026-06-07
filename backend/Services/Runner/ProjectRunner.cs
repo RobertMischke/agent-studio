@@ -3193,7 +3193,14 @@ public class ProjectRunner
             }
 
             OutcomeAction? action = capturedPlan != null
-                ? RunOutcomePolicy.Decide(capturedIntent, capturedPlan, outcome, capturedFollowup, capturedAttempt, codexEvidence)
+                ? RunOutcomePolicy.Decide(
+                    capturedIntent,
+                    capturedPlan,
+                    outcome,
+                    capturedFollowup,
+                    capturedAttempt,
+                    codexEvidence,
+                    RunOutcomePolicy.PriorCommitLines(activeInfo))
                 : null;
 
             // Per-task anti-endless-reissue circuit breaker. A run that did not

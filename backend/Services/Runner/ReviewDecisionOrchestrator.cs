@@ -1075,9 +1075,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (_, recentLog) = LoadTaskContext(pending);
         var findings = CompletionGate.ExtractFindings(LoadStatusSummary(current.FolderPath), recentLog);
+        var priorCommits = RunOutcomePolicy.PriorCommitLines(current);
 
         var followUp = RunOutcomePolicy.BuildMissingSentinelInterventionPrompt(
-            "the previous run ended without any [[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel");
+            "the previous run ended without any [[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel",
+            priorCommits);
         if (findings.Count > 0)
         {
             followUp += "\n\n" + CompletionGate.BuildFollowUp(findings);
@@ -1133,7 +1135,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             RecordOrchestratorReviewStep(moved.FolderPath, PipelineStepStatus.Failed,
                 DecisionVerdictReissue, reason);
             var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
-            var steering = new SteeringContext("no-completion-signal", "reissue", priorReissues, reason);
+            var priorCommits = RunOutcomePolicy.PriorCommitLines(current);
+            var steering = new SteeringContext("no-completion-signal", "reissue", priorReissues, reason,
+                PriorCommits: priorCommits);
             await WriteFollowUpFileAsync(moved, followUp, ct, steering);
             EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
                 TimelineActors.QualityLoop,

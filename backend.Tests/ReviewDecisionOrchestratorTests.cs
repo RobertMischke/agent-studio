@@ -634,7 +634,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // a terminal sentinel from the run agent.
         SeedReviewJobWithoutSentinel("ghosted-malformed",
             title: "Add pagination to the task list endpoint",
-            promptBody: "# Add pagination\n\nAdd cursor-based pagination to GET /api/tasks so the kanban can lazy-load lanes with hundreds of cards.\n");
+            promptBody: "# Add pagination\n\nAdd cursor-based pagination to GET /api/tasks so the kanban can lazy-load lanes with hundreds of cards.\n",
+            commits: new[] { ("abc1234", "feat: add cursor model"), ("def5678", "test: cover task pagination") });
 
         var calls = 0;
         var orchestrator = BuildOrchestrator(
@@ -654,10 +655,20 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var followUp = File.ReadAllText(followUpPath);
         Assert.Contains("terminal sentinel", followUp);
         Assert.Contains("[[TASK_DONE]]", followUp);
+        Assert.Contains("Commits already made for this task", followUp);
+        Assert.Contains("abc1234 feat: add cursor model", followUp);
+        Assert.Contains("def5678 test: cover task pagination", followUp);
+
+        var historyDir = Path.Combine(_watchPath, TaskStates.Ready, "ghosted-malformed", "orchestrator-follow-up-history");
+        var historyPath = Assert.Single(Directory.GetFiles(historyDir, "*.md"));
+        var history = File.ReadAllText(historyPath);
+        Assert.Contains("- priorCommits:", history);
+        Assert.Contains("abc1234 feat: add cursor model", history);
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
         Assert.Equal("(deterministic no-completion-signal branch)", record.Prompt);
+        Assert.Contains("abc1234 feat: add cursor model", record.FollowUp);
     }
 
     [Fact]
@@ -696,6 +707,16 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal(ReviewDecisionKind.Escalate, records[^1].Kind);
         // Never accept-as-done on a missing deterministic signal.
         Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.AcceptAsDone);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // The lane move is the idempotency guard: once in human review, a
+        // later tick must not create another "needs your attention" intake or
+        // append a duplicate escalation verdict.
+        records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Equal(3, records.Count);
+        var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-stubborn-no-signal");
+        Assert.False(Directory.Exists(intake));
     }
 
     [Fact]
@@ -1692,12 +1713,21 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             $"[12:00:01.000] [stdout] [[TASK_BLOCKED: {reason}]]{Environment.NewLine}");
     }
 
-    private void SeedReviewJobWithoutSentinel(string slug, string title, string promptBody, bool includeRunnerActiveClearedMarker = true)
+    private void SeedReviewJobWithoutSentinel(
+        string slug,
+        string title,
+        string promptBody,
+        bool includeRunnerActiveClearedMarker = true,
+        IReadOnlyList<(string ShortSha, string Message)>? commits = null)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        var commitJson = commits == null || commits.Count == 0
+            ? string.Empty
+            : ",\"commits\":[" + string.Join(",", commits.Select(c =>
+                $"{{\"sha\":\"{c.ShortSha}\",\"shortSha\":\"{c.ShortSha}\",\"message\":{System.Text.Json.JsonSerializer.Serialize(c.Message)},\"filesChanged\":1,\"files\":[],\"at\":\"2026-06-01T00:00:00Z\"}}")) + "]";
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"{commitJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         var suffix = includeRunnerActiveClearedMarker
             ? $"[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review){Environment.NewLine}"

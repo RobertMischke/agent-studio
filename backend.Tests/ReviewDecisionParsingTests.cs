@@ -247,6 +247,20 @@ public class ReviewDecisionParsingTests
     }
 
     [Fact]
+    public void LacksTerminalSentinel_False_WhenPriorDoneWasAlreadyReviewed()
+    {
+        // DONE on a prior tick was already consumed by the review-decision
+        // pipeline. With no new run output after the orchestrator verdict,
+        // the no-signal detector must leave the card untouched.
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_DONE]]",
+            "[12:00:30.000] [orchestrator] [decision] accepted after review");
+
+        Assert.False(ReviewDecisionParsing.LacksTerminalSentinelInLatestRun(log));
+        Assert.Null(ReviewDecisionParsing.FindUnresolvedDone(log));
+    }
+
+    [Fact]
     public void LacksTerminalSentinel_True_WhenReissuedRunComesBackWithoutSentinel()
     {
         // A NEEDS_INPUT that was answered, then the reissued run finished

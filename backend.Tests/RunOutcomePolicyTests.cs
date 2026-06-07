@@ -152,8 +152,11 @@ public class RunOutcomePolicyTests
 
         var reissue = RunOutcomePolicy.BuildReissueFollowupPrompt("do it", priorCommits: commits);
         var missing = RunOutcomePolicy.BuildMissingSentinelInterventionPrompt("sum", priorCommits: commits);
+        var codex = RunOutcomePolicy.BuildCodexContinuationPrompt(
+            Outcome(AgentOutcomeKind.Done, sentinel: false),
+            priorCommits: commits);
 
-        foreach (var prompt in new[] { reissue, missing })
+        foreach (var prompt in new[] { reissue, missing, codex })
         {
             Assert.Contains("Commits already made for this task", prompt);
             Assert.Contains("a1b2c3 feat: add lane move", prompt);
@@ -163,6 +166,24 @@ public class RunOutcomePolicyTests
         // No commit block leaks when none are supplied.
         var noCommits = RunOutcomePolicy.BuildReissueFollowupPrompt("do it");
         Assert.DoesNotContain("Commits already made for this task", noCommits);
+    }
+
+    [Theory]
+    [InlineData(RunIssueKind.MissingTerminalSentinel)]
+    [InlineData(RunIssueKind.ClassifierUnknown)]
+    public void SoftIntervention_DecidePrompt_ListsPriorCommits(RunIssueKind issueKind)
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown) with { IssueKind = issueKind },
+            followupPrompt: null,
+            reissueAttempt: 0,
+            priorCommits: new[] { "abc1234 feat: keep existing work" });
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Contains("Commits already made for this task", action.FollowupRetryPrompt);
+        Assert.Contains("abc1234 feat: keep existing work", action.FollowupRetryPrompt);
     }
 
     /// <summary>

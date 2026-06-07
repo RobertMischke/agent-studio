@@ -93,6 +93,29 @@ public static class RunOutcomePolicy
         return sb.ToString();
     }
 
+    public static IReadOnlyList<string> PriorCommitLines(TaskInfo? info)
+    {
+        if (info == null) return Array.Empty<string>();
+
+        var commits = info.Commits.Count > 0
+            ? info.Commits
+            : info.Commit == null ? [] : [info.Commit];
+
+        return commits
+            .Where(c => !string.IsNullOrWhiteSpace(c.Sha) || !string.IsNullOrWhiteSpace(c.ShortSha))
+            .Select(c =>
+            {
+                var sha = !string.IsNullOrWhiteSpace(c.ShortSha)
+                    ? c.ShortSha.Trim()
+                    : c.Sha.Length > 7 ? c.Sha[..7] : c.Sha.Trim();
+                var subject = (c.Message ?? string.Empty).Split('\n')[0].Trim();
+                return string.IsNullOrWhiteSpace(subject) ? sha : $"{sha} {subject}";
+            })
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Take(20)
+            .ToList();
+    }
+
     /// <summary>
     /// Decide what to do with a finished run.
     /// </summary>
@@ -107,7 +130,8 @@ public static class RunOutcomePolicy
         AgentOutcome outcome,
         string? followupPrompt,
         int reissueAttempt,
-        CodexCompletionEvidence.Inputs? codexEvidence = null)
+        CodexCompletionEvidence.Inputs? codexEvidence = null,
+        IReadOnlyList<string>? priorCommits = null)
     {
         var heuristic = !outcome.MatchedSentinel;
         var hasFollowup = !string.IsNullOrWhiteSpace(followupPrompt);
@@ -123,7 +147,7 @@ public static class RunOutcomePolicy
             // a clean finish via a bounded continuation loop before we accept.
             // A clean finish (commits + success status, nothing open) still
             // accepts, just with an evidence-grounded note.
-            var codexAction = TryCodexEvidenceAction(codexEvidence, outcome, reissueAttempt, RunIssueKind.SilentCompletion);
+            var codexAction = TryCodexEvidenceAction(codexEvidence, outcome, reissueAttempt, RunIssueKind.SilentCompletion, priorCommits);
             if (codexAction != null) return codexAction;
 
             // Codex stopped after a successful tool call and never produced
@@ -251,7 +275,7 @@ public static class RunOutcomePolicy
             // --experimental-json stream close + exit code is the completion
             // gate. A missing sentinel remains a review hint, but must not
             // trigger the legacy "ask once for a structured close-out" loop.
-            var codexAction = TryCodexEvidenceAction(codexEvidence, outcome, reissueAttempt, RunIssueKind.MissingTerminalSentinel);
+            var codexAction = TryCodexEvidenceAction(codexEvidence, outcome, reissueAttempt, RunIssueKind.MissingTerminalSentinel, priorCommits);
             if (codexAction != null) return codexAction;
             if (codexEvidence is { } evidence && evidence.IsCodex)
             {
@@ -271,7 +295,7 @@ public static class RunOutcomePolicy
                     Kind: OutcomeActionKind.ReissueWithStrongerFraming,
                     MetaMessage: "The agent replied without a terminal sentinel. The orchestrator is asking once for a structured close-out so the task can move through the pipeline cleanly.",
                     IsHeuristicFallback: false,
-                    FollowupRetryPrompt: BuildMissingSentinelInterventionPrompt(outcome),
+                    FollowupRetryPrompt: BuildMissingSentinelInterventionPrompt(outcome, priorCommits),
                     RetryAttempt: reissueAttempt + 1)
                 {
                     IssueKind = RunIssueKind.MissingTerminalSentinel,
@@ -307,7 +331,7 @@ public static class RunOutcomePolicy
                     Kind: OutcomeActionKind.ReissueWithStrongerFraming,
                     MetaMessage: "The previous run failed before its reply could be classified. The orchestrator is re-issuing once with a sharper framing so the task drives to a clear conclusion.",
                     IsHeuristicFallback: false,
-                    FollowupRetryPrompt: BuildMissingSentinelInterventionPrompt(outcome),
+                    FollowupRetryPrompt: BuildMissingSentinelInterventionPrompt(outcome, priorCommits),
                     RetryAttempt: reissueAttempt + 1)
                 {
                     IssueKind = RunIssueKind.ClassifierUnknown,
@@ -457,7 +481,8 @@ public static class RunOutcomePolicy
         CodexCompletionEvidence.Inputs? codexEvidence,
         AgentOutcome outcome,
         int reissueAttempt,
-        RunIssueKind issueKind)
+        RunIssueKind issueKind,
+        IReadOnlyList<string>? priorCommits)
     {
         if (codexEvidence is not { } evidence) return null;
 
@@ -479,7 +504,7 @@ public static class RunOutcomePolicy
                     Kind: OutcomeActionKind.ReissueWithStrongerFraming,
                     MetaMessage: $"Codex finished without a terminal sentinel and left open work. Running a bounded continuation to drive it to completion. {verdict.Reason}",
                     IsHeuristicFallback: false,
-                    FollowupRetryPrompt: BuildCodexContinuationPrompt(outcome),
+                    FollowupRetryPrompt: BuildCodexContinuationPrompt(outcome, priorCommits),
                     RetryAttempt: reissueAttempt + 1)
                 {
                     IssueKind = issueKind,
