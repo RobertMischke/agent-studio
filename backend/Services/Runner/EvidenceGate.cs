@@ -130,7 +130,7 @@ public static class EvidenceGate
                 foreach (var path in Directory.EnumerateFiles(resultsDir, "*.*", SearchOption.AllDirectories))
                 {
                     var ext = Path.GetExtension(path).ToLowerInvariant();
-                    if (Array.IndexOf(ImageExtensions, ext) >= 0) return true;
+                    if (Array.IndexOf(ImageExtensions, ext) >= 0 && IsNonEmptyFile(path)) return true;
                 }
             }
             catch
@@ -152,6 +152,18 @@ public static class EvidenceGate
         }
 
         return false;
+    }
+
+    private static bool IsNonEmptyFile(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>

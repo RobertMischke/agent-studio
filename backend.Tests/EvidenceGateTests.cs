@@ -74,6 +74,16 @@ public class EvidenceGateTests : IDisposable
     }
 
     [Fact]
+    public void HasVisualEvidence_ZeroByteScreenshot_False()
+    {
+        var nested = Path.Combine(_folder, "results", "playwright", "board-spec");
+        Directory.CreateDirectory(nested);
+        File.WriteAllBytes(Path.Combine(nested, "after.png"), Array.Empty<byte>());
+
+        Assert.False(EvidenceGate.HasVisualEvidence(_folder));
+    }
+
+    [Fact]
     public void HasVisualEvidence_EmptyResultsFolder_False()
     {
         Directory.CreateDirectory(Path.Combine(_folder, "results"));
@@ -90,6 +100,33 @@ public class EvidenceGateTests : IDisposable
             "{\"id\":\"e1\",\"title\":\"Fix verified via screenshot\"}\n");
 
         Assert.True(EvidenceGate.HasVisualEvidence(_folder));
+    }
+
+    [Fact]
+    public void HasVisualEvidence_EmptyReviewEvidenceLog_False()
+    {
+        Directory.CreateDirectory(Path.Combine(_folder, "results"));
+        File.WriteAllText(Path.Combine(_folder, "results", "review-evidence.jsonl"), "");
+
+        Assert.False(EvidenceGate.HasVisualEvidence(_folder));
+    }
+
+    [Fact]
+    public void HasVisualEvidence_WhitespaceReviewEvidenceLog_False()
+    {
+        Directory.CreateDirectory(Path.Combine(_folder, "results"));
+        File.WriteAllText(Path.Combine(_folder, "results", "review-evidence.jsonl"), " \r\n\t\r\n");
+
+        Assert.False(EvidenceGate.HasVisualEvidence(_folder));
+    }
+
+    [Fact]
+    public void TestsAndEvidenceAspectId_MatchesAspectRunnerCatalogue()
+    {
+        Assert.True(
+            AspectRunnerService.Catalogue.TryGetValue(EvidenceGate.TestsAndEvidenceAspectId, out var definition),
+            "EvidenceGate.TestsAndEvidenceAspectId must match the AspectRunnerService catalogue id.");
+        Assert.Equal(EvidenceGate.TestsAndEvidenceAspectId, definition.Id);
     }
 
     [Fact]

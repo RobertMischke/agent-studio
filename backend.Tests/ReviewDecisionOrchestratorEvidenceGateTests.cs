@@ -73,6 +73,30 @@ public class ReviewDecisionOrchestratorEvidenceGateTests : IDisposable
     }
 
     [Fact]
+    public async Task BugTask_WhitespaceReviewEvidence_AspectsPass_ReissuesWithEvidenceDemand()
+    {
+        // A review-evidence file that exists but contains no real entry must
+        // fail closed, same as a missing artifact. The gate runs after aspects,
+        // then upgrades the residual accept to a verification-demanding reissue.
+        SeedReviewJobWithDone("whitespace-evidence-bug", CleanStatus, taskType: TaskTypes.Bug, reviewEvidenceLog: " \r\n\t\r\n");
+        var invocations = 0;
+        var orchestrator = BuildOrchestrator(
+            _ => { Interlocked.Increment(ref invocations); return PassVerdict; }, maxReissues: 3);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "whitespace-evidence-bug");
+        Assert.True(Directory.Exists(folder), "whitespace-only review evidence should not satisfy the evidence gate");
+        Assert.True(invocations > 0, "evidence gate must run AFTER the aspect review");
+
+        var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
+        Assert.Contains("\"verdict\": \"reissue\"", pipelineJson);
+
+        var followUp = File.ReadAllText(Path.Combine(folder, "orchestrator-follow-up.md"));
+        Assert.Contains("screenshot", followUp, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task TestsAndEvidenceConcern_WithVisualEvidence_ReissuesNotAcceptWithConcerns()
     {
         // Requirement 2: the tests-and-evidence aspect raises a concern (failing
@@ -161,7 +185,12 @@ public class ReviewDecisionOrchestratorEvidenceGateTests : IDisposable
 
     private const string PassVerdict = "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]";
 
-    private void SeedReviewJobWithDone(string slug, string status, string taskType, bool withScreenshot = false)
+    private void SeedReviewJobWithDone(
+        string slug,
+        string status,
+        string taskType,
+        bool withScreenshot = false,
+        string? reviewEvidenceLog = null)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
@@ -178,6 +207,13 @@ public class ReviewDecisionOrchestratorEvidenceGateTests : IDisposable
             var shots = Path.Combine(dir, "results", "playwright", "fix-spec");
             Directory.CreateDirectory(shots);
             File.WriteAllBytes(Path.Combine(shots, "after.png"), new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+        }
+
+        if (reviewEvidenceLog is not null)
+        {
+            var results = Path.Combine(dir, "results");
+            Directory.CreateDirectory(results);
+            File.WriteAllText(Path.Combine(results, "review-evidence.jsonl"), reviewEvidenceLog);
         }
     }
 
