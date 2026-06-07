@@ -309,4 +309,94 @@ test.describe('Pipeline: per-step metric column headers', () => {
       });
     }
   });
+
+  test('overview content keeps left-aligned prose and tabular measures on ultrawide viewports', async ({ page }) => {
+    await page.setViewportSize({ width: 1900, height: 1050 });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          'taskboard.panesVisible',
+          JSON.stringify({ prompt: true, protocol: true, git: false }),
+        );
+      } catch {
+        /* private mode */
+      }
+    });
+
+    await installRoutes(page, '4-auto-review', pipelineWithMetrics);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const overview = page.getByTestId('overview-tab');
+    const title = page.getByTestId('overview-title-block');
+    const status = page.getByTestId('overview-status');
+    const pipeline = page.getByTestId('overview-pipeline');
+    const protocol = page.getByTestId('pane-protocol');
+
+    await expect(overview).toBeVisible({ timeout: 10_000 });
+    await expect(protocol).toBeVisible();
+    await expect(pipeline).toBeVisible();
+
+    const geometry = await page.evaluate(() => {
+      const box = (selector: string): DOMRect => {
+        const el = document.querySelector<HTMLElement>(selector);
+        if (!el) throw new Error(`missing ${selector}`);
+        return el.getBoundingClientRect();
+      };
+
+      const overview = box('[data-testid="overview-tab"]');
+      const title = box('[data-testid="overview-title-block"]');
+      const status = box('[data-testid="overview-status"]');
+      const pipeline = box('[data-testid="overview-pipeline"]');
+      const protocol = box('[data-testid="pane-protocol"]');
+      const coreRow = box('[data-step-id="core-agent-run"]');
+      const coreCost = box('[data-step-id="core-agent-run"] .ov-pl-step__cost');
+      const titleStyle = getComputedStyle(document.querySelector<HTMLElement>('[data-testid="overview-title-block"]')!);
+      const pipelineStyle = getComputedStyle(document.querySelector<HTMLElement>('[data-testid="overview-pipeline"]')!);
+
+      return {
+        overviewLeft: overview.left,
+        titleLeft: title.left,
+        titleWidth: title.width,
+        statusLeft: status.left,
+        statusWidth: status.width,
+        pipelineLeft: pipeline.left,
+        pipelineWidth: pipeline.width,
+        protocolLeft: protocol.left,
+        protocolWidth: protocol.width,
+        coreRowRight: coreRow.right,
+        coreCostRight: coreCost.right,
+        proseMax: titleStyle.maxWidth,
+        pipelineMax: pipelineStyle.maxWidth,
+      };
+    });
+
+    // The central measure primitive is explicitly left-aligned, not centered
+    // inside the prompt pane.
+    expect(Math.abs(geometry.titleLeft - geometry.overviewLeft)).toBeLessThanOrEqual(20);
+    expect(Math.abs(geometry.statusLeft - geometry.overviewLeft)).toBeLessThanOrEqual(20);
+    expect(Math.abs(geometry.pipelineLeft - geometry.overviewLeft)).toBeLessThanOrEqual(20);
+
+    // Prose stays on a character measure; tabular blocks get the wider but
+    // still capped pixel measure from the shared tokens.
+    expect(geometry.proseMax).toBe('74ch');
+    expect(geometry.pipelineMax).toBe('900px');
+    expect(geometry.titleWidth).toBeLessThan(900);
+    expect(geometry.statusWidth).toBeLessThanOrEqual(1040);
+    expect(geometry.pipelineWidth).toBeLessThanOrEqual(940);
+
+    // Pipeline metrics remain near the row instead of drifting toward the
+    // viewport edge, and the right protocol/activity pane keeps its own space.
+    expect(geometry.coreCostRight).toBeLessThanOrEqual(geometry.coreRowRight + 1);
+    expect(geometry.coreRowRight).toBeLessThan(geometry.protocolLeft);
+    expect(geometry.protocolWidth).toBeGreaterThan(260);
+
+    if (RESULTS_DIR) {
+      await overview.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'overview-content-measures-wide.png'),
+        fullPage: true,
+      });
+    }
+  });
 });
