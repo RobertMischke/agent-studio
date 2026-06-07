@@ -226,6 +226,7 @@ export class App implements OnInit, OnDestroy {
   readonly triageToast = this.jobSelection.triageToast;
   readonly epicOverlayDetail = signal<TaskDetail | null>(null);
   readonly epicOverlayTaskDetail = signal<TaskDetail | null>(null);
+  private epicOverlayReturnUrl: string | null = null;
   readonly epicOverlaySubTaskPeers = computed<TaskInfo[]>(() => {
     const epic = this.epicOverlayDetail();
     if (!epic) return [];
@@ -1685,6 +1686,9 @@ export class App implements OnInit, OnDestroy {
             currentEpic?.info.id !== detail.info.id ||
             currentEpic?.info.watchPath !== detail.info.watchPath
           ) {
+            if (!currentEpic) {
+              this.epicOverlayReturnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            }
             this.epicOverlayTaskDetail.set(null);
           }
           this.epicOverlayDetail.set(detail);
@@ -1750,7 +1754,11 @@ export class App implements OnInit, OnDestroy {
   private selectEpicOverlaySubTask(detail: TaskDetail): void {
     this.epicOverlayTaskDetail.set(detail);
     this.captureEpicOverlayPager(detail);
-    this.selectFetchedDetail(detail);
+    history.replaceState(
+      null,
+      '',
+      `?job=${encodeURIComponent(detail.info.id)}&watchPath=${encodeURIComponent(detail.info.watchPath)}`,
+    );
   }
 
   private captureEpicOverlayPager(detail: TaskDetail): void {
@@ -1790,6 +1798,10 @@ export class App implements OnInit, OnDestroy {
   closeEpicOverlay(): void {
     this.epicOverlayDetail.set(null);
     this.epicOverlayTaskDetail.set(null);
+    if (this.epicOverlayReturnUrl !== null) {
+      history.replaceState(null, '', this.epicOverlayReturnUrl);
+      this.epicOverlayReturnUrl = null;
+    }
   }
 
   refreshEpicOverlay(): void {

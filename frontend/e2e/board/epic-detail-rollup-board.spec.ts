@@ -196,8 +196,23 @@ test.describe('Epic detail: sub-tasks grouped by lane', () => {
     await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
       .toBe(subIds[1]);
 
+    const secondDetailShot = testInfo.outputPath('epic-detail-persistent-master-detail.png');
+    await page.screenshot({ path: secondDetailShot, fullPage: false });
+    await testInfo.attach('epic-detail-persistent-master-detail', { path: secondDetailShot, contentType: 'image/png' });
+
+    await board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[2]}"]`).click();
+    await expect(overlay).toBeVisible({ timeout: 15_000 });
+    await expect(pane).toBeVisible();
+    await expect(board.locator(`[data-testid="epic-rollup-card"][data-sub-id="${subIds[2]}"]`))
+      .toHaveAttribute('aria-current', 'true', { timeout: 10_000 });
+    await expect(overlay.locator('[data-testid="overview-title"]')).toContainText(`${PREFIX}sub 3`, { timeout: 15_000 });
+    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
+      .toBe(subIds[2]);
+
     await page.locator('[data-testid="epic-overlay-close"]').click();
     await expect(overlay).toHaveCount(0, { timeout: 10_000 });
-    await expect(page.locator('[data-testid="studio-task"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="studio-board"]')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => new URL(page.url()).searchParams.get('job'), { timeout: 10_000 })
+      .toBeNull();
   });
 });
