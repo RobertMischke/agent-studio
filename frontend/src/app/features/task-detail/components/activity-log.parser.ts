@@ -252,11 +252,37 @@ function parseCodexJsonlFrame(line: CliOutputLine, completedCommandIds: Set<stri
     };
   }
 
-  if (codexJsonFrameTypes.has(frameType) || frameType.startsWith('response.') || frameType.startsWith('turn.')) {
-    return { visible: false };
+  if (codexJsonFrameTypes.has(frameType)
+    || frameType.startsWith('response.')
+    || frameType.startsWith('turn.')
+    || frameType.startsWith('thread.')
+    || frameType.startsWith('session.')
+    || frameType.startsWith('item.')) {
+    return {
+      visible: true,
+      group: codexDebugGroup(line, frameType, itemType, itemId)
+    };
   }
 
   return null;
+}
+
+function codexDebugGroup(
+  line: CliOutputLine,
+  frameType: string,
+  itemType: string | null,
+  itemId: string
+): ActivityLogGroup {
+  const itemLabel = itemType ? ` ${itemType}` : '';
+  return {
+    id: `${line.timestamp}-codex-frame-${itemId}`,
+    kind: 'other',
+    title: `Codex ${frameType}${itemLabel}`,
+    subtitle: '',
+    status: 'neutral',
+    lines: [line],
+    collapsedByDefault: true
+  };
 }
 
 function commandDisplayLines(
@@ -469,6 +495,10 @@ function isWatchdogMetaLine(group: ActivityLogGroup): boolean {
   return /\[watchdog[^\]]*\]/i.test(first.text ?? '');
 }
 
+function isCodexDebugFrame(group: ActivityLogGroup): boolean {
+  return group.kind === 'other' && /^Codex\b/i.test(group.title);
+}
+
 /**
  * Maps a sequence of {@link ActivityLogGroup}s into a sequence of conversation
  * turns. Adjacent groups of the same role are merged. Errors that aren't
@@ -478,7 +508,9 @@ function isWatchdogMetaLine(group: ActivityLogGroup): boolean {
  */
 export function buildConversationTurns(groups: ActivityLogGroup[]): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
-  const filtered = groups.filter((g) => !isTaskboardRuntimeMarker(g) && !isWatchdogMetaLine(g));
+  const filtered = groups.filter((g) =>
+    !isTaskboardRuntimeMarker(g) && !isWatchdogMetaLine(g) && !isCodexDebugFrame(g)
+  );
   let i = 0;
   while (i < filtered.length) {
     const group = filtered[i];

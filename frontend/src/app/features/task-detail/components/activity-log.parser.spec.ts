@@ -171,13 +171,15 @@ describe('parseActivityLog', () => {
   it('parses Codex JSONL agent messages and command executions without raw JSON titles', () => {
     const groups = parseActivityLog(codexJsonlSample());
 
-    expect(groups.map((g) => g.kind)).toEqual(['message', 'command']);
-    expect(groups[0].title).toBe('I will make the frontend change.');
-    expect(groups[0].lines[0].text).toBe('I will make the frontend change.');
-    expect(groups[1].title).toBe('git status --short');
-    expect(groups[1].subtitle).toContain('git status --short');
+    expect(groups.map((g) => g.kind)).toEqual(['other', 'message', 'command']);
+    expect(groups[0].title).toBe('Codex turn.started');
+    expect(groups[0].lines[0].text).toContain('{"type":"turn.started"}');
+    expect(groups[1].title).toBe('I will make the frontend change.');
+    expect(groups[1].lines[0].text).toBe('I will make the frontend change.');
+    expect(groups[2].title).toBe('git status --short');
+    expect(groups[2].subtitle).toContain('git status --short');
     expect(groups.some((group) => group.title.includes('"type"'))).toBe(false);
-    expect(flattenActivityLines(groups).some((entry) => entry.text.includes('{"type"'))).toBe(false);
+    expect(flattenActivityLines(groups).filter((entry) => entry.text.includes('{"type"'))).toHaveLength(1);
   });
 
   it('marks failed Codex command executions as error-status command groups', () => {
@@ -194,6 +196,32 @@ describe('parseActivityLog', () => {
       '$ npm test [failed] [exit 1]',
       'FAIL parser spec'
     ]);
+  });
+
+  it('summarizes in-progress Codex command executions when no completion frame has arrived yet', () => {
+    const groups = parseActivityLog([
+      line('{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"Get-Content frontend\\\\AGENTS.md","aggregated_output":"","exit_code":null,"status":"in_progress"}}')
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].kind).toBe('command');
+    expect(groups[0].status).toBe('ok');
+    expect(groups[0].title).toBe('Get-Content frontend\\AGENTS.md');
+    expect(groups[0].lines.map((entry) => entry.text)).toEqual([
+      '$ Get-Content frontend\\AGENTS.md [in_progress]'
+    ]);
+  });
+
+  it('keeps unknown Codex JSON frames as collapsed trace-only debug groups', () => {
+    const groups = parseActivityLog([
+      line('{"type":"session.created","session_id":"abc123"}')
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].kind).toBe('other');
+    expect(groups[0].title).toBe('Codex session.created');
+    expect(groups[0].collapsedByDefault).toBe(true);
+    expect(groups[0].lines[0].text).toContain('"session.created"');
   });
 });
 

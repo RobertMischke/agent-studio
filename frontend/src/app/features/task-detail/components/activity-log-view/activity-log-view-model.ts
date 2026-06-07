@@ -48,6 +48,7 @@ export function isDebugNoise(group: ActivityLogGroup): boolean {
   if (allBlank) return true;
   if (group.kind === 'message' && /^●\s*Session\b/i.test(group.title)) return true;
   if (group.kind === 'message' && /^●\s*frame\b/i.test(group.title)) return true;
+  if (group.kind === 'other' && /^Codex\b/i.test(group.title)) return true;
   return false;
 }
 
