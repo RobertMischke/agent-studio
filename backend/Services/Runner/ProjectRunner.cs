@@ -223,6 +223,19 @@ public class ProjectRunner
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _consecutiveFailNoProgress = new(StringComparer.Ordinal);
     internal const int QuarantineFailThreshold = RunQuarantineBreaker.DefaultFailThreshold;
 
+    // Per-task rapid-crash governor (RapidCrashBreaker). Keyed by jobId. The
+    // value is the UTC instant until which pickup must skip this task — an
+    // exponential backoff armed on each rapid crash so the few retries that
+    // precede the quarantine park cannot tight-loop and saturate the host
+    // (incident 2026-06-07). In-memory only: a backend restart resets it,
+    // acceptable now that the build-process leak that crashed the backend
+    // mid-loop is fixed. The crash COUNT rides on _consecutiveFailNoProgress
+    // so the existing quarantine route parks the task after the threshold.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _rapidCrashBackoffUntil = new(StringComparer.Ordinal);
+
+    private bool IsInRapidCrashBackoff(string jobId)
+        => _rapidCrashBackoffUntil.TryGetValue(jobId, out var until) && until > DateTime.UtcNow;
+
     // Continuous decision review: while a job sits in 3-progress, we scan
     // its live output buffer every tick for an unresolved interruptive
     // sentinel ([[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]). The latch is
@@ -3194,13 +3207,22 @@ public class ProjectRunner
             // long-running task that keeps committing is never quarantined.
             var deliberateStop = WasDeliberatelyStopped(execution.Status);
             var movedToReview = RunCompletionPolicy.ShouldMoveToReview(terminalOutcome);
+            // Rapid-crash governor (RapidCrashBreaker): a failed run that finished
+            // in seconds with no commit. It counts toward the quarantine streak
+            // REGARDLESS of issue-kind classification — closing the gap where a
+            // launch-shaped fast crash was excluded by CountsAsNoProgressFailure
+            // and tight-looped the host — and arms an exponential pickup backoff
+            // so the retries before the park are spaced, not saturating.
+            var isRapidCrash = !deliberateStop
+                && RapidCrashBreaker.IsRapidCrash(execution.Status ?? "", execution.DurationSeconds ?? 0.0, commitsDuringRun);
             if (action != null && activeInfo != null
                 && !movedToReview && !deliberateStop && commitsDuringRun == 0
-                && RunQuarantineBreaker.CountsAsNoProgressFailure(action.IssueKind))
+                && (RunQuarantineBreaker.CountsAsNoProgressFailure(action.IssueKind) || isRapidCrash))
             {
                 var fails = _consecutiveFailNoProgress.AddOrUpdate(jobId, 1, (_, n) => n + 1);
                 if (RunQuarantineBreaker.ShouldQuarantine(fails, QuarantineFailThreshold))
                 {
+                    _rapidCrashBackoffUntil.TryRemove(jobId, out _);
                     var priorTopic = ToIssueTopic(action.IssueKind);
                     _logger.LogWarning(
                         "[circuit-breaker] quarantined {JobId} after {N} fails (reason={Reason})",
@@ -3223,11 +3245,22 @@ public class ProjectRunner
                     };
                     _consecutiveFailNoProgress.TryRemove(jobId, out _);
                 }
+                else if (isRapidCrash)
+                {
+                    // Not yet at the park threshold: space the next pickup so the
+                    // crash cannot tight-loop while the streak accrues.
+                    var until = DateTime.UtcNow + RapidCrashBreaker.Backoff(fails);
+                    _rapidCrashBackoffUntil[jobId] = until;
+                    _logger.LogWarning(
+                        "[rapid-crash] {JobId} failed in {Dur:F1}s (#{N}, no commit); backing off pickup until {Until:o}",
+                        jobId, execution.DurationSeconds ?? 0.0, fails, until);
+                }
             }
             else if (commitsDuringRun > 0 || movedToReview)
             {
                 // Progress or a clean finish breaks the streak.
                 _consecutiveFailNoProgress.TryRemove(jobId, out _);
+                _rapidCrashBackoffUntil.TryRemove(jobId, out _);
             }
 
             if (action != null && activeInfo != null)
@@ -4271,6 +4304,9 @@ public class ProjectRunner
                         // 5-human-review relocation sweep failed to move it.
                         // Running it just NOOP-burns a CLI and trips the breaker.
                         && !TaskSlugs.IsHumanDecisionNeeded(j.Id)
+                        // Rapid-crash backoff: skip a task that just crashed fast
+                        // until its exponential cooldown elapses (RapidCrashBreaker).
+                        && !IsInRapidCrashBackoff(j.Id)
                         && IsPickupAllowed(j, intakeEnabled))
             .OrderBy(j => j.Order)
             .FirstOrDefault();
@@ -4669,6 +4705,13 @@ public class ProjectRunner
             }
 
             if (!AgentTypes.IsAutoPickupEligible(candidate.Info.Agent))
+                continue;
+
+            // Rapid-crash backoff: a progress folder that just crashed fast is
+            // skipped (not dead-lettered) until its cooldown elapses, so the
+            // progress-first picker cannot pull it straight back into a tight
+            // loop. Other progress/ready work is still free to run this tick.
+            if (IsInRapidCrashBackoff(candidate.Info.Id))
                 continue;
 
             var attempts = GetPickupAttempts(slug);

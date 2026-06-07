@@ -357,6 +357,22 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // respect it to skip prompts; harmless for the others.
         psi.Environment["CI"]                             = "1";
 
+        // dotnet build-server suppression. Agents that build/test a .NET repo
+        // (this one dogfoods on itself) spawn `dotnet build`/`dotnet test`,
+        // which by default leave PERSISTENT, detached MSBuild worker nodes and
+        // a build server behind for warm-start reuse. Those processes re-parent
+        // away from the agent CLI tree, so the orphan reaper's taskkill /T never
+        // reaps them — over many tasks they accumulate into a process leak that
+        // starved the host and took the backend down (incident 2026-06-07).
+        // Disabling node-reuse + the MSBuild server makes every agent `dotnet`
+        // invocation tear its build processes down with the build, at the cost
+        // of slightly colder builds. NOLOGO/TELEMETRY_OPTOUT keep output clean
+        // and avoid a background telemetry process.
+        psi.Environment["MSBUILDDISABLENODEREUSE"]        = "1";
+        psi.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"]  = "0";
+        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"]    = "1";
+        psi.Environment["DOTNET_NOLOGO"]                  = "1";
+
         // When running under the agent task orchestrator, set JOB_RESULTS_DIR
         // so tools like Playwright can harvest artifacts into the job folder.
         // Cleaned up in the task orchestrator's result directories.
