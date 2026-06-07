@@ -759,8 +759,9 @@
 .runs-modal {
   display: flex;
   flex-direction: column;
-  width: min(680px, 100%);
-  max-height: min(80vh, 720px);
+  width: var(--studio-modal-width-run-details);
+  max-width: 100%;
+  height: var(--studio-modal-height-run-details);
   border-radius: 8px;
   border: 1px solid var(--studio-border-strong);
   background: var(--studio-bg-elevated);
@@ -801,6 +802,7 @@
 
 .runs-modal__body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 12px 16px 16px;
 }
