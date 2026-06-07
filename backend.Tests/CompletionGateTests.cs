@@ -45,6 +45,53 @@ public class CompletionGateTests
         Assert.Contains(findings, f => f.Contains("Wire the new route", System.StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    // ASS-797: a non-actionable "None" follow-up checkbox the agent can never
+    // close. Each variant must NOT become a finding, or the task ping-pongs back
+    // to 2-ready forever / escalates grundlos.
+    [InlineData("- [ ] None. Changes left in working tree per managed-run guidelines.")]
+    [InlineData("- None. Changes left in working tree per managed-run guidelines.")]
+    [InlineData("- [ ] None.")]
+    [InlineData("- [ ] N/A")]
+    [InlineData("- [ ] Nothing to do.")]
+    [InlineData("- [ ] No follow-ups required.")]
+    [InlineData("- [ ] No open items.")]
+    public void ExtractFindings_PhantomNoneOpenItem_IsNotReported(string openItemLine)
+    {
+        var status = string.Join('\n', "## Open Items", openItemLine);
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_PhantomNoneOpenItem_DoesNotTriggerReissueOrEscalate()
+    {
+        // The whole point of AC3: a phantom "None" item must pass the gate at
+        // both ends of the reissue budget, not reissue (budget left) or escalate
+        // (budget spent).
+        var status = "## Summary\nDone.\n\nResult: Success\n\n## Open Items\n- [ ] None. Changes left in working tree per managed-run guidelines.\n";
+
+        var fresh = CompletionGate.Evaluate(status, recentLog: null, priorReissues: 0, maxReissues: MaxReissues);
+        var spent = CompletionGate.Evaluate(status, recentLog: null, priorReissues: MaxReissues, maxReissues: MaxReissues);
+
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, fresh.Action);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, spent.Action);
+    }
+
+    [Fact]
+    public void ExtractFindings_RealItemStartingWithNone_StillReported()
+    {
+        // Guard the guard: a genuine open item that merely opens with "None"
+        // must NOT be swallowed by the phantom-None suppression.
+        var status = "## Open Items\n- [ ] None of the routes are wired into the shell yet.";
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Contains(findings, f => f.Contains("routes are wired", System.StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void ExtractFindings_PartialResult_IsReported()
     {

@@ -94,6 +94,27 @@ public static class CompletionGate
         @"^(?:success|succeeded|done|complete|completed|pass|passed)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // A no-op open-item declaration: the agent's close-out lists "nothing open"
+    // rather than an actual unfinished item. Matched against the FIRST sentence
+    // of the extracted item text (everything up to the first '.'), so a phantom
+    // checkbox like "- [ ] None. Changes left in working tree per managed-run
+    // guidelines." is recognised as a no-op and never reported as a finding.
+    // Anchored to the whole first-sentence so a real item that merely starts
+    // with one of these words (e.g. "None of the routes are wired") is NOT
+    // suppressed. This closes the phantom-"None" reissue/escalation loop
+    // (ASS-797): a non-actionable checkbox the agent can never close, that
+    // otherwise ping-pongs the task back to 2-ready forever.
+    private static readonly Regex NoOpOpenItemRegex = new(
+        @"(?ix)^\s*(?:
+            none |
+            n/?a |
+            nothing(?:\s+(?:to\s+do|further|else|needed|remaining|outstanding|open|pending))? |
+            no\s+(?:open\s+items? | follow[-\s]?ups? | remaining\s+(?:work|items?) | further\s+(?:work|action|items?))
+        )
+        (?:\s+(?:required|needed|necessary|outstanding|remaining|pending|at\s+this\s+(?:time|point)))?
+        \s*$",
+        RegexOptions.Compiled);
+
     public enum CompletionGateAction
     {
         Pass,
@@ -269,12 +290,14 @@ public static class CompletionGate
             var uncheckedMatch = UncheckedItemRegex.Match(trimmed);
             if (uncheckedMatch.Success)
             {
-                yield return uncheckedMatch.Groups["text"].Value;
+                var text = uncheckedMatch.Groups["text"].Value;
+                if (!IsNoOpItemText(text)) yield return text;
                 continue;
             }
 
             var bullet = BulletRegex.Match(trimmed);
-            yield return bullet.Success ? bullet.Groups["text"].Value : trimmed;
+            var itemText = bullet.Success ? bullet.Groups["text"].Value : trimmed;
+            if (!IsNoOpItemText(itemText)) yield return itemText;
         }
     }
 
@@ -310,6 +333,21 @@ public static class CompletionGate
         return normalized.Equals("none", StringComparison.OrdinalIgnoreCase)
             || normalized.Equals("n/a", StringComparison.OrdinalIgnoreCase)
             || normalized.Equals("no open items", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// True when an extracted open-item's text is a no-op "nothing open"
+    /// declaration rather than a real unfinished item. Tests only the FIRST
+    /// sentence (up to the first '.'), so a trailing managed-run boilerplate
+    /// clause ("None. Changes left in working tree per managed-run guidelines.")
+    /// is still recognised, while a genuine item that merely opens with the word
+    /// ("None of the routes are wired") is preserved. See ASS-797.
+    /// </summary>
+    private static bool IsNoOpItemText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var firstSentence = text.Split('.', 2)[0];
+        return NoOpOpenItemRegex.IsMatch(firstSentence);
     }
 
     private static string Normalize(string? candidate)
