@@ -97,7 +97,7 @@ internal sealed class PerfBaselineFixture : IDisposable
         var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, Config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new GeminiCliService(NullLogger<GeminiCliService>.Instance, Config);
+        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, Config);
         Router = new CliRouter(copilot, claude, codex, gemini);
 
         var contextUsageParser = new ContextUsageParser();

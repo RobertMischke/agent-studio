@@ -66,7 +66,7 @@ public class ProjectObservationServiceTests : IDisposable
             new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, config),
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new GeminiCliService(NullLogger<GeminiCliService>.Instance, config);
+        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
         var router = new CliRouter(copilot, claude, codex, gemini);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var projectSettings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);

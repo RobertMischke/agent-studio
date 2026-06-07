@@ -20,7 +20,7 @@ public sealed class CliRouter
         CopilotCliService copilot,
         ClaudeCliService claude,
         CodexCliService codex,
-        GeminiCliService gemini)
+        AntigravityCliService gemini)
     {
         _byType = new(StringComparer.OrdinalIgnoreCase)
         {

@@ -2958,7 +2958,7 @@ public class ProjectRunner
             {
                 ClaudeCliService claude => claude.GetCapturedSessionId(jobKey),
                 CodexCliService codex   => codex.GetCapturedSessionId(jobKey),
-                GeminiCliService gemini => gemini.GetCapturedSessionId(jobKey),
+                AntigravityCliService gemini => gemini.GetCapturedSessionId(jobKey),
                 _ => null
             };
             // Post-hoc token reconstruction (ASS-626 / ASS-665): the Claude
@@ -3014,7 +3014,7 @@ public class ProjectRunner
             }
             else if (cli is ClaudeCliService
                   || cli is CodexCliService
-                  || cli is GeminiCliService)
+                  || cli is AntigravityCliService)
             {
                 // The CLI normally emits a session UUID on every run; missing
                 // it means the next follow-up will fall back to Recovery. Tell

@@ -185,7 +185,7 @@ builder.Services.AddSingleton<CodexModelDiscovery>();
 builder.Services.AddSingleton<CopilotCliService>();
 builder.Services.AddSingleton<ClaudeCliService>();
 builder.Services.AddSingleton<CodexCliService>();
-builder.Services.AddSingleton<GeminiCliService>();
+builder.Services.AddSingleton<AntigravityCliService>();
 builder.Services.AddSingleton<ClaudeSessionInspector>();
 builder.Services.AddSingleton<CliRouter>();
 builder.Services.AddSingleton<SessionToTaskIndex>();
@@ -285,7 +285,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Design.DesignEvidenceServ
 builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
-builder.Services.AddSingleton<IQuotaProbe, GeminiQuotaProbe>();
+builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();

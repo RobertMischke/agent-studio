@@ -169,7 +169,7 @@ public sealed class ProjectRunnerHumanDecisionRoutingTests : IDisposable
             NullLogger<CodexCliService>.Instance, config, codexDiscovery,
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-        var gemini = new GeminiCliService(NullLogger<GeminiCliService>.Instance, config);
+        var gemini = new AntigravityCliService(NullLogger<AntigravityCliService>.Instance, config);
         var router = new CliRouter(copilot, claude, codex, gemini);
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
         var orchestratorSessions = new OrchestratorSessionStore(NullLogger<OrchestratorSessionStore>.Instance);

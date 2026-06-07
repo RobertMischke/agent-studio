@@ -92,16 +92,21 @@ public class CliSpawnIntegrationTests
         }
     }
 
-    /// <summary>Locate <c>gemini.cmd</c> (the npm shim - Gemini has no single .exe).</summary>
-    private static string? GeminiCmdPath
+    /// <summary>Locate <c>agentapi</c> (Google's Antigravity CLI).</summary>
+    private static string? AntigravityCmdPath
     {
         get
         {
-            var fromEnv = Environment.GetEnvironmentVariable("GEMINI_CMD");
+            var fromEnv = Environment.GetEnvironmentVariable("AGENTAPI_CMD") ?? Environment.GetEnvironmentVariable("ANTIGRAVITY_CMD");
             if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
+            var resolved = OrchestratorApi.Services.Cli.AntigravityCliService.ResolveExecutable("agentapi");
+            if (resolved != "agentapi" && File.Exists(resolved)) return resolved;
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var candidate = Path.Combine(appData, "npm", "gemini.cmd");
-            return File.Exists(candidate) ? candidate : null;
+            var candidate = Path.Combine(appData, "npm", "agentapi.cmd");
+            if (File.Exists(candidate)) return candidate;
+            candidate = Path.Combine(appData, "npm", "agentapi.bat");
+            if (File.Exists(candidate)) return candidate;
+            return "agentapi";
         }
     }
 
@@ -555,35 +560,33 @@ public class CliSpawnIntegrationTests
     }
 
     /// <summary>
-    /// Gemini parity probe: drives <see cref="OrchestratorApi.Services.Cli.GeminiCliService.StartAsync"/>
-    /// against the live <c>gemini -p ...</c> CLI. Gemini also ships as
-    /// <c>node.exe + bundle/gemini.js</c> via <c>gemini.cmd</c>; same shim
-    /// path as Codex.
+    /// Antigravity parity probe: drives <see cref="OrchestratorApi.Services.Cli.AntigravityCliService.StartAsync"/>
+    /// against the live <c>agentapi</c> CLI.
     /// </summary>
     [SkippableFact]
-    public async Task GeminiCliService_StartAsync_ProducesStreamingFrames()
+    public async Task AntigravityCliService_StartAsync_ProducesStreamingFrames()
     {
         Skip.IfNot(IntegrationEnabled, SkipReason);
-        var cmd = GeminiCmdPath;
-        Skip.IfNot(cmd != null, "gemini.cmd not found");
+        var cmd = AntigravityCmdPath;
+        Skip.IfNot(cmd != null, "agentapi not found");
 
         var cfg = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["GeminiCli:Path"] = cmd,
+                ["AntigravityCli:Path"] = cmd,
                 ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
             })
             .Build();
 
-        var svc = new OrchestratorApi.Services.Cli.GeminiCliService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.GeminiCliService>.Instance,
+        var svc = new OrchestratorApi.Services.Cli.AntigravityCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.AntigravityCliService>.Instance,
             cfg);
 
         var jobId = $"it-{Guid.NewGuid():N}";
         var jobKey = $"::{jobId}";
         var (exec, err) = await svc.StartAsync(
             jobId, jobKey,
-            prompt: "Reply with exactly four words and nothing else: gemini test ready ack",
+            prompt: "Reply with exactly four words and nothing else: antigravity test ready ack",
             workingDirectory: Path.GetTempPath(),
             sessionName: null, resumeSession: false,
             model: null);
@@ -604,7 +607,7 @@ public class CliSpawnIntegrationTests
         var stdoutLines = final.Where(l => l.Stream == "stdout").ToList();
         Assert.True(
             stdoutLines.Count >= 1,
-            $"Expected at least one stdout frame from gemini. Got:\n" +
+            $"Expected at least one stdout frame from antigravity. Got:\n" +
             string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text[..Math.Min(l.Text.Length, 200)]}")));
     }
 
