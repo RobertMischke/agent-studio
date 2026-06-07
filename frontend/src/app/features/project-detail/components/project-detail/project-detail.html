@@ -196,7 +196,7 @@
     <section class="proj-detail__group">
       <h3>Auto-commit</h3>
       <label class="proj-detail__toggle"
-             [appTooltip]="'When enabled, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on TaskInfo.Commit. Changes apply to the next task transition immediately.'">
+             [appTooltip]="'When enabled, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on TaskInfo.Commit. The setting applies immediately to the next job transition.'">
         <input type="checkbox"
                data-testid="project-detail-auto-commit"
                [(ngModel)]="autoCommitDraft"
@@ -204,7 +204,7 @@
         <span>Auto-commit on transition <code>3-progress -> 4-auto-review</code></span>
       </label>
       <p class="proj-detail__hint">
-        When enabled, the orchestrator commits after each transition and stamps the SHA on the job. Changes apply to the next job immediately.
+        When enabled, the orchestrator commits after each transition and stamps the SHA on <code>TaskInfo.Commit</code>. The setting applies immediately to the next job transition.
       </p>
     </section>
 
