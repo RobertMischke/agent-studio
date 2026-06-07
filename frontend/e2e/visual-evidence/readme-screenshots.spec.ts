@@ -10,6 +10,20 @@ const OUT = '../docs/images/';
 const TASK_CARD = '[data-testid="task-card"], [data-testid="job-card"]';
 const PRIMARY_TASK_LABELS = ['ASS-847', 'ASS-850', 'ASS-856', 'ASS-1529'];
 
+async function applyVisualCaptureMode(page: Page): Promise<void> {
+  if ((process.env.PW_VISUAL_CAPTURE ?? 'marketing') !== 'marketing') return;
+
+  await page.addStyleTag({
+    content: `
+      body::before,
+      .dev-banner,
+      [data-testid="dev-banner"] {
+        display: none !important;
+      }
+    `,
+  });
+}
+
 async function capture(page: Page, fileName: string) {
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}${fileName}`, fullPage: false });
@@ -53,6 +67,8 @@ test('readme screenshots — board and task detail states', async ({ page, devBa
   await api('/api/watch-paths');
 
   await page.goto('/');
+  await applyVisualCaptureMode(page);
+  await expect(page.getByTestId('dev-banner')).toBeHidden({ timeout: 5_000 });
   await expect(page.locator(TASK_CARD).first()).toBeVisible({ timeout: 15_000 });
   await capture(page, 'board-overview.png');
 

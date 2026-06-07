@@ -8,6 +8,7 @@
     "spec": "frontend/e2e/visual-evidence/readme-screenshots.spec.ts",
     "command": "./scripts/visual-docs/generate.sh",
     "dataState": "Existing task data from the current Agent Software Studio workspace exposed by /api/watch-paths.",
+    "captureMode": "marketing: hides local-only DEV chrome such as the banner and left-edge stripe before screenshots are written.",
     "notes": "The spec prefers real Agent Software Studio tasks with Git and review context, then falls back to the first visible task card."
   },
   "images": [

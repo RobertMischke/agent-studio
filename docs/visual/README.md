@@ -44,6 +44,10 @@ Generate the current visual documentation set from the product repo root:
 
 The script runs the Playwright screenshot recipe and then validates the manifest.
 It writes the generated PNG files to [`docs/images/`](../images/).
+By default it uses `PW_VISUAL_CAPTURE=marketing`, which hides local-only dev
+chrome such as the `DEV` banner and left-edge stripe before writing screenshots.
+Set `PW_VISUAL_CAPTURE=workspace` when you intentionally want the local checkout
+marker in debugging captures.
 
 You can also run the Playwright recipe directly from the frontend folder:
 
@@ -57,6 +61,8 @@ Preconditions:
 - the dev frontend is reachable at the configured Playwright target
 - the backend exposes at least one existing project with visible task cards
 - the spec can write to `../docs/images/`
+- marketing capture mode is acceptable for public docs, so local-only DEV
+  markers are hidden from generated product images
 
 The spec uses existing task data. Preferred task keys are kept in the spec so
 the generated set stays visually stable, but the run can fall back to the first
