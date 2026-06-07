@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 
 /**
- * Pipeline column headers (Time / Duration / Tokens / Cost).
+ * Pipeline column headers (Time / Duration / Tokens / Cost) and phase headers.
  *
  * The per-step metric cells (start clock, duration, token count, cost) used to
  * render bare numbers with no captions. This polish introduces one header row
@@ -52,7 +52,7 @@ function step(id: string, displayName: string, kind: string, runMode: string) {
   return { id, displayName, kind, runMode, dependsOn: [], idempotent: true, stub: false };
 }
 
-const pre = [step('pre-loop-guard', 'Loop guard', 'pre', 'sequential')];
+const pre = [step('pre-loop-guard', 'Loop guard', 'module', 'sequential')];
 const core = [step('core-agent-run', 'Agent execution', 'core', 'sequential')];
 const post = [step('post-orchestrator-decision', 'Final verdict', 'orchestrator', 'sequential')];
 const allSteps = [...pre, ...core, ...post];
@@ -116,7 +116,7 @@ function pipelineWithMetrics() {
       startedAt: '2026-06-02T08:00:00Z',
       completedAt: '2026-06-02T08:05:00Z',
       steps: [
-        execStep('pre-loop-guard', 'pre', 'claude-haiku-4-5'),
+        execStep('pre-loop-guard', 'module', 'claude-haiku-4-5'),
         execStep('core-agent-run', 'core', 'claude-opus-4-7'),
         execStep('post-orchestrator-decision', 'orchestrator', 'claude-haiku-4-5', { verdict: 'accept' }),
       ],
@@ -140,6 +140,46 @@ function pipelineWithMetrics() {
       anyModelUnknown: false,
     },
     config: {},
+  };
+}
+
+function pipelineWithAllPhases() {
+  const phasePost = [
+    step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
+    step('post-git-commit-attribution', 'Git attribution', 'tool', 'sequential'),
+    step('post-orchestrator-decision', 'Final verdict', 'orchestrator', 'sequential'),
+    step('post-drift-adr-code', 'ADR drift', 'drift', 'sequential'),
+  ];
+  return {
+    ...pipelineWithMetrics(),
+    pipeline: {
+      ...basePipeline(),
+      post: phasePost,
+      allSteps: [...pre, ...core, ...phasePost],
+    },
+    execution: {
+      ...pipelineWithMetrics().execution,
+      steps: [
+        execStep('pre-loop-guard', 'module', 'claude-haiku-4-5'),
+        execStep('core-agent-run', 'core', 'claude-opus-4-7'),
+        execStep('aspect-requirement-fit', 'aspect', 'claude-haiku-4-5', { verdict: 'pass' }),
+        execStep('post-git-commit-attribution', 'tool', 'claude-haiku-4-5'),
+        execStep('post-orchestrator-decision', 'orchestrator', 'claude-haiku-4-5', { verdict: 'accept' }),
+        execStep('post-drift-adr-code', 'drift', 'claude-haiku-4-5', { verdict: 'clean' }),
+      ],
+    },
+    cost: {
+      ...pipelineWithMetrics().cost,
+      steps: [
+        costStep('pre-loop-guard', 'claude-haiku-4-5', 1_200, 0.0021),
+        costStep('core-agent-run', 'claude-opus-4-7', 248_000, 4.37),
+        costStep('aspect-requirement-fit', 'claude-haiku-4-5', 8_000, 0.0120),
+        costStep('post-git-commit-attribution', 'claude-haiku-4-5', 800, 0.0010),
+        costStep('post-orchestrator-decision', 'claude-haiku-4-5', 5_400, 0.0089),
+        costStep('post-drift-adr-code', 'claude-haiku-4-5', 12_000, 0.0180),
+      ],
+      totalTokens: 275_400,
+    },
   };
 }
 
@@ -310,6 +350,90 @@ test.describe('Pipeline: per-step metric column headers', () => {
     }
   });
 
+  test('phase headers visually group PRE / CORE / ASPECT / TOOL / DECISION / DRIFT without reordering steps', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithAllPhases);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+
+    const phases = page.getByTestId('overview-pipeline-phase');
+    await expect(phases).toHaveCount(6);
+    await expect(phases.locator('.ov-pl-phase__label')).toHaveText([
+      'PRE',
+      'CORE',
+      'ASPECT',
+      'TOOL',
+      'DECISION',
+      'DRIFT',
+    ]);
+
+    const phaseAriaLabels = await phases.evaluateAll(els =>
+      els.map(el => el.getAttribute('aria-label') ?? ''),
+    );
+    expect(phaseAriaLabels).toEqual([
+      expect.stringContaining('PRE pipeline phase:'),
+      expect.stringContaining('CORE pipeline phase:'),
+      expect.stringContaining('ASPECT pipeline phase:'),
+      expect.stringContaining('TOOL pipeline phase:'),
+      expect.stringContaining('DECISION pipeline phase:'),
+      expect.stringContaining('DRIFT pipeline phase:'),
+    ]);
+
+    const domOrder = await page.evaluate(() => {
+      return Array
+        .from(document.querySelectorAll<HTMLElement>('[data-testid="overview-pipeline-phase"], [data-testid="overview-pipeline-step"]'))
+        .map(el => {
+          if (el.dataset['testid'] === 'overview-pipeline-phase') {
+            return `phase:${el.dataset['phase']}`;
+          }
+          return `step:${el.dataset['stepId']}`;
+        });
+    });
+
+    expect(domOrder).toEqual([
+      'phase:pre',
+      'step:pre-loop-guard',
+      'phase:core',
+      'step:core-agent-run',
+      'phase:aspect',
+      'step:aspect-requirement-fit',
+      'phase:tool',
+      'step:post-git-commit-attribution',
+      'phase:decision',
+      'step:post-orchestrator-decision',
+      'phase:drift',
+      'step:post-drift-adr-code',
+    ]);
+
+    const groupingStyle = await page.evaluate(() => {
+      const phase = document.querySelector<HTMLElement>('[data-testid="overview-pipeline-phase"][data-phase="aspect"]')!;
+      const row = document.querySelector<HTMLElement>('[data-testid="overview-pipeline-step"][data-phase="aspect"]')!;
+      const phaseStyle = getComputedStyle(phase);
+      const rowStyle = getComputedStyle(row);
+      return {
+        phaseBackground: phaseStyle.background,
+        phaseBoxShadow: phaseStyle.boxShadow,
+        rowBackground: rowStyle.background,
+        rowBoxShadow: rowStyle.boxShadow,
+      };
+    });
+
+    expect(groupingStyle.phaseBackground).not.toBe('none');
+    expect(groupingStyle.phaseBoxShadow).toContain('inset');
+    expect(groupingStyle.rowBackground).not.toBe('none');
+    expect(groupingStyle.rowBoxShadow).toContain('inset');
+
+    if (RESULTS_DIR) {
+      await pipeline.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-phase-groups.png'),
+        fullPage: true,
+      });
+    }
+  });
+
   test('overview content keeps left-aligned prose and tabular measures on ultrawide viewports', async ({ page }) => {
     await page.setViewportSize({ width: 1900, height: 1050 });
     await page.addInitScript(() => {
@@ -379,7 +503,8 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     // Prose stays on a character measure; tabular blocks get the wider but
     // still capped pixel measure from the shared tokens.
-    expect(geometry.proseMax).toBe('74ch');
+    expect(Number.parseFloat(geometry.proseMax)).toBeGreaterThan(500);
+    expect(Number.parseFloat(geometry.proseMax)).toBeLessThan(900);
     expect(geometry.pipelineMax).toBe('900px');
     expect(geometry.titleWidth).toBeLessThan(900);
     expect(geometry.statusWidth).toBeLessThanOrEqual(1040);

@@ -289,6 +289,7 @@
           @if (row.startsPhase) {
             <div class="ov-pl-phase"
                  [attr.data-phase]="row.phaseKey"
+                 aria-label="{{ row.phaseLabel }} pipeline phase: {{ row.phaseDescription }}"
                  data-testid="overview-pipeline-phase">
               <span class="ov-pl-phase__label">{{ row.phaseLabel }}</span>
               <span class="ov-pl-phase__rule" aria-hidden="true"></span>
