@@ -92,6 +92,56 @@ public class CompletionGateTests
         Assert.Contains(findings, f => f.Contains("routes are wired", System.StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    // The reissue loop's own trigger: a commit/push-delegation follow-up the
+    // agent can never close because the platform owns the commit boundary
+    // (docs/commit-push-doctrine.md). Each variant must NOT become a finding,
+    // or the managed run ping-pongs back to 2-ready forever / escalates grundlos.
+    [InlineData("- [ ] Working tree changes awaiting managed-run commit/push (platform owns merge).")]
+    [InlineData("- [ ] Changes left in the working tree for the platform to commit.")]
+    [InlineData("- [ ] Commit/push handled by the managed run.")]
+    [InlineData("- [ ] Changes committed by the platform after this run.")]
+    [InlineData("- [ ] Awaiting the managed run to push the work.")]
+    [InlineData("- [ ] Final commit per managed-run guidelines.")]
+    [InlineData("- Changes awaiting commit/push.")]
+    public void ExtractFindings_PlatformOwnedCommitItem_IsNotReported(string openItemLine)
+    {
+        var status = string.Join('\n', "## Open Items", openItemLine);
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void ExtractFindings_PlatformOwnedCommitItem_DoesNotTriggerReissueOrEscalate()
+    {
+        // The exact reissue trigger this fix targets: a commit-delegation item
+        // must pass the gate at both ends of the reissue budget.
+        var status = "## Summary\nDone.\n\nResult: Success\n\n## Open Items\n- [ ] Working tree changes awaiting managed-run commit/push (platform owns merge).\n";
+
+        var fresh = CompletionGate.Evaluate(status, recentLog: null, priorReissues: 0, maxReissues: MaxReissues);
+        var spent = CompletionGate.Evaluate(status, recentLog: null, priorReissues: MaxReissues, maxReissues: MaxReissues);
+
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, fresh.Action);
+        Assert.Equal(CompletionGate.CompletionGateAction.Pass, spent.Action);
+    }
+
+    [Theory]
+    // Guard the guard: genuine work that happens to mention commit/push/merge
+    // must still be reported. The delegation must be explicit to suppress.
+    [InlineData("- [ ] Push the migration to the shared config repo.")]
+    [InlineData("- [ ] Commit the generated client SDK before release.")]
+    [InlineData("- [ ] Merge the feature branch into develop once review passes.")]
+    public void ExtractFindings_RealCommitWork_StillReported(string openItemLine)
+    {
+        var status = string.Join('\n', "## Open Items", openItemLine);
+
+        var findings = CompletionGate.ExtractFindings(status, recentLog: null);
+
+        Assert.NotEmpty(findings);
+    }
+
     [Fact]
     public void ExtractFindings_PartialResult_IsReported()
     {

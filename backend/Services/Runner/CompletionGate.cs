@@ -115,6 +115,31 @@ public static class CompletionGate
         \s*$",
         RegexOptions.Compiled);
 
+    // A non-actionable "the platform owns the commit/push" open item. In a
+    // managed run the agent is contractually forbidden from committing or
+    // pushing (docs/commit-push-doctrine.md - the platform owns that boundary),
+    // so an open item that merely defers the commit / push / merge of the
+    // leftover working tree to the platform or managed run can NEVER be closed
+    // by the agent. Treating it as unfinished work reissues the card forever on
+    // a state the run cannot change - the exact false-negative loop this task
+    // fixes (ASS-619/766/797). Examples this catches:
+    //   "Working tree changes awaiting managed-run commit/push (platform owns merge)."
+    //   "Changes left in working tree for the platform to commit."
+    //   "Commit/push handled by the managed run."
+    // Precise (the delegation must be explicit) so real work like
+    // "Push the migration to the shared config repo" is NOT suppressed.
+    private static readonly Regex PlatformOwnedCommitItemRegex = new(
+        @"(?ix)
+        (?:
+            (?:platform|managed[-\s]?run)\s+(?:owns?|will\s+\w+|handles?|commits?|pushes|merges?) |
+            (?:owned|handled|committed|pushed|merged)\s+by\s+(?:the\s+)?(?:platform|managed[-\s]?run) |
+            await(?:s|ing)?\s+(?:the\s+)?(?:managed[-\s]?run|platform) |
+            per\s+managed[-\s]?run |
+            left\s+in\s+(?:the\s+)?working\s+tree |
+            changes?\s+awaiting\s+(?:managed[-\s]?run\s+)?(?:commit|push|merge)
+        )",
+        RegexOptions.Compiled);
+
     public enum CompletionGateAction
     {
         Pass,
@@ -347,7 +372,11 @@ public static class CompletionGate
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
         var firstSentence = text.Split('.', 2)[0];
-        return NoOpOpenItemRegex.IsMatch(firstSentence);
+        if (NoOpOpenItemRegex.IsMatch(firstSentence)) return true;
+        // Non-actionable commit/push delegation: the platform owns the commit
+        // boundary, so the agent can never close such an item. Scanned over the
+        // full text (the delegation clause may be the second sentence).
+        return PlatformOwnedCommitItemRegex.IsMatch(text);
     }
 
     private static string Normalize(string? candidate)
