@@ -7,12 +7,31 @@ using Xunit;
 
 namespace OrchestratorApi.Tests;
 
-public class TempOrphanCleanupApiTest
+public class TaskOrphanFolderDeleteEndpointTests : IDisposable
 {
-    [Fact]
-    public async Task DeleteNamedArchiveOrphanThroughApi()
+    private readonly string _watchPath;
+
+    public TaskOrphanFolderDeleteEndpointTests()
     {
-        var watchPath = @"C:\Projects\agent-taskboard-workspace\projects\agent-taskboard";
+        _watchPath = Path.Combine(Path.GetTempPath(), "atp-orphan-delete-api-tests-" + Guid.NewGuid().ToString("N"));
+        foreach (var state in TaskStates.All)
+            Directory.CreateDirectory(Path.Combine(_watchPath, state));
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
+    }
+
+    [Fact]
+    public async Task DeleteOrphanFolder_RemovesArchiveFolderThroughApi()
+    {
+        var slug = "archive-orphan";
+        var folder = Path.Combine(_watchPath, TaskStates.Archive, slug);
+        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(Path.Combine(folder, "results"));
+        File.WriteAllText(Path.Combine(folder, "results", "evidence.txt"), "leftover");
+
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(b =>
             {
@@ -22,8 +41,8 @@ public class TempOrphanCleanupApiTest
                     cfg.AddInMemoryCollection(new Dictionary<string, string?>
                     {
                         ["WatchPaths:0:Name"] = "Agent Task Processor",
-                        ["WatchPaths:0:Path"] = watchPath,
-                        ["WatchPaths:0:RootPath"] = @"C:\Projects\agent-taskboard-devspace\agent-taskboard-dev"
+                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = _watchPath
                     });
                 });
             });
@@ -33,14 +52,15 @@ public class TempOrphanCleanupApiTest
         {
             Content = JsonContent.Create(new OrphanFolderDeleteRequest
             {
-                WatchPath = watchPath,
+                WatchPath = _watchPath,
                 Lane = TaskStates.Archive,
-                Folder = "kanban-lane-grouping-collapse-empty-2026-05-05"
+                Folder = slug
             })
         };
         request.Headers.Add("X-Client-Id", "local-default");
 
         using var response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
+        Assert.False(Directory.Exists(folder));
     }
 }
