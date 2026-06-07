@@ -42,6 +42,127 @@ public sealed class CrashRecorder
     /// <summary>Absolute path of the marker file. Stable across restarts so the diagnostics endpoint can read it.</summary>
     public string MarkerPath => Path.Combine(Path.GetFullPath(_options.LogDirectory), "last-crash.json");
 
+    /// <summary>Per-boot marker (capturedAt + pid). Overwritten on every boot; read by the next boot to bound the crash/shutdown markers to the run they belong to.</summary>
+    public string StartupMarkerPath => Path.Combine(Path.GetFullPath(_options.LogDirectory), "startup.json");
+
+    /// <summary>Graceful-shutdown marker written by the ProcessExit handler. Read here to tell a clean teardown apart from a silent death.</summary>
+    public string ShutdownMarkerPath => Path.Combine(Path.GetFullPath(_options.LogDirectory), "last-shutdown.json");
+
+    /// <summary>Written only when the previous run was classified <see cref="PreviousRunVerdict.SilentKill"/> so an operator finds the named verdict in one glance.</summary>
+    public string SilentKillMarkerPath => Path.Combine(Path.GetFullPath(_options.LogDirectory), "last-silent-kill.json");
+
+    /// <summary>
+    /// Boot-time forensics: classify how the <i>previous</i> run ended by
+    /// diffing this boot's view of the startup / shutdown / crash markers,
+    /// log a structured verdict, persist a <c>last-silent-kill.json</c> when
+    /// the previous run vanished silently, then arm a fresh
+    /// <c>startup.json</c> so the <i>next</i> boot can do the same.
+    ///
+    /// <para>
+    /// This is the only thing that can surface the silent class — a
+    /// StackOverflowException, OS OOM-kill, or native PTY crash terminates the
+    /// host before <c>AppDomain.UnhandledException</c> /
+    /// <c>TaskScheduler.UnobservedTaskException</c> / <c>ProcessExit</c> can
+    /// run, so no in-process handler ever sees it. Everything here is
+    /// best-effort and fully swallowed: boot diagnostics must never block boot.
+    /// </para>
+    /// </summary>
+    public PreviousRunReport ClassifyPreviousRunAndArm()
+    {
+        DateTime? prevStarted = null;
+        int? prevPid = null;
+        DateTime? lastShutdown = null;
+        DateTime? lastCrash = null;
+
+        try { (prevStarted, prevPid) = ReadStartupMarker(); } catch { }
+        try { lastShutdown = ReadCapturedAt(ShutdownMarkerPath); } catch { }
+        try { lastCrash = ReadCapturedAt(MarkerPath); } catch { }
+
+        var verdict = CrashForensics.Classify(prevStarted, lastShutdown, lastCrash);
+        var report = new PreviousRunReport(verdict, prevStarted, prevPid, lastShutdown, lastCrash);
+
+        try { LogVerdict(report); } catch { }
+        if (verdict == PreviousRunVerdict.SilentKill)
+        {
+            try { WriteSilentKillMarker(report); } catch { }
+        }
+        try { ArmStartupMarker(); } catch { }
+
+        return report;
+    }
+
+    private (DateTime?, int?) ReadStartupMarker()
+    {
+        if (!File.Exists(StartupMarkerPath)) return (null, null);
+        using var doc = JsonDocument.Parse(File.ReadAllText(StartupMarkerPath));
+        var root = doc.RootElement;
+        DateTime? started = root.TryGetProperty("capturedAt", out var ca)
+            && DateTime.TryParse(ca.GetString(), null, System.Globalization.DateTimeStyles.RoundtripKind, out var t)
+                ? t : null;
+        int? pid = root.TryGetProperty("pid", out var p) && p.TryGetInt32(out var pv) ? pv : null;
+        return (started, pid);
+    }
+
+    private static DateTime? ReadCapturedAt(string path)
+    {
+        if (!File.Exists(path)) return null;
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.TryGetProperty("capturedAt", out var ca)
+            && DateTime.TryParse(ca.GetString(), null, System.Globalization.DateTimeStyles.RoundtripKind, out var t)
+                ? t : null;
+    }
+
+    private void ArmStartupMarker()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(StartupMarkerPath)!);
+        var json = JsonSerializer.Serialize(new
+        {
+            capturedAt = DateTime.UtcNow.ToString("O"),
+            pid = Environment.ProcessId,
+        }, JsonOptions);
+        lock (_writeLock) File.WriteAllText(StartupMarkerPath, json, Encoding.UTF8);
+    }
+
+    private void WriteSilentKillMarker(PreviousRunReport report)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SilentKillMarkerPath)!);
+        var json = JsonSerializer.Serialize(new
+        {
+            capturedAt = DateTime.UtcNow.ToString("O"),
+            verdict = report.Verdict.ToString(),
+            previousPid = report.PreviousPid,
+            previousStartedAt = report.PreviousStartedAt?.ToString("O"),
+            note = "Previous backend run ended without a shutdown or crash marker. "
+                 + "Likely native crash / OOM / StackOverflow / external kill — no in-process handler witnessed it.",
+        }, JsonOptions);
+        lock (_writeLock) File.WriteAllText(SilentKillMarkerPath, json, Encoding.UTF8);
+    }
+
+    private void LogVerdict(PreviousRunReport report)
+    {
+        var (level, headline) = report.Verdict switch
+        {
+            PreviousRunVerdict.SilentKill => ("FATAL",
+                "previous backend run died SILENTLY (no shutdown or crash marker) — likely native crash / OOM / StackOverflow / external kill"),
+            PreviousRunVerdict.ManagedCrash => ("ERROR",
+                "previous backend run ended on a managed crash (last-crash.json present, no shutdown marker)"),
+            PreviousRunVerdict.GracefulShutdown => ("INFO ",
+                "previous backend run shut down gracefully"),
+            _ => ("INFO ", "no previous-run marker found (first boot in this log directory)"),
+        };
+
+        var sb = new StringBuilder();
+        sb.Append(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+        sb.Append(' ').Append(level);
+        sb.Append(' ').Append("Backend.Startup");
+        sb.Append(" [").Append(report.Verdict).Append("] ").Append(headline);
+        if (report.PreviousPid is int pid) sb.Append(" previousPid=").Append(pid);
+        if (report.PreviousStartedAt is DateTime s) sb.Append(" previousStartedAt=").Append(s.ToString("O"));
+        if (report.LastCrashAt is DateTime c) sb.Append(" lastCrashAt=").Append(c.ToString("O"));
+        if (report.LastShutdownAt is DateTime d) sb.Append(" lastShutdownAt=").Append(d.ToString("O"));
+        _sink.WriteRaw(sb.ToString());
+    }
+
     /// <summary>
     /// Persist a crash. <paramref name="source"/> identifies which
     /// handler captured it (e.g. <c>UnobservedTaskException</c>) and is

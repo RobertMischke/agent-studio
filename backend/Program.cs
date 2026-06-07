@@ -108,6 +108,25 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) =>
     catch { }
 };
 
+// Boot-time silent-death detector. The handlers above can only witness a
+// *managed* death; a StackOverflowException, an OS OOM-kill, or a native PTY
+// crash terminates the process before any of them run and leaves the api-log
+// to simply stop. By diffing the previous run's startup marker against the
+// shutdown / crash markers this names that silent class at the next boot (and
+// drops a last-silent-kill.json) instead of leaving the operator staring at a
+// log that ends mid-line. Also arms a fresh startup.json for the next boot.
+// Runs before DI build so it captures the prior run regardless of what boot
+// does next; fully swallowed so diagnostics can never block boot.
+try
+{
+    var previousRun = crashRecorder.ClassifyPreviousRunAndArm();
+    if (previousRun.Verdict == PreviousRunVerdict.SilentKill)
+        Console.Error.WriteLine(
+            $"[startup] previous backend run died silently (pid={previousRun.PreviousPid}, " +
+            $"started={previousRun.PreviousStartedAt:O}) — see last-silent-kill.json");
+}
+catch { /* boot diagnostics must never block boot */ }
+
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<WorkspaceManagementService>();

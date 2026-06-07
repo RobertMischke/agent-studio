@@ -33,6 +33,26 @@ public static class DiagnosticsEndpoints
             }
         });
 
+        // Returns the marker written when the *previous* backend run was
+        // classified as a silent death at boot (no shutdown or crash marker —
+        // the StackOverflow / OOM / native-kill class no in-process handler
+        // can witness). 200 with the verdict JSON when present, 404 on the
+        // happy path where the previous run ended cleanly or crashed managed.
+        group.MapGet("/last-silent-kill", (CrashRecorder recorder) =>
+        {
+            var path = recorder.SilentKillMarkerPath;
+            if (!File.Exists(path)) return Results.NotFound(new { silentKill = false });
+            try
+            {
+                var bytes = File.ReadAllBytes(path);
+                return Results.File(bytes, "application/json");
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem($"Failed to read silent-kill marker: {ex.Message}", statusCode: 500);
+            }
+        });
+
         // Reports the resolved log directory + the file currently being
         // written to. Cheap and load-bearing: a sibling agent or the
         // user can paste the path into a tail command without guessing
