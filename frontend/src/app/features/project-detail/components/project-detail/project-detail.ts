@@ -46,6 +46,34 @@ interface ProjectSettingsRow {
 
 type AutoPushStrategy = 'never' | 'on-completed' | 'always-immediate';
 
+interface PipelineAdminRow {
+  id: string;
+  displayName: string;
+  kind: string;
+  usesModel: boolean;
+  usesPrompt: boolean;
+  supportsMode: boolean;
+  canDisable: boolean;
+  supportsCondition: boolean;
+  phase: string;
+  enabled: boolean;
+  cliType: string;
+  model: string;
+  thinkingLevel: string;
+  prompt: string;
+  thinkingLevels: readonly string[];
+  mode: string;
+  condition: string;
+  conditionValue: string;
+  conditionNeedsValue: boolean;
+}
+
+interface PipelineGroup {
+  phase: string;
+  label: string;
+  rows: PipelineAdminRow[];
+}
+
 export type ProjectDetailView =
   | 'overview'
   | 'jobs'
@@ -172,6 +200,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly pipelineCatalogue = signal<readonly PipelineCatalogueStep[]>([]);
   readonly pipelineOverrides = signal<Record<string, PipelineStepSetting>>({});
   readonly pipelineStepModels = PipelineStep_KnownModels;
+  readonly pipelineCliTypes = CLI_TYPES;
   readonly pipelineGateModes = PipelineStep_GateModes;
   readonly pipelineConditions = PipelineStep_Conditions;
   /** Per-step write in flight; disables that row's controls until the PUT resolves. */
@@ -183,7 +212,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
    * falls back to the step's `defaultEnabled` - on for most steps, off for the
    * opt-in drift post-steps. `model` / `mode` empty string = inherit.
    */
-  readonly pipelineRows = computed(() => {
+  readonly pipelineRows = computed<PipelineAdminRow[]>(() => {
     const overrides = this.pipelineOverrides();
     const drafts = this.pipelineConditionDraft();
     return this.pipelineCatalogue().map(step => {
@@ -204,7 +233,9 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         supportsMode: step.supportsMode,
         canDisable: step.canDisable,
         supportsCondition: step.supportsCondition,
+        phase: step.phase ?? this.phaseForStep(step),
         enabled: ov?.enabled ?? step.defaultEnabled,
+        cliType: ov?.cliType ?? step.cliType ?? '',
         model: ov?.model ?? '',
         thinkingLevel: ov?.thinkingLevel ?? '',
         prompt: ov?.prompt ?? '',
@@ -215,6 +246,20 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         conditionNeedsValue: PipelineStep_ConditionValueTokens.includes(conditionWhen),
       };
     });
+  });
+
+  readonly pipelineGroups = computed(() => {
+    const groups: PipelineGroup[] = [];
+    for (const row of this.pipelineRows()) {
+      const phase = row.phase || 'post';
+      let group = groups.find(g => g.phase === phase);
+      if (!group) {
+        group = { phase, label: this.pipelinePhaseLabel(phase), rows: [] };
+        groups.push(group);
+      }
+      group.rows.push(row);
+    }
+    return groups;
   });
 
   /**
@@ -553,6 +598,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.writeStep(stepId, { model, thinkingLevel: nextThinkingLevel });
   }
 
+  onStepCliTypeChange(stepId: string, cliType: string): void {
+    this.writeStep(stepId, { cliType });
+  }
+
   onStepModeChange(stepId: string, mode: string): void {
     this.writeStep(stepId, { mode });
   }
@@ -642,12 +691,21 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
    */
   private writeStep(
     stepId: string,
-    patch: { enabled?: boolean; model?: string; thinkingLevel?: string | null; prompt?: string | null; mode?: string; condition?: PipelineStepCondition | null },
+    patch: {
+      enabled?: boolean;
+      cliType?: string;
+      model?: string;
+      thinkingLevel?: string | null;
+      prompt?: string | null;
+      mode?: string;
+      condition?: PipelineStepCondition | null;
+    },
   ): void {
     const cur = this.pipelineOverrides()[stepId] ?? {};
     const defaultEnabled = this.pipelineCatalogue().find(s => s.id === stepId)?.defaultEnabled ?? true;
     const enabled = patch.enabled ?? (cur.enabled ?? defaultEnabled);
     const model = (patch.model ?? cur.model ?? '').trim();
+    const cliType = (patch.cliType ?? cur.cliType ?? '').trim();
     const thinkingLevel = (patch.thinkingLevel !== undefined ? patch.thinkingLevel : (cur.thinkingLevel ?? ''))?.trim() ?? '';
     const prompt = (patch.prompt !== undefined ? patch.prompt : (cur.prompt ?? ''))?.trim() ?? '';
     const mode = (patch.mode ?? cur.mode ?? '').trim();
@@ -661,6 +719,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       // dead override. This matters for opt-in steps (abort-review, drift)
       // whose default is off: enabling them must store true, not clear it.
       enabled: enabled === defaultEnabled ? null : enabled,
+      cliType: cliType || null,
       model: model || null,
       thinkingLevel: thinkingLevel || null,
       prompt: prompt || null,
@@ -691,6 +750,30 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     const id = (model ?? '').trim();
     if (!id) return null;
     return this.pipelineStepModels.find(m => m.id === id)?.defaultThinkingLevel ?? null;
+  }
+
+  private phaseForStep(step: PipelineCatalogueStep): string {
+    if (step.kind === 'Aspect') return 'aspect';
+    if (step.kind === 'Tool') return 'tool';
+    if (step.kind === 'Drift') return 'drift';
+    if (step.kind === 'Core') return 'core';
+    if (step.id.startsWith('pre-')) return 'pre';
+    if (step.id.includes('decision')) return 'decision';
+    if (step.id.includes('abort')) return 'abort';
+    return 'post';
+  }
+
+  private pipelinePhaseLabel(phase: string): string {
+    switch (phase) {
+      case 'pre': return 'Pre';
+      case 'core': return 'Core';
+      case 'aspect': return 'Aspect reviews';
+      case 'tool': return 'Tool steps';
+      case 'decision': return 'Decision';
+      case 'drift': return 'Drift';
+      case 'abort': return 'Abort-only';
+      default: return 'Post';
+    }
   }
 
   repairQueueHealth(): void {

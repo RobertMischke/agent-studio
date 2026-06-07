@@ -97,11 +97,27 @@ public static class ProjectSettingsEndpoints
         app.MapGet("/api/projects/pipeline-catalogue", () =>
         {
             var pipeline = PipelineCatalogue.Standard;
-            var steps = pipeline.AllSteps.Select(s => new
+            var steps = pipeline.Pre.Select(s => ProjectPipelineStepDto(s, "pre"))
+                .Concat(pipeline.Core.Select(s => ProjectPipelineStepDto(s, "core")))
+                .Concat(pipeline.Post.Select(s => ProjectPipelineStepDto(s, PhaseForPostStep(s))))
+                .ToList();
+
+            static string PhaseForPostStep(PipelineStep step)
+            {
+                if (step.Kind == StepKind.Aspect) return "aspect";
+                if (step.Kind == StepKind.Tool) return "tool";
+                if (step.Kind == StepKind.Drift) return "drift";
+                if (string.Equals(step.Id, PipelineCatalogue.OrchestratorDecisionStepId, StringComparison.OrdinalIgnoreCase))
+                    return "decision";
+                return "post";
+            }
+
+            static object ProjectPipelineStepDto(PipelineStep s, string phase) => new
             {
                 id = s.Id,
                 displayName = s.DisplayName,
                 kind = s.Kind.ToString(),
+                phase,
                 // The core agent run cannot be disabled or model-overridden
                 // here (it uses the task's own CLI + model). Aspect, drift,
                 // and orchestrator review/decision rows invoke LLMs, so the
@@ -123,7 +139,7 @@ public static class ProjectSettingsEndpoints
                 // initial state when the project has no explicit override.
                 defaultEnabled = s.DefaultEnabled,
                 supportsCondition = s.Kind != StepKind.Core,
-            }).ToList();
+            };
 
             // The abort-triggered review step lives off the linear AllSteps list
             // (it only fires after a non-clean run end) but is configurable
@@ -134,6 +150,7 @@ public static class ProjectSettingsEndpoints
                 id = abort.Id,
                 displayName = abort.DisplayName,
                 kind = abort.Kind.ToString(),
+                phase = "abort",
                 usesModel = true,
                 usesPrompt = true,
                 supportsMode = false,

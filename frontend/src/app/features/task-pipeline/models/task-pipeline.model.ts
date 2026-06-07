@@ -157,6 +157,7 @@ export interface PipelineCatalogueStep {
   id: string;
   displayName: string;
   kind: StepKind;
+  phase?: string | null;
   usesModel: boolean;
   usesPrompt: boolean;
   supportsMode: boolean;
