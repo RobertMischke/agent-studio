@@ -18,6 +18,10 @@
   --ov-label-col: 100px;
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 64px;
+  --ov-pipeline-meta-col: minmax(0, max-content);
+  --ov-pipeline-time-col: 96px;
+  --ov-pipeline-tokens-col: 56px;
+  --ov-pipeline-cost-col: 64px;
 
   padding: var(--studio-spacing-2) var(--studio-spacing-4);
   display: flex;
@@ -506,6 +510,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  width: 100%;
   max-width: 100%;
 }
 
@@ -554,10 +559,20 @@
 // caption lines up over its right-aligned values. Pure presentation — quiet,
 // uppercase captions in the label idiom used elsewhere in this panel.
 .ov-pl-header {
-  display: flex;
+  display: grid;
+  grid-template-columns:
+    var(--ov-pipeline-status-col)
+    var(--ov-pipeline-kind-col)
+    minmax(180px, 1fr)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-time-col)
+    var(--ov-pipeline-tokens-col)
+    var(--ov-pipeline-cost-col);
   align-items: baseline;
-  justify-content: flex-end;
-  gap: var(--studio-spacing-1);
+  column-gap: var(--studio-spacing-1);
   padding-block: var(--studio-row-pad-block);
 
   &__timing {
@@ -565,6 +580,7 @@
     align-items: baseline;
     justify-content: flex-end;
     gap: 5px;
+    grid-column: 8;
   }
 
   &__cell {
@@ -607,9 +623,14 @@
   grid-template-columns:
     var(--ov-pipeline-status-col)
     var(--ov-pipeline-kind-col)
-    minmax(0, 1fr);
-  grid-auto-flow: column;
-  grid-auto-columns: max-content;
+    minmax(180px, 1fr)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-time-col)
+    var(--ov-pipeline-tokens-col)
+    var(--ov-pipeline-cost-col);
   align-items: center;
   column-gap: var(--studio-spacing-1);
   max-width: 100%;
@@ -774,6 +795,17 @@
     // the help cursor signals it is hoverable.
     cursor: help;
   }
+
+  &__parallel-note { grid-column: 4; }
+  &__final-badge { grid-column: 5; }
+  &__running-badge { grid-column: 6; }
+  &__runs { grid-column: 7; }
+  &__verdict { grid-column: 4; }
+  &__model { grid-column: 5; }
+  &__model-select { grid-column: 6; }
+  &__timing { grid-column: 8; }
+  &__tokens { grid-column: 9; }
+  &__cost { grid-column: 10; }
 
   &__verdict {
     flex: 0 0 auto;
