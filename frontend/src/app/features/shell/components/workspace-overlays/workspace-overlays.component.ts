@@ -7,6 +7,7 @@ import { WorkspaceSummaryComponent } from '../../../summary';
 import { CliAdminPanelComponent } from '../../../cli';
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 
@@ -37,7 +38,7 @@ interface SettingsRailItem {
 @Component({
   selector: 'app-workspace-overlays',
   standalone: true,
-  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, TooltipDirective],
+  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, TooltipDirective, OverlayPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-overlays.component.html',
   styleUrl: './workspace-overlays.component.scss',

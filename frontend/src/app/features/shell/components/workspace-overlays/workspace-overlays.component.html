@@ -1,5 +1,6 @@
 @if (overlays.settingsOpen()) {
   <div class="ws-settings__backdrop"
+       appOverlayPortal="modal"
        data-testid="workspace-settings-overlay"
        (click)="onBackdrop($event)"
        tabindex="0"

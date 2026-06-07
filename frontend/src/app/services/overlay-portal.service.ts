@@ -5,6 +5,7 @@ export interface OverlayPortalRef {
   dispose(): void;
 }
 
+export type OverlayPortalLayer = 'panel' | 'modal';
 export type OverlayPlacement = 'above' | 'below' | 'right' | 'left';
 export type OverlayAlignment = 'start' | 'end';
 
@@ -36,6 +37,10 @@ export interface ConnectedOverlayPosition {
  */
 @Injectable({ providedIn: 'root' })
 export class OverlayPortalService {
+  attachLayer(element: HTMLElement, layer: OverlayPortalLayer = 'panel'): OverlayPortalRef {
+    return layer === 'modal' ? this.attachModal(element) : this.attachPanel(element);
+  }
+
   attachPanel(element: HTMLElement): OverlayPortalRef {
     return this.attach(element, 'studio-overlay-layer studio-overlay-layer--panel');
   }
@@ -47,8 +52,11 @@ export class OverlayPortalService {
   attach(element: HTMLElement, layerClass = 'studio-overlay-layer studio-overlay-layer--panel'): OverlayPortalRef {
     const parent = element.parentNode;
     const next = element.nextSibling;
+    const previousPosition = element.style.position;
+    const previousZIndex = element.style.zIndex;
     const classes = layerClass.split(/\s+/).filter(Boolean);
     for (const cls of classes) element.classList.add(cls);
+    element.style.zIndex = '';
     document.body.appendChild(element);
 
     let disposed = false;
@@ -58,6 +66,8 @@ export class OverlayPortalService {
         if (disposed) return;
         disposed = true;
         for (const cls of classes) element.classList.remove(cls);
+        element.style.position = previousPosition;
+        element.style.zIndex = previousZIndex;
         if (!parent || !element.isConnected) return;
         if (next && next.parentNode === parent) {
           parent.insertBefore(element, next);

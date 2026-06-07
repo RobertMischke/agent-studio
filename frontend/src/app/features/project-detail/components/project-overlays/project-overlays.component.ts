@@ -16,6 +16,7 @@ import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/a
 import { ProjectRailKey } from '../project-shell/project-shell.config';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import type { TaskScreenshot } from '../../../screenshots';
+import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 /**
@@ -46,7 +47,8 @@ import { TooltipDirective } from '../../../../components/tooltip';
     ProjectSkillReadinessSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
-    TooltipDirective
+    TooltipDirective,
+    OverlayPortalDirective
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-overlays.component.html',
