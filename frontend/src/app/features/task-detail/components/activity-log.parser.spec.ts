@@ -167,6 +167,29 @@ describe('parseActivityLog', () => {
     expect(orchMsg).toBeDefined();
     expect(orchMsg?.author).toBe('Orchestrator');
   });
+
+  it('parses Codex JSONL agent messages and command executions without raw JSON titles', () => {
+    const groups = parseActivityLog(codexJsonlSample());
+
+    expect(groups.map((g) => g.kind)).toEqual(['message', 'command']);
+    expect(groups[0].title).toBe('I will make the frontend change.');
+    expect(groups[0].lines[0].text).toBe('I will make the frontend change.');
+    expect(groups[1].title).toBe('Commands ×2');
+    expect(groups[1].subtitle).toContain('git status --short');
+    expect(groups.some((group) => group.title.includes('"type"'))).toBe(false);
+  });
+
+  it('marks failed Codex command executions as error-status command groups', () => {
+    const groups = parseActivityLog([
+      line('{"type":"item.completed","item":{"id":"item_9","type":"command_execution","command":"npm test","aggregated_output":"FAIL parser spec","exit_code":1,"status":"failed"}}')
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].kind).toBe('command');
+    expect(groups[0].status).toBe('error');
+    expect(groups[0].title).toBe('npm test');
+    expect(groups[0].subtitle).toContain('exit 1');
+  });
 });
 
 describe('buildConversationTurns', () => {
@@ -233,6 +256,20 @@ describe('buildConversationTurns', () => {
     expect(turns.map((t) => t.kind)).toContain('system');
     const sys = turns.find((t) => t.kind === 'system');
     expect(sys?.status).toBe('error');
+  });
+
+  it('keeps Codex JSONL raw frames out of Conversation text while preserving tool turns', () => {
+    const groups = parseActivityLog(codexJsonlSample());
+    const turns = buildConversationTurns(groups);
+    const conversationText = turns.map((turn) => turn.text).join('\n');
+
+    expect(turns.map((turn) => turn.kind)).toEqual(['agent', 'tools']);
+    expect(turns[0].text).toBe('I will make the frontend change.');
+    expect(conversationText).not.toContain('{"type"');
+    expect(turns[1].toolSummary?.counts.command).toBe(1);
+
+    const defaultVisibleTurns = turns.filter((turn) => turn.kind !== 'tools');
+    expect(defaultVisibleTurns.map((turn) => turn.kind)).toEqual(['agent']);
   });
 });
 
@@ -409,4 +446,13 @@ function line(text: string, stream = 'stdout', timestamp = '2026-04-26T12:00:00.
     stream,
     text
   };
+}
+
+function codexJsonlSample(): CliOutputLine[] {
+  return [
+    line('{"type":"turn.started"}'),
+    line('{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I will make the frontend change."}}'),
+    line('{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"git status --short","aggregated_output":"","exit_code":null,"status":"in_progress"}}'),
+    line('{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"git status --short","aggregated_output":"","exit_code":0,"status":"completed"}}')
+  ];
 }

@@ -14,6 +14,7 @@ export interface ActivityLogGroup {
 }
 
 const actionStartRegex = /^(?<marker>[^\w\s]+|x|X|\*)\s+(?<label>.+)$/i;
+const codexJsonFrameTypes = new Set(['turn.started', 'turn.completed', 'thread.started', 'thread.completed', 'session.started', 'session.completed']);
 
 export const activityLogKinds: ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo', 'error', 'message', 'orchestrator', 'supervisor', 'other'];
 
@@ -93,6 +94,17 @@ export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
       continue;
     }
 
+    const codexFrame = parseCodexJsonlFrame(line);
+    if (codexFrame) {
+      if (codexFrame.visible) {
+        groups.push(codexFrame.group);
+        current = codexFrame.group;
+      } else {
+        current = null;
+      }
+      continue;
+    }
+
     const action = parseActionLine(line);
     if (action) {
       current = {
@@ -140,6 +152,106 @@ export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
   }
 
   return compressActivityGroups(groups);
+}
+
+type CodexJsonlParseResult =
+  | { visible: true; group: ActivityLogGroup }
+  | { visible: false };
+
+interface CodexJsonObject {
+  type?: unknown;
+  item?: {
+    id?: unknown;
+    type?: unknown;
+    text?: unknown;
+    command?: unknown;
+    aggregated_output?: unknown;
+    exit_code?: unknown;
+    status?: unknown;
+  };
+}
+
+function parseCodexJsonlFrame(line: CliOutputLine): CodexJsonlParseResult | null {
+  const trimmed = line.text.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+
+  let frame: CodexJsonObject;
+  try {
+    frame = JSON.parse(trimmed) as CodexJsonObject;
+  } catch {
+    return null;
+  }
+
+  const frameType = stringValue(frame.type);
+  if (!frameType) return null;
+
+  const item = frame.item;
+  const itemType = stringValue(item?.type);
+  const itemId = stringValue(item?.id) ?? frameType;
+  if ((frameType === 'item.started' || frameType === 'item.completed') && itemType === 'agent_message') {
+    const text = stringValue(item?.text)?.trim();
+    if (!text) return { visible: false };
+    return {
+      visible: true,
+      group: {
+        id: `${line.timestamp}-codex-agent-${itemId}`,
+        kind: 'message',
+        title: text,
+        subtitle: '',
+        status: 'neutral',
+        lines: [withText(line, text)],
+        collapsedByDefault: false
+      }
+    };
+  }
+
+  if ((frameType === 'item.started' || frameType === 'item.completed') && itemType === 'command_execution') {
+    const command = stringValue(item?.command)?.trim() || 'Command';
+    const statusText = stringValue(item?.status);
+    const exitCode = numberValue(item?.exit_code);
+    const failed = line.stream === 'stderr'
+      || (exitCode !== null && exitCode !== 0)
+      || /failed|error|cancelled/i.test(statusText ?? '');
+    const output = stringValue(item?.aggregated_output)?.trim();
+    return {
+      visible: true,
+      group: {
+        id: `${line.timestamp}-codex-command-${itemId}`,
+        kind: 'command',
+        title: command,
+        subtitle: commandSubtitle(command, statusText, exitCode, output),
+        status: failed ? 'error' : 'ok',
+        lines: [line],
+        collapsedByDefault: false
+      }
+    };
+  }
+
+  if (codexJsonFrameTypes.has(frameType) || frameType.startsWith('response.') || frameType.startsWith('turn.')) {
+    return { visible: false };
+  }
+
+  return null;
+}
+
+function commandSubtitle(command: string, status: string | null, exitCode: number | null, output: string | undefined): string {
+  const parts: string[] = [command];
+  if (status) parts.push(status);
+  if (exitCode !== null) parts.push(`exit ${exitCode}`);
+  if (output) parts.push(output.split(/\r?\n/)[0]);
+  return parts.join(' - ');
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function withText(line: CliOutputLine, text: string): CliOutputLine {
+  return { ...line, text };
 }
 
 export function filterActivityGroups(groups: ActivityLogGroup[], filters: ActivityLogFilters): ActivityLogGroup[] {
