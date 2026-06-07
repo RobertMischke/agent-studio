@@ -7,28 +7,32 @@ var builder = WebApplication.CreateBuilder(args);
 var options = new UpdateServiceOptions();
 builder.Configuration.GetSection("UpdateService").Bind(options);
 
-options.ListenUrl       = Environment.GetEnvironmentVariable("ATP_UPDATE_LISTEN")      ?? options.ListenUrl;
-options.StableCheckoutDir = Environment.GetEnvironmentVariable("ATP_STABLE_CHECKOUT")  ?? options.StableCheckoutDir;
-options.DevspaceDir     = Environment.GetEnvironmentVariable("ATP_DEVSPACE_DIR")        ?? options.DevspaceDir;
-options.UpdateScript    = Environment.GetEnvironmentVariable("ATP_UPDATE_SCRIPT")       ?? options.UpdateScript;
-options.StopScript      = Environment.GetEnvironmentVariable("ATP_STOP_SCRIPT")         ?? options.StopScript;
-options.StartScript     = Environment.GetEnvironmentVariable("ATP_START_SCRIPT")        ?? options.StartScript;
-options.BackendUrl      = Environment.GetEnvironmentVariable("ATP_BACKEND_URL")         ?? options.BackendUrl;
-options.HistoryFile     = Environment.GetEnvironmentVariable("ATP_UPDATE_HISTORY")      ?? options.HistoryFile;
-options.RunsDirectory   = Environment.GetEnvironmentVariable("ATP_UPDATE_RUNS_DIR")     ?? options.RunsDirectory;
-options.TriggerToken    = Environment.GetEnvironmentVariable("ATP_UPDATE_TOKEN")        ?? options.TriggerToken;
-options.BashPath        = Environment.GetEnvironmentVariable("ATP_BASH_PATH")           ?? options.BashPath;
-options.VersionFile     = Environment.GetEnvironmentVariable("ATP_VERSION_FILE")        ?? options.VersionFile;
-
-// ADR-0031: opt-in auto-rollback. Env flag (ATP_UPDATE_AUTO_ROLLBACK=1/true)
-// turns it on at runtime. The integration suite drives this through the
-// `UpdateService:AutoRollback` config key bound above (env var unset),
-// so an unset env var must not stomp the config-bound value.
-var autoRollbackEnv = Environment.GetEnvironmentVariable("ATP_UPDATE_AUTO_ROLLBACK");
-if (!string.IsNullOrEmpty(autoRollbackEnv))
+if (!builder.Environment.IsEnvironment("Testing"))
 {
-    options.AutoRollback = string.Equals(autoRollbackEnv, "1", StringComparison.Ordinal)
-        || string.Equals(autoRollbackEnv, "true", StringComparison.OrdinalIgnoreCase);
+    options.ListenUrl       = Environment.GetEnvironmentVariable("ATP_UPDATE_LISTEN")      ?? options.ListenUrl;
+    options.StableCheckoutDir = Environment.GetEnvironmentVariable("ATP_STABLE_CHECKOUT")  ?? options.StableCheckoutDir;
+    options.DevspaceDir     = Environment.GetEnvironmentVariable("ATP_DEVSPACE_DIR")        ?? options.DevspaceDir;
+    options.UpdateScript    = Environment.GetEnvironmentVariable("ATP_UPDATE_SCRIPT")       ?? options.UpdateScript;
+    options.StopScript      = Environment.GetEnvironmentVariable("ATP_STOP_SCRIPT")         ?? options.StopScript;
+    options.StartScript     = Environment.GetEnvironmentVariable("ATP_START_SCRIPT")        ?? options.StartScript;
+    options.BackendUrl      = Environment.GetEnvironmentVariable("ATP_BACKEND_URL")         ?? options.BackendUrl;
+    options.HistoryFile     = Environment.GetEnvironmentVariable("ATP_UPDATE_HISTORY")      ?? options.HistoryFile;
+    options.RunsDirectory   = Environment.GetEnvironmentVariable("ATP_UPDATE_RUNS_DIR")     ?? options.RunsDirectory;
+    options.TriggerToken    = Environment.GetEnvironmentVariable("ATP_UPDATE_TOKEN")        ?? options.TriggerToken;
+    options.BashPath        = Environment.GetEnvironmentVariable("ATP_BASH_PATH")           ?? options.BashPath;
+    options.VersionFile     = Environment.GetEnvironmentVariable("ATP_VERSION_FILE")        ?? options.VersionFile;
+    options.Mode            = Environment.GetEnvironmentVariable("ATP_UPDATE_MODE")          ?? options.Mode;
+
+    // ADR-0031: opt-in auto-rollback. Env flag (ATP_UPDATE_AUTO_ROLLBACK=1/true)
+    // turns it on at runtime. The integration suite drives this through the
+    // `UpdateService:AutoRollback` config key bound above, so Testing keeps
+    // the config-bound value isolated from the developer machine environment.
+    var autoRollbackEnv = Environment.GetEnvironmentVariable("ATP_UPDATE_AUTO_ROLLBACK");
+    if (!string.IsNullOrEmpty(autoRollbackEnv))
+    {
+        options.AutoRollback = string.Equals(autoRollbackEnv, "1", StringComparison.Ordinal)
+            || string.Equals(autoRollbackEnv, "true", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 builder.Services.AddSingleton(options);
@@ -64,7 +68,7 @@ builder.Services.AddSingleton(sp =>
         }
         return "unknown";
     };
-    return new UpdateStatusStore(options.HistoryFile, git.HeadShort(), readVersion, logger);
+    return new UpdateStatusStore(options.HistoryFile, git.HeadShort(), readVersion, logger, options.Mode);
 });
 
 builder.Services.AddSingleton<UpdateOrchestrator>();
@@ -103,7 +107,8 @@ app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, 
     TriggerRequest? body = null;
     try { body = await ctx.Request.ReadFromJsonAsync<TriggerRequest>(ct); } catch { /* empty body OK */ }
     var force = body?.Force ?? false;
-    var (runId, phase, message) = orch.StartTrigger(trigger: "manual", force: force, lifetime.ApplicationStopping);
+    var trigger = string.IsNullOrWhiteSpace(body?.Reason) ? "manual" : body.Reason.Trim();
+    var (runId, phase, message) = orch.StartTrigger(trigger: trigger, force: force, lifetime.ApplicationStopping);
     return Results.Json(new TriggerResponse(runId, phase, message), statusCode: 202);
 });
 

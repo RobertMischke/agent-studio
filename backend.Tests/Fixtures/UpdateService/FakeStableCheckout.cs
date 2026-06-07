@@ -79,7 +79,14 @@ public sealed class FakeStableCheckout : IDisposable
         Run(gitPath, checkout.StableDir, "config", "user.name", "Update Service Test");
         Run(gitPath, checkout.StableDir, "remote", "add", "origin", checkout.RemoteDir);
         File.WriteAllText(checkout.VersionFile, "0.0.1-test\n");
+        var frontendDir = Path.Combine(checkout.StableDir, "frontend");
+        Directory.CreateDirectory(frontendDir);
+        File.WriteAllText(Path.Combine(frontendDir, "package.json"),
+            "{\n  \"name\": \"fake-update-service-frontend\",\n  \"version\": \"0.0.0\",\n  \"private\": true\n}\n");
+        File.WriteAllText(Path.Combine(frontendDir, "package-lock.json"),
+            "{\n  \"name\": \"fake-update-service-frontend\",\n  \"version\": \"0.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": { \"\": { \"name\": \"fake-update-service-frontend\", \"version\": \"0.0.0\" } }\n}\n");
         Run(gitPath, checkout.StableDir, "add", "VERSION");
+        Run(gitPath, checkout.StableDir, "add", "frontend");
         Run(gitPath, checkout.StableDir, "commit", "-m", "test: initial");
         Run(gitPath, checkout.StableDir, "push", "-u", "origin", "main");
 
@@ -100,6 +107,25 @@ public sealed class FakeStableCheckout : IDisposable
 
     public bool StopRan() => File.Exists(StopMarkerPath);
     public bool StartRan() => File.Exists(StartMarkerPath);
+
+    public void AdvanceOriginMain(string message = "test: remote update")
+    {
+        var cloneDir = Path.Combine(Root, "remote-work-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        Run(GitPath, Root, "clone", "--branch", "main", RemoteDir, cloneDir);
+        Run(GitPath, cloneDir, "config", "user.email", "test@example.com");
+        Run(GitPath, cloneDir, "config", "user.name", "Update Service Test");
+        File.WriteAllText(Path.Combine(cloneDir, $"remote-{Guid.NewGuid():N}.txt"), DateTime.UtcNow.ToString("O"));
+        Run(GitPath, cloneDir, "add", ".");
+        Run(GitPath, cloneDir, "commit", "-m", message);
+        Run(GitPath, cloneDir, "push", "origin", "main");
+    }
+
+    public void AdvanceLocalMain(string message = "test: local divergent update")
+    {
+        File.WriteAllText(Path.Combine(StableDir, $"local-{Guid.NewGuid():N}.txt"), DateTime.UtcNow.ToString("O"));
+        Run(GitPath, StableDir, "add", ".");
+        Run(GitPath, StableDir, "commit", "-m", message);
+    }
 
     private static string? FindOnPath(string exe)
     {

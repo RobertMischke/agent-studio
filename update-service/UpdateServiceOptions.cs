@@ -31,6 +31,13 @@ public sealed class UpdateServiceOptions
     public int HealthWaitSeconds { get; set; } = 180;
 
     /// <summary>
+    /// Controls whether behind-origin notifications may apply an update on
+    /// their own. "manual" still allows explicit manual triggers; "scheduled"
+    /// allows scheduled/API triggers to run the apply pipeline.
+    /// </summary>
+    public string Mode { get; set; } = "manual";
+
+    /// <summary>
     /// ADR-0031: opt-in. When true (env: ATP_UPDATE_AUTO_ROLLBACK=1), a
     /// failed verification triggers an automatic git reset + restart +
     /// re-verify cycle. Default off so verification failures stay loud and

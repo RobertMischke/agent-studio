@@ -112,6 +112,7 @@ public class UpdateServiceIntegrationTests
         await using var backend = new FakeBackendHarness();
         await backend.StartAsync();
 
+        checkout!.AdvanceOriginMain();
         using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: false);
         var client = factory.CreateClient();
 
@@ -159,6 +160,87 @@ public class UpdateServiceIntegrationTests
     }
 
     [SkippableFact]
+    public async Task Trigger_WhenStableIsNotBehind_DoesNotPauseOrStartRun()
+    {
+        using var checkout = FakeStableCheckout.TryCreate();
+        Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
+
+        await using var backend = new FakeBackendHarness();
+        await backend.StartAsync();
+
+        using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: false);
+        var client = factory.CreateClient();
+
+        using var resp = await client.PostAsJsonAsync("/update/trigger", new { Force = false });
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<TriggerResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("(none)", body!.RunId);
+        Assert.Equal("already up to date", body.Message);
+
+        var status = await GetStatusAsync(client);
+        Assert.Equal("idle", status.GetProperty("phase").GetString());
+        Assert.Empty(backend.ModeWrites);
+        Assert.Empty(Directory.GetDirectories(checkout!.RunsDir));
+        Assert.False(checkout.StopRan(), "stop-stable.sh should not run when behindBy=0");
+        Assert.False(checkout.StartRan(), "start-stable.sh should not run when behindBy=0");
+    }
+
+    [SkippableFact]
+    public async Task ScheduledTrigger_WhenApplyModeManual_DoesNotPauseOrStartRun()
+    {
+        using var checkout = FakeStableCheckout.TryCreate();
+        Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
+
+        await using var backend = new FakeBackendHarness();
+        await backend.StartAsync();
+
+        checkout!.AdvanceOriginMain();
+        using var factory = new UpdateServiceTestFactory(checkout, backend, autoRollback: false, mode: "manual");
+        var client = factory.CreateClient();
+
+        using var resp = await client.PostAsJsonAsync("/update/trigger", new { Reason = "scheduled", Force = false });
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<TriggerResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("(none)", body!.RunId);
+        Assert.Equal("manual apply mode", body.Message);
+
+        var status = await GetStatusAsync(client);
+        Assert.Equal("idle", status.GetProperty("phase").GetString());
+        Assert.Equal("manual", status.GetProperty("mode").GetString());
+        Assert.Empty(backend.ModeWrites);
+        Assert.Empty(Directory.GetDirectories(checkout.RunsDir));
+        Assert.False(checkout.StopRan(), "stop-stable.sh should not run in manual apply mode");
+        Assert.False(checkout.StartRan(), "start-stable.sh should not run in manual apply mode");
+    }
+
+    [SkippableFact]
+    public async Task PullFailure_AfterPause_RestoresPreRunModeInFinally()
+    {
+        using var checkout = FakeStableCheckout.TryCreate();
+        Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
+
+        checkout!.AdvanceOriginMain();
+        checkout.AdvanceLocalMain();
+
+        await using var backend = new FakeBackendHarness();
+        await backend.StartAsync();
+
+        using var factory = new UpdateServiceTestFactory(checkout, backend, autoRollback: false);
+        var client = factory.CreateClient();
+
+        await TriggerAsync(client);
+        var status = await WaitForPhaseAsync(client, new[] { "failed" }, TriggerTimeoutMs);
+        Assert.Contains("git pull failed", status.GetProperty("message").GetString());
+
+        await WaitForModeWriteAsync(backend, "agent-taskboard", "auto-continuous", TriggerTimeoutMs);
+        Assert.Contains(backend.ModeWrites, w => w is { Project: "agent-taskboard", Mode: "manual" });
+        Assert.Contains(backend.ModeWrites, w => w is { Project: "agent-taskboard", Mode: "auto-continuous" });
+        Assert.Equal("auto-continuous", backend.ProjectModes["agent-taskboard"]);
+    }
+
+    [SkippableFact]
     public async Task FailureInjection_PhaseFailed_VerificationFailuresContainsDbTouch_NoRollback()
     {
         using var checkout = FakeStableCheckout.TryCreate();
@@ -167,6 +249,7 @@ public class UpdateServiceIntegrationTests
         await using var backend = new FakeBackendHarness { ProbeReturns503 = true };
         await backend.StartAsync();
 
+        checkout!.AdvanceOriginMain();
         using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: false);
         var client = factory.CreateClient();
 
@@ -207,6 +290,7 @@ public class UpdateServiceIntegrationTests
         await using var backend = new FakeBackendHarness { ProbeFailFirstN = 1 };
         await backend.StartAsync();
 
+        checkout!.AdvanceOriginMain();
         using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: true);
         var client = factory.CreateClient();
 
@@ -246,6 +330,7 @@ public class UpdateServiceIntegrationTests
         await using var backend = new FakeBackendHarness { ProbeReturns503 = true };
         await backend.StartAsync();
 
+        checkout!.AdvanceOriginMain();
         using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: true);
         var client = factory.CreateClient();
 
@@ -276,6 +361,7 @@ public class UpdateServiceIntegrationTests
         await using var backend = new FakeBackendHarness { ProbeFailFirstN = 1 };
         await backend.StartAsync();
 
+        checkout!.AdvanceOriginMain();
         using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: false);
         var client = factory.CreateClient();
 
@@ -311,6 +397,7 @@ public class UpdateServiceIntegrationTests
         await using var backend = new FakeBackendHarness { JobsGroupedFailFirstN = 1 };
         await backend.StartAsync();
 
+        checkout!.AdvanceOriginMain();
         using var factory = new UpdateServiceTestFactory(checkout!, backend, autoRollback: false);
         var client = factory.CreateClient();
 
@@ -339,6 +426,7 @@ public class UpdateServiceIntegrationTests
         await using var backend = new FakeBackendHarness();
         await backend.StartAsync();
 
+        checkout!.AdvanceOriginMain();
         // Shortened linger window so the test does not have to wait the
         // production-default 60 s. The wire contract is unchanged: the FE
         // computes "within the last N seconds" against lastRunFinishedAt;
@@ -395,6 +483,26 @@ public class UpdateServiceIntegrationTests
             if (File.Exists(path)) return;
             await Task.Delay(200);
         }
-        throw new TimeoutException($"File {path} did not appear within {timeoutMs} ms");
+        var dir = Path.GetDirectoryName(path);
+        var files = dir != null && Directory.Exists(dir)
+            ? string.Join(", ", Directory.GetFiles(dir).Select(Path.GetFileName))
+            : "(run folder missing)";
+        var summaryPath = dir == null ? null : Path.Combine(dir, "summary.md");
+        var pullPath = dir == null ? null : Path.Combine(dir, "pull-output.txt");
+        var summary = summaryPath != null && File.Exists(summaryPath) ? File.ReadAllText(summaryPath) : "";
+        var pull = pullPath != null && File.Exists(pullPath) ? File.ReadAllText(pullPath) : "";
+        throw new TimeoutException(
+            $"File {path} did not appear within {timeoutMs} ms. Files: {files}. Summary: {summary}. Pull: {pull}");
+    }
+
+    private static async Task WaitForModeWriteAsync(FakeBackendHarness backend, string project, string mode, int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (backend.ModeWrites.Any(w => w.Project == project && w.Mode == mode)) return;
+            await Task.Delay(100);
+        }
+        throw new TimeoutException($"Mode write {project} -> {mode} did not happen within {timeoutMs} ms");
     }
 }

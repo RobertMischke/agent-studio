@@ -107,7 +107,7 @@ public sealed class FakeBackendHarness : IAsyncDisposable
             try
             {
                 using var doc = JsonDocument.Parse(body);
-                return Results.Json(doc.RootElement);
+                return Results.Json(doc.RootElement.Clone());
             }
             catch
             {

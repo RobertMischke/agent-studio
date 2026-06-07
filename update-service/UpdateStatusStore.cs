@@ -18,7 +18,12 @@ public sealed class UpdateStatusStore
     private UpdateStatus _status;
     private bool _backendReachable;
 
-    public UpdateStatusStore(string historyFile, string headLocal, Func<string> readProductVersion, ILogger<UpdateStatusStore> logger)
+    public UpdateStatusStore(
+        string historyFile,
+        string headLocal,
+        Func<string> readProductVersion,
+        ILogger<UpdateStatusStore> logger,
+        string mode = "manual")
     {
         _historyFile = historyFile;
         _logger = logger;
@@ -45,11 +50,14 @@ public sealed class UpdateStatusStore
             BackendReachable: false,
             ServiceVersion: _serviceVersion,
             ProductVersion: SafeReadVersion(),
-            Mode: "manual",
+            Mode: NormalizeMode(mode),
             VerificationFailures: null,
             AutoRollbackEnabled: false
         );
     }
+
+    private static string NormalizeMode(string? mode)
+        => string.Equals(mode, "scheduled", StringComparison.OrdinalIgnoreCase) ? "scheduled" : "manual";
 
     private string SafeReadVersion()
     {

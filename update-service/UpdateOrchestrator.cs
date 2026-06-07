@@ -51,6 +51,21 @@ public sealed class UpdateOrchestrator
 
     public (string RunId, string Phase, string Message) StartTrigger(string trigger, bool force, CancellationToken ct)
     {
+        var (_, behindBy) = RefreshGitStatus();
+        if (behindBy <= 0)
+        {
+            _logger.LogInformation("Update trigger ignored because stable is not behind origin (behindBy={BehindBy})", behindBy);
+            return ("(none)", _store.Get().Phase, "already up to date");
+        }
+
+        if (!CanApplyForTrigger(trigger, force))
+        {
+            _logger.LogInformation(
+                "Update trigger ignored because apply mode is manual (trigger={Trigger}, force={Force}, behindBy={BehindBy})",
+                trigger, force, behindBy);
+            return ("(none)", _store.Get().Phase, "manual apply mode");
+        }
+
         if (!_gate.Wait(0, CancellationToken.None))
         {
             var current = _store.Get();
@@ -76,6 +91,14 @@ public sealed class UpdateOrchestrator
         }, ct);
 
         return (runId, "preparing", "accepted");
+    }
+
+    private bool CanApplyForTrigger(string trigger, bool force)
+    {
+        if (force) return true;
+        if (!string.Equals(_options.Mode, "manual", StringComparison.OrdinalIgnoreCase)) return true;
+        return string.Equals(trigger, "manual", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, "manual-rollback", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -107,12 +130,14 @@ public sealed class UpdateOrchestrator
 
         var headBefore = _git.HeadShort();
         UpdateRunSnapshot? preSnapshot = null;
+        Dictionary<string, string>? restoreModes = null;
 
         try
         {
             // PHASE 1 — preparing
             SetPhase("preparing", "snapshotting pre-state", runId, startedAt);
             var preModes = await _backend.ReadProjectModesAsync(ct) ?? new Dictionary<string, string>();
+            restoreModes = new Dictionary<string, string>(preModes);
             preSnapshot = await CaptureSnapshotAsync("pre", runId, headBefore, preModes, ct);
             folder.WriteSnapshot(preSnapshot);
 
@@ -195,14 +220,8 @@ public sealed class UpdateOrchestrator
 
             // PHASE 7 — resuming
             SetPhase("resuming", "restoring runner modes", runId, startedAt);
-            var resumeOut = new StringBuilder();
-            foreach (var (project, prev) in preModes)
-            {
-                if (prev == "manual") continue;
-                var ok = await _backend.SetModeAsync(project, prev, ct);
-                resumeOut.AppendLine($"{project} -> {prev}: {(ok ? "ok" : "FAIL")}");
-            }
-            folder.WriteOutput("resume-output.txt", resumeOut.ToString());
+            await RestoreRunnerModesAsync(restoreModes, folder, "resume-output.txt", ct);
+            restoreModes = null;
 
             // PHASE 8 — done
             var headAfter = _git.HeadShort();
@@ -222,6 +241,11 @@ public sealed class UpdateOrchestrator
             var headNow = _git.HeadShort();
             FinishFailed(runId, startedAt, headBefore, headNow, trigger,
                 $"orchestration crashed: {ex.Message}", null, folder, preSnapshot);
+        }
+        finally
+        {
+            if (restoreModes is not null)
+                await RestoreRunnerModesAsync(restoreModes, folder, "resume-output.txt", CancellationToken.None);
         }
     }
 
@@ -317,14 +341,7 @@ public sealed class UpdateOrchestrator
 
             // PHASE 7' — resume runners using the pre-snapshot modes.
             SetPhase("rolling-back", "restoring runner modes", parentRunId, startedAt);
-            var resumeOut = new StringBuilder();
-            foreach (var (project, prev) in preModes)
-            {
-                if (prev == "manual") continue;
-                var ok = await _backend.SetModeAsync(project, prev, ct);
-                resumeOut.AppendLine($"{project} -> {prev}: {(ok ? "ok" : "FAIL")}");
-            }
-            folder.WriteOutput("rollback-resume-output.txt", resumeOut.ToString());
+            await RestoreRunnerModesAsync(preModes, folder, "rollback-resume-output.txt", ct);
 
             var okResult = new RollbackResult(parentRunId, "ok",
                 headBefore, headAfterReset, startedAt, DateTime.UtcNow,
@@ -393,6 +410,36 @@ public sealed class UpdateOrchestrator
             _logger.LogWarning(ex, "rollback: failed to read pre-snapshot at {Path}", preSnapPath);
             return (null, new Dictionary<string, string>());
         }
+    }
+
+    private (string Origin, int BehindBy) RefreshGitStatus()
+    {
+        var head = _git.HeadShort();
+        if (!string.IsNullOrEmpty(head)) _store.SetHead(head);
+
+        var (origin, behindBy) = _git.FetchAndCompare();
+        if (!string.IsNullOrEmpty(origin))
+        {
+            var pending = behindBy > 0 ? _git.PendingCommits(50) : Array.Empty<CommitInfo>();
+            _store.SetFetchResult(origin, behindBy, pending);
+        }
+
+        return (origin, behindBy);
+    }
+
+    private async Task RestoreRunnerModesAsync(
+        IReadOnlyDictionary<string, string> modes,
+        RunFolder folder,
+        string outputName,
+        CancellationToken ct)
+    {
+        var resumeOut = new StringBuilder();
+        foreach (var (project, prev) in modes)
+        {
+            var ok = await _backend.SetModeAsync(project, prev, ct);
+            resumeOut.AppendLine($"{project} -> {prev}: {(ok ? "ok" : "FAIL")}");
+        }
+        folder.WriteOutput(outputName, resumeOut.ToString());
     }
 
     // ─── snapshots ──────────────────────────────────────────────────────────
