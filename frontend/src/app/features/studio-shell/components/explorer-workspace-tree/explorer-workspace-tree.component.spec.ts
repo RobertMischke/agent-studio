@@ -152,6 +152,75 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(prevented).toBe(false);
     expect(cmp.wsContextMenu()).toBeNull();
   });
+
+  it('right-click opens a text-only project menu that starts inline rename', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+
+    const alpha = cmp.groups()[0].projects[0];
+    let prevented = false;
+    let stopped = false;
+    cmp.onProjectContextMenu({
+      preventDefault: () => { prevented = true; },
+      stopPropagation: () => { stopped = true; },
+      clientX: 20,
+      clientY: 40,
+    } as unknown as MouseEvent, alpha);
+
+    expect(prevented).toBe(true);
+    expect(stopped).toBe(true);
+    expect(cmp.projectActions.contextMenu()).toEqual({
+      projectId: 'PROJ-Alpha',
+      name: 'Alpha',
+      displayName: 'Alpha',
+      shortCode: 'ALP',
+      x: 20,
+      y: 40,
+    });
+    expect(cmp.projectActions.contextMenuItems()).toEqual([
+      { kind: 'row', id: 'rename', label: 'Rename' },
+      { kind: 'row', id: 'delete', label: 'Delete project…', danger: true },
+    ]);
+
+    cmp.onProjectContextMenuItemClick({
+      id: 'rename',
+      item: cmp.projectActions.contextMenuItems()[0] as never,
+    });
+
+    expect(cmp.projectActions.contextMenu()).toBeNull();
+    expect(cmp.projectActions.renamingProjectId()).toBe('PROJ-Alpha');
+    expect(cmp.projectActions.renameDraft()).toBe('Alpha');
+  });
+
+  it('project delete menu emits stable id plus display name and short code', () => {
+    const fixture = mount();
+    const cmp = fixture.componentInstance;
+    fixture.componentRef.setInput('registryWorkspaces', [
+      workspace('ws-default', 'Default', 0, [project('Alpha', 'ws-default', '/repos/Alpha')]),
+    ]);
+    fixture.componentRef.setInput('projectRows', [row('Alpha')]);
+
+    const emitted: Array<{ projectId: string; displayName: string; shortCode: string | null }> = [];
+    cmp.deleteProject.subscribe(v => emitted.push(v));
+    cmp.onProjectContextMenu({
+      preventDefault() {},
+      stopPropagation() {},
+      clientX: 1,
+      clientY: 2,
+    } as unknown as MouseEvent, cmp.groups()[0].projects[0]);
+
+    cmp.onProjectContextMenuItemClick({
+      id: 'delete',
+      item: cmp.projectActions.contextMenuItems()[1] as never,
+    });
+
+    expect(cmp.projectActions.contextMenu()).toBeNull();
+    expect(emitted).toEqual([{ projectId: 'PROJ-Alpha', displayName: 'Alpha', shortCode: 'ALP' }]);
+  });
 });
 
 describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspace reassignment)', () => {

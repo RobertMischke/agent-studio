@@ -271,6 +271,26 @@ public class WorkspaceManagementServiceTests : IDisposable
     }
 
     [Fact]
+    public void DeleteProjectStorage_RemovesFolderAndMatchingWatchPath()
+    {
+        var storage = Path.Combine(_taskRepository, "projects", "PROJ-123");
+        Directory.CreateDirectory(Path.Combine(storage, "2-ready", "sample-task"));
+        File.WriteAllText(Path.Combine(storage, "2-ready", "sample-task", "job.json"), "{\"id\":\"sample-task\"}");
+        var (svc, config) = Build(seed: [("Alpha", storage)]);
+
+        var result = svc.DeleteProjectStorage(storage);
+
+        Assert.Equal(WorkspaceManagementOutcome.Ok, result.Outcome);
+        Assert.False(Directory.Exists(storage));
+
+        var written = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(_contentRoot, "appsettings.Local.json"))).RootElement;
+        Assert.True(written.TryGetProperty("WatchPaths", out var watchPaths));
+        Assert.Equal(0, watchPaths.GetArrayLength());
+        Assert.Empty(config.GetSection("WatchPaths").GetChildren());
+    }
+
+    [Fact]
     public void Slugify_HandlesCommonCases()
     {
         Assert.Equal("my-workspace", WorkspaceManagementService.Slugify("My Workspace"));
