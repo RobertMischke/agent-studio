@@ -123,6 +123,71 @@ public class RunOutcomeContractTests
         Assert.True(terminal.ShouldShowFailureToast);
     }
 
+    // Classifier-unknown hardening (AC#1 / AC#3): a failed run whose agent text
+    // could not be deterministically classified (RunIssueKind.ClassifierUnknown)
+    // but which committed real work must surface at the terminal layer as an
+    // honest "committed-partial" - routed to review, Partial verdict, and NO
+    // crash toast. The classifier-unknown cause is carried by the TASK-level
+    // RunOutcomePolicy (reissue-once-then-accept-with-marker); the per-run
+    // terminal report must not pile a hard FAILURE on top of it.
+    [Fact]
+    public void ClassifierUnknownShape_WithCommits_IsCommittedPartial_NotHardFailure()
+    {
+        var outcome = new AgentOutcome(
+            Kind: AgentOutcomeKind.Unknown,
+            Summary: "long investigation, no recognizable sign-off",
+            MatchedSentinel: false,
+            SentinelKeyword: null,
+            Reason: "no sentinel matched, heuristic also inconclusive",
+            AgentTextChars: 600,
+            OutputLineCount: 40,
+            DurationSeconds: 120.0)
+        {
+            IssueKind = RunIssueKind.ClassifierUnknown
+        };
+
+        var terminal = TerminalRunOutcomeClassifier.Classify(
+            RunStatuses.Failed, outcome, commitsDuringRun: 1);
+
+        Assert.Equal("committed-partial", terminal.Kind);
+        Assert.Equal("Partial", terminal.ProtocolResult);
+        Assert.True(terminal.ShouldMoveToReview);
+        Assert.True(RunCompletionPolicy.ShouldMoveToReview(terminal));
+        Assert.False(terminal.ShouldShowFailureToast);
+    }
+
+    // Layer separation pin: with zero commits the terminal layer still reports
+    // the run itself as "failed" (honest per-RUN report, crash toast on). This
+    // is deliberately NOT the same as a terminal user-visible TASK failure - the
+    // "never a terminal FAILURE for classifier-unknown" guarantee lives in
+    // RunOutcomePolicy (reissue-once-then-accept-with-marker), not here. This
+    // test exists so a future change cannot quietly collapse the two layers by
+    // softening the per-run report and calling the hardening "done".
+    [Fact]
+    public void ClassifierUnknownShape_ZeroCommits_TerminalLayerReportsRunFailed()
+    {
+        var outcome = new AgentOutcome(
+            Kind: AgentOutcomeKind.Unknown,
+            Summary: "long investigation, no recognizable sign-off",
+            MatchedSentinel: false,
+            SentinelKeyword: null,
+            Reason: "no sentinel matched, heuristic also inconclusive",
+            AgentTextChars: 600,
+            OutputLineCount: 40,
+            DurationSeconds: 120.0)
+        {
+            IssueKind = RunIssueKind.ClassifierUnknown
+        };
+
+        var terminal = TerminalRunOutcomeClassifier.Classify(
+            RunStatuses.Failed, outcome, commitsDuringRun: 0);
+
+        Assert.Equal("failed", terminal.Kind);
+        Assert.Equal("Failed", terminal.ProtocolResult);
+        Assert.False(terminal.ShouldMoveToReview);
+        Assert.True(terminal.ShouldShowFailureToast);
+    }
+
     // The bug this guards: five identical Codex runs (all exitCode=-1, all
     // [[TASK_NOOP]]) produced three different status.md values, four different
     // target lanes, and an inconsistent failure toast, because lane routing,

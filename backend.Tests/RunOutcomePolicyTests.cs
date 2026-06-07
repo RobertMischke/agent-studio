@@ -431,6 +431,113 @@ public class RunOutcomePolicyTests
     }
 
     /// <summary>
+    /// The load-bearing invariant of this whole path: classifier-unknown is
+    /// NEVER a terminal, user-facing FAILURE. Sweep the entire reissue budget -
+    /// before it, exactly at the cap, and well past it - and assert the policy
+    /// never returns <see cref="OutcomeActionKind.NotifyUserAndStop"/>. Within
+    /// budget it spends one soft intervention; once the budget is gone it
+    /// accepts with a visible classifier-unknown marker so the lane keeps
+    /// moving. A future refactor that "tidies" the branch into a stop/escalate
+    /// would trip this.
+    /// </summary>
+    [Theory]
+    [InlineData(0, OutcomeActionKind.ReissueWithStrongerFraming, OrchestratorMessageKind.SoftIntervention)]
+    [InlineData(1, OutcomeActionKind.NotifyUserAndAccept, OrchestratorMessageKind.ClassifierUnknown)]
+    [InlineData(2, OutcomeActionKind.NotifyUserAndAccept, OrchestratorMessageKind.ClassifierUnknown)]
+    [InlineData(5, OutcomeActionKind.NotifyUserAndAccept, OrchestratorMessageKind.ClassifierUnknown)]
+    public void ClassifierUnknown_NeverStops_AcrossEntireReissueBudget(
+        int reissueAttempt,
+        OutcomeActionKind expectedKind,
+        OrchestratorMessageKind expectedMessageKind)
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
+            {
+                IssueKind = RunIssueKind.ClassifierUnknown,
+                Summary = "Agent text did not match any known shape."
+            },
+            followupPrompt: null,
+            reissueAttempt: reissueAttempt);
+
+        Assert.Equal(expectedKind, action.Kind);
+        Assert.Equal(expectedMessageKind, action.MessageKind);
+        Assert.Equal(RunIssueKind.ClassifierUnknown, action.IssueKind);
+        // The invariant, stated directly: never a terminal stop / human-review FAILURE.
+        Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+    }
+
+    /// <summary>
+    /// classifier-unknown must not be confused with the two structural
+    /// neighbours that share its surface shape (Unknown kind, no sentinel, real
+    /// agent text): a CLI launch/resume failure routes straight to Recovery
+    /// (NotifyUserAndAccept + CliLaunchFailed marker, NO reissue), while
+    /// classifier-unknown and missing-terminal-sentinel each spend one soft
+    /// intervention but stay tagged distinctly. Feed the identical outcome with
+    /// each issue kind and assert three separate routings - none terminal.
+    /// </summary>
+    [Fact]
+    public void ClassifierUnknown_NotConfusedWith_CliLaunchFailed_Or_MissingTerminalSentinel()
+    {
+        AgentOutcome Shape(RunIssueKind issue) =>
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 60.0, agentChars: 300)
+                with { IssueKind = issue, Summary = "same surface text" };
+
+        var classifierUnknown = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.ClassifierUnknown), null, 0);
+        var cliLaunchFailed = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.CliLaunchFailed), null, 0);
+        var missingSentinel = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue, ContinuePlan(), Shape(RunIssueKind.MissingTerminalSentinel), null, 0);
+
+        // CLI launch failure -> Recovery accept; NOT a soft reissue, NOT classifier-unknown.
+        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, cliLaunchFailed.Kind);
+        Assert.Equal(OrchestratorMessageKind.CliLaunchFailed, cliLaunchFailed.MessageKind);
+
+        // classifier-unknown -> one soft intervention, tagged as itself.
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, classifierUnknown.Kind);
+        Assert.Equal(RunIssueKind.ClassifierUnknown, classifierUnknown.IssueKind);
+
+        // missing-terminal-sentinel -> also a soft intervention, but tagged distinctly.
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, missingSentinel.Kind);
+        Assert.Equal(RunIssueKind.MissingTerminalSentinel, missingSentinel.IssueKind);
+
+        // The three issue kinds stay separate, and none collapses to a terminal stop.
+        Assert.NotEqual(classifierUnknown.IssueKind, cliLaunchFailed.IssueKind);
+        Assert.NotEqual(classifierUnknown.IssueKind, missingSentinel.IssueKind);
+        foreach (var a in new[] { classifierUnknown, cliLaunchFailed, missingSentinel })
+            Assert.NotEqual(OutcomeActionKind.NotifyUserAndStop, a.Kind);
+    }
+
+    /// <summary>
+    /// The classifier-unknown soft intervention must ask the agent for a
+    /// structured close-out: both terminal sentinels offered, and led by the
+    /// shared diff-only steering rule so the reissue builds on existing commits
+    /// instead of restarting from scratch. Pins the prompt contract for this
+    /// branch so it cannot silently drift from the missing-sentinel framing.
+    /// </summary>
+    [Fact]
+    public void ClassifierUnknown_ReissuePrompt_AsksForStructuredCloseOut()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 90.0, agentChars: 500) with
+            {
+                IssueKind = RunIssueKind.ClassifierUnknown,
+                Summary = "Agent text did not match any known shape."
+            },
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.True(action.IsPreframedRetryPrompt);
+        Assert.StartsWith(RunOutcomePolicy.DiffOnlySteeringRule, action.FollowupRetryPrompt);
+        Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
+        Assert.Contains("[[TASK_BLOCKED", action.FollowupRetryPrompt);
+    }
+
+    /// <summary>
     /// Run produced no agent text (e.g. claude rejected the resume target
     /// and exited with error_during_execution). The user already sees the
     /// system-error block in the chat and a [capture-fail] decision

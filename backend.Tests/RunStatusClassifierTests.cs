@@ -70,6 +70,24 @@ public class RunStatusClassifierTests
     }
 
     [Theory]
+    [InlineData(RunStopReason.UserStop)]
+    [InlineData(RunStopReason.FollowupPause)]
+    [InlineData(RunStopReason.Watchdog)]
+    [InlineData(RunStopReason.Cancelled)]
+    public void DeliberateStop_IsStopped_NeverTheFailedPreconditionForClassifierUnknown(RunStopReason reason)
+    {
+        // ClassifierUnknown is only reachable when the run status is "failed"
+        // (AgentOutcomeAnalyzer.ResolveIssueKind returns ClassifierUnknown only
+        // on a failed run with real agent text). A deliberately stopped run -
+        // user pause, Pause & Send, watchdog kill, or cancellation - must
+        // resolve to "stopped", never "failed", so it can never be mistaken for
+        // the classifier-unknown path even though Windows reports exitCode = -1.
+        var status = RunStatusClassifier.Classify(-1, reason);
+        Assert.Equal(RunStatuses.Stopped, status);
+        Assert.NotEqual(RunStatuses.Failed, status);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(1)]
