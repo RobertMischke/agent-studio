@@ -181,3 +181,227 @@ X [ERROR] TS2367: This comparison appears to be unintentional because the types 
           ╵         ~~~~~~~~~~~~~~~~~~~~
 
 
+X [ERROR] NG8113: CliModelSelectorComponent is not used within the template of ProjectDetailComponent [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:114:4:
+      114 │     CliModelSelectorComponent],
+          ╵     ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:767:8:
+      767 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:768:8:
+      768 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:769:8:
+      769 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:770:8:
+      770 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] NG8113: CliModelSelectorComponent is not used within the template of ProjectDetailComponent [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:114:4:
+      114 │     CliModelSelectorComponent],
+          ╵     ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:767:8:
+      767 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:768:8:
+      768 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:769:8:
+      769 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:770:8:
+      770 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] NG8113: OverlayPortalDirective is not used within the template of ConceptHelpComponent [plugin angular-compiler]
+
+    src/app/components/concept-help/concept-help.component.ts:35:30:
+      35 │   imports: [TooltipDirective, OverlayPortalDirective],
+         ╵                               ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] NG8113: CliModelSelectorComponent is not used within the template of ProjectDetailComponent [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:114:4:
+      114 │     CliModelSelectorComponent],
+          ╵     ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:767:8:
+      767 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:768:8:
+      768 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:769:8:
+      769 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:770:8:
+      770 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] NG8113: CliModelSelectorComponent is not used within the template of ProjectDetailComponent [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:114:4:
+      114 │     CliModelSelectorComponent],
+          ╵     ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:767:8:
+      767 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:768:8:
+      768 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:769:8:
+      769 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:770:8:
+      770 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] NG8113: CliModelSelectorComponent is not used within the template of ProjectDetailComponent [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:114:4:
+      114 │     CliModelSelectorComponent],
+          ╵     ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:767:8:
+      767 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:768:8:
+      768 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:769:8:
+      769 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:770:8:
+      770 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] NG8113: CliModelSelectorComponent is not used within the template of ProjectDetailComponent [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:114:4:
+      114 │     CliModelSelectorComponent],
+          ╵     ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:767:8:
+      767 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:768:8:
+      768 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:769:8:
+      769 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:770:8:
+      770 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] NG8113: OverlayPortalDirective is not used within the template of UpdateCenterComponent [plugin angular-compiler]
+
+    src/app/features/update/components/update-center/update-center.component.ts:30:30:
+      30 │   imports: [TooltipDirective, OverlayPortalDirective],
+         ╵                               ~~~~~~~~~~~~~~~~~~~~~~
+
+
