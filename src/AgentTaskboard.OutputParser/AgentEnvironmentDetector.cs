@@ -84,7 +84,7 @@ public static class AgentEnvironmentDetector
             Id: "posix-eacces",
             Needle: "EACCES",
             ShortLabel: "POSIX permission denied (EACCES)",
-            DiagnosisTemplate: "A POSIX permission-denied error (EACCES) blocked the agent. The agent cannot grant itself filesystem permissions; check the affected path's ACLs."),
+            DiagnosisTemplate: "A POSIX permission-denied error (EACCES) repeated without recovery. This can be a real ACL/sandbox problem, but on Windows-hosted worktrees it can also be transient file-lock contention; check the affected path and whether a later edit succeeded."),
 
         new EnvironmentBlockerPattern(
             Id: "posix-eperm",

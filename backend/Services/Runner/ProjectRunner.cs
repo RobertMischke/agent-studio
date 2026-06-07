@@ -4255,7 +4255,13 @@ public class ProjectRunner
 
     private string RenderPrompt(RunPlan plan, TaskInfo info, string runWorkingDir)
     {
-        if (plan.PromptOverride != null) return RewriteMainCheckoutPathsForRun(plan.PromptOverride, runWorkingDir);
+        if (plan.PromptOverride != null)
+        {
+            var rewrittenOverride = RewriteMainCheckoutPathsForRun(plan.PromptOverride, runWorkingDir);
+            return IsWorktreePath(runWorkingDir)
+                ? BuildWorktreeContainmentNotice(runWorkingDir) + rewrittenOverride
+                : rewrittenOverride;
+        }
         if (string.IsNullOrWhiteSpace(plan.PromptTemplate))
             throw new InvalidOperationException("Run plan has neither a prompt template nor a prompt override.");
 

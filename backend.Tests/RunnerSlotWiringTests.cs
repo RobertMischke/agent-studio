@@ -10,6 +10,7 @@ using OrchestratorApi.Services.Registry;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
+using System.Reflection;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -28,6 +29,7 @@ namespace OrchestratorApi.Tests;
 public sealed class RunnerSlotWiringTests : IDisposable
 {
     private readonly string _watchPath;
+    private readonly string _repoRoot;
     private readonly string _workspaceRoot;
     private const string ProjectName = "demo";
 
@@ -35,7 +37,9 @@ public sealed class RunnerSlotWiringTests : IDisposable
     {
         _workspaceRoot = Path.Combine(Path.GetTempPath(), "atp-runner-slot-" + Guid.NewGuid().ToString("N"));
         _watchPath = Path.Combine(_workspaceRoot, "projects", ProjectName);
+        _repoRoot = Path.Combine(_workspaceRoot, "repos", ProjectName);
         Directory.CreateDirectory(_workspaceRoot);
+        Directory.CreateDirectory(_repoRoot);
         foreach (var state in TaskStates.All) Directory.CreateDirectory(Path.Combine(_watchPath, state));
     }
 
@@ -70,6 +74,99 @@ public sealed class RunnerSlotWiringTests : IDisposable
         Assert.Equal(0, status.OccupiedSlots);
     }
 
+    [Fact]
+    public void RenderPrompt_ForWorktreeRun_RewritesMainCheckoutPathsAndAddsContainmentNotice()
+    {
+        var (runner, _) = BuildRunner();
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "fix-worktree-paths");
+        Directory.CreateDirectory(jobFolder);
+        var promptPath = Path.Combine(jobFolder, "prompt.md");
+        File.WriteAllText(promptPath,
+            $"Edit {_repoRoot}\\backend\\Services\\Tasks\\TaskStateMachine.cs and run git -C {_repoRoot} status.");
+        var worktree = Path.Combine(_workspaceRoot, "worktrees", "fix-worktree-paths");
+        Directory.CreateDirectory(worktree);
+        var info = new TaskInfo
+        {
+            Id = "fix-worktree-paths",
+            Title = "Fix worktree paths",
+            State = TaskStates.Progress,
+            FolderPath = jobFolder,
+            WatchPath = _watchPath,
+            ProjectName = ProjectName
+        };
+        var plan = new RunPlan(
+            PromptTemplate: RuntimePromptService.RunnerFreshStart,
+            PromptVariables: new Dictionary<string, string?>
+            {
+                ["prompt_path"] = promptPath,
+                ["job_folder"] = jobFolder,
+                ["user_followup"] = null
+            },
+            PromptOverride: null,
+            SessionToResume: null,
+            ResumeFlag: false,
+            EventKind: "start",
+            EventReason: null,
+            EventInputSessionId: null,
+            MoveJobToProgress: false,
+            MarkSessionChainRecovery: false,
+            WriteCutMarker: false,
+            CutMarkerReason: null,
+            PersistSessionName: null,
+            ClearStaleSessionName: false);
+
+        var rendered = InvokeRenderPrompt(runner, plan, info, worktree);
+
+        Assert.Contains("## Worktree containment", rendered);
+        Assert.Contains(worktree, rendered);
+        Assert.DoesNotContain($"git -C {_repoRoot} status", rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain($"Edit {_repoRoot}\\backend", rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains($"git -C {worktree} status", rendered);
+        Assert.Contains($"Working directory: `{worktree}`", rendered);
+        Assert.Contains($"Git repository for status/diff/commits: `{worktree}`", rendered);
+    }
+
+    [Fact]
+    public void RenderPrompt_ForWorktreePromptOverride_StillAddsContainmentNotice()
+    {
+        var (runner, _) = BuildRunner();
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "fix-worktree-override-paths");
+        Directory.CreateDirectory(jobFolder);
+        var worktree = Path.Combine(_workspaceRoot, "worktrees", "fix-worktree-override-paths");
+        Directory.CreateDirectory(worktree);
+        var info = new TaskInfo
+        {
+            Id = "fix-worktree-override-paths",
+            Title = "Fix worktree override paths",
+            State = TaskStates.Progress,
+            FolderPath = jobFolder,
+            WatchPath = _watchPath,
+            ProjectName = ProjectName
+        };
+        var plan = new RunPlan(
+            PromptTemplate: null,
+            PromptVariables: new Dictionary<string, string?>(),
+            PromptOverride: $"Run tests in {_repoRoot} and inspect {_repoRoot}\\backend.",
+            SessionToResume: null,
+            ResumeFlag: false,
+            EventKind: "start",
+            EventReason: null,
+            EventInputSessionId: null,
+            MoveJobToProgress: false,
+            MarkSessionChainRecovery: false,
+            WriteCutMarker: false,
+            CutMarkerReason: null,
+            PersistSessionName: null,
+            ClearStaleSessionName: false);
+
+        var rendered = InvokeRenderPrompt(runner, plan, info, worktree);
+
+        Assert.Contains("## Worktree containment", rendered);
+        Assert.Contains(worktree, rendered);
+        Assert.DoesNotContain($"Run tests in {_repoRoot}", rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain($"inspect {_repoRoot}\\backend", rendered, StringComparison.OrdinalIgnoreCase);
+    }
+
     private (ProjectRunner Runner, ProjectSettingsService Settings) BuildRunner()
     {
         var config = new ConfigurationBuilder()
@@ -77,8 +174,8 @@ public sealed class RunnerSlotWiringTests : IDisposable
             {
                 ["WatchPaths:0:Name"] = ProjectName,
                 ["WatchPaths:0:Path"] = _watchPath,
-                ["WatchPaths:0:RootPath"] = _watchPath,
-                ["WatchPaths:0:RepositoryPath"] = _watchPath,
+                ["WatchPaths:0:RootPath"] = _repoRoot,
+                ["WatchPaths:0:RepositoryPath"] = _repoRoot,
                 ["TaskRepository"] = _workspaceRoot
             })
             .Build();
@@ -87,8 +184,8 @@ public sealed class RunnerSlotWiringTests : IDisposable
         {
             Name = ProjectName,
             Path = _watchPath,
-            RootPath = _watchPath,
-            RepositoryPath = _watchPath
+            RootPath = _repoRoot,
+            RepositoryPath = _repoRoot
         };
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
@@ -140,5 +237,12 @@ public sealed class RunnerSlotWiringTests : IDisposable
             settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess, bus: null);
 
         return (runner, settings);
+    }
+
+    private static string InvokeRenderPrompt(ProjectRunner runner, RunPlan plan, TaskInfo info, string runWorkingDir)
+    {
+        var method = typeof(ProjectRunner).GetMethod("RenderPrompt", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(nameof(ProjectRunner), "RenderPrompt");
+        return (string)method.Invoke(runner, new object[] { plan, info, runWorkingDir })!;
     }
 }

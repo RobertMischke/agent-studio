@@ -167,4 +167,17 @@ public class TaskScannerOutcomeIssueTests : IDisposable
         Assert.NotNull(issue);
         Assert.Equal("environment-blocker", issue!.Kind);
     }
+
+    [Fact]
+    public void WorktreeContainmentMarker_SurfacesHighSeverityOutcome()
+    {
+        SeedJob("worktree-containment", TaskStates.HumanReview,
+            $"[09:10:00.000] [orchestrator] [worktree-containment] Worktree run job-1 changed the shared main checkout; verdict=main-checkout-modified{Environment.NewLine}");
+
+        var issue = Outcome("worktree-containment");
+
+        Assert.NotNull(issue);
+        Assert.Equal("worktree-containment", issue!.Kind);
+        Assert.Equal("High", issue.Severity);
+    }
 }

@@ -89,6 +89,15 @@ public class AgentEnvironmentDetectorTests
         Assert.Null(AgentEnvironmentDetector.MatchRuntimeBlocker(toolResult));
     }
 
+    [Theory]
+    [InlineData("file has been updated successfully")]
+    [InlineData("File updated successfully")]
+    [InlineData("AgentMessageBusStore.cs has been updated successfully")]
+    public void IsRecoverySignal_FiresForSuccessfulEditAfterTransientEacces(string line)
+    {
+        Assert.True(AgentEnvironmentDetector.IsRecoverySignal(line));
+    }
+
     [Fact]
     public void Diagnose_IncludesCliTypeAndRecoveryHint()
     {
