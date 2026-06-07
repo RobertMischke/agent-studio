@@ -31,6 +31,7 @@ import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/p
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import {
   SORTABLE_LANES,
   USER_VISIBLE_LANE_SORT_STRATEGIES,
@@ -108,7 +109,9 @@ export type ProjectDetailView =
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
     ProjectWorkspaceSectionComponent,
-    AutonomySliderComponent, TooltipDirective],
+    AutonomySliderComponent,
+    TooltipDirective,
+    CliModelSelectorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-detail.html',
   styleUrl: './project-detail.scss'
@@ -612,6 +615,14 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   onStepPromptChange(stepId: string, prompt: string): void {
     this.writeStep(stepId, { prompt });
+  }
+
+  onStepAgentCommit(stepId: string, selection: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
+    this.writeStep(stepId, {
+      cliType: selection.cliType,
+      model: selection.model,
+      thinkingLevel: selection.thinkingLevel,
+    });
   }
 
   /**
