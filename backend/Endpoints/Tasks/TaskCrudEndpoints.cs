@@ -233,6 +233,20 @@ public static class TaskCrudEndpoints
             }
         });
 
+        group.MapDelete("/orphan-folder", (OrphanFolderDeleteRequest req, TaskStateMachine states) =>
+        {
+            var outcome = states.DeleteOrphanFolder(req.WatchPath ?? "", req.Lane ?? "", req.Folder ?? "");
+            return outcome.Status switch
+            {
+                OrphanFolderDeleteStatus.Success => Results.Ok(new { status = "deleted" }),
+                OrphanFolderDeleteStatus.InvalidRequest => Results.BadRequest(new { error = outcome.Message }),
+                OrphanFolderDeleteStatus.NonTerminalLane => Results.BadRequest(new { error = outcome.Message }),
+                OrphanFolderDeleteStatus.HasJobJson => Results.Conflict(new { error = outcome.Message }),
+                OrphanFolderDeleteStatus.NotFound => Results.NotFound(new { error = outcome.Message }),
+                _ => Results.Problem(outcome.Message ?? "Orphan folder deletion failed")
+            };
+        });
+
         group.MapDelete("/{jobId}", (string jobId, string? watchPath, TaskStateMachine states) =>
         {
             var success = states.DeleteJob(jobId, watchPath);

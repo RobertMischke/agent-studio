@@ -8,13 +8,11 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Regression contract for the orphan-folder branch of
-/// <see cref="TaskStateMachine.DeleteJob"/>. Before this branch existed
-/// the DELETE endpoint returned 404 for any folder whose <c>job.json</c>
-/// was missing - exactly the zombie folders that the AGENTS.md "API
-/// first" rule is supposed to keep cleanable, and exactly the case
-/// where operators historically reached for the forbidden manual
-/// <c>rm -rf</c>.
+/// Regression contract for the terminal-lane orphan-folder delete path.
+/// Before this branch existed the DELETE endpoint returned 404 for any folder
+/// whose <c>job.json</c> was missing - exactly the zombie folders that the
+/// AGENTS.md "API first" rule is supposed to keep cleanable, and exactly the
+/// case where operators historically reached for forbidden manual deletion.
 /// </summary>
 public class TaskStateMachineOrphanDeleteTests : IDisposable
 {
@@ -33,50 +31,71 @@ public class TaskStateMachineOrphanDeleteTests : IDisposable
     }
 
     [Fact]
-    public void DeleteJob_RemovesOrphanFolder_WithoutJobJson()
+    public void DeleteOrphanFolder_RemovesJobJsonLessFolder_UnderArchive()
     {
         var slug = "orphan-zombie";
-        var folder = Path.Combine(_watchPath, TaskStates.Ready, slug);
+        var folder = Path.Combine(_watchPath, TaskStates.Archive, slug);
         Directory.CreateDirectory(folder);
         File.WriteAllText(Path.Combine(folder, "prompt.md"), "leftover content");
 
         var states = BuildStates();
-        var ok = states.DeleteJob(slug, _watchPath);
+        var outcome = states.DeleteOrphanFolder(_watchPath, TaskStates.Archive, slug);
 
-        Assert.True(ok);
+        Assert.Equal(OrphanFolderDeleteStatus.Success, outcome.Status);
         Assert.False(Directory.Exists(folder));
     }
 
     [Fact]
-    public void DeleteJob_OrphanFolder_ReturnsFalse_WhenSlugIsUnknown()
+    public void DeleteOrphanFolder_ReturnsNotFound_WhenFolderIsUnknown()
     {
         var states = BuildStates();
-        Assert.False(states.DeleteJob("never-existed", _watchPath));
+        var outcome = states.DeleteOrphanFolder(_watchPath, TaskStates.Archive, "never-existed");
+        Assert.Equal(OrphanFolderDeleteStatus.NotFound, outcome.Status);
     }
 
     [Fact]
-    public void DeleteJob_OrphanFolder_RefusesPathTraversalSlug()
+    public void DeleteOrphanFolder_RefusesPathTraversalFolder()
     {
         var states = BuildStates();
-        Assert.False(states.DeleteJob("../escape", _watchPath));
-        Assert.False(states.DeleteJob("foo/bar", _watchPath));
-        Assert.False(states.DeleteJob("foo\\bar", _watchPath));
+        Assert.Equal(OrphanFolderDeleteStatus.InvalidRequest,
+            states.DeleteOrphanFolder(_watchPath, TaskStates.Archive, "../escape").Status);
+        Assert.Equal(OrphanFolderDeleteStatus.InvalidRequest,
+            states.DeleteOrphanFolder(_watchPath, TaskStates.Archive, "foo/bar").Status);
+        Assert.Equal(OrphanFolderDeleteStatus.InvalidRequest,
+            states.DeleteOrphanFolder(_watchPath, TaskStates.Archive, "foo\\bar").Status);
     }
 
     [Fact]
-    public void DeleteJob_OrphanFolder_RefusesWhenFolderHasJobJson()
+    public void DeleteOrphanFolder_RefusesWhenFolderHasJobJson()
     {
         // Defensive guard: a folder that does carry a job.json should
         // never be deleted via the orphan branch. If the scanner did not
         // surface it, that is a scanner regression to investigate, not
         // a folder to wipe.
         var slug = "scanner-blind-spot";
-        var folder = Path.Combine(_watchPath, TaskStates.Ready, slug);
+        var folder = Path.Combine(_watchPath, TaskStates.Archive, slug);
         Directory.CreateDirectory(folder);
         File.WriteAllText(Path.Combine(folder, "job.json"), "{ this is not valid json");
 
         var states = BuildStates();
-        Assert.False(states.DeleteJob(slug, _watchPath));
+        var outcome = states.DeleteOrphanFolder(_watchPath, TaskStates.Archive, slug);
+
+        Assert.Equal(OrphanFolderDeleteStatus.HasJobJson, outcome.Status);
+        Assert.True(Directory.Exists(folder));
+    }
+
+    [Fact]
+    public void DeleteOrphanFolder_RefusesNonTerminalLane()
+    {
+        var slug = "live-lane-orphan";
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, slug);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "prompt.md"), "leftover content");
+
+        var states = BuildStates();
+        var outcome = states.DeleteOrphanFolder(_watchPath, TaskStates.Ready, slug);
+
+        Assert.Equal(OrphanFolderDeleteStatus.NonTerminalLane, outcome.Status);
         Assert.True(Directory.Exists(folder));
     }
 

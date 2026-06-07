@@ -1226,6 +1226,13 @@ public record ReorderRequest
     public List<TaskOrderItem> Jobs { get; init; } = [];
 }
 
+public record OrphanFolderDeleteRequest
+{
+    public string? WatchPath { get; init; }
+    public string? Lane { get; init; }
+    public string? Folder { get; init; }
+}
+
 public record TaskOrderItem
 {
     public string JobId { get; init; } = "";
