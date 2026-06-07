@@ -553,6 +553,88 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Contains("\"slugs\":[\"stuck-a\",\"stuck-b\"]", infraRows[0]);
     }
 
+    // ===== Zombie-resume wiring (this bug: failed pickup leaves a queue-
+    // jumping zombie in 3-progress) =====
+
+    /// <summary>
+    /// The increment wire that was missing in production. A session-less
+    /// 3-progress folder whose auto-pickup run finished without reaching
+    /// review is left stranded in 3-progress; the progress-first picker would
+    /// resume it again next tick forever. <see cref="ProjectRunner.AccountZombieResumeOutcome"/>
+    /// must count each such failed resume so the picker can eventually give up,
+    /// and must reset the counter the moment a folder gains a resumable session
+    /// (real progress). Before the fix the counter never moved, so the picker's
+    /// zombie guard never tripped and the zombie kept getting picked.
+    /// </summary>
+    [Fact]
+    public void AccountZombieResumeOutcome_IncrementsPerFailedResume_ResetsWhenSessionCaptured()
+    {
+        WriteJob(TaskStates.Progress, "zombie-x");                 // session-less
+        WriteResumableProgressJob("resumable-y", "sess-abc123");   // carries a session id
+
+        var runner = BuildRunner();
+
+        // Session-less folder: every failed resume counts.
+        Assert.Equal(0, runner.GetZombieResumeFailures("zombie-x"));
+        runner.AccountZombieResumeOutcome("zombie-x");
+        Assert.Equal(1, runner.GetZombieResumeFailures("zombie-x"));
+        runner.AccountZombieResumeOutcome("zombie-x");
+        Assert.Equal(2, runner.GetZombieResumeFailures("zombie-x"));
+
+        // A folder that now carries a resumable session made real progress:
+        // any accumulated streak is cleared instead of incremented.
+        runner.SetZombieResumeFailuresForTest("resumable-y", 1);
+        runner.AccountZombieResumeOutcome("resumable-y");
+        Assert.Equal(0, runner.GetZombieResumeFailures("resumable-y"));
+    }
+
+    /// <summary>
+    /// End-to-end of the reported bug: a session-less zombie in 3-progress that
+    /// has burned its resume budget must be dead-lettered (escalated out of
+    /// 3-progress) so the due 2-ready task becomes the next pickup, instead of
+    /// the zombie jumping the queue every tick. Drives the counter through the
+    /// real <see cref="ProjectRunner.AccountZombieResumeOutcome"/> wire (not just
+    /// the test seam) to prove the full chain: failed resumes increment ->
+    /// picker gives up -> ready job is next.
+    /// </summary>
+    [Fact]
+    public void ZombieResumesPastBudget_PickerEscalatesAndDueReadyBecomesNext()
+    {
+        WriteJob(TaskStates.Progress, "zombie-a"); // session-less, stranded
+        WriteJob(TaskStates.Ready, "due-b");
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        // Simulate the real failed resumes that production was never counting.
+        for (var i = 0; i < ProjectRunner.ZombieResumeFailureThreshold; i++)
+            runner.AccountZombieResumeOutcome("zombie-a");
+        Assert.Equal(ProjectRunner.ZombieResumeFailureThreshold, runner.GetZombieResumeFailures("zombie-a"));
+
+        var picked = InvokePickerLoop(runner);
+
+        // The picker no longer hands back the zombie; 3-progress drained so
+        // TickAsync falls through to 2-ready. The zombie is escalated to
+        // 5-human-review (task-shaped terminal route), not dead-ended in
+        // 3a-failed-pickup.
+        Assert.Null(picked);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "zombie-a")),
+            "the session-less zombie must leave 3-progress once its resume budget is spent");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "zombie-a")),
+            "the zombie escalates to 5-human-review under its original slug");
+
+        // The due ready task is untouched and is what runs next.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "due-b")));
+        var next = runner.GetNextReadyJob();
+        Assert.NotNull(next);
+        Assert.Equal("due-b", next!.Id);
+
+        var jsonlPath = Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl");
+        var row = File.ReadAllLines(jsonlPath).Single(l => l.Length > 0);
+        Assert.Contains("\"slug\":\"zombie-a\"", row);
+        Assert.Contains("\"kind\":\"escalated-human-review\"", row);
+    }
+
     // ===== Helpers =====
 
     /// <summary>
@@ -590,6 +672,14 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // mtime values the ordering tests rely on).
         File.WriteAllText(Path.Combine(dir, "job.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\",\"cliType\":\"copilot\",\"ownerClientId\":\"local-default\"}}");
+    }
+
+    private void WriteResumableProgressJob(string slug, string sessionName)
+    {
+        var dir = Path.Combine(_watchPath, TaskStates.Progress, slug);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{TaskStates.Progress}\",\"order\":1,\"agent\":\"copilot\",\"cliType\":\"copilot\",\"sessionName\":\"{sessionName}\",\"ownerClientId\":\"local-default\"}}");
     }
 
     private void WriteOrphanProgressFolder(string slug)

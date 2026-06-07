@@ -3568,6 +3568,12 @@ public class ProjectRunner
                     // so the "3 distinct parked tasks" halt only fires on a
                     // genuine run of failures with no success in between.
                     _parkedFailedJobIds.Clear();
+                    // Real progress: the folder left 3-progress, so clear any
+                    // zombie-resume streak it accumulated from earlier failed
+                    // resumes (reset-on-progress, mirrors the per-slug attempt
+                    // counter).
+                    if (activeInfo != null)
+                        _zombieResumeFailures.TryRemove(Path.GetFileName(activeInfo.FolderPath), out _);
                 }
                 else if (WasDeliberatelyStopped(execution.Status))
                 {
@@ -3586,6 +3592,19 @@ public class ProjectRunner
                 else
                 {
                     HandleAutoPickupFailure(jobId, activeInfo);
+                    // Zombie-resume accounting. This branch means an auto-pickup
+                    // run finished WITHOUT reaching review and was not a
+                    // deliberate stop, so the folder is left sitting in
+                    // 3-progress. If it also carries no resumable session id,
+                    // the progress-first picker will resume it again next tick,
+                    // jumping ahead of the due 2-ready task forever. Count the
+                    // failed resume so the picker dead-letters the zombie after
+                    // ZombieResumeFailureThreshold attempts (and reset the
+                    // counter when the run actually captured a session). This is
+                    // the wire that was missing: without it the per-slug counter
+                    // never incremented in production, so the picker's zombie
+                    // guard never tripped and the zombie kept getting picked.
+                    AccountZombieResumeOutcome(jobId);
                 }
             }
         }
@@ -4650,6 +4669,33 @@ public class ProjectRunner
         _logger.LogInformation(
             "[taskboard] zombie resume failure {N}/{Budget} for {Slug} on {Project} (no resumable session, no progress)",
             n, ZombieResumeFailureThreshold, slug, ProjectName);
+    }
+
+    /// <summary>
+    /// Settles the zombie-resume counter for a job whose auto-pickup run just
+    /// finished WITHOUT reaching review (and was not a deliberate stop). The job
+    /// is therefore still sitting in <c>3-progress</c>. If it now carries a
+    /// resumable session id the run made real progress, so the counter is reset;
+    /// otherwise the folder is a zombie that the progress-first picker will
+    /// resume again next tick, so the failed resume is counted. Once the count
+    /// reaches <see cref="ZombieResumeFailureThreshold"/> the picker stops
+    /// resuming it and escalates it out of <c>3-progress</c> instead.
+    /// Re-scans on-disk state because the pre-run <see cref="TaskInfo"/> snapshot
+    /// predates any session id the finished run may have captured.
+    /// </summary>
+    internal void AccountZombieResumeOutcome(string jobId)
+    {
+        var info = _scanner.FindJob(jobId, Entry.Path);
+        // A job that moved out of 3-progress (e.g. parked in
+        // 3b-code-not-complete by HandleAutoPickupFailure) is no longer a
+        // resume candidate, so there is nothing to count.
+        if (info == null || info.State != TaskStates.Progress) return;
+
+        var slug = Path.GetFileName(info.FolderPath);
+        if (HasResumableSession(info))
+            _zombieResumeFailures.TryRemove(slug, out _);
+        else
+            RecordZombieResumeFailure(slug);
     }
 
     /// <summary>Test seam: read the consecutive auto-failure counter so
