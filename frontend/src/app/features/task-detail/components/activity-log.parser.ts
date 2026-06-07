@@ -35,6 +35,7 @@ export const defaultActivityLogFilters: ActivityLogFilters = {
 export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
   const groups: ActivityLogGroup[] = [];
   let current: ActivityLogGroup | null = null;
+  const completedCodexCommandIds = collectCompletedCodexCommandIds(lines);
 
   for (const line of lines) {
     // User follow-ups are persisted with stream='user' (see backend
@@ -94,7 +95,7 @@ export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
       continue;
     }
 
-    const codexFrame = parseCodexJsonlFrame(line);
+    const codexFrame = parseCodexJsonlFrame(line, completedCodexCommandIds);
     if (codexFrame) {
       if (codexFrame.visible) {
         groups.push(codexFrame.group);
@@ -171,7 +172,28 @@ interface CodexJsonObject {
   };
 }
 
-function parseCodexJsonlFrame(line: CliOutputLine): CodexJsonlParseResult | null {
+function collectCompletedCodexCommandIds(lines: CliOutputLine[]): Set<string> {
+  const ids = new Set<string>();
+  for (const line of lines) {
+    const trimmed = line.text.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) continue;
+    try {
+      const frame = JSON.parse(trimmed) as CodexJsonObject;
+      const frameType = stringValue(frame.type);
+      const item = frame.item;
+      const itemType = stringValue(item?.type);
+      const itemId = stringValue(item?.id);
+      if (frameType === 'item.completed' && itemType === 'command_execution' && itemId) {
+        ids.add(itemId);
+      }
+    } catch {
+      // Non-JSON or non-Codex lines stay on the legacy parser path.
+    }
+  }
+  return ids;
+}
+
+function parseCodexJsonlFrame(line: CliOutputLine, completedCommandIds: Set<string>): CodexJsonlParseResult | null {
   const trimmed = line.text.trim();
   if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
 
@@ -206,6 +228,9 @@ function parseCodexJsonlFrame(line: CliOutputLine): CodexJsonlParseResult | null
   }
 
   if ((frameType === 'item.started' || frameType === 'item.completed') && itemType === 'command_execution') {
+    if (frameType === 'item.started' && completedCommandIds.has(itemId)) {
+      return { visible: false };
+    }
     const command = stringValue(item?.command)?.trim() || 'Command';
     const statusText = stringValue(item?.status);
     const exitCode = numberValue(item?.exit_code);
@@ -221,7 +246,7 @@ function parseCodexJsonlFrame(line: CliOutputLine): CodexJsonlParseResult | null
         title: command,
         subtitle: commandSubtitle(command, statusText, exitCode, output),
         status: failed ? 'error' : 'ok',
-        lines: [line],
+        lines: commandDisplayLines(line, command, statusText, exitCode, output),
         collapsedByDefault: false
       }
     };
@@ -232,6 +257,23 @@ function parseCodexJsonlFrame(line: CliOutputLine): CodexJsonlParseResult | null
   }
 
   return null;
+}
+
+function commandDisplayLines(
+  line: CliOutputLine,
+  command: string,
+  status: string | null,
+  exitCode: number | null,
+  output: string | undefined
+): CliOutputLine[] {
+  const summaryParts = [`$ ${command}`];
+  if (status) summaryParts.push(`[${status}]`);
+  if (exitCode !== null) summaryParts.push(`[exit ${exitCode}]`);
+  const displayLines = [withText(line, summaryParts.join(' '))];
+  if (output) {
+    displayLines.push(...output.split(/\r?\n/).map((text) => withText(line, text)));
+  }
+  return displayLines;
 }
 
 function commandSubtitle(command: string, status: string | null, exitCode: number | null, output: string | undefined): string {

@@ -174,9 +174,10 @@ describe('parseActivityLog', () => {
     expect(groups.map((g) => g.kind)).toEqual(['message', 'command']);
     expect(groups[0].title).toBe('I will make the frontend change.');
     expect(groups[0].lines[0].text).toBe('I will make the frontend change.');
-    expect(groups[1].title).toBe('Commands ×2');
+    expect(groups[1].title).toBe('git status --short');
     expect(groups[1].subtitle).toContain('git status --short');
     expect(groups.some((group) => group.title.includes('"type"'))).toBe(false);
+    expect(flattenActivityLines(groups).some((entry) => entry.text.includes('{"type"'))).toBe(false);
   });
 
   it('marks failed Codex command executions as error-status command groups', () => {
@@ -189,6 +190,10 @@ describe('parseActivityLog', () => {
     expect(groups[0].status).toBe('error');
     expect(groups[0].title).toBe('npm test');
     expect(groups[0].subtitle).toContain('exit 1');
+    expect(groups[0].lines.map((entry) => entry.text)).toEqual([
+      '$ npm test [failed] [exit 1]',
+      'FAIL parser spec'
+    ]);
   });
 });
 
