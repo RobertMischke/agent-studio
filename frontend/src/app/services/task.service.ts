@@ -1386,6 +1386,7 @@ export class TaskService {
       mode?: string | null;
       model?: string | null;
       thinkingLevel?: string | null;
+      prompt?: string | null;
       condition?: PipelineStepCondition | null;
     },
   ) {

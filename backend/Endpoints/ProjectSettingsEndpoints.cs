@@ -120,17 +120,12 @@ public static class ProjectSettingsEndpoints
                 // defaults on. The Settings UI uses this to render the toggle's
                 // initial state when the project has no explicit override.
                 defaultEnabled = s.DefaultEnabled,
-                // Run conditions are only evaluated by the abort-review gate
-                // this slice; the linear steps ignore them, so the UI hides the
-                // condition control for every step here.
                 supportsCondition = s.Kind != StepKind.Core,
             }).ToList();
 
             // The abort-triggered review step lives off the linear AllSteps list
             // (it only fires after a non-clean run end) but is configurable
-            // through the same per-project override mechanism. It is the one step
-            // whose run condition the runtime actually evaluates, so it is the
-            // only catalogue entry with supportsCondition = true.
+            // through the same per-project override mechanism.
             var abort = PipelineCatalogue.AbortReviewStep;
             steps.Add(new
             {

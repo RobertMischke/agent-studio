@@ -141,8 +141,14 @@ public sealed class DriftPostStepRunner
     {
         if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(jobFolderPath)) return;
 
+        var ctx = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = false,
+        };
         var enabled = PipelineCatalogue.Standard.Post
-            .Where(s => s.Kind == StepKind.Drift && PipelineStepConfigResolver.IsEnabled(settings, s))
+            .Where(s => s.Kind == StepKind.Drift && PipelineStepConfigResolver.ShouldRun(settings, s, ctx))
             .ToList();
         if (enabled.Count == 0) return;
 
@@ -169,7 +175,8 @@ public sealed class DriftPostStepRunner
             var thinkingLevel = PipelineStepConfigResolver.ResolveThinkingLevel(settings, step, CliTypes.Claude, model);
             try
             {
-                await RunDimensionAsync(step, model, thinkingLevel, project, jobId, jobFolderPath, projectRoot, repoRoot, workspace!, ct)
+                var promptOverride = PipelineStepConfigResolver.ResolvePrompt(settings, step);
+                await RunDimensionAsync(step, model, thinkingLevel, promptOverride, project, jobId, jobFolderPath, projectRoot, repoRoot, workspace!, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -184,6 +191,7 @@ public sealed class DriftPostStepRunner
         PipelineStep step,
         string model,
         string? thinkingLevel,
+        string? promptOverride,
         string project,
         string jobId,
         string jobFolderPath,
@@ -208,13 +216,14 @@ public sealed class DriftPostStepRunner
             return;
         }
 
-        var (prompt, persist) = BuildDimension(step.Id, project, projectRoot, repoRoot, workspace);
+        var (defaultPrompt, persist) = BuildDimension(step.Id, project, projectRoot, repoRoot, workspace);
         if (persist == null)
         {
             // Unknown drift step id - record a no-op so the telemetry is honest.
             RecordStep(jobFolderPath, step.Id, model, PipelineStepStatus.Failed, null, "unknown-drift-step");
             return;
         }
+        var prompt = string.IsNullOrWhiteSpace(promptOverride) ? defaultPrompt : promptOverride!;
 
         var cli = _thinkingAwareCliRunner is null
             ? await CliRunner(model, prompt, project, jobId, PerDimensionTimeout, ct).ConfigureAwait(false)

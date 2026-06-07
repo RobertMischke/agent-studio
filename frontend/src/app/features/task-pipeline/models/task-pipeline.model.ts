@@ -158,6 +158,7 @@ export interface PipelineCatalogueStep {
   displayName: string;
   kind: StepKind;
   usesModel: boolean;
+  usesPrompt: boolean;
   supportsMode: boolean;
   canDisable: boolean;
   /**
@@ -210,6 +211,7 @@ export interface PipelineStepSetting {
   mode?: string | null;
   model?: string | null;
   thinkingLevel?: string | null;
+  prompt?: string | null;
   condition?: PipelineStepCondition | null;
 }
 

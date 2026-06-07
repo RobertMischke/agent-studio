@@ -1470,8 +1470,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // (falling back to the run-wide aspectModel). The resolver keys on
         // the catalogue step id (aspect-{id}); see PipelineStepConfigResolver.
         var settings = _projectSettings?.Get(entry.Name);
+        var conditionContext = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = false,
+            TaskType = current.TaskType,
+            Tags = current.Tags,
+        };
         var enabledAspects = aspects
-            .Where(id => PipelineStepConfigResolver.IsEnabled(settings, $"aspect-{id}"))
+            .Where(id => PipelineStepConfigResolver.ShouldRun(settings, $"aspect-{id}", conditionContext))
             .ToList();
         Func<string, string>? modelForAspect = settings is null
             ? null
@@ -1487,8 +1495,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     CliTypes.Claude,
                     resolvedModel);
             };
+        Func<string, string?>? promptForAspect = settings is null
+            ? null
+            : aspectId => PipelineStepConfigResolver.ResolvePrompt(settings, $"aspect-{aspectId}");
 
-        var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect, thinkingLevelForAspect);
+        var report = await _aspectRunner.RunAsync(inputs, enabledAspects, cliBinary, aspectModel, perAspectTimeout, ct, modelForAspect, thinkingLevelForAspect, promptForAspect);
 
         // ASS-563: run the lint-scss post-step BEFORE the pipeline Complete
         // mark so its step record lands in pipeline-execution.json while
@@ -1990,8 +2001,28 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         if (_lintScssRunner == null) return null;
 
-        var mode = PostStepConfigResolver.Resolve(
+        var settings = _projectSettings?.Get(entry.Name);
+        var lintStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, PipelineCatalogue.LintScssStepId, StringComparison.OrdinalIgnoreCase));
+        if (lintStep is not null
+            && !PipelineStepConfigResolver.ShouldRun(settings, lintStep, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = 0,
+                AnyAspectFailed = false,
+                TaskType = current.TaskType,
+                Tags = current.Tags,
+            }))
+        {
+            RecordLintScssStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "condition",
+                reason: "pipeline condition did not match");
+            return new LintScssResult(LintScssVerdict.Skipped, null, 0, "", "condition");
+        }
+
+        var legacyMode = PostStepConfigResolver.Resolve(
             _configuration, current.FolderPath, PipelineCatalogue.LintScssStepId);
+        var mode = PipelineStepConfigResolver.ResolveMode(settings, PipelineCatalogue.LintScssStepId, legacyMode);
 
         if (mode == PostStepMode.Off)
         {

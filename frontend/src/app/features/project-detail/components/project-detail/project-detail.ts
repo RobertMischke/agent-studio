@@ -200,12 +200,14 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         displayName: step.displayName,
         kind: step.kind,
         usesModel: step.usesModel,
+        usesPrompt: step.usesPrompt,
         supportsMode: step.supportsMode,
         canDisable: step.canDisable,
         supportsCondition: step.supportsCondition,
         enabled: ov?.enabled ?? step.defaultEnabled,
         model: ov?.model ?? '',
         thinkingLevel: ov?.thinkingLevel ?? '',
+        prompt: ov?.prompt ?? '',
         thinkingLevels: this.thinkingLevelsForModel(ov?.model ?? ''),
         mode: ov?.mode ?? '',
         condition: conditionWhen,
@@ -559,6 +561,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.writeStep(stepId, { thinkingLevel });
   }
 
+  onStepPromptChange(stepId: string, prompt: string): void {
+    this.writeStep(stepId, { prompt });
+  }
+
   /**
    * The condition <select> changed. A non-value token (always / never /
    * on-abort / ...) persists immediately. A value-bearing token (task-type /
@@ -636,13 +642,14 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
    */
   private writeStep(
     stepId: string,
-    patch: { enabled?: boolean; model?: string; thinkingLevel?: string | null; mode?: string; condition?: PipelineStepCondition | null },
+    patch: { enabled?: boolean; model?: string; thinkingLevel?: string | null; prompt?: string | null; mode?: string; condition?: PipelineStepCondition | null },
   ): void {
     const cur = this.pipelineOverrides()[stepId] ?? {};
     const defaultEnabled = this.pipelineCatalogue().find(s => s.id === stepId)?.defaultEnabled ?? true;
     const enabled = patch.enabled ?? (cur.enabled ?? defaultEnabled);
     const model = (patch.model ?? cur.model ?? '').trim();
     const thinkingLevel = (patch.thinkingLevel !== undefined ? patch.thinkingLevel : (cur.thinkingLevel ?? ''))?.trim() ?? '';
+    const prompt = (patch.prompt !== undefined ? patch.prompt : (cur.prompt ?? ''))?.trim() ?? '';
     const mode = (patch.mode ?? cur.mode ?? '').trim();
     const condition = patch.condition !== undefined ? patch.condition : (cur.condition ?? null);
 
@@ -656,6 +663,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       enabled: enabled === defaultEnabled ? null : enabled,
       model: model || null,
       thinkingLevel: thinkingLevel || null,
+      prompt: prompt || null,
       mode: mode || null,
       condition: condition ?? null,
     }).subscribe({

@@ -37,8 +37,8 @@ export const PipelineStep_GateModes: readonly { id: string; label: string }[] = 
 ];
 
 /**
- * Run-condition choices for steps that honour a per-step condition (today the
- * abort-review step). Mirrors the backend `PipelineStepConditions` vocabulary.
+ * Run-condition choices for pipeline steps. Mirrors the backend
+ * `PipelineStepConditions` vocabulary.
  * Empty `id` clears any condition so the step runs whenever it is enabled
  * (equivalent to `always`). The value-bearing tokens (`task-type`, `tag`)
  * require a free-text value entered alongside the select.

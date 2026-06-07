@@ -295,6 +295,17 @@
                 }
               }
 
+              @if (step.usesPrompt) {
+                <textarea class="proj-detail__pl-prompt"
+                          rows="2"
+                          [attr.data-testid]="'pipeline-step-prompt-' + step.id"
+                          [appTooltip]="'Prompt override for this LLM step. Empty uses the catalogue prompt template.'"
+                          [placeholder]="'Catalogue prompt'"
+                          [disabled]="!step.enabled || pipelineStepBusy[step.id]"
+                          [ngModel]="step.prompt"
+                          (change)="onStepPromptChange(step.id, $any($event.target).value)"></textarea>
+              }
+
               @if (step.supportsMode) {
                 <select class="proj-detail__pl-mode"
                         [attr.data-testid]="'pipeline-step-mode-' + step.id"
