@@ -1189,8 +1189,8 @@
        screen. The drag-handle, click-to-open behaviour, and per-state
        border accent are preserved. */
     .task-card--compact {
-      padding: 6px 10px;
-      border-radius: 8px;
+      padding: var(--studio-card-compact-padding-block) var(--studio-card-compact-padding-inline);
+      border-radius: var(--studio-card-compact-radius);
       // Compact cards have a known small rendered height — tighten the
       // intrinsic-size hint so the scroll geometry matches what the
       // user sees once cards near the viewport are painted.
@@ -1209,11 +1209,11 @@
     .task-card--compact .task-card__title {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--studio-spacing-2);
       margin: 0;
-      font-size: 13px;
+      font-size: var(--studio-card-compact-title-size);
       font-weight: 500;
-      line-height: 1.25;
+      line-height: var(--studio-card-compact-title-lh);
       min-width: 0;
     }
     .task-card--compact .task-card__title-text {

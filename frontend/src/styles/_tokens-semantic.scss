@@ -138,12 +138,18 @@
   --studio-card-radius:          12px;
   --studio-card-padding:         var(--studio-spacing-4);
   --studio-card-section-gap:     var(--studio-spacing-3);
+  --studio-card-list-gap:        var(--studio-spacing-3);
   --studio-card-title-size:      15px;
   --studio-card-title-weight:    600;
   --studio-card-title-lh:        1.35;
   --studio-card-meta-size:       11px;
   --studio-card-pill-height:     22px;
   --studio-card-pill-padding-x:  var(--studio-spacing-2);
+  --studio-card-compact-padding-block: var(--studio-spacing-2);
+  --studio-card-compact-padding-inline: var(--studio-spacing-3);
+  --studio-card-compact-radius:  10px;
+  --studio-card-compact-title-size: 13px;
+  --studio-card-compact-title-lh: 1.25;
   --studio-card-muted-bg:        color-mix(in srgb, var(--studio-fg-dim) 7%, var(--studio-bg-elevated));
   --studio-card-muted-border:    color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
   --studio-card-state-border:    color-mix(in srgb, var(--task-card-state-color, var(--studio-card-border)) 38%, var(--studio-card-border));

@@ -27,7 +27,7 @@
       flex: 1 1 220px;
       display: flex;
       flex-direction: column;
-      gap: var(--studio-spacing-3);
+      gap: var(--studio-card-list-gap);
       transition: outline 0.15s;
       /*
        * CSS containment: scrolling a single lane's body or polling a
@@ -73,7 +73,7 @@
       display: flex;
       align-items: center;
       gap: var(--studio-spacing-2);
-      padding-bottom: var(--studio-spacing-3);
+      padding-bottom: var(--studio-spacing-4);
       border-bottom: 1px solid var(--studio-border, rgba(255,255,255,0.06));
       /*
        * Clip header content to the column. With min-width: 200 on
@@ -123,7 +123,7 @@
     .column__body {
       display: flex;
       flex-direction: column;
-      gap: var(--studio-spacing-3);
+      gap: var(--studio-card-list-gap);
       flex: 1;
       min-height: 0;
       /*
@@ -170,7 +170,7 @@
     .column__subsection {
       display: flex;
       flex-direction: column;
-      gap: var(--studio-spacing-3);
+      gap: var(--studio-card-list-gap);
       padding: var(--studio-spacing-3);
       border-radius: 10px;
       background: rgba(255, 255, 255, 0.02);

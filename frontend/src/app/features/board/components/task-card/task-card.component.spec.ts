@@ -258,6 +258,38 @@ describe('TaskCardComponent (smoke)', () => {
     expect(hasExplicitCssDeclaration('.task-card', 'border-left')).toBe(false);
     expect(findCssDeclaration('.task-card', '--task-card-ring')).toBe('0 0 0 1px var(--studio-card-state-border)');
     expect(findCssDeclaration('.task-card', 'box-shadow')).toContain('var(--task-card-ring)');
+    expect(findCssDeclaration('.task-card', 'padding')).toBe('var(--studio-card-padding)');
+    expect(findCssDeclaration('.task-card', 'border-radius')).toBe('var(--studio-card-radius)');
+    expect(findCssDeclaration('.task-card__title', 'font-size')).toBe('var(--studio-card-title-size)');
+    expect(findCssDeclaration('.task-card__title', 'font-weight')).toBe('var(--studio-card-title-weight)');
+    expect(findCssDeclaration('.task-card__commits', 'background')).toBe('var(--studio-commit-bg)');
+    expect(findCssDeclaration('.task-card__commits', 'border')).toBe('1px solid var(--studio-commit-border)');
+  });
+
+  it('routes compact-card density through the standard card tokens', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TaskCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(TaskCardComponent);
+    fixture.componentRef.setInput('job', makeJob({ state: '2-ready' }));
+    fixture.componentRef.setInput('compact', true);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
+    expect(host?.classList.contains('task-card--compact')).toBe(true);
+    expect(findCssDeclaration('.task-card--compact', 'padding')).toBe(
+      'var(--studio-card-compact-padding-block) var(--studio-card-compact-padding-inline)'
+    );
+    expect(findCssDeclaration('.task-card--compact', 'border-radius')).toBe('var(--studio-card-compact-radius)');
+    expect(findCssDeclarationWithSelectorParts(['.task-card--compact', '.task-card__title'], 'gap')).toBe('var(--studio-spacing-2)');
+    expect(findCssDeclarationWithSelectorParts(['.task-card--compact', '.task-card__title'], 'font-size')).toBe('var(--studio-card-compact-title-size)');
   });
 
   it('suppresses the "Running live" pill on cards outside 3-progress (lane is source of truth)', async () => {
@@ -1021,6 +1053,37 @@ function findCssDeclaration(selectorFragment: string, property: string): string 
     }
     const found = findDeclarationInRules(rules, selectorFragment, property);
     if (found !== null) return found;
+  }
+  return null;
+}
+
+function findCssDeclarationWithSelectorParts(selectorParts: string[], property: string): string | null {
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    const found = findDeclarationWithSelectorPartsInRules(rules, selectorParts, property);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+function findDeclarationWithSelectorPartsInRules(rules: CSSRuleList, selectorParts: string[], property: string): string | null {
+  for (const rule of Array.from(rules)) {
+    if ('selectorText' in rule && typeof rule.selectorText === 'string') {
+      const cssRule = rule as CSSStyleRule;
+      const style = cssRule.style;
+      if (selectorParts.every((part) => cssRule.selectorText.includes(part)) && style.getPropertyValue(property)) {
+        return style.getPropertyValue(property).trim();
+      }
+    }
+    if ('cssRules' in rule) {
+      const nested = findDeclarationWithSelectorPartsInRules((rule as CSSGroupingRule).cssRules, selectorParts, property);
+      if (nested !== null) return nested;
+    }
   }
   return null;
 }
