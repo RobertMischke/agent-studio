@@ -57,7 +57,6 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
   private scrollFrame: number | null = null;
   private suppressScrollEvent = false;
   private editableFocused = false;
-  private editableAnchorTop: number | null = null;
   private readonly onScroll = (): void => this.handleScroll();
   private readonly onFocusIn = (event: FocusEvent): void => this.handleFocusIn(event);
   private readonly onFocusOut = (): void => this.handleFocusOut();
@@ -100,7 +99,6 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
 
   private onContentResize(): void {
     if (this.editableFocused) {
-      this.preserveEditableAnchor();
       return;
     }
     if (!this._stuck()) return;
@@ -118,9 +116,6 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
   private handleFocusIn(event: FocusEvent): void {
     const target = event.target;
     this.editableFocused = target instanceof HTMLElement && this.isEditable(target);
-    this.editableAnchorTop = this.editableFocused && target instanceof HTMLElement
-      ? target.getBoundingClientRect().top
-      : null;
   }
 
   private handleFocusOut(): void {
@@ -129,28 +124,8 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
     requestAnimationFrame(() => {
       const active = document.activeElement;
       this.editableFocused = active instanceof HTMLElement && this.isEditable(active);
-      this.editableAnchorTop = active instanceof HTMLElement && this.editableFocused
-        ? active.getBoundingClientRect().top
-        : null;
       this.handleScroll();
     });
-  }
-
-  private preserveEditableAnchor(): void {
-    const el = this.container;
-    const active = document.activeElement;
-    if (!el || !(active instanceof HTMLElement) || !this.isEditable(active)) return;
-    const before = this.editableAnchorTop ?? active.getBoundingClientRect().top;
-    const after = active.getBoundingClientRect().top;
-    const delta = after - before;
-    if (Math.abs(delta) > 1) {
-      this.suppressScrollEvent = true;
-      el.scrollTop += delta;
-      requestAnimationFrame(() => {
-        this.suppressScrollEvent = false;
-      });
-    }
-    this.editableAnchorTop = active.getBoundingClientRect().top;
   }
 
   private isEditable(el: HTMLElement): boolean {
@@ -169,6 +144,7 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
       this.scrollFrame = null;
       const el = this.container ?? (this.container = this.resolveScrollContainer());
       if (!el) return;
+      if (this.editableFocused) return;
       if (!this._stuck()) return;
       // The write fires exactly one scroll event (no smooth behaviour);
       // suppress it so handleScroll doesn't misread the transient position

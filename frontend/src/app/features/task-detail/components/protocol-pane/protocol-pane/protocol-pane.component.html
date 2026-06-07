@@ -384,7 +384,7 @@
                 [visible]="gitViewerRun() !== null"
                 (closeRequest)="closeGitViewer()" />
 
-              @if (cliOutput().length > 0 || isRunning()) {
+              @if (cliOutput().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
                 @if (activityViewTabs().length > 1) {
                   <app-pane-tabs variant="pill"
                                  class="activity-view-toggle"
@@ -399,7 +399,7 @@
                   }
                   @case ('conversation') {
                     <app-conversation-view [events]="nextGenChatEvents()"
-                                           [isRunning]="isRunning()"
+                                           [isRunning]="isRunning() || isActiveJob()"
                                            [queuedFollowUp]="queuedFollowUp()"
                                            variant="embedded"
                                            (openTrace)="onConversationOpenTrace($event)"

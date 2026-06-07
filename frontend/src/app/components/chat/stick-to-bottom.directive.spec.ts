@@ -37,8 +37,11 @@ const realCaf = globalThis.cancelAnimationFrame;
 const realRO = (globalThis as any).ResizeObserver;
 
 describe('StickToBottomDirective', () => {
+  let queuedRafs: FrameRequestCallback[] | null;
+
   beforeEach(() => {
     resizeCallback = null;
+    queuedRafs = null;
     // Synchronous rAF so the pin lands within the test tick.
     (globalThis as any).requestAnimationFrame = (cb: FrameRequestCallback) => {
       cb(0);
@@ -55,6 +58,7 @@ describe('StickToBottomDirective', () => {
   });
 
   afterEach(() => {
+    queuedRafs = null;
     globalThis.requestAnimationFrame = realRaf;
     globalThis.cancelAnimationFrame = realCaf;
     (globalThis as any).ResizeObserver = realRO;
@@ -129,6 +133,27 @@ describe('StickToBottomDirective', () => {
     scroller.scrollTop = 500;
     textarea.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     resizeCallback!();
+    expect(scroller.scrollTop).toBe(500);
+  });
+
+  it('cancels a pending re-pin if the composer receives focus before the frame runs', async () => {
+    queuedRafs = [];
+    (globalThis as any).requestAnimationFrame = (cb: FrameRequestCallback) => {
+      queuedRafs!.push(cb);
+      return queuedRafs!.length as unknown as number;
+    };
+    (globalThis as any).cancelAnimationFrame = () => undefined;
+
+    const { fixture, scroller, dir } = await mount();
+    fakeGeometry(scroller, 1000, 200);
+    scroller.scrollTop = 500;
+    expect(dir.stuck()).toBe(true);
+
+    resizeCallback!();
+    const textarea = fixture.nativeElement.querySelector('.composer') as HTMLTextAreaElement;
+    textarea.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    queuedRafs.shift()?.(0);
+
     expect(scroller.scrollTop).toBe(500);
   });
 
