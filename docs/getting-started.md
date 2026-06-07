@@ -67,6 +67,7 @@ Use the API for normal job operations:
 - `POST /api/tasks/{jobId}/move?watchPath=...` to move a job.
 - `POST /api/tasks/reorder` to reorder jobs.
 - `DELETE /api/tasks/{jobId}?watchPath=...` to delete a job.
+- `DELETE /api/tasks/orphan-folder` with body `{"watchPath":"...","lane":"7-archive","folder":"..."}` to delete a scanner-invisible terminal-lane residue folder that has no `job.json`. The route refuses non-terminal lanes and folders that contain `job.json`, and logs `task-orphan-folder-deleted` or `task-orphan-folder-delete-failed`.
 
 On create, `agent` and `cliType` must be valid CLI values (`claude`, `codex`,
 `copilot`, or `gemini`) and should match. Do not use `agent: "human"` to keep

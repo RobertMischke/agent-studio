@@ -252,6 +252,7 @@ Canonical endpoints:
 - `PUT /api/jobs/{id}/state` - drive a task through a typed state transition.
 - `POST /api/jobs/reorder` - reorder tasks within a lane.
 - `DELETE /api/jobs/{id}?watchPath=...` - delete a task.
+- `DELETE /api/tasks/orphan-folder` - delete a scanner-invisible terminal-lane residue folder with body `{"watchPath":"...","lane":"7-archive","folder":"..."}`. It refuses non-terminal lanes and folders that contain `job.json`, and logs `task-orphan-folder-deleted` / `task-orphan-folder-delete-failed`.
 - `GET /api/jobs`, `GET /api/jobs/grouped`, `GET /api/jobs/{id}` - list and read.
 
 **Task runner and content**

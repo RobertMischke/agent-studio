@@ -291,6 +291,7 @@ The frontend Overview pipeline keys the "FINAL VERDICT" badge and the final-verd
 | POST | `/api/jobs` | Create task (`CreateJobRequest`). |
 | POST | `/api/jobs/batch-move` | Move many tasks in one call (per-item atomic; `BatchMoveRequest`). |
 | POST | `/api/jobs/{jobId}/restore-from-failed-pickup?watchPath=...` | Lift a folder out of `3a-failed-pickup` back into `2-ready`, dropping the `-pickup-failed-<utc>` suffix; optional body `{"keepDeadLetterSlug": true}` retains it. |
+| DELETE | `/api/tasks/orphan-folder` | Delete a scanner-invisible residue folder with body `{"watchPath":"...","lane":"7-archive","folder":"..."}`. Terminal lanes only; refuses folders that contain `job.json`; logs `task-orphan-folder-deleted` / `task-orphan-folder-delete-failed`. |
 | POST | `/api/jobs/{jobId}/start?watchPath=...` | Start CLI execution. |
 | POST | `/api/jobs/{jobId}/stop?watchPath=...` | Cancel running execution. |
 | POST | `/api/jobs/{jobId}/continue?watchPath=...` | Resume with new prompt (same session). |
@@ -451,6 +452,7 @@ Use:
 - `POST /api/jobs/{jobId}/move-to-top?watchPath=...` to promote a queued task.
 - `POST /api/jobs/{jobId}/change-project?watchPath=...` to relocate a task between watched workspaces.
 - `DELETE /api/jobs/{jobId}?watchPath=...` to delete tasks.
+- `DELETE /api/tasks/orphan-folder` with body `{"watchPath":"...","lane":"7-archive","folder":"..."}` to delete a scanner-invisible residue folder in a terminal lane. It refuses folders with `job.json` and non-terminal lanes, and emits `task-orphan-folder-deleted` / `task-orphan-folder-delete-failed`.
 - `PUT /api/jobs/{jobId}/state?watchPath=...` plus the other `PUT /api/jobs/{jobId}/*` field-edit endpoints for content changes.
 
 **Forbidden, even as a one-shot convenience:** `mv`, `rm`, `cp`, `mkdir`, `Move-Item`, `Remove-Item`, `Rename-Item`, or any other shell / filesystem command against a slug folder under `agent-taskboard-workspace/projects/<projectKey>/<lane>/`. Editing `state` inside a `job.json` by hand to "fix" a lane mismatch is the same bypass and is also forbidden. Filesystem state and the in-memory index diverge silently when these run, which is exactly what produced the 2026-05-09 zombie folder + 409 conflict. The architecture test [`backend.Tests/Architecture/JobFolderAccessIsolationTest.cs`](backend.Tests/Architecture/JobFolderAccessIsolationTest.cs) catches code-side bypasses; the LLM behavioural side is this rule.

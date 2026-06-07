@@ -114,6 +114,26 @@ must be on the same lane.
 
 Delete a job and its folder. Returns `200` on success.
 
+### `DELETE /api/tasks/orphan-folder`
+
+Delete a scanner-invisible residue folder in a terminal lane. This is for
+folders that have no `job.json`, such as boot-sweep leftovers in `7-archive`.
+Body:
+
+```json
+{
+  "watchPath": "C:\\Projects\\agent-taskboard-workspace\\projects\\agent-taskboard",
+  "lane": "7-archive",
+  "folder": "kanban-lane-grouping-collapse-empty-2026-05-05"
+}
+```
+
+Allowed lanes are `7-archive` and `6-completed`. The endpoint refuses
+non-terminal lanes, path traversal folder names, and any folder that contains
+`job.json`; use normal task deletion for real tasks. Success returns
+`200 { "status": "deleted" }`. The backend emits the stable structured log
+events `task-orphan-folder-deleted` and `task-orphan-folder-delete-failed`.
+
 ### `POST /api/tasks/{jobId}/restore-from-failed-pickup?watchPath=...`
 
 Lift a folder out of `3a-failed-pickup` back into `2-ready` and drop the

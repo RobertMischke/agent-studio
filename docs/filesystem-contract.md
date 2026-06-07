@@ -41,6 +41,7 @@ The filesystem layout is the storage contract, not the normal operating interfac
 - `POST /api/tasks/{jobId}/move?watchPath=...`
 - `POST /api/tasks/reorder`
 - `DELETE /api/tasks/{jobId}?watchPath=...`
+- `DELETE /api/tasks/orphan-folder` with body `{"watchPath":"...","lane":"7-archive","folder":"..."}` for scanner-invisible residue folders in terminal lanes only. This path refuses folders that contain `job.json` and logs `task-orphan-folder-deleted` or `task-orphan-folder-delete-failed`.
 
 Direct folder edits are reserved for backend implementation, migrations, recovery, and tests that deliberately exercise this contract. Normal queue management goes through the API so validation, owner identity, SignalR updates, and the Task Access layer remain authoritative.
 
