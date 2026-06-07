@@ -1,3 +1,8 @@
+    <!-- Backend-offline warning: app-wide, fixed top strip shown whenever the
+         SignalR socket has been down past the grace window. Lives outside both
+         layout branches so it is present in the VS-Code shell and the legacy
+         layout alike. Additive: cached data stays visible behind it. -->
+    <app-offline-banner />
     @if (featureFlags.vsCodeLayout()) {
       <!--
         Agent Software Studio redesign — VS-Code-inspired shell.

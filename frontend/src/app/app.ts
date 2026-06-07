@@ -103,6 +103,7 @@ import { ConfirmDialogComponent } from './components/app-dialog/confirm-dialog/c
 import { StudioIconComponent } from './components/studio-icon/studio-icon.component';
 import { NotificationStackComponent } from './components/app-dialog/notification-stack/notification-stack.component';
 import { MediaLightboxComponent } from './components/media-lightbox/media-lightbox.component';
+import { OfflineBannerComponent } from './components/offline-banner/offline-banner.component';
 import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
@@ -157,6 +158,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     ConfirmDialogComponent,
     NotificationStackComponent,
     MediaLightboxComponent,
+    OfflineBannerComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,
     TagManagerDialogComponent,
