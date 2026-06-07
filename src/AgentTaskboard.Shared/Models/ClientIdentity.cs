@@ -52,7 +52,7 @@ public record ClientIdentity
     public string? DefaultCliType { get; init; }
 
     /// <summary>
-    /// User's preferred model id for new tasks (e.g. "claude-opus-4-7").
+    /// User's preferred model id for new tasks (e.g. "claude-haiku-4-5").
     /// Surfaced into the per-turn orchestrator prompt. Null until first set.
     /// </summary>
     public string? DefaultModel { get; init; }

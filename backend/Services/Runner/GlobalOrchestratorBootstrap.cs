@@ -159,8 +159,8 @@ public sealed class GlobalOrchestratorBootstrap
     /// <summary>
     /// Resolve the "boot-time" user defaults from the bootstrap identity
     /// (<see cref="DefaultClientIdentity.Id"/>). Falls back to the historic
-    /// hardcoded pair (claude / opus-4-7) so a fresh install with no
-    /// identity record still produces a well-formed block.
+    /// default CLI plus the orchestrator runner's default model so a fresh
+    /// install with no identity record still produces a well-formed block.
     /// </summary>
     internal static (string cli, string model) ResolveBootDefaults(ClientIdentityStore? identityStore)
     {

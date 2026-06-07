@@ -29,7 +29,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
  *       expand to show the MD body inline.</li>
  *   <li>Drive the "Run Code Review" action: a unified
  *       <code>&lt;app-cli-model-selector&gt;</code> (CLI + model) defaults
- *       to <code>claude</code> + <code>claude-opus-4-7</code>, the Run
+ *       to <code>claude</code> + <code>claude-haiku-4-5</code>, the Run
  *       button POSTs the chosen pair and shows a spinner until the
  *       response arrives.</li>
  *   <li>Cover the user's "Progress an die Karte, dass da gerade eine
@@ -57,7 +57,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
 export class CodeReviewPanelComponent implements OnInit {
   readonly job = input.required<TaskInfo>();
   /** Optional override for the model dropdown's initial value. */
-  readonly defaultModel = input<string>('claude-opus-4-7');
+  readonly defaultModel = input<string>('claude-haiku-4-5');
   /** Optional override for the CLI dropdown's initial value. */
   readonly defaultCli = input<CliType>('claude');
 
@@ -67,7 +67,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly expandedFile = signal<string | null>(null);
   readonly expandedBody = signal<string | null>(null);
-  readonly selectedModel = signal<string>('claude-opus-4-7');
+  readonly selectedModel = signal<string>('claude-haiku-4-5');
   readonly selectedThinkingLevel = signal<string | null>(null);
   readonly selectedCli = signal<CliType>('claude');
 
@@ -82,7 +82,7 @@ export class CodeReviewPanelComponent implements OnInit {
     // model" + "configurable default if there is no last one" asks):
     //   1. last-used pair persisted in localStorage,
     //   2. the deployment-configured default from the backend,
-    //   3. the hard-coded input fallbacks (claude / claude-opus-4-7).
+    //   3. the hard-coded input fallbacks (claude / claude-haiku-4-5).
     const remembered = this.readLastAgent();
     if (remembered) {
       this.selectedCli.set(remembered.cliType);

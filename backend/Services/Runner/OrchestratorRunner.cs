@@ -51,7 +51,7 @@ public sealed record OrchestratorDecisionResult(
 /// </summary>
 public class OrchestratorRunner
 {
-    public const string DefaultModel = "claude-opus-4-7";
+    public const string DefaultModel = "claude-haiku-4-5";
 
     private readonly ClaudeCliService _claude;
     private readonly ILogger<OrchestratorRunner> _logger;

@@ -83,7 +83,7 @@ describe('CodeReviewPanelComponent', () => {
     // default before listing existing reviews.
     httpCtrl
       .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
-      .flush({ cliType: 'claude', model: 'claude-opus-4-7' });
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
     const req = httpCtrl.expectOne((r) => r.url.includes('/api/tasks/demo-job/code-review/list'));
     expect(req.request.method).toBe('GET');
     req.flush({ entries: [] });
@@ -103,14 +103,14 @@ describe('CodeReviewPanelComponent', () => {
     const httpCtrl = TestBed.inject(HttpTestingController);
     httpCtrl
       .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
-      .flush({ cliType: 'claude', model: 'claude-opus-4-7' });
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
     httpCtrl.expectOne((r) => r.url.includes('/api/tasks/demo-job/code-review/list')).flush({
       entries: [
         {
           fileName: 'code-review-2026-05-14T12-00-00Z.md',
           verdict: 'pass',
           summary: 'Looks fine.',
-          model: 'claude-opus-4-7',
+          model: 'claude-haiku-4-5',
           cliType: 'claude',
           commit: '0aa4c5d',
           runAt: '2026-05-14T12:00:00Z',
@@ -146,7 +146,7 @@ describe('CodeReviewPanelComponent', () => {
     const httpCtrl = TestBed.inject(HttpTestingController);
     httpCtrl
       .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
-      .flush({ cliType: 'claude', model: 'claude-opus-4-7' });
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
     httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({ entries: [] });
     fixture.detectChanges();
 
@@ -220,14 +220,14 @@ describe('CodeReviewPanelComponent', () => {
     const httpCtrl = TestBed.inject(HttpTestingController);
     httpCtrl
       .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
-      .flush({ cliType: 'claude', model: 'claude-opus-4-7' });
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
     httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({
       entries: [
         {
           fileName: 'code-review-2026-05-14T12-00-00Z.md',
           verdict: 'concerns',
           summary: 'Helper duplicated.',
-          model: 'claude-opus-4-7',
+          model: 'claude-haiku-4-5',
           cliType: 'claude',
           commit: '0aa4c5d',
           runAt: '2026-05-14T12:00:00Z',
@@ -267,7 +267,7 @@ describe('CodeReviewPanelComponent', () => {
     const httpCtrl = TestBed.inject(HttpTestingController);
     httpCtrl
       .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
-      .flush({ cliType: 'claude', model: 'claude-opus-4-7' });
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
     httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({ entries: [] });
     fixture.detectChanges();
 
@@ -332,7 +332,7 @@ describe('CodeReviewPanelComponent', () => {
     const httpCtrl = TestBed.inject(HttpTestingController);
     httpCtrl
       .expectOne((r) => r.url.includes('/tasks/code-review/defaults'))
-      .flush({ cliType: 'claude', model: 'claude-opus-4-7' });
+      .flush({ cliType: 'claude', model: 'claude-haiku-4-5' });
     httpCtrl.expectOne((r) => r.url.includes('/code-review/list')).flush({ entries: [] });
     fixture.detectChanges();
 
@@ -352,7 +352,7 @@ describe('CodeReviewPanelComponent', () => {
       fileName: 'code-review-2026-05-14T13-00-00Z.md',
       verdict: 'pass',
       summary: 'ok',
-      model: 'claude-opus-4-7',
+      model: 'claude-haiku-4-5',
       cliType: 'claude',
       commit: 'abcdef0',
       durationMs: 10,

@@ -31,7 +31,6 @@ import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/p
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from '../../../../components/tooltip';
-import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import {
   SORTABLE_LANES,
   USER_VISIBLE_LANE_SORT_STRATEGIES,
@@ -110,8 +109,7 @@ export type ProjectDetailView =
     ProjectAnalysisReportsSectionComponent,
     ProjectWorkspaceSectionComponent,
     AutonomySliderComponent,
-    TooltipDirective,
-    CliModelSelectorComponent],
+    TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-detail.html',
   styleUrl: './project-detail.scss'
@@ -764,10 +762,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   }
 
   private phaseForStep(step: PipelineCatalogueStep): string {
-    if (step.kind === 'Aspect') return 'aspect';
-    if (step.kind === 'Tool') return 'tool';
-    if (step.kind === 'Drift') return 'drift';
-    if (step.kind === 'Core') return 'core';
+    if (step.kind === 'aspect') return 'aspect';
+    if (step.kind === 'tool') return 'tool';
+    if (step.kind === 'drift') return 'drift';
+    if (step.kind === 'core') return 'core';
     if (step.id.startsWith('pre-')) return 'pre';
     if (step.id.includes('decision')) return 'decision';
     if (step.id.includes('abort')) return 'abort';

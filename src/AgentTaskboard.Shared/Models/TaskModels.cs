@@ -1306,9 +1306,7 @@ public record ProjectSettings
 
     /// <summary>
     /// Model the orchestrator uses when it makes decisions on behalf of the
-    /// user in auto mode (Phase E and later). Defaults to the strongest
-    /// Claude model (<c>claude-opus-4-7</c>) so decisions are high-quality;
-    /// the user can downgrade to Sonnet for cost. Null means use the default.
+    /// user in auto mode (Phase E and later). Null means use the default.
     /// </summary>
     public string? OrchestratorModel { get; init; }
 
