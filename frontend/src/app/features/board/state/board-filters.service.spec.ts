@@ -153,3 +153,68 @@ describe('BoardFiltersService project selection', () => {
     expect(svc.hasActiveFiltersOrSearch()).toBe(true);
   });
 });
+
+/**
+ * `filteredGroupedForProject` is the explicit-scope path that the shell's
+ * per-project count badges read (e.g. `backlogCount` =
+ * `filteredGroupedForProject(activeProjectName()).backlog.length`). The
+ * "193" symptom in the bug report was a backlog/count that aggregated across
+ * projects; these tests pin the badge source so a single project's backlog
+ * count is exactly that project's `0-backlog`, regardless of any stale
+ * activeProjects / localStorage filter state.
+ */
+describe('BoardFiltersService.filteredGroupedForProject (count-badge scope)', () => {
+  let svc: BoardFiltersService;
+  let jobs: TaskService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    jobs = TestBed.inject(TaskService);
+    svc = TestBed.inject(BoardFiltersService);
+
+    const fixture: TaskInfo[] = [
+      // Active project: exactly 3 backlog tasks (mirrors ASS-717/718/719).
+      makeJob('atp-b-1', 'Agent Task Processor', '0-backlog'),
+      makeJob('atp-b-2', 'Agent Task Processor', '0-backlog'),
+      makeJob('atp-b-3', 'Agent Task Processor', '0-backlog'),
+      // Foreign backlog tasks that must NOT bleed into the count.
+      makeJob('lot-b-1', 'Lotta Dashboard', '0-backlog'),
+      makeJob('lot-b-2', 'Lotta Dashboard', '0-backlog'),
+      // A pile of foreign non-backlog work (the "156 human-review" symptom).
+      makeJob('lot-h-1', 'Lotta Dashboard', '5-human-review'),
+      makeJob('lot-h-2', 'Lotta Dashboard', '5-human-review'),
+    ];
+    jobs.grouped.set(makeGrouped(fixture));
+  });
+
+  it('scopes the backlog count to the named project only', () => {
+    const g = svc.filteredGroupedForProject('Agent Task Processor');
+    expect(g.backlog.length).toBe(3);
+    for (const j of g.backlog) expect(j.projectName).toBe('Agent Task Processor');
+    // Foreign lanes are emptied too — the badge never sees other projects.
+    expect(g.humanReview?.length ?? 0).toBe(0);
+  });
+
+  it('ignores a stale activeProjects filter and uses the explicit scope', () => {
+    // Simulate a leftover board filter pointing at a different project.
+    svc.selectProject('Lotta Dashboard', false);
+    const g = svc.filteredGroupedForProject('Agent Task Processor');
+    expect(g.backlog.map((j) => j.projectName)).toEqual([
+      'Agent Task Processor',
+      'Agent Task Processor',
+      'Agent Task Processor',
+    ]);
+  });
+
+  it('re-scopes cleanly between projects (no leak from the previous project)', () => {
+    expect(svc.filteredGroupedForProject('Agent Task Processor').backlog.length).toBe(3);
+    expect(svc.filteredGroupedForProject('Lotta Dashboard').backlog.length).toBe(2);
+  });
+});
