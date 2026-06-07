@@ -62,6 +62,9 @@ body {
 .studio-measure {
   width: min(100%, var(--studio-measure-max, var(--studio-measure-tabular)));
   max-width: var(--studio-measure-max, var(--studio-measure-tabular));
+  min-width: 0;
+  align-self: flex-start;
+  justify-self: start;
   margin-inline-start: 0;
   margin-inline-end: auto;
 }

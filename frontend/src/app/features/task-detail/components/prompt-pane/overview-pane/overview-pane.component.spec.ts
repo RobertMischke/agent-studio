@@ -1091,4 +1091,23 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(typeof proto['copyToClipboard']).toBe('undefined');
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('keeps overview content on reusable left-aligned measures', async () => {
+    const fixture = await build(baseJob());
+    TestBed.inject(TaskPipelinePollService).pipeline.set(agentPipeline());
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const title = host.querySelector('[data-testid="overview-title-block"]');
+    const status = host.querySelector('[data-testid="overview-status"]');
+    const agent = host.querySelector('[data-testid="overview-agent"]');
+    const pipeline = host.querySelector('[data-testid="overview-pipeline"]');
+
+    expect(title?.classList.contains('studio-measure')).toBe(true);
+    expect(title?.classList.contains('studio-measure--prose')).toBe(true);
+    expect(status?.classList.contains('studio-measure--tabular')).toBe(true);
+    expect(agent?.classList.contains('studio-measure--tabular')).toBe(true);
+    expect(pipeline?.classList.contains('studio-measure--tabular-compact')).toBe(true);
+  });
 });
