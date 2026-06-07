@@ -147,12 +147,6 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         var level = settings.AutonomyLevel ?? 2;
         if (level == 0) return; // manual: never moves a task forward
 
-        // Optional per project: prep is the opt-in pre-orchestrator-prep
-        // pipeline step (DefaultEnabled = false). When the project has not
-        // turned it on, the loop is a no-op and cards rest in 1-preparation
-        // until a human readies them.
-        if (!PipelineStepConfigResolver.IsEnabled(settings, PrepStep)) return;
-
         var allJobs = _scanner.ScanAllJobs().Where(j => j.WatchPath == watchPath).ToList();
         var prep = allJobs.Where(j => j.State == TaskStates.Preparation).OrderBy(j => j.Order).ToList();
         var ready = allJobs.Where(j => j.State == TaskStates.Ready).OrderBy(j => j.Order).ToList();
@@ -173,6 +167,23 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         }
 
         var job = prep.First();
+
+        // Optional per project: prep is the opt-in pre-orchestrator-prep
+        // pipeline step (DefaultEnabled = false). Evaluate the full per-step
+        // condition against the head preparation card so task-type / tag gates
+        // apply here like they do for post-run pipeline steps.
+        if (!PipelineStepConfigResolver.ShouldRun(settings, PrepStep, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = null,
+                AnyAspectFailed = false,
+                TaskType = job.TaskType,
+                Tags = job.Tags,
+            }))
+        {
+            return;
+        }
+
         var promptText = ReadPromptText(job);
         var prevText = "";
         var nextText = "";

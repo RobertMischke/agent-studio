@@ -156,6 +156,29 @@ public class PipelineStepConditionTests
             settings, PipelineCatalogue.AbortReviewStep, Ctx(aborted: true)));
     }
 
+    [Fact]
+    public void ShouldRun_PreOrchestratorPrep_HonoursTaskScopedCondition()
+    {
+        var step = PipelineCatalogue.Standard.Pre.First(s => s.Id == PipelineCatalogue.PreOrchestratorPrepStepId);
+        var settings = SettingsWith(step.Id, new PipelineStepSetting
+        {
+            Enabled = true,
+            Condition = Cond(PipelineStepConditions.Tag, "frontend"),
+        });
+
+        Assert.True(PipelineStepConfigResolver.ShouldRun(settings, step, Ctx(tags: ["frontend", "bug"])));
+        Assert.False(PipelineStepConfigResolver.ShouldRun(settings, step, Ctx(tags: ["backend"])));
+    }
+
+    [Fact]
+    public void ResolvePrompt_ReturnsTrimmedOverride_AndNullForCatalogueDefault()
+    {
+        var settings = SettingsWith("aspect-code-quality", new PipelineStepSetting { Prompt = "  custom review prompt  " });
+
+        Assert.Equal("custom review prompt", PipelineStepConfigResolver.ResolvePrompt(settings, "aspect-code-quality"));
+        Assert.Null(PipelineStepConfigResolver.ResolvePrompt(new ProjectSettings(), "aspect-code-quality"));
+    }
+
     // ---- Vocabulary the endpoint validation reuses ------------------------
 
     [Fact]

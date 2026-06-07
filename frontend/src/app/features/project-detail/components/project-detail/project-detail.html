@@ -270,29 +270,17 @@
               <span class="proj-detail__pl-name">{{ step.displayName }}</span>
 
               @if (step.usesModel) {
-                <select class="proj-detail__pl-model"
-                        [attr.data-testid]="'pipeline-step-model-' + step.id"
-                        [appTooltip]="'Model for this step LLM call. Inherit falls back to the project orchestrator model, then the runtime default.'"
-                        [disabled]="!step.enabled || pipelineStepBusy[step.id]"
-                        [ngModel]="step.model"
-                        (ngModelChange)="onStepModelChange(step.id, $event)">
-                  @for (opt of pipelineStepModels; track opt.id) {
-                    <option [value]="opt.id">{{ opt.label }}</option>
-                  }
-                </select>
-                @if (step.thinkingLevels.length > 0) {
-                  <select class="proj-detail__pl-model"
-                          [attr.data-testid]="'pipeline-step-thinking-' + step.id"
-                          [appTooltip]="'Thinking level for this step LLM call. Inherit uses the selected model default.'"
-                          [disabled]="!step.enabled || pipelineStepBusy[step.id]"
-                          [ngModel]="step.thinkingLevel"
-                          (ngModelChange)="onStepThinkingLevelChange(step.id, $event)">
-                    <option value="">Default</option>
-                    @for (level of step.thinkingLevels; track level) {
-                      <option [value]="level">{{ level }}</option>
-                    }
-                  </select>
-                }
+                <app-cli-model-selector
+                  [cliType]="asCliType(step.cliType)"
+                  [model]="step.model"
+                  [thinkingLevel]="step.thinkingLevel || null"
+                  [disabled]="!step.enabled || !!pipelineStepBusy[step.id]"
+                  [disabledReason]="!step.enabled ? 'Enable this step before changing its agent.' : 'Pipeline step update in progress.'"
+                  [tooltipOverride]="'CLI, model, and thinking level for this step LLM call. Empty model uses the project/runtime default.'"
+                  eyebrow="Pipeline step"
+                  [triggerTestid]="'pipeline-step-agent-' + step.id"
+                  [pickerTestidPrefix]="'pipeline-step-agent-picker-' + step.id"
+                  (commit)="onStepAgentCommit(step.id, $event)" />
               }
 
               @if (step.usesPrompt) {

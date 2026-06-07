@@ -22,7 +22,7 @@ import { api } from '../helpers/api';
 
 interface WatchPath { name: string; path: string }
 interface PipelineStepCondition { when: string; value?: string | null }
-interface PipelineStepSetting { enabled?: boolean | null; mode?: string | null; model?: string | null; condition?: PipelineStepCondition | null }
+interface PipelineStepSetting { enabled?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }
 interface ProjectSettingsProjection { pipelineSteps?: Record<string, PipelineStepSetting> }
 
 const STEP = 'aspect-code-quality';
@@ -60,7 +60,7 @@ async function getStepOverride(): Promise<PipelineStepSetting | undefined> {
   return getOverride(STEP);
 }
 
-async function setStep(body: { stepId: string; enabled?: boolean | null; mode?: string | null; model?: string | null; condition?: PipelineStepCondition | null }): Promise<void> {
+async function setStep(body: { stepId: string; enabled?: boolean | null; mode?: string | null; cliType?: string | null; model?: string | null; thinkingLevel?: string | null; prompt?: string | null; condition?: PipelineStepCondition | null }): Promise<void> {
   await api(`/api/projects/${enc(projectName)}/pipeline-step`, {
     method: 'PUT',
     body: JSON.stringify(body),
@@ -84,13 +84,19 @@ test.afterAll(async () => {
   await setStep({
     stepId: STEP,
     enabled: originalOverride?.enabled ?? null,
+    cliType: originalOverride?.cliType ?? null,
     model: originalOverride?.model ?? null,
+    thinkingLevel: originalOverride?.thinkingLevel ?? null,
+    prompt: originalOverride?.prompt ?? null,
     mode: originalOverride?.mode ?? null,
   });
   await setStep({
     stepId: ABORT_STEP,
     enabled: originalAbortOverride?.enabled ?? null,
+    cliType: originalAbortOverride?.cliType ?? null,
     model: originalAbortOverride?.model ?? null,
+    thinkingLevel: originalAbortOverride?.thinkingLevel ?? null,
+    prompt: originalAbortOverride?.prompt ?? null,
     mode: originalAbortOverride?.mode ?? null,
     condition: originalAbortOverride?.condition ?? null,
   });
@@ -98,7 +104,7 @@ test.afterAll(async () => {
 
 test('settings: pipeline-step section renders and a per-step model change persists', async ({ page }) => {
   // Start from a clean override so the model select begins on Inherit.
-  await setStep({ stepId: STEP, enabled: null, model: null, mode: null });
+  await setStep({ stepId: STEP, enabled: null, cliType: null, model: null, thinkingLevel: null, prompt: null, mode: null });
 
   await page.goto(`/#/projects/${projectSlug}/settings`);
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
@@ -109,16 +115,21 @@ test('settings: pipeline-step section renders and a per-step model change persis
   const row = page.getByTestId(`pipeline-step-row-${STEP}`);
   await expect(row).toBeVisible();
 
-  const modelSelect = page.getByTestId(`pipeline-step-model-${STEP}`);
-  await expect(modelSelect).toHaveValue(''); // Inherit
+  const agentPicker = page.getByTestId(`pipeline-step-agent-${STEP}`);
+  await expect(agentPicker).toBeVisible();
+  await expect(agentPicker).toContainText('CLI default');
 
   await section.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '01-settings-defaults.png'), fullPage: true });
 
-  // Pin this aspect to Haiku through the UI; assert it lands in settings.
-  await modelSelect.selectOption(HAIKU);
-  await expect(modelSelect).toHaveValue(HAIKU);
+  // Pin this aspect to Claude / Haiku through the shared CLI+model picker;
+  // assert it lands in settings.
+  await agentPicker.click();
+  await page.getByTestId(`pipeline-step-agent-picker-${STEP}-cli-claude`).click();
+  await page.getByTestId(`pipeline-step-agent-picker-${STEP}-model-${HAIKU}`).click();
+  await page.getByTestId(`pipeline-step-agent-picker-${STEP}-done`).click();
   await expect.poll(async () => (await getStepOverride())?.model).toBe(HAIKU);
+  await expect.poll(async () => (await getStepOverride())?.cliType).toBe('claude');
 
   await section.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02-step-model-haiku.png'), fullPage: true });

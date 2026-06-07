@@ -21,6 +21,7 @@ import type {
 } from '../../../../features/task-pipeline';
 import { TokenSummaryBlockComponent } from '../../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
+import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
 import { ProjectDriftSectionComponent } from '../project-drift-section/project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-section/project-drift-overview-section';
@@ -99,6 +100,7 @@ export type ProjectDetailView =
   standalone: true,
   imports: [
     FormsModule,
+    CliModelSelectorComponent,
     TokenSummaryBlockComponent,
     GlobalOrchestratorCardComponent,
     ProjectArchitectureSectionComponent,
