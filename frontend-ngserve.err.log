@@ -13,3 +13,171 @@ X [ERROR] TS2339: Property 'position' does not exist on type 'CliModelSelectorCo
           ╵                                                        ~~~~~~~~
 
 
+X [ERROR] TS2353: Object literal may only specify known properties, and 'cliType' does not exist in type '{ enabled?: boolean | undefined; model?: string | undefined; thinkingLevel?: string | null | undefined; prompt?: string | null | undefined; mode?: string | undefined; condition?: PipelineStepCondition | null | undefined; }'. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:580:29:
+      580 │     this.writeStep(stepId, { cliType });
+          ╵                              ~~~~~~~
+
+
+X [ERROR] TS2339: Property 'cliType' does not exist on type '{ enabled?: boolean | undefined; model?: string | undefined; thinkingLevel?: string | null | undefined; prompt?: string | null | undefined; mode?: string | undefined; condition?: PipelineStepCondition | null | undefined; }'. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:678:27:
+      678 │     const cliType = (patch.cliType ?? cur.cliType ?? '').trim();
+          ╵                            ~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:726:8:
+      726 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:727:8:
+      727 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:728:8:
+      728 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:729:8:
+      729 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2353: Object literal may only specify known properties, and 'cliType' does not exist in type '{ enabled?: boolean | undefined; model?: string | undefined; thinkingLevel?: string | null | undefined; prompt?: string | null | undefined; mode?: string | undefined; condition?: PipelineStepCondition | null | undefined; }'. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:602:29:
+      602 │     this.writeStep(stepId, { cliType });
+          ╵                              ~~~~~~~
+
+
+X [ERROR] TS2339: Property 'cliType' does not exist on type '{ enabled?: boolean | undefined; model?: string | undefined; thinkingLevel?: string | null | undefined; prompt?: string | null | undefined; mode?: string | undefined; condition?: PipelineStepCondition | null | undefined; }'. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:700:27:
+      700 │     const cliType = (patch.cliType ?? cur.cliType ?? '').trim();
+          ╵                            ~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:748:8:
+      748 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:749:8:
+      749 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:750:8:
+      750 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:751:8:
+      751 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:756:8:
+      756 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:757:8:
+      757 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:758:8:
+      758 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:759:8:
+      759 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:756:8:
+      756 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:757:8:
+      757 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:758:8:
+      758 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:759:8:
+      759 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Aspect"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:756:8:
+      756 │     if (step.kind === 'Aspect') return 'aspect';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Tool"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:757:8:
+      757 │     if (step.kind === 'Tool') return 'tool';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Drift"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:758:8:
+      758 │     if (step.kind === 'Drift') return 'drift';
+          ╵         ~~~~~~~~~~~~~~~~~~~~~
+
+
+X [ERROR] TS2367: This comparison appears to be unintentional because the types 'StepKind' and '"Core"' have no overlap. [plugin angular-compiler]
+
+    src/app/features/project-detail/components/project-detail/project-detail.ts:759:8:
+      759 │     if (step.kind === 'Core') return 'core';
+          ╵         ~~~~~~~~~~~~~~~~~~~~
+
+

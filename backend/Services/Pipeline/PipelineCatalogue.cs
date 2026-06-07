@@ -153,6 +153,15 @@ public static class PipelineCatalogue
     public const string RegressionRadarStepId = "post-regression-radar";
 
     /// <summary>
+    /// Opt-in deterministic post-step that keeps a watched project's local
+    /// <c>docs/wiki/common-problems</c> library current from task outcome
+    /// signals. It dedupes by slug, increments occurrence evidence, updates
+    /// <c>last-seen</c>, and regenerates the common-problems index without an
+    /// LLM call. Implemented by <c>WikiMaintenancePostStepRunner</c>.
+    /// </summary>
+    public const string WikiMaintenanceStepId = "post-wiki-maintenance";
+
+    /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
     /// run, before the aspect verdicts. It is the deterministic
     /// <c>CompletionGate</c> scan of the run's own close-out evidence
@@ -431,6 +440,16 @@ public static class PipelineCatalogue
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [.. AspectStepIds],
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = WikiMaintenanceStepId,
+                    DisplayName = "Wiki maintenance",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                    DefaultEnabled = false,
                 },
                 new PipelineStep
                 {
