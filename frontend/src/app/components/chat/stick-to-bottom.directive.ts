@@ -116,6 +116,9 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
   private handleFocusIn(event: FocusEvent): void {
     const target = event.target;
     this.editableFocused = target instanceof HTMLElement && this.isEditable(target);
+    if (this.editableFocused) {
+      this.cancelPendingScroll();
+    }
   }
 
   private handleFocusOut(): void {
@@ -139,7 +142,7 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
     // Coalesce to a single pin per frame: a streaming tick can grow the
     // content several times in quick succession, but we only want one
     // scrollTop write, after the browser has laid out the new rows.
-    if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
+    this.cancelPendingScroll();
     this.scrollFrame = requestAnimationFrame(() => {
       this.scrollFrame = null;
       const el = this.container ?? (this.container = this.resolveScrollContainer());
@@ -155,6 +158,12 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
         this.suppressScrollEvent = false;
       });
     });
+  }
+
+  private cancelPendingScroll(): void {
+    if (this.scrollFrame === null || typeof cancelAnimationFrame === 'undefined') return;
+    cancelAnimationFrame(this.scrollFrame);
+    this.scrollFrame = null;
   }
 
   /**

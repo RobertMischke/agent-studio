@@ -137,12 +137,15 @@ describe('StickToBottomDirective', () => {
   });
 
   it('cancels a pending re-pin if the composer receives focus before the frame runs', async () => {
+    const cancelledFrames = new Set<number>();
     queuedRafs = [];
     (globalThis as any).requestAnimationFrame = (cb: FrameRequestCallback) => {
       queuedRafs!.push(cb);
       return queuedRafs!.length as unknown as number;
     };
-    (globalThis as any).cancelAnimationFrame = () => undefined;
+    (globalThis as any).cancelAnimationFrame = (id: number) => {
+      cancelledFrames.add(id);
+    };
 
     const { fixture, scroller, dir } = await mount();
     fakeGeometry(scroller, 1000, 200);
@@ -150,9 +153,16 @@ describe('StickToBottomDirective', () => {
     expect(dir.stuck()).toBe(true);
 
     resizeCallback!();
+    const pendingResizeFrame = queuedRafs.length;
+    expect(pendingResizeFrame).toBeGreaterThan(0);
     const textarea = fixture.nativeElement.querySelector('.composer') as HTMLTextAreaElement;
     textarea.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    queuedRafs.shift()?.(0);
+
+    expect(cancelledFrames.has(pendingResizeFrame)).toBe(true);
+    for (let index = 0; index < queuedRafs.length; index++) {
+      const frameId = index + 1;
+      if (!cancelledFrames.has(frameId)) queuedRafs[index]?.(0);
+    }
 
     expect(scroller.scrollTop).toBe(500);
   });
