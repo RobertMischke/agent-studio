@@ -23,7 +23,7 @@ import { TooltipDirective } from '../tooltip';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
-import { OverlayPortalService } from '../../services/overlay-portal.service';
+import { ConnectedOverlayPositionRef, OverlayPortalService } from '../../services/overlay-portal.service';
 
 /**
  * Unified CLI + model selector. One reusable chip-with-popover control
@@ -114,8 +114,7 @@ export class CliModelSelectorComponent {
   private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
-  private repositionAttached = false;
-  private readonly reposition = () => this.position();
+  private positionRef: ConnectedOverlayPositionRef | null = null;
 
   /** Draft state initialised when the picker opens. */
   readonly draftCliType = signal<CliType | null>(null);
@@ -196,7 +195,7 @@ export class CliModelSelectorComponent {
         // exist in the central overlay layer.
         queueMicrotask(() => this.showAndPosition());
       } else {
-        this.detachReposition();
+        this.releasePositioner();
         this.releaseModalStack();
       }
     });
@@ -208,7 +207,7 @@ export class CliModelSelectorComponent {
       this.draftAvailableModels();
       this.loadingCatalog();
       this.catalogError();
-      if (this.pickerOpen()) queueMicrotask(() => this.position());
+      if (this.pickerOpen()) queueMicrotask(() => this.positionRef?.update());
     });
   }
 
@@ -229,7 +228,7 @@ export class CliModelSelectorComponent {
   }
 
   closePicker(): void {
-    this.detachReposition();
+    this.releasePositioner();
     this.pickerOpen.set(false);
     this.releaseModalStack();
     queueMicrotask(() => this.triggerBtnRef?.nativeElement.focus());
@@ -363,35 +362,21 @@ export class CliModelSelectorComponent {
 
   private showAndPosition(): void {
     if (!this.pickerOpen()) return;
-    this.attachReposition();
-    this.position();
-  }
-
-  private position(): void {
     const picker = this.pickerElRef?.nativeElement;
     const trigger = this.triggerBtnRef?.nativeElement;
     if (!picker || !trigger) return;
-    const pos = this.overlayPortal.positionConnected(trigger, picker, {
+    this.releasePositioner();
+    this.positionRef = this.overlayPortal.watchConnectedPosition(trigger, picker, {
       preferredPlacement: 'above',
       alignment: 'start',
       gap: 6,
       viewportPadding: 8,
-    });
-    this.pickerPos.set({ left: pos.left, top: pos.top });
+    }, pos => this.pickerPos.set({ left: pos.left, top: pos.top }));
   }
 
-  private attachReposition(): void {
-    if (this.repositionAttached) return;
-    this.repositionAttached = true;
-    window.addEventListener('scroll', this.reposition, true);
-    window.addEventListener('resize', this.reposition);
-  }
-
-  private detachReposition(): void {
-    if (!this.repositionAttached) return;
-    this.repositionAttached = false;
-    window.removeEventListener('scroll', this.reposition, true);
-    window.removeEventListener('resize', this.reposition);
+  private releasePositioner(): void {
+    this.positionRef?.dispose();
+    this.positionRef = null;
   }
 
   private acquireModalStack(): void {

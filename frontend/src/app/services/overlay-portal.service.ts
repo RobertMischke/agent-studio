@@ -23,6 +23,11 @@ export interface ConnectedOverlayPosition {
   readonly placement: OverlayPlacement;
 }
 
+export interface ConnectedOverlayPositionRef {
+  update(): void;
+  dispose(): void;
+}
+
 const OVERLAY_ROOT_CLASS = 'studio-overlay-root';
 
 /**
@@ -157,6 +162,46 @@ export class OverlayPortalService {
       placement: chosen,
       left: Math.round(this.clamp(pos.left, pad, maxLeft)),
       top: Math.round(this.clamp(pos.top, pad, maxTop)),
+    };
+  }
+
+  watchConnectedPosition(
+    anchor: HTMLElement,
+    panel: HTMLElement,
+    options: ConnectedOverlayOptions = {},
+    apply: (position: ConnectedOverlayPosition) => void = (position) => {
+      panel.style.left = `${position.left}px`;
+      panel.style.top = `${position.top}px`;
+      panel.dataset['placement'] = position.placement;
+    },
+  ): ConnectedOverlayPositionRef {
+    let disposed = false;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const update = () => {
+      if (disposed || !anchor.isConnected || !panel.isConnected) return;
+      apply(this.positionConnected(anchor, panel, options));
+    };
+
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(update);
+      resizeObserver.observe(panel);
+      resizeObserver.observe(anchor);
+    }
+
+    queueMicrotask(update);
+
+    return {
+      update,
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        window.removeEventListener('scroll', update, true);
+        window.removeEventListener('resize', update);
+        resizeObserver?.disconnect();
+      },
     };
   }
 
