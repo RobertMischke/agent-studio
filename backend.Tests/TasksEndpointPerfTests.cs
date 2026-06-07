@@ -131,6 +131,47 @@ public class JobsEndpointPerfTests : IDisposable
     }
 
     [Fact]
+    public void GroupedPath_Over300JobsWithWarmBusProjection_FinishesUnderVerifierBudget()
+    {
+        const int jobCount = 300;
+        const int messageCount = 50_000;
+        const string projectName = "grouped-warm-bus";
+        var workspace = Path.Combine(Path.GetTempPath(), "atp-bus-perf-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        try
+        {
+            var jobs = Enumerable.Range(0, jobCount)
+                .Select(i => MakeJob($"job-{i:D4}", projectName, _watchPath))
+                .ToList();
+
+            WriteBusTokenMessages(workspace, projectName, jobCount, messageCount);
+            var store = new AgentMessageBusStore();
+            var warmed = store.WarmProject(workspace, projectName);
+            Assert.Equal(messageCount, warmed);
+            var tokens = BuildRealTokenAggregator(workspace, store);
+
+            // This is the grouped endpoint's expensive enrichment path:
+            // /api/tasks/grouped -> BuildTokenLookup -> WorkspacePerJob ->
+            // BusBackedTokenSummaryReader.SummarizePerJob. Startup warmup
+            // must make this a memory-only projection pass, not a request-
+            // thread JSONL cold load that can exceed UpdateVerifier's 10s
+            // per-attempt timeout.
+            var sw = Stopwatch.StartNew();
+            var lookup = TaskEndpointHelpersAccessor.BuildTokenLookup(jobs, tokens);
+            sw.Stop();
+
+            Assert.Equal(jobCount, lookup.Count);
+            Assert.True(sw.ElapsedMilliseconds < 5_000,
+                $"Grouped token lookup over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
+                + "the grouped endpoint must stay below the post-restart verifier budget.");
+        }
+        finally
+        {
+            try { Directory.Delete(workspace, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+
+    [Fact]
     public void WithRuntime_OutsideProgress_ClearsExecutionOverlay()
     {
         // Single-source-of-truth contract (Lane > Execution-Status >
@@ -210,6 +251,71 @@ public class JobsEndpointPerfTests : IDisposable
         WatchPath = watchPath,
         FolderPath = Path.Combine(watchPath, TaskStates.Progress, id),
     };
+
+    private static void WriteBusTokenMessages(string workspace, string projectName, int jobCount, int messageCount)
+    {
+        var day = new DateTime(2026, 5, 29, 0, 0, 0, DateTimeKind.Utc);
+        var path = AgentMessageBusPaths.DayFile(workspace, projectName, day);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16);
+        using var writer = new StreamWriter(stream);
+        var participant = AgentMessageBusBridge.ParticipantOrchestratorFor(projectName);
+        for (var i = 0; i < messageCount; i++)
+        {
+            var msg = new AgentMessage
+            {
+                Id = "01HXYZ0000000000000000G" + i.ToString("D5"),
+                CreatedAt = day.AddSeconds(i),
+                ParticipantId = participant,
+                Role = "actor",
+                Kind = "token-usage",
+                Project = projectName,
+                JobId = $"job-{i % jobCount:D4}",
+                Summary = "perf token sample",
+                Tokens = new AgentMessageTokens(
+                    Input: 100 + i % 17,
+                    Output: 20 + i % 7,
+                    CacheRead: i % 5,
+                    CacheWrite: i % 3,
+                    Model: "claude-sonnet-4"),
+            };
+            writer.WriteLine(System.Text.Json.JsonSerializer.Serialize(msg, AgentMessageBusStore.SerializerOptions));
+        }
+    }
+
+    private static ITokenAggregator BuildRealTokenAggregator(string workspace, AgentMessageBusStore store)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = workspace,
+            })
+            .Build();
+        var busCache = new BusAggregationCache(store);
+        store.OnAppended = busCache.OnAppended;
+        var summaryCache = new TokenSummaryCacheStore(config, NullLogger<TokenSummaryCacheStore>.Instance);
+        return new TokenAggregationService(
+            busCache,
+            config,
+            summaryCache,
+            new BusBackedAdHocUsageReader(store, config),
+            new BusBackedTokenSummaryReader(store, config),
+            new BusBackedWorkspaceTimelineReader(store, config),
+            new BusBackedProjectTokenUsageReader(store, config, BuildScannerFor(workspace)));
+    }
+
+    private static TaskScannerService BuildScannerFor(string watchPath)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "grouped-warm-bus",
+                ["WatchPaths:0:Path"] = watchPath,
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+    }
 
     private TaskScannerService BuildScanner()
     {

@@ -62,6 +62,8 @@ public sealed class AgentMessageBusStore
     /// </summary>
     public int WarmProject(string workspaceRoot, string? project, CancellationToken ct = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(project);
         var projection = GetOrLoad(workspaceRoot, project, ct);
         return projection.Snapshot().Count;
     }
