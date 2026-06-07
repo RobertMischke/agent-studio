@@ -168,8 +168,8 @@ export interface PipelineCatalogueStep {
   defaultEnabled: boolean;
   /**
    * Whether the runtime evaluates a per-step run condition for this step.
-   * Only the abort-review step honours conditions today, so it is the only
-   * row that renders the condition control.
+   * Core cannot be conditionally skipped; configurable pre/post steps use this
+   * to render the condition control in the project settings pipeline editor.
    */
   supportsCondition: boolean;
 }

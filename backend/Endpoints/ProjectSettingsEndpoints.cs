@@ -166,11 +166,9 @@ public static class ProjectSettingsEndpoints
             if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
                 return Results.BadRequest(new { error = $"Unsupported mode '{req.Mode}' (expected off / warn / fail)" });
 
-            // Validate any run condition: the token must be known, value-bearing
-            // tokens need a value, and the condition must target a step the
-            // runtime actually evaluates conditions for (today: abort-review).
-            // An "always" / blank condition is a no-op and is left to normalize
-            // away in the service.
+            // Validate any run condition: the token must be known and
+            // value-bearing tokens need a value. An "always" / blank condition
+            // is a no-op and is left to normalize away in the service.
             if (req.Condition is { } condition && !string.IsNullOrWhiteSpace(condition.When))
             {
                 var when = PipelineStepConditions.Normalize(condition.When);

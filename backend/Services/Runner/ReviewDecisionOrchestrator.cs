@@ -2327,10 +2327,29 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (analyze == null) return;
 
         var settings = _projectSettings?.Get(entry.Name);
-        if (!PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.RegressionRadarStepId))
+        var radarStep = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, PipelineCatalogue.RegressionRadarStepId, StringComparison.OrdinalIgnoreCase));
+        var shouldRun = radarStep is null
+            ? PipelineStepConfigResolver.ShouldRun(settings, PipelineCatalogue.RegressionRadarStepId, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = 0,
+                AnyAspectFailed = false,
+                TaskType = current.TaskType,
+                Tags = current.Tags,
+            })
+            : PipelineStepConfigResolver.ShouldRun(settings, radarStep, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = 0,
+                AnyAspectFailed = false,
+                TaskType = current.TaskType,
+                Tags = current.Tags,
+            });
+        if (!shouldRun)
         {
             RecordRegressionRadarStep(current.FolderPath, PipelineStepStatus.Skipped,
-                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config");
+                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config or condition");
             return;
         }
 

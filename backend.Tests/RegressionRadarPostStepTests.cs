@@ -129,19 +129,71 @@ public class RegressionRadarPostStepTests : IDisposable
         Assert.True(radarStep.DurationMs >= 0);
     }
 
-    private void SeedReviewJobWithDone(string slug)
+    [Fact]
+    public async Task RadarCondition_DoesNotRunAnalyzer_WhenConditionDoesNotMatch()
+    {
+        SeedReviewJobWithDone("radar-condition", taskType: "bug");
+        var analyzerCalled = false;
+        var orchestrator = BuildOrchestrator(
+            new RegressionRadarResult
+            {
+                OverallStatus = SpecChangeCategory.Drift,
+                TotalSpecChanges = 1,
+                BaselineSha = "aaaaaaa",
+                HeadSha = "bbbbbbb",
+            },
+            settings =>
+            {
+                settings.SetPipelineStep(Project, PipelineCatalogue.RegressionRadarStepId, new PipelineStepSetting
+                {
+                    Condition = new PipelineStepCondition
+                    {
+                        When = PipelineStepConditions.TaskType,
+                        Value = "feature",
+                    },
+                });
+            });
+        orchestrator.RegressionRadarAnalyzer = (_, _) =>
+        {
+            analyzerCalled = true;
+            return new RegressionRadarResult
+            {
+                OverallStatus = SpecChangeCategory.Drift,
+                TotalSpecChanges = 1,
+                BaselineSha = "aaaaaaa",
+                HeadSha = "bbbbbbb",
+            };
+        };
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.False(analyzerCalled);
+        var reviewFolder = Path.Combine(_watchPath, TaskStates.HumanReview, "radar-condition");
+        var record = new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance).Read(reviewFolder);
+        Assert.NotNull(record);
+        var radarStep = record!.Steps.First(s =>
+            string.Equals(s.StepId, PipelineCatalogue.RegressionRadarStepId, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(PipelineStepStatus.Skipped, radarStep.Status);
+        Assert.Equal("off", radarStep.Verdict);
+        Assert.Equal("post-step disabled by config or condition", radarStep.Reason);
+    }
+
+    private void SeedReviewJobWithDone(string slug, string? taskType = null)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        var taskTypeJson = string.IsNullOrWhiteSpace(taskType) ? "" : $",\"taskType\":\"{taskType}\"";
         File.WriteAllText(Path.Combine(dir, "job.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"{taskTypeJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
             $"[12:00:01.000] [stdout] [[TASK_DONE]]{Environment.NewLine}");
     }
 
-    private ReviewDecisionOrchestrator BuildOrchestrator(RegressionRadarResult cannedResult)
+    private ReviewDecisionOrchestrator BuildOrchestrator(
+        RegressionRadarResult cannedResult,
+        Action<ProjectSettingsService>? configureSettings = null)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -174,6 +226,7 @@ public class RegressionRadarPostStepTests : IDisposable
             NullLogger<TaskMutationService>.Instance);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        configureSettings?.Invoke(settings);
         var transitions = new TaskTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<TaskTransitionService>.Instance);
         var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
             scanner, mutations, stateMachine, transitions, indexCache,
