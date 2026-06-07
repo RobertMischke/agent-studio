@@ -29,6 +29,11 @@ artifacts/
 frontend/e2e/_baselines*
 frontend/screenshots/
 test-results/
+# .NET VSTest/MSTest output: TestResults/<run>.trx (+ any stray .trx). The
+# lowercase `test-results/` above did NOT catch backend.Tests/TestResults/*.trx
+# (case-sensitive), so be explicit. Build/test artefacts never belong in a commit.
+**/TestResults/
+*.trx
 
 # Locally-scoped build trees occasionally used to side-step a locked bin/ dir
 # (e.g. when the dev backend is running and holds OrchestratorApi.dll). Build
