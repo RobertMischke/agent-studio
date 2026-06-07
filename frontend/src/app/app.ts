@@ -227,6 +227,8 @@ export class App implements OnInit, OnDestroy {
   readonly epicOverlayDetail = signal<TaskDetail | null>(null);
   readonly epicOverlayTaskDetail = signal<TaskDetail | null>(null);
   private epicOverlayReturnUrl: string | null = null;
+  private epicOverlayReturnSelection: TaskDetail | null = null;
+  private suppressStudioTaskTabForEpicOverlay = false;
   readonly epicOverlaySubTaskPeers = computed<TaskInfo[]>(() => {
     const epic = this.epicOverlayDetail();
     if (!epic) return [];
@@ -979,6 +981,7 @@ export class App implements OnInit, OnDestroy {
       const selected = this.selectedJob();
       if (!this.featureFlags.vsCodeLayout()) return;
       if (!selected) return;
+      if (this.isEpicOverlaySubTaskDetail(selected)) return;
       const key = `task:${selected.info.taskKey}`;
       const tabs = untracked(() => this.studioTabState.tabs());
       const present = tabs.some((t) => t.kind === 'task' && t.taskKey === selected.info.taskKey);
@@ -1688,6 +1691,7 @@ export class App implements OnInit, OnDestroy {
           ) {
             if (!currentEpic) {
               this.epicOverlayReturnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+              this.epicOverlayReturnSelection = this.selectedJob();
             }
             this.epicOverlayTaskDetail.set(null);
           }
@@ -1752,12 +1756,26 @@ export class App implements OnInit, OnDestroy {
   }
 
   private selectEpicOverlaySubTask(detail: TaskDetail): void {
+    this.suppressStudioTaskTabForEpicOverlay = true;
     this.epicOverlayTaskDetail.set(detail);
+    const token = this.jobSelection.bumpOpenDetailToken();
+    this.jobSelection.setSelectedFromAdvance(detail, token);
     this.captureEpicOverlayPager(detail);
     history.replaceState(
       null,
       '',
       `?job=${encodeURIComponent(detail.info.id)}&watchPath=${encodeURIComponent(detail.info.watchPath)}`,
+    );
+  }
+
+  private isEpicOverlaySubTaskDetail(detail: TaskDetail): boolean {
+    if (!this.suppressStudioTaskTabForEpicOverlay) return false;
+    const epic = this.epicOverlayDetail();
+    if (!epic) return false;
+    return (
+      detail.info.kind !== 'epic' &&
+      detail.info.epicId === epic.info.id &&
+      detail.info.watchPath === epic.info.watchPath
     );
   }
 
@@ -1796,8 +1814,17 @@ export class App implements OnInit, OnDestroy {
   }
 
   closeEpicOverlay(): void {
+    const returnSelection = this.epicOverlayReturnSelection;
     this.epicOverlayDetail.set(null);
     this.epicOverlayTaskDetail.set(null);
+    this.suppressStudioTaskTabForEpicOverlay = false;
+    this.epicOverlayReturnSelection = null;
+    if (returnSelection) {
+      const token = this.jobSelection.bumpOpenDetailToken();
+      this.jobSelection.setSelectedFromAdvance(returnSelection, token);
+    } else {
+      this.jobSelection.selected.set(null);
+    }
     if (this.epicOverlayReturnUrl !== null) {
       history.replaceState(null, '', this.epicOverlayReturnUrl);
       this.epicOverlayReturnUrl = null;
