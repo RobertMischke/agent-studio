@@ -125,6 +125,67 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
         Assert.True(aspect.Invocations > 0, "a clean gate must let the aspect review run");
     }
 
+    [Fact]
+    public async Task TaskDone_BuildTestGateFails_BudgetLeft_ReissuesBeforeAspects()
+    {
+        SeedReviewJobWithDone("build-red-job",
+            status: "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n");
+        var aspect = new CountingAspect();
+        var buildGate = new FakeBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail, 1, 123,
+            "TaskJsonFile.cs(10,20): error CS1061: missing member",
+            "dotnet build exit 1", true, false));
+        var orchestrator = BuildOrchestrator(aspect.Cli, maxReissues: 3, buildGate);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "build-red-job");
+        Assert.True(Directory.Exists(folder), "a red deterministic build gate should reissue to 2-ready");
+
+        var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
+        Assert.Contains("\"stepId\": \"" + PipelineCatalogue.BuildTestGateStepId + "\"", pipelineJson);
+        Assert.Contains("\"verdict\": \"fail\"", pipelineJson);
+        Assert.Contains("\"verdict\": \"reissue\"", pipelineJson);
+        Assert.Equal(0, aspect.Invocations);
+    }
+
+    [Fact]
+    public async Task TaskDone_BuildTestGateGreen_ContinuesToAspects()
+    {
+        SeedReviewJobWithDone("build-green-job",
+            status: "## Summary\nDone.\n\nResult: Success\n\n## Open Items\nNone\n");
+        var aspect = new CountingAspect();
+        var buildGate = new FakeBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Ok, 0, 123, "build passed", "build gate passed", true, false));
+        var orchestrator = BuildOrchestrator(aspect.Cli, maxReissues: 3, buildGate);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "build-green-job");
+        Assert.True(Directory.Exists(folder), "a green deterministic build gate should continue through auto-review");
+
+        var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
+        Assert.Contains("\"stepId\": \"" + PipelineCatalogue.BuildTestGateStepId + "\"", pipelineJson);
+        Assert.Contains("\"verdict\": \"ok\"", pipelineJson);
+        Assert.True(aspect.Invocations > 0, "a green build gate must let the aspect review run");
+    }
+
+    [Fact]
+    public void BuildTestGate_DocOnlyDiff_IsSkippedByDiffClassifier()
+    {
+        Assert.False(BuildTestGateRunner.HasCodeDiff([
+            "docs/research/note.md",
+            "README.md",
+            ".orchestrator/status.md",
+        ]));
+        Assert.True(BuildTestGateRunner.HasCodeDiff([
+            "src/AgentTaskboard.Shared/Models/TaskModels.cs",
+        ]));
+        Assert.True(BuildTestGateRunner.HasCodeDiff([
+            "frontend/src/app/app.component.ts",
+        ]));
+    }
+
     private sealed class CountingAspect
     {
         private int _invocations;
@@ -141,6 +202,23 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
     private delegate Task<string> AspectCli(
         string aspectId, string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct);
 
+    private sealed class FakeBuildTestGateRunner : IBuildTestGateRunner
+    {
+        private readonly BuildTestGateResult _result;
+
+        public FakeBuildTestGateRunner(BuildTestGateResult result)
+        {
+            _result = result;
+        }
+
+        public Task<BuildTestGateResult> RunAsync(
+            string repositoryPath,
+            IReadOnlyList<string>? changedFiles,
+            PostStepMode mode,
+            TimeSpan timeout,
+            CancellationToken ct) => Task.FromResult(_result);
+    }
+
     private void SeedReviewJobWithDone(string slug, string status)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
@@ -156,7 +234,8 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 
     private ReviewDecisionOrchestrator BuildOrchestrator(
         AspectCli aspectCli,
-        int maxReissues)
+        int maxReissues,
+        IBuildTestGateRunner? buildGate = null)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -206,6 +285,7 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
             sessions: null,
             git: null,
             pipelineLog: pipelineLog,
-            lintScssRunner: null);
+            lintScssRunner: null,
+            buildTestGateRunner: buildGate);
     }
 }

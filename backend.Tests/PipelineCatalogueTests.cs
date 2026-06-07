@@ -35,10 +35,10 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post: post-core orchestrator-review + 4 aspects + commit-attribution
-        // + lint-scss + regression-radar + final orchestrator decision + 5
-        // opt-in drift dimensions (DRIFT Nachtrag).
-        Assert.Equal(14, p.Post.Count);
+        // Post includes the deterministic review/build gates, four aspects,
+        // implemented tool steps, final orchestrator decision, and opt-in drift
+        // dimensions.
+        Assert.Equal(17, p.Post.Count);
     }
 
     [Fact]
@@ -266,6 +266,31 @@ public class PipelineCatalogueTests
     }
 
     [Fact]
+    public void StandardPipeline_BuildTestGate_IsToolStep_BeforeAspects_AndNotAStub()
+    {
+        // Deterministic build/test gate: runs after the post-core completion
+        // scan and before aspect review so a broken compile short-circuits
+        // before LLM review or accept-as-done can trust self-reported Success.
+        var p = PipelineCatalogue.Standard;
+        var step = p.Post.First(s => s.Id == PipelineCatalogue.BuildTestGateStepId);
+        Assert.Equal(StepKind.Tool, step.Kind);
+        Assert.False(step.Stub);
+        Assert.True(step.Idempotent);
+        Assert.Contains(PipelineCatalogue.CoreAgentRunStepId, step.DependsOn);
+
+        var reviewIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorReviewStepId);
+        var buildIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.BuildTestGateStepId);
+        Assert.True(reviewIndex < buildIndex,
+            $"orchestrator-review (idx {reviewIndex}) must precede build/test gate (idx {buildIndex})");
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            var aspectIndex = p.Post.FindIndex(s => s.Id == aspectId);
+            Assert.True(buildIndex < aspectIndex,
+                $"build/test gate (idx {buildIndex}) must precede aspect {aspectId} (idx {aspectIndex})");
+        }
+    }
+
+    [Fact]
     public void StandardPipeline_RegressionRadar_IsToolStep_WithAspectDependencies_AndNotAStub()
     {
         // Regression radar runs as a deterministic Tool post-step after the
@@ -386,8 +411,9 @@ public class PipelineCatalogueTests
         Assert.Equal(PipelineCatalogue.PreOrchestratorPrepStepId, ro.Pre[1].Id);
         Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ro.Pre[2].Id);
 
-        // Exactly the one git step was removed from Post.
-        Assert.Equal(standard.Post.Count - 1, ro.Post.Count);
+        // Every git step was removed from Post.
+        var standardPostGitSteps = standard.Post.Count(s => PipelineCatalogue.GitStepIds.Contains(s.Id));
+        Assert.Equal(standard.Post.Count - standardPostGitSteps, ro.Post.Count);
     }
 
     [Fact]

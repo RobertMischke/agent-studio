@@ -249,6 +249,8 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.PipelineExecutio
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ProjectPipelineCostService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ILintScssRunner,
     OrchestratorApi.Services.Pipeline.LintScssRunner>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.IBuildTestGateRunner,
+    OrchestratorApi.Services.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Review.CodeReviewStepService>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.

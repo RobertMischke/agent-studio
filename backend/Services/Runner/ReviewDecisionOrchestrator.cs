@@ -139,6 +139,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
+    private readonly IBuildTestGateRunner? _buildTestGateRunner;
     private readonly RegressionRadarService? _regressionRadar;
 
     /// <summary>
@@ -165,6 +166,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// gate; the next failure escalates to human review).
     /// </summary>
     internal const string LintScssReissueReasonPrefix = "lint-scss reissue: ";
+    internal const string BuildTestGateReissueReasonPrefix = "build-test-gate reissue: ";
 
     public ReviewDecisionOrchestrator(
         TaskScannerService scanner,
@@ -182,6 +184,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         GitService? git = null,
         PipelineExecutionLog? pipelineLog = null,
         ILintScssRunner? lintScssRunner = null,
+        IBuildTestGateRunner? buildTestGateRunner = null,
         TimelineLog? timeline = null,
         ProjectSettingsService? projectSettings = null,
         HumanReviewEscalation? humanReviewEscalation = null,
@@ -202,6 +205,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _git = git;
         _pipelineLog = pipelineLog;
         _lintScssRunner = lintScssRunner;
+        _buildTestGateRunner = buildTestGateRunner;
         _timeline = timeline;
         _projectSettings = projectSettings;
         _humanReviewEscalation = humanReviewEscalation;
@@ -1465,6 +1469,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         RecordOrchestratorReviewStep(current.FolderPath, PipelineStepStatus.Passed,
             ReviewVerdictComplete, gate.Reason);
 
+        var buildGateResult = await RunBuildTestGatePostStepAsync(workspace, entry, current, ct);
+        if (buildGateResult?.Verdict == BuildTestGateVerdict.Fail)
+        {
+            await HandleBuildTestGateFailureAsync(workspace, entry, pending, current, buildGateResult, ct);
+            return;
+        }
+
         // Per-project pipeline config: drop aspects the project disabled and
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
@@ -2093,6 +2104,173 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         });
     }
 
+    private async Task<BuildTestGateResult?> RunBuildTestGatePostStepAsync(
+        string workspace,
+        WatchPathEntry entry,
+        TaskInfo current,
+        CancellationToken ct)
+    {
+        if (_buildTestGateRunner == null) return null;
+
+        var settings = _projectSettings?.Get(entry.Name);
+        var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, PipelineCatalogue.BuildTestGateStepId, StringComparison.OrdinalIgnoreCase));
+        if (step is not null
+            && !PipelineStepConfigResolver.ShouldRun(settings, step, new PipelineStepConditionContext
+            {
+                Aborted = false,
+                ExitCode = 0,
+                AnyAspectFailed = false,
+                TaskType = current.TaskType,
+                Tags = current.Tags,
+            }))
+        {
+            RecordBuildTestGateStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "condition",
+                reason: "pipeline condition did not match");
+            return new BuildTestGateResult(BuildTestGateVerdict.Skipped, null, 0, "",
+                "condition", false, false);
+        }
+
+        var projectMode = PostStepConfigResolver.ParseMode(
+            _configuration[$"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:DefaultMode"])
+            ?? PostStepMode.Fail;
+        var legacyMode = PostStepConfigResolver.Resolve(
+            current.FolderPath,
+            PipelineCatalogue.BuildTestGateStepId,
+            projectMode: projectMode);
+        var mode = PipelineStepConfigResolver.ResolveMode(settings, PipelineCatalogue.BuildTestGateStepId, legacyMode);
+
+        if (mode == PostStepMode.Off)
+        {
+            RecordBuildTestGateStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off",
+                reason: "post-step disabled by config");
+            return new BuildTestGateResult(BuildTestGateVerdict.Skipped, null, 0, "",
+                "mode=off", false, false);
+        }
+
+        var repoPath = string.IsNullOrWhiteSpace(entry.RepositoryPath) ? entry.RootPath : entry.RepositoryPath;
+        var timeoutSeconds = _configuration.GetValue($"PostSteps:{PipelineCatalogue.BuildTestGateStepId}:TimeoutSeconds", 300);
+        var changedFiles = ResolveLatestRunChangedFiles(current, entry.Path);
+
+        BuildTestGateResult result;
+        try
+        {
+            result = await _buildTestGateRunner.RunAsync(
+                repoPath, changedFiles, mode, TimeSpan.FromSeconds(timeoutSeconds), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: build-test gate post-step threw for {Project}/{JobId}; treating as skipped",
+                entry.Name, current.Id);
+            RecordBuildTestGateStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "error", reason: ex.Message);
+            return null;
+        }
+
+        var status = result.Verdict switch
+        {
+            BuildTestGateVerdict.Ok => PipelineStepStatus.Passed,
+            BuildTestGateVerdict.Warn => PipelineStepStatus.Passed,
+            BuildTestGateVerdict.Fail => PipelineStepStatus.Failed,
+            BuildTestGateVerdict.Skipped => PipelineStepStatus.Skipped,
+            _ => PipelineStepStatus.Skipped,
+        };
+        var verdictToken = result.Verdict switch
+        {
+            BuildTestGateVerdict.Ok => "ok",
+            BuildTestGateVerdict.Warn => "warn",
+            BuildTestGateVerdict.Fail => "fail",
+            BuildTestGateVerdict.Skipped => "skipped",
+            _ => "skipped",
+        };
+        RecordBuildTestGateStep(current.FolderPath, status, result.DurationMs, verdictToken, result.Reason);
+        WriteBuildTestGateLog(current.FolderPath, result, changedFiles);
+
+        _logger.LogInformation(
+            "ReviewDecisionOrchestrator: build-test gate {Verdict} for {Project}/{JobId} in {DurationMs}ms (backend={Backend} frontend={Frontend} changedFiles={ChangedFiles})",
+            result.Verdict, entry.Name, current.Id, result.DurationMs,
+            result.RanBackendBuild, result.RanFrontendBuild,
+            changedFiles?.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown");
+
+        return result;
+    }
+
+    private IReadOnlyList<string>? ResolveLatestRunChangedFiles(TaskInfo job, string? watchPath)
+    {
+        if (_sessions == null || _git == null) return null;
+        try
+        {
+            var latest = _sessions.ReadSessionEvents(job.Id, watchPath)
+                .LastOrDefault(e => !string.IsNullOrWhiteSpace(e.HeadShaBefore)
+                                 && !string.IsNullOrWhiteSpace(e.HeadShaAfter));
+            if (latest == null) return null;
+            return _git.GetFilesChangedInShaRange(job.Id, watchPath, latest.HeadShaBefore, latest.HeadShaAfter)
+                .Select(f => f.Path)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: changed-file probe failed for {JobId}; build-test gate will run conservatively",
+                job.Id);
+            return null;
+        }
+    }
+
+    private void RecordBuildTestGateStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.BuildTestGateStepId,
+            Kind = StepKind.Tool,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Verdict = verdictToken,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    private void WriteBuildTestGateLog(
+        string jobFolderPath,
+        BuildTestGateResult result,
+        IReadOnlyList<string>? changedFiles)
+    {
+        try
+        {
+            var dir = Path.Combine(jobFolderPath, "post-steps");
+            Directory.CreateDirectory(dir);
+            var index = Directory.EnumerateFiles(dir, "build-test-gate-*.log").Count() + 1;
+            var path = Path.Combine(dir, $"build-test-gate-{index}.log");
+            var body = $"verdict={result.Verdict} exit={result.ExitCode?.ToString() ?? "n/a"} durationMs={result.DurationMs}\n" +
+                       $"reason={result.Reason}\n" +
+                       $"backend={result.RanBackendBuild} frontend={result.RanFrontendBuild}\n" +
+                       $"changedFiles={(changedFiles == null ? "unknown" : string.Join(", ", changedFiles.Take(50)))}\n" +
+                       "---\n" +
+                       result.Output;
+            File.WriteAllText(path, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: failed to persist build-test gate log under {TaskFolder}",
+                jobFolderPath);
+        }
+    }
+
     /// <summary>
     /// Verdict tokens stamped on the
     /// <see cref="PipelineCatalogue.OrchestratorDecisionStepId"/> step. This is
@@ -2425,6 +2603,104 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             SpecChangeCategory.AtRisk => (PipelineStepStatus.Passed, "at-risk", counts),
             _                         => (PipelineStepStatus.Passed, "intended", counts),
         };
+    }
+
+    private async Task HandleBuildTestGateFailureAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        TaskInfo current,
+        BuildTestGateResult result,
+        CancellationToken ct)
+    {
+        _pipelineLog?.Complete(current.FolderPath);
+
+        var priorBuildGateReissues = ReviewDecisionLog.ReadAll(workspace, entry.Name)
+            .Count(r => r.JobId == current.Id
+                        && r.Kind == ReviewDecisionKind.Reissue
+                        && r.Reason != null
+                        && r.Reason.StartsWith(BuildTestGateReissueReasonPrefix, StringComparison.Ordinal));
+
+        if (priorBuildGateReissues >= 1)
+        {
+            var reason = $"build-test gate failed twice in a row ({result.Reason}); escalating per post-step loop guard.";
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+            if (move.Status == MoveJobStatus.Success)
+            {
+                var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+                var escalated = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+                RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
+                    DecisionVerdictEscalate, reason);
+                _chatLog.AppendSupervisor(escalated, "escalate",
+                    $"Build/test gate failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
+                EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
+                    TimelineActors.Orchestrator, reason,
+                    BuildEscalateDetails("build-test-gate-double-fail", reason,
+                        CountPriorReissues(workspace, entry.Name, current.Id)));
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "ReviewDecisionOrchestrator: failed to escalate {JobId} after build-test gate double-fail: {Status} {Message}",
+                    current.Id, move.Status, move.Message);
+            }
+            _statusSnapshot.RecordEscalate();
+            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow,
+                JobId: current.Id,
+                Project: entry.Name,
+                Kind: ReviewDecisionKind.Escalate,
+                Reason: reason,
+                Prompt: "(deterministic build-test gate post-step)",
+                Response: result.Output,
+                FollowUp: string.Empty));
+            return;
+        }
+
+        var moved = MoveReissueToReadyTop(current, entry, "build-test gate fail");
+        if (moved == null) return;
+
+        RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
+            DecisionVerdictReissue, BuildTestGateReissueReasonPrefix + result.Reason);
+
+        var followUp = BuildBuildTestGateFollowUp(result);
+        await WriteFollowUpFileAsync(moved, followUp, ct);
+
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+            $"Auto-review sent \"{title}\" back to 2-ready: build/test gate failed ({result.Reason}).");
+
+        EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
+            TimelineActors.QualityLoop,
+            $"Reopened: build/test gate failed ({result.Reason}).",
+            BuildReopenDetails("build-test-gate-fail",
+                CountPriorReissues(workspace, entry.Name, current.Id),
+                result.Output));
+
+        _statusSnapshot.RecordReissue();
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: BuildTestGateReissueReasonPrefix + result.Reason,
+            Prompt: "(deterministic build-test gate post-step)",
+            Response: result.Output,
+            FollowUp: followUp));
+    }
+
+    private static string BuildBuildTestGateFollowUp(BuildTestGateResult result)
+    {
+        var commands = result.RanFrontendBuild
+            ? "`dotnet build backend/OrchestratorApi.csproj` and `npm run build` from `frontend/`"
+            : "`dotnet build backend/OrchestratorApi.csproj`";
+        return "Auto-review re-opened this task because the deterministic build/test gate failed. " +
+            "Do not rely on the previous self-reported Success. Fix only the current task diff, " +
+            $"run {commands}, and end with [[TASK_DONE]] once the gate is green.\n\n" +
+            "Truncated build/test output:\n" +
+            "```\n" +
+            result.Output + "\n" +
+            "```";
     }
 
     /// <summary>

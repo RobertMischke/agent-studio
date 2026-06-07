@@ -135,6 +135,14 @@ public static class PipelineCatalogue
     public const string GitCommitAttributionStepId = "post-git-commit-attribution";
     public const string WorktreeContainmentStepId = "post-worktree-containment";
     /// <summary>
+    /// Deterministic post-step that compiles the changed repository state before
+    /// the orchestrator trusts any self-reported Success. It runs after the
+    /// post-core completion scan and before the expensive aspect review; a red
+    /// gate reissues with the build output foregrounded. Implemented by
+    /// <see cref="BuildTestGateRunner"/>.
+    /// </summary>
+    public const string BuildTestGateStepId = "post-build-test-gate";
+    /// <summary>
     /// Post-step that runs <c>npx stylelint</c> over the frontend SCSS tree
     /// after the agent run finishes. Verdict drives the
     /// <see cref="OrchestratorApi.Services.Pipeline.LintScssRunner"/> mode
@@ -396,6 +404,15 @@ public static class PipelineCatalogue
                     // verdicts, so an unfinished close-out is caught before any
                     // expensive review pass. No intra-section dependency.
                     RunMode = StepRunMode.Sequential,
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = BuildTestGateStepId,
+                    DisplayName = "Build/test gate",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [CoreAgentRunStepId],
                     Idempotent = true,
                 },
                 .. aspects,
