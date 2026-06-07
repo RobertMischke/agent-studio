@@ -1,5 +1,6 @@
 <span class="concept-help" [attr.data-concept]="concept()">
   <button
+    #trigger
     type="button"
     class="concept-help__trigger"
     [class.concept-help__trigger--open]="open()"
@@ -14,7 +15,10 @@
     <div
       #popover
       class="concept-help__popover"
+      appOverlayPortal="panel"
       role="dialog"
+      [style.left.px]="popoverPos().left"
+      [style.top.px]="popoverPos().top"
       [attr.aria-label]="entry().title"
       [attr.data-testid]="'concept-help-popover-' + concept()">
       <header class="concept-help__head">

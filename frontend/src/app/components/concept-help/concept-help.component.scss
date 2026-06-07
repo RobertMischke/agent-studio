@@ -34,10 +34,7 @@
 }
 
 .concept-help__popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 9999;
+  position: fixed;
   min-width: 260px;
   max-width: 360px;
   padding: 12px 14px;

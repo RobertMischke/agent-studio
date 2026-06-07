@@ -14,7 +14,7 @@ import {
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { ModalStackService } from '../../../../../services/modal-stack.service';
-import { OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
+import { ConnectedOverlayPositionRef, OverlayPortalRef, OverlayPortalService } from '../../../../../services/overlay-portal.service';
 import { resolveProtocolImageSrc } from '../../protocol-pane/protocol-image-resolver';
 
 /**
@@ -67,8 +67,7 @@ export class TaskPromptPopoverComponent {
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
   private portalRef: OverlayPortalRef | null = null;
-  private repositionAttached = false;
-  private readonly reposition = () => this.positionPanel();
+  private positionRef: ConnectedOverlayPositionRef | null = null;
 
   readonly panelPos = signal<{ left: number; top: number }>({ left: 0, top: 0 });
 
@@ -124,40 +123,22 @@ export class TaskPromptPopoverComponent {
       if (!root) return;
       this.portalRef = this.overlayPortal.attachPanel(root);
     }
-    this.attachReposition();
-    this.positionPanel();
-  }
-
-  private positionPanel(): void {
     const trigger = this.triggerBtnRef?.nativeElement;
     const panel = this.panelElRef?.nativeElement;
     if (!trigger || !panel) return;
-    const pos = this.overlayPortal.positionConnected(trigger, panel, {
+    this.positionRef?.dispose();
+    this.positionRef = this.overlayPortal.watchConnectedPosition(trigger, panel, {
       preferredPlacement: 'below',
       alignment: 'start',
       gap: 6,
       viewportPadding: 8,
-    });
-    this.panelPos.set({ left: pos.left, top: pos.top });
+    }, pos => this.panelPos.set({ left: pos.left, top: pos.top }));
   }
 
   private releasePortal(): void {
-    this.detachReposition();
+    this.positionRef?.dispose();
+    this.positionRef = null;
     this.portalRef?.dispose();
     this.portalRef = null;
-  }
-
-  private attachReposition(): void {
-    if (this.repositionAttached) return;
-    this.repositionAttached = true;
-    window.addEventListener('scroll', this.reposition, true);
-    window.addEventListener('resize', this.reposition);
-  }
-
-  private detachReposition(): void {
-    if (!this.repositionAttached) return;
-    this.repositionAttached = false;
-    window.removeEventListener('scroll', this.reposition, true);
-    window.removeEventListener('resize', this.reposition);
   }
 }
