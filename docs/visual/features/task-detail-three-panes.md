@@ -10,9 +10,9 @@ request, the result, and the repository evidence without losing the task.
 
 ## Relevant State
 
-- Route: `/tasks/<sample-shop-task>`
+- Route: `/tasks/<existing-agent-studio-task>`
 - Viewport: `1440x900`
-- Data state: existing `Sample Shop` task selected by visible title text
+- Data state: existing Agent Software Studio task selected by the Playwright spec
 - Visible state: prompt pane, protocol pane, and Git pane are visible
 
 This state matters because review is not only a yes/no decision. It is a small
@@ -23,14 +23,13 @@ investigation across task intent, run summary, and code evidence.
 Manifest id: `task-detail-three-panes`
 
 ```sh
-cd frontend
-PW_TARGET=dev npx playwright test e2e/visual-evidence/readme-screenshots.spec.ts --project=chromium
+./scripts/visual-docs/generate.sh
 ```
 
 The Playwright spec:
 
 1. Opens `/`.
-2. Clicks the first `job-card` containing `coffee`.
+2. Opens the preferred existing task card.
 3. Waits for `pane-protocol`.
 4. Clicks `pane-toggle-git`.
 5. Waits for `pane-git`.

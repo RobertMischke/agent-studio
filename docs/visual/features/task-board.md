@@ -6,13 +6,13 @@ The task board shows the work that agents can do, are doing, or have already
 handed back for review. It turns agent activity into visible tasks instead of a
 private terminal stream.
 
-![Agent Task Processor board overview](../../images/board-overview.png)
+![Agent Studio board overview](../../images/board-overview.png)
 
 ## Relevant State
 
 - Route: `/`
 - Viewport: `1440x900`
-- Data state: existing `Sample Shop` demo workspace
+- Data state: existing Agent Software Studio workspace
 - Visible state: project tree, lanes, job cards, runner state, and usage summary
 
 This state matters because it is the first visual proof of the product: tasks
@@ -23,15 +23,14 @@ are grouped by lifecycle, and the human can see what needs attention.
 Manifest id: `task-board-overview`
 
 ```sh
-cd frontend
-PW_TARGET=dev npx playwright test e2e/visual-evidence/readme-screenshots.spec.ts --project=chromium
+./scripts/visual-docs/generate.sh
 ```
 
 The Playwright spec:
 
-1. Checks that `/api/watch-paths` contains a watch path named `Sample Shop`.
-2. Opens `/`.
-3. Waits for the first `job-card`.
+1. Opens `/`.
+2. Waits for the first visible task card.
+3. Uses the current existing workspace data.
 4. Captures `docs/images/board-overview.png`.
 
 ## Marketing Usage

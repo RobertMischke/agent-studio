@@ -16,6 +16,8 @@
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "e2e:report": "playwright show-report",
+    "docs:visual": "playwright test e2e/visual-evidence/readme-screenshots.spec.ts --project=chromium",
+    "docs:visual:headed": "playwright test e2e/visual-evidence/readme-screenshots.spec.ts --project=chromium --headed",
     "lint": "ng lint && npm run lint:scss && npm run lint:components && npm run lint:structure",
     "lint:css": "stylelint \"src/**/*.scss\"",
     "lint:scss": "stylelint \"src/**/*.scss\"",

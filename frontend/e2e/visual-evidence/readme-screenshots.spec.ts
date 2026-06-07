@@ -1,45 +1,105 @@
-import { test, expect } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { api } from '../helpers/api';
 
-// On-demand README screenshot generator. Skips itself unless the backend is
-// pointed at the temporary "Sample Shop" demo workspace, so it stays a no-op
-// during normal test runs. To regenerate screenshots, swap WatchPaths in
-// backend/appsettings.Development.json to a Sample Shop demo and run only
-// this spec. Output paths are relative to the frontend/ working dir.
-
-interface WatchPath { name?: string }
+// On-demand visual documentation screenshot generator. It uses existing task
+// data from the configured product workspace and writes output paths relative
+// to the frontend/ working dir.
 
 const OUT = '../docs/images/';
+const TASK_CARD = '[data-testid="task-card"], [data-testid="job-card"]';
+const PRIMARY_TASK_LABELS = ['ASS-847', 'ASS-850', 'ASS-856', 'ASS-1529'];
+
+async function capture(page: Page, fileName: string) {
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}${fileName}`, fullPage: false });
+}
+
+async function openExistingTask(page: Page, preferredLabels: readonly string[]): Promise<string> {
+  for (const label of preferredLabels) {
+    const card = page.locator(TASK_CARD).filter({ hasText: label }).first();
+    if (await card.count()) {
+      await card.scrollIntoViewIfNeeded();
+      await card.click();
+      return label;
+    }
+  }
+
+  const fallback = page.locator(TASK_CARD).first();
+  await expect(fallback).toBeVisible({ timeout: 15_000 });
+  const label = (await fallback.innerText()).split('\n').find(Boolean)?.trim() ?? 'first visible task';
+  await fallback.click();
+  return label;
+}
+
+async function clickVisibleTestId(page: Page, testIds: readonly string[]): Promise<void> {
+  for (const testId of testIds) {
+    const locator = page.getByTestId(testId).first();
+    if (await locator.isVisible()) {
+      await locator.click();
+      return;
+    }
+  }
+
+  await page.getByTestId(testIds[0]).first().click({ force: true });
+}
 
 test.describe.configure({ mode: 'serial' });
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
-test('readme screenshots — board, detail, protocol pane', async ({ page }) => {
-  const paths = await api<WatchPath[]>('/api/watch-paths');
-  test.skip(!paths.some(p => p.name === 'Sample Shop'),
-    'Sample Shop demo workspace not configured — skipping README screenshot regeneration');
+test('readme screenshots — board and task detail states', async ({ page, devBackend }) => {
+  void devBackend;
+  await api('/api/watch-paths');
 
   await page.goto('/');
-  await expect(page.getByTestId('job-card').first()).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${OUT}board-overview.png`, fullPage: false });
+  await expect(page.locator(TASK_CARD).first()).toBeVisible({ timeout: 15_000 });
+  await capture(page, 'board-overview.png');
 
-  await page.locator('[data-testid="job-card"]').filter({ hasText: 'coffee' }).first().click();
+  await openExistingTask(page, PRIMARY_TASK_LABELS);
   await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}detail-protocol.png`, fullPage: false });
+  await expect(page.getByTestId('overview-tab')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-overview.png');
 
-  await page.getByTestId('pane-toggle-git').click();
+  await page.getByTestId('prompt-tab-description').click();
+  await expect(page.getByTestId('files-pane')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-files.png');
+
+  await page.getByTestId('prompt-tab-timeline').click();
+  await expect(page.getByTestId('timeline-tab')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-timeline.png');
+
+  await page.getByTestId('prompt-tab-evidence').click();
+  await expect(page.getByTestId('evidence-view')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-evidence.png');
+
+  await page.getByTestId('prompt-tab-code-review').click();
+  await expect(page.getByTestId('code-review-panel')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-code-review.png');
+
+  await page.getByTestId('prompt-tab-overview').click();
+  await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-protocol.png');
+
+  await page.getByTestId('inspector-tab-activity').click();
+  await expect(page.getByTestId('activity-panel')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-activity.png');
+
+  await clickVisibleTestId(page, ['studio-pane-toggle-git', 'pane-toggle-git']);
   await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 5_000 });
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: `${OUT}detail-three-panes.png`, fullPage: false });
+  await capture(page, 'detail-three-panes.png');
 
-  await page.getByTestId('back-to-board').click();
-  await expect(page.getByTestId('job-card').first()).toBeVisible({ timeout: 10_000 });
+  await clickVisibleTestId(page, ['studio-pane-toggle-prompt', 'pane-toggle-prompt']);
+  await clickVisibleTestId(page, ['studio-pane-toggle-protocol', 'pane-toggle-protocol']);
+  await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 5_000 });
+  await capture(page, 'detail-git-focus.png');
 
-  await page.locator('[data-testid="job-card"]').filter({ hasText: 'wishlist' }).first().click();
-  await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}detail-quality-gate.png`, fullPage: false });
+  await clickVisibleTestId(page, ['studio-pane-toggle-prompt', 'pane-toggle-prompt']);
+  await clickVisibleTestId(page, ['studio-pane-toggle-protocol', 'pane-toggle-protocol']);
+  await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 5_000 });
+  const protocolTab = page.getByTestId('inspector-tab-protocol');
+  if (await protocolTab.isVisible() && await protocolTab.isEnabled()) {
+    await protocolTab.click();
+  }
+  await capture(page, 'detail-quality-gate.png');
 });

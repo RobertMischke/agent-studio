@@ -1,7 +1,7 @@
 # Visual Documentation Library
 
 This folder is the source of truth for product screenshots that explain Agent
-Task Processor features.
+Studio features.
 
 The goal is simple: every relevant feature should eventually have one
 meaningful screenshot, one plain-language explanation, and one reproducible
@@ -24,32 +24,43 @@ must reference entries from the manifest, not invent separate image metadata.
 
 ## Existing-data rule
 
-This first implementation uses the existing README screenshots under
-[`docs/images/`](../images/). Those images come from the existing
-`frontend/e2e/visual-evidence/readme-screenshots.spec.ts` Playwright recipe and
-the existing "Sample Shop" demo workspace. Do not introduce synthetic product
-states for this library just to make a prettier screenshot.
+This implementation uses existing product data from the current Agent Studio
+workspace. The images come from
+`frontend/e2e/visual-evidence/readme-screenshots.spec.ts`, which opens the
+board and selects an existing task with useful review and Git context. Do not
+introduce synthetic product states for this library just to make a prettier
+screenshot.
 
 If a feature needs a new visual state, first add or identify a real data state,
 then document the Playwright route to that state.
 
 ## Regenerating screenshots
 
-Current screenshot source:
+Generate the current visual documentation set from the product repo root:
+
+```sh
+./scripts/visual-docs/generate.sh
+```
+
+The script runs the Playwright screenshot recipe and then validates the manifest.
+It writes the generated PNG files to [`docs/images/`](../images/).
+
+You can also run the Playwright recipe directly from the frontend folder:
 
 ```sh
 cd frontend
-PW_TARGET=dev npx playwright test e2e/visual-evidence/readme-screenshots.spec.ts --project=chromium
+PW_TARGET=dev npm run docs:visual
 ```
 
 Preconditions:
 
 - the dev frontend is reachable at the configured Playwright target
-- the backend watch paths include the existing `Sample Shop` demo workspace
+- the backend exposes at least one existing project with visible task cards
 - the spec can write to `../docs/images/`
 
-The spec intentionally skips when `Sample Shop` is not configured. That keeps
-normal E2E runs from fabricating demo data.
+The spec uses existing task data. Preferred task keys are kept in the spec so
+the generated set stays visually stable, but the run can fall back to the first
+visible task card.
 
 ## Validating the library
 
@@ -69,7 +80,7 @@ From the website repo:
 
 ```sh
 cd 04-angular-static-final
-npm run sync:product-visuals -- --product ../../agent-taskboard-visual-docs
+npm run sync:product-visuals -- --product ../../agent-taskboard-dev
 ```
 
 That script reads this manifest, copies the referenced images, and regenerates

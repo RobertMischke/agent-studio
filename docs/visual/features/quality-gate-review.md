@@ -10,9 +10,9 @@ context before a human accepts or redirects it.
 
 ## Relevant State
 
-- Route: `/tasks/<sample-shop-quality-task>`
+- Route: `/tasks/<existing-agent-studio-task>`
 - Viewport: `1440x900`
-- Data state: existing `Sample Shop` task selected by visible title text
+- Data state: existing Agent Software Studio task selected by the Playwright spec
 - Visible state: protocol and quality-gate context are visible in the task detail
 
 This state matters because quality checks should be evidence, not a private
@@ -23,14 +23,13 @@ claim from the agent.
 Manifest id: `quality-gate-review`
 
 ```sh
-cd frontend
-PW_TARGET=dev npx playwright test e2e/visual-evidence/readme-screenshots.spec.ts --project=chromium
+./scripts/visual-docs/generate.sh
 ```
 
 The Playwright spec:
 
-1. Returns to the board.
-2. Clicks the first `job-card` containing `wishlist`.
+1. Opens the preferred existing task card.
+2. Restores prompt and protocol panes after the Git focus capture.
 3. Waits for `pane-protocol`.
 4. Captures `docs/images/detail-quality-gate.png`.
 
