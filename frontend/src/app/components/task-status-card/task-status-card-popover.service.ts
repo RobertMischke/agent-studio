@@ -8,20 +8,15 @@ import {
 } from '@angular/core';
 import { TaskStatusCardComponent } from './task-status-card.component';
 import type { TaskInfo } from '../../models/task.model';
+import { OverlayPortalRef, OverlayPortalService } from '../../services/overlay-portal.service';
 
 const GAP = 8;
 const VIEWPORT_PAD = 6;
 
-interface Placement {
-  side: 'right' | 'bottom' | 'top' | 'left';
-  left: number;
-  top: number;
-}
-
 /**
  * Singleton popover host for `<app-task-status-card>`. Mounts one Angular
- * component instance into a fixed-position wrapper on `document.body` and
- * positions it next to the anchor element. Re-used by:
+ * component instance into the central overlay layer and positions it next to
+ * the anchor element. Re-used by:
  *   - Open-tabs hover (Explorer)
  *   - Job-card hover (board)
  *   - any future place that wants a TaskStatusCard popover.
@@ -34,8 +29,10 @@ interface Placement {
 export class TaskStatusCardPopover {
   private readonly appRef = inject(ApplicationRef);
   private readonly envInjector = inject(EnvironmentInjector);
+  private readonly overlayPortal = inject(OverlayPortalService);
 
   private host: HTMLDivElement | null = null;
+  private portalRef: OverlayPortalRef | null = null;
   private cardRef: ComponentRef<TaskStatusCardComponent> | null = null;
   private currentAnchor: HTMLElement | null = null;
   private hoverIntent = false;
@@ -63,10 +60,15 @@ export class TaskStatusCardPopover {
     // Force a layout pass so we know the natural size.
     card.changeDetectorRef.detectChanges();
 
-    const place = this.computePlacement(anchor, host);
-    host.style.left = `${Math.round(place.left)}px`;
-    host.style.top = `${Math.round(place.top)}px`;
-    host.dataset['placement'] = place.side;
+    const pos = this.overlayPortal.positionConnected(anchor, host, {
+      preferredPlacement: 'right',
+      alignment: 'start',
+      gap: GAP,
+      viewportPadding: VIEWPORT_PAD,
+    });
+    host.style.left = `${pos.left}px`;
+    host.style.top = `${pos.top}px`;
+    host.dataset['placement'] = pos.placement;
   }
 
   hide(anchor: HTMLElement | null): void {
@@ -108,7 +110,7 @@ export class TaskStatusCardPopover {
     host.setAttribute('data-testid', 'task-status-card-popover');
     host.addEventListener('mouseenter', () => this.markHoverEnter());
     host.addEventListener('mouseleave', () => this.markHoverLeave(this.currentAnchor));
-    document.body.appendChild(host);
+    this.portalRef = this.overlayPortal.attachPanel(host);
     this.host = host;
     return host;
   }
@@ -124,60 +126,5 @@ export class TaskStatusCardPopover {
     this.appRef.attachView(ref.hostView);
     this.cardRef = ref;
     return ref;
-  }
-
-  private computePlacement(anchor: HTMLElement, host: HTMLDivElement): Placement {
-    const aRect = anchor.getBoundingClientRect();
-    const hRect = host.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    const order: Placement['side'][] = ['right', 'bottom', 'left', 'top'];
-    for (const side of order) {
-      const cand = this.placeSide(side, aRect, hRect, vw, vh);
-      if (cand) return cand;
-    }
-    return this.placeSide(order[0], aRect, hRect, vw, vh, true)!;
-  }
-
-  private placeSide(
-    side: Placement['side'],
-    a: DOMRect,
-    h: DOMRect,
-    vw: number,
-    vh: number,
-    force = false,
-  ): Placement | null {
-    let top = 0;
-    let left = 0;
-    switch (side) {
-      case 'right':
-        top = a.top;
-        left = a.right + GAP;
-        break;
-      case 'left':
-        top = a.top;
-        left = a.left - h.width - GAP;
-        break;
-      case 'bottom':
-        top = a.bottom + GAP;
-        left = a.left;
-        break;
-      case 'top':
-        top = a.top - h.height - GAP;
-        left = a.left;
-        break;
-    }
-    const fitsVertically = top >= VIEWPORT_PAD && top + h.height <= vh - VIEWPORT_PAD;
-    const fitsHorizontally = left >= VIEWPORT_PAD && left + h.width <= vw - VIEWPORT_PAD;
-    const fits =
-      side === 'left' || side === 'right' ? fitsHorizontally : fitsVertically;
-    if (!fits && !force) return null;
-
-    if (left < VIEWPORT_PAD) left = VIEWPORT_PAD;
-    if (top < VIEWPORT_PAD) top = VIEWPORT_PAD;
-    if (left + h.width > vw - VIEWPORT_PAD) left = vw - VIEWPORT_PAD - h.width;
-    if (top + h.height > vh - VIEWPORT_PAD) top = vh - VIEWPORT_PAD - h.height;
-    return { side, left, top };
   }
 }
