@@ -31,6 +31,7 @@ import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/p
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import {
   SORTABLE_LANES,
   USER_VISIBLE_LANE_SORT_STRATEGIES,
@@ -109,6 +110,7 @@ export type ProjectDetailView =
     ProjectAnalysisReportsSectionComponent,
     ProjectWorkspaceSectionComponent,
     AutonomySliderComponent,
+    CliModelSelectorComponent,
     TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-detail.html',
@@ -615,6 +617,14 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.writeStep(stepId, { prompt });
   }
 
+  resetStepAgent(stepId: string): void {
+    this.writeStep(stepId, {
+      cliType: '',
+      model: '',
+      thinkingLevel: null,
+    });
+  }
+
   onStepAgentCommit(stepId: string, selection: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     this.writeStep(stepId, {
       cliType: selection.cliType,
@@ -759,6 +769,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     const id = (model ?? '').trim();
     if (!id) return null;
     return this.pipelineStepModels.find(m => m.id === id)?.defaultThinkingLevel ?? null;
+  }
+
+  asCliType(value: string | null | undefined): CliType | null {
+    return value && (CLI_TYPES as readonly string[]).includes(value) ? value as CliType : null;
   }
 
   private phaseForStep(step: PipelineCatalogueStep): string {
