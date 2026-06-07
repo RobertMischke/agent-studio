@@ -721,7 +721,15 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("quarantined", "Quarantined", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("worktree-containment") || lower.Contains("main-checkout-modified"))
+        // Require the BRACKETED runner marker, never the bare word. The runner
+        // emits "[worktree-containment] ..." (ProjectRunner) only on a real
+        // containment violation. The previous bare-substring match also fired
+        // when an AGENT merely *mentioned* the pipeline step in its stdout prose
+        // (e.g. a self-modifying task describing `worktree-containment` /
+        // `git-commit-attribution`) -> a false High-severity chip + spurious
+        // reissue (ASS-914). The bracketed form is the runner's structured tag
+        // and cannot be produced by the agent describing the pipeline.
+        if (lower.Contains("[worktree-containment]"))
         {
             issue = BuildOutcomeIssue("worktree-containment", "Worktree containment", "High", line, lastSeenAt);
             return true;

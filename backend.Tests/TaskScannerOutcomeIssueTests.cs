@@ -180,4 +180,19 @@ public class TaskScannerOutcomeIssueTests : IDisposable
         Assert.Equal("worktree-containment", issue!.Kind);
         Assert.Equal("High", issue.Severity);
     }
+
+    [Fact]
+    public void AgentStdoutMentioningContainmentInProse_DoesNotFalselySurface()
+    {
+        // ASS-914 regression (scanner self-reference): a self-modifying task whose
+        // AGENT stdout merely *describes* the pipeline — the step is literally
+        // named `worktree-containment` — must NOT be mislabelled as a containment
+        // violation. Only the bracketed runner marker ([worktree-containment])
+        // counts; a bare mention in [stdout] prose does not.
+        SeedJob("self-ref", TaskStates.AutoReview,
+            $"[12:00:00.000] [stdout] The standard pipeline includes both git slots (`worktree-containment`, `git-commit-attribution`) plus wiki maintenance.{Environment.NewLine}" +
+            $"[12:00:05.000] [stdout] Added the deterministic build/test gate post-step; the older count test predates these additions.{Environment.NewLine}");
+
+        Assert.Null(Outcome("self-ref"));
+    }
 }
