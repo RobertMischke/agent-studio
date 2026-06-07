@@ -31,7 +31,6 @@ import { ProjectWorkspaceSectionComponent } from '../project-workspace-section/p
 import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
 import { AnalysisReport } from '../../../../models/analysis-report.model';
 import { TooltipDirective } from '../../../../components/tooltip';
-import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import {
   SORTABLE_LANES,
   USER_VISIBLE_LANE_SORT_STRATEGIES,
@@ -110,7 +109,6 @@ export type ProjectDetailView =
     ProjectAnalysisReportsSectionComponent,
     ProjectWorkspaceSectionComponent,
     AutonomySliderComponent,
-    CliModelSelectorComponent,
     TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-detail.html',
