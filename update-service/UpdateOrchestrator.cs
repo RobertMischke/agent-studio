@@ -74,7 +74,7 @@ public sealed class UpdateOrchestrator
             _ = Task.Run(async () =>
             {
                 await _gate.WaitAsync(ct);
-                try { await RunOrchestrationAsync(queuedRunId, trigger, ct); }
+                try { await RunOrchestrationAsync(queuedRunId, trigger, force, ct); }
                 finally { _gate.Release(); }
             }, ct);
             return (queuedRunId, "preparing", "queued behind in-flight run");
@@ -86,7 +86,7 @@ public sealed class UpdateOrchestrator
 
         _ = Task.Run(async () =>
         {
-            try { await RunOrchestrationAsync(runId, trigger, ct); }
+            try { await RunOrchestrationAsync(runId, trigger, force, ct); }
             finally { _gate.Release(); }
         }, ct);
 
@@ -100,6 +100,9 @@ public sealed class UpdateOrchestrator
         return string.Equals(trigger, "manual", StringComparison.OrdinalIgnoreCase)
             || string.Equals(trigger, "manual-rollback", StringComparison.OrdinalIgnoreCase);
     }
+
+    private bool ShouldQuiesceRunners()
+        => !string.Equals(_options.Mode, "manual", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Manual-rollback entry. The runId must match the most recent run; the
@@ -123,7 +126,7 @@ public sealed class UpdateOrchestrator
 
     // ─── pipeline ───────────────────────────────────────────────────────────
 
-    private async Task RunOrchestrationAsync(string runId, string trigger, CancellationToken ct)
+    private async Task RunOrchestrationAsync(string runId, string trigger, bool force, CancellationToken ct)
     {
         var startedAt = DateTime.UtcNow;
         var folder = new RunFolder(_options.RunsDirectory, runId, _loggerFactory.CreateLogger<RunFolder>());
@@ -134,18 +137,47 @@ public sealed class UpdateOrchestrator
 
         try
         {
+            var (_, behindBy) = RefreshGitStatus();
+            if (behindBy <= 0 && !force)
+            {
+                _logger.LogInformation(
+                    "Update run {RunId} ignored at execution time because stable is not behind origin (behindBy={BehindBy})",
+                    runId, behindBy);
+                SetPhase("idle", "already up to date", null, null);
+                return;
+            }
+
+            if (!CanApplyForTrigger(trigger, force))
+            {
+                _logger.LogInformation(
+                    "Update run {RunId} ignored at execution time because apply mode is manual (trigger={Trigger}, force={Force}, behindBy={BehindBy})",
+                    runId, trigger, force, behindBy);
+                SetPhase("idle", "manual apply mode", null, null);
+                return;
+            }
+
             // PHASE 1 — preparing
             SetPhase("preparing", "snapshotting pre-state", runId, startedAt);
             var preModes = await _backend.ReadProjectModesAsync(ct) ?? new Dictionary<string, string>();
-            restoreModes = new Dictionary<string, string>(preModes);
+            var shouldQuiesceRunners = ShouldQuiesceRunners();
+            restoreModes = shouldQuiesceRunners ? new Dictionary<string, string>(preModes) : null;
             preSnapshot = await CaptureSnapshotAsync("pre", runId, headBefore, preModes, ct);
             folder.WriteSnapshot(preSnapshot);
 
             // PHASE 2 — pausing-runners
-            SetPhase("pausing-runners", $"pausing {preModes.Count} project runner(s)", runId, startedAt);
-            foreach (var kv in preModes)
-                if (kv.Value != "manual")
-                    await _backend.SetModeAsync(kv.Key, "manual", ct);
+            if (shouldQuiesceRunners)
+            {
+                SetPhase("pausing-runners", $"pausing {preModes.Count} project runner(s)", runId, startedAt);
+                foreach (var kv in preModes)
+                    if (kv.Value != "manual")
+                        await _backend.SetModeAsync(kv.Key, "manual", ct);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Update run {RunId} is applying without runner quiesce because update apply mode is manual",
+                    runId);
+            }
 
             // PHASE 3 — pulling
             SetPhase("pulling", "git fetch + pull --ff-only", runId, startedAt);
@@ -219,9 +251,12 @@ public sealed class UpdateOrchestrator
             }
 
             // PHASE 7 — resuming
-            SetPhase("resuming", "restoring runner modes", runId, startedAt);
-            await RestoreRunnerModesAsync(restoreModes, folder, "resume-output.txt", ct);
-            restoreModes = null;
+            if (restoreModes is not null)
+            {
+                SetPhase("resuming", "restoring runner modes", runId, startedAt);
+                await RestoreRunnerModesAsync(restoreModes, folder, "resume-output.txt", ct);
+                restoreModes = null;
+            }
 
             // PHASE 8 — done
             var headAfter = _git.HeadShort();

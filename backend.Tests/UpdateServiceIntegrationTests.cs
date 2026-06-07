@@ -216,6 +216,33 @@ public class UpdateServiceIntegrationTests
     }
 
     [SkippableFact]
+    public async Task ManualTrigger_WhenApplyModeManual_AppliesWithoutRunnerModeWrites()
+    {
+        using var checkout = FakeStableCheckout.TryCreate();
+        Skip.If(checkout == null, "git and/or bash are not available on PATH; this integration test needs both.");
+
+        await using var backend = new FakeBackendHarness();
+        await backend.StartAsync();
+
+        checkout!.AdvanceOriginMain();
+        using var factory = new UpdateServiceTestFactory(checkout, backend, autoRollback: false, mode: "manual");
+        var client = factory.CreateClient();
+
+        using var resp = await client.PostAsJsonAsync("/update/trigger", new { Reason = "manual", Force = false });
+        resp.EnsureSuccessStatusCode();
+
+        var status = await WaitForPhaseAsync(client, new[] { "done", "failed" }, TriggerTimeoutMs);
+        var phase = status.GetProperty("phase").GetString();
+        var msg = status.TryGetProperty("message", out var m) ? m.GetString() : null;
+        Assert.True(phase == "done", $"manual apply expected phase=done, got {phase}; message={msg}");
+
+        Assert.Empty(backend.ModeWrites);
+        Assert.Equal("auto-continuous", backend.ProjectModes["agent-taskboard"]);
+        Assert.True(checkout.StopRan(), "stop-stable.sh marker missing - manual apply did not restart stable");
+        Assert.True(checkout.StartRan(), "start-stable.sh marker missing - manual apply did not restart stable");
+    }
+
+    [SkippableFact]
     public async Task PullFailure_AfterPause_RestoresPreRunModeInFinally()
     {
         using var checkout = FakeStableCheckout.TryCreate();
