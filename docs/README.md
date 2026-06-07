@@ -90,6 +90,7 @@ Each mockup is a click-dummy plus a design narrative. Implementation slices refe
 | [mockups/task-progress-tracking/](mockups/task-progress-tracking/) | Per-job plan strip above the activity log. Parses Claude `TodoWrite` / Codex `update_plan` frames; live tool-call ticker, soft-estimate band, heartbeat pulse, expandable sub-actions per completed item. No LLM calls. |
 | [mockups/orchestrator-prep-and-autonomy/](mockups/orchestrator-prep-and-autonomy/) | The `1a-orchestrator-prep` lane + autonomy scale (ADR-0026). |
 | [mockups/chat-window-next-gen/](mockups/chat-window-next-gen/) | Project chat redesign: markdown rendering, embedded events, side rail, endless history. Source for the `project-chat-becomes-primary-surface-with-embedded-events` job and its slices. |
+| [mockups/task-detail-header-state-actions/](mockups/task-detail-header-state-actions/) | Task-detail header action concept: `→ <Lane>` move labels, primary action rules, overflow menu mockups, undo, and completion de-dup. |
 | [mockups/vscode-layout/](mockups/vscode-layout/) | VS Code-shape chrome experiment behind the `Frontend:VsCodeLayout` flag. |
 | [mockups/task-processing-pipeline/](mockups/task-processing-pipeline/) | CI/CD-style pipeline (ADR-0051): the project pipeline editor (drag-reorder, per-step config, AI-assist) and the task-detail timeline (planned steps + live progress + per-step artifact + orchestrator verdict). Static ASCII at concept stage. |
 
