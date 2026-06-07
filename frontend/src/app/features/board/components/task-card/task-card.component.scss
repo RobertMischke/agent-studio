@@ -1063,16 +1063,14 @@
       border-color: rgba(251,146,60,0.45);
     }
 
-    /* Native [popover] element: TokenPopoverDirective calls showPopover() so
-       this renders in the browser top layer, escaping the card's
-       overflow:hidden + content-visibility paint containment and the lane
-       scroll container. The directive sets fixed top/left (UA default would
-       centre it); we only override inset/margin and keep the visuals. */
+    /* TokenPopoverDirective portals this element to the central body overlay
+       root, escaping the card's overflow:hidden + content-visibility paint
+       containment and the lane scroll container. */
     .task-card__token-popover {
       position: fixed;
       inset: auto;
       margin: 0;
-      z-index: 60;
+      z-index: var(--studio-z-overlay-panel);
       min-width: 240px;
       max-width: 320px;
       max-height: 60vh;
