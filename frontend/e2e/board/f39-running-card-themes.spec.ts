@@ -9,20 +9,16 @@ import { test, expect, type Page } from '@playwright/test';
  * by the bridge but the gradient produced a near-invisible wash, leaving
  * running cards visually identical to idle ones. The new design routes
  * everything through theme-aware semantic tokens (`--studio-bg-running`,
- * `--shadow-running`, `--studio-accent-3` family) and adds an indeterminate
- * progress bar at the top edge so the running cue does not depend on the
- * box-shadow halo, which barely reads on a white surface.
+ * `--shadow-running`, `--studio-accent-3` family). The running cue is now a
+ * whole-card ring/tint plus the existing "Running live" badge, never a
+ * single-edge progress strip.
  *
  * Three contracts locked here:
- *  - The `.job-card__progress` element exists on running cards (DOM proof
- *    that the bar is present in both themes), and stays a positioned
- *    overlay (`position: absolute`).
+ *  - No `.task-card__progress` element exists on running cards. State must
+ *    be whole-card ring/tint and badge based.
  *  - The "Running live" execution pill clears WCAG-AA (≥ 4.5:1 text vs.
  *    background) in both dark + light. That is the regression the prompt
  *    explicitly called out.
- *  - With `prefers-reduced-motion: reduce` the slide animation stops but
- *    the bar stays statically visible (left:0, width:100%, no animation),
- *    so motion-sensitive operators still see the running cue.
  */
 
 const PROJECT = 'fixture-f39';
@@ -227,9 +223,9 @@ async function seedBoardTab(page: Page): Promise<void> {
   });
 }
 
-test.describe('F39 — running job-card across themes', () => {
+test.describe('F39 - running task-card across themes', () => {
   for (const theme of ['dark', 'light'] as const) {
-    test(`running card surfaces progress bar + readable pill (${theme})`, async ({ page }, testInfo) => {
+    test(`running card uses whole-card ring + readable pill (${theme})`, async ({ page }, testInfo) => {
       await seedBoardTab(page);
       await installRoutes(page);
       await page.goto('/?includeFixtures=true');
@@ -239,33 +235,35 @@ test.describe('F39 — running job-card across themes', () => {
       // the flag-off path. Wait for either to be visible.
       await expect(page.locator('[data-testid="studio-board"], [data-testid="kanban-dashboard"]').first())
         .toBeVisible({ timeout: 10_000 });
-      await expect(page.locator('[data-testid="job-card"]').first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[data-testid="task-card"]').first()).toBeVisible({ timeout: 10_000 });
       await setTheme(page, theme);
       await page.waitForTimeout(300);
 
-      const runningCard = page.locator('[data-testid="job-card"][data-running="true"]').first();
+      const runningCard = page.locator('[data-testid="task-card"][data-running="true"]').first();
       await expect(runningCard).toBeVisible({ timeout: 5_000 });
 
-      // 1. Progress bar exists and is a positioned overlay.
-      const progress = runningCard.locator('[data-testid="job-card-progress"]');
-      await expect(progress).toHaveCount(1);
-      const progressGeom = await progress.evaluate((el) => {
+      // 1. No one-edge progress strip exists. Running must be card ring/tint
+      //    plus the execution badge.
+      await expect(runningCard.locator('[data-testid="task-card-progress"]')).toHaveCount(0);
+      const cardChrome = await runningCard.evaluate((el) => {
         const cs = getComputedStyle(el);
         return {
-          position: cs.position,
-          top: cs.top,
-          height: cs.height,
-          background: cs.backgroundColor,
+          borderTop: cs.borderTopColor,
+          borderRight: cs.borderRightColor,
+          borderBottom: cs.borderBottomColor,
+          borderLeft: cs.borderLeftColor,
+          boxShadow: cs.boxShadow,
         };
       });
-      expect(progressGeom.position).toBe('absolute');
-      expect(progressGeom.top).toBe('0px');
-      expect(progressGeom.height).toBe('3px');
+      expect(cardChrome.borderTop).toBe(cardChrome.borderRight);
+      expect(cardChrome.borderTop).toBe(cardChrome.borderBottom);
+      expect(cardChrome.borderTop).toBe(cardChrome.borderLeft);
+      expect(cardChrome.boxShadow).not.toBe('none');
 
       // 2. The execution pill stays readable: text-on-background contrast
       //    clears WCAG-AA (≥ 4.5:1). This is the regression the prompt
       //    explicitly called out for the light theme.
-      const pill = runningCard.locator('.job-card__execution-pill--running');
+      const pill = runningCard.locator('.task-card__execution-pill--running');
       await expect(pill).toBeVisible();
       const pillSample = await pill.evaluate((el) => {
         const cs = getComputedStyle(el);
@@ -280,7 +278,7 @@ test.describe('F39 — running job-card across themes', () => {
       // 3. The card surface is distinct from the idle card surface — i.e.
       //    --studio-bg-running actually tints the card. Compare against an
       //    idle sibling on the same lane.
-      const idleCard = page.locator('[data-testid="job-card"]:not([data-running="true"])').first();
+      const idleCard = page.locator('[data-testid="task-card"]:not([data-running="true"])').first();
       await expect(idleCard).toBeVisible();
       const [runningBg, idleBg] = await Promise.all([
         runningCard.evaluate((el) => getComputedStyle(el).backgroundColor),
@@ -301,7 +299,7 @@ test.describe('F39 — running job-card across themes', () => {
     });
   }
 
-  test('reduced-motion stops the slide animation but keeps the bar visible', async ({ browser }, testInfo) => {
+  test('reduced-motion still has no edge progress strip', async ({ browser }, testInfo) => {
     const context = await browser.newContext({ reducedMotion: 'reduce' });
     const page = await context.newPage();
     try {
@@ -314,30 +312,15 @@ test.describe('F39 — running job-card across themes', () => {
       // the flag-off path. Wait for either to be visible.
       await expect(page.locator('[data-testid="studio-board"], [data-testid="kanban-dashboard"]').first())
         .toBeVisible({ timeout: 10_000 });
-      await expect(page.locator('[data-testid="job-card"]').first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[data-testid="task-card"]').first()).toBeVisible({ timeout: 10_000 });
       await setTheme(page, 'light');
       await page.waitForTimeout(300);
 
-      const runningCard = page.locator('[data-testid="job-card"][data-running="true"]').first();
+      const runningCard = page.locator('[data-testid="task-card"][data-running="true"]').first();
       await expect(runningCard).toBeVisible({ timeout: 5_000 });
 
-      const bar = runningCard.locator('[data-testid="job-card-progress"]');
-      await expect(bar).toHaveCount(1);
-
-      const sample = await bar.evaluate((el) => {
-        // The animated stripe lives on ::after, not the bar itself.
-        const after = getComputedStyle(el, '::after');
-        return {
-          animationName: after.animationName,
-          left: after.left,
-          width: after.width,
-          opacity: after.opacity,
-        };
-      });
-      // Under reduced-motion the rule swaps to `animation: none` and pins
-      // the stripe to a static, centred state.
-      expect(sample.animationName).toBe('none');
-      expect(sample.opacity).not.toBe('0');
+      await expect(runningCard.locator('[data-testid="task-card-progress"]')).toHaveCount(0);
+      await expect(runningCard.locator('.task-card__execution-pill--running')).toBeVisible();
 
       if (process.env.F39_RESULTS_DIR) {
         await page.screenshot({

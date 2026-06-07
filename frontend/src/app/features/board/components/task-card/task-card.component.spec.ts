@@ -197,7 +197,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(tooltip.body).toContain('&lt;img');
   });
 
-  it('renders the indeterminate progress bar on running cards only (F39)', async () => {
+  it('marks running cards with whole-card ring and badge only', async () => {
     await TestBed.configureTestingModule({
       imports: [TaskCardComponent],
       providers: [
@@ -227,14 +227,12 @@ describe('TaskCardComponent (smoke)', () => {
     const host = fixture.nativeElement.querySelector('[data-testid="task-card"]') as HTMLElement | null;
     expect(host?.classList.contains('task-card--running')).toBe(true);
     expect(host?.getAttribute('data-running')).toBe('true');
-    const bar = fixture.nativeElement.querySelector('[data-testid="task-card-progress"]') as HTMLElement | null;
-    expect(bar).not.toBeNull();
-    expect(bar?.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-progress"]')).toBeNull();
+    expect(findCssDeclaration('.task-card__progress', 'height')).toBeNull();
 
     fixture.componentRef.setInput('job', makeJob({ execution: null }));
     fixture.detectChanges();
-    const barAfter = fixture.nativeElement.querySelector('[data-testid="task-card-progress"]') as HTMLElement | null;
-    expect(barAfter).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-progress"]')).toBeNull();
   });
 
   it('uses a uniform card border and whole-card ring instead of a left-only accent', async () => {
@@ -256,6 +254,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(host).not.toBeNull();
     expect(findCssDeclaration('.task-card', 'border')).toContain('1px solid var(--studio-card-state-border');
     expect(hasExplicitCssDeclaration('.task-card', 'border-left')).toBe(false);
+    expect(hasExplicitCssDeclaration('.task-card__progress', 'height')).toBe(false);
     expect(findCssDeclaration('.task-card', '--task-card-ring')).toBe('0 0 0 1px var(--studio-card-state-border)');
     expect(findCssDeclaration('.task-card', 'box-shadow')).toContain('var(--task-card-ring)');
     expect(findCssDeclaration('.task-card', 'padding')).toBe('var(--studio-card-padding)');
@@ -315,7 +314,7 @@ describe('TaskCardComponent (smoke)', () => {
       exitCode: null, durationSeconds: null, model: null, runOutcome: null,
     };
 
-    // 3-progress + running → badge + progress bar present.
+    // 3-progress + running -> badge + whole-card ring present.
     fixture.componentRef.setInput('job', makeJob({
       state: '3-progress',
       execution: runningExecution,
@@ -323,7 +322,7 @@ describe('TaskCardComponent (smoke)', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.executionBadge()?.tone).toBe('running');
     expect(fixture.componentInstance.isRunning()).toBe(true);
-    expect(fixture.nativeElement.querySelector('[data-testid="task-card-progress"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-progress"]')).toBeNull();
 
     // Same execution but lane has moved to 4-auto-review → suppress.
     for (const state of ['4-auto-review', '5-human-review', '6-completed', '4-review']) {

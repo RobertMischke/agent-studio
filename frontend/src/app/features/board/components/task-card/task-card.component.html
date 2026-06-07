@@ -14,9 +14,6 @@
      [attr.data-running]="isRunning() ? 'true' : null"
      [attr.data-compact]="compact() ? 'true' : null"
      (contextmenu)="openCardContextMenu($event)">
-  @if (isRunning()) {
-    <div class="task-card__progress" aria-hidden="true" data-testid="task-card-progress"></div>
-  }
   <div class="task-card__header">
     <span class="task-card__project" data-testid="task-card-project">
       <span class="task-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>
@@ -110,6 +107,12 @@
             [attr.data-task-type]="tt.kind"
             [appTooltip]="tt.tooltip">{{ tt.icon }} {{ tt.label }}</span>
     }
+    <span class="task-card__state-pill"
+          [class]="'task-card__state-pill--' + job().state"
+          data-testid="task-card-state"
+          [attr.data-state]="job().state">
+      {{ laneLabel(job().state) }}
+    </span>
     @if (waitingOnLabel(); as wol) {
       <span class="task-card__waiting-pill"
             [appTooltip]="waitingOnTooltip()"

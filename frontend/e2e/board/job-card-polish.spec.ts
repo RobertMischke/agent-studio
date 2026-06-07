@@ -2,11 +2,11 @@ import { test, expect, Page } from '@playwright/test';
 import { contrastRatio } from '../helpers/contrast';
 
 /**
- * F57 — Board-card polish regression spec.
+ * F57 - Board-card polish regression spec.
  *
- * Validates three fixes applied to job cards:
- *   A) No inner scrollbar on cards (overflow: hidden on .job-card).
- *   B) Running halo shadow is present but not overly prominent.
+ * Validates three fixes applied to task cards:
+ *   A) No inner scrollbar on cards (overflow: hidden on .task-card).
+ *   B) Running state is a uniform whole-card ring, not a one-edge accent.
  *   C) Tag/pill badges use semantic tokens and achieve WCAG-AA contrast
  *      on both light and dark themes.
  *
@@ -25,7 +25,7 @@ function makeJob(
 ) {
   return {
     id,
-    jobKey: `${WATCH_PATH}::${id}`,
+    taskKey: `${WATCH_PATH}::${id}`,
     title: `${state} card ${id}`,
     state,
     order,
@@ -51,7 +51,7 @@ function makeJob(
 const RUNNING_JOB = makeJob('f57-running', '3-progress', 1, {
   execution: {
     jobId: 'f57-running',
-    jobKey: `${WATCH_PATH}::f57-running`,
+    taskKey: `${WATCH_PATH}::f57-running`,
     processId: 99001,
     startedAt: '2026-05-24T10:00:00Z',
     status: 'running',
@@ -66,7 +66,13 @@ const IDLE_JOBS = Array.from({ length: 4 }, (_, i) =>
 );
 
 const WARN_ISSUE_JOB = makeJob('f57-warn-issue', '3-progress', 7, {
-  runnerOutcome: { issues: [{ severity: 'warn', code: 'missing-sentinel', message: 'Missing sentinel' }] },
+  outcomeIssue: {
+    kind: 'missing-terminal-sentinel',
+    label: 'Missing sentinel',
+    severity: 'Warn',
+    summary: 'The run finished without a terminal sentinel.',
+    lastSeenAt: '2026-05-24T11:00:00Z',
+  },
 });
 
 const GROUPED_PAYLOAD = {
@@ -93,6 +99,12 @@ async function installRoutes(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
 
+  await page.route('**/api/tasks/grouped**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(GROUPED_PAYLOAD),
+    }));
   await page.route('**/api/jobs/grouped**', (route) =>
     route.fulfill({
       status: 200,
@@ -154,7 +166,7 @@ test.describe('F57 — Board-card polish', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoBoard(page);
 
-    const cards = page.locator('[data-testid="job-card"]');
+    const cards = page.locator('[data-testid="task-card"]');
     const count = await cards.count();
     expect(count).toBeGreaterThanOrEqual(1);
 
@@ -170,17 +182,30 @@ test.describe('F57 — Board-card polish', () => {
     }
   });
 
-  test('B) running card has --shadow-running with tamed alpha', async ({ page }) => {
+  test('B) running card has a uniform whole-card ring', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoBoard(page);
 
-    const runningCard = page.locator('[data-testid="job-card"][data-running="true"]');
+    const runningCard = page.locator('[data-testid="task-card"][data-running="true"]');
     await expect(runningCard).toBeVisible({ timeout: 5_000 });
+    await expect(runningCard.locator('[data-testid="task-card-progress"]')).toHaveCount(0);
 
-    const shadow = await runningCard.evaluate((el) => getComputedStyle(el).boxShadow);
-    expect(shadow).not.toBe('none');
+    const chrome = await runningCard.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        borderTop: cs.borderTopColor,
+        borderRight: cs.borderRightColor,
+        borderBottom: cs.borderBottomColor,
+        borderLeft: cs.borderLeftColor,
+        shadow: cs.boxShadow,
+      };
+    });
+    expect(chrome.borderTop).toBe(chrome.borderRight);
+    expect(chrome.borderTop).toBe(chrome.borderBottom);
+    expect(chrome.borderTop).toBe(chrome.borderLeft);
+    expect(chrome.shadow).not.toBe('none');
 
-    const alphaMatches = [...shadow.matchAll(/rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*([\d.]+)\s*\)/g)];
+    const alphaMatches = [...chrome.shadow.matchAll(/rgba?\(\s*\d+,\s*\d+,\s*\d+,\s*([\d.]+)\s*\)/g)];
     for (const m of alphaMatches) {
       expect(Number(m[1])).toBeLessThanOrEqual(0.35);
     }
@@ -190,7 +215,7 @@ test.describe('F57 — Board-card polish', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoBoard(page);
 
-    const issuePill = page.locator('[data-testid="job-card-outcome-issue"]');
+    const issuePill = page.locator('[data-testid="task-card-outcome-issue"]');
     if ((await issuePill.count()) > 0) {
       const { fg, bg } = await issuePill.first().evaluate((el) => {
         const cs = getComputedStyle(el);
@@ -212,7 +237,7 @@ test.describe('F57 — Board-card polish', () => {
     });
     await page.waitForTimeout(300);
 
-    const issuePill = page.locator('[data-testid="job-card-outcome-issue"]');
+    const issuePill = page.locator('[data-testid="task-card-outcome-issue"]');
     if ((await issuePill.count()) > 0) {
       const { fg, bg } = await issuePill.first().evaluate((el) => {
         const cs = getComputedStyle(el);

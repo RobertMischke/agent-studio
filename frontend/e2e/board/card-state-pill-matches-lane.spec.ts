@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
  * The card "Running" cue must follow the lane, not a stale execution snapshot.
  *
  * Operator bug (2026-05-28): a card sitting in `4-auto-review` still showed
- * the "Running live" pill (and the indeterminate progress bar) because the
+ * the "Running live" pill because the
  * grouped payload carried a `execution.status === 'running'` snapshot left
  * over from when the task was in `3-progress`. The backend now clears
  * `execution` for non-progress lanes (TaskEndpointHelpers.WithRuntime), and
@@ -15,7 +15,7 @@ import { test, expect, type Page } from '@playwright/test';
  * This spec drives the defensive layer directly: every fixture below is fed a
  * live `running` execution, but only the `3-progress` card is allowed to show
  * the running cue. Cards in `4-auto-review` / `5-human-review` / `6-completed`
- * must suppress the pill + progress bar and fall back to their lane label.
+ * must suppress the pill and fall back to their lane label.
  *
  * Fully mocked via route interception so it runs against any served frontend
  * without depending on a real backend payload. Targets the dev build
@@ -185,9 +185,9 @@ test.describe('Card state pill matches lane (running cue follows lane, not execu
     const card = cardByTitle(page, PROGRESS_TASK.title);
     await expect(card).toHaveCount(1);
 
-    // Running cue present: host flag, progress bar, and the execution pill.
+    // Running cue present: host flag and the execution pill.
     await expect(card).toHaveAttribute('data-running', 'true');
-    await expect(card.getByTestId('task-card-progress')).toHaveCount(1);
+    await expect(card.getByTestId('task-card-progress')).toHaveCount(0);
     const pill = card.locator('.task-card__execution-pill--running');
     await expect(pill).toBeVisible();
     await expect(pill).toContainText('Running live');
@@ -205,8 +205,8 @@ test.describe('Card state pill matches lane (running cue follows lane, not execu
 
       // No running flag on the host.
       await expect(card, `${task.state} data-running`).not.toHaveAttribute('data-running', 'true');
-      // No indeterminate progress bar.
-      await expect(card.getByTestId('task-card-progress'), `${task.state} progress bar`).toHaveCount(0);
+      // No edge progress strip.
+      await expect(card.getByTestId('task-card-progress'), `${task.state} progress strip`).toHaveCount(0);
       // No "Running live" execution pill.
       await expect(card.locator('.task-card__execution-pill--running'), `${task.state} running pill`).toHaveCount(0);
       await expect(card, `${task.state} running text`).not.toContainText('Running live');

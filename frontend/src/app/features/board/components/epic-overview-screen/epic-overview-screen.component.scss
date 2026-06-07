@@ -107,11 +107,12 @@
   &__card {
     display: flex;
     flex-direction: column;
-    gap: var(--studio-spacing-2);
-    padding: var(--studio-spacing-3);
-    border: 1px solid var(--studio-border);
-    border-radius: 8px;
-    background: var(--studio-bg-elevated);
+    gap: var(--studio-card-section-gap);
+    padding: var(--studio-card-padding);
+    border: 1px solid var(--studio-card-border);
+    border-radius: var(--studio-card-radius);
+    background: var(--studio-card-bg);
+    box-shadow: var(--studio-card-shadow);
   }
 
   &__card-head {
@@ -149,8 +150,9 @@
     background: transparent;
     color: var(--studio-fg-strong);
     cursor: pointer;
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: var(--studio-card-title-size);
+    font-weight: var(--studio-card-title-weight);
+    line-height: var(--studio-card-title-lh);
     text-align: left;
     padding: 0;
     overflow: hidden;
@@ -174,6 +176,7 @@
     flex: none;
     color: var(--studio-fg);
     font-size: 0.78rem;
+    min-height: var(--studio-card-pill-height);
     border: 1px solid color-mix(in srgb, var(--project-color, var(--studio-fg-dim)) 35%, transparent);
     background: color-mix(in srgb, var(--project-soft, var(--studio-bg-selected)) 70%, transparent);
   }
@@ -225,8 +228,9 @@
   &__stat {
     font-size: 0.72rem;
     font-weight: 600;
-    padding: 1px 8px;
-    border-radius: 10px;
+    min-height: var(--studio-card-pill-height);
+    padding: 0 var(--studio-card-pill-padding-x);
+    border-radius: var(--studio-card-compact-radius);
     border: 1px solid var(--studio-border);
     color: var(--studio-fg-muted);
     font-variant-numeric: tabular-nums;
@@ -237,16 +241,19 @@
   &__subs {
     list-style: none;
     margin: var(--studio-spacing-1) 0 0;
-    padding: 0;
+    padding: var(--studio-spacing-1);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--studio-spacing-1);
+    border: 1px solid var(--studio-card-muted-border);
+    border-radius: var(--studio-card-compact-radius);
+    background: var(--studio-card-muted-bg);
   }
 
   &__sub-btn {
     appearance: none;
     width: 100%;
-    border: none;
+    border: 1px solid transparent;
     background: transparent;
     color: var(--studio-fg);
     cursor: pointer;
@@ -254,11 +261,14 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--studio-spacing-3);
-    padding: var(--studio-spacing-1) 6px;
-    border-radius: 4px;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
+    border-radius: 6px;
     text-align: left;
 
-    &:hover { background: var(--studio-bg-hover); }
+    &:hover {
+      background: var(--studio-bg-hover);
+      border-color: var(--studio-card-muted-border);
+    }
   }
 
   &__sub-title {

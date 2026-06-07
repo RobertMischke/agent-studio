@@ -7,9 +7,9 @@
       border-radius: var(--studio-card-radius);
       padding: var(--studio-card-padding);
       cursor: pointer;
-      // Card is the positioning context for absolutely-placed children
-      // (running progress bar, token popover anchor stays unaffected
-      // because its own wrapper sets position:relative).
+      // Card is the positioning context for absolutely-placed children. Token
+      // popover anchors stay unaffected because their own wrapper sets
+      // position:relative.
       position: relative;
       // F3: native CSS virtualisation. The browser skips layout + paint
       // for cards outside the scroll viewport, which is the cheap win
@@ -81,17 +81,19 @@
         var(--task-card-ring),
         var(--studio-card-shadow-hover);
     }
-    .task-card--1-preparation { --state-color: #8b5cf6; }
-    .task-card--2-ready { --state-color: #06b6d4; }
-    .task-card--3-progress { --state-color: var(--severity-info); }
+    .task-card--1-preparation { --state-color: var(--lane-prep); }
+    .task-card--1a-orchestrator-prep { --state-color: var(--lane-prep); }
+    .task-card--2-ready { --state-color: var(--lane-ready); }
+    .task-card--3-progress { --state-color: var(--lane-progress); }
     /* ADR-0025: distinct accents for the two review lanes - amber for the
        orchestrator's machine pass, sky for human-attention. The legacy
        4-review class is kept for any data still rendering the old name. */
-    .task-card--4-review { --state-color: #f59e0b; }
-    .task-card--4-auto-review { --state-color: #f59e0b; }
-    .task-card--5-human-review { --state-color: #38bdf8; }
-    .task-card--5-completed { --state-color: #10b981; }
-    .task-card--6-completed { --state-color: #10b981; }
+    .task-card--4-review { --state-color: var(--lane-auto-review); }
+    .task-card--4-auto-review { --state-color: var(--lane-auto-review); }
+    .task-card--5-human-review { --state-color: var(--lane-human-review); }
+    .task-card--5-completed { --state-color: var(--lane-completed); }
+    .task-card--6-completed { --state-color: var(--lane-completed); }
+    .task-card--7-archive { --state-color: var(--lane-archive); }
 
     /* F39: running tasks must jump out of the column on BOTH themes. The
        prior dark-only halo (hardcoded blue rgba + #1e1e2e base) dissolved
@@ -100,9 +102,9 @@
          - --studio-bg-running  (tint over --studio-bg-elevated)
          - --shadow-running     (outline ring + soft outer cast)
          - --studio-accent-3    (progress-bar pigment)
-       The motion role moves from a breathing box-shadow (poor perf, easy
-       to overlook on white) to a constant indeterminate progress bar at
-       the top edge - see .task-card__progress below.
+       The motion role lives in the running badge dot; the card itself uses
+       only whole-card background, border, and ring so running never becomes
+       a one-edge accent.
 
        Compound selector .task-card.task-card--running is deliberate: the
        light-theme bridge in styles.scss carries
@@ -155,60 +157,6 @@
         0 10px 24px color-mix(in srgb, var(--studio-accent-6) 22%, transparent);
     }
 
-    /* F39: indeterminate progress bar pinned to the top edge of a running
-       card. A 40%-wide gradient stripe slides left -> right on a 1.6 s
-       loop, providing constant "something is happening right now" motion
-       that reads on both themes (the gradient peak is the opaque accent
-       token, so it stays visible on white). Track tint is the same accent
-       at low alpha for contrast against the card surface. Bottom corners
-       stay square; top corners follow the card's 10 px outer radius (the
-       bar sits 1 px inside the top border). Hidden in compact mode (rows
-       are too tight) and pinned-static under prefers-reduced-motion
-       (handled in the media block above). */
-    .task-card__progress {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      overflow: hidden;
-      border-top-left-radius: calc(var(--studio-card-radius) - 1px);
-      border-top-right-radius: calc(var(--studio-card-radius) - 1px);
-      pointer-events: none;
-      background: color-mix(in srgb, var(--studio-accent-3) 14%, transparent);
-    }
-    .task-card__progress::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -40%;
-      width: 40%;
-      height: 100%;
-      background: linear-gradient(90deg,
-        transparent 0%,
-        var(--studio-accent-3) 50%,
-        transparent 100%);
-      animation: job-card-progress-slide 1.6s ease-in-out infinite;
-    }
-    @keyframes job-card-progress-slide {
-      0%   { left: -40%; }
-      100% { left: 100%; }
-    }
-    /* F39: under prefers-reduced-motion: reduce we stop the slide but keep
-       the bar statically visible (left:0; width:100%) so the running cue
-       is preserved for operators with motion sensitivity. This block must
-       come AFTER the .task-card__progress::after declaration above so the
-       cascade picks the static state under the media query (equal-
-       specificity rule — last one wins). */
-    @media (prefers-reduced-motion: reduce) {
-      .task-card__progress::after {
-        animation: none;
-        left: 0;
-        width: 100%;
-        opacity: 0.6;
-      }
-    }
-
     .task-card__header {
       display: flex;
       justify-content: space-between;
@@ -240,7 +188,7 @@
       border-radius: 999px;
       background: var(--project-color, #8b5cf6);
       color: var(--project-on, #0b1020);
-      font-size: 10px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 800;
       letter-spacing: 0;
       flex: 0 0 auto;
@@ -430,9 +378,10 @@
     // competing with the title.
     .task-card__epic-badge {
       display: inline-block;
-      padding: 1px 6px;
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 3px;
-      font-size: 10px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 800;
       letter-spacing: 0.06em;
       color: var(--studio-on-accent);
@@ -445,9 +394,10 @@
     }
     .task-card__subtask-chip {
       display: inline-block;
-      padding: 1px 5px;
+      min-height: var(--studio-card-pill-height);
+      padding: 0 var(--studio-card-pill-padding-x);
       border-radius: 3px;
-      font-size: 10px;
+      font-size: var(--studio-card-meta-size);
       font-weight: 600;
       color: var(--studio-fg-muted);
       background: transparent;
@@ -533,6 +483,7 @@
     .task-card__waiting-pill,
     .task-card__mode-pill,
     .task-card__type-pill,
+    .task-card__state-pill,
     .task-card__loop-pill,
     .task-card__review-pill,
     .task-card__code-review-pill,
@@ -853,6 +804,13 @@
     .task-card__type-pill {
       border: 1px solid transparent;
       font-weight: 600;
+    }
+    .task-card__state-pill {
+      color: var(--task-card-state-color);
+      background: color-mix(in srgb, var(--task-card-state-color) 12%, var(--studio-bg-elevated));
+      border: 1px solid color-mix(in srgb, var(--task-card-state-color) 36%, transparent);
+      font-weight: 650;
+      text-transform: lowercase;
     }
     .task-card__type-pill--bug {
       color: #fca5a5;
@@ -1247,12 +1205,9 @@
       flex: 0 0 auto;
       white-space: nowrap;
     }
-    /* In compact mode the running pulse animation would move every row in
-       a busy column; the indeterminate progress stripe is hidden too
-       because a stack of sliding bars in a dense lane is more noise than
-       signal. The steady accent (tinted bg + uniform outline ring
-       from --shadow-running) still marks the row as the active one. */
+    /* In compact mode the steady accent (tinted bg + uniform outline ring
+       from --shadow-running) marks the row as the active one without adding
+       edge-specific motion noise. */
     .task-card.task-card--compact.task-card--running {
       background: var(--studio-bg-running);
     }
-    .task-card--compact .task-card__progress { display: none; }
