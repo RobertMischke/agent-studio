@@ -76,6 +76,10 @@
         <p class="studio-empty">Queue health is loading.</p>
       }
     </section>
+
+    <section class="proj-detail__group">
+      <app-regression-radar scope="project" [projectName]="projectName()" />
+    </section>
   }
 
   @if (view() === 'jobs') {

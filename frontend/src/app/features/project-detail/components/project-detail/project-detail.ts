@@ -24,6 +24,7 @@ import { CliModelSelectorComponent } from '../../../../components/cli-model-sele
 import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
 import { ProjectDriftSectionComponent } from '../project-drift-section/project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-section/project-drift-overview-section';
+import { RegressionRadarComponent } from '../../../../features/regression-radar';
 import { ProjectSupervisorSectionComponent } from '../project-supervisor-section/project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from '../project-meta-cycle-section/project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from '../project-analysis-reports-section/project-analysis-reports-section';
@@ -104,6 +105,7 @@ export type ProjectDetailView =
     ProjectArchitectureSectionComponent,
     ProjectDriftSectionComponent,
     ProjectDriftOverviewSectionComponent,
+    RegressionRadarComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,

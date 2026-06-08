@@ -8,7 +8,8 @@ import {
   OnInit,
   OnDestroy,
 } from '@angular/core';
-import type { RegressionRadarResult, SpecChangeEntry } from '../../models/regression-radar.model';
+import { NgTemplateOutlet } from '@angular/common';
+import type { RegressionRadarResult, RegressionRadarTaskGroup, SpecChangeEntry } from '../../models/regression-radar.model';
 import { TaskService } from '../../../../services/task.service';
 import { TooltipDirective } from '../../../../components/tooltip';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
@@ -17,12 +18,14 @@ import { InfoButtonComponent } from '../../../../components/info-button/info-but
   selector: 'app-regression-radar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective, InfoButtonComponent],
+  imports: [NgTemplateOutlet, TooltipDirective, InfoButtonComponent],
   templateUrl: './regression-radar.component.html',
   styleUrl: './regression-radar.component.scss',
 })
 export class RegressionRadarComponent implements OnInit, OnDestroy {
-  readonly jobId = input.required<string>();
+  readonly scope = input<'task' | 'project'>('task');
+  readonly jobId = input<string | null>(null);
+  readonly projectName = input<string | null>(null);
   readonly watchPath = input<string>();
 
   private readonly jobService = inject(TaskService);
@@ -50,7 +53,21 @@ export class RegressionRadarComponent implements OnInit, OnDestroy {
     );
   });
 
-  /** Short baseline..head SHA range, or null when unavailable. */
+  readonly sortedTaskGroups = computed(() => {
+    const r = this.result();
+    if (!r?.taskGroups?.length) return [];
+    const order = RegressionRadarComponent.SEVERITY_ORDER;
+    return [...r.taskGroups]
+      .map(group => ({
+        ...group,
+        entries: [...group.entries].sort(
+          (a, b) => (order[a.category] ?? 99) - (order[b.category] ?? 99),
+        ),
+      }))
+      .sort((a, b) => this.groupSeverity(a) - this.groupSeverity(b));
+  });
+
+  /** Short first..last attributed commit label, or null when unavailable. */
   readonly shaRange = computed(() => {
     const r = this.result();
     if (!r || !r.baselineSha || !r.headSha) return null;
@@ -62,6 +79,16 @@ export class RegressionRadarComponent implements OnInit, OnDestroy {
     if (!r || !r.baselineSha || !r.headSha) return '';
     return `${r.baselineSha} .. ${r.headSha}`;
   });
+
+  readonly title = computed(() =>
+    this.scope() === 'project' ? 'Project Regression Radar' : 'Regression Radar',
+  );
+
+  readonly emptyLabel = computed(() =>
+    this.scope() === 'project'
+      ? 'No spec file changes in attributed project commits'
+      : 'No changes for this task',
+  );
 
   /** Human-readable generation duration, e.g. "420 ms" or "1.3 s". */
   readonly durationLabel = computed(() => {
@@ -123,7 +150,11 @@ export class RegressionRadarComponent implements OnInit, OnDestroy {
   }
 
   load(): void {
-    this.jobService.getRegressionRadar(this.jobId(), this.watchPath()).subscribe({
+    const request = this.scope() === 'project'
+      ? this.jobService.getProjectRegressionRadar(this.projectName() ?? '')
+      : this.jobService.getRegressionRadar(this.jobId() ?? '', this.watchPath());
+
+    request.subscribe({
       next: (r) => { this.result.set(r); this.loading.set(false); },
       error: () => { this.loading.set(false); },
     });
@@ -164,5 +195,27 @@ export class RegressionRadarComponent implements OnInit, OnDestroy {
         if (status.startsWith('R')) return 'renamed';
         return status;
     }
+  }
+
+  taskGroupLabel(group: RegressionRadarTaskGroup): string {
+    return group.jobTitle?.trim() || group.jobId;
+  }
+
+  taskGroupSummary(group: RegressionRadarTaskGroup): string {
+    const parts: string[] = [];
+    if (group.driftCount) parts.push(`${group.driftCount} drift`);
+    if (group.atRiskCount) parts.push(`${group.atRiskCount} at risk`);
+    if (group.intendedCount) parts.push(`${group.intendedCount} intended`);
+    return parts.join(' · ') || 'No spec changes';
+  }
+
+  entryKey(entry: SpecChangeEntry): string {
+    return `${entry.jobId ?? 'task'}:${entry.path}`;
+  }
+
+  private groupSeverity(group: RegressionRadarTaskGroup): number {
+    if (group.driftCount > 0) return 0;
+    if (group.atRiskCount > 0) return 1;
+    return 2;
   }
 }

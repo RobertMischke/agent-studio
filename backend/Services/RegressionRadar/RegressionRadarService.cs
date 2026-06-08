@@ -6,20 +6,19 @@ using OrchestratorApi.Services.Runner;
 namespace OrchestratorApi.Services.RegressionRadar;
 
 /// <summary>
-/// Analyzes spec-file changes across a task's commit range and classifies
+/// Analyzes spec-file changes across a task's attributed commits and classifies
 /// each change as intended, at-risk, or drift. The classification is
 /// deterministic (no LLM) and uses git diff data plus companion-file
 /// heuristics.
 ///
-/// <para>Design: the service is stateless. It reads the run timeline to
-/// derive the SHA range, then delegates to <see cref="GitService"/> for
-/// file lists and diffs. Classification is a pure function over the
-/// file-change list, testable without git.</para>
+/// <para>Design: the service is stateless. It reads the task's attributed
+/// commit chain, then delegates to <see cref="GitService"/> for file lists.
+/// Classification is a pure function over the file-change list, testable
+/// without git.</para>
 /// </summary>
 public sealed class RegressionRadarService
 {
     private readonly GitService _git;
-    private readonly TaskSessionLog _sessions;
     private readonly TaskScannerService _scanner;
     private readonly ILogger<RegressionRadarService> _logger;
 
@@ -34,7 +33,6 @@ public sealed class RegressionRadarService
         ILogger<RegressionRadarService> logger)
     {
         _git = git;
-        _sessions = sessions;
         _scanner = scanner;
         _logger = logger;
     }
@@ -53,24 +51,87 @@ public sealed class RegressionRadarService
         return result with { GeneratedAt = generatedAt, DurationMs = sw.ElapsedMilliseconds };
     }
 
+    public RegressionRadarResult AnalyzeProject(string projectName)
+    {
+        var generatedAt = DateTime.UtcNow;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = AnalyzeProjectCore(projectName);
+        sw.Stop();
+
+        _logger.LogDebug(
+            "Project regression radar for {ProjectName} generated in {DurationMs} ms ({Total} spec changes, error={Error})",
+            projectName, sw.ElapsedMilliseconds, result.TotalSpecChanges, result.Error ?? "none");
+
+        return result with { GeneratedAt = generatedAt, DurationMs = sw.ElapsedMilliseconds };
+    }
+
     private RegressionRadarResult AnalyzeCore(string jobId, string? watchPath)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null)
             return new RegressionRadarResult { Error = "Job not found" };
 
-        var (baselineSha, headSha) = ResolveShaRange(info, watchPath);
-        if (baselineSha == null || headSha == null)
-            return new RegressionRadarResult { Error = "No commit range available (task has no tracked runs with SHA data)" };
-
-        if (string.Equals(baselineSha, headSha, StringComparison.OrdinalIgnoreCase))
+        var shas = ResolveTaskCommitShas(info);
+        var (baselineSha, headSha) = ResolveCommitSpan(shas);
+        if (shas.Count == 0)
             return new RegressionRadarResult { BaselineSha = baselineSha, HeadSha = headSha };
 
-        var allFiles = _git.GetFilesChangedInShaRange(jobId, watchPath, baselineSha, headSha);
+        var allFiles = _git.GetAggregateCommitFiles(jobId, watchPath, shas);
         if (allFiles.Count == 0)
             return new RegressionRadarResult { BaselineSha = baselineSha, HeadSha = headSha };
 
         return ClassifyFiles(allFiles, baselineSha, headSha, jobId);
+    }
+
+    private RegressionRadarResult AnalyzeProjectCore(string projectName)
+    {
+        var jobs = _scanner.ScanAllJobs()
+            .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(j => j.EnteredLaneAt)
+            .ToList();
+
+        if (jobs.Count == 0)
+            return new RegressionRadarResult { Error = "Project not found" };
+
+        var groups = new List<RegressionRadarTaskGroup>();
+        var entries = new List<SpecChangeEntry>();
+        string? baselineSha = null;
+        string? headSha = null;
+
+        foreach (var job in jobs)
+        {
+            var shas = ResolveTaskCommitShas(job);
+            if (shas.Count == 0) continue;
+
+            var (jobBaseline, jobHead) = ResolveCommitSpan(shas);
+            baselineSha ??= jobBaseline;
+            headSha = jobHead ?? headSha;
+
+            var files = _git.GetAggregateCommitFiles(job.Id, job.WatchPath, shas);
+            if (files.Count == 0) continue;
+
+            var taskResult = ClassifyFiles(files, jobBaseline, jobHead, job.Id);
+            if (taskResult.TotalSpecChanges == 0) continue;
+
+            var taskEntries = taskResult.Entries
+                .Select(e => e with { JobId = job.Id, JobTitle = job.Title })
+                .ToList();
+            entries.AddRange(taskEntries);
+            groups.Add(new RegressionRadarTaskGroup
+            {
+                JobId = job.Id,
+                JobTitle = job.Title,
+                State = job.State,
+                IntendedCount = taskResult.IntendedCount,
+                AtRiskCount = taskResult.AtRiskCount,
+                DriftCount = taskResult.DriftCount,
+                TotalSpecChanges = taskResult.TotalSpecChanges,
+                Entries = taskEntries,
+            });
+        }
+
+        var result = BuildResult(entries, baselineSha, headSha, $"project:{projectName}");
+        return result with { TaskGroups = groups };
     }
 
     /// <summary>
@@ -78,7 +139,7 @@ public sealed class RegressionRadarService
     /// <see cref="Analyze"/> so unit tests can call it without git.
     /// </summary>
     internal RegressionRadarResult ClassifyFiles(
-        List<GitFileChange> allFiles, string baselineSha, string headSha, string jobId)
+        List<GitFileChange> allFiles, string? baselineSha, string? headSha, string jobId)
     {
         var specFiles = allFiles.Where(f => IsSpecFile(f.Path)).ToList();
         var nonSpecPaths = new HashSet<string>(
@@ -106,6 +167,12 @@ public sealed class RegressionRadarService
             });
         }
 
+        return BuildResult(entries, baselineSha, headSha, jobId);
+    }
+
+    private RegressionRadarResult BuildResult(
+        List<SpecChangeEntry> entries, string? baselineSha, string? headSha, string jobId)
+    {
         var intended = entries.Count(e => e.Category == SpecChangeCategory.Intended);
         var atRisk = entries.Count(e => e.Category == SpecChangeCategory.AtRisk);
         var drift = entries.Count(e => e.Category == SpecChangeCategory.Drift);
@@ -130,31 +197,24 @@ public sealed class RegressionRadarService
         };
     }
 
-    /// <summary>
-    /// Derives the full SHA range for a task by walking all runs in the
-    /// timeline. Uses the first run's HeadShaBefore as baseline and the
-    /// last run's HeadShaAfter as head.
-    /// </summary>
-    internal (string? BaselineSha, string? HeadSha) ResolveShaRange(
-        Models.TaskInfo info, string? watchPath)
+    internal static List<string> ResolveTaskCommitShas(Models.TaskInfo info)
     {
-        var events = _sessions.ReadSessionEvents(info.Id, watchPath);
-        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
-        var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-        if (timeline.Runs.Count == 0) return (null, null);
-
-        string? baseline = null;
-        string? head = null;
-
-        foreach (var run in timeline.Runs)
+        var shas = info.Commits
+            .Select(c => c.Sha)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (shas.Count == 0 && !string.IsNullOrWhiteSpace(info.Commit?.Sha))
         {
-            if (baseline == null && !string.IsNullOrWhiteSpace(run.HeadShaBefore))
-                baseline = run.HeadShaBefore;
-            if (!string.IsNullOrWhiteSpace(run.HeadShaAfter))
-                head = run.HeadShaAfter;
+            shas.Add(info.Commit.Sha);
         }
+        return shas;
+    }
 
-        return (baseline, head);
+    private static (string? BaselineSha, string? HeadSha) ResolveCommitSpan(IReadOnlyList<string> shas)
+    {
+        if (shas.Count == 0) return (null, null);
+        return (shas[0], shas[^1]);
     }
 
     /// <summary>
@@ -177,8 +237,7 @@ public sealed class RegressionRadarService
         {
             var baseName = StripSpecSuffix(Path.GetFileNameWithoutExtension(spec.Path));
             var hasReplacement = allSpecFiles.Any(f =>
-                !string.Equals(f.Path, spec.Path, StringComparison.OrdinalIgnoreCase)
-                && f.Status.StartsWith("A", StringComparison.OrdinalIgnoreCase)
+                f.Status.StartsWith("A", StringComparison.OrdinalIgnoreCase)
                 && StripSpecSuffix(Path.GetFileNameWithoutExtension(f.Path))
                     .Equals(baseName, StringComparison.OrdinalIgnoreCase));
             return hasReplacement ? SpecChangeCategory.Intended : SpecChangeCategory.Drift;
@@ -234,7 +293,7 @@ public sealed class RegressionRadarService
 
     /// <summary>
     /// Resolves a spec's companion implementation and whether it changed within
-    /// the same commit range. TypeScript/JS companions carry their own directory
+    /// the same attributed commit set. TypeScript/JS companions carry their own directory
     /// and are matched by exact relative path. .NET companions are only known by
     /// filename (test and impl live in parallel directory trees), so they are
     /// matched by basename against the changed non-spec paths; when a match is
@@ -277,10 +336,10 @@ public sealed class RegressionRadarService
             name = name[..^5];
         else if (name.EndsWith(".test", StringComparison.OrdinalIgnoreCase))
             name = name[..^5];
-        else if (name.EndsWith("Tests", StringComparison.OrdinalIgnoreCase))
-            name = name[..^5];
         else if (name.EndsWith(".tests", StringComparison.OrdinalIgnoreCase))
             name = name[..^6];
+        else if (name.EndsWith("Tests", StringComparison.OrdinalIgnoreCase))
+            name = name[..^5];
         return name;
     }
 
@@ -301,7 +360,7 @@ public sealed class RegressionRadarService
                     ? $"Spec assertions changed without matching change in {companion}"
                     : "Spec assertions changed without identifiable companion implementation change",
             SpecChangeCategory.Drift =>
-                "Spec deleted without replacement in the same commit range",
+                "Spec deleted without replacement in this task's attributed commits",
             _ => ""
         };
     }

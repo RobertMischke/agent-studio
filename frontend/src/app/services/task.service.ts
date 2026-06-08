@@ -1025,6 +1025,12 @@ export class TaskService {
     );
   }
 
+  getProjectRegressionRadar(projectName: string) {
+    return this.http.get<RegressionRadarResult>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/regression-radar`,
+    );
+  }
+
   // CLI execution
   startJob(jobId: string, watchPath?: string, model?: string, cliType?: CliType, thinkingLevel?: string) {
     const body: { model?: string; cliType?: CliType; thinkingLevel?: string } = {};

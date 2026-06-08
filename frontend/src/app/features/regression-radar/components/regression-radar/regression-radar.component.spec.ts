@@ -18,6 +18,7 @@ const baseResult: RegressionRadarResult = {
   baselineSha: null,
   headSha: null,
   entries: [],
+  taskGroups: [],
   error: null,
   generatedAt: '2026-06-05T10:00:00.000Z',
   durationMs: 12,
@@ -90,14 +91,14 @@ describe('RegressionRadarComponent (smoke)', () => {
 });
 
 describe('RegressionRadarComponent empty states', () => {
-  it('renders an unavailable commit range as an inline note instead of a boxed card', async () => {
+  it('renders an analysis error as an inline note instead of a boxed card', async () => {
     const root = await renderWith({
       ...baseResult,
-      error: 'No commit range available (task has no tracked runs with SHA data)',
+      error: 'Git repository unavailable',
     });
 
     const note = root.querySelector<HTMLElement>('[data-testid="regression-radar-error"]');
-    expect(note?.textContent).toContain('No commit range available');
+    expect(note?.textContent).toContain('Git repository unavailable');
     expect(note?.classList.contains('radar-inline-note')).toBe(true);
     expect(note?.classList.contains('radar')).toBe(false);
   });
@@ -110,7 +111,7 @@ describe('RegressionRadarComponent empty states', () => {
     });
 
     const note = root.querySelector<HTMLElement>('[data-testid="regression-radar-empty"]');
-    expect(note?.textContent).toContain('No spec file changes');
+    expect(note?.textContent).toContain('No changes for this task');
     expect(note?.classList.contains('radar-inline-note')).toBe(true);
     expect(note?.classList.contains('radar')).toBe(false);
   });

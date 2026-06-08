@@ -9,13 +9,13 @@
   </div>
 } @else if (isEmpty()) {
   <div class="radar-inline-note" data-testid="regression-radar-empty">
-    <span class="radar-inline-note__text">No spec file changes in this task</span>
+    <span class="radar-inline-note__text">{{ emptyLabel() }}</span>
   </div>
 } @else if (hasData()) {
   <div class="radar" data-testid="regression-radar">
     <div class="radar__header">
       <div class="radar__title-group">
-        <h4 class="radar__title">Regression Radar</h4>
+        <h4 class="radar__title">{{ title() }}</h4>
         <app-info-button topic="regression-radar"
                          eyebrow="Regression Radar"
                          label="How does Regression Radar work?" />
@@ -82,62 +82,80 @@
 
     @if (detailsOpen()) {
     <div class="radar__entries" data-testid="regression-radar-entries">
-      @for (entry of sortedEntries(); track entry.path) {
-        <div class="radar__entry"
-             [class]="'radar__entry--' + categoryIcon(entry)"
-             data-testid="radar-entry">
-          <button type="button"
-                  class="radar__entry-header"
-                  (click)="toggleExpand(entry.path)"
-                  [attr.aria-expanded]="expanded() === entry.path">
-            <span class="radar__entry-dot"
-                  [class]="'radar__entry-dot--' + categoryIcon(entry)"></span>
-            <span class="radar__entry-file">{{ entry.fileName }}</span>
-            <span class="radar__entry-status">({{ statusLabel(entry.gitStatus) }})</span>
-            <span class="radar__entry-category"
-                  [class]="'radar__entry-category--' + categoryIcon(entry)">
-              {{ categoryLabel(entry) }}
-            </span>
-            <span class="radar__entry-lines">
-              @if (entry.linesAdded > 0) {
-                <span class="radar__lines-added">+{{ entry.linesAdded }}</span>
-              }
-              @if (entry.linesRemoved > 0) {
-                <span class="radar__lines-removed">-{{ entry.linesRemoved }}</span>
-              }
-            </span>
-            <span class="radar__entry-chevron"
-                  [class.radar__entry-chevron--open]="expanded() === entry.path">
-            </span>
-          </button>
-          @if (expanded() === entry.path) {
-            <div class="radar__entry-detail" data-testid="radar-entry-detail">
-              <div class="radar__detail-row">
-                <span class="radar__detail-label">Path</span>
-                <span class="radar__detail-value">{{ entry.path }}</span>
-              </div>
-              <div class="radar__detail-row">
-                <span class="radar__detail-label">Reason</span>
-                <span class="radar__detail-value">{{ entry.reason }}</span>
-              </div>
-              @if (entry.companionPath) {
-                <div class="radar__detail-row">
-                  <span class="radar__detail-label">Companion</span>
-                  <span class="radar__detail-value">
-                    {{ entry.companionPath }}
-                    @if (entry.companionChanged) {
-                      <span class="radar__companion-changed">(also changed)</span>
-                    } @else {
-                      <span class="radar__companion-unchanged">(unchanged)</span>
-                    }
-                  </span>
-                </div>
-              }
-            </div>
-          }
-        </div>
+      @if (scope() === 'project' && sortedTaskGroups().length > 0) {
+        @for (group of sortedTaskGroups(); track group.jobId) {
+          <section class="radar__task-group" data-testid="radar-task-group">
+            <header class="radar__task-group-head">
+              <span class="radar__task-title">{{ taskGroupLabel(group) }}</span>
+              <span class="radar__task-meta">#{{ group.jobId }} · {{ taskGroupSummary(group) }}</span>
+            </header>
+            @for (entry of group.entries; track entryKey(entry)) {
+              <ng-container *ngTemplateOutlet="entryRow; context: { entry: entry, expandKey: entryKey(entry) }" />
+            }
+          </section>
+        }
+      } @else {
+        @for (entry of sortedEntries(); track entry.path) {
+          <ng-container *ngTemplateOutlet="entryRow; context: { entry: entry, expandKey: entry.path }" />
+        }
       }
     </div>
     }
   </div>
 }
+
+<ng-template #entryRow let-entry="entry" let-expandKey="expandKey">
+  <div class="radar__entry"
+       [class]="'radar__entry--' + categoryIcon(entry)"
+       data-testid="radar-entry">
+    <button type="button"
+            class="radar__entry-header"
+            (click)="toggleExpand(expandKey)"
+            [attr.aria-expanded]="expanded() === expandKey">
+      <span class="radar__entry-dot"
+            [class]="'radar__entry-dot--' + categoryIcon(entry)"></span>
+      <span class="radar__entry-file">{{ entry.fileName }}</span>
+      <span class="radar__entry-status">({{ statusLabel(entry.gitStatus) }})</span>
+      <span class="radar__entry-category"
+            [class]="'radar__entry-category--' + categoryIcon(entry)">
+        {{ categoryLabel(entry) }}
+      </span>
+      <span class="radar__entry-lines">
+        @if (entry.linesAdded > 0) {
+          <span class="radar__lines-added">+{{ entry.linesAdded }}</span>
+        }
+        @if (entry.linesRemoved > 0) {
+          <span class="radar__lines-removed">-{{ entry.linesRemoved }}</span>
+        }
+      </span>
+      <span class="radar__entry-chevron"
+            [class.radar__entry-chevron--open]="expanded() === expandKey">
+      </span>
+    </button>
+    @if (expanded() === expandKey) {
+      <div class="radar__entry-detail" data-testid="radar-entry-detail">
+        <div class="radar__detail-row">
+          <span class="radar__detail-label">Path</span>
+          <span class="radar__detail-value">{{ entry.path }}</span>
+        </div>
+        <div class="radar__detail-row">
+          <span class="radar__detail-label">Reason</span>
+          <span class="radar__detail-value">{{ entry.reason }}</span>
+        </div>
+        @if (entry.companionPath) {
+          <div class="radar__detail-row">
+            <span class="radar__detail-label">Companion</span>
+            <span class="radar__detail-value">
+              {{ entry.companionPath }}
+              @if (entry.companionChanged) {
+                <span class="radar__companion-changed">(also changed)</span>
+              } @else {
+                <span class="radar__companion-unchanged">(unchanged)</span>
+              }
+            </span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</ng-template>

@@ -157,6 +157,43 @@
     gap: 2px;
   }
 
+  &__task-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 0;
+    border-top: 1px solid color-mix(in srgb, var(--studio-border) 70%, transparent);
+
+    &:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+  }
+
+  &__task-group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 2px 6px;
+  }
+
+  &__task-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--studio-fg-strong, rgba(255, 255, 255, 0.87));
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  &__task-meta {
+    flex-shrink: 0;
+    color: var(--studio-fg-muted, rgba(255, 255, 255, 0.4));
+    font-size: 0.7rem;
+  }
+
   &__entry {
     border-radius: 6px;
     overflow: hidden;

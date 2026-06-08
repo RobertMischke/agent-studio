@@ -2750,7 +2750,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// so every successful analysis records as
     /// <see cref="PipelineStepStatus.Passed"/> with the spec-change category
     /// carried in the verdict token (clean / intended / at-risk / drift); an
-    /// analysis that could not run (no repo / no commit range) records as
+    /// analysis that could not run records as
     /// <see cref="PipelineStepStatus.Skipped"/>. Static + internal so unit
     /// tests can assert the mapping without the orchestrator.
     /// </summary>
@@ -2761,7 +2761,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return (PipelineStepStatus.Skipped, "n/a", result.Error!);
 
         if (result.TotalSpecChanges == 0)
-            return (PipelineStepStatus.Passed, "clean", "No spec changes in the commit range");
+            return (PipelineStepStatus.Passed, "clean", "No spec changes in attributed commits");
 
         var counts = $"{result.TotalSpecChanges} spec change(s): "
             + $"{result.IntendedCount} intended, {result.AtRiskCount} at-risk, {result.DriftCount} drift";

@@ -38,8 +38,11 @@ function makeRadarResult() {
     error: null,
     generatedAt: '2026-06-03T09:00:00Z',
     durationMs: 420,
+    taskGroups: [],
     entries: [
       {
+        jobId: null,
+        jobTitle: null,
         path: 'frontend/src/app/services/task.service.spec.ts',
         fileName: 'task.service.spec.ts',
         gitStatus: 'M',
@@ -53,11 +56,13 @@ function makeRadarResult() {
         overrideReason: null,
       },
       {
+        jobId: null,
+        jobTitle: null,
         path: 'backend.Tests/LegacyFlowTests.cs',
         fileName: 'LegacyFlowTests.cs',
         gitStatus: 'D',
         category: 'Drift',
-        reason: 'Spec deleted without replacement in the same commit range',
+        reason: "Spec deleted without replacement in this task's attributed commits",
         companionPath: 'LegacyFlow.cs',
         companionChanged: false,
         linesAdded: 0,
@@ -69,7 +74,7 @@ function makeRadarResult() {
   };
 }
 
-function makeUnavailableRangeResult() {
+function makeNoAttributedCommitsResult() {
   return {
     overallStatus: 'Intended',
     intendedCount: 0,
@@ -78,9 +83,10 @@ function makeUnavailableRangeResult() {
     totalSpecChanges: 0,
     baselineSha: null,
     headSha: null,
-    error: 'No commit range available (task has no tracked runs with SHA data)',
+    error: null,
     generatedAt: '2026-06-03T09:00:00Z',
     durationMs: 0,
+    taskGroups: [],
     entries: [],
   };
 }
@@ -350,7 +356,7 @@ test.describe('Regression radar info-button', () => {
     const radar = page.getByTestId('regression-radar');
     await expect(radar).toBeVisible({ timeout: 10_000 });
 
-    // Metadata row: SHA range + generation duration are visible in the compact view.
+    // Metadata row: first..last attributed commit label + generation duration are visible in the compact view.
     await expect(radar.getByTestId('regression-radar-sha-range')).toHaveText('aaaa111..bbbb222');
     await expect(radar.getByTestId('regression-radar-duration')).toContainText('generated in 420 ms');
 
@@ -381,15 +387,15 @@ test.describe('Regression radar info-button', () => {
     }
   });
 
-  test('renders unavailable commit range as a quiet inline note', async ({ page }) => {
-    await installRoutes(page, '5-human-review', makeUnavailableRangeResult());
+  test('renders no attributed commits as a quiet inline note', async ({ page }) => {
+    await installRoutes(page, '5-human-review', makeNoAttributedCommitsResult());
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
 
     await dismissErrorDialog(page);
 
-    const note = page.getByTestId('regression-radar-error');
+    const note = page.getByTestId('regression-radar-empty');
     await expect(note).toBeVisible({ timeout: 10_000 });
-    await expect(note).toContainText('No commit range available');
+    await expect(note).toContainText('No changes for this task');
     await expect(page.getByTestId('regression-radar')).toHaveCount(0);
 
     const box = await note.boundingBox();
@@ -401,7 +407,7 @@ test.describe('Regression radar info-button', () => {
 
     if (RESULTS_DIR) {
       await note.scrollIntoViewIfNeeded();
-      await note.screenshot({ path: path.join(RESULTS_DIR, 'radar-unavailable-range-inline-note.png') });
+      await note.screenshot({ path: path.join(RESULTS_DIR, 'radar-no-attributed-commits-inline-note.png') });
     }
   });
 });

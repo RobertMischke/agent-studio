@@ -296,6 +296,40 @@ public sealed class RegressionRadarServiceTests
     // --- Analyze: metadata stamping ---
 
     [Fact]
+    public void ResolveTaskCommitShas_UsesAttributedCommitChain()
+    {
+        var info = new TaskInfo
+        {
+            Id = "radar-task",
+            Commit = new TaskCommitInfo { Sha = "legacy" },
+            Commits =
+            [
+                new TaskCommitInfo { Sha = "own-a" },
+                new TaskCommitInfo { Sha = "own-b" },
+                new TaskCommitInfo { Sha = "own-a" },
+            ],
+        };
+
+        var shas = RegressionRadarService.ResolveTaskCommitShas(info);
+
+        Assert.Equal(["own-a", "own-b"], shas);
+    }
+
+    [Fact]
+    public void ResolveTaskCommitShas_FallsBackToLegacyCommit()
+    {
+        var info = new TaskInfo
+        {
+            Id = "legacy-task",
+            Commit = new TaskCommitInfo { Sha = "legacy-sha" },
+        };
+
+        var shas = RegressionRadarService.ResolveTaskCommitShas(info);
+
+        Assert.Equal(["legacy-sha"], shas);
+    }
+
+    [Fact]
     public void Analyze_StampsGeneratedAtAndDurationMs()
     {
         // Even on the error path (job not found) the analysis is timestamped and
