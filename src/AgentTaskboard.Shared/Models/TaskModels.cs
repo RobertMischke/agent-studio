@@ -1106,7 +1106,7 @@ public record BatchMoveRequest
 /// <list type="bullet">
 /// <item><description><c>moved</c>: folder transitioned to the target lane.</description></item>
 /// <item><description><c>not-found</c>: no job folder matched the (jobId, watchPath) pair.</description></item>
-/// <item><description><c>conflict</c>: a folder with the same slug already exists in the target lane (stale duplicate).</description></item>
+/// <item><description><c>conflict</c>: a non-recoverable target path conflict blocked the move.</description></item>
 /// <item><description><c>rejected</c>: invalid input (unknown lane name, empty jobId, etc.).</description></item>
 /// <item><description><c>failed</c>: an unexpected IO error blocked the move.</description></item>
 /// </list>

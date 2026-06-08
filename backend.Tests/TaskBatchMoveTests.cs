@@ -176,6 +176,43 @@ public class TaskBatchMoveTests : IDisposable
     }
 
     [Fact]
+    public async Task BatchMoveAsync_ItemConflict_DoesNotBlockRemainingMoves()
+    {
+        WriteJob(TaskStates.Archive, "alpha");
+        WriteJob(TaskStates.Archive, "beta");
+        WriteJob(TaskStates.Archive, "gamma");
+        WriteJob(TaskStates.Archive, "delta");
+        WriteJob(TaskStates.Archive, "epsilon");
+        File.WriteAllText(Path.Combine(_watchPath, TaskStates.Ready, "gamma"), "not a task folder");
+
+        var transitions = BuildTransitionService();
+
+        var items = new List<BatchMoveItem>
+        {
+            new() { JobId = "alpha",   WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "beta",    WatchPath = _watchPath, TargetState = TaskStates.Backlog },
+            new() { JobId = "gamma",   WatchPath = _watchPath, TargetState = TaskStates.Ready },
+            new() { JobId = "delta",   WatchPath = _watchPath, TargetState = TaskStates.Preparation },
+            new() { JobId = "epsilon", WatchPath = _watchPath, TargetState = TaskStates.Ready },
+        };
+
+        var results = await transitions.BatchMoveAsync(items, CancellationToken.None);
+
+        Assert.Equal("moved",    results[0].Status);
+        Assert.Equal("moved",    results[1].Status);
+        Assert.Equal("conflict", results[2].Status);
+        Assert.Equal("moved",    results[3].Status);
+        Assert.Equal("moved",    results[4].Status);
+
+        var laneByJob = ReadLaneByJob();
+        Assert.Equal(TaskStates.Ready,       laneByJob["alpha"]);
+        Assert.Equal(TaskStates.Backlog,     laneByJob["beta"]);
+        Assert.Equal(TaskStates.Archive,     laneByJob["gamma"]);
+        Assert.Equal(TaskStates.Preparation, laneByJob["delta"]);
+        Assert.Equal(TaskStates.Ready,       laneByJob["epsilon"]);
+    }
+
+    [Fact]
     public async Task BatchMoveAsync_InvalidLane_ReportsRejectedWithoutBlockingOtherItems()
     {
         WriteJob(TaskStates.Archive, "alpha");

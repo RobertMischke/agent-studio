@@ -120,6 +120,15 @@ public class TaskStateMachine
                 "move-slug-deduped jobId={JobId} targetState={State} baseSlug={BaseSlug} resolvedSlug={ResolvedSlug}",
                 jobId, targetState, jobFolderName, targetSlug);
         }
+        else if (File.Exists(targetDir))
+        {
+            _logger.LogWarning(
+                "Cannot move job {JobId} to {State}/{Slug}: target path already exists as a file at {Target}",
+                jobId, targetState, targetSlug, targetDir);
+            return new MoveJobOutcome(
+                MoveJobStatus.TargetFolderExists,
+                $"A non-folder path named '{targetSlug}' already exists in {targetState}.");
+        }
 
         try
         {
