@@ -347,9 +347,9 @@ public static class LifecyclePhases
     /// </summary>
     public const string IntakePassed = "intake-passed";
 
-    // 3-progress substates: distinguishes "coding CLI is working" from
-    // "post-processing pipeline (auto-commit, summary, future checks) is
-    // working" without a new filesystem state.
+    // 3-progress / 4-auto-review substates: distinguishes "coding CLI is
+    // working" from "post-processing pipeline (auto-commit, summary, future
+    // checks) is working" without a new filesystem state.
     public const string ExecutionRunning = "execution-running";
     public const string ExecutionStalled = "execution-stalled";
     public const string PostProcessingRunning = "post-processing-running";
@@ -376,6 +376,7 @@ public static class LifecyclePhases
     {
         [TaskStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
         [TaskStates.Progress] = [ExecutionRunning, ExecutionStalled, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
+        [TaskStates.AutoReview] = [PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
     };
 
     /// <summary>
@@ -398,6 +399,7 @@ public static class LifecyclePhases
             // the existing UI treats them as the execution lane today, so
             // the lane projection keeps that behavior under the new model.
             TaskStates.Progress => ExecutionRunning,
+            TaskStates.AutoReview => PostProcessingRunning,
             _ => null,
         };
     }
@@ -405,13 +407,15 @@ public static class LifecyclePhases
     /// <summary>
     /// True when <paramref name="phase"/> is empty or in the allowed set for
     /// <paramref name="state"/>. Permissive on a null phase (the state's
-    /// default lane covers it) and on unknown states (no constraint
-    /// declared); strict only when both are populated.
+    /// default lane covers it) and on unknown future states (no constraint
+    /// declared); strict for known task states so review / completed lanes do
+    /// not retain stale orchestrator-owned phases.
     /// </summary>
     public static bool IsAllowed(string state, string? phase)
     {
         if (string.IsNullOrWhiteSpace(phase)) return true;
-        if (!AllowedByState.TryGetValue(state, out var allowed)) return true;
+        if (!AllowedByState.TryGetValue(state, out var allowed))
+            return !TaskStates.All.Contains(state);
         return allowed.Contains(phase);
     }
 }
@@ -487,6 +491,54 @@ public record LifecycleCheck
     public DateTime? StartedAt { get; init; }
     public DateTime? FinishedAt { get; init; }
     public string? Detail { get; init; }
+}
+
+/// <summary>
+/// Typed evidence row written by orchestrator-owned post-processing after the
+/// core coding CLI has finished. Rows live in
+/// <c>post-processing-outcomes.jsonl</c> in the task folder. The row records
+/// which supporting identity performed the check and which state-machine
+/// outcome it produced; it never authorizes source edits.
+/// </summary>
+public record PostProcessingOutcomeRecord
+{
+    public int Version { get; init; } = 1;
+    public DateTime At { get; init; } = DateTime.UtcNow;
+    public string JobId { get; init; } = "";
+    public string Project { get; init; } = "";
+    public string Outcome { get; init; } = PostProcessingOutcomes.PassToHumanReview;
+    public string Performer { get; init; } = PostProcessingPerformers.Orchestrator;
+    public string? PerformerCliType { get; init; }
+    public string? StepId { get; init; }
+    public string? Summary { get; init; }
+    public string? EvidenceRef { get; init; }
+    public List<string> FindingRefs { get; init; } = [];
+    public List<string> FollowUpTaskIds { get; init; } = [];
+}
+
+public static class PostProcessingOutcomes
+{
+    public const string PassToHumanReview = "pass-to-human-review";
+    public const string FindingsAdded = "findings-added";
+    public const string NeedsFollowUpTask = "needs-follow-up-task";
+    public const string NeedsHumanInput = "needs-human-input";
+    public const string FailedPostProcessing = "failed-post-processing";
+
+    public static readonly string[] All =
+    [
+        PassToHumanReview,
+        FindingsAdded,
+        NeedsFollowUpTask,
+        NeedsHumanInput,
+        FailedPostProcessing,
+    ];
+}
+
+public static class PostProcessingPerformers
+{
+    public const string Orchestrator = "orchestrator";
+    public const string SupportingAgent = "supporting-agent";
+    public const string Tool = "tool";
 }
 
 /// <summary>

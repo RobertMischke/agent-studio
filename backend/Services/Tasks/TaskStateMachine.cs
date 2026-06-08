@@ -87,6 +87,7 @@ public class TaskStateMachine
                 if (result.Changed)
                 {
                     TaskJsonFile.UpdateField(recheck.FolderPath, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
+                    ClearIncompatiblePhase(recheck.FolderPath, targetState);
                     _scanner.InvalidateCache();
                 }
                 return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: recheck.FolderPath);
@@ -135,6 +136,7 @@ public class TaskStateMachine
             // re-stamp its entry time. Drives the lane-entry default sort
             // (newest entry on top). Migration paths deliberately skip this.
             TaskJsonFile.UpdateField(targetDir, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
+            ClearIncompatiblePhase(targetDir, targetState);
             // Keep the canonical id in lockstep with the (possibly suffixed)
             // folder name so FindJob resolves the moved folder immediately,
             // without waiting for the scanner's self-heal pass.
@@ -424,6 +426,7 @@ public class TaskStateMachine
                 // Lane-entry anchor: archive/failed-pickup/restore are genuine
                 // lane changes, so re-stamp the entry time like a normal move.
                 TaskJsonFile.UpdateField(targetDir, "enteredLaneAt", enteredLaneAt, _logger);
+                ClearIncompatiblePhase(targetDir, targetState);
             }
             else if (writePlaceholderJobJson)
             {
@@ -537,6 +540,34 @@ public class TaskStateMachine
     private static bool IsOrphanDeleteLane(string lane)
         => string.Equals(lane, TaskStates.Archive, StringComparison.Ordinal)
            || string.Equals(lane, TaskStates.Completed, StringComparison.Ordinal);
+
+    private void ClearIncompatiblePhase(string folderPath, string targetState)
+    {
+        var jobJsonPath = Path.Combine(folderPath, "task.json");
+        if (!File.Exists(jobJsonPath)) return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(jobJsonPath));
+            if (!doc.RootElement.TryGetProperty("phase", out var phaseEl)
+                || phaseEl.ValueKind != JsonValueKind.String)
+            {
+                return;
+            }
+
+            var phase = phaseEl.GetString();
+            if (string.IsNullOrWhiteSpace(phase) || LifecyclePhases.IsAllowed(targetState, phase)) return;
+
+            TaskJsonFile.UpdateField(folderPath, "phase", "", _logger);
+            _logger.LogInformation(
+                "task-phase-cleared jobFolder={Folder} targetState={State} previousPhase={Phase}",
+                folderPath, targetState, phase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to clear incompatible phase in {Folder}", folderPath);
+        }
+    }
 
     public bool ChangeProject(string jobId, string targetWatchPath, string? watchPath = null)
     {

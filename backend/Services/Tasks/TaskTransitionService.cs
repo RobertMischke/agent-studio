@@ -127,6 +127,7 @@ public sealed class TaskTransitionService
             && info.State == TaskStates.Progress && targetState == TaskStates.AutoReview)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
+            if (attributed != null) EnterPostProcessingPhase(attributed);
             // Commit-attribution is a git step; skip it for read-only runs (they
             // produce no commits to attribute). Drift below is not a git step and
             // self-gates, so it still runs.
@@ -187,6 +188,57 @@ public sealed class TaskTransitionService
 
         return outcome;
     }
+
+    private void EnterPostProcessingPhase(TaskInfo info)
+    {
+        _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.PostProcessingRunning);
+        try
+        {
+            var now = DateTime.UtcNow;
+            var snapshot = new LifecycleSnapshot
+            {
+                Phase = LifecyclePhases.PostProcessingRunning,
+                PhaseEnteredAt = now,
+                PostProcessingChecks =
+                [
+                    new LifecycleCheck
+                    {
+                        Name = "orchestrator-post-processing",
+                        Status = "running",
+                        StartedAt = now,
+                        Detail = "Task execution finished; orchestrator post-processing is running before human review."
+                    }
+                ]
+            };
+            var path = Path.Combine(info.FolderPath, "lifecycle.json");
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(snapshot, LifecycleJsonWriteOpts));
+            PostProcessingOutcomeLog.Append(info.FolderPath, new PostProcessingOutcomeRecord
+            {
+                At = now,
+                JobId = info.Id,
+                Project = info.ProjectName,
+                Outcome = PostProcessingOutcomes.FindingsAdded,
+                Performer = PostProcessingPerformers.Orchestrator,
+                StepId = OrchestratorApi.Services.Pipeline.PipelineCatalogue.GitCommitAttributionStepId,
+                Summary = "Entered orchestrator post-processing after task execution.",
+                EvidenceRef = "lifecycle.json"
+            }, _logger);
+            _logger.LogInformation(
+                "post-processing-entered project={Project} job={JobId} performer={Performer}",
+                info.ProjectName, info.Id, PostProcessingPerformers.Orchestrator);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write post-processing lifecycle evidence for {JobId}", info.Id);
+        }
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions LifecycleJsonWriteOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     /// <summary>
     /// Per-item-atomic batch move. Each item independently routes through

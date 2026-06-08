@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Clients;
+using OrchestratorApi.Services.Runner;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Registry;
 using Xunit;
@@ -178,6 +179,29 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         var status = deps.Git.GetStatus("plan-task", _watchPath);
         Assert.True(status.IsRepo);
         Assert.Contains(status.Files, f => f.Path.EndsWith("stray.txt", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MoveProgressToAutoReview_EntersPostProcessingPhase_AndWritesEvidence()
+    {
+        WriteJob(TaskStates.Progress, "post-processing-task");
+
+        var deps = BuildDeps();
+        var outcome = await deps.Transitions.MoveAsync("post-processing-task", TaskStates.AutoReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var moved = ReadJob(TaskStates.AutoReview, "post-processing-task");
+        Assert.NotNull(moved);
+        Assert.Equal(LifecyclePhases.PostProcessingRunning, moved!.Phase);
+
+        var folder = Path.Combine(_watchPath, TaskStates.AutoReview, "post-processing-task");
+        var lifecycle = File.ReadAllText(Path.Combine(folder, "lifecycle.json"));
+        Assert.Contains("\"phase\": \"post-processing-running\"", lifecycle);
+        Assert.Contains("orchestrator-post-processing", lifecycle);
+
+        var outcomes = File.ReadAllText(Path.Combine(folder, PostProcessingOutcomeLog.FileName));
+        Assert.Contains("\"outcome\":\"findings-added\"", outcomes);
+        Assert.Contains("\"performer\":\"orchestrator\"", outcomes);
     }
 
     private Deps BuildDeps()

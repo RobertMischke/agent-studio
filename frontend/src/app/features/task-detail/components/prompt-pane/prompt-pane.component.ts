@@ -225,7 +225,7 @@ export class PromptPaneComponent {
       case '1a-orchestrator-prep': return 'Orchestrator Prep';
       case '2-ready':              return 'Ready';
       case '3-progress':           return 'In Progress';
-      case '4-auto-review':        return 'Auto Review';
+      case '4-auto-review':        return 'Post Processing';
       case '5-human-review':       return 'Review';
       case '6-completed':          return 'Completed';
       case '7-archive':            return 'Archive';

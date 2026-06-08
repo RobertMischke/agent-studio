@@ -7,6 +7,7 @@ using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Registry;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Pipeline;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -1101,6 +1102,13 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // (accept-as-done), so the orchestrator-moved tag must be stamped.
         Assert.Contains(ReviewDecisionOrchestrator.OrchestratorMovedTagId, tags);
 
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "clean-job");
+        Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.PassToHumanReview);
+        Assert.Contains(outcomes, o =>
+            o.StepId == PipelineCatalogue.OrchestratorDecisionStepId &&
+            o.Performer == PostProcessingPerformers.SupportingAgent &&
+            o.PerformerCliType == CliTypes.Claude);
+
         // Decision-journal records the accept-as-done with a multi-aspect reason.
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
@@ -1124,6 +1132,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var tags = ReadJobTags(TaskStates.HumanReview, "concerns-job");
         Assert.Contains("quality:concerns", tags);
 
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "concerns-job");
+        Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.FindingsAdded);
+        Assert.Contains(outcomes, o => o.Outcome == PostProcessingOutcomes.PassToHumanReview);
+
         // The aspect MD itself records the concern.
         var qualityMd = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "concerns-job", "aspect-code-quality.md"));
         Assert.Equal(AspectStatus.Concerns, AspectVerdictParsing.ReadStatusFromReport(qualityMd));
@@ -1132,6 +1144,25 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
         Assert.Contains("concerns", record.Reason);
+    }
+
+    [Fact]
+    public async Task TaskDone_PostProcessingEvidence_ShowsDifferentSupportingCliIdentity()
+    {
+        SeedReviewJobWithDone("codex-main-claude-post", agent: CliTypes.Codex);
+        var orchestrator = BuildOrchestratorWithAspects(
+            aspectStub: _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var taskJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "codex-main-claude-post", "task.json"));
+        Assert.Contains("\"agent\": \"codex\"", taskJson);
+
+        var outcomes = ReadPostProcessingOutcomes(TaskStates.HumanReview, "codex-main-claude-post");
+        Assert.Contains(outcomes, o =>
+            o.Outcome == PostProcessingOutcomes.PassToHumanReview &&
+            o.Performer == PostProcessingPerformers.SupportingAgent &&
+            o.PerformerCliType == CliTypes.Claude);
     }
 
     [Fact]
@@ -1539,7 +1570,11 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             FollowUp: string.Empty));
     }
 
-    private void SeedReviewJobWithDone(string slug, bool includeRunnerActiveClearedMarker = false, IReadOnlyList<string>? initialTags = null)
+    private void SeedReviewJobWithDone(
+        string slug,
+        bool includeRunnerActiveClearedMarker = false,
+        IReadOnlyList<string>? initialTags = null,
+        string agent = CliTypes.Claude)
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
@@ -1547,7 +1582,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             ? ",\"tags\":[" + string.Join(",", initialTags.Select(t => $"\"{t}\"")) + "]"
             : string.Empty;
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"{tagsJson}}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"{agent}\",\"cliType\":\"{agent}\"{tagsJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         var suffix = includeRunnerActiveClearedMarker
             ? $"[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review){Environment.NewLine}"
@@ -1610,6 +1645,19 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             }
         }
         return tags;
+    }
+
+    private List<PostProcessingOutcomeRecord> ReadPostProcessingOutcomes(string state, string slug)
+    {
+        var path = Path.Combine(_watchPath, state, slug, PostProcessingOutcomeLog.FileName);
+        Assert.True(File.Exists(path), $"missing {PostProcessingOutcomeLog.FileName} for {slug}");
+        return File.ReadAllLines(path)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => System.Text.Json.JsonSerializer.Deserialize<PostProcessingOutcomeRecord>(line, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            })!)
+            .ToList();
     }
 
     private ReviewDecisionOrchestrator BuildOrchestratorWithAspects(

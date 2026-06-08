@@ -101,12 +101,31 @@ public class TaskStateMachineOutcomeTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "collide")));
     }
 
-    private void SeedJob(string state, string slug)
+    [Fact]
+    public void MoveJob_ClearsPostProcessingPhase_WhenMovingToHumanReview()
+    {
+        SeedJob(TaskStates.AutoReview, "phase-task", LifecyclePhases.PostProcessingRunning);
+
+        var (machine, scanner) = BuildMachine();
+        var outcome = machine.MoveJob("phase-task", TaskStates.HumanReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var moved = scanner.FindJob("phase-task", _watchPath);
+        Assert.NotNull(moved);
+        Assert.Equal(TaskStates.HumanReview, moved!.State);
+        Assert.Null(moved.Phase);
+
+        var taskJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "phase-task", "task.json"));
+        Assert.Contains("\"phase\": \"\"", taskJson);
+    }
+
+    private void SeedJob(string state, string slug, string? phase = null)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
+        var phaseJson = phase == null ? "" : $",\"phase\":\"{phase}\"";
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"{phaseJson}}}");
     }
 
     private (TaskStateMachine, TaskScannerService) BuildMachine()

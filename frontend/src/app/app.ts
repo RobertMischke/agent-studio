@@ -569,7 +569,7 @@ export class App implements OnInit, OnDestroy {
       });
     }
     lanes.push(
-      { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
+      { state: '4-auto-review', title: 'Post Processing', icon: '🤖', jobs: grouped.autoReview },
       { state: '5-human-review', title: 'Review', icon: '👁️', jobs: grouped.humanReview },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
       { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
@@ -653,7 +653,7 @@ export class App implements OnInit, OnDestroy {
     }
     activeLanes.push({
       state: '4-auto-review',
-      title: 'Auto Review',
+      title: 'Post Processing',
       icon: '🤖',
       jobs: grouped.autoReview,
     });

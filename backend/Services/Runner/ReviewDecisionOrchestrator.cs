@@ -1421,6 +1421,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var (taskBody, recentLog) = LoadTaskContext(pending);
         var statusSummary = LoadStatusSummary(current.FolderPath);
         var diffSummary = LoadDiffSummary(entry.Name, entry.Path, current);
+        WritePostProcessingOutcome(current, PostProcessingOutcomes.FindingsAdded,
+            summary: "Orchestrator post-processing started.",
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorReviewStepId,
+            evidenceRef: "pipeline-execution.json");
 
         var inputs = new AspectRunInputs(
             Project: entry.Name,
@@ -1647,6 +1652,25 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             report.Overall == AspectStatus.Concerns
                 ? FormatConcernCount(report)
                 : "all aspects pass");
+        if (report.Overall == AspectStatus.Concerns)
+        {
+            WritePostProcessingOutcome(movedInfo, PostProcessingOutcomes.FindingsAdded,
+                summary: FormatConcernCount(report),
+                performerCliType: CliTypes.Claude,
+                stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+                evidenceRef: "pipeline-execution.json",
+                findingRefs: report.Verdicts
+                    .Where(v => v.Status == AspectStatus.Concerns)
+                    .Select(v => $"aspect-{v.Aspect}.md")
+                    .ToList());
+        }
+        WritePostProcessingOutcome(movedInfo, PostProcessingOutcomes.PassToHumanReview,
+            summary: report.Overall == AspectStatus.Concerns
+                ? $"Accepted with concerns: {FormatConcernCount(report)}"
+                : "Accepted as done after post-processing.",
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: "pipeline-execution.json");
 
         // Provenance: the orchestrator (not a human) advanced this task
         // toward Completed. Stamp on the authoritative post-move path.
@@ -1721,6 +1745,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // parallel aspect rows that drove it.
         RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
             DecisionVerdictReissue, "Multi-aspect block: " + AspectSummaryLine(report));
+        WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
+            summary: "Blocking aspect verdicts require follow-up work before human review.",
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: "pipeline-execution.json",
+            findingRefs: report.Verdicts
+                .Where(v => v.Status == AspectStatus.Block)
+                .Select(v => $"aspect-{v.Aspect}.md")
+                .ToList());
 
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
@@ -2347,8 +2380,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             }
 
             var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
+            var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.HumanReview };
             RecordOrchestratorReviewStep(escalatedFolder, PipelineStepStatus.Failed,
                 DecisionVerdictEscalate, gate.Reason);
+            WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
+                summary: gate.Reason,
+                performerCliType: CliTypes.Claude,
+                stepId: PipelineCatalogue.OrchestratorReviewStepId,
+                evidenceRef: "pipeline-execution.json",
+                findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList());
 
             EmitVerdictTimeline(escalatedFolder,
                 TimelineEventKinds.OrchestratorEscalated, TimelineActors.Orchestrator, gate.Reason,
@@ -2381,6 +2421,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         RecordOrchestratorReviewStep(moved.FolderPath, PipelineStepStatus.Failed,
             DecisionVerdictReissue, gate.Reason);
+        WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsFollowUpTask,
+            summary: gate.Reason,
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorReviewStepId,
+            evidenceRef: "pipeline-execution.json",
+            findingRefs: gate.Findings.Take(CompletionGate.MaxFindings).ToList());
 
         await WriteFollowUpFileAsync(moved, followUp, ct);
 
@@ -2436,6 +2482,40 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Verdict = verdict,
             Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
         });
+    }
+
+    private void WritePostProcessingOutcome(
+        TaskInfo job,
+        string outcome,
+        string? summary,
+        string? performerCliType = null,
+        string? stepId = null,
+        string? evidenceRef = null,
+        IReadOnlyList<string>? findingRefs = null,
+        string performer = PostProcessingPerformers.SupportingAgent)
+    {
+        if (!PostProcessingOutcomes.All.Contains(outcome, StringComparer.Ordinal))
+        {
+            outcome = PostProcessingOutcomes.FailedPostProcessing;
+        }
+
+        PostProcessingOutcomeLog.Append(job.FolderPath, new PostProcessingOutcomeRecord
+        {
+            At = DateTime.UtcNow,
+            JobId = job.Id,
+            Project = job.ProjectName,
+            Outcome = outcome,
+            Performer = performer,
+            PerformerCliType = performerCliType,
+            StepId = stepId,
+            Summary = string.IsNullOrWhiteSpace(summary) ? null : summary,
+            EvidenceRef = evidenceRef,
+            FindingRefs = findingRefs?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).ToList() ?? [],
+        }, _logger);
+
+        _logger.LogInformation(
+            "post-processing-outcome project={Project} job={JobId} outcome={Outcome} performer={Performer} cli={CliType} step={StepId}",
+            job.ProjectName, job.Id, outcome, performer, performerCliType ?? "", stepId ?? "");
     }
 
     /// <summary>
@@ -2725,6 +2805,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 var escalated = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
                 RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
                     DecisionVerdictEscalate, reason);
+                WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
+                    summary: reason,
+                    performer: PostProcessingPerformers.Tool,
+                    stepId: PipelineCatalogue.BuildTestGateStepId,
+                    evidenceRef: "post-steps/build-test-gate.log");
                 _chatLog.AppendSupervisor(escalated, "escalate",
                     $"Build/test gate failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
                 EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
@@ -2756,6 +2841,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         RecordOrchestratorDecisionStep(moved.FolderPath, PipelineStepStatus.Failed,
             DecisionVerdictReissue, BuildTestGateReissueReasonPrefix + result.Reason);
+        WritePostProcessingOutcome(moved, PostProcessingOutcomes.FailedPostProcessing,
+            summary: BuildTestGateReissueReasonPrefix + result.Reason,
+            performer: PostProcessingPerformers.Tool,
+            stepId: PipelineCatalogue.BuildTestGateStepId,
+            evidenceRef: "post-steps/build-test-gate.log");
 
         var followUp = BuildBuildTestGateFollowUp(result);
         await WriteFollowUpFileAsync(moved, followUp, ct);
@@ -3575,6 +3665,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // stale path resurrects the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsHumanInput,
+            summary: verdict.Reason,
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: "pipeline-execution.json");
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
             $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
@@ -3629,6 +3724,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // resurrect the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        WritePostProcessingOutcome(moved, PostProcessingOutcomes.PassToHumanReview,
+            summary: verdict.Reason,
+            performerCliType: CliTypes.Claude,
+            stepId: PipelineCatalogue.OrchestratorDecisionStepId,
+            evidenceRef: "pipeline-execution.json");
 
         // Provenance: the orchestrator (not a human) advanced this task
         // toward Completed. Stamp on the authoritative post-move path.

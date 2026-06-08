@@ -122,7 +122,7 @@ export const LANE_LABELS: Record<string, string> = {
   '2-ready':                'Ready',
   '3-progress':             'In Progress',
   '3b-code-not-complete':   'Code not complete',
-  '4-auto-review':          'Auto Review',
+  '4-auto-review':          'Post Processing',
   '5-human-review':         'Review',
   '6-completed':            'Completed',
   '7-archive':              'Archive',
