@@ -22,8 +22,7 @@ import {
 import { TooltipDirective } from '../tooltip';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
-import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
-import { ConnectedOverlayPositionRef, OverlayPortalService } from '../../services/overlay-portal.service';
+import { ConnectedOverlayDirective } from '../../directives/connected-overlay.directive';
 
 /**
  * Unified CLI + model selector. One reusable chip-with-popover control
@@ -53,7 +52,7 @@ import { ConnectedOverlayPositionRef, OverlayPortalService } from '../../service
   selector: 'app-cli-model-selector',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TooltipDirective, OverlayPortalDirective],
+  imports: [TooltipDirective, ConnectedOverlayDirective],
   templateUrl: './cli-model-selector.component.html',
   styleUrls: ['./cli-model-selector.component.scss'],
 })
@@ -102,19 +101,10 @@ export class CliModelSelectorComponent {
 
   readonly pickerOpen = signal<boolean>(false);
 
-  /**
-   * Viewport-relative coordinates for the popover. The picker is portaled to
-   * <body>, so fixed positioning escapes ancestor overflow, paint containment,
-   * transforms, and sibling stacking contexts.
-   */
-  readonly pickerPos = signal<{ left: number; top: number }>({ left: 0, top: 0 });
-
   private readonly modalStack = inject(ModalStackService);
   private readonly catalogStore = inject(CliCatalogStore);
-  private readonly overlayPortal = inject(OverlayPortalService);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
-  private positionRef: ConnectedOverlayPositionRef | null = null;
 
   /** Draft state initialised when the picker opens. */
   readonly draftCliType = signal<CliType | null>(null);
@@ -182,32 +172,15 @@ export class CliModelSelectorComponent {
   });
 
   @ViewChild('triggerBtn') private triggerBtnRef?: ElementRef<HTMLButtonElement>;
-  @ViewChild('portalRoot') private portalRootRef?: ElementRef<HTMLDivElement>;
-  @ViewChild('pickerEl') private pickerElRef?: ElementRef<HTMLDivElement>;
 
   constructor() {
     effect(() => {
       const open = this.pickerOpen();
       if (open) {
         this.acquireModalStack();
-        // The picker elements are added and portaled by the `@if` in the same
-        // change detection pass; position them on the next microtask once they
-        // exist in the central overlay layer.
-        queueMicrotask(() => this.showAndPosition());
       } else {
-        this.releasePositioner();
         this.releaseModalStack();
       }
-    });
-
-    // The popover's height changes as the model catalog loads (loading hint ->
-    // pills -> error). Re-run positioning so a flip decision made against the
-    // stale height never leaves the popover off-screen.
-    effect(() => {
-      this.draftAvailableModels();
-      this.loadingCatalog();
-      this.catalogError();
-      if (this.pickerOpen()) queueMicrotask(() => this.positionRef?.update());
     });
   }
 
@@ -228,7 +201,6 @@ export class CliModelSelectorComponent {
   }
 
   closePicker(): void {
-    this.releasePositioner();
     this.pickerOpen.set(false);
     this.releaseModalStack();
     queueMicrotask(() => this.triggerBtnRef?.nativeElement.focus());
@@ -390,29 +362,6 @@ export class CliModelSelectorComponent {
     if (home) nextIndex = 0;
     if (end) nextIndex = items.length - 1;
     commit(items[nextIndex]);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Body-portal lifecycle + positioning
-  // ---------------------------------------------------------------------------
-
-  private showAndPosition(): void {
-    if (!this.pickerOpen()) return;
-    const picker = this.pickerElRef?.nativeElement;
-    const trigger = this.triggerBtnRef?.nativeElement;
-    if (!picker || !trigger) return;
-    this.releasePositioner();
-    this.positionRef = this.overlayPortal.watchConnectedPosition(trigger, picker, {
-      preferredPlacement: 'above',
-      alignment: 'start',
-      gap: 6,
-      viewportPadding: 8,
-    }, pos => this.pickerPos.set({ left: pos.left, top: pos.top }));
-  }
-
-  private releasePositioner(): void {
-    this.positionRef?.dispose();
-    this.positionRef = null;
   }
 
   private acquireModalStack(): void {

@@ -17,16 +17,18 @@
 </button>
 
 @if (pickerOpen()) {
-  <div #portalRoot class="cli-model-picker-portal" appOverlayPortal="panel">
+  <div class="cli-model-picker-portal">
     <div class="cli-model-picker__backdrop"
          [attr.data-testid]="pickerTestidPrefix() + '-backdrop'"
          (mousedown)="onBackdropClick(); $event.preventDefault()"></div>
     <div class="cli-model-picker"
-         #pickerEl
          role="dialog"
          aria-modal="false"
-         [style.left.px]="pickerPos().left"
-         [style.top.px]="pickerPos().top"
+         [appConnectedOverlay]="triggerBtn"
+         connectedOverlayPlacement="above"
+         connectedOverlayAlignment="start"
+         [connectedOverlayGap]="6"
+         [connectedOverlayViewportPadding]="8"
          [attr.data-testid]="pickerTestidPrefix()"
          [attr.aria-label]="eyebrow() + ': ' + draftHeaderText()"
          (mousedown)="$event.stopPropagation()">

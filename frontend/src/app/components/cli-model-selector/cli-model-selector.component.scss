@@ -56,9 +56,8 @@
 // Configure-agent picker popover.
 // =============================================================================
 
-// Both the backdrop and the picker render under the central body overlay root,
-// so they escape ancestor overflow / paint containment / transforms that would
-// otherwise clip them. JS-computed `left` / `top` drive placement.
+// The picker panel uses `appConnectedOverlay`, the shared body-portaled
+// anchored-popover primitive. The transparent backdrop only owns dismissal.
 
 .cli-model-picker__backdrop {
   position: fixed;
