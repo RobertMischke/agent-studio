@@ -863,71 +863,7 @@
     </div>
     }
 
-    @if (epicOverlayDetail(); as epic) {
-      <section class="epic-overlay"
-               appOverlayPortal="modal"
-               data-testid="epic-overlay"
-               role="dialog"
-               aria-modal="false"
-               [attr.aria-label]="'Epic: ' + (epic.info.title || epic.info.id)">
-        <button type="button"
-                class="epic-overlay__scrim"
-                aria-label="Close epic overlay"
-                (click)="closeEpicOverlay()"></button>
-        <aside class="epic-overlay__panel">
-          <header class="epic-overlay__header">
-            <div class="epic-overlay__title-block">
-              <span class="epic-overlay__eyebrow">Epic</span>
-              <h2 class="epic-overlay__title">{{ epic.info.title || epic.info.id }}</h2>
-            </div>
-            <button type="button"
-                    class="epic-overlay__close"
-                    data-testid="epic-overlay-close"
-                    [appTooltip]="'Close epic overlay'"
-                    (click)="closeEpicOverlay()">Close</button>
-          </header>
-
-          <div class="epic-overlay__master">
-            <app-epic-rollup-pane
-              [epicId]="epic.info.id"
-              [watchPath]="epic.info.watchPath"
-              [job]="epic.info"
-              [promptMarkdown]="epic.promptMarkdown || ''"
-              [availableModels]="availableModels()"
-              [isRunning]="epic.info.execution?.status === 'running'"
-              [selectedSubTaskId]="epicOverlayTaskDetail()?.info?.id ?? null"
-              (openSubTask)="openEpicOverlaySubTask($event)"
-              (saveTitle)="saveEpicOverlayTitle($event)"
-              (saveDescription)="saveEpicOverlayDescription($event)"
-              (referencesChanged)="refreshEpicOverlay()"
-              (agentConfigCommit)="onEpicOverlayAgentConfigCommit($event)" />
-          </div>
-
-          @if (epicOverlayTaskDetail(); as subDetail) {
-            <section class="epic-overlay__detail" data-testid="epic-overlay-detail">
-              <app-job-detail
-                [detail]="subDetail"
-                [watchPaths]="watchPaths()"
-                [lanePeers]="epicOverlaySubTaskPeers()"
-                [mutationsBlocked]="updateClient.mutationsBlocked()"
-                (back)="closeEpicOverlayTaskDetail()"
-                (fileSaved)="onFileSaved()"
-                (projectChanged)="onProjectChanged($event)"
-                (deleteRequested)="onDeleteFromDetail(subDetail.info)"
-                (navigateLaneRequested)="onEpicOverlayNavigateLane($event)"
-                (openEpicRequested)="onOpenJobDetailFromSheet($event)"
-                (triageMoveRequested)="onTriageMove(subDetail.info, $event)"
-                (triageMoveToTopRequested)="onTriageMoveToTop(subDetail.info, $event)"
-                (triageDeleteRequested)="onTriageDelete(subDetail.info, $event)"
-                (triageStartRequested)="onTriageStart(subDetail.info, $event)"
-                (nextInLaneRequested)="onEpicOverlayNextSubTask(subDetail.info)"
-                (prevInLaneRequested)="onEpicOverlayPrevSubTask(subDetail.info)" />
-            </section>
-          } @else {
-            <div class="epic-overlay__empty" data-testid="epic-overlay-empty">
-              Select a sub-task to open its detail here.
-            </div>
-          }
-        </aside>
-      </section>
-    }
+    <!-- ASS-849: epic detail moved from a modal overlay to an inline tab
+         (epicTab*). The old epic-overlay block was removed here; its handlers
+         were already deleted from app.ts, which left this dead markup
+         referencing missing members and broke the build. -->
