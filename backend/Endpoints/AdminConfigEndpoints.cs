@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OrchestratorApi.Services;
 using OrchestratorApi.Services.Configuration;
 using OrchestratorApi.Services.Tasks;
 
@@ -43,6 +44,39 @@ public static class AdminConfigEndpoints
             }
         });
 
+        // --- Application-wide system-prompt templates (view + override) ---
+        var prompts = app.MapGroup("/api/admin/prompts");
+
+        prompts.MapGet("", (PromptAdminService svc) => Results.Ok(svc.GetCatalog()));
+
+        prompts.MapGet("/{name}", (string name, PromptAdminService svc) =>
+        {
+            var detail = svc.GetDetail(name);
+            return detail == null ? Results.NotFound(new { error = $"Unknown prompt '{name}'." }) : Results.Ok(detail);
+        });
+
+        prompts.MapPut("/{name}", (string name, SavePromptOverrideRequest req, PromptAdminService svc) =>
+        {
+            if (req?.Content == null)
+                return Results.BadRequest(new { error = "content is required" });
+            var detail = svc.SaveOverride(name, req.Content);
+            return detail == null ? Results.NotFound(new { error = $"Unknown prompt '{name}'." }) : Results.Ok(detail);
+        });
+
+        prompts.MapDelete("/{name}", (string name, PromptAdminService svc) =>
+        {
+            var detail = svc.ResetToDefault(name);
+            return detail == null ? Results.NotFound(new { error = $"Unknown prompt '{name}'." }) : Results.Ok(detail);
+        });
+
+        // "Keep mine" after a default update: re-points the override's recorded
+        // base SHA at the current default, clearing the drift banner.
+        prompts.MapPost("/{name}/rebaseline", (string name, PromptAdminService svc) =>
+        {
+            var detail = svc.RebaselineOverride(name);
+            return detail == null ? Results.NotFound(new { error = $"Unknown prompt '{name}'." }) : Results.Ok(detail);
+        });
+
         var maintenance = app.MapGroup("/api/maintenance");
 
         maintenance.MapPost("/backfill-keys", (TaskMutationService mutations) =>
@@ -77,4 +111,9 @@ public static class AdminConfigEndpoints
 public sealed class UpdateOrchestratorConfigRequest
 {
     public Dictionary<string, JsonElement>? Values { get; set; }
+}
+
+public sealed class SavePromptOverrideRequest
+{
+    public string? Content { get; set; }
 }

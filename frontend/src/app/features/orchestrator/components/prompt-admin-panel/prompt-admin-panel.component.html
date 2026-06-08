@@ -1,0 +1,120 @@
+<div class="prompts" data-testid="prompt-admin-panel">
+  @if (loadError()) {
+    <div class="prompts__banner prompts__banner--err" data-testid="prompt-admin-load-error">
+      {{ loadError() }}
+    </div>
+  }
+
+  <div class="prompts__layout">
+    <aside class="prompts__list" data-testid="prompt-admin-list" aria-label="Prompt templates">
+      @for (group of groups(); track group.name) {
+        <div class="prompts__group-head">{{ group.name }}</div>
+        @for (item of group.items; track item.name) {
+          <button
+            type="button"
+            class="prompts__item"
+            [class.prompts__item--active]="item.name === selectedName()"
+            [attr.data-testid]="'prompt-admin-item-' + item.name"
+            (click)="select(item.name)">
+            <span class="prompts__item-title">{{ item.title }}</span>
+            <span class="prompts__item-tags">
+              @if (item.hasOverride) {
+                <span class="prompts__pill prompts__pill--override">overridden</span>
+              } @else {
+                <span class="prompts__pill">default</span>
+              }
+              @if (item.defaultChangedSinceOverride) {
+                <span class="prompts__pill prompts__pill--warn"
+                      [attr.data-testid]="'prompt-admin-drift-' + item.name">default changed</span>
+              }
+            </span>
+          </button>
+        }
+      }
+    </aside>
+
+    <main class="prompts__detail">
+      @if (detail(); as d) {
+        <header class="prompts__detail-head">
+          <div>
+            <h3 class="prompts__detail-title">{{ d.title }}</h3>
+            <p class="prompts__detail-desc">{{ d.description }}</p>
+            <code class="prompts__detail-file">{{ d.name }}</code>
+          </div>
+        </header>
+
+        <div class="prompts__status" data-testid="prompt-admin-status">
+          @if (d.hasOverride) {
+            <span class="prompts__pill prompts__pill--override">overridden by you</span>
+            <span class="prompts__muted">
+              based on default {{ shortSha(d.baseDefaultSha) }}
+              @if (d.overrideUpdatedAt) { · edited {{ d.overrideUpdatedAt | date:'short' }} }
+            </span>
+          } @else {
+            <span class="prompts__pill">shipped default</span>
+            <span class="prompts__muted">default {{ shortSha(d.defaultSha) }}</span>
+          }
+        </div>
+
+        @if (d.defaultChangedSinceOverride) {
+          <div class="prompts__banner prompts__banner--warn" data-testid="prompt-admin-drift-banner">
+            <div>
+              <strong>The shipped default changed since you created this override.</strong>
+              <span class="prompts__muted">
+                Your override was based on {{ shortSha(d.baseDefaultSha) }}; the current default is
+                {{ shortSha(d.defaultSha) }}. Compare below, then choose:
+              </span>
+            </div>
+            <div class="prompts__banner-actions">
+              <button type="button" class="prompts__btn" [disabled]="busy()"
+                      data-testid="prompt-admin-keep-mine" (click)="keepMine()">Keep mine</button>
+              <button type="button" class="prompts__btn" [disabled]="busy()"
+                      data-testid="prompt-admin-take-default" (click)="takeNewDefault()">Take new default</button>
+            </div>
+          </div>
+        }
+
+        @if (actionError()) {
+          <div class="prompts__banner prompts__banner--err" data-testid="prompt-admin-action-error">
+            {{ actionError() }}
+          </div>
+        }
+
+        <label class="prompts__editor-label" for="prompt-editor">Effective prompt (editing creates an override)</label>
+        <textarea
+          id="prompt-editor"
+          class="prompts__editor"
+          data-testid="prompt-admin-editor"
+          spellcheck="false"
+          [ngModel]="draft()"
+          (ngModelChange)="draft.set($event)"></textarea>
+
+        <div class="prompts__actions">
+          <button type="button" class="prompts__btn prompts__btn--primary"
+                  data-testid="prompt-admin-save"
+                  [disabled]="busy() || !dirty()" (click)="save()">Save override</button>
+          <button type="button" class="prompts__btn"
+                  [disabled]="busy() || !dirty()" (click)="revertDraft()">Revert edits</button>
+          <button type="button" class="prompts__btn prompts__btn--danger"
+                  data-testid="prompt-admin-reset"
+                  [disabled]="busy() || !d.hasOverride" (click)="resetToDefault()">Reset to default</button>
+          @if (d.hasDefault) {
+            <button type="button" class="prompts__btn prompts__btn--ghost"
+                    data-testid="prompt-admin-toggle-default" (click)="toggleDefault()">
+              {{ showDefault() ? 'Hide shipped default' : 'Show shipped default' }}
+            </button>
+          }
+        </div>
+
+        @if (showDefault() && d.hasDefault) {
+          <div class="prompts__compare" data-testid="prompt-admin-default-view">
+            <div class="prompts__compare-head">Shipped default ({{ shortSha(d.defaultSha) }}) - read only</div>
+            <pre class="prompts__default">{{ d.defaultContent }}</pre>
+          </div>
+        }
+      } @else {
+        <div class="prompts__empty">Select a prompt to view and edit it.</div>
+      }
+    </main>
+  </div>
+</div>

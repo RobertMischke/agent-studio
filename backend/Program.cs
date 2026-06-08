@@ -241,6 +241,7 @@ builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();
 builder.Services.AddSingleton<RuntimePromptService>();
+builder.Services.AddSingleton<PromptAdminService>();
 builder.Services.AddSingleton<TitleGenerationService>();
 builder.Services.AddSingleton<PromptEnhancementService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.AdHoc.AdHocUsageRecorder>();

@@ -78,21 +78,37 @@ public sealed partial class RuntimePromptService
         });
     }
 
+    /// <summary>
+    /// Effective resolution: an application-wide override (user-data
+    /// directory, survives updates) wins over the shipped default
+    /// (bin / source tree, replaced on update). This is the
+    /// Default/Override layering the admin surface edits.
+    /// </summary>
     private string ResolveTemplatePath(string templateName)
     {
-        foreach (var root in CandidateRoots())
-        {
-            if (string.IsNullOrWhiteSpace(root)) continue;
-            var path = Path.GetFullPath(Path.Combine(root, templateName));
-            if (File.Exists(path)) return path;
-        }
+        var overridePath = OverridePathFor(templateName);
+        if (File.Exists(overridePath)) return overridePath;
+
+        var defaultPath = TryResolveDefaultPath(templateName);
+        if (defaultPath != null) return defaultPath;
 
         throw new FileNotFoundException(
             $"Runtime prompt template '{templateName}' was not found. " +
             $"Set PromptTemplates:RuntimePath or ensure prompts/runtime is copied to the output directory.");
     }
 
-    private IEnumerable<string?> CandidateRoots()
+    private string? TryResolveDefaultPath(string templateName)
+    {
+        foreach (var root in DefaultRoots())
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            var path = Path.GetFullPath(Path.Combine(root, templateName));
+            if (File.Exists(path)) return path;
+        }
+        return null;
+    }
+
+    private IEnumerable<string?> DefaultRoots()
     {
         var configured = _configuration["PromptTemplates:RuntimePath"];
         if (!string.IsNullOrWhiteSpace(configured)) yield return configured;
@@ -100,6 +116,104 @@ public sealed partial class RuntimePromptService
         yield return Path.Combine(AppContext.BaseDirectory, "prompts", "runtime");
         yield return Path.Combine(Directory.GetCurrentDirectory(), "prompts", "runtime");
         yield return Path.Combine(Directory.GetCurrentDirectory(), "..", "prompts", "runtime");
+    }
+
+    /// <summary>
+    /// Application-wide override directory. Survives app updates because it
+    /// lives in user data, not in the install/bin tree. Resolution mirrors
+    /// the other user-data stores (config override -&gt; TaskRepository -&gt;
+    /// LocalAppData).
+    /// </summary>
+    public string OverrideDirectory
+    {
+        get
+        {
+            var configured = _configuration["PromptTemplates:OverridePath"];
+            if (!string.IsNullOrWhiteSpace(configured)) return configured;
+
+            var taskRepo = _configuration["TaskRepository"];
+            if (!string.IsNullOrWhiteSpace(taskRepo))
+                return Path.Combine(taskRepo, ".metadata", "prompt-overrides");
+
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrEmpty(local)) local = Path.GetTempPath();
+            return Path.Combine(local, "agent-taskboard", "prompt-overrides");
+        }
+    }
+
+    private string OverridePathFor(string templateName) =>
+        Path.GetFullPath(Path.Combine(OverrideDirectory, templateName));
+
+    /// <summary>Shipped default content, ignoring any override. Null when the template ships no default.</summary>
+    public string? TryReadDefault(string templateName)
+    {
+        var path = TryResolveDefaultPath(templateName);
+        return path == null ? null : File.ReadAllText(path);
+    }
+
+    /// <summary>Override content, or null when no application-wide override exists.</summary>
+    public string? TryReadOverride(string templateName)
+    {
+        var path = OverridePathFor(templateName);
+        return File.Exists(path) ? File.ReadAllText(path) : null;
+    }
+
+    public bool HasOverride(string templateName) => File.Exists(OverridePathFor(templateName));
+
+    /// <summary>
+    /// Filenames of every shipped default template (first existing default
+    /// root wins) plus any override-only file. Lets the admin surface list
+    /// "ALL" templates, including ones added after the description catalog.
+    /// </summary>
+    public IReadOnlyList<string> EnumerateTemplateNames()
+    {
+        var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in DefaultRoots())
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            if (!Directory.Exists(root)) continue;
+            foreach (var file in Directory.EnumerateFiles(root, "*.md"))
+                names.Add(Path.GetFileName(file));
+            break; // first existing default root is authoritative
+        }
+        if (Directory.Exists(OverrideDirectory))
+            foreach (var file in Directory.EnumerateFiles(OverrideDirectory, "*.md"))
+                names.Add(Path.GetFileName(file));
+        return names.ToList();
+    }
+
+    /// <summary>Writes (or replaces) the application-wide override and busts the render cache.</summary>
+    public void WriteOverride(string templateName, string content)
+    {
+        var path = OverridePathFor(templateName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, content ?? string.Empty);
+        try { File.Replace(temp, path, destinationBackupFileName: null); }
+        catch (FileNotFoundException) { File.Move(temp, path); }
+        InvalidateCache(templateName);
+        _logger.LogInformation("prompt-override-written template={Template} path={Path}", templateName, path);
+    }
+
+    /// <summary>Removes the override (reset to shipped default) and busts the render cache.</summary>
+    public bool DeleteOverride(string templateName)
+    {
+        var path = OverridePathFor(templateName);
+        if (!File.Exists(path))
+        {
+            InvalidateCache(templateName);
+            return false;
+        }
+        File.Delete(path);
+        InvalidateCache(templateName);
+        _logger.LogInformation("prompt-override-reset template={Template} path={Path}", templateName, path);
+        return true;
+    }
+
+    public void InvalidateCache(string? templateName = null)
+    {
+        if (templateName == null) _cache.Clear();
+        else _cache.TryRemove(templateName, out _);
     }
 
     [GeneratedRegex(@"\{\{\s*(?<key>[A-Za-z0-9_]+)\s*\}\}", RegexOptions.Compiled)]
