@@ -29,6 +29,7 @@ import * as path from 'path';
 const PROJECT = 'fixture';
 const WATCH_PATH = 'C:/fixtures/multi-commit-repo';
 const JOB_ID = 'multi-commit-task';
+const WORKTREE_JOB_ID = 'worktree-commit-menu-task';
 
 interface CommitFixture {
   sha: string;
@@ -199,6 +200,99 @@ async function installRoutes(page: Page) {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }));
 }
 
+async function installWorktreeRoutes(page: Page) {
+  await page.route('**/api/**', (route) => {
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+  });
+  await page.route('**/api/tasks/grouped**', (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        preparation: [], orchestratorPrep: [],
+        ready: [], progress: [], failedPickup: [],
+        autoReview: [], humanReview: [], completed: [], archive: []
+      })
+    }));
+  await page.route('**/api/watch-paths**', (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify([{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH, repositoryPath: WATCH_PATH }])
+    }));
+  await page.route('**/api/environment**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } }) }));
+  await page.route('**/api/agent-rules', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/clients', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/cli/usage**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }));
+  await page.route('**/api/cli/quota**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ at: '2026-05-29T00:00:00Z', snapshots: [] }) }));
+  await page.route('**/api/git/summary**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route(/\/api\/git\/hygiene(\?|$)/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  await page.route(/\/api\/runner\/status(\?|$)/, (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ projects: { [PROJECT]: { projectName: PROJECT, mode: 'manual', activeJobId: WORKTREE_JOB_ID, activeExecution: null, queuedJobIds: [] } } })
+    }));
+
+  const idEsc = WORKTREE_JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const detail = {
+    info: {
+      id: WORKTREE_JOB_ID,
+      jobKey: `${WATCH_PATH}::${WORKTREE_JOB_ID}`,
+      title: 'Worktree commit menu fixture',
+      state: '5-human-review',
+      agent: 'codex',
+      cliType: 'codex',
+      model: 'gpt-5',
+      watchPath: WATCH_PATH,
+      projectName: PROJECT,
+      folderPath: `${WATCH_PATH}/.orchestrator/jobs/5-human-review/${WORKTREE_JOB_ID}`,
+      sessionName: null,
+      lastUsage: null,
+      execution: null,
+      order: 1,
+      commit: null,
+      commits: [],
+      ownerClientId: 'local-default'
+    },
+    promptMarkdown: 'Pretend active worktree prompt.',
+    statusMarkdown: '## Review\n\nUncommitted worktree changes.\n',
+    log: [],
+    promptHistory: [],
+    contextUsage: null,
+    reviewEvidence: [],
+    summaryState: { status: 'finished', startedAt: null, finishedAt: null, errorMessage: null }
+  };
+
+  await page.route(new RegExp(`/api/tasks/${idEsc}/output(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/runs(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/session-events(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) }));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/git/hygiene(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projectName: PROJECT, isRepo: true, isDirty: true, hasUpstream: true, ahead: 0, behind: 0, job: null, error: null }) }));
+  await page.route(new RegExp(`/api/tasks/${idEsc}/git/status(\\?|$)`), (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        isRepo: true,
+        branch: 'feature/worktree-menu',
+        filesChanged: 1,
+        totalAdded: 8,
+        totalRemoved: 2,
+        files: [{ status: 'M', path: 'src/worktree.ts', added: 8, removed: 2 }],
+        error: null
+      })
+    }));
+  await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }));
+}
+
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
 
 test.describe('Task-detail multi-commit chain', () => {
@@ -206,38 +300,32 @@ test.describe('Task-detail multi-commit chain', () => {
     await page.addInitScript(() => {
       try {
         localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: false, protocol: false, git: true }));
+        localStorage.setItem('taskboard.gitPane.commitGroupCollapsed', '1');
       } catch { /* private mode */ }
     });
   });
 
-  test('defaults to the aggregated all-commits view', async ({ page }) => {
+  test('defaults to a collapsed aggregated all-commits group', async ({ page }) => {
     await installRoutes(page);
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
     await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
 
-    // The "All" filter chip is present and selected by default; no
-    // individual commit chip is selected.
-    const allChip = page.getByTestId('git-commit-chain-all');
-    await expect(allChip).toBeVisible();
-    await expect(allChip).toHaveClass(/git-view__commit-chain-item--selected/);
-    const items = page.getByTestId('git-commit-chain-item');
-    await expect(items).toHaveCount(3);
-    for (let i = 0; i < 3; i++) {
-      await expect(items.nth(i)).not.toHaveClass(/git-view__commit-chain-item--selected/);
-    }
+    // The group is the single aggregate control: collapsed by default,
+    // summarising the active "All commits" view without a second
+    // "All commits" header below it.
+    const groupToggle = page.getByTestId('git-commit-group-toggle');
+    await expect(groupToggle).toBeVisible();
+    await expect(groupToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(groupToggle).toContainText('All 3 commits');
+    await expect(page.getByTestId('git-commit-chain')).toHaveCount(0);
+    await expect(page.getByTestId('git-commit-aggregate-header')).toHaveCount(0);
 
-    // The aggregate header is shown, summarising files + commit count, and
-    // the combined diff renders without a click.
-    const header = page.getByTestId('git-commit-aggregate-header');
-    await expect(header).toBeVisible();
-    await expect(page.getByTestId('git-commit-sha')).toContainText('All commits');
-    await expect(header).toContainText('4 files');
-    await expect(header).toContainText('3 commits');
+    // The combined diff still renders without expanding the group.
     await expect(page.getByTestId('git-diff')).toContainText('aggregated across all commits', { timeout: 5_000 });
 
     if (RESULTS_DIR) {
       const pane = page.getByTestId('pane-git');
-      await pane.screenshot({ path: path.join(RESULTS_DIR, 'multi-commit-aggregate-default.png') });
+      await pane.screenshot({ path: path.join(RESULTS_DIR, 'multi-commit-aggregate-collapsed.png') });
     }
   });
 
@@ -246,6 +334,7 @@ test.describe('Task-detail multi-commit chain', () => {
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
     await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
 
+    await page.getByTestId('git-commit-group-toggle').click();
     const chain = page.getByTestId('git-commit-chain');
     await expect(chain).toBeVisible();
     const items = page.getByTestId('git-commit-chain-item');
@@ -279,6 +368,7 @@ test.describe('Task-detail multi-commit chain', () => {
     }
 
     const items = page.getByTestId('git-commit-chain-item');
+    await page.getByTestId('git-commit-group-toggle').click();
     await expect(items).toHaveCount(3);
 
     // Confirm the default selection is the aggregate before clicking.
@@ -306,8 +396,8 @@ test.describe('Task-detail multi-commit chain', () => {
       btn?.click();
     });
     await expect(page.getByTestId('git-commit-chain-all')).toHaveClass(/git-view__commit-chain-item--selected/, { timeout: 5_000 });
-    await expect(page.getByTestId('git-commit-aggregate-header')).toBeVisible();
-    await expect(page.getByTestId('git-commit-sha')).toContainText('All commits');
+    await expect(page.getByTestId('git-commit-aggregate-header')).toHaveCount(0);
+    await expect(page.getByTestId('git-commit-group-toggle')).toContainText('All 3 commits');
   });
 
   test('pane title surfaces the multi-commit count', async ({ page }) => {
@@ -319,5 +409,22 @@ test.describe('Task-detail multi-commit chain', () => {
     // rather than the singular "Task commit" so reviewers see the
     // chain length without scanning the strip.
     await expect(page.locator('[data-testid="pane-git"] .pane__title')).toContainText('3 task commits');
+  });
+
+  test('studio overflow menu exposes worktree commit actions', async ({ page }) => {
+    await installWorktreeRoutes(page);
+    await page.goto(`/?job=${encodeURIComponent(WORKTREE_JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await expect(page.getByTestId('pane-git')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('git-files-count')).toHaveText('1 files', { timeout: 10_000 });
+
+    await page.getByTestId('studio-triage-overflow-btn').click();
+    const menu = page.getByTestId('studio-triage-overflow-panel');
+    await expect(menu).toBeVisible();
+    await expect(page.getByTestId('studio-triage-overflow-item-generate-commit-message')).toHaveText('Generate Commit Message');
+    await expect(page.getByTestId('studio-triage-overflow-item-add-commit')).toContainText('Add Commit...');
+
+    if (RESULTS_DIR) {
+      await menu.screenshot({ path: path.join(RESULTS_DIR, 'studio-overflow-commit-actions.png') });
+    }
   });
 });

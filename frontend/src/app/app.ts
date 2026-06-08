@@ -1306,20 +1306,42 @@ export class App implements OnInit, OnDestroy {
     return sel ? overflowActionsFor(sel.info.state) : [];
   });
   readonly studioTriageHasActions = computed(
-    () => this.studioTriagePrimary() !== null || this.studioTriageOverflow().length > 0,
+    () => this.studioTriagePrimary() !== null || this.studioTriageOverflow().length > 0 || this.studioCommitActionsAvailable(),
   );
   readonly studioTriageOverflowOpen = signal(false);
   readonly studioTriageOverflowAnchor = signal<HTMLElement | null>(null);
-  readonly studioTriageMenuItems = computed<MenuItem[]>(() => {
+  studioCommitActionsAvailable(): boolean {
+    return this.selectedJob() !== null && !!this.jobDetailRef?.commitActionsAvailable();
+  }
+  studioTriageMenuItems(): MenuItem[] {
     const blocked = this.updateClient.mutationsBlocked();
-    return this.studioTriageOverflow().map<MenuItem>(b => ({
+    const items = this.studioTriageOverflow().map<MenuItem>(b => ({
       kind: 'row',
       id: b.id,
       label: b.label,
       danger: b.variant === 'danger',
       disabled: blocked,
     }));
-  });
+    if (this.studioCommitActionsAvailable()) {
+      if (items.length > 0) items.push({ kind: 'separator' });
+      items.push(
+        {
+          kind: 'row',
+          id: 'generate-commit-message',
+          label: this.jobDetailRef?.generatingMsg() ? 'Generating Commit Message...' : 'Generate Commit Message',
+          disabled: blocked || !!this.jobDetailRef?.generatingMsg() || !!this.jobDetailRef?.committing(),
+        },
+        {
+          kind: 'row',
+          id: 'add-commit',
+          label: this.jobDetailRef?.committing() ? 'Committing...' : 'Add Commit...',
+          hint: this.jobDetailRef?.commitMessage().trim() ? 'Draft ready' : undefined,
+          disabled: blocked || !!this.jobDetailRef?.generatingMsg() || !!this.jobDetailRef?.committing(),
+        },
+      );
+    }
+    return items;
+  }
 
   onStudioTriagePrimary(): void {
     const sel = this.selectedJob();
@@ -1340,6 +1362,16 @@ export class App implements OnInit, OnDestroy {
   }
 
   onStudioTriageMenuItemClick(ev: MenuItemClickEvent): void {
+    if (ev.id === 'generate-commit-message') {
+      this.studioTriageOverflowOpen.set(false);
+      this.jobDetailRef?.generateCommitMessage();
+      return;
+    }
+    if (ev.id === 'add-commit') {
+      this.studioTriageOverflowOpen.set(false);
+      this.jobDetailRef?.addCommitFromMenu();
+      return;
+    }
     const button = this.studioTriageOverflow().find(b => b.id === ev.id);
     const sel = this.selectedJob();
     if (!sel || !button) return;

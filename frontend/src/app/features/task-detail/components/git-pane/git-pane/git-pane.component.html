@@ -77,15 +77,7 @@
           }
         </section>
       }
-      @if (git.isAggregate()) {
-        <div class="git-view__commit-header git-view__commit-header--aggregate"
-             data-testid="git-commit-aggregate-header">
-          <div class="git-view__commit-row">
-            <span class="git-view__commit-sha" data-testid="git-commit-sha">∑ All commits</span>
-            <span class="git-view__commit-files">{{ git.commitFiles().length }} {{ git.commitFiles().length === 1 ? 'file' : 'files' }} · {{ git.commitChain().length }} commits</span>
-          </div>
-        </div>
-      } @else if (git.commitDetail()?.commit; as c) {
+      @if (git.commitDetail()?.commit; as c) {
         <div class="git-view__commit-header"
              [class.git-view__commit-header--collapsed]="commitHeaderCollapsed()"
              data-testid="git-commit-header">

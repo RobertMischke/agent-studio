@@ -5,6 +5,30 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { DetailHeaderComponent } from './detail-header.component';
+import type { TaskInfo } from '../../../../models/task.model';
+
+const taskInfo: TaskInfo = {
+  id: 'ASS-871',
+  taskKey: 'ASS-871',
+  key: 'ASS-871',
+  displayKey: 'ASS-871',
+  title: 'Polish commit panel',
+  state: '5-human-review',
+  order: 1,
+  agent: 'codex',
+  createdAt: '2026-06-08T10:00:00Z',
+  watchPath: 'C:/Projects/agent-taskboard-devspace/agent-taskboard-dev',
+  projectName: 'agent-taskboard',
+  folderPath: 'C:/Projects/agent-taskboard-workspace/projects/agent-taskboard/tasks/000/ASS-871',
+  lastActivity: '2026-06-08T10:00:00Z',
+  sessionName: null,
+  model: null,
+  cliType: 'codex',
+  useOwnSession: null,
+  lastUsage: null,
+  execution: null,
+  commit: null,
+};
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -30,15 +54,35 @@ describe('DetailHeaderComponent (smoke)', () => {
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(DetailHeaderComponent);
-    fixture.componentRef.setInput('info', undefined);
+    fixture.componentRef.setInput('info', taskInfo);
 
-    // Required inputs seeded with undefined — replace with realistic defaults if needed:
-    // info
     try { fixture.detectChanges(); } catch (e) {
       // Render needs more setup than the generic generator provides.
       // The instantiation above is still a real smoke check.
       console.warn('[smoke] DetailHeaderComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+
+  it('adds worktree commit actions to the text-only overflow menu model', async () => {
+    await TestBed.configureTestingModule({
+      imports: [DetailHeaderComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(DetailHeaderComponent);
+    fixture.componentRef.setInput('info', taskInfo);
+    fixture.componentRef.setInput('commitActionsAvailable', true);
+    fixture.componentRef.setInput('commitMessageDraft', 'Polish commit panel');
+    fixture.detectChanges();
+
+    const rows = fixture.componentInstance.triageMenuItems().filter(item => item.kind === 'row');
+    expect(rows.map(item => item.label)).toContain('Generate Commit Message');
+    expect(rows.map(item => item.label)).toContain('Add Commit...');
+    expect(rows.find(item => item.id === 'add-commit')?.hint).toBe('Draft ready');
   });
 });

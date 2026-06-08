@@ -13,8 +13,8 @@
 
 .pane--git { min-height: 0; }
 .git-view {
-  gap: 8px;
-  padding: 6px 8px 8px;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2) var(--studio-spacing-2);
   min-height: 0;
   flex: 1 1 auto;
 }
@@ -316,7 +316,7 @@
 .git-view__split-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--studio-spacing-1);
   min-height: 0;
   flex: 1;
 }
@@ -390,28 +390,28 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-1);
 }
 .git-view__commit-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--studio-spacing-1);
   border: 1px solid var(--studio-border);
   border-radius: 8px;
-  padding: 4px;
+  padding: var(--studio-spacing-1);
   background: var(--studio-bg-hover);
 }
 .git-view__commit-group--collapsed {
-  padding: 3px 4px;
+  padding: 2px var(--studio-spacing-1);
 }
 .git-view__commit-group-toggle {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--studio-spacing-2);
   width: 100%;
   min-width: 0;
-  padding: 4px 6px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -452,21 +452,21 @@
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--studio-spacing-1);
 }
 .git-view__commit-chain-item--all {
-  padding-bottom: 4px;
+  padding-bottom: var(--studio-spacing-1);
   margin-bottom: 2px;
   border-bottom: 1px solid var(--studio-border);
 }
 .git-view__commit-chain-item--all .git-view__commit-chain-subject { font-weight: 600; }
 .git-view__commit-chain-button {
   display: flex;
-  gap: 8px;
+  gap: var(--studio-spacing-2);
   align-items: baseline;
   flex: 1 1 auto;
   min-width: 0;
-  padding: 6px 8px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
