@@ -95,6 +95,30 @@
   }
 }
 
+.pane-tabs--header .pane-tab__badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+}
+
+.pane-tabs--header .pane-tab__badge .count-badge {
+  min-width: 20px;
+  height: 18px;
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--studio-fg-dim) 18%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--studio-bg-elevated) 76%, var(--studio-fg-dim) 24%);
+  color: var(--studio-fg);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pane-tabs--header .pane-tab--active .pane-tab__badge .count-badge {
+  border-color: color-mix(in srgb, var(--studio-accent) 36%, transparent);
+  background: color-mix(in srgb, var(--studio-accent) 16%, var(--studio-bg-elevated) 84%);
+  color: var(--studio-fg-strong);
+}
+
 /* Pill variant — compact toggle group inside the pane body. */
 .pane-tabs--pill .pane-tab {
   padding: 3px 10px;

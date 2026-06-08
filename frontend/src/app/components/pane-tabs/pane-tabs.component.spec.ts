@@ -40,4 +40,31 @@ describe('PaneTabsComponent (smoke)', () => {
       expect(PaneTabsComponent).toBeTruthy();
     }
   });
+
+  it('renders tab badges with active and inactive badge tones', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PaneTabsComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PaneTabsComponent);
+    fixture.componentRef.setInput('tabs', [
+      { id: 'files', label: 'Files', badge: 6, testid: 'tab-files' },
+      { id: 'evidence', label: 'Evidence', badge: 2, testid: 'tab-evidence' },
+    ]);
+    fixture.componentRef.setInput('activeTabId', 'evidence');
+    fixture.componentRef.setInput('variant', 'header');
+    fixture.detectChanges();
+
+    const filesBadge = fixture.nativeElement.querySelector('[data-testid="tab-files-badge"] .count-badge');
+    const evidenceBadge = fixture.nativeElement.querySelector('[data-testid="tab-evidence-badge"] .count-badge');
+    expect(filesBadge?.textContent?.trim()).toBe('6');
+    expect(filesBadge?.classList.contains('count-badge--active')).toBe(false);
+    expect(evidenceBadge?.textContent?.trim()).toBe('2');
+    expect(evidenceBadge?.classList.contains('count-badge--active')).toBe(true);
+  });
 });
