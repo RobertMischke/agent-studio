@@ -53,9 +53,9 @@ describe('EpicRollupPaneComponent (smoke)', () => {
  * ASS-733 regression. The epic rollup pane sits as a flex child of the
  * height-constrained `.detail` column. When vertical space is tight (short
  * column / after a resize) the host must be able to shrink below its content
- * height and scroll its own viewport — otherwise the gray box (`.epic-rollup`)
+ * height and scroll its own viewport. Otherwise the epic band (`.epic-rollup`)
  * overflows the column unreachably and its lower lanes (incl. Archive) spill
- * past the visible bottom with no scrollbar, making the box look "too small".
+ * past the visible bottom with no scrollbar, making the band look "too small".
  *
  * This guards the host scroll contract at the unit level (no backend needed),
  * complementing the live-backend e2e in
@@ -85,7 +85,7 @@ describe('EpicRollupPaneComponent host scroll contract (ASS-733)', () => {
       const style = getComputedStyle(host);
       // The flex item must be allowed to shrink past its content height...
       expect(style.minHeight).toBe('0px');
-      // ...and own the scroll so the gray box keeps full height while every
+      // ...and own the scroll so the epic band keeps full height while every
       // lane stays reachable.
       expect(['auto', 'scroll']).toContain(style.overflowY);
     } finally {

@@ -1,5 +1,5 @@
 /* The pane is a flex child of the height-constrained detail column. Let it
-   shrink below its content height and scroll its own viewport so the gray box
+   shrink below its content height and scroll its own viewport so the epic band
    never spills its lower lanes (e.g. Archive) past the bottom edge with no way
    to reach them when vertical space is tight or the view is resized. */
 :host {
@@ -13,9 +13,9 @@
   flex-direction: column;
   gap: var(--studio-spacing-2);
   padding: var(--studio-spacing-3);
-  border: 1px solid var(--studio-border);
-  border-radius: 6px;
-  background: var(--studio-bg-elevated);
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--studio-accent) 7%, transparent);
 
   /* Editable epic properties (description / references / model+CLI). Sits
      above the status board so the pane reads as Edit-then-Status. */
@@ -64,7 +64,7 @@
     cursor: pointer;
     font-size: 11px;
     font-weight: 600;
-    padding: 2px 9px;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
     transition: background 0.12s ease, border-color 0.12s ease;
 
     &:hover:not(:disabled) {
@@ -109,7 +109,7 @@
     font-size: 15px;
     font-weight: 700;
     line-height: 1.3;
-    padding: 4px 8px;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
 
     &:focus-visible {
       outline: 2px solid var(--studio-accent);
@@ -166,7 +166,7 @@
   &__stat {
     font-size: 11px;
     font-weight: 600;
-    padding: 1px 7px;
+    padding: var(--studio-spacing-1) var(--studio-spacing-2);
     border-radius: 10px;
     border: 1px solid var(--studio-border);
     color: var(--studio-fg-muted);
