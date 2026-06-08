@@ -86,11 +86,19 @@ public sealed class TaskTransitionService
         // than committing it. See TaskModes / ParallelSlotPolicy and ADR-0052.
         var isReadOnly = TaskModes.IsReadOnly(info.Mode);
 
+        // A+B+C: the commit step is non-optional and decoupled from both the
+        // target lane and the terminal-sentinel classification. Whenever a task
+        // LEAVES 3-progress, its worktree changes MUST be captured before the
+        // move — regardless of where it goes (auto-review, human-review, ready
+        // on reissue, …) or how the run was classified. The evidence is simply
+        // "is there anything in the worktree": TryAutoCommitAsync self-gates and
+        // returns null on a clean tree, so this is a no-op when there is nothing
+        // to commit. The old `&& settings.AutoCommit` gate is removed on purpose
+        // — committing the agent's work is never optional (operator directive
+        // 2026-06-08; the broken-commit-pipeline incident).
         var shouldAutoCommit =
             !isReadOnly &&
-            info.State == TaskStates.Progress &&
-            targetState == TaskStates.AutoReview &&
-            settings.AutoCommit;
+            info.State == TaskStates.Progress;
 
         TaskCommitInfo? commitToStamp = null;
         if (shouldAutoCommit)
@@ -124,7 +132,7 @@ public sealed class TaskTransitionService
         // review lane renders it. No LLM, no tokens; same git + windows in,
         // same result out, so re-running is a no-op.
         if (outcome.Status == MoveJobStatus.Success
-            && info.State == TaskStates.Progress && targetState == TaskStates.AutoReview)
+            && info.State == TaskStates.Progress)
         {
             var attributed = _scanner.FindJob(jobId, watchPath);
             if (attributed != null) EnterPostProcessingPhase(attributed);
@@ -138,7 +146,7 @@ public sealed class TaskTransitionService
             // forget and fully guarded - a drift failure (or the absence of any
             // enabled dimension; the runner self-gates default-OFF) must never
             // affect the lane transition that already completed above.
-            if (attributed != null && _driftRunner != null)
+            if (attributed != null && _driftRunner != null && targetState == TaskStates.AutoReview)
             {
                 TriggerDriftPostSteps(attributed, settings);
             }

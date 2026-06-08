@@ -473,6 +473,17 @@ public static class AgentOutcomeAnalyzer
             return (AgentOutcomeKind.Blocked, "Agent text suggests the task is blocked (heuristic).");
         if (ProgressPattern.IsMatch(tail))
             return (AgentOutcomeKind.Progress, "Agent text suggests it is mid-task (heuristic).");
+        // B (operator directive 2026-06-08, broken-commit-pipeline incident):
+        // do NOT strand a substantial reply on Unknown. A run that produced a
+        // real reply but no parseable verdict (a shape this codex-tuned matcher
+        // misses for claude/other CLIs) has almost always done work. The safe,
+        // CLI-agnostic default is to treat it as Done and let it flow to review
+        // — where the now-non-optional commit step captures the work and a
+        // human/orchestrator has the final say — instead of spinning the
+        // classifier-unknown reissue loop that leaves the work uncommitted in
+        // the worktree. Only a short, contentless reply stays Unknown.
+        if (agentText.Trim().Length >= 400)
+            return (AgentOutcomeKind.Done, "Substantial reply without a parseable verdict; treating as done for review (heuristic).");
         return (AgentOutcomeKind.Unknown, "Agent text did not match any known shape.");
     }
 
