@@ -19,6 +19,7 @@
         <app-count-badge class="pane-tab__badge"
                          [value]="tab.badge"
                          [tone]="tab.id === activeTabId() ? 'active' : 'default'"
+                         variant="pane-tab"
                          [attr.data-testid]="tab.testid ? tab.testid + '-badge' : null" />
       }
       @if (tab.indicator === 'spinner') {

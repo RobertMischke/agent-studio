@@ -63,8 +63,10 @@ describe('PaneTabsComponent (smoke)', () => {
     const filesBadge = fixture.nativeElement.querySelector('[data-testid="tab-files-badge"] .count-badge');
     const evidenceBadge = fixture.nativeElement.querySelector('[data-testid="tab-evidence-badge"] .count-badge');
     expect(filesBadge?.textContent?.trim()).toBe('6');
+    expect(filesBadge?.classList.contains('count-badge--pane-tab')).toBe(true);
     expect(filesBadge?.classList.contains('count-badge--active')).toBe(false);
     expect(evidenceBadge?.textContent?.trim()).toBe('2');
+    expect(evidenceBadge?.classList.contains('count-badge--pane-tab')).toBe(true);
     expect(evidenceBadge?.classList.contains('count-badge--active')).toBe(true);
   });
 });

@@ -13,6 +13,8 @@ import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@a
  *
  * Pass `tone="active"` when the row owning the badge is selected so the
  * pill inverts to the accent fill instead of the muted elevated chip.
+ * Pass `variant="pane-tab"` for tab-strip metadata counts, where the badge
+ * needs to stay calmer and align with the tab icon/label row.
  */
 @Component({
   selector: 'app-count-badge',
@@ -27,4 +29,6 @@ export class CountBadgeComponent {
   readonly value = input<string | number | null>(null);
   /** `active` inverts the pill to the accent fill for selected rows. */
   readonly tone = input<'default' | 'active'>('default');
+  /** Context variant. Defaults preserve the canonical sidebar/tree pill. */
+  readonly variant = input<'default' | 'pane-tab'>('default');
 }

@@ -42,4 +42,15 @@ describe('CountBadgeComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.count-badge--active')).toBeTruthy();
   });
+
+  it('adds the pane-tab variant without changing the active tone contract', async () => {
+    const fixture = await mount();
+    fixture.componentRef.setInput('value', 6);
+    fixture.componentRef.setInput('variant', 'pane-tab');
+    fixture.componentRef.setInput('tone', 'active');
+    fixture.detectChanges();
+    const badge = fixture.nativeElement.querySelector('.count-badge');
+    expect(badge?.classList.contains('count-badge--pane-tab')).toBe(true);
+    expect(badge?.classList.contains('count-badge--active')).toBe(true);
+  });
 });

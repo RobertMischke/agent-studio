@@ -1,4 +1,5 @@
 @if (value() !== null) {
   <span class="count-badge"
+        [class.count-badge--pane-tab]="variant() === 'pane-tab'"
         [class.count-badge--active]="tone() === 'active'">{{ value() }}</span>
 }
