@@ -1,9 +1,14 @@
+:host {
+  display: block;
+  margin-inline: calc(var(--studio-spacing-3) * -1);
+}
+
 .epic-membership {
   display: flex;
   align-items: center;
   gap: var(--studio-spacing-2);
   width: 100%;
-  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) calc(var(--studio-spacing-3) * 2);
   border: 0;
   border-radius: 0;
   background: color-mix(in srgb, var(--studio-accent) 10%, var(--studio-bg-subtle, var(--studio-bg-hover)));

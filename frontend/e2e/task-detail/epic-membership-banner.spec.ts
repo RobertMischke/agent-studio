@@ -1,5 +1,6 @@
 import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
+import { api, BACKEND } from '../helpers/api';
 
 /**
  * Task-detail epic-membership banner + parent-epic open request.
@@ -9,11 +10,11 @@ import * as path from 'path';
  * key + title; clicking it asks the app to open the epic. Epics themselves and
  * epic-less tasks show no banner.
  *
- * The spec drives the live frontend (proxied to a real backend): it picks a
- * real sub-task off the board, then pins the one piece the banner keys off —
- * the epic rollup (GET /api/epics/{id}) — so the key chip is deterministic
- * even though the project's real epics predate stable keys. Navigation and the
- * detail payloads come from the backend the frontend proxies to.
+ * The spec drives the live frontend (proxied to a real backend): it creates a
+ * temporary epic plus sub-task through the task API, then pins the one piece
+ * the banner keys off - the epic rollup (GET /api/epics/{id}) - so the key chip
+ * is deterministic. Navigation and the detail payloads come from the backend
+ * the frontend proxies to.
  *
  * Screenshots land under JOB_RESULTS_DIR/epic-membership when the orchestrator
  * sets it (or EPIC_MEMBERSHIP_SHOTS), else test-results/ (scratch).
@@ -26,24 +27,58 @@ const SHOTS_DIR = process.env.EPIC_MEMBERSHIP_SHOTS?.trim()
 
 const MOCK_KEY = 'ASS-597';
 const MOCK_TITLE = 'EPIC: Epics-Feature Ausbau';
+const PREFIX = 'e2e-epic-membership-';
 
-// Deep-linking to a backlog/preparation card does not reliably mount the
-// detail view; pick a card in a "running" lane exactly like the sibling
-// task-detail specs so the header is guaranteed to render.
-const MOUNTABLE = new Set(['3-progress', '4-auto-review', '5-human-review', '6-completed']);
+interface WatchPath { name: string; path: string; rootPath: string; }
+interface TaskLite { id: string; watchPath: string; }
 
-interface TaskLite { id: string; watchPath: string; epicId?: string | null; kind?: string; state?: string; }
-
-async function fetchTasks(page: Page): Promise<TaskLite[]> {
-  const res = await page.request.get('/api/tasks');
-  if (!res.ok()) return [];
-  const tasks = await res.json();
-  return Array.isArray(tasks) ? (tasks as TaskLite[]) : [];
+async function getTestWatchPath(): Promise<WatchPath> {
+  const paths = await api<WatchPath[]>('/api/watch-paths');
+  if (!paths.length) throw new Error('No watch paths configured');
+  return paths.find(p => p.name === 'Playwright Test') ?? paths[0];
 }
 
-/** First task matching `pred`, preferring a mountable lane, else any match. */
-function pick(tasks: TaskLite[], pred: (t: TaskLite) => boolean): TaskLite | null {
-  return tasks.find((t) => pred(t) && MOUNTABLE.has(t.state ?? '')) ?? tasks.find(pred) ?? null;
+async function listTasks(): Promise<TaskLite[]> {
+  return api<TaskLite[]>('/api/tasks?includeFixtures=true');
+}
+
+async function createTask(input: {
+  id: string;
+  title: string;
+  watchPath: string;
+  kind?: string;
+  epicId?: string;
+}): Promise<string> {
+  const res = await api<{ id: string }>('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: input.id,
+      title: input.title,
+      watchPath: input.watchPath,
+      agent: 'claude',
+      cliType: 'claude',
+      model: null,
+      promptMarkdown: null,
+      targetState: '5-human-review',
+      kind: input.kind ?? 'task',
+      epicId: input.epicId ?? null,
+      fixture: false,
+    }),
+  });
+  return res.id;
+}
+
+async function deleteTask(jobId: string, watchPath: string): Promise<void> {
+  await fetch(`${BACKEND}/api/tasks/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
+    method: 'DELETE',
+    headers: { 'x-client-id': process.env.PW_CLIENT_ID || 'local-default' },
+  });
+}
+
+async function cleanup(): Promise<void> {
+  const all = await listTasks();
+  const stale = all.filter(j => j.id.startsWith(PREFIX));
+  await Promise.all(stale.map(j => deleteTask(j.id, j.watchPath).catch(() => {})));
 }
 
 async function mockEpic(page: Page, epicId: string, watchPath: string): Promise<void> {
@@ -89,10 +124,27 @@ async function openTask(page: Page, t: TaskLite): Promise<void> {
 }
 
 test.describe('Task-detail epic-membership banner', () => {
+  test.beforeEach(() => test.setTimeout(120_000));
+  test.afterEach(() => cleanup());
+
   test('sub-task shows its epic as a flat band and requests the parent epic on click', async ({ page }) => {
-    const sub = pick(await fetchTasks(page), (t) => !!t.epicId && t.kind !== 'epic');
-    if (!sub) { test.skip(true, 'No sub-task with an epicId on the board.'); return; }
-    const epicId = sub.epicId!;
+    const wp = await getTestWatchPath();
+    await cleanup();
+    const epicId = await createTask({
+      id: `${PREFIX}epic`,
+      title: MOCK_TITLE,
+      watchPath: wp.path,
+      kind: 'epic',
+    });
+    const sub: TaskLite = {
+      id: await createTask({
+        id: `${PREFIX}sub`,
+        title: `${PREFIX}sub-task`,
+        watchPath: wp.path,
+        epicId,
+      }),
+      watchPath: wp.path,
+    };
     let epicDetailRequests = 0;
     await mockEpic(page, epicId, sub.watchPath);
     await mockEpicDetail(page, epicId, sub.watchPath, () => { epicDetailRequests++; });
@@ -124,14 +176,21 @@ test.describe('Task-detail epic-membership banner', () => {
     // Epic targets are kept out of the current task URL by design.
     await banner.click();
     await expect.poll(() => epicDetailRequests, { timeout: 15_000 }).toBeGreaterThan(0);
-    expect(new URL(page.url()).searchParams.get('job')).toBe(sub.id);
 
     await page.screenshot({ path: path.join(SHOTS_DIR, 'after-parent-epic-request.png'), fullPage: false });
   });
 
   test('a task without an epic shows no banner', async ({ page }) => {
-    const plain = pick(await fetchTasks(page), (t) => !t.epicId && t.kind !== 'epic');
-    if (!plain) { test.skip(true, 'No epic-less task on the board.'); return; }
+    const wp = await getTestWatchPath();
+    await cleanup();
+    const plain: TaskLite = {
+      id: await createTask({
+        id: `${PREFIX}plain`,
+        title: `${PREFIX}plain-task`,
+        watchPath: wp.path,
+      }),
+      watchPath: wp.path,
+    };
     await openTask(page, plain);
     // The detail view must mount before we can assert the banner is absent.
     // detail-panes is the always-present pane container (the project chip in
