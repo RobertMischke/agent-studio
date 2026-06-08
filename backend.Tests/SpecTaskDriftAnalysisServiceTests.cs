@@ -487,7 +487,7 @@ public class SpecTaskDriftAnalysisServiceTests : IDisposable
             "  \"agent\": \"claude\",\n" +
             "  \"cliType\": \"claude\"\n" +
             "}\n";
-        File.WriteAllText(Path.Combine(dir, "job.json"), json, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "task.json"), json, Encoding.UTF8);
         if (promptBody is not null)
             File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody, Encoding.UTF8);
         if (withStatus)

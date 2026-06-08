@@ -63,11 +63,11 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
         Assert.Equal(newCliType, info!.CliType);
         Assert.Equal(newCliType, info.Agent);
 
-        // Verify the on-disk job.json is consistent so a fresh boot or external
+        // Verify the on-disk task.json is consistent so a fresh boot or external
         // reader sees the synced value (the cache invalidation in Updated()
         // would otherwise be invisible to a clean process).
         var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
-            File.ReadAllText(Path.Combine(info.FolderPath, "job.json")),
+            File.ReadAllText(Path.Combine(info.FolderPath, "task.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
         Assert.Equal(newCliType, raw["cliType"].GetString());
         Assert.Equal(newCliType, raw["agent"].GetString());
@@ -83,7 +83,7 @@ public class SetJobCliTypeSyncsAgentTests : IDisposable
 
         var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "legacy");
         Directory.CreateDirectory(jobDir);
-        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), """
             {
               "id": "legacy",
               "title": "Legacy",

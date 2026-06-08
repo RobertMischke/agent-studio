@@ -4838,7 +4838,7 @@ public class ProjectRunner
         // locked sub-file. Directory.Move() succeeds for the rest of the
         // tree (and returns success) but a stub folder containing just
         // the still-locked file or its parent <c>logs/</c> sub-folder is
-        // left behind in 3-progress. The job.json is gone (it moved with
+        // left behind in 3-progress. The task.json is gone (it moved with
         // the rest), so the next pickup tick walks into this method.
         //
         // From the user's point of view, calling that "failed pickup" is
@@ -4858,9 +4858,9 @@ public class ProjectRunner
         // written for cleanup debris.
         //
         // The genuine-orphan path (no post-progress twin) is below. A folder
-        // with no job.json is not a runnable task: a user who manually created
+        // with no task.json is not a runnable task: a user who manually created
         // an empty 3-progress/<slug>/ folder, or a hard backend crash that
-        // lost job.json without moving the job on. failed-pickup-elimination
+        // lost task.json without moving the job on. failed-pickup-elimination
         // cause #5: this is debris, not a pickup failure, so it is archived to
         // 7-archive with its evidence (logs, status.md) intact rather than
         // parked in a dead-end failure lane the operator has to triage.
@@ -4908,7 +4908,7 @@ public class ProjectRunner
 
         _pickupAttempts.TryRemove(slug, out _);
         _logger.LogInformation(
-            "[taskboard] archived stale 3-progress orphan {Slug} on {Project} to {Destination} (no job.json, no downstream twin); auto-pickup will continue",
+            "[taskboard] archived stale 3-progress orphan {Slug} on {Project} to {Destination} (no task.json, no downstream twin); auto-pickup will continue",
             slug, ProjectName, destinationSlug);
     }
 
@@ -4966,14 +4966,14 @@ public class ProjectRunner
     /// Lists every folder under this project's <c>3-progress</c> lane,
     /// ordered oldest-first by mtime. mtime uses the same shape as
     /// <see cref="StaleProgressArchiver"/>: <c>logs/cli-output.log</c>
-    /// when present, falling back to <c>job.json</c>, falling back to
+    /// when present, falling back to <c>task.json</c>, falling back to
     /// the directory itself; an empty folder lands at epoch 0 so it
     /// sorts to the head of the iteration.
     /// </summary>
     internal List<ProgressPickupCandidate> ListProgressFoldersOldestFirst()
     {
         // ADR-0024: enumerate 3-progress through the typed layer.
-        // ListLaneFolders returns orphan folders (no job.json) too,
+        // ListLaneFolders returns orphan folders (no task.json) too,
         // which is exactly the case the pickup loop is built around.
         var byId = _scanner.ScanAllJobs()
             .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Progress)
@@ -5003,7 +5003,7 @@ public class ProjectRunner
 
     /// <summary>
     /// mtime measurement matching <see cref="StaleProgressArchiver.MeasureFolder"/>:
-    /// max mtime across <c>job.json</c> and every file under <c>logs/</c>
+    /// max mtime across <c>task.json</c> and every file under <c>logs/</c>
     /// (<c>cli-output.log</c>, <c>tool-calls.jsonl</c>,
     /// <c>session-events.jsonl</c>, future log types). Falls back to the
     /// directory mtime when no files exist. Folders with nothing return
@@ -5033,7 +5033,7 @@ public class ProjectRunner
                 }
             }
 
-            var jobJson = Path.Combine(folder, "job.json");
+            var jobJson = Path.Combine(folder, "task.json");
             if (File.Exists(jobJson))
             {
                 try
@@ -5055,7 +5055,7 @@ public class ProjectRunner
     /// <summary>
     /// Reroute a 3-progress folder whose autopickup attempts have exhausted
     /// the retry budget. failed-pickup-elimination doctrine: a folder that
-    /// carries a <c>job.json</c> is a real task and is NEVER parked in a
+    /// carries a <c>task.json</c> is a real task and is NEVER parked in a
     /// dead-end failure lane. The budget-exhaustion cause decides where it
     /// goes instead:
     ///

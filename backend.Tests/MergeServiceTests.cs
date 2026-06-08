@@ -225,8 +225,8 @@ public class MergeServiceTests : IDisposable
         Assert.NotNull(still);
         Assert.Equal(TaskStates.Backlog, still!.State);
 
-        // job.json carries mergedInto pointer.
-        var json = File.ReadAllText(Path.Combine(still.FolderPath, "job.json"));
+        // task.json carries mergedInto pointer.
+        var json = File.ReadAllText(Path.Combine(still.FolderPath, "task.json"));
         Assert.Contains("\"mergedInto\":", json);
         Assert.Contains("primary", json);
     }
@@ -257,7 +257,7 @@ public class MergeServiceTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{title}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
     }

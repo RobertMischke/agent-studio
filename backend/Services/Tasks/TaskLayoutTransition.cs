@@ -5,7 +5,7 @@ namespace OrchestratorApi.Services.Tasks;
 
 /// <summary>
 /// Lane change for the flat storage layout (F45 restscope) expressed as a pure
-/// metadata + index mutation: it rewrites <c>job.json.state</c> and moves the
+/// metadata + index mutation: it rewrites <c>task.json.state</c> and moves the
 /// task's location between state buckets in <c>index/by-state.json</c>, with NO
 /// <see cref="Directory.Move(string, string)"/>. The task's physical location
 /// (<c>jobs/&lt;bucket&gt;/&lt;key&gt;</c>) is invariant under a lane change.
@@ -15,7 +15,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// criterion "Lane-Wechsel = reine Metadata-/Index-Mutation, kein FS-Move": it
 /// removes the cross-lane <c>Directory.Move</c> that produced the 409 conflicts
 /// and zombie folders under the old lane-folder layout. <c>state</c> in
-/// <c>job.json</c> is the authority; <c>by-state.json</c> is a derived cache, so
+/// <c>task.json</c> is the authority; <c>by-state.json</c> is a derived cache, so
 /// a crash between the field write and the index write self-heals on the next
 /// <see cref="TaskLayoutIndex.Rebuild"/>.
 /// </para>
@@ -35,7 +35,7 @@ internal static class TaskLayoutTransition
 {
     /// <summary>
     /// Moves the task identified by <paramref name="taskKey"/> into
-    /// <paramref name="newState"/> by rewriting <c>job.json.state</c> and the
+    /// <paramref name="newState"/> by rewriting <c>task.json.state</c> and the
     /// <c>by-state</c> index. Returns a result describing the change (or a
     /// no-op / not-found outcome); the physical folder is never moved.
     /// </summary>
@@ -61,14 +61,14 @@ internal static class TaskLayoutTransition
         var jobDir = Path.Combine(
             TaskStorageLayout.JobsRoot(projectRoot),
             location.Replace('/', Path.DirectorySeparatorChar));
-        if (!File.Exists(Path.Combine(jobDir, "job.json")))
+        if (!File.Exists(Path.Combine(jobDir, "task.json")))
             return TransitionResult.NotFound(taskKey, newState);
 
         var fromState = ReadState(jobDir);
         if (string.Equals(fromState, newState, StringComparison.Ordinal))
             return new TransitionResult(taskKey, location, fromState, newState, Changed: false);
 
-        // 1. Authority: the lane lives in job.json.state.
+        // 1. Authority: the lane lives in task.json.state.
         TaskJsonFile.UpdateField(jobDir, "state", newState, logger);
 
         // 2. Derived cache: move the location between state buckets and write
@@ -95,7 +95,7 @@ internal static class TaskLayoutTransition
     private static string? ReadState(string jobDir)
     {
         var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
-            File.ReadAllText(Path.Combine(jobDir, "job.json")), TaskJsonFile.ReadOpts);
+            File.ReadAllText(Path.Combine(jobDir, "task.json")), TaskJsonFile.ReadOpts);
         return doc != null && doc.TryGetValue("state", out var el) && el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : null;

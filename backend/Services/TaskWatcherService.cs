@@ -148,7 +148,7 @@ public class TaskWatcherService : BackgroundService
         if (p.Contains("/results/")) return true;
         // CLI streams write tool-calls.jsonl, cli-output.log, session-events.jsonl
         // continuously. They live under <jobDir>/logs/ and never affect the
-        // lane / job.json fields the cache tracks.
+        // lane / task.json fields the cache tracks.
         if (p.Contains("/logs/")) return true;
         // VS Code, ripgrep, and other tooling create temp files on the way
         // to atomic writes. Ignore the obvious patterns.

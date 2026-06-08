@@ -113,7 +113,7 @@ public enum TaskChangeKind
 /// Lightweight (watchPath, lane, slug, folderPath) tuple returned by
 /// <see cref="ITaskAccess.ListLaneFolders"/>. Used by orphan-rescue
 /// paths that need an absolute folder path to read its contents
-/// (logs, job.json mtime) without constructing the lane folder
+/// (logs, task.json mtime) without constructing the lane folder
 /// themselves.
 /// </summary>
 public record LaneFolderRef
@@ -127,7 +127,7 @@ public record LaneFolderRef
 /// <summary>
 /// One folder entry observed by
 /// <see cref="ITaskAccess.ListAllLaneFolders"/>. Includes folders
-/// without a <c>job.json</c> so the queue-health endpoint can flag
+/// without a <c>task.json</c> so the queue-health endpoint can flag
 /// orphans without reaching into the filesystem from outside the
 /// layer.
 /// </summary>
@@ -139,9 +139,9 @@ public record LaneFolderEntry
     public string FolderPath { get; init; } = "";
     public bool HasJobJson { get; init; }
     /// <summary>
-    /// <c>state</c> field read from <c>job.json</c> when present, used by
+    /// <c>state</c> field read from <c>task.json</c> when present, used by
     /// the queue-health endpoint to detect lane / state-field drift.
-    /// Null when <c>job.json</c> is missing or unreadable.
+    /// Null when <c>task.json</c> is missing or unreadable.
     /// </summary>
     public string? StateInJobJson { get; init; }
 }

@@ -81,7 +81,7 @@ public sealed class RoadmapAlignmentReviewService
     /// <param name="project">Project name as it appears in the watch path
     /// catalogue. Used both to label the scope and to look up recent reports.</param>
     /// <param name="projectRoot">Filesystem root that contains lane folders.
-    /// Layout: <c>{projectRoot}/{lane}/{jobId}/job.json</c>. The caller resolves
+    /// Layout: <c>{projectRoot}/{lane}/{jobId}/task.json</c>. The caller resolves
     /// this from the workspace's watch path; the service does not consult
     /// configuration.</param>
     /// <param name="repoRoot">Filesystem root for the source repository (the
@@ -319,7 +319,7 @@ public sealed class RoadmapAlignmentReviewService
         var jobs = new List<TaskSummary>();
         foreach (var dir in Directory.EnumerateDirectories(laneDir))
         {
-            var jobJson = Path.Combine(dir, "job.json");
+            var jobJson = Path.Combine(dir, "task.json");
             if (!File.Exists(jobJson))
             {
                 stray.Add($"{lane}/{Path.GetFileName(dir)}");
@@ -329,7 +329,7 @@ public sealed class RoadmapAlignmentReviewService
             try
             {
                 // ReadAllText handles UTF-8 BOM, the encoding the rest of the
-                // backend writes job.json with. JsonDocument.Parse(byte[])
+                // backend writes task.json with. JsonDocument.Parse(byte[])
                 // does NOT skip the BOM so byte-level reads need a manual
                 // strip; staying on string is simpler and matches
                 // TaskScannerService.
@@ -352,8 +352,8 @@ public sealed class RoadmapAlignmentReviewService
             }
             catch (JsonException)
             {
-                // Malformed job.json: surface as a stray so the report flags it.
-                stray.Add($"{lane}/{Path.GetFileName(dir)} (malformed job.json)");
+                // Malformed task.json: surface as a stray so the report flags it.
+                stray.Add($"{lane}/{Path.GetFileName(dir)} (malformed task.json)");
             }
         }
 

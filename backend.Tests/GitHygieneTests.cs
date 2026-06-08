@@ -144,7 +144,7 @@ public class GitHygieneTests : IDisposable
               }
             }
             """;
-        File.WriteAllText(Path.Combine(jobFolder, "job.json"), jobJson);
+        File.WriteAllText(Path.Combine(jobFolder, "task.json"), jobJson);
         File.WriteAllText(Path.Combine(jobFolder, "prompt.md"), "demo");
 
         // Keep the orchestrator workspace out of the working tree so the
@@ -171,7 +171,7 @@ public class GitHygieneTests : IDisposable
         var jobsRoot = Path.Combine(repo, ".orchestrator", "jobs", TaskStates.HumanReview);
         var jobFolder = Path.Combine(jobsRoot, "leaky-task");
         Directory.CreateDirectory(jobFolder);
-        File.WriteAllText(Path.Combine(jobFolder, "job.json"), $$"""
+        File.WriteAllText(Path.Combine(jobFolder, "task.json"), $$"""
             { "id": "leaky-task", "title": "Leaky", "state": "{{TaskStates.HumanReview}}",
               "agent": "claude", "createdAt": "2026-05-06T10:00:00Z" }
             """);

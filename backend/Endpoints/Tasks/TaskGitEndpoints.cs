@@ -38,7 +38,7 @@ public static class TaskGitEndpoints
                 : Results.BadRequest(new { error = result.Error });
         });
 
-        // Per-job commit details: returns the cached snapshot from job.json plus
+        // Per-job commit details: returns the cached snapshot from task.json plus
         // a live re-derivation of the file list from `git show --name-status`,
         // so the detail view stays accurate even after history rewrites.
         group.MapGet("/{jobId}/commit", (string jobId, string? watchPath, TaskScannerService scanner, GitService git) =>

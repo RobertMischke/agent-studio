@@ -26,7 +26,7 @@ public class CodeReviewStepServiceTests : IDisposable
     {
         _jobFolder = Path.Combine(Path.GetTempPath(), "code-review-step-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_jobFolder);
-        File.WriteAllText(Path.Combine(_jobFolder, "job.json"), "{ \"id\": \"demo\", \"title\": \"Demo\" }");
+        File.WriteAllText(Path.Combine(_jobFolder, "task.json"), "{ \"id\": \"demo\", \"title\": \"Demo\" }");
     }
 
     public void Dispose()
@@ -195,7 +195,7 @@ public class CodeReviewStepServiceTests : IDisposable
 
     private List<string> ReadTags()
     {
-        var jobJsonPath = Path.Combine(_jobFolder, "job.json");
+        var jobJsonPath = Path.Combine(_jobFolder, "task.json");
         if (!File.Exists(jobJsonPath)) return new List<string>();
         var json = File.ReadAllText(jobJsonPath);
         using var doc = JsonDocument.Parse(json);

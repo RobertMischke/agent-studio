@@ -12,7 +12,7 @@ namespace OrchestratorApi.Endpoints.Tasks;
 /// Job CRUD + state transitions: list, detail, create, delete, move,
 /// reorder, change-project, plus the "set one job field" PUTs (model,
 /// cli-type, title). These are the routes that read or rewrite the
-/// canonical <c>job.json</c> on disk.
+/// canonical <c>task.json</c> on disk.
 /// </summary>
 public static class TaskCrudEndpoints
 {

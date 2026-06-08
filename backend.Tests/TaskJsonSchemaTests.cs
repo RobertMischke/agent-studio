@@ -9,7 +9,7 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Backwards-compat tests for the <c>job.json</c> commit shape. The
+/// Backwards-compat tests for the <c>task.json</c> commit shape. The
 /// task lifecycle moved from a singular <c>commit</c> object to an
 /// ordered <c>commits</c> array (task: task-detail-worktree-isolation-and-multi-commit-support);
 /// existing on-disk jobs that predate the change must still parse and
@@ -167,7 +167,7 @@ public class TaskJsonSchemaTests : IDisposable
         Directory.CreateDirectory(laneDir);
         var jobDir = Path.Combine(laneDir, id);
         Directory.CreateDirectory(jobDir);
-        File.WriteAllText(Path.Combine(jobDir, "job.json"), jobJson);
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), jobJson);
         File.WriteAllText(Path.Combine(jobDir, "prompt.md"), "fixture");
     }
 

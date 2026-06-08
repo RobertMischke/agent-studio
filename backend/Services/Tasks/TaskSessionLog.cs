@@ -7,7 +7,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// <summary>
 /// Everything that records "what happened to this job's CLI session":
 /// the persisted <c>sessionName</c> and full <c>sessionChain</c> in
-/// <c>job.json</c>, the JSONL event log under <c>logs/session-events.jsonl</c>
+/// <c>task.json</c>, the JSONL event log under <c>logs/session-events.jsonl</c>
 /// that drives the "session continued / lost" chip, and the related
 /// usage snapshot writeback. Reads of the same data live in
 /// <see cref="TaskScannerService"/> alongside the rest of the read

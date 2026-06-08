@@ -211,7 +211,7 @@ public class RunCommitsLinkageTests : IDisposable
             agent = "claude",
             createdAt = DateTime.UtcNow.ToString("o")
         };
-        File.WriteAllText(Path.Combine(jobFolder, "job.json"),
+        File.WriteAllText(Path.Combine(jobFolder, "task.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(jobFolder, "prompt.md"), "Do the thing.");
         return (repoRoot, jobFolder, jobId, watchPath);

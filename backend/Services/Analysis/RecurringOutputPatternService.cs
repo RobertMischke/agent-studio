@@ -22,7 +22,7 @@ namespace OrchestratorApi.Services.Analysis;
 /// <list type="number">
 ///   <item><description><see cref="SelectScope"/> walks recent project lanes,
 ///   reads each job's <c>prompt.md</c>, <c>status.md</c>, the tail of
-///   <c>logs/cli-output.log</c>, and <c>job.json</c>, then groups the
+///   <c>logs/cli-output.log</c>, and <c>task.json</c>, then groups the
 ///   extracted signals (sentinel outcome, normalised reason, evidence-gaps)
 ///   into <see cref="RecurringPatternGroup"/>s. No agent calls happen
 ///   here.</description></item>
@@ -92,8 +92,8 @@ public sealed class RecurringOutputPatternService
     /// <param name="project">Project name as it appears in the watch path
     /// catalogue.</param>
     /// <param name="projectRoot">Filesystem root that contains lane folders.
-    /// Layout: <c>{projectRoot}/{lane}/{jobId}/job.json</c>.</param>
-    /// <param name="windowFrom">Earliest <c>job.json.updatedAt</c> /
+    /// Layout: <c>{projectRoot}/{lane}/{jobId}/task.json</c>.</param>
+    /// <param name="windowFrom">Earliest <c>task.json.updatedAt</c> /
     /// fallback-folder-mtime that should be considered. Pass
     /// <c>DateTime.MinValue</c> to scan everything in the inspected lanes.</param>
     /// <param name="windowTo">Wall-clock the report's "captured at" timestamp
@@ -331,7 +331,7 @@ public sealed class RecurringOutputPatternService
 
     private static TaskEvidence? ReadJobEvidence(string dir, string lane)
     {
-        var jobJson = Path.Combine(dir, "job.json");
+        var jobJson = Path.Combine(dir, "task.json");
         if (!File.Exists(jobJson)) return null;
 
         string id = Path.GetFileName(dir);
@@ -359,7 +359,7 @@ public sealed class RecurringOutputPatternService
         }
         catch (JsonException)
         {
-            // Malformed job.json: keep defaults; the job still surfaces with
+            // Malformed task.json: keep defaults; the job still surfaces with
             // its folder id so the agent can flag it.
         }
 

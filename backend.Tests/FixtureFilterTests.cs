@@ -13,7 +13,7 @@ namespace OrchestratorApi.Tests;
 /// 1. The heuristic in <see cref="FixtureHeuristics"/> matches obvious
 ///    Playwright fixture ids and titles, and ignores legitimate user
 ///    tasks that merely contain "test" or "spec".
-/// 2. The scanner reads <c>"fixture": true</c> off <c>job.json</c>.
+/// 2. The scanner reads <c>"fixture": true</c> off <c>task.json</c>.
 /// 3. The migration service is dry-run by default and idempotent.
 /// 4. Filtering on <c>!Fixture</c> hides marked jobs from the default
 ///    list, while <c>?includeFixtures=true</c> re-surfaces them - this
@@ -65,7 +65,7 @@ public class FixtureFilterTests : IDisposable
             ["agent"] = "claude"
         };
         if (fixture.HasValue) json["fixture"] = fixture.Value;
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             JsonSerializer.Serialize(json, new JsonSerializerOptions { WriteIndented = true }));
     }
 

@@ -965,7 +965,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     public void EnrichLineStats_PersistedChainCommitsWithoutLines_BackfillsRealChangeset()
     {
         // ASS-770 regression. The run-window SHA range produced no commits, so
-        // the aggregator surfaced the work only from the persisted job.json
+        // the aggregator surfaced the work only from the persisted task.json
         // chain - which stores a file count but hardcodes +0/-0. Pre-fix the
         // aspect reviewer saw "7 files, +0/-0" and false-BLOCKed a real,
         // tested commit (a9af3aa: +771/-28 over 7 files). EnrichLineStats must
@@ -1261,7 +1261,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         // The backfill runs once per boot. Use a fresh orchestrator for each
         // call so the second pass sees the first pass's appended note through a
-        // cold scanner cache (TaskIndexCache is keyed on job.json mtime and does
+        // cold scanner cache (TaskIndexCache is keyed on task.json mtime and does
         // not invalidate on a cli-output.log append within one process).
         BuildOrchestratorWithAspects(_ => string.Empty)
             .BackfillStaleAcceptedOutcomeIssues(_workspace, CancellationToken.None);
@@ -1495,7 +1495,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var dir = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         var tagsJson = "[" + string.Join(",", tags.Select(t => $"\"{t}\"")) + "]";
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.HumanReview}\",\"order\":1,\"agent\":\"claude\",\"tags\":{tagsJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
@@ -1506,7 +1506,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.HumanReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"), log);
@@ -1546,7 +1546,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var tagsJson = initialTags is { Count: > 0 }
             ? ",\"tags\":[" + string.Join(",", initialTags.Select(t => $"\"{t}\"")) + "]"
             : string.Empty;
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"{tagsJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         var suffix = includeRunnerActiveClearedMarker
@@ -1569,7 +1569,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         var logPath = Path.Combine(dir, "logs", "cli-output.log");
@@ -1582,7 +1582,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private int ReadJobOrder(string state, string slug)
     {
-        var jobJsonPath = Path.Combine(_watchPath, state, slug, "job.json");
+        var jobJsonPath = Path.Combine(_watchPath, state, slug, "task.json");
         var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
         if (json.RootElement.TryGetProperty("order", out var orderEl) &&
             orderEl.ValueKind == System.Text.Json.JsonValueKind.Number)
@@ -1594,7 +1594,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private List<string> ReadJobTags(string state, string slug)
     {
-        var jobJsonPath = Path.Combine(_watchPath, state, slug, "job.json");
+        var jobJsonPath = Path.Combine(_watchPath, state, slug, "task.json");
         var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
         var tags = new List<string>();
         if (json.RootElement.TryGetProperty("tags", out var tagsEl) &&
@@ -1680,19 +1680,19 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.Progress, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.Progress}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
     }
 
     private void SeedReviewJobWithoutCoreRun(string slug)
     {
-        // A card placed in 4-auto-review with job.json + prompt.md but NO
+        // A card placed in 4-auto-review with task.json + prompt.md but NO
         // logs/cli-output.log: the decomposition-bug fingerprint (a freshly
         // created sub-task that never ran a core agent run). 0 commits, no run.
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
     }
@@ -1701,7 +1701,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
@@ -1722,7 +1722,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             ? string.Empty
             : ",\"commits\":[" + string.Join(",", commits.Select(c =>
                 $"{{\"sha\":\"{c.ShortSha}\",\"shortSha\":\"{c.ShortSha}\",\"message\":{System.Text.Json.JsonSerializer.Serialize(c.Message)},\"filesChanged\":1,\"files\":[],\"at\":\"2026-06-01T00:00:00Z\"}}")) + "]";
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"{commitJson}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         var suffix = includeRunnerActiveClearedMarker
@@ -1755,7 +1755,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
@@ -1767,7 +1767,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"codex\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
@@ -1794,7 +1794,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),

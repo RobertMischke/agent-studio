@@ -259,10 +259,10 @@ public class WorkspaceManagementServiceTests : IDisposable
         // Drop a fake job folder under one of the lanes to simulate
         // non-empty workspace (no TaskMutationService needed for this
         // boundary check; the scanner-style walk only requires lane
-        // dir + slug dir + job.json).
+        // dir + slug dir + task.json).
         var fakeJobDir = Path.Combine(created.Entry!.Path, "2-ready", "fake-job");
         Directory.CreateDirectory(fakeJobDir);
-        File.WriteAllText(Path.Combine(fakeJobDir, "job.json"), "{\"id\":\"fake-job\"}");
+        File.WriteAllText(Path.Combine(fakeJobDir, "task.json"), "{\"id\":\"fake-job\"}");
 
         var result = svc.Delete("Busy");
         Assert.Equal(WorkspaceManagementOutcome.Conflict, result.Outcome);
@@ -275,7 +275,7 @@ public class WorkspaceManagementServiceTests : IDisposable
     {
         var storage = Path.Combine(_taskRepository, "projects", "PROJ-123");
         Directory.CreateDirectory(Path.Combine(storage, "2-ready", "sample-task"));
-        File.WriteAllText(Path.Combine(storage, "2-ready", "sample-task", "job.json"), "{\"id\":\"sample-task\"}");
+        File.WriteAllText(Path.Combine(storage, "2-ready", "sample-task", "task.json"), "{\"id\":\"sample-task\"}");
         var (svc, config) = Build(seed: [("Alpha", storage)]);
 
         var result = svc.DeleteProjectStorage(storage);

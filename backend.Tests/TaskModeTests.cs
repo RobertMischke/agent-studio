@@ -11,7 +11,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Task execution mode (coding|planning|research) - orthogonal to the epic
-/// kind. Foundation slice: the field round-trips through job.json + the scanner
+/// kind. Foundation slice: the field round-trips through task.json + the scanner
 /// and the web-access default is mode-derived. Pipeline behaviour (read-only
 /// git-step skip) + the create-modal + promote flow are separate slices.
 /// </summary>

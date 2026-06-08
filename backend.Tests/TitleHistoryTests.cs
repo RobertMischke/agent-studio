@@ -98,7 +98,7 @@ public class TitleHistoryTests : IDisposable
 
         var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "legacy");
         Directory.CreateDirectory(jobDir);
-        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), """
             {
               "id": "legacy",
               "title": "Legacy job",

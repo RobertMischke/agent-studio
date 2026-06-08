@@ -77,7 +77,7 @@ public class LintScssPostStepTests : IDisposable
     {
         var folder = Path.Combine(_workspace, "job-override");
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, "job.json"),
+        File.WriteAllText(Path.Combine(folder, "task.json"),
             $"{{\"id\":\"job-override\",\"postSteps\":{{\"{PipelineCatalogue.LintScssStepId}\":\"off\"}}}}");
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -90,11 +90,11 @@ public class LintScssPostStepTests : IDisposable
     [Fact]
     public void ConfigResolver_JobOverride_AcceptsBareStepIdSuffix()
     {
-        // job.json author conveniences: "lint-scss" instead of
+        // task.json author conveniences: "lint-scss" instead of
         // "post-lint-scss" so the per-task override stays terse.
         var folder = Path.Combine(_workspace, "bare-suffix");
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, "job.json"),
+        File.WriteAllText(Path.Combine(folder, "task.json"),
             "{\"id\":\"bare\",\"postSteps\":{\"lint-scss\":\"fail\"}}");
         var mode = PostStepConfigResolver.Resolve(
             new ConfigurationBuilder().Build(), folder, PipelineCatalogue.LintScssStepId);
@@ -112,7 +112,7 @@ public class LintScssPostStepTests : IDisposable
             taskTypeMode: PostStepMode.Fail, projectMode: PostStepMode.Warn);
         Assert.Equal(PostStepMode.Fail, middle);
 
-        File.WriteAllText(Path.Combine(folder, "job.json"),
+        File.WriteAllText(Path.Combine(folder, "task.json"),
             $"{{\"id\":\"x\",\"postSteps\":{{\"{PipelineCatalogue.LintScssStepId}\":\"off\"}}}}");
         var jobWins = PostStepConfigResolver.Resolve(folder, PipelineCatalogue.LintScssStepId,
             taskTypeMode: PostStepMode.Fail, projectMode: PostStepMode.Warn);
@@ -124,7 +124,7 @@ public class LintScssPostStepTests : IDisposable
     {
         var folder = Path.Combine(_workspace, "garbled");
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, "job.json"),
+        File.WriteAllText(Path.Combine(folder, "task.json"),
             $"{{\"id\":\"g\",\"postSteps\":{{\"{PipelineCatalogue.LintScssStepId}\":\"yolo\"}}}}");
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -279,7 +279,7 @@ public class LintScssPostStepTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{TaskStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),

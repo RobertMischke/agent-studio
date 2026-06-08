@@ -130,7 +130,7 @@ public sealed class ProjectObservationService
 
     /// <summary>
     /// Returns the latest mtime across every file the runner writes to
-    /// during an active session: <c>job.json</c>, anything under
+    /// during an active session: <c>task.json</c>, anything under
     /// <c>logs/</c> (cli-output.log, tool-calls.jsonl, session-events.jsonl,
     /// future log files). Mirrors
     /// <c>StaleProgressArchiver.MeasureFolder</c>'s "any append counts"
@@ -144,7 +144,7 @@ public sealed class ProjectObservationService
         var maxStamp = DateTime.MinValue;
         try
         {
-            var jobJson = Path.Combine(jobFolder, "job.json");
+            var jobJson = Path.Combine(jobFolder, "task.json");
             if (File.Exists(jobJson))
             {
                 var stamp = File.GetLastWriteTimeUtc(jobJson);

@@ -75,7 +75,7 @@ public interface ITaskAccess
     /// <summary>
     /// List every immediate subfolder name under <paramref name="lane"/>
     /// in <paramref name="watchPath"/>, including folders without a
-    /// <c>job.json</c>. Used by orphan-rescue paths that need to see
+    /// <c>task.json</c>. Used by orphan-rescue paths that need to see
     /// folders the typed index has dropped because they are unparseable.
     /// </summary>
     IReadOnlyList<string> ListLaneFolderNames(string watchPath, string lane);
@@ -83,7 +83,7 @@ public interface ITaskAccess
     /// <summary>
     /// Like <see cref="ListLaneFolderNames"/> but returns absolute
     /// folder paths instead of slug names. Orphan-rescue paths need
-    /// to read files inside each folder (logs, job.json mtime); having
+    /// to read files inside each folder (logs, task.json mtime); having
     /// the layer hand back the resolved path lets callers skip the
     /// lane-folder construction they would otherwise do.
     /// </summary>
@@ -92,7 +92,7 @@ public interface ITaskAccess
     /// <summary>
     /// Snapshot of every lane folder across every lane in
     /// <paramref name="watchPath"/>, including folders without
-    /// <c>job.json</c>. Drives the queue-health endpoint without
+    /// <c>task.json</c>. Drives the queue-health endpoint without
     /// reaching into the filesystem from outside the layer.
     /// </summary>
     IReadOnlyList<LaneFolderEntry> ListAllLaneFolders(string watchPath);
@@ -107,7 +107,7 @@ public interface ITaskAccess
 
     /// <summary>
     /// Move a stale folder (typically a <c>3-progress</c> orphan with no
-    /// <c>job.json</c>) to <c>3a-failed-pickup</c> under
+    /// <c>task.json</c>) to <c>3a-failed-pickup</c> under
     /// <paramref name="destinationSlug"/>, optionally writing a
     /// <c>failed-pickup-reason.md</c> placard alongside it. The move
     /// goes through <see cref="OrchestratorApi.Services.Tasks.TaskStateMachine"/>
@@ -122,7 +122,7 @@ public interface ITaskAccess
 
     /// <summary>
     /// Archive a stale folder (typically a <c>3-progress</c> orphan with no
-    /// <c>job.json</c> and no downstream twin) to <c>7-archive</c> under
+    /// <c>task.json</c> and no downstream twin) to <c>7-archive</c> under
     /// <paramref name="destinationSlug"/>. This is the debris path of the
     /// failed-pickup-elimination doctrine: a folder that is not a runnable
     /// task is cleaned up with its evidence intact, never parked in a

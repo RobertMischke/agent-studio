@@ -15,7 +15,7 @@ namespace OrchestratorApi.Tests;
 ///   Way 1 - at create time via CreateJobRequest.EpicId / Kind.
 ///   Way 2 - post-hoc via TaskMutationService.SetJobEpic (PUT /api/tasks/{id}/epic).
 ///   Way 3 - an epic's decomposition run reuses way 1 (create sub-tasks with EpicId).
-/// Round-trips through job.json + the scanner so persistence is covered.
+/// Round-trips through task.json + the scanner so persistence is covered.
 /// </summary>
 public class EpicAssignmentTests : IDisposable
 {

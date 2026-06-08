@@ -161,7 +161,7 @@ public static class ProjectSnapshotEndpoints
             // ADR-0024: enumerate orphan folders through the layer
             // (which knows the lane shape) rather than constructing the
             // lane paths here. Failed-pickup-elimination (supersedes
-            // ADR-0028/0029, cause #9): a folder with no job.json is debris,
+            // ADR-0028/0029, cause #9): a folder with no task.json is debris,
             // not a runnable task, so the repair archives it to 7-archive with
             // its evidence intact instead of parking a card in the retired
             // 3a-failed-pickup lane. Each repair routes through
@@ -173,7 +173,7 @@ public static class ProjectSnapshotEndpoints
                 var reason =
                     "# Queue health repair\n\n" +
                     $"Original folder: `{entryFolder.Lane}/{entryFolder.Slug}`\n\n" +
-                    "This folder did not contain `job.json`, so it could not be governed by the normal job API. " +
+                    "This folder did not contain `task.json`, so it could not be governed by the normal job API. " +
                     "It is debris, not a runnable task. The queue-health repair action archived it here through the " +
                     "application state machine and preserved its files.\n";
                 var outcome = taskAccess.ArchiveOrphanFolder(

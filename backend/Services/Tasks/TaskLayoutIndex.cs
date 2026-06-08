@@ -12,7 +12,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// <para>
 /// The index is a derived cache, never the authority: it is always
 /// rebuildable from the <c>state</c> and <c>key</c> fields in each
-/// <c>job.json</c>, so a missing or stale index can be regenerated at boot
+/// <c>task.json</c>, so a missing or stale index can be regenerated at boot
 /// without data loss. Writes go through a temp file + atomic replace so a
 /// crash mid-write cannot leave a reader observing a half-written file.
 /// </para>
@@ -38,7 +38,7 @@ internal static class TaskLayoutIndex
         Path.Combine(TaskStorageLayout.IndexRoot(projectRoot), ByKeyFileName);
 
     /// <summary>
-    /// Rebuilds both index maps from the <c>job.json</c> files under
+    /// Rebuilds both index maps from the <c>task.json</c> files under
     /// <c>jobs/*</c> in a deterministic order (lane order from
     /// <see cref="TaskStates.All"/>, then ascending key number), then writes
     /// them atomically. Returns the rebuilt maps so callers can log counts.
@@ -49,7 +49,7 @@ internal static class TaskLayoutIndex
 
         foreach (var jobDir in TaskStorageLayout.EnumerateJobDirs(projectRoot))
         {
-            var jobJsonPath = Path.Combine(jobDir, "job.json");
+            var jobJsonPath = Path.Combine(jobDir, "task.json");
             if (!File.Exists(jobJsonPath)) continue;
 
             Dictionary<string, JsonElement>? doc;
@@ -60,7 +60,7 @@ internal static class TaskLayoutIndex
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "task-index: unreadable job.json at {Dir}; skipped", jobDir);
+                logger.LogWarning(ex, "task-index: unreadable task.json at {Dir}; skipped", jobDir);
                 continue;
             }
             if (doc is null) continue;

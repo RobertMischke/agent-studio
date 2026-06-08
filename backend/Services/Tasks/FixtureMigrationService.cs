@@ -37,7 +37,7 @@ public record FixtureMigrationReport
 /// <summary>
 /// One-shot migration helper that retrofits the <c>fixture: true</c>
 /// marker onto legacy E2E-fixture-shaped folders. Dry-run by default;
-/// pass <c>apply=true</c> to actually rewrite the job.json files.
+/// pass <c>apply=true</c> to actually rewrite the task.json files.
 /// Idempotent: running it again on a cleaned workspace is a no-op.
 /// </summary>
 public class FixtureMigrationService

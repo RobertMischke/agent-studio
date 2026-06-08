@@ -251,7 +251,7 @@ public class TaskReferencesTests : IDisposable
 
         mutations.SetTaskReferences("a", new TaskReferences { DependsOn = new() { keyB } }, _watchPath);
 
-        var jobJsonPath = Path.Combine(_watchPath, TaskStates.Backlog, "a", "job.json");
+        var jobJsonPath = Path.Combine(_watchPath, TaskStates.Backlog, "a", "task.json");
         var disk = File.ReadAllText(jobJsonPath);
         // The documented schema uses camelCase keys; the writer must honour it
         // even though the shared WriteOpts carry no naming policy.

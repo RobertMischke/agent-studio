@@ -11,7 +11,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// F33 stable-reference-key contract: once a task is minted a display key
-/// (<c>DEM-7</c>) the number is persisted in <c>job.json</c> and is
+/// (<c>DEM-7</c>) the number is persisted in <c>task.json</c> and is
 /// <b>immutable</b> for the life of the task. The number must survive every
 /// non-mint board operation - create, delete, reorder, lane-move, re-scan -
 /// and the idempotent boot migrations (backfill + dedup) must never disturb
@@ -270,7 +270,7 @@ public class TaskKeyStabilityTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
             $"\"order\":1,\"agent\":\"claude\",\"key\":\"{key}\",\"createdAt\":\"{createdAtIso}\"}}");
     }
@@ -279,7 +279,7 @@ public class TaskKeyStabilityTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\"," +
             $"\"order\":1,\"agent\":\"claude\",\"createdAt\":\"{createdAtIso}\"}}");
     }

@@ -24,12 +24,12 @@ namespace OrchestratorApi.Tests;
 ///   The "no log" case is the most-restartable case (CLI never streamed
 ///   anything), not the most-skippable.</item>
 ///   <item>Iteration order is deterministic: oldest-first by mtime
-///   (cli-output.log when present, else job.json, else folder).</item>
+///   (cli-output.log when present, else task.json, else folder).</item>
 ///   <item>A 3-progress folder past the retry budget is no longer
 ///   dead-lettered. It routes by cause: a spawn failure (CLI never started)
 ///   returns the task to <c>2-ready</c> and pauses the runner; a task-shaped
 ///   silence (CLI ran but stayed quiet) or a session-less zombie escalates to
-///   <c>5-human-review</c> and the picker continues. A no-<c>job.json</c>
+///   <c>5-human-review</c> and the picker continues. A no-<c>task.json</c>
 ///   orphan with no downstream twin is archived to <c>7-archive</c> as debris.
 ///   Every routing appends a row to
 ///   <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>.</item>
@@ -80,10 +80,10 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         var folderOnly = ProjectRunner.MeasureProgressFolderMtime(folder);
         Assert.True(folderOnly > DateTime.UtcNow.AddDays(-1));
 
-        // Add job.json with stamped mtime: returns that.
-        File.WriteAllText(Path.Combine(folder, "job.json"), "{}");
+        // Add task.json with stamped mtime: returns that.
+        File.WriteAllText(Path.Combine(folder, "task.json"), "{}");
         var jobStamp = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-        File.SetLastWriteTimeUtc(Path.Combine(folder, "job.json"), jobStamp);
+        File.SetLastWriteTimeUtc(Path.Combine(folder, "task.json"), jobStamp);
         Assert.Equal(jobStamp, ProjectRunner.MeasureProgressFolderMtime(folder));
 
         // Add cli-output.log with newer mtime: takes precedence.
@@ -157,13 +157,13 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     {
         // Three progress folders in non-mtime order, plus several ready jobs.
         WriteJob(TaskStates.Progress, "newest");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "newest", "job.json"), TimeSpan.FromMinutes(-5));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "newest", "task.json"), TimeSpan.FromMinutes(-5));
 
         WriteJob(TaskStates.Progress, "oldest");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "oldest", "job.json"), TimeSpan.FromMinutes(-90));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "oldest", "task.json"), TimeSpan.FromMinutes(-90));
 
         WriteJob(TaskStates.Progress, "middle");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "middle", "job.json"), TimeSpan.FromMinutes(-30));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "middle", "task.json"), TimeSpan.FromMinutes(-30));
 
         WriteJob(TaskStates.Ready, "ready-1");
         WriteJob(TaskStates.Ready, "ready-2");
@@ -252,11 +252,11 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     public void StrictIteration_OneExhaustedTwoFresh_EscalatesExhaustedAndPicksNext()
     {
         WriteJob(TaskStates.Progress, "exhausted");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "exhausted", "job.json"), TimeSpan.FromMinutes(-90));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "exhausted", "task.json"), TimeSpan.FromMinutes(-90));
         WriteJob(TaskStates.Progress, "second-oldest");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "second-oldest", "job.json"), TimeSpan.FromMinutes(-30));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "second-oldest", "task.json"), TimeSpan.FromMinutes(-30));
         WriteJob(TaskStates.Progress, "newest");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "newest", "job.json"), TimeSpan.FromMinutes(-5));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "newest", "task.json"), TimeSpan.FromMinutes(-5));
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -325,7 +325,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // skeleton in production: a job runs in 3-progress, the move to
         // 5-human-review succeeds for most of the tree, but a logs/* file
         // stays locked by an in-process writer and leaves an empty shell
-        // behind in 3-progress while the canonical folder (with job.json)
+        // behind in 3-progress while the canonical folder (with task.json)
         // lives in the downstream lane.
         WriteOrphanProgressFolder("duplicate-later-lane");
         WriteJob(TaskStates.HumanReview, "duplicate-later-lane");
@@ -399,10 +399,10 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     }
 
     /// <summary>
-    /// Genuine orphan: a 3-progress folder with no job.json AND no twin in
+    /// Genuine orphan: a 3-progress folder with no task.json AND no twin in
     /// any post-progress lane. A manual filesystem intervention or a hard
     /// backend crash before the move leaves this behind. ADR-0051 cause #5:
-    /// a folder with no job.json is not a runnable task, it is debris. It is
+    /// a folder with no task.json is not a runnable task, it is debris. It is
     /// archived to 7-archive with its evidence (logs, status.md) intact,
     /// never parked in a dead-end failure lane the operator must triage.
     /// </summary>
@@ -503,11 +503,11 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     public void CrossSlug_SpawnFailuresAcrossTicks_TripBreakerOnSecondDistinctSlug()
     {
         WriteJob(TaskStates.Progress, "stuck-a");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a", "job.json"), TimeSpan.FromMinutes(-90));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-a", "task.json"), TimeSpan.FromMinutes(-90));
         WriteJob(TaskStates.Progress, "stuck-b");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-b", "job.json"), TimeSpan.FromMinutes(-60));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-b", "task.json"), TimeSpan.FromMinutes(-60));
         WriteJob(TaskStates.Progress, "stuck-c");
-        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-c", "job.json"), TimeSpan.FromMinutes(-30));
+        SetMtime(Path.Combine(_watchPath, TaskStates.Progress, "stuck-c", "task.json"), TimeSpan.FromMinutes(-30));
 
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -668,9 +668,9 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         // Pre-stamp ownerClientId so the scanner's owner-id migration sweep
-        // does not rewrite job.json on first scan (which would clobber the
+        // does not rewrite task.json on first scan (which would clobber the
         // mtime values the ordering tests rely on).
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\",\"cliType\":\"copilot\",\"ownerClientId\":\"local-default\"}}");
     }
 
@@ -678,7 +678,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.Progress, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{TaskStates.Progress}\",\"order\":1,\"agent\":\"copilot\",\"cliType\":\"copilot\",\"sessionName\":\"{sessionName}\",\"ownerClientId\":\"local-default\"}}");
     }
 

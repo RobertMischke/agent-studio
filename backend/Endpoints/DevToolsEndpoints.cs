@@ -83,7 +83,7 @@ public static class DevToolsEndpoints
         // Fixture-marker migration: scan the workspace for fixture-shaped
         // job folders that pre-date the `fixture: true` flag and report what
         // would be marked. Dry-run by default; pass apply=true to rewrite
-        // the job.json files. Reuses the DeleteE2EJobs gate since it is the
+        // the task.json files. Reuses the DeleteE2EJobs gate since it is the
         // same one-shot fixture maintenance surface.
         group.MapGet("/fixtures/scan", (
             IConfiguration config,

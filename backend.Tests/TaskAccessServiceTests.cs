@@ -230,7 +230,7 @@ public class TaskAccessServiceTests : IDisposable
         var (taskAccess, machine, _, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
 
-        // Synthesize a folder with no job.json under 3-progress. This
+        // Synthesize a folder with no task.json under 3-progress. This
         // simulates the orphan case the migration-target consumers rely
         // on the layer to enumerate.
         var orphanPath = Path.Combine(_watchPath, TaskStates.Progress, "orphan-folder");

@@ -74,12 +74,12 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
     public void SelectScope_FlagsStrayFoldersWithoutJobJsonAndMarksQueueDirty()
     {
         WriteJob("2-ready", "real-task", "Real");
-        // A subfolder under 2-ready without job.json: a stray.
+        // A subfolder under 2-ready without task.json: a stray.
         Directory.CreateDirectory(Path.Combine(_projectRoot, "2-ready", "chip-1234567890"));
         // A subfolder under 3-progress with malformed JSON: also a stray.
         var bad = Path.Combine(_projectRoot, "3-progress", "broken-task");
         Directory.CreateDirectory(bad);
-        File.WriteAllText(Path.Combine(bad, "job.json"), "{ this is not valid json", Encoding.UTF8);
+        File.WriteAllText(Path.Combine(bad, "task.json"), "{ this is not valid json", Encoding.UTF8);
 
         var svc = new RoadmapAlignmentReviewService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
@@ -387,6 +387,6 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
             "  \"agent\": \"claude\",\n" +
             "  \"cliType\": \"claude\"\n" +
             "}\n";
-        File.WriteAllText(Path.Combine(dir, "job.json"), json, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "task.json"), json, Encoding.UTF8);
     }
 }

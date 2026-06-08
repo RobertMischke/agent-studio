@@ -2966,7 +2966,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
             var aggregate = TaskCommitsAggregator.Aggregate(job, timeline.Runs,
                 (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
-            // Commits surfaced from the persisted chain (job.json) carry only a
+            // Commits surfaced from the persisted chain (task.json) carry only a
             // file count - their +/- line stats are hardcoded 0 because
             // TaskCommitInfo never stored them. Re-derive the real +N/-M per
             // SHA from git so the aspect reviewer never sees "N files, +0/-0"

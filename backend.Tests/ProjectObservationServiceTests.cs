@@ -41,7 +41,7 @@ public class ProjectObservationServiceTests : IDisposable
         _jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "active-job");
         Directory.CreateDirectory(_jobFolder);
         Directory.CreateDirectory(Path.Combine(_jobFolder, "logs"));
-        File.WriteAllText(Path.Combine(_jobFolder, "job.json"),
+        File.WriteAllText(Path.Combine(_jobFolder, "task.json"),
             JsonSerializer.Serialize(new { id = "active-job", title = "Active", state = TaskStates.Progress, order = 1, agent = "claude", cliType = "claude" }));
 
         var config = new ConfigurationBuilder()

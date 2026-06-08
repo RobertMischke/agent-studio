@@ -27,7 +27,7 @@ namespace OrchestratorApi.Services.Runner;
 ///
 /// <para>
 /// The pipeline is deliberately stateless: it never moves the job lane,
-/// never edits <c>job.json</c> beyond the tags array, and never
+/// never edits <c>task.json</c> beyond the tags array, and never
 /// re-issues a follow-up. Lane transitions and follow-up writes stay
 /// the orchestrator's job, in line with the single-state-machine rule.
 /// </para>
@@ -571,7 +571,7 @@ public sealed record AspectRunReport(
 internal static class ConcernTagWriter
 {
     /// <summary>
-    /// Read the tags array from the job's <c>job.json</c>, merge in the
+    /// Read the tags array from the job's <c>task.json</c>, merge in the
     /// supplied concern tag ids (deduped, case-insensitive), and write
     /// the result back. Used by the orchestrator after a multi-aspect
     /// run produces concern verdicts.
@@ -579,7 +579,7 @@ internal static class ConcernTagWriter
     public static void MergeConcernTags(string jobFolderPath, IReadOnlyList<string> concernTagIds, ILogger logger)
     {
         if (concernTagIds.Count == 0) return;
-        var jobJsonPath = Path.Combine(jobFolderPath, "job.json");
+        var jobJsonPath = Path.Combine(jobFolderPath, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
         try
@@ -628,7 +628,7 @@ internal static class ConcernTagWriter
     /// </summary>
     public static void ReconcileConcernTags(string jobFolderPath, IReadOnlyList<string> currentConcernTagIds, ILogger logger)
     {
-        var jobJsonPath = Path.Combine(jobFolderPath, "job.json");
+        var jobJsonPath = Path.Combine(jobFolderPath, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
         try

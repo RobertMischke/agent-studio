@@ -382,7 +382,7 @@ public sealed class WorkspaceManagementService
     /// Mirrors the lane walk in
     /// <see cref="TaskScannerService.ScanAllJobsRaw"/> so the answer
     /// matches what the user sees on the kanban: lane subdir present,
-    /// folder name does not start with <c>_</c>, <c>job.json</c> exists.
+    /// folder name does not start with <c>_</c>, <c>task.json</c> exists.
     /// </summary>
     private static int CountJobs(WatchPathEntry entry)
     {
@@ -396,7 +396,7 @@ public sealed class WorkspaceManagementService
             {
                 var dirName = Path.GetFileName(jobDir);
                 if (dirName.StartsWith('_')) continue;
-                if (!File.Exists(Path.Combine(jobDir, "job.json"))) continue;
+                if (!File.Exists(Path.Combine(jobDir, "task.json"))) continue;
                 count++;
             }
         }

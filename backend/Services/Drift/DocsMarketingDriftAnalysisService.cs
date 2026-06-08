@@ -439,7 +439,7 @@ public sealed class DocsMarketingDriftAnalysisService
 
     private static TaskRef? ReadJobRef(string dir, string lane)
     {
-        var jobJson = Path.Combine(dir, "job.json");
+        var jobJson = Path.Combine(dir, "task.json");
         if (!File.Exists(jobJson)) return null;
 
         var id = Path.GetFileName(dir);
@@ -457,7 +457,7 @@ public sealed class DocsMarketingDriftAnalysisService
         }
         catch (JsonException)
         {
-            // Malformed job.json - still surface the slug as evidence so the
+            // Malformed task.json - still surface the slug as evidence so the
             // drift report can flag the queue dirty.
         }
 

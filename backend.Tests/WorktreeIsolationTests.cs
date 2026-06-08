@@ -121,7 +121,7 @@ public class WorktreeIsolationTests : IDisposable
         var jobsRoot = Path.Combine(repo, ".orchestrator", "jobs", lane);
         var jobFolder = Path.Combine(jobsRoot, "fixture-task");
         Directory.CreateDirectory(jobFolder);
-        File.WriteAllText(Path.Combine(jobFolder, "job.json"), $$"""
+        File.WriteAllText(Path.Combine(jobFolder, "task.json"), $$"""
             { "id": "fixture-task", "title": "Fixture", "state": "{{lane}}",
               "agent": "claude", "createdAt": "2026-05-09T10:00:00Z" }
             """);

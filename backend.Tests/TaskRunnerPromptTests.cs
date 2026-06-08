@@ -59,7 +59,7 @@ public class TaskRunnerPromptTests
         Assert.Contains(@"C:\jobs\fix-bug", p);
         Assert.Contains(@"C:\Projects\Runbook\App", p);
         Assert.Contains(@"C:\Projects\Runbook", p);
-        Assert.Contains("job.json", p);
+        Assert.Contains("task.json", p);
         Assert.Contains("prompt.md", p);
         Assert.Contains("status.md", p);
         Assert.Contains("logs", p);

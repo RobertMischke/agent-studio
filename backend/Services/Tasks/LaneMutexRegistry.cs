@@ -18,7 +18,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// produce the symptoms tracked under this ticket: orphan/empty folders
 /// in <c>3a-failed-pickup</c>, half-renamed siblings with <c>-2</c>
 /// collision suffixes, and a reader catching a mid-rename folder without
-/// <c>job.json</c>.</para>
+/// <c>task.json</c>.</para>
 ///
 /// <para>This registry hands out a per-project (per watch-path)
 /// <see cref="SemaphoreSlim"/> with concurrency 1. All writers acquire it

@@ -29,7 +29,7 @@ namespace OrchestratorApi.Tests;
 ///   that entry in place rather than bloating the chain - re-stamping
 ///   the same SHA refreshes metadata (file count, message) without
 ///   re-ordering.</item>
-/// <item>A legacy <c>job.json</c> that carries only the singular
+/// <item>A legacy <c>task.json</c> that carries only the singular
 ///   <c>commit</c> field gets migrated to the array on the first
 ///   append, with the legacy entry preserved as the chain head.</item>
 /// </list>
@@ -181,7 +181,7 @@ public class TaskCommitBindingTests : IDisposable
                   }
                 }
                 """;
-        File.WriteAllText(Path.Combine(jobDir, "job.json"), jobJson);
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), jobJson);
         File.WriteAllText(Path.Combine(jobDir, "prompt.md"), "fixture");
         return jobDir;
     }

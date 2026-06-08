@@ -128,7 +128,7 @@ public static class TaskCommitsAggregator
         // Legacy singular auto-commit fold. The scanner mirrors `commit` into
         // the `commits` chain, so in production this is already covered above;
         // it stays for callers that build TaskInfo with only the singular field
-        // set (legacy job.json read paths and unit fixtures).
+        // set (legacy task.json read paths and unit fixtures).
         if (info.Commit != null && !string.IsNullOrWhiteSpace(info.Commit.Sha)
             && seen.Add(info.Commit.Sha))
         {

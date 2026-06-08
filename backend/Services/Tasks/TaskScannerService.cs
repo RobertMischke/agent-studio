@@ -15,7 +15,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// summary state), and serves read-only file lookups including the
 /// <c>attachments/</c> and <c>results/</c> binary mirrors.
 ///
-/// Writes against <c>job.json</c> live in the sibling services in this
+/// Writes against <c>task.json</c> live in the sibling services in this
 /// folder: <see cref="TaskStateMachine"/> for folder moves,
 /// <see cref="TaskMutationService"/> for field-level edits and
 /// attachments, and <see cref="TaskSessionLog"/> for session telemetry.
@@ -65,7 +65,7 @@ public class TaskScannerService : ITaskScanner
 
     /// <summary>
     /// Invalidates the in-memory snapshot, if a cache is wired. Mutation
-    /// services call this right after a folder move / job.json rewrite so
+    /// services call this right after a folder move / task.json rewrite so
     /// the next read sees the change synchronously rather than waiting for
     /// the FileSystemWatcher's debounce window. No-op when no cache is
     /// registered (test fixtures that build the scanner directly).
@@ -172,7 +172,7 @@ public class TaskScannerService : ITaskScanner
 
         // Phase 1 — cheap directory enumeration. The flat layout is
         // authoritative when present: jobs live under jobs/<bucket>/<key>/ and
-        // the lane comes from job.json.state. The legacy lane scan remains as a
+        // the lane comes from task.json.state. The legacy lane scan remains as a
         // read fallback for pre-migration tests and partially initialized
         // workspaces.
         var candidates = new List<(string jobDir, WatchPathEntry entry, string state)>();
@@ -214,7 +214,7 @@ public class TaskScannerService : ITaskScanner
 
         // Phase 2 — parse each folder in parallel. ScanJobFolder is read-only
         // (the only write is a rare divergent-id self-heal that targets that
-        // folder's own job.json, so distinct folders never contend) and returns
+        // folder's own task.json, so distinct folders never contend) and returns
         // an independent TaskInfo. The dominant per-folder cost is
         // GetLastActivityTime's recursive file walk plus the JSON parse — both
         // CPU/IO that overlap well across the dev host's cores. A full board
@@ -245,7 +245,7 @@ public class TaskScannerService : ITaskScanner
 
     public TaskInfo? ScanJobFolder(string jobDir, WatchPathEntry entry, string state)
     {
-        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
         if (!File.Exists(jobJsonPath)) return null;
 
         try
@@ -260,9 +260,9 @@ public class TaskScannerService : ITaskScanner
             var resolvedId = folderId;
             if (isFlatLayout)
             {
-                // New layout: folder name is the stable key, while job.json.id
+                // New layout: folder name is the stable key, while task.json.id
                 // remains the external slug/id. Lane is metadata too, so prefer
-                // job.json.state over the enumeration context.
+                // task.json.state over the enumeration context.
                 resolvedId = raw.TryGetProperty("id", out var flatId)
                              && flatId.ValueKind == JsonValueKind.String
                              && flatId.GetString() is { Length: > 0 } flatJsonId
@@ -279,7 +279,7 @@ public class TaskScannerService : ITaskScanner
                     && jsonId != folderId)
                 {
                     _logger.LogWarning(
-                        "Job folder '{Dir}' has divergent id '{JsonId}' in job.json - rewriting to match folder name '{FolderId}'.",
+                        "Job folder '{Dir}' has divergent id '{JsonId}' in task.json - rewriting to match folder name '{FolderId}'.",
                         jobDir, jsonId, folderId);
                     TaskJsonFile.UpdateField(jobDir, "id", folderId, _logger);
                 }
@@ -293,7 +293,7 @@ public class TaskScannerService : ITaskScanner
 
             // If a flat-layout folder was scanned but lacks usable state, it is
             // corrupt. Do not surface a lane-less card; the index rebuild/migrator
-            // path logs the underlying bad job.json separately.
+            // path logs the underlying bad task.json separately.
             if (string.IsNullOrWhiteSpace(resolvedState)) return null;
 
             var ownerClientId = ResolveOwnerClientId(raw, jobDir);
@@ -348,7 +348,7 @@ public class TaskScannerService : ITaskScanner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to parse job.json in {Dir}", jobDir);
+            _logger.LogError(ex, "Failed to parse task.json in {Dir}", jobDir);
             return null;
         }
     }
@@ -498,7 +498,7 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
-    /// Returns the job's <c>ownerClientId</c>, migrating legacy job.json
+    /// Returns the job's <c>ownerClientId</c>, migrating legacy task.json
     /// files (which predate the field) by writing <see cref="DefaultClientIdentity.Id"/>
     /// back to disk so the next scan finds a non-null value.
     /// </summary>
@@ -519,14 +519,14 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
-    /// Reads the optional <c>phase</c> field from <c>job.json</c>. The wire
+    /// Reads the optional <c>phase</c> field from <c>task.json</c>. The wire
     /// field stays null when absent on disk; the frontend's lane projection
     /// then falls back to <see cref="LifecyclePhases.DefaultFor"/>. This is
     /// the compatibility contract from
     /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
     /// job folders that predate the field continue to render in the default
     /// lane of their state without a one-shot migration that rewrites every
-    /// <c>job.json</c>. Unknown phase strings, or phase strings that do not
+    /// <c>task.json</c>. Unknown phase strings, or phase strings that do not
     /// belong to <paramref name="state"/>, are dropped with a warning so a
     /// hand-edited / corrupted file cannot wedge the board.
     /// </summary>
@@ -550,7 +550,7 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
-    /// Reads the optional <c>taskType</c> field from <c>job.json</c>. Missing
+    /// Reads the optional <c>taskType</c> field from <c>task.json</c>. Missing
     /// or unknown values fall back to <see cref="TaskTypes.Chore"/>, the
     /// safe neutral default for legacy and technical work that predates the
     /// field. No write-back: lazy defaulting keeps boot scans cheap.
@@ -564,7 +564,7 @@ public class TaskScannerService : ITaskScanner
 
     /// <summary>
     /// Reads the F33 Linear-style reference key (<c>ATP-130</c>, <c>RB-42</c>)
-    /// from <c>job.json</c>. Returns null when the field is absent or
+    /// from <c>task.json</c>. Returns null when the field is absent or
     /// non-string so the UI can fall back to <see cref="TaskInfo.Id"/>.
     /// </summary>
     private static string? ReadReferenceKey(JsonElement raw)
@@ -576,7 +576,7 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
-    /// Reads the optional <c>tags</c> string array from <c>job.json</c>. Drops
+    /// Reads the optional <c>tags</c> string array from <c>task.json</c>. Drops
     /// non-string entries. Returns an empty list when the field is absent or
     /// the wrong shape; never throws on a malformed value.
     /// </summary>
@@ -595,7 +595,7 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
-    /// Reads the F34 <c>"references"</c> object from <c>job.json</c>. Absent,
+    /// Reads the F34 <c>"references"</c> object from <c>task.json</c>. Absent,
     /// null, or non-object yields an empty <see cref="TaskReferences"/>; a
     /// malformed object is tolerated the same way so a bad edge can never
     /// fail the whole scan.
@@ -874,12 +874,12 @@ public class TaskScannerService : ITaskScanner
     }
 
     /// <summary>
-    /// Reads <c>sessionChain</c> from job.json with a tolerant fallback: if the
+    /// Reads <c>sessionChain</c> from task.json with a tolerant fallback: if the
     /// field is missing but a legacy <c>sessionName</c> exists, return a single-
     /// element chain. Anything else returns an empty list.
     /// </summary>
     /// <summary>
-    /// Reads the task's commit chain from <c>job.json</c>. Returns a tuple
+    /// Reads the task's commit chain from <c>task.json</c>. Returns a tuple
     /// <c>(chain, legacy)</c> where <c>chain</c> is the ordered list of
     /// commits this task has produced (oldest -&gt; newest) and <c>legacy</c>
     /// is the singular <see cref="TaskInfo.Commit"/> value kept for
@@ -946,7 +946,7 @@ public class TaskScannerService : ITaskScanner
 
     private ContextUsageSnapshot? ReadContextUsage(string jobDir)
     {
-        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
         if (!File.Exists(jobJsonPath)) return null;
 
         try
@@ -978,7 +978,7 @@ public class TaskScannerService : ITaskScanner
 
         // Editable / always-known files plus any *.md file the agents / operators
         // drop in the job root (surfaced by the Files tab).
-        var allowed = new[] { "prompt.md", "status.md", "job.json" };
+        var allowed = new[] { "prompt.md", "status.md", "task.json" };
         var isMarkdown = fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
         if (!allowed.Contains(fileName) && !isMarkdown) return null;
 
@@ -1109,7 +1109,7 @@ public class TaskScannerService : ITaskScanner
     {
         var entries = new List<TaskLogEntry>();
 
-        var jobJson = Path.Combine(dir, "job.json");
+        var jobJson = Path.Combine(dir, "task.json");
         if (File.Exists(jobJson))
         {
             entries.Add(new TaskLogEntry

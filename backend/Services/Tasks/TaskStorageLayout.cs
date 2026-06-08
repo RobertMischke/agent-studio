@@ -9,7 +9,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// <c>bucket = floor(keyNumber / 1000)</c> zero-padded to three digits and
 /// <c>taskId</c> is the stable task key (e.g. <c>ASS-617</c>). The derived
 /// index lives under <c>&lt;projectRoot&gt;/index/</c>. Lane is metadata
-/// (<c>job.json.state</c>), no longer folder position.
+/// (<c>task.json.state</c>), no longer folder position.
 ///
 /// <para>
 /// This type is side-effect free except for read-only directory

@@ -217,13 +217,13 @@ public class TaskStateMachine
     /// Archive a job folder by absolute source path under <c>7-archive/</c>
     /// with a new folder slug. Used by the boot-time stale-progress sweep
     /// (ADR-0020 follow-up) for the residual case where a folder is genuinely
-    /// nothing but a directory entry (no <c>job.json</c>, no
+    /// nothing but a directory entry (no <c>task.json</c>, no
     /// <c>cli-output.log</c>): see <see cref="MoveFolderToFailedPickup"/> for
     /// the loud path that handles real orphans.
     /// </summary>
     /// <remarks>
     /// Takes a folder path rather than a jobId because empty stale folders have
-    /// no job.json and therefore are not visible to <see cref="TaskScannerService"/>.
+    /// no task.json and therefore are not visible to <see cref="TaskScannerService"/>.
     /// Still routes the move + state-field update through this state machine so
     /// callers never write to the state folders directly.
     /// </remarks>
@@ -240,7 +240,7 @@ public class TaskStateMachine
     /// <remarks>
     /// Same shape as <see cref="ArchiveFolder"/> but targets
     /// <see cref="TaskStates.FailedPickup"/>. Empty stale folders may not have
-    /// a <c>job.json</c>; in that case a placeholder is written so the lane
+    /// a <c>task.json</c>; in that case a placeholder is written so the lane
     /// can render a card and the state-field invariant holds.
     /// </remarks>
     public MoveJobOutcome MoveFolderToFailedPickup(string sourceFolder, string newSlug)
@@ -274,7 +274,7 @@ public class TaskStateMachine
     /// dead-letter time (see <c>DeadLetterUnrecoverableFolder</c>), so
     /// the next pickup attempt on the restored slug starts at 0 without
     /// any extra reset here. If a future schema adds a persisted counter
-    /// to <c>job.json</c>, reset it inside this method.</para>
+    /// to <c>task.json</c>, reset it inside this method.</para>
     /// </summary>
     /// <param name="jobId">The dead-letter slug under
     /// <c>3a-failed-pickup</c>, e.g. <c>foo-pickup-failed-2026-05-08</c>.</param>
@@ -417,7 +417,7 @@ public class TaskStateMachine
                 targetState);
             if (moveFailure != null) return moveFailure;
 
-            var jobJsonPath = Path.Combine(targetDir, "job.json");
+            var jobJsonPath = Path.Combine(targetDir, "task.json");
             var enteredLaneAt = DateTime.UtcNow.ToString("o");
             if (File.Exists(jobJsonPath))
             {
@@ -429,7 +429,7 @@ public class TaskStateMachine
             else if (writePlaceholderJobJson)
             {
                 // The empty-stale path lacks any metadata. Synthesize a minimal
-                // job.json so the scanner sees the card and the state-field
+                // task.json so the scanner sees the card and the state-field
                 // invariant ("every job folder has a state field on disk") holds.
                 var placeholder = $"{{\"id\":\"{newSlug}\",\"title\":\"{newSlug}\",\"state\":\"{targetState}\",\"order\":1,\"agent\":\"unknown\",\"enteredLaneAt\":\"{enteredLaneAt}\"}}";
                 File.WriteAllText(jobJsonPath, placeholder);
@@ -513,8 +513,8 @@ public class TaskStateMachine
         using var _ = _laneMutex.Acquire(entry.Path);
         if (!Directory.Exists(target))
             return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.NotFound, "Folder not found.");
-        if (File.Exists(Path.Combine(target, "job.json")))
-            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.HasJobJson, "Folder contains job.json; use normal task deletion.");
+        if (File.Exists(Path.Combine(target, "task.json")))
+            return new OrphanFolderDeleteResult(OrphanFolderDeleteStatus.HasJobJson, "Folder contains task.json; use normal task deletion.");
 
         try
         {
@@ -596,7 +596,7 @@ public class TaskStateMachine
     /// <summary>
     /// One-shot migration step for ADR-0025: if <paramref name="oldName"/>
     /// exists in the workspace, move every job folder under it to
-    /// <paramref name="newName"/>, rewrite each job.json's <c>state</c>
+    /// <paramref name="newName"/>, rewrite each task.json's <c>state</c>
     /// field, and remove the now-empty old folder. Idempotent: on the
     /// next boot the old folder no longer exists and the call is a no-op.
     /// </summary>
@@ -636,7 +636,7 @@ public class TaskStateMachine
                         jobFolder, targetFolder, moveFailure.Message);
                     continue;
                 }
-                if (File.Exists(Path.Combine(targetFolder, "job.json")))
+                if (File.Exists(Path.Combine(targetFolder, "task.json")))
                 {
                     TaskJsonFile.UpdateField(targetFolder, "state", newName, _logger);
                 }
@@ -654,7 +654,7 @@ public class TaskStateMachine
         // Try to remove the old (now-empty) lane folder so the next boot has
         // nothing to do. Leftover non-job items (loose files, hidden state)
         // keep it around; that's fine, the migration is still idempotent
-        // because we only act on directories with a job.json shape.
+        // because we only act on directories with a task.json shape.
         try
         {
             if (!Directory.EnumerateFileSystemEntries(oldDir).Any())
@@ -697,124 +697,15 @@ public class TaskStateMachine
                 Directory.CreateDirectory(watchPath);
             }
 
-            // One-time, idempotent rename of the flat-layout folders to the
-            // current terminology: legacy "jobs"/"index" -> "tasks"/"id".
-            // Runs BEFORE JobsRoot is (re)created so we never leave an empty
-            // tasks/ next to a populated jobs/. A crash leaves either the old
-            // or the new name present (single atomic Directory.Move), never a
-            // half state; the next boot finds the legacy name gone and skips.
-            foreach (var (legacy, current) in new[]
-            {
-                (TaskStorageLayout.LegacyJobsDirName, TaskStorageLayout.JobsDirName),   // jobs  -> tasks
-                (TaskStorageLayout.LegacyIndexDirName, TaskStorageLayout.IndexDirName), // index -> id
-            })
-            {
-                var legacyDir = Path.Combine(watchPath, legacy);
-                var currentDir = Path.Combine(watchPath, current);
-                if (Directory.Exists(legacyDir) && !Directory.Exists(currentDir))
-                {
-                    var renameFailure = MoveDirectoryWithRetry(
-                        legacyDir,
-                        currentDir,
-                        operation: "rename-layout-folder",
-                        subject: legacy,
-                        targetState: current);
-                    if (renameFailure != null)
-                        _logger.LogError(
-                            "Failed to rename layout folder {Old} -> {New}: {Message}",
-                            legacy, current, renameFailure.Message);
-                    else
-                        _logger.LogInformation("Renamed layout folder {Old} -> {New}", legacy, current);
-                }
-            }
-
             Directory.CreateDirectory(TaskStorageLayout.JobsRoot(watchPath));
+            Directory.CreateDirectory(TaskStorageLayout.IndexRoot(watchPath));
 
-            // Rename old unnumbered state folders to numbered ones
-            foreach (var (oldName, newName) in TaskStates.LegacyFolderMap)
-            {
-                var oldDir = Path.Combine(watchPath, oldName);
-                var newDir = Path.Combine(watchPath, newName);
-                if (Directory.Exists(oldDir) && !Directory.Exists(newDir))
-                {
-                    var laneMoveFailure = MoveDirectoryWithRetry(
-                        oldDir,
-                        newDir,
-                        operation: "migrate-legacy-lane",
-                        subject: oldName,
-                        targetState: newName);
-                    if (laneMoveFailure != null)
-                    {
-                        _logger.LogError(
-                            "Failed to rename state folder {Old} to {New}: {Message}",
-                            oldName, newName, laneMoveFailure.Message);
-                    }
-                    else
-                    {
-                    _logger.LogInformation("Renamed state folder {Old} → {New}", oldName, newName);
-                    }
-                }
-            }
-
-            // ADR-0025: rename pre-three-stage-review numbered lanes to the
-            // new layout. Order matters: free 6- before reusing it for
-            // completed, free 5- before completed could overwrite a stray
-            // 5-human-review someone tried to seed by hand. The check is
-            // idempotent - on the second boot the old names no longer
-            // exist so each branch is a no-op.
-            MigrateNumberedLane(watchPath, "6-archive", TaskStates.Archive);
-            MigrateNumberedLane(watchPath, "5-completed", TaskStates.Completed);
-            MigrateNumberedLane(watchPath, "4-review", TaskStates.AutoReview);
-
-            // Retired lane: the former 1b-needs-human-review bounce lane was
-            // removed (the "Human decision needed" concept was obsoleted). Move
-            // any card still parked there into 2-ready so removing the lane
-            // never orphans an in-flight task. Genuine human-decision markers
-            // are then herded to 5-human-review by the runner's pickup sweep.
-            MigrateNumberedLane(watchPath, "1b-needs-human-review", TaskStates.Ready);
-
-            // Migrate existing flat job folders into state subfolders
-            foreach (var jobDir in Directory.GetDirectories(watchPath))
-            {
-                var dirName = Path.GetFileName(jobDir);
-                if (TaskStates.All.Contains(dirName)) continue; // skip state folders themselves
-                if (TaskStates.LegacyFolderMap.ContainsKey(dirName)) continue; // skip old state folders
-                if (dirName.StartsWith('_')) continue;
-
-                var jobJsonPath = Path.Combine(jobDir, "job.json");
-                if (!File.Exists(jobJsonPath)) continue;
-
-                try
-                {
-                    var json = File.ReadAllText(jobJsonPath);
-                    var raw = JsonSerializer.Deserialize<JsonElement>(json, TaskJsonFile.ReadOpts);
-                    var oldState = raw.TryGetProperty("state", out var s) ? s.GetString() ?? "draft" : "draft";
-                    var newState = TaskStates.MapLegacyState(oldState);
-
-                    var targetDir = Path.Combine(watchPath, newState, dirName);
-                    var moveFailure = MoveDirectoryWithRetry(
-                        jobDir,
-                        targetDir,
-                        operation: "migrate-flat-job",
-                        subject: dirName,
-                        targetState: newState);
-                    if (moveFailure != null)
-                    {
-                        _logger.LogError(
-                            "Failed to migrate job folder {Dir}: {Message}",
-                            dirName, moveFailure.Message);
-                        continue;
-                    }
-                    TaskJsonFile.UpdateField(targetDir, "state", newState, _logger);
-                    _logger.LogInformation("Migrated job {Job} from {Old} to {New}", dirName, oldState, newState);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to migrate job folder {Dir}", dirName);
-                }
-            }
-
-            TaskLayoutMigrator.Migrate(watchPath, () => MintMigrationKey(watchPath), _logger);
+            // Derived index (id/by-key.json + by-state.json) is rebuilt from
+            // the task.json source-of-truth so it always reflects on-disk state.
+            // No data-moving migration runs at boot: the layout is fixed and
+            // there is a single local instance (an auto-migrating boot against
+            // the shared workspace is exactly what corrupted it twice).
+            TaskLayoutIndex.Rebuild(watchPath, _logger);
         }
     }
 
@@ -837,7 +728,7 @@ public class TaskStateMachine
         var max = 0;
         foreach (var jobDir in EnumerateAnyJobDirs(watchPath))
         {
-            var jobJson = Path.Combine(jobDir, "job.json");
+            var jobJson = Path.Combine(jobDir, "task.json");
             if (!File.Exists(jobJson)) continue;
             try
             {
@@ -849,7 +740,7 @@ public class TaskStateMachine
             }
             catch
             {
-                // Migration is best-effort per folder; an unreadable job.json
+                // Migration is best-effort per folder; an unreadable task.json
                 // will be logged by the migrator/index rebuild path.
             }
         }
@@ -870,7 +761,7 @@ public class TaskStateMachine
     }
 
     private static bool IsFlatLayoutJobDir(string jobDir)
-        => IsUnderFlatLayout(jobDir) && File.Exists(Path.Combine(jobDir, "job.json"));
+        => IsUnderFlatLayout(jobDir) && File.Exists(Path.Combine(jobDir, "task.json"));
 
     private static bool IsUnderFlatLayout(string jobDir)
     {

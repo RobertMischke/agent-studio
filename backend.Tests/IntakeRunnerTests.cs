@@ -26,7 +26,7 @@ namespace OrchestratorApi.Tests;
 /// against a temp watch path so the state-transition contract is also
 /// covered end-to-end: phase moves human-ready -> intake-passed on Pass
 /// and human-ready -> intake-blocked on a non-Pass verdict, plus a
-/// <c>lifecycle.json</c> sidecar lands next to <c>job.json</c>.
+/// <c>lifecycle.json</c> sidecar lands next to <c>task.json</c>.
 /// </para>
 /// </summary>
 public class IntakeRunnerTests : IDisposable
@@ -321,7 +321,7 @@ public class IntakeRunnerTests : IDisposable
         Assert.NotNull(info);
         Assert.Equal(LifecyclePhases.IntakePassed, info!.Phase);
 
-        // lifecycle.json is next to job.json, status reflects the verdict.
+        // lifecycle.json is next to task.json, status reflects the verdict.
         var sidecar = ReadLifecycleJson("happy");
         Assert.NotNull(sidecar);
         Assert.Equal(LifecyclePhases.IntakePassed, sidecar!.Phase);
@@ -434,7 +434,7 @@ public class IntakeRunnerTests : IDisposable
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         var phaseField = phase is null ? "" : $",\"phase\":\"{phase}\"";
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"ownerClientId\":\"default\"{phaseField}}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptMd);
     }

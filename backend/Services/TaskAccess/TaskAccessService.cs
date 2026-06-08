@@ -40,7 +40,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
 
     // Per-job optimistic-concurrency counter. Bumped on every successful
     // write. The token consumers see combines this with the on-disk
-    // job.json mtime so a writer that picked up a stale snapshot is
+    // task.json mtime so a writer that picked up a stale snapshot is
     // rejected with Conflict.
     private readonly ConcurrentDictionary<string, long> _versions =
         new(StringComparer.OrdinalIgnoreCase);
@@ -533,7 +533,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             {
                 var slug = Path.GetFileName(folder);
                 if (string.IsNullOrEmpty(slug)) continue;
-                var jobJson = Path.Combine(folder, "job.json");
+                var jobJson = Path.Combine(folder, "task.json");
                 var hasJobJson = File.Exists(jobJson);
                 string? stateInJobJson = null;
                 if (hasJobJson)
@@ -609,7 +609,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         // Forcing a fresh ScanAllJobsRaw on every orphan move has a
         // load-bearing side effect: ScanJobFolder runs the lazy
         // ownerClientId migration, which calls TaskJsonFile.UpdateField
-        // on every legacy job.json it touches. That mtime bump on
+        // on every legacy task.json it touches. That mtime bump on
         // unrelated sibling folders (e.g. another 3-progress folder
         // still queued for the same sweep) made them look freshly
         // active to the next MeasureFolder call and broke the

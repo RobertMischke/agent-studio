@@ -80,7 +80,7 @@ public class BackendBaselineTests
             metrics.Add(Measure($"FindJob", fx, n, iterations, warmup,
                 () => { _ = fx.Scanner.FindJob(midSlug, fx.WatchPath); }));
 
-            // 3) GetJobDetail (calls FindJob -> ScanAllJobs + reads job.json).
+            // 3) GetJobDetail (calls FindJob -> ScanAllJobs + reads task.json).
             metrics.Add(Measure($"GetJobDetail", fx, n, iterations, warmup,
                 () => { _ = fx.Scanner.GetJobDetail(midSlug, fx.WatchPath); }));
 

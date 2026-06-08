@@ -215,7 +215,7 @@ public class SkillReadinessServiceTests : IDisposable
         // Folder + prompt landed on disk.
         var jobDir = Path.Combine(_watchPath, TaskStates.Ready, result.JobId);
         Assert.True(Directory.Exists(jobDir));
-        Assert.True(File.Exists(Path.Combine(jobDir, "job.json")));
+        Assert.True(File.Exists(Path.Combine(jobDir, "task.json")));
         var prompt = File.ReadAllText(Path.Combine(jobDir, "prompt.md"));
         Assert.Contains("Agent Software Studio Skills", prompt);
 

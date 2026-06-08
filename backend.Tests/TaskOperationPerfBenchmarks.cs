@@ -79,7 +79,7 @@ public sealed class TaskOperationPerfBenchmarks : IDisposable
             var key = $"PERF-{n}";
             var dir = WriteFlatTask(key, TaskStates.Backlog, order: n);
             TaskLayoutIndex.Upsert(_root, key, TaskStorageLayout.Location(n, key), TaskStates.Backlog, NullLogger.Instance);
-            Assert.True(File.Exists(Path.Combine(dir, "job.json")));
+            Assert.True(File.Exists(Path.Combine(dir, "task.json")));
         });
 
         var cachedListRead = Measure(Samples, () =>
@@ -148,7 +148,7 @@ public sealed class TaskOperationPerfBenchmarks : IDisposable
             ["agent"] = CliTypes.Codex,
             ["cliType"] = CliTypes.Codex
         };
-        File.WriteAllText(Path.Combine(dir, "job.json"), JsonSerializer.Serialize(json));
+        File.WriteAllText(Path.Combine(dir, "task.json"), JsonSerializer.Serialize(json));
         return dir;
     }
 

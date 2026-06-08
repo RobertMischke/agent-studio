@@ -114,7 +114,7 @@ public sealed class ProjectRunnerHumanDecisionRoutingTests : IDisposable
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(
-            Path.Combine(dir, "job.json"),
+            Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order}," +
             "\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}");
     }

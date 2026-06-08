@@ -212,7 +212,7 @@ public class TaskDetailReviewEvidenceTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.AutoReview, "demo-task");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             """{"id":"demo-task","title":"demo","state":"4-auto-review","order":1,"agent":"claude"}""");
 
         var detail = BuildScanner().GetJobDetail("demo-task", _watchPath);
@@ -226,7 +226,7 @@ public class TaskDetailReviewEvidenceTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.HumanReview, "with-evidence");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             """{"id":"with-evidence","title":"with","state":"5-human-review","order":1,"agent":"claude"}""");
 
         var resultsDir = TaskPaths.ResultsDir(dir);
@@ -298,7 +298,7 @@ public class TaskOutcomeIssueScannerTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.Progress, "permission-task");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             """{"id":"permission-task","title":"permission","state":"3-progress","order":1,"agent":"codex"}""");
         Directory.CreateDirectory(TaskPaths.LogsDir(dir));
         File.WriteAllText(TaskPaths.CliOutputLog(dir),
@@ -319,7 +319,7 @@ public class TaskOutcomeIssueScannerTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.HumanReview, "legacy-heuristic-task");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             """{"id":"legacy-heuristic-task","title":"legacy","state":"5-human-review","order":1,"agent":"claude"}""");
         Directory.CreateDirectory(TaskPaths.LogsDir(dir));
         File.WriteAllText(TaskPaths.CliOutputLog(dir),

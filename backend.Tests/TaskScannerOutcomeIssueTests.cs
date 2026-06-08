@@ -49,7 +49,7 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"), log);
     }

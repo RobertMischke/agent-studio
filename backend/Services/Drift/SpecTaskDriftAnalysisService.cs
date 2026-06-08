@@ -485,7 +485,7 @@ public sealed class SpecTaskDriftAnalysisService
 
     private static ActiveJobRef? ReadActiveJobRef(string dir, string lane)
     {
-        var jobJson = Path.Combine(dir, "job.json");
+        var jobJson = Path.Combine(dir, "task.json");
         if (!File.Exists(jobJson)) return null;
 
         var id = Path.GetFileName(dir);
@@ -503,7 +503,7 @@ public sealed class SpecTaskDriftAnalysisService
         }
         catch (JsonException)
         {
-            // Malformed job.json - still surface the slug so the queue is visible.
+            // Malformed task.json - still surface the slug so the queue is visible.
         }
 
         try { touched = Directory.GetLastWriteTimeUtc(dir); }
@@ -518,7 +518,7 @@ public sealed class SpecTaskDriftAnalysisService
 
     private static TaskRef? ReadJobRef(string dir, string lane)
     {
-        var jobJson = Path.Combine(dir, "job.json");
+        var jobJson = Path.Combine(dir, "task.json");
         if (!File.Exists(jobJson)) return null;
 
         var id = Path.GetFileName(dir);

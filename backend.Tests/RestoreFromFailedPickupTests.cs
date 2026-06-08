@@ -48,7 +48,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
     public void Restore_DeadLetterSlug_LandsInReadyUnderOriginalSlug_AndAppendsForensicsRow()
     {
         // Arrange: simulate a finished dead-letter. The folder lives under
-        // 3a-failed-pickup/foo-pickup-failed-2026-05-08 with a job.json
+        // 3a-failed-pickup/foo-pickup-failed-2026-05-08 with a task.json
         // whose state field still reads "3a-failed-pickup" (set by the
         // dead-letter move). A supervisor chat-log note is also present
         // so we can confirm logs survive the restore.
@@ -56,7 +56,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         const string deadLetterSlug = "foo-pickup-failed-2026-05-08";
         var deadLetterFolder = Path.Combine(_watchPath, TaskStates.FailedPickup, deadLetterSlug);
         Directory.CreateDirectory(deadLetterFolder);
-        File.WriteAllText(Path.Combine(deadLetterFolder, "job.json"),
+        File.WriteAllText(Path.Combine(deadLetterFolder, "task.json"),
             $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"{original}\",\"state\":\"{TaskStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
         var logsDir = Path.Combine(deadLetterFolder, "logs");
         Directory.CreateDirectory(logsDir);
@@ -84,10 +84,10 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         var preservedLog = File.ReadAllText(Path.Combine(restored, "logs", "cli-output.log"));
         Assert.Contains("[supervisor]", preservedLog);
 
-        // job.json state is now 2-ready. The id field is left to the
+        // task.json state is now 2-ready. The id field is left to the
         // scanner's self-heal pass: a fresh scan rewrites it to match
         // the new folder name (line 201-208 of TaskScannerService).
-        var jobJsonRaw = File.ReadAllText(Path.Combine(restored, "job.json"));
+        var jobJsonRaw = File.ReadAllText(Path.Combine(restored, "task.json"));
         Assert.Contains($"\"state\": \"{TaskStates.Ready}\"", jobJsonRaw);
 
         // Forensics: the endpoint appends a pickup-restored row. The
@@ -126,7 +126,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         const string deadLetterSlug = "foo-pickup-failed-2026-05-08";
         var deadLetterFolder = Path.Combine(_watchPath, TaskStates.FailedPickup, deadLetterSlug);
         Directory.CreateDirectory(deadLetterFolder);
-        File.WriteAllText(Path.Combine(deadLetterFolder, "job.json"),
+        File.WriteAllText(Path.Combine(deadLetterFolder, "task.json"),
             $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"foo\",\"state\":\"{TaskStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
 
         var (states, _, _) = Build();
@@ -163,7 +163,7 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
         // Seed 2-ready with the restored folder.
         var restored = Path.Combine(_watchPath, TaskStates.Ready, original);
         Directory.CreateDirectory(restored);
-        File.WriteAllText(Path.Combine(restored, "job.json"),
+        File.WriteAllText(Path.Combine(restored, "task.json"),
             $"{{\"id\":\"{original}\",\"title\":\"{original}\",\"state\":\"{TaskStates.Ready}\",\"order\":1,\"agent\":\"copilot\"}}");
         // 3a-failed-pickup is empty: nothing to restore.
 
@@ -189,12 +189,12 @@ public sealed class RestoreFromFailedPickupTests : IDisposable
 
         var stale = Path.Combine(_watchPath, TaskStates.Ready, original);
         Directory.CreateDirectory(stale);
-        File.WriteAllText(Path.Combine(stale, "job.json"),
+        File.WriteAllText(Path.Combine(stale, "task.json"),
             $"{{\"id\":\"{original}\",\"title\":\"stale\",\"state\":\"{TaskStates.Ready}\",\"order\":1,\"agent\":\"copilot\"}}");
 
         var deadLetterFolder = Path.Combine(_watchPath, TaskStates.FailedPickup, deadLetterSlug);
         Directory.CreateDirectory(deadLetterFolder);
-        File.WriteAllText(Path.Combine(deadLetterFolder, "job.json"),
+        File.WriteAllText(Path.Combine(deadLetterFolder, "task.json"),
             $"{{\"id\":\"{deadLetterSlug}\",\"title\":\"{original}\",\"state\":\"{TaskStates.FailedPickup}\",\"order\":1,\"agent\":\"copilot\"}}");
 
         var (states, _, _) = Build();

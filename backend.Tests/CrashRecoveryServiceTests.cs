@@ -287,7 +287,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
     }
 
@@ -303,7 +303,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
 
     private static void StampLastProgressAt(string jobFolder, DateTime utc)
     {
-        var jsonPath = Path.Combine(jobFolder, "job.json");
+        var jsonPath = Path.Combine(jobFolder, "task.json");
         var json = File.ReadAllText(jsonPath);
         using var doc = JsonDocument.Parse(json);
         var dict = new Dictionary<string, JsonElement>();

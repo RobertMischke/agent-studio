@@ -350,7 +350,7 @@ public class OrchestratorIntakeTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             JsonSerializer.Serialize(new Dictionary<string, object?>
             {
                 ["id"] = slug,

@@ -429,6 +429,6 @@ public class SteeringDocsSummaryDriftServiceTests : IDisposable
             "  \"agent\": \"claude\",\n" +
             "  \"cliType\": \"claude\"\n" +
             "}\n";
-        File.WriteAllText(Path.Combine(dir, "job.json"), json, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "task.json"), json, Encoding.UTF8);
     }
 }

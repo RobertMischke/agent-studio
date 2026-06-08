@@ -10,7 +10,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Locks the registration boundary contract: round-trip register/get/list/soft-delete,
-/// the bootstrap default identity is created on first load, and legacy job.json
+/// the bootstrap default identity is created on first load, and legacy task.json
 /// without ownerClientId is migrated to <see cref="DefaultClientIdentity.Id"/>
 /// on first scan.
 /// </summary>
@@ -154,7 +154,7 @@ public class ClientIdentityTests : IDisposable
 
         var dir = Path.Combine(_watchPath, TaskStates.Ready, "legacy-job");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             "{\"id\":\"legacy-job\",\"title\":\"Legacy\",\"state\":\"2-ready\",\"order\":1,\"agent\":\"copilot\"}");
 
         var jobs = scanner.ScanAllJobs();
@@ -162,7 +162,7 @@ public class ClientIdentityTests : IDisposable
         Assert.Equal(DefaultClientIdentity.Id, legacy.OwnerClientId);
 
         // The migration is sticky: the file on disk now contains the field.
-        var rewritten = File.ReadAllText(Path.Combine(dir, "job.json"));
+        var rewritten = File.ReadAllText(Path.Combine(dir, "task.json"));
         Assert.Contains("\"ownerClientId\"", rewritten);
         Assert.Contains(DefaultClientIdentity.Id, rewritten);
     }
@@ -175,7 +175,7 @@ public class ClientIdentityTests : IDisposable
 
         var dir = Path.Combine(_watchPath, TaskStates.Ready, "owned-job");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             "{\"id\":\"owned-job\",\"title\":\"Owned\",\"state\":\"2-ready\",\"order\":1,\"agent\":\"copilot\",\"ownerClientId\":\"layer-3-review\"}");
 
         var jobs = scanner.ScanAllJobs();

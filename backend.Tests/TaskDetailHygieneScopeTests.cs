@@ -188,7 +188,7 @@ public class TaskDetailHygieneScopeTests : IDisposable
               "createdAt": "2026-05-09T10:00:00Z"{{commitBlock}}
             }
             """;
-        File.WriteAllText(Path.Combine(folder, "job.json"), jobJson);
+        File.WriteAllText(Path.Combine(folder, "task.json"), jobJson);
         File.WriteAllText(Path.Combine(folder, "prompt.md"), "demo");
     }
 

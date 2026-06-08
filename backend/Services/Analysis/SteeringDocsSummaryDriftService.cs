@@ -495,7 +495,7 @@ public sealed class SteeringDocsSummaryDriftService
         var entries = new List<(TaskEvidenceRef Job, DateTime Touched)>();
         foreach (var dir in Directory.EnumerateDirectories(laneDir))
         {
-            var jobJson = Path.Combine(dir, "job.json");
+            var jobJson = Path.Combine(dir, "task.json");
             if (!File.Exists(jobJson)) continue;
             var slug = Path.GetFileName(dir);
             var title = slug;

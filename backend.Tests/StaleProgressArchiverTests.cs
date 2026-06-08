@@ -19,10 +19,10 @@ namespace OrchestratorApi.Tests;
 /// <list type="number">
 ///   <item>Sentinel + stale -> finished missed transition into 4-auto-review
 ///   with a <c>recovered-from-stuck-progress</c> supervisor chat note.</item>
-///   <item>No sentinel + stale + has <c>job.json</c> -> requeued to
+///   <item>No sentinel + stale + has <c>task.json</c> -> requeued to
 ///   <c>2-ready</c> so the pickup loop retries the same task (an interrupted run
 ///   is not a failure). No new orphan card.</item>
-///   <item>Empty + stale + no <c>job.json</c> -> archived to <c>7-archive</c> as
+///   <item>Empty + stale + no <c>task.json</c> -> archived to <c>7-archive</c> as
 ///   <c>-debris-&lt;date&gt;</c> (debris, not a runnable task).</item>
 ///   <item>Fresh -> untouched (progress-first pickup will resume).</item>
 ///   <item>Re-run on the same lane -> no further changes (idempotency).</item>
@@ -65,7 +65,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "demo-task");
         WriteCliLogWithSentinel(folder, "[[TASK_DONE]]");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
 
         var (archiver, _) = Build();
         var decisions = await archiver.SweepAsync();
@@ -94,14 +94,14 @@ public sealed class StaleProgressArchiverTests : IDisposable
     public async Task Sweep_StaleFolderWithJobJsonNoSentinel_IsRequeuedToReadyNotDeadLettered()
     {
         // ADR-0051 (failed-pickup elimination): a stale 3-progress folder that
-        // still carries a job.json is a real task whose run was interrupted, not
+        // still carries a task.json is a real task whose run was interrupted, not
         // a task that failed. It is requeued to 2-ready so the pickup loop
         // retries the same task. No new orphan card, nothing in failed-pickup.
         WriteJob(TaskStates.Progress, "no-sentinel");
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "no-sentinel");
         WriteCliLog(folder, "agent talked but never finished");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
 
         var (archiver, _) = Build();
         var decisions = await archiver.SweepAsync();
@@ -130,11 +130,11 @@ public sealed class StaleProgressArchiverTests : IDisposable
     public async Task Sweep_EmptyStaleFolderNoJobJson_IsArchivedAsDebrisNotDeadLettered()
     {
         // ADR-0051 (failed-pickup elimination): an empty stale folder with no
-        // job.json is not a runnable task. It is debris and is archived to
+        // task.json is not a runnable task. It is debris and is archived to
         // 7-archive with its evidence intact, never parked in a dead-end lane.
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "empty-shell");
         Directory.CreateDirectory(folder);
-        // No job.json, no logs. MeasureFolder treats this as epoch 0 so it
+        // No task.json, no logs. MeasureFolder treats this as epoch 0 so it
         // always crosses the threshold.
 
         var (archiver, _) = Build();
@@ -164,7 +164,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         // restart at 01:27:42): six phantom folders appeared in 3a-failed-pickup
         // after a backend restart while four jobs were finishing their
         // 3-progress -> 4-auto-review -> 5-human-review moves. The boot sweep
-        // saw a 3-progress residue with no job.json and minted
+        // saw a 3-progress residue with no task.json and minted
         // <slug>-debris-<date> markers for jobs already in 5-human-review.
         // After the fix, the sweep cross-checks downstream lanes
         // (4-auto-review / 5-human-review / 6-completed / 7-archive) and
@@ -174,7 +174,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         // The real twin already lives in 5-human-review.
         WriteJob(TaskStates.HumanReview, slug);
 
-        // The mid-move residue in 3-progress has no job.json (mimicking the
+        // The mid-move residue in 3-progress has no task.json (mimicking the
         // empty placard-only shape observed in the incident).
         var residueFolder = Path.Combine(_watchPath, TaskStates.Progress, slug);
         Directory.CreateDirectory(residueFolder);
@@ -193,8 +193,8 @@ public sealed class StaleProgressArchiverTests : IDisposable
         // 2. The real twin in 5-human-review is untouched.
         var twinFolder = Path.Combine(_watchPath, TaskStates.HumanReview, slug);
         Assert.True(Directory.Exists(twinFolder), "real twin in 5-human-review must remain intact");
-        Assert.True(File.Exists(Path.Combine(twinFolder, "job.json")),
-            "real twin's job.json must remain intact");
+        Assert.True(File.Exists(Path.Combine(twinFolder, "task.json")),
+            "real twin's task.json must remain intact");
 
         // 3. One decision row: MidMoveCasualtyRemoved, pointing to the twin's lane.
         var d = Assert.Single(decisions);
@@ -263,7 +263,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "tool-calling");
         WriteCliLog(folder, "long-quiet stdout");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
 
         // tool-calls.jsonl mtime defaults to "now" since we just wrote it.
         var toolCalls = Path.Combine(folder, "logs", "tool-calls.jsonl");
@@ -290,7 +290,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "just-resumed");
         WriteCliLog(folder, "old stdout from a previous attempt");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
 
         var sessionEvents = Path.Combine(folder, "logs", "session-events.jsonl");
         File.WriteAllText(sessionEvents, "{\"Ts\":\"now\",\"Kind\":\"continue\",\"Cli\":\"claude\"}\n");
@@ -309,13 +309,13 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var f1 = Path.Combine(_watchPath, TaskStates.Progress, "first-orphan");
         WriteCliLog(f1, "no sentinel here");
         SetMtimeOldEnough(Path.Combine(f1, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(f1, "job.json"));
+        SetMtimeOldEnough(Path.Combine(f1, "task.json"));
 
         WriteJob(TaskStates.Progress, "second-recovered");
         var f2 = Path.Combine(_watchPath, TaskStates.Progress, "second-recovered");
         WriteCliLogWithSentinel(f2, "[[TASK_NEEDS_INPUT:waiting]]");
         SetMtimeOldEnough(Path.Combine(f2, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(f2, "job.json"));
+        SetMtimeOldEnough(Path.Combine(f2, "task.json"));
 
         var (archiver, _) = Build();
         var first = await archiver.SweepAsync();
@@ -337,7 +337,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "running-now");
         WriteCliLog(folder, "agent mid-stream");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
 
         var (archiver, _) = Build();
         archiver.StatusProviderOverride = () => new RunnerStatus
@@ -367,7 +367,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var folder = Path.Combine(_watchPath, TaskStates.Progress, "would-be-orphan");
         WriteCliLog(folder, "no sentinel");
         SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
-        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
 
         var (archiver, _) = Build(stuckResumeWindowMinutes: 0);
         var decisions = await archiver.SweepAsync();
@@ -417,7 +417,7 @@ public sealed class StaleProgressArchiverTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
     }
 

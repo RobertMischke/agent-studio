@@ -7,7 +7,7 @@ namespace OrchestratorApi.Services.Runner;
 /// computes a clarity score on a task prompt, maps the score and the
 /// per-project autonomy level to a verdict (<c>Accept</c>, <c>Iterate</c>,
 /// or <c>Bounce</c>), and exposes the typed bounce reason that the
-/// orchestrator-prep hosted service writes to <c>job.json</c>.
+/// orchestrator-prep hosted service writes to <c>task.json</c>.
 ///
 /// <para>The clarity score is heuristic in the first slice (cheap, no
 /// model call, auditable). A future slice may upgrade to a fast-model

@@ -104,7 +104,7 @@ public class TaskMutationService
     /// <summary>
     /// Epics assignment way 2 (post-hoc): attach this task to a parent epic, or
     /// detach it (<paramref name="epicId"/> null/empty clears the link). Writes
-    /// the <c>epicId</c> field on job.json via the mutation layer (API-only
+    /// the <c>epicId</c> field on task.json via the mutation layer (API-only
     /// job-folder rule, ADR-0024). Returns false when the task is not found.
     /// </summary>
     public bool SetJobEpic(string jobId, string? epicId, string? watchPath = null)
@@ -165,7 +165,7 @@ public class TaskMutationService
     }
 
     /// <summary>
-    /// Append a new commit to the task's commit chain in <c>job.json</c>.
+    /// Append a new commit to the task's commit chain in <c>task.json</c>.
     /// Existing entries are preserved (oldest -&gt; newest); the singular
     /// legacy <c>commit</c> field is also updated to mirror the newest
     /// entry so consumers that still read the old shape see the latest
@@ -185,7 +185,7 @@ public class TaskMutationService
     public bool AppendJobCommitOnFolder(string folderPath, TaskCommitInfo commit)
     {
         if (!Directory.Exists(folderPath)) return false;
-        var jobJsonPath = Path.Combine(folderPath, "job.json");
+        var jobJsonPath = Path.Combine(folderPath, "task.json");
         if (!File.Exists(jobJsonPath)) return false;
         try
         {
@@ -263,7 +263,7 @@ public class TaskMutationService
     }
 
     /// <summary>
-    /// Stamp a UTC progress heartbeat onto the job's <c>job.json</c>. Written
+    /// Stamp a UTC progress heartbeat onto the job's <c>task.json</c>. Written
     /// on every CLI-output flush so <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
     /// can attribute orphan working-tree changes to the most-recently-active
     /// job in <c>3-progress</c> on the next backend boot. ADR-0020.
@@ -422,7 +422,7 @@ public class TaskMutationService
 
     /// <summary>
     /// Application-owned write of the optional <c>phase</c> field on a job's
-    /// <c>job.json</c>. Used by the orchestrator-intake hosted service to
+    /// <c>task.json</c>. Used by the orchestrator-intake hosted service to
     /// move a 2-ready card through <c>human-ready → intake-running →
     /// intake-passed | intake-blocked</c> without changing the filesystem
     /// state. Pass <see cref="LifecyclePhases.IsAllowed"/> values; an empty
@@ -561,7 +561,7 @@ public class TaskMutationService
         if (!string.IsNullOrWhiteSpace(effectiveCliType))
             jobJson["cliType"] = effectiveCliType;
         // Epics: card kind (task|epic) + optional parent epic (assignment way 1,
-        // at create time). kind is always written so a fresh job.json is explicit.
+        // at create time). kind is always written so a fresh task.json is explicit.
         jobJson["kind"] = TaskKinds.Normalize(req.Kind);
         if (!string.IsNullOrWhiteSpace(req.EpicId))
             jobJson["epicId"] = req.EpicId;
@@ -574,7 +574,7 @@ public class TaskMutationService
         if (req.Fixture)
             jobJson["fixture"] = true;
 
-        // taskType is always written so a fresh job.json carries an explicit
+        // taskType is always written so a fresh task.json carries an explicit
         // value. Legacy folders without the field render as Chore (the
         // scanner's lazy default), so we only emit it on create.
         jobJson["taskType"] = TaskTypes.Normalize(req.TaskType);
@@ -590,7 +590,7 @@ public class TaskMutationService
 
         jobJson["key"] = storageId;
 
-        File.WriteAllText(Path.Combine(jobDir, "job.json"),
+        File.WriteAllText(Path.Combine(jobDir, "task.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
 
         if (!string.IsNullOrWhiteSpace(req.PromptMarkdown))
@@ -1014,7 +1014,7 @@ public class TaskMutationService
 
     /// <summary>
     /// Boot-time backfill: stamps a <c>key</c> on every job whose
-    /// <c>job.json</c> currently has no key. Idempotent; jobs that
+    /// <c>task.json</c> currently has no key. Idempotent; jobs that
     /// already carry a key are skipped. The project counter floor is first
     /// raised past the highest key already on disk (across all tasks, not
     /// only the ones being stamped) so a freshly stamped key cannot collide

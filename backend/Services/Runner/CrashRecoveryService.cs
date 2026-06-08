@@ -137,7 +137,7 @@ public sealed class CrashRecoveryService
             var marker = CompletionMarker.TryRead(jobFolder, _logger);
             if (marker == null) continue;
 
-            var jobJsonPath = Path.Combine(jobFolder, "job.json");
+            var jobJsonPath = Path.Combine(jobFolder, "task.json");
             if (!File.Exists(jobJsonPath))
             {
                 CompletionMarker.Clear(jobFolder, _logger);
@@ -226,7 +226,7 @@ public sealed class CrashRecoveryService
         if (!_git.RepoHasUncommittedChanges(repoRoot)) return;
 
         // Attribute orphan changes to the most-recently-active job in
-        // 3-progress by lastProgressAt. We deliberately read job.json
+        // 3-progress by lastProgressAt. We deliberately read task.json
         // straight from disk: at boot time the TaskScannerService's overlay
         // has not warmed up yet, and we need a single field.
         //
@@ -317,7 +317,7 @@ public sealed class CrashRecoveryService
             "CrashRecoveryService: committed orphan changes for project {Project} as {Sha}",
             entry.Name, commit.Sha);
 
-        // Attach the commit reference to the job's job.json so the UI shows
+        // Attach the commit reference to the job's task.json so the UI shows
         // the recovered SHA on the card. Only when we have a target job.
         if (jobId != null && jobFolder != null && !string.IsNullOrWhiteSpace(commit.Sha))
         {
@@ -355,9 +355,9 @@ public sealed class CrashRecoveryService
         {
             ct.ThrowIfCancellationRequested();
 
-            // No job.json means this is a folder-shaped orphan, not a real
+            // No task.json means this is a folder-shaped orphan, not a real
             // interrupted run; leave it for the runner's own orphan sweep.
-            if (!File.Exists(Path.Combine(jobFolder, "job.json"))) continue;
+            if (!File.Exists(Path.Combine(jobFolder, "task.json"))) continue;
 
             // Only a present lock signals an interrupted run. A 3-progress job
             // with no lock was never mid-spawn (or was already released); the
@@ -506,7 +506,7 @@ public sealed class CrashRecoveryService
 
         foreach (var jobFolder in Directory.EnumerateDirectories(progressDir))
         {
-            var jobJsonPath = Path.Combine(jobFolder, "job.json");
+            var jobJsonPath = Path.Combine(jobFolder, "task.json");
             if (!File.Exists(jobJsonPath)) continue;
 
             var slug = Path.GetFileName(jobFolder);
@@ -533,7 +533,7 @@ public sealed class CrashRecoveryService
                 }
                 else
                 {
-                    // Fall back to job.json mtime; better than nothing.
+                    // Fall back to task.json mtime; better than nothing.
                     at = File.GetLastWriteTimeUtc(jobJsonPath);
                 }
 
@@ -546,7 +546,7 @@ public sealed class CrashRecoveryService
             }
             catch
             {
-                // Ignore unreadable job.json entries; recovery is best-effort.
+                // Ignore unreadable task.json entries; recovery is best-effort.
             }
         }
 

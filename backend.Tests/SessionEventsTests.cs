@@ -12,7 +12,7 @@ namespace OrchestratorApi.Tests;
 /// Locks in the contract for session telemetry: every start / continue /
 /// recovery must produce a row in <c>logs/session-events.jsonl</c>, the
 /// captured session id must backfill the latest row after the run, and the
-/// session chain in <c>job.json</c> must accumulate ids and break cleanly
+/// session chain in <c>task.json</c> must accumulate ids and break cleanly
 /// at <c>(recovery)</c> markers.
 ///
 /// The user explicitly asked for visibility into "was the session continued
@@ -67,7 +67,7 @@ public class SessionEventsTests : IDisposable
         };
         if (sessionName != null) fields["sessionName"] = sessionName;
         if (sessionChain != null) fields["sessionChain"] = sessionChain;
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             JsonSerializer.Serialize(fields, new JsonSerializerOptions { WriteIndented = true }));
     }
 
@@ -195,7 +195,7 @@ public class SessionEventsTests : IDisposable
 
     /// <summary>
     /// Job folders written before this PR shipped don't have <c>sessionChain</c>
-    /// in <c>job.json</c>. The reader must derive a single-element chain from
+    /// in <c>task.json</c>. The reader must derive a single-element chain from
     /// the legacy <c>sessionName</c> field so the UI shows continuity for old
     /// jobs instead of treating them as never-started.
     /// </summary>

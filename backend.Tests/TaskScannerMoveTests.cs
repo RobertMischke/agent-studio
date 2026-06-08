@@ -54,7 +54,7 @@ public class TaskScannerMoveTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
     }
 
@@ -81,7 +81,7 @@ public class TaskScannerMoveTests : IDisposable
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         var json = File.ReadAllText(
-            Path.Combine(_watchPath, TaskStates.Archive, "stamp-task", "job.json"));
+            Path.Combine(_watchPath, TaskStates.Archive, "stamp-task", "task.json"));
         Assert.Contains("\"enteredLaneAt\"", json);
     }
 
@@ -127,16 +127,16 @@ public class TaskScannerMoveTests : IDisposable
             outcome.NewFolderPath);
 
         // Source lane is drained; the pre-existing namesake is untouched; the
-        // moved folder lives under the suffixed slug with its job.json intact.
+        // moved folder lives under the suffixed slug with its task.json intact.
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "duplicate-slug")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2")));
-        Assert.True(File.Exists(Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2", "job.json")));
+        Assert.True(File.Exists(Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2", "task.json")));
 
         // The canonical id was rewritten to match the new folder name so the
         // scanner does not have to self-heal a divergent id on the next pass.
         var movedJson = File.ReadAllText(
-            Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2", "job.json"));
+            Path.Combine(_watchPath, TaskStates.Archive, "duplicate-slug-2", "task.json"));
         Assert.Contains("\"duplicate-slug-2\"", movedJson);
     }
 }

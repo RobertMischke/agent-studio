@@ -161,7 +161,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Fact]
     public void Scanner_PhaseFromWrongState_IsDroppedNotFatal()
     {
-        // Hand-edited job.json puts an execution phase on a 2-ready card.
+        // Hand-edited task.json puts an execution phase on a 2-ready card.
         // The scanner must drop it (logging a warning) rather than wedge the
         // board or echo nonsense back to the UI.
         WriteJob(TaskStates.Ready, "bad-phase", phase: LifecyclePhases.ExecutionRunning);
@@ -225,10 +225,10 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     {
         // The compatibility constraint from the task prompt: do not rewrite
         // every job folder just to add default metadata. The scan path must
-        // leave a phase-less job.json alone so an idle backend boot does not
+        // leave a phase-less task.json alone so an idle backend boot does not
         // touch every card on the board.
         WriteJob(TaskStates.Ready, "untouched", phase: null);
-        var path = Path.Combine(_watchPath, TaskStates.Ready, "untouched", "job.json");
+        var path = Path.Combine(_watchPath, TaskStates.Ready, "untouched", "task.json");
         var before = File.ReadAllText(path);
         var beforeMtime = File.GetLastWriteTimeUtc(path);
 
@@ -248,7 +248,7 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         var phaseField = phase is null ? "" : $",\"phase\":\"{phase}\"";
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"ownerClientId\":\"default\"{phaseField}}}");
     }
 

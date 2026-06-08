@@ -6,7 +6,7 @@ namespace OrchestratorApi.Services.Tasks;
 /// Shared low-level helper for the job services in this folder. All four
 /// (<see cref="TaskScannerService"/>, <see cref="TaskStateMachine"/>,
 /// <see cref="TaskMutationService"/>, <see cref="TaskSessionLog"/>) need to
-/// rewrite a single field in a job's <c>job.json</c> while preserving the
+/// rewrite a single field in a job's <c>task.json</c> while preserving the
 /// original key order; centralising that read-modify-write avoids each
 /// service growing its own near-identical copy and drifting on details
 /// like indent, encoding, or legacy-field handling.
@@ -17,12 +17,12 @@ internal static class TaskJsonFile
     private static readonly JsonSerializerOptions WriteOpts = new() { WriteIndented = true };
 
     /// <summary>
-    /// Reads <c>job.json</c>, replaces or adds a single top-level field, writes
+    /// Reads <c>task.json</c>, replaces or adds a single top-level field, writes
     /// back preserving the existing field order.
     /// </summary>
     internal static void UpdateField(string jobDir, string fieldName, object value, ILogger logger)
     {
-        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
         try
@@ -51,18 +51,18 @@ internal static class TaskJsonFile
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to update field {Field} in job.json at {Dir}", fieldName, jobDir);
+            logger.LogError(ex, "Failed to update field {Field} in task.json at {Dir}", fieldName, jobDir);
         }
     }
 
     /// <summary>
-    /// Remove a top-level key from <c>job.json</c> if present. No-op when the
+    /// Remove a top-level key from <c>task.json</c> if present. No-op when the
     /// file or key is absent. Used to clean up obsolete fields after a feature
     /// is removed (e.g. the operator-override <c>excludedCommits</c> array).
     /// </summary>
     internal static void RemoveField(string jobDir, string fieldName, ILogger logger)
     {
-        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
         try
@@ -83,7 +83,7 @@ internal static class TaskJsonFile
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to remove field {Field} from job.json at {Dir}", fieldName, jobDir);
+            logger.LogError(ex, "Failed to remove field {Field} from task.json at {Dir}", fieldName, jobDir);
         }
     }
 
@@ -94,7 +94,7 @@ internal static class TaskJsonFile
     /// </summary>
     internal static void UpdateOrder(string jobDir, int order, ILogger logger)
     {
-        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
         if (!File.Exists(jobJsonPath)) return;
 
         try
@@ -116,7 +116,7 @@ internal static class TaskJsonFile
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to update order in job.json at {Dir}", jobDir);
+            logger.LogError(ex, "Failed to update order in task.json at {Dir}", jobDir);
         }
     }
 }

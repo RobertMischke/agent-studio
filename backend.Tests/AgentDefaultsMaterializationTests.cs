@@ -161,7 +161,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
 
         var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "legacy-job");
         Directory.CreateDirectory(jobDir);
-        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), """
             {
               "id": "legacy-job",
               "title": "Legacy",
@@ -191,7 +191,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
 
         var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "idem-job");
         Directory.CreateDirectory(jobDir);
-        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), """
             {
               "id": "idem-job",
               "title": "Idempotent",
@@ -217,7 +217,7 @@ public class AgentDefaultsMaterializationTests : IDisposable
 
         var jobDir = Path.Combine(_watchPath, TaskStates.Ready, "explicit-job");
         Directory.CreateDirectory(jobDir);
-        File.WriteAllText(Path.Combine(jobDir, "job.json"), """
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), """
             {
               "id": "explicit-job",
               "title": "Explicit",

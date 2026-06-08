@@ -12,7 +12,7 @@ namespace OrchestratorApi.Tests;
 /// must set order=1" bug. The frontend computes a new in-lane sequence
 /// from a drag gesture and POSTs the ordered slug list to
 /// <see cref="TaskStateMachine.ReorderJobs"/>; the backend rewrites every
-/// job.json's <c>order</c> field to its 1-based position in the list.
+/// task.json's <c>order</c> field to its 1-based position in the list.
 ///
 /// The bug surfaced as "dragged card landed at order 2 instead of order
 /// 1". The frontend-side hit-target fix is covered by
@@ -121,7 +121,7 @@ public class TaskReorderTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, TaskStates.Ready, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{TaskStates.Ready}\",\"order\":{order},\"agent\":\"copilot\"}}");
     }
 

@@ -138,7 +138,7 @@ public class ProjectTokenUsageEndpointPerfTests : IDisposable
             order = 1,
             agent = "copilot",
         });
-        File.WriteAllText(Path.Combine(dir, "job.json"), json);
+        File.WriteAllText(Path.Combine(dir, "task.json"), json);
     }
 
     private void WriteOrchestratorLog(int jobCount, int entries)

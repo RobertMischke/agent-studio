@@ -141,7 +141,7 @@ public class TaskIndexCacheTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             JsonSerializer.Serialize(new { id = slug, title, state, order = 1, agent = "claude" }));
     }
 

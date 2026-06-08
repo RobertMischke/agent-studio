@@ -9,7 +9,7 @@ namespace OrchestratorApi.Tests;
 /// <summary>
 /// Pins the F45 restscope acceptance criterion "Lane-Wechsel = reine
 /// Metadata-/Index-Mutation, kein FS-Move": a lane change must rewrite
-/// <c>job.json.state</c> and the <c>by-state</c> index while leaving the task's
+/// <c>task.json.state</c> and the <c>by-state</c> index while leaving the task's
 /// physical folder (<c>jobs/&lt;bucket&gt;/&lt;key&gt;</c>) exactly where it is.
 /// Fixtures are built by running the real migrator so the starting state is a
 /// genuine migrated layout, not a hand-rolled one.
@@ -45,8 +45,8 @@ public class TaskLayoutTransitionTests : IDisposable
         Assert.Equal(TaskStates.Progress, result.ToState);
         Assert.Equal("000/TST-10", result.Location);
 
-        // Authority: job.json.state flipped.
-        Assert.Equal(TaskStates.Progress, Field(Path.Combine(folder, "job.json"), "state"));
+        // Authority: task.json.state flipped.
+        Assert.Equal(TaskStates.Progress, Field(Path.Combine(folder, "task.json"), "state"));
 
         // Location invariant: the folder is still exactly where it was, no
         // sibling clone, no Directory.Move.
@@ -120,7 +120,7 @@ public class TaskLayoutTransitionTests : IDisposable
     public void ChangeState_LiveIndex_MatchesRebuild_FromJobJson()
     {
         // The index is a derived cache: after a live transition, regenerating
-        // it from job.json (the authority) must yield the same membership.
+        // it from task.json (the authority) must yield the same membership.
         SeedLaneTask(TaskStates.Ready, "a", "TST-10");
         SeedLaneTask(TaskStates.Progress, "b", "TST-11");
         Migrate();
@@ -147,7 +147,7 @@ public class TaskLayoutTransitionTests : IDisposable
     private static string NoMint() =>
         throw new InvalidOperationException("fixture has no keyless folders; mintKey must not be called");
 
-    private string JobJson(string key) => Path.Combine(_root, "jobs", "000", key, "job.json");
+    private string JobJson(string key) => Path.Combine(_root, "jobs", "000", key, "task.json");
 
     private void SeedLaneTask(string lane, string slug, string key)
     {
@@ -159,7 +159,7 @@ public class TaskLayoutTransitionTests : IDisposable
             ["title"] = slug + " title",
             ["key"] = key,
         };
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
     }
 

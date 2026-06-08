@@ -459,7 +459,7 @@ public class TaskRunnerPlanTests
     /// Copilot-specific: Copilot uses the persisted session name as the
     /// `--resume` handle, so the planner must pre-generate a slug on a fresh
     /// start and signal PersistSessionName so the runner writes it back to
-    /// job.json. Other CLIs leave SessionName null until they capture a real
+    /// task.json. Other CLIs leave SessionName null until they capture a real
     /// UUID during streaming.
     /// </summary>
     [Fact]

@@ -140,14 +140,14 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
         Assert.DoesNotContain(allDestinationFolders, name => name != null && name.Contains("-2-", StringComparison.Ordinal));
         Assert.DoesNotContain(allDestinationFolders, name => name != null && name.EndsWith("-2", StringComparison.Ordinal));
 
-        // Every moved folder still has a job.json file. The "reader
+        // Every moved folder still has a task.json file. The "reader
         // catches mid-rename" race would leave an empty skeleton.
         foreach (var target in targets)
         {
             foreach (var folder in Directory.GetDirectories(Path.Combine(_watchPath, target)))
             {
-                Assert.True(File.Exists(Path.Combine(folder, "job.json")),
-                    $"Expected job.json in moved folder {folder}.");
+                Assert.True(File.Exists(Path.Combine(folder, "task.json")),
+                    $"Expected task.json in moved folder {folder}.");
             }
         }
     }
@@ -181,7 +181,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
         if (moved)
         {
             Assert.Single(autoReviewFolders);
-            Assert.True(File.Exists(Path.Combine(autoReviewFolders[0], "job.json")));
+            Assert.True(File.Exists(Path.Combine(autoReviewFolders[0], "task.json")));
         }
         else
         {
@@ -193,7 +193,7 @@ public class LaneMutexRegistryConcurrencyTests : IDisposable
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "job.json"),
+        File.WriteAllText(Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}");
     }
 

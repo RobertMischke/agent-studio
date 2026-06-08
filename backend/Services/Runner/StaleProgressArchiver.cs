@@ -24,7 +24,7 @@ namespace OrchestratorApi.Services.Runner;
 ///
 /// Decision shape per folder:
 /// <list type="bullet">
-///   <item>Latest activity = max mtime across <c>job.json</c> and every file
+///   <item>Latest activity = max mtime across <c>task.json</c> and every file
 ///   under <c>logs/</c> (<c>cli-output.log</c>, <c>tool-calls.jsonl</c>,
 ///   <c>session-events.jsonl</c>, future log types). Reading any single file
 ///   as the liveness signal misclassifies a session that is currently emitting
@@ -41,11 +41,11 @@ namespace OrchestratorApi.Services.Runner;
 ///   <c>3-progress -&gt; 4-auto-review</c> transition the orchestrator missed
 ///   and appends a <c>[recovered-from-stuck-progress]</c> note to the chat
 ///   log.</item>
-///   <item>If older with no sentinel but **with** a <c>job.json</c>, the run
+///   <item>If older with no sentinel but **with** a <c>task.json</c>, the run
 ///   was interrupted, not failed: the folder is a real task and is requeued to
 ///   <c>2-ready</c> so the pickup loop retries the same task. No new card is
 ///   minted. (ADR-0051, failed-pickup elimination, supersedes ADR-0028/0029.)</item>
-///   <item>If older with no <c>job.json</c>, the folder is not a runnable task:
+///   <item>If older with no <c>task.json</c>, the folder is not a runnable task:
 ///   it is debris (an empty folder, a lost-metadata shell, a hand-made
 ///   directory) and is archived to <c>7-archive</c> under
 ///   <c>&lt;original-slug&gt;-debris-&lt;utc-date&gt;/</c> with its evidence
@@ -142,12 +142,12 @@ public sealed class StaleProgressArchiver
             activeByProject.TryGetValue(entry.Name, out var activeJobId);
 
             // ADR-0024: enumerate 3-progress through the typed layer.
-            // ListLaneFolders includes orphan folders (no job.json),
+            // ListLaneFolders includes orphan folders (no task.json),
             // which is the case this sweep was designed to catch.
             //
             // Measure every folder BEFORE acting on any of them. The requeue
             // and recover paths call _scanner.FindJob, which stamps
-            // ownerClientId onto sibling legacy job.json files and bumps their
+            // ownerClientId onto sibling legacy task.json files and bumps their
             // mtime; acting on one folder must not reclassify a sibling that has
             // not been processed yet (it would look freshly active and be
             // skipped). Snapshotting the age verdict up front judges each folder
@@ -188,7 +188,7 @@ public sealed class StaleProgressArchiver
                 }
 
                 // Routing (failed-pickup elimination, supersedes ADR-0028/0029):
-                //   * mid-move casualty (no job.json AND same slug already in
+                //   * mid-move casualty (no task.json AND same slug already in
                 //     a later lane) -> silently delete the empty source folder.
                 //     This is the 2026-05-12 boot-race: a Lane-Move
                 //     3-progress -> 4-auto-review was already complete when the
@@ -198,12 +198,12 @@ public sealed class StaleProgressArchiver
                 //     real job lives in the later lane; archiving the residue
                 //     as debris would mint a phantom card under
                 //     <slug>-debris-<date>.
-                //   * has job.json + completion sentinel -> finish the missed
+                //   * has task.json + completion sentinel -> finish the missed
                 //     transition to 4-auto-review (unchanged).
-                //   * has job.json, no sentinel            -> the run was
+                //   * has task.json, no sentinel            -> the run was
                 //     interrupted, not failed; requeue the same task to 2-ready
                 //     so the pickup loop retries it. No new orphan card.
-                //   * no job.json                          -> debris (an empty
+                //   * no task.json                          -> debris (an empty
                 //     folder, a lost-metadata shell, a hand-made directory).
                 //     Not a runnable task; archive it to 7-archive with its
                 //     evidence intact instead of parking a card in a dead-end
@@ -213,7 +213,7 @@ public sealed class StaleProgressArchiver
                 // `orphan-detection-checks-other-lanes`): every code path that
                 // decides "this is an orphan" must first check whether the same
                 // slug already exists in a later lane.
-                var hasJobJson = File.Exists(Path.Combine(jobFolder, "job.json"));
+                var hasJobJson = File.Exists(Path.Combine(jobFolder, "task.json"));
                 StaleProgressDecision decision;
                 if (!hasJobJson && TryFindSlugInLaterLane(entry.Path, slug, out var twinLane))
                 {
@@ -261,11 +261,11 @@ public sealed class StaleProgressArchiver
     /// historical backlog so the lane reaches and stays empty, then can be
     /// retired:
     /// <list type="bullet">
-    ///   <item>A folder that carries a <c>job.json</c> is a real task. It is
+    ///   <item>A folder that carries a <c>task.json</c> is a real task. It is
     ///   restored to <c>2-ready</c> (original slug recovered when the
     ///   dead-letter shape is recognised, otherwise kept) so the pickup loop
     ///   retries the same task.</item>
-    ///   <item>A folder with no <c>job.json</c> is debris and is archived to
+    ///   <item>A folder with no <c>task.json</c> is debris and is archived to
     ///   <c>7-archive</c> with its evidence intact.</item>
     /// </list>
     /// Idempotent: a boot with an already-empty lane is a no-op. Runs after
@@ -282,20 +282,20 @@ public sealed class StaleProgressArchiver
             ct.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
 
-            // ListLaneFolders includes folders with no job.json, which is the
+            // ListLaneFolders includes folders with no task.json, which is the
             // debris case the drain must catch.
             foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, TaskStates.FailedPickup))
             {
                 ct.ThrowIfCancellationRequested();
                 var slug = laneFolder.Slug;
                 var jobFolder = laneFolder.FolderPath;
-                var hasJobJson = File.Exists(Path.Combine(jobFolder, "job.json"));
+                var hasJobJson = File.Exists(Path.Combine(jobFolder, "task.json"));
 
                 var decision = hasJobJson
                     ? DrainRealTaskToReady(entry, slug, now)
                     : ArchiveAsDebris(
                         entry, jobFolder, slug, now,
-                        $"folder left in {TaskStates.FailedPickup} with no job.json (debris); archived to {TaskStates.Archive} on the failed-pickup-lane drain");
+                        $"folder left in {TaskStates.FailedPickup} with no task.json (debris); archived to {TaskStates.Archive} on the failed-pickup-lane drain");
 
                 decisions.Add(decision);
                 AppendOrphanRecoveryEntry(decision);
@@ -313,7 +313,7 @@ public sealed class StaleProgressArchiver
     }
 
     /// <summary>
-    /// Restore a real task (a folder carrying <c>job.json</c>) out of
+    /// Restore a real task (a folder carrying <c>task.json</c>) out of
     /// <c>3a-failed-pickup</c> and back to <c>2-ready</c>. The state machine
     /// recovers the original slug when the dead-letter shape is recognised; for
     /// the older <c>-orphan-</c> / <c>-empty-</c> / <c>orphan-</c> shapes that
@@ -395,7 +395,7 @@ public sealed class StaleProgressArchiver
     private static (DateTime LastActivity, bool IsEmpty) MeasureFolder(string jobFolder)
     {
         // Activity signature is the union of every file the runner may append
-        // to during a live session: job.json, logs/cli-output.log,
+        // to during a live session: task.json, logs/cli-output.log,
         // logs/tool-calls.jsonl, logs/session-events.jsonl, plus any future
         // log file the runner adds. Reading only cli-output.log misses
         // sessions that emit primarily tool-use events into tool-calls.jsonl
@@ -404,7 +404,7 @@ public sealed class StaleProgressArchiver
         // failed-pickup with `-orphan-`. The union catches every form of
         // runner-side append without coupling the sweep to a specific file
         // name.
-        var jobJson = Path.Combine(jobFolder, "job.json");
+        var jobJson = Path.Combine(jobFolder, "task.json");
         var logsDir = Path.Combine(jobFolder, "logs");
         var hasJson = File.Exists(jobJson);
         var hasAnyLogFile = false;
@@ -496,7 +496,7 @@ public sealed class StaleProgressArchiver
         WatchPathEntry entry, string jobFolder, string slug, string keyword,
         DateTime now, CancellationToken ct)
     {
-        // Use jobId from job.json when available; folder name is the canonical
+        // Use jobId from task.json when available; folder name is the canonical
         // fallback (the application uses folder name as jobId everywhere).
         var jobId = TryReadJobId(jobFolder) ?? slug;
         try
@@ -556,7 +556,7 @@ public sealed class StaleProgressArchiver
     }
 
     /// <summary>
-    /// A stale <c>3-progress</c> folder that still carries a <c>job.json</c> is
+    /// A stale <c>3-progress</c> folder that still carries a <c>task.json</c> is
     /// a real task whose run was interrupted (a backend that died mid-run, an
     /// <c>update-stable.sh</c> cycle that killed the runner, a pickup that never
     /// streamed a sentinel). The task is not failed; requeue it to <c>2-ready</c>
@@ -630,7 +630,7 @@ public sealed class StaleProgressArchiver
     }
 
     /// <summary>
-    /// A stale <c>3-progress</c> folder with no <c>job.json</c> is not a runnable
+    /// A stale <c>3-progress</c> folder with no <c>task.json</c> is not a runnable
     /// task: it is debris (an empty folder, a lost-metadata shell, a hand-made
     /// directory). Archive it to <c>7-archive</c> so its evidence is preserved
     /// without parking a card in a dead-end lane. (Failed-pickup elimination.)
@@ -643,16 +643,16 @@ public sealed class StaleProgressArchiver
         DateTime lastActivity)
         => ArchiveAsDebris(
             entry, jobFolder, slug, now,
-            "stale folder with no job.json (debris, not a runnable task); archived to 7-archive");
+            "stale folder with no task.json (debris, not a runnable task); archived to 7-archive");
 
     /// <summary>
     /// Move <paramref name="jobFolder"/> to <c>7-archive</c> under a
     /// collision-safe <c>&lt;slug&gt;-debris-&lt;utc-date&gt;</c> name. Shared
-    /// by the live boot sweep (a no-<c>job.json</c> <c>3-progress</c> folder)
-    /// and the one-time failed-pickup drain (a no-<c>job.json</c> folder left
+    /// by the live boot sweep (a no-<c>task.json</c> <c>3-progress</c> folder)
+    /// and the one-time failed-pickup drain (a no-<c>task.json</c> folder left
     /// in the retired lane). The move goes through
     /// <see cref="TaskStateMachine.ArchiveFolder"/>, which works without a
-    /// <c>job.json</c>.
+    /// <c>task.json</c>.
     /// </summary>
     private StaleProgressDecision ArchiveAsDebris(
         WatchPathEntry entry,
@@ -720,7 +720,7 @@ public sealed class StaleProgressArchiver
     }
 
     /// <summary>
-    /// Lanes the boot sweep checks for a downstream twin of a no-<c>job.json</c>
+    /// Lanes the boot sweep checks for a downstream twin of a no-<c>task.json</c>
     /// 3-progress folder. A match means the real task already completed its
     /// move and the source-side residue is a mid-move casualty, not an orphan.
     /// 3a-failed-pickup is deliberately excluded so a previous phantom marker
@@ -736,7 +736,7 @@ public sealed class StaleProgressArchiver
 
     /// <summary>
     /// Cross-lane lookup that prevents the 2026-05-12 boot-race phantom: when
-    /// a 3-progress folder has no <c>job.json</c>, but the same slug already
+    /// a 3-progress folder has no <c>task.json</c>, but the same slug already
     /// lives in a later lane, the source folder is a mid-move casualty and
     /// must be silently removed instead of being archived as debris (or, in
     /// the pre-ADR-0051 world, dead-lettered into 3a-failed-pickup).
@@ -762,7 +762,7 @@ public sealed class StaleProgressArchiver
     /// <summary>
     /// Silently delete a mid-move casualty source folder. The real task lives
     /// in <paramref name="twinLane"/>; the residue in 3-progress carries no
-    /// <c>job.json</c> and would otherwise be archived as debris and mint a
+    /// <c>task.json</c> and would otherwise be archived as debris and mint a
     /// phantom card. The delete goes through the typed layer so the
     /// architecture test stays green.
     /// </summary>
@@ -812,7 +812,7 @@ public sealed class StaleProgressArchiver
 
     private static string? TryReadJobId(string jobFolder)
     {
-        var path = Path.Combine(jobFolder, "job.json");
+        var path = Path.Combine(jobFolder, "task.json");
         if (!File.Exists(path)) return null;
         try
         {
@@ -885,16 +885,16 @@ public static class StaleProgressDecisionKinds
     public const string RecoveredToReview = "recovered-to-review";
     /// <summary>Sentinel found but the transition refused or threw.</summary>
     public const string RecoveryFailed = "recovery-failed";
-    /// <summary>Stale folder with <c>job.json</c> (interrupted real task) requeued to <c>2-ready</c> (failed-pickup elimination).</summary>
+    /// <summary>Stale folder with <c>task.json</c> (interrupted real task) requeued to <c>2-ready</c> (failed-pickup elimination).</summary>
     public const string RequeuedToReady = "requeued-to-ready";
     /// <summary>Requeue of an interrupted task to <c>2-ready</c> refused or threw.</summary>
     public const string RequeueFailed = "requeue-failed";
-    /// <summary>Stale folder with no <c>job.json</c> (debris) archived to <c>7-archive</c> (failed-pickup elimination).</summary>
+    /// <summary>Stale folder with no <c>task.json</c> (debris) archived to <c>7-archive</c> (failed-pickup elimination).</summary>
     public const string ArchivedDebris = "archived-debris";
-    /// <summary>Archive of a no-<c>job.json</c> debris folder refused (e.g. target slug already exists).</summary>
+    /// <summary>Archive of a no-<c>task.json</c> debris folder refused (e.g. target slug already exists).</summary>
     public const string ArchiveFailed = "archive-failed";
     /// <summary>
-    /// Source folder in <c>3-progress</c> with no <c>job.json</c> was a leftover
+    /// Source folder in <c>3-progress</c> with no <c>task.json</c> was a leftover
     /// from a Lane-Move that already completed (twin lives in a later lane).
     /// The residue was silently deleted instead of being archived as debris
     /// to avoid minting a phantom card. 2026-05-12 boot-race fix.

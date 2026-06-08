@@ -175,7 +175,7 @@ public class CompletedLaneAuditServiceTests : IDisposable
         var jobJson = commitSha == null
             ? $"{{\"id\":\"{slug}\",\"title\":\"{title}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\"}}"
             : $"{{\"id\":\"{slug}\",\"title\":\"{title}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"commits\":[{{\"sha\":\"{commitSha}\",\"message\":\"work\",\"authorEmail\":\"x@y\",\"at\":\"2026-05-29T12:00:00Z\",\"fileCount\":1}}]}}";
-        File.WriteAllText(Path.Combine(dir, "job.json"), jobJson);
+        File.WriteAllText(Path.Combine(dir, "task.json"), jobJson);
         File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
         File.WriteAllText(Path.Combine(dir, "status.md"), statusBody);
     }

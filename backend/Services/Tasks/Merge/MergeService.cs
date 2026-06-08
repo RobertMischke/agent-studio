@@ -184,7 +184,7 @@ public sealed class MergeService
             }
             Directory.Move(secondary.FolderPath, archivePath);
 
-            // 4) Stamp the secondary's job.json with mergedInto so the
+            // 4) Stamp the secondary's task.json with mergedInto so the
             //    archived record stays self-describing.
             TaskJsonFile.UpdateField(archivePath, "mergedInto", primary.Id, _logger);
             TaskJsonFile.UpdateField(archivePath, "mergedAt", now.ToString("o"), _logger);
@@ -487,7 +487,7 @@ public sealed class MergeService
     {
         try
         {
-            var path = Path.Combine(folderPath, "job.json");
+            var path = Path.Combine(folderPath, "task.json");
             if (!File.Exists(path)) return false;
             var json = File.ReadAllText(path);
             var doc = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement>>(

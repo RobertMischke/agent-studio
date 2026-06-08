@@ -461,7 +461,7 @@ public sealed class AdrCodeDriftAnalysisService
 
             foreach (var dir in Directory.EnumerateDirectories(laneDir))
             {
-                var jobJson = Path.Combine(dir, "job.json");
+                var jobJson = Path.Combine(dir, "task.json");
                 if (!File.Exists(jobJson)) continue;
 
                 string id = Path.GetFileName(dir);
@@ -479,7 +479,7 @@ public sealed class AdrCodeDriftAnalysisService
                 }
                 catch (JsonException)
                 {
-                    // Malformed job.json: still surface the slug as evidence.
+                    // Malformed task.json: still surface the slug as evidence.
                 }
 
                 try { touched = Directory.GetLastWriteTimeUtc(dir); }

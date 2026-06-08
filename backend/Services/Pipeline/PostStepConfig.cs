@@ -30,7 +30,7 @@ public enum PostStepMode
 
 /// <summary>
 /// Per-step mode resolved at runtime by walking the configuration layers:
-/// per-task override (<c>job.json</c> &gt;<c>postSteps</c>), per-project
+/// per-task override (<c>task.json</c> &gt;<c>postSteps</c>), per-project
 /// default (<c>appsettings.Local.json</c> &gt;
 /// <c>PostSteps:{StepId}:DefaultMode</c>), and built-in default
 /// (<see cref="PostStepConfigResolver.BuiltInDefault"/>). The first layer
@@ -56,7 +56,7 @@ public static class PostStepConfigResolver
 
     /// <summary>
     /// Resolve the mode for a given step on a given job. Reads, in order:
-    /// 1. <paramref name="jobFolderPath"/>/job.json -&gt; postSteps.{stepId}
+    /// 1. <paramref name="jobFolderPath"/>/task.json -&gt; postSteps.{stepId}
     /// 2. <paramref name="taskTypeMode"/> (caller-supplied; lets task-type
     ///    defaults plug in without this resolver doing schema-aware reads)
     /// 3. <paramref name="projectMode"/> (caller-supplied; e.g. from
@@ -113,14 +113,14 @@ public static class PostStepConfigResolver
     }
 
     /// <summary>
-    /// Read <c>job.json</c> at the given folder and extract
+    /// Read <c>task.json</c> at the given folder and extract
     /// <c>postSteps[stepId]</c>. Returns null when the file is missing,
     /// the field is absent, or the value is not a recognised mode token.
     /// </summary>
     internal static PostStepMode? ReadJobOverride(string jobFolderPath, string stepId)
     {
         if (string.IsNullOrWhiteSpace(jobFolderPath) || string.IsNullOrWhiteSpace(stepId)) return null;
-        var path = Path.Combine(jobFolderPath, "job.json");
+        var path = Path.Combine(jobFolderPath, "task.json");
         if (!File.Exists(path)) return null;
         try
         {
@@ -129,7 +129,7 @@ public static class PostStepConfigResolver
             if (doc == null) return null;
             if (!doc.TryGetValue("postSteps", out var postSteps)) return null;
             if (postSteps.ValueKind != JsonValueKind.Object) return null;
-            // job.json uses camelCase, but step ids already are lower-case
+            // task.json uses camelCase, but step ids already are lower-case
             // tokens (e.g. "post-lint-scss") so we read them literally.
             // Accept either the full pipeline-step id or the bare suffix
             // (e.g. "lint-scss") so per-task config stays terse.
@@ -150,7 +150,7 @@ public static class PostStepConfigResolver
         }
         catch
         {
-            // A malformed job.json should not crash the post-step; fall
+            // A malformed task.json should not crash the post-step; fall
             // through to the next config layer.
             return null;
         }

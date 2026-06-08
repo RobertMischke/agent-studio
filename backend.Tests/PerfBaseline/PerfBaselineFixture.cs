@@ -146,7 +146,7 @@ internal sealed class PerfBaselineFixture : IDisposable
             agent = "claude",
             cliType = "claude"
         });
-        File.WriteAllText(Path.Combine(dir, "job.json"), json);
+        File.WriteAllText(Path.Combine(dir, "task.json"), json);
     }
 
     public void Dispose()

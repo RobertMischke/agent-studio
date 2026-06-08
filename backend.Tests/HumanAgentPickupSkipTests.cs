@@ -71,7 +71,7 @@ public sealed class HumanAgentPickupSkipTests : IDisposable
         var json = isHuman
             ? $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order},\"agent\":\"{agent}\",\"ownerClientId\":\"local-default\"}}"
             : $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order},\"agent\":\"{cliType}\",\"cliType\":\"{cliType}\",\"ownerClientId\":\"local-default\"}}";
-        File.WriteAllText(Path.Combine(dir, "job.json"), json);
+        File.WriteAllText(Path.Combine(dir, "task.json"), json);
     }
 
     private ProjectRunner BuildRunner()

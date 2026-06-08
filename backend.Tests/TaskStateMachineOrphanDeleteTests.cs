@@ -10,7 +10,7 @@ namespace OrchestratorApi.Tests;
 /// <summary>
 /// Regression contract for the terminal-lane orphan-folder delete path.
 /// Before this branch existed the DELETE endpoint returned 404 for any folder
-/// whose <c>job.json</c> was missing - exactly the zombie folders that the
+/// whose <c>task.json</c> was missing - exactly the zombie folders that the
 /// AGENTS.md "API first" rule is supposed to keep cleanable, and exactly the
 /// case where operators historically reached for forbidden manual deletion.
 /// </summary>
@@ -68,14 +68,14 @@ public class TaskStateMachineOrphanDeleteTests : IDisposable
     [Fact]
     public void DeleteOrphanFolder_RefusesWhenFolderHasJobJson()
     {
-        // Defensive guard: a folder that does carry a job.json should
+        // Defensive guard: a folder that does carry a task.json should
         // never be deleted via the orphan branch. If the scanner did not
         // surface it, that is a scanner regression to investigate, not
         // a folder to wipe.
         var slug = "scanner-blind-spot";
         var folder = Path.Combine(_watchPath, TaskStates.Archive, slug);
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, "job.json"), "{ this is not valid json");
+        File.WriteAllText(Path.Combine(folder, "task.json"), "{ this is not valid json");
 
         var states = BuildStates();
         var outcome = states.DeleteOrphanFolder(_watchPath, TaskStates.Archive, slug);
@@ -105,7 +105,7 @@ public class TaskStateMachineOrphanDeleteTests : IDisposable
         var slug = "live-job";
         var folder = Path.Combine(_watchPath, TaskStates.Ready, slug);
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, "job.json"),
+        File.WriteAllText(Path.Combine(folder, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{TaskStates.Ready}\",\"order\":10,\"agent\":\"copilot\"}}");
 
         var states = BuildStates();
