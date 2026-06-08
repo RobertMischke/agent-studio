@@ -14,6 +14,8 @@ namespace OrchestratorApi.Services.Tags;
 /// tag <c>orchestrator-moved</c>, so a fresh workspace already has the
 /// standard taxonomy. Existing rows are never overwritten: a user's
 /// custom label / colour / description for a seed id wins over the seed.
+/// Explicitly deleted seed ids are remembered in a sidecar tombstone file so
+/// later seed merges do not resurrect tags the user removed.
 /// </summary>
 /// <remarks>
 /// Concurrency: a process-wide lock protects the in-memory cache and the
@@ -23,6 +25,7 @@ namespace OrchestratorApi.Services.Tags;
 public sealed class TagRegistryService
 {
     private const string FileName = "tags.json";
+    private const string DeletedSeedsFileName = "tags.deleted-seeds.json";
     private static readonly Regex IdPattern = new("^[a-z0-9-]{1,32}$", RegexOptions.Compiled);
 
     private static readonly TagRegistryEntry[] Seed =
@@ -42,6 +45,7 @@ public sealed class TagRegistryService
     private readonly IConfiguration _config;
     private readonly object _lock = new();
     private List<TagRegistryEntry>? _cache;
+    private HashSet<string>? _deletedSeedIds;
 
     public TagRegistryService(ILogger<TagRegistryService> logger, IConfiguration config)
     {
@@ -91,6 +95,7 @@ public sealed class TagRegistryService
                 Description = description?.Trim() ?? string.Empty
             };
             _cache!.Add(entry);
+            _deletedSeedIds!.Remove(resolvedId);
             Persist();
             return Clone(entry);
         }
@@ -109,6 +114,8 @@ public sealed class TagRegistryService
         {
             var idx = _cache!.FindIndex(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase));
             if (idx < 0) return false;
+            if (IsSeedId(_cache[idx].Id))
+                _deletedSeedIds!.Add(_cache[idx].Id);
             _cache.RemoveAt(idx);
             Persist();
             return true;
@@ -134,8 +141,10 @@ public sealed class TagRegistryService
             if (path == null)
             {
                 _cache = Seed.Select(Clone).ToList();
+                _deletedSeedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 return;
             }
+            _deletedSeedIds = LoadDeletedSeedIds(path);
 
             if (!File.Exists(path))
             {
@@ -189,6 +198,7 @@ public sealed class TagRegistryService
         foreach (var seed in Seed)
         {
             if (existing.Contains(seed.Id)) continue;
+            if (_deletedSeedIds?.Contains(seed.Id) == true) continue;
             _cache.Add(Clone(seed));
             added = true;
         }
@@ -205,6 +215,7 @@ public sealed class TagRegistryService
             File.WriteAllText(path,
                 JsonSerializer.Serialize(_cache,
                     new JsonSerializerOptions { WriteIndented = true }));
+            PersistDeletedSeedIds(path);
         }
         catch (Exception ex)
         {
@@ -231,6 +242,49 @@ public sealed class TagRegistryService
         // Accept #rgb, #rrggbb, #rrggbbaa loosely; otherwise default.
         return Regex.IsMatch(s, "^#[0-9a-fA-F]{3,8}$") ? s : "#94a3b8";
     }
+
+    private static bool IsSeedId(string id) =>
+        Seed.Any(seed => string.Equals(seed.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    private HashSet<string> LoadDeletedSeedIds(string registryPath)
+    {
+        var tombstonePath = ResolveDeletedSeedsPath(registryPath);
+        if (!File.Exists(tombstonePath))
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var ids = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(tombstonePath))
+                      ?? [];
+            return ids
+                .Where(id => IsSeedId(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read deleted seed tag registry at {Path}; deleted seed tags may be re-merged", tombstonePath);
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private void PersistDeletedSeedIds(string registryPath)
+    {
+        var tombstonePath = ResolveDeletedSeedsPath(registryPath);
+        var ids = _deletedSeedIds?.OrderBy(id => id, StringComparer.Ordinal).ToArray()
+                  ?? [];
+        if (ids.Length == 0)
+        {
+            if (File.Exists(tombstonePath))
+                File.Delete(tombstonePath);
+            return;
+        }
+
+        File.WriteAllText(tombstonePath,
+            JsonSerializer.Serialize(ids, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static string ResolveDeletedSeedsPath(string registryPath) =>
+        Path.Combine(Path.GetDirectoryName(registryPath)!, DeletedSeedsFileName);
 
     private static TagRegistryEntry Clone(TagRegistryEntry e) => new()
     {

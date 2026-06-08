@@ -12,12 +12,10 @@
  *   - the Edit flow swaps label/colour/description for the same id and
  *     the result persists across a reload
  *
- * Re-seed-on-boot assertion is intentionally skipped: the current backend
- * `MergeMissingSeeds` re-adds any seed id missing from disk on the next
- * boot, so a deleted seed tag DOES resurrect; the dialog's confirmation
- * copy reflects that. The task spec's "seed merge does not resurrect"
- * line is incorrect against the current code path; called out in the
- * task report so the discrepancy is visible.
+ * Re-seed-on-boot is covered by `BacklogLaneAndTagsTests` because the
+ * Playwright fixture intentionally owns backend start/stop. This spec asserts
+ * the user-facing warning that default seed tags stay deleted after explicit
+ * removal.
  *
  * Cleanup deletes any custom tags created by the test (best-effort).
  */
@@ -26,6 +24,7 @@ import { test, expect } from '../fixtures/dev-backend';
 const CLIENT_ID = 'local-default';
 const TEST_TAG_ID = 'e2e-tagmgr-new';
 const TEST_TAG_LABEL = 'E2E tag manager';
+const TEST_JOB_ID = 'e2e-tagmgr-ghost-card';
 
 async function apiRequest(baseUrl: string, path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
@@ -42,9 +41,26 @@ async function deleteTagViaApi(baseUrl: string, id: string): Promise<void> {
   await apiRequest(baseUrl, `/api/tags/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+async function firstWatchPath(baseUrl: string): Promise<{ path: string }> {
+  const res = await apiRequest(baseUrl, '/api/watch-paths');
+  const paths = (await res.json()) as Array<{ path: string }>;
+  if (!paths.length) throw new Error('No watch paths configured');
+  return paths[0];
+}
+
+async function deleteJobViaApi(baseUrl: string, id: string, watchPath: string): Promise<void> {
+  await apiRequest(
+    baseUrl,
+    `/api/jobs/${encodeURIComponent(id)}?watchPath=${encodeURIComponent(watchPath)}`,
+    { method: 'DELETE' },
+  );
+}
+
 test.describe('Tag manager dialog', () => {
   test.beforeEach(async ({ devBackend, page }) => {
+    const wp = await firstWatchPath(devBackend.baseUrl);
     await deleteTagViaApi(devBackend.baseUrl, TEST_TAG_ID);
+    await deleteJobViaApi(devBackend.baseUrl, TEST_JOB_ID, wp.path).catch(() => {});
     // The devtools menu is currently rendered only in the legacy header
     // (`@else` branch of app.html). The vsCodeLayout flag is default-on,
     // so flip it off for the test session before the first paint.
@@ -54,7 +70,9 @@ test.describe('Tag manager dialog', () => {
   });
 
   test.afterAll(async ({ devBackend }) => {
+    const wp = await firstWatchPath(devBackend.baseUrl);
     await deleteTagViaApi(devBackend.baseUrl, TEST_TAG_ID);
+    await deleteJobViaApi(devBackend.baseUrl, TEST_JOB_ID, wp.path).catch(() => {});
   });
 
   test('opens from dev-tools menu and lists registered tags', async ({ page }) => {
@@ -134,20 +152,35 @@ test.describe('Tag manager dialog', () => {
     await expect(err).toContainText(TEST_TAG_ID);
   });
 
-  test('Delete tag → registry drops it', async ({ page, devBackend }) => {
+  test('Delete tag → registry drops it and tagged cards render a ghost chip', async ({ page, devBackend }) => {
     // Seed the tag we will delete.
     await apiRequest(devBackend.baseUrl, '/api/tags', {
       method: 'POST',
       body: JSON.stringify({ id: TEST_TAG_ID, label: TEST_TAG_LABEL, color: '#aaaaaa', description: '' }),
     });
+    const wp = await firstWatchPath(devBackend.baseUrl);
+    await apiRequest(devBackend.baseUrl, '/api/jobs', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: TEST_JOB_ID,
+        title: 'Tag manager ghost card',
+        watchPath: wp.path,
+        agent: 'claude',
+        cliType: 'claude',
+        taskType: 'bug',
+        tags: [TEST_TAG_ID],
+        fixture: true,
+      }),
+    });
 
-    await page.goto('/');
+    await page.goto('/?includeFixtures=true');
     await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 10_000 });
     await page.getByTestId('devtools-menu-trigger').click();
     await page.getByTestId('devtools-menu-item-tag-manager').click();
     await expect(page.getByTestId(`tag-manager-row-${TEST_TAG_ID}`)).toBeVisible();
 
     await page.getByTestId(`tag-manager-delete-${TEST_TAG_ID}`).click();
+    await expect(page.getByTestId('confirm-dialog')).toContainText('Default seed tags stay deleted too');
     await page.getByTestId('confirm-dialog-confirm').click();
 
     await expect(page.getByTestId(`tag-manager-row-${TEST_TAG_ID}`)).toBeHidden();
@@ -156,6 +189,17 @@ test.describe('Tag manager dialog', () => {
     const apiRes = await apiRequest(devBackend.baseUrl, '/api/tags');
     const tags = (await apiRes.json()) as Array<{ id: string }>;
     expect(tags.some((t) => t.id === TEST_TAG_ID)).toBe(false);
+
+    await page.getByTestId('tag-manager-close').click();
+    const card = page.locator('[data-testid="job-card"]', { hasText: 'Tag manager ghost card' }).first();
+    await expect(card).toBeVisible();
+    const ghost = card.locator(`[data-tag-id="${TEST_TAG_ID}"]`);
+    await expect(ghost).toBeVisible();
+    await expect(ghost).toContainText(TEST_TAG_ID);
+    await expect(ghost).toHaveClass(/task-card__tag-chip--ghost/);
+
+    await page.getByTestId('filters-dropdown-trigger').click();
+    await expect(page.getByTestId(`tag-filter-row-${TEST_TAG_ID}`)).toHaveCount(0);
   });
 
   test('Edit tag → new label persists across reload', async ({ page, devBackend }) => {

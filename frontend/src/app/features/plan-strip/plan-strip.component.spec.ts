@@ -1,50 +1,106 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { PlanStripComponent } from './plan-strip.component';
+import type { TaskPlanView } from './plan.model';
 
-/**
- * Cycle 11c smoke. Compiles + instantiates the standalone component.
- * What this catches: broken templateUrl/styleUrl resolution, broken
- * inject() wiring, broken signal init, decorator metadata regressions.
- *
- * What it does NOT catch: full render-path bugs that require seeded
- * inputs or per-component service stubs — those would need a
- * hand-tuned spec. `detectChanges()` is wrapped in try/catch so a
- * missing-input or missing-provider failure surfaces as a console
- * note instead of a red test, which keeps this generator-driven layer
- * stable across template tweaks.
- */
-describe('PlanStripComponent (smoke)', () => {
-  it('compiles + instantiates without throwing', async () => {
-    try {
-      await TestBed.configureTestingModule({
-        imports: [PlanStripComponent],
-        providers: [
-          provideZonelessChangeDetection(),
-          provideHttpClient(),
-          provideHttpClientTesting(),
-          provideRouter([]),
-        ],
-      }).compileComponents();
-      const fixture = TestBed.createComponent(PlanStripComponent);
-      fixture.componentRef.setInput('plan', undefined);
+const plan: TaskPlanView = {
+  hasPlan: true,
+  source: 'codex/update_plan',
+  snapshotCount: 4,
+  activeItemId: 'patch',
+  softEstimateMedian: 2,
+  unassignedSubActions: [
+    { ts: '2026-06-08T10:00:00Z', tool: 'Read', label: 'Read prompt.md' },
+  ],
+  items: [
+    {
+      id: 'survey',
+      title: 'Survey existing progress surfaces',
+      status: 'done',
+      subActionCount: 2,
+      subActions: [
+        { ts: '2026-06-08T10:00:01Z', tool: 'Grep', label: 'Grep PlanReader' },
+        { ts: '2026-06-08T10:00:02Z', tool: 'Read', label: 'Read PlanReader.cs' },
+      ],
+    },
+    {
+      id: 'patch',
+      title: 'Wire plan strip into task detail',
+      status: 'active',
+      subActionCount: 3,
+      subActions: [
+        { ts: new Date().toISOString(), tool: 'Edit', label: 'Edit plan-strip.component.ts' },
+        { ts: new Date().toISOString(), tool: 'Test', label: 'Test plan strip' },
+        { ts: new Date().toISOString(), tool: 'Build', label: 'Build frontend' },
+      ],
+    },
+    {
+      id: 'verify',
+      title: 'Verify behavior',
+      status: 'pending',
+      subActionCount: 0,
+      subActions: [],
+    },
+  ],
+};
 
-      // Required inputs seeded with undefined — replace with realistic defaults if needed:
-    // plan
-    try { fixture.detectChanges(); } catch (e) {
-        console.warn('[smoke] PlanStripComponent initial render skipped:', (e as Error).message);
-      }
-      expect(fixture.componentInstance).toBeTruthy();
-    } catch (e) {
-      // TestBed setup itself crashed (module-load cycle, env not
-      // initialized because of file-order, etc). Still verifies the
-      // component class is importable.
-      console.warn('[smoke] PlanStripComponent TestBed setup skipped:', (e as Error).message);
-      expect(PlanStripComponent).toBeTruthy();
-    }
+async function render(input: TaskPlanView | null, isRunning = true) {
+  await TestBed.configureTestingModule({
+    imports: [PlanStripComponent],
+    providers: [provideZonelessChangeDetection()],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(PlanStripComponent);
+  fixture.componentRef.setInput('plan', input);
+  fixture.componentRef.setInput('isRunning', isRunning);
+  fixture.detectChanges();
+  await fixture.whenStable();
+  return fixture;
+}
+
+describe('PlanStripComponent', () => {
+  it('does not render until a plan is available', async () => {
+    const fixture = await render({ ...plan, hasPlan: false, items: [] });
+
+    expect(fixture.nativeElement.querySelector('[data-testid="plan-strip"]')).toBeNull();
+  });
+
+  it('renders plan titles, done count, active progress cue, and soft-estimate band', async () => {
+    const fixture = await render(plan);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-testid="plan-strip-source"]')?.textContent?.trim()).toBe('Codex');
+    expect(host.querySelector('[data-testid="plan-strip-count"]')?.textContent?.trim()).toBe('1/3 done');
+    expect(texts(host, '[data-testid="plan-item-title"]')).toEqual([
+      'Survey existing progress surfaces',
+      'Wire plan strip into task detail',
+      'Verify behavior',
+    ]);
+    expect(host.querySelector('[data-testid="plan-item-latest"]')?.textContent).toContain('Build frontend');
+    expect(host.querySelector('[data-testid="plan-item-band"]')?.textContent?.trim()).toBe('~2');
+    expect(host.querySelector('[data-testid="plan-item-heartbeat"]')?.getAttribute('data-state')).toBe('pulsing');
+  });
+
+  it('expands completed sub-actions so finished internal tasks stay inspectable', async () => {
+    const fixture = await render(plan);
+    const host = fixture.nativeElement as HTMLElement;
+
+    host.querySelector<HTMLButtonElement>('[data-testid="plan-item-expand"]')?.click();
+    fixture.detectChanges();
+
+    expect(texts(host, '.plan-sub__label')).toContain('Grep PlanReader');
+    expect(texts(host, '.plan-sub__label')).toContain('Read PlanReader.cs');
+  });
+
+  it('surfaces pre-plan work in the before-plan bucket', async () => {
+    const fixture = await render(plan);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-testid="plan-strip-before"]')?.textContent).toContain('Before plan: 1 action');
   });
 });
+
+function texts(host: HTMLElement, selector: string): string[] {
+  return Array.from(host.querySelectorAll(selector)).map((el) => el.textContent?.trim() ?? '');
+}

@@ -216,9 +216,8 @@ export class TagManagerDialogComponent implements OnInit {
       message:
         `The tag '${tag.id}' will be removed from the registry. Existing tasks ` +
         'that carry it will render a faint ghost chip until you re-tag them. ' +
-        'Seed tags from the default taxonomy reappear on the next backend boot ' +
-        'because the registry merge re-adds any missing default; only user-created ' +
-        'tags stay deleted permanently.',
+        'Default seed tags stay deleted too; the registry merge only adds defaults ' +
+        'that were never explicitly removed.',
       confirmLabel: 'Delete',
       cancelLabel: 'Keep',
       kind: 'danger',

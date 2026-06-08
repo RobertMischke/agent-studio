@@ -196,6 +196,39 @@ public class BacklogLaneAndTagsTests : IDisposable
     }
 
     [Fact]
+    public void TagRegistry_DeleteSeed_DoesNotResurrectOnNextBoot()
+    {
+        var tags = NewTagRegistry();
+        Assert.Contains(tags.GetAll(), t => t.Id == "architecture");
+
+        Assert.True(tags.Delete("architecture"));
+        Assert.False(tags.Exists("architecture"));
+
+        var secondBoot = NewTagRegistry();
+        var entries = secondBoot.GetAll();
+
+        Assert.DoesNotContain(entries, t => t.Id == "architecture");
+        Assert.Contains(entries, t => t.Id == "ui-ux");
+    }
+
+    [Fact]
+    public void TagRegistry_RecreateDeletedSeed_AllowsFutureLoads()
+    {
+        var tags = NewTagRegistry();
+        tags.GetAll();
+
+        Assert.True(tags.Delete("architecture"));
+        tags.Create("architecture", "Architecture custom", "#abcdef", "Restored by user");
+
+        var secondBoot = NewTagRegistry();
+        var architecture = secondBoot.GetAll().Single(t => t.Id == "architecture");
+
+        Assert.Equal("Architecture custom", architecture.Label);
+        Assert.Equal("#abcdef", architecture.Color);
+        Assert.Equal("Restored by user", architecture.Description);
+    }
+
+    [Fact]
     public void SetJobTags_ReplacesAll_AndNormalizes()
     {
         var (machine, scanner, mutations) = Build();
