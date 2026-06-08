@@ -1313,7 +1313,7 @@
 // overriding the inner `lane-group__lanes` flex direction to column
 // when the dashboard is rendered inside the studio shell — the legacy
 // (flag-off) chrome keeps its 7-column side-by-side layout.
-.dashboard--studio {
+.studio .dashboard--studio {
   // Three super-columns of equal width fill the editor body. The
   // minmax(0, 1fr) row template is what lets each super-column shrink
   // below its content's intrinsic height — without it, the row sizes
@@ -1346,6 +1346,7 @@
     background: transparent;
     border: 0;
     border-radius: 0;
+    padding: 0;
     overflow: hidden;
     min-height: 0;
   }

@@ -248,6 +248,7 @@ public class TaskRunnerService : BackgroundService
                 postAbortReview: _postAbortReview,
                 sessionInspector: _sessionInspector);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
+            runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
             runner.OnStatusChanged += status =>

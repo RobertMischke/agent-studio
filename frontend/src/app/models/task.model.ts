@@ -751,6 +751,14 @@ export interface ProjectRunnerStatus {
    * the heuristic on every render.
    */
   modeSource?: 'user' | 'circuit-breaker' | 'supervisor' | 'system' | string | null;
+  /** Current global auto-failure breaker state; `cooldown` means auto-resume is scheduled. */
+  breakerState?: 'cooldown' | string | null;
+  /** UTC instant when the global breaker cooldown expires. */
+  breakerCooldownUntil?: string | null;
+  /** Human-readable reason for the active global breaker cooldown. */
+  breakerReason?: string | null;
+  /** Number of global breaker trips since backend startup. */
+  breakerTripCount?: number;
   /**
    * Backend role assigned via `Runner:Role` config (ADR-0044). `orchestrator`
    * runs the auto-pickup loop (stable seat); `test-subject` structurally

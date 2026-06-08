@@ -2210,6 +2210,26 @@ public record ProjectRunnerStatus
     /// </summary>
     public string? ModeSource { get; init; }
     /// <summary>
+    /// Current automatic breaker state. Null when no breaker is active;
+    /// <c>cooldown</c> when the global auto-failure safety net paused the
+    /// project temporarily and will auto-resume.
+    /// </summary>
+    public string? BreakerState { get; init; }
+    /// <summary>
+    /// UTC instant when the global breaker cooldown expires and the runner may
+    /// restore <c>auto-continuous</c>.
+    /// </summary>
+    public DateTime? BreakerCooldownUntil { get; init; }
+    /// <summary>
+    /// Human-readable reason for the active global breaker cooldown.
+    /// </summary>
+    public string? BreakerReason { get; init; }
+    /// <summary>
+    /// Number of global breaker trips since this runner instance started. Used
+    /// to explain exponential cooldown backoff.
+    /// </summary>
+    public int BreakerTripCount { get; init; }
+    /// <summary>
     /// Backend role assigned via <c>Runner:Role</c> config; one of
     /// <c>orchestrator</c> (the default — picks tasks automatically when mode is
     /// <c>auto-*</c>) or <c>test-subject</c> (pickup loop is structurally

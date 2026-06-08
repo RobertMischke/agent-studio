@@ -9,6 +9,51 @@ using System.Text.RegularExpressions;
 
 namespace OrchestratorApi.Services.Runner;
 
+public sealed record RunnerCircuitBreakerOptions(
+    int PerTaskFailureThreshold,
+    TimeSpan GlobalCooldownBase,
+    double GlobalCooldownBackoffMultiplier,
+    TimeSpan GlobalCooldownMax)
+{
+    public static RunnerCircuitBreakerOptions Default { get; } = new(
+        ProjectRunner.AutoFailureHaltThreshold,
+        TimeSpan.FromMinutes(20),
+        2.0,
+        TimeSpan.FromMinutes(60));
+
+    public RunnerCircuitBreakerOptions Normalize()
+    {
+        var threshold = PerTaskFailureThreshold <= 0
+            ? Default.PerTaskFailureThreshold
+            : PerTaskFailureThreshold;
+        var baseCooldown = GlobalCooldownBase <= TimeSpan.Zero
+            ? Default.GlobalCooldownBase
+            : GlobalCooldownBase;
+        var multiplier = GlobalCooldownBackoffMultiplier < 1.0
+            ? Default.GlobalCooldownBackoffMultiplier
+            : GlobalCooldownBackoffMultiplier;
+        var max = GlobalCooldownMax < baseCooldown ? baseCooldown : GlobalCooldownMax;
+        return this with
+        {
+            PerTaskFailureThreshold = threshold,
+            GlobalCooldownBase = baseCooldown,
+            GlobalCooldownBackoffMultiplier = multiplier,
+            GlobalCooldownMax = max
+        };
+    }
+
+    public static RunnerCircuitBreakerOptions FromConfig(Microsoft.Extensions.Configuration.IConfiguration config)
+    {
+        var section = config.GetSection("Runner:CircuitBreaker");
+        return new RunnerCircuitBreakerOptions(
+            section.GetValue<int?>("PerTaskFailureThreshold") ?? Default.PerTaskFailureThreshold,
+            TimeSpan.FromMinutes(section.GetValue<double?>("GlobalCooldownMinutes") ?? Default.GlobalCooldownBase.TotalMinutes),
+            section.GetValue<double?>("GlobalCooldownBackoffMultiplier") ?? Default.GlobalCooldownBackoffMultiplier,
+            TimeSpan.FromMinutes(section.GetValue<double?>("GlobalCooldownMaxMinutes") ?? Default.GlobalCooldownMax.TotalMinutes))
+            .Normalize();
+    }
+}
+
 /// <summary>
 /// Per-project runner: owns the lifecycle state for one watched workspace
 /// (active job, mode, processing flag) and applies the side-effects of one
@@ -109,6 +154,10 @@ public class ProjectRunner
     private string? _modeReason;
     private DateTime? _modeChangedAt;
     private string? _modeSource;
+    private RunnerCircuitBreakerOptions _circuitBreakerOptions = RunnerCircuitBreakerOptions.Default;
+    private DateTime? _globalBreakerCooldownUntil;
+    private string? _globalBreakerReason;
+    private int _globalBreakerTripCount;
     // Backend role (orchestrator vs test-subject). Set in the ctor from
     // Runner:Role config; defaults to Orchestrator so an unconfigured backend
     // behaves like stable rather than silently going dark. TestSubject skips
@@ -347,6 +396,11 @@ public class ProjectRunner
         _router.OnRunEvent += (_, jobKey, evt) => OnRunEventReceived(jobKey, evt);
     }
 
+    public void ConfigureCircuitBreaker(RunnerCircuitBreakerOptions options)
+    {
+        _circuitBreakerOptions = options.Normalize();
+    }
+
     /// <summary>
     /// Backend role assigned at construction time. Read-only after the runner
     /// is built; the role is a process-wide policy decided from
@@ -561,6 +615,10 @@ public class ProjectRunner
             ModeReason = _modeReason,
             ModeChangedAt = _modeChangedAt,
             ModeSource = _modeSource,
+            BreakerState = _globalBreakerCooldownUntil == null ? null : "cooldown",
+            BreakerCooldownUntil = _globalBreakerCooldownUntil,
+            BreakerReason = _globalBreakerReason,
+            BreakerTripCount = _globalBreakerTripCount,
             MaxParallelism = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism),
             OccupiedSlots = _activeRuns.Count,
             LastPickReason = _lastPickReason
@@ -602,6 +660,8 @@ public class ProjectRunner
         // refuse to claim work here. Explicit POST /api/tasks/{id}/start still
         // routes through RunCliAsync directly and is allowed.
         if (_role == RunnerRole.TestSubject) return;
+
+        TryAutoResumeGlobalBreaker();
 
         if (_mode is "manual" or "paused") return;
         var slotMax = SlotMax();
@@ -3072,21 +3132,23 @@ public class ProjectRunner
                     // pickup from resuming the same dead UUID, but several
                     // failure modes (race with planner, planner reads stale
                     // info, scanner cache) can still re-feed the same
-                    // session. Past the threshold we stop the runner so a
-                    // structural problem stops burning quota in a tight
-                    // loop. Reset on the success path above.
+                    // session. Past the threshold we pause into an automatic
+                    // cooldown, then resume later instead of waiting forever
+                    // for a human to re-arm auto-mode. Reset on the success
+                    // path above.
                     var prior = _consecutiveCaptureFailJobId == jobId ? _consecutiveCaptureFailCount : 0;
                     _consecutiveCaptureFailJobId = jobId;
                     _consecutiveCaptureFailCount = prior + 1;
                     if (_consecutiveCaptureFailCount >= CaptureFailHaltThreshold && IsAutoMode(_mode))
                     {
                         _logger.LogWarning(
-                            "Runner '{Project}' halting auto-mode after {N} consecutive capture-fails on {JobId}",
+                            "Runner '{Project}' cooling down auto-mode after {N} consecutive capture-fails on {JobId}",
                             ProjectName, _consecutiveCaptureFailCount, jobId);
                         _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision,
-                            $"Auto-mode paused: {_consecutiveCaptureFailCount} consecutive {cli.CliType} runs for this job ended without capturing a session id. The session is unrecoverable; rebuild from prompt.md or rephrase before re-enabling auto.");
-                        SetMode("manual",
-                            $"capture-fail circuit-breaker: {_consecutiveCaptureFailCount}x no session id on {jobId} ({cli.CliType})");
+                            $"Auto-mode cooldown: {_consecutiveCaptureFailCount} consecutive {cli.CliType} runs for this job ended without capturing a session id. The runner will resume automatically after cooldown.");
+                        ScheduleGlobalBreakerCooldown(
+                            $"capture-fail circuit-breaker: {_consecutiveCaptureFailCount}x no session id on {jobId} ({cli.CliType})",
+                            captureFailInfo);
                         _consecutiveCaptureFailCount = 0;
                         _consecutiveCaptureFailJobId = null;
                     }
@@ -3628,7 +3690,17 @@ public class ProjectRunner
                 }
                 else
                 {
-                    HandleAutoPickupFailure(jobId, activeInfo);
+                    if (IsRateLimitFailure(liveOutputSnapshot))
+                    {
+                        _logger.LogWarning(
+                            "Runner '{Project}' saw rate-limit-shaped auto-pickup failure on {JobId}; cooling down without quarantining the task.",
+                            ProjectName, jobId);
+                        ScheduleGlobalBreakerCooldown($"rate-limit or transient CLI quota failure on '{jobId}'", activeInfo);
+                    }
+                    else
+                    {
+                        HandleAutoPickupFailure(jobId, activeInfo);
+                    }
                     // Zombie-resume accounting. This branch means an auto-pickup
                     // run finished WITHOUT reaching review and was not a
                     // deliberate stop, so the folder is left sitting in
@@ -4606,8 +4678,8 @@ public class ProjectRunner
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
 
     /// <summary>Test seam: number of distinct tasks the auto-failure breaker has
-    /// parked in 3b-code-not-complete without a success in between - the "3x3"
-    /// halt counter that flips the project to manual at
+    /// parked in 5-human-review without a success in between - the "3x3"
+    /// cooldown counter that temporarily flips the project to manual at
     /// <see cref="AutoFailureDistinctTaskHaltThreshold"/>.</summary>
     internal int GetParkedFailedTaskCountForTest() => _parkedFailedJobIds.Count;
 
@@ -4615,10 +4687,10 @@ public class ProjectRunner
     /// Auto-failure handling for a finished auto-pickup run that did NOT reach
     /// review and was not a deliberate stop. Park-and-continue: a task that
     /// fails <see cref="AutoFailureHaltThreshold"/> times in a row is parked in
-    /// 3b-code-not-complete and auto-mode KEEPS running with the next task; only
+    /// 5-human-review and auto-mode KEEPS running with the next task; only
     /// when <see cref="AutoFailureDistinctTaskHaltThreshold"/> DISTINCT tasks have
     /// each failed out without a success in between ("3x3") does the project
-    /// flip to manual. <paramref name="activeInfo"/> may be null (e.g. in tests):
+    /// enter a self-healing cooldown. <paramref name="activeInfo"/> may be null (e.g. in tests):
     /// the counting + halt decision still runs; the park-move + chat note are
     /// skipped.
     /// </summary>
@@ -4626,34 +4698,30 @@ public class ProjectRunner
     {
         _consecutiveAutoFailureCount++;
         _recentAutoFailureJobIds.Enqueue(jobId);
-        while (_recentAutoFailureJobIds.Count > AutoFailureHaltThreshold)
+        while (_recentAutoFailureJobIds.Count > _circuitBreakerOptions.PerTaskFailureThreshold)
             _recentAutoFailureJobIds.Dequeue();
 
         // A single task that fails AutoFailureHaltThreshold times in a row
         // without reaching review is the unambiguous offender.
-        var sameJobRepeated = _recentAutoFailureJobIds.Count >= AutoFailureHaltThreshold
+        var sameJobRepeated = _recentAutoFailureJobIds.Count >= _circuitBreakerOptions.PerTaskFailureThreshold
             && _recentAutoFailureJobIds.All(id => string.Equals(id, jobId, StringComparison.Ordinal));
 
         if (sameJobRepeated && IsAutoMode(_mode))
         {
-            // PARK-AND-CONTINUE (not a project-wide halt on one bad task).
-            // Route the offender out of 3-progress into 3b-code-not-complete so
-            // it stops being re-picked (the picker only walks 3-progress), then
-            // keep auto-mode running so the rest of the queue proceeds. The move
-            // goes through TaskTransitionService.MoveAsync so the OnJobMoved side
-            // effects fire (active-job latch cleared, live board push). Only a
-            // SYSTEMIC pattern halts the project (distinct-task check below).
+            // QUARANTINE-AND-CONTINUE (not a project-wide halt on one bad task).
+            // Route the offender out of 3-progress into 5-human-review through
+            // the same escalation funnel as other system moves. Only a systemic
+            // pattern trips the global cooldown below.
             if (activeInfo != null)
             {
-                try
-                {
-                    _ = _transitions.MoveAsync(
-                        jobId, TaskStates.CodeNotComplete, activeInfo.WatchPath, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Park-to-code-not-complete failed for {JobId}", jobId);
-                }
+                _mutations.AddJobTag(jobId, "auto-halted", activeInfo.WatchPath);
+                _ = _humanReviewEscalation.EscalateAsync(
+                    jobId,
+                    activeInfo.WatchPath,
+                    activeInfo.ProjectName,
+                    HumanReviewEscalationCategories.AutoFailurePark,
+                    $"auto-halted: {jobId} did not reach review after {_circuitBreakerOptions.PerTaskFailureThreshold} auto-pickup runs",
+                    CancellationToken.None);
             }
 
             _parkedFailedJobIds.Add(jobId);
@@ -4666,24 +4734,25 @@ public class ProjectRunner
                 var parked = string.Join(", ", _parkedFailedJobIds);
                 if (activeInfo != null)
                     _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                        $"Auto-mode paused: {_parkedFailedJobIds.Count} distinct tasks each failed {AutoFailureHaltThreshold}x without reaching review and were moved to Code not complete ({parked}). Looks systemic - investigate before re-enabling.");
+                        $"Auto-mode cooldown: {_parkedFailedJobIds.Count} distinct tasks each failed {_circuitBreakerOptions.PerTaskFailureThreshold}x without reaching review and were moved to human review ({parked}). Looks systemic; the runner will resume automatically after cooldown.");
                 _logger.LogWarning(
-                    "Runner '{Project}' halting auto-mode: {Count} distinct tasks failed out (3x{Threshold}): {Parked}",
-                    ProjectName, _parkedFailedJobIds.Count, AutoFailureHaltThreshold, parked);
-                SetMode("manual",
-                    $"auto-failure circuit-breaker: {_parkedFailedJobIds.Count} distinct tasks failed out (3x{AutoFailureHaltThreshold}); last '{jobId}'");
+                    "Runner '{Project}' cooling down auto-mode: {Count} distinct tasks failed out (3x{Threshold}): {Parked}",
+                    ProjectName, _parkedFailedJobIds.Count, _circuitBreakerOptions.PerTaskFailureThreshold, parked);
+                ScheduleGlobalBreakerCooldown(
+                    $"{_parkedFailedJobIds.Count} distinct tasks failed out; last '{jobId}'",
+                    activeInfo);
                 _parkedFailedJobIds.Clear();
             }
             else if (activeInfo != null)
             {
                 _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                    $"Job '{jobId}' did not reach review after {AutoFailureHaltThreshold} runs; moved to Code not complete. Auto-mode continues with the next task ({_parkedFailedJobIds.Count}/{AutoFailureDistinctTaskHaltThreshold} distinct tasks parked before a systemic pause).");
+                    $"Job '{jobId}' did not reach review after {_circuitBreakerOptions.PerTaskFailureThreshold} runs; moved to human review with tag auto-halted. Auto-mode continues with the next task ({_parkedFailedJobIds.Count}/{AutoFailureDistinctTaskHaltThreshold} distinct tasks quarantined before a systemic cooldown).");
                 _logger.LogWarning(
-                    "Runner '{Project}' moved '{JobId}' to code-not-complete after {N} failures; auto-mode continues ({Count}/{Halt} distinct parked).",
-                    ProjectName, jobId, AutoFailureHaltThreshold, _parkedFailedJobIds.Count, AutoFailureDistinctTaskHaltThreshold);
+                    "Runner '{Project}' moved '{JobId}' to human-review after {N} failures; auto-mode continues ({Count}/{Halt} distinct quarantined).",
+                    ProjectName, jobId, _circuitBreakerOptions.PerTaskFailureThreshold, _parkedFailedJobIds.Count, AutoFailureDistinctTaskHaltThreshold);
             }
         }
-        else if (_consecutiveAutoFailureCount >= AutoFailureHaltThreshold && IsAutoMode(_mode))
+        else if (_consecutiveAutoFailureCount >= _circuitBreakerOptions.PerTaskFailureThreshold && IsAutoMode(_mode))
         {
             // Window full but no single repeated offender (mixed transient
             // failures across different jobs). Don't park or halt: reset the
@@ -4697,12 +4766,74 @@ public class ProjectRunner
         }
     }
 
+    private static bool IsRateLimitFailure(IReadOnlyList<CliOutputLine> output)
+    {
+        foreach (var line in output)
+        {
+            var text = line.Text ?? string.Empty;
+            if (text.Contains("Rate limit", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("rate_limit", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("rate-limit", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("429", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("too many requests", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private void ScheduleGlobalBreakerCooldown(string reason, TaskInfo? activeInfo)
+    {
+        if (!IsAutoMode(_mode)) return;
+
+        _globalBreakerTripCount++;
+        var minutes = Math.Min(
+            _circuitBreakerOptions.GlobalCooldownMax.TotalMinutes,
+            _circuitBreakerOptions.GlobalCooldownBase.TotalMinutes
+                * Math.Pow(_circuitBreakerOptions.GlobalCooldownBackoffMultiplier, Math.Max(0, _globalBreakerTripCount - 1)));
+        if (minutes <= 0) minutes = RunnerCircuitBreakerOptions.Default.GlobalCooldownBase.TotalMinutes;
+
+        _globalBreakerReason = reason;
+        _globalBreakerCooldownUntil = DateTime.UtcNow.AddMinutes(minutes);
+
+        if (activeInfo != null)
+        {
+            _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+                $"Auto-mode cooling down until {_globalBreakerCooldownUntil:O}: {reason}. The runner will resume automatically.");
+        }
+
+        _logger.LogWarning(
+            "Runner '{Project}' global circuit breaker cooling down until {Until:o} after trip {TripCount}: {Reason}",
+            ProjectName, _globalBreakerCooldownUntil, _globalBreakerTripCount, reason);
+        SetMode("manual", $"auto-failure cooldown: {reason}; resumes at {_globalBreakerCooldownUntil:O}");
+    }
+
+    private void TryAutoResumeGlobalBreaker()
+    {
+        if (_globalBreakerCooldownUntil == null) return;
+        if (DateTime.UtcNow < _globalBreakerCooldownUntil.Value) return;
+        if (!string.Equals(_mode, "manual", StringComparison.Ordinal)) return;
+
+        var reason = _globalBreakerReason ?? "global circuit breaker cooldown elapsed";
+        _logger.LogInformation(
+            "Runner '{Project}' auto-resuming after global circuit breaker cooldown: {Reason}",
+            ProjectName, reason);
+        _globalBreakerCooldownUntil = null;
+        _globalBreakerReason = null;
+        SetMode("auto-continuous", $"auto-resume after circuit-breaker cooldown: {reason}");
+    }
+
     /// <summary>Test seam: drive one auto-pickup failure through the breaker
     /// decision (park-and-continue / 3x3 halt) without a full run. Pass
     /// <paramref name="activeInfo"/> null to exercise the pure counting + mode
     /// decision.</summary>
     internal void RecordAutoPickupFailureForTest(string jobId, TaskInfo? activeInfo = null)
         => HandleAutoPickupFailure(jobId, activeInfo);
+
+    internal void ForceGlobalBreakerCooldownElapsedForTest()
+    {
+        if (_globalBreakerCooldownUntil != null)
+            _globalBreakerCooldownUntil = DateTime.UtcNow.AddSeconds(-1);
+    }
 
     /// <summary>Test seam: prime the per-slug zombie-resume-failure counter
     /// so a regression test can drive the picker's zombie dead-letter path
@@ -4746,8 +4877,8 @@ public class ProjectRunner
     internal void AccountZombieResumeOutcome(string jobId)
     {
         var info = _scanner.FindJob(jobId, Entry.Path);
-        // A job that moved out of 3-progress (e.g. parked in
-        // 3b-code-not-complete by HandleAutoPickupFailure) is no longer a
+        // A job that moved out of 3-progress (e.g. quarantined in
+        // 5-human-review by HandleAutoPickupFailure) is no longer a
         // resume candidate, so there is nothing to count.
         if (info == null || info.State != TaskStates.Progress) return;
 

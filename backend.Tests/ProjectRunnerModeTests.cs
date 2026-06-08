@@ -215,14 +215,13 @@ public sealed class ProjectRunnerModeTests : IDisposable
     }
 
     /// <summary>
-    /// Park destination: a task that fails out is MOVED out of 3-progress into
-    /// 3b-code-not-complete (not 5-human-review), and the project stays auto so
-    /// the next Ready task is picked up. The move runs through
-    /// <see cref="TaskTransitionService.MoveAsync"/> fire-and-forget, so the
-    /// assertion polls the on-disk lane folder.
+    /// Quarantine destination: a task that fails out is MOVED out of
+    /// 3-progress into 5-human-review through the escalation funnel, and the
+    /// project stays auto so the next Ready task is picked up. The move runs
+    /// fire-and-forget, so the assertion polls the on-disk lane folder.
     /// </summary>
     [Fact]
-    public async Task AutoFailure_SingleTaskFailsOut_MovesToCodeNotCompleteAndKeepsAuto()
+    public async Task AutoFailure_SingleTaskFailsOut_MovesToHumanReviewAndKeepsAuto()
     {
         WriteJob(TaskStates.Progress, "job-a");
         var runner = BuildRunner();
@@ -240,23 +239,25 @@ public sealed class ProjectRunnerModeTests : IDisposable
         for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
             runner.RecordAutoPickupFailureForTest("job-a", info);
 
-        var movedTo3b = await WaitForFolderAsync(TaskStates.CodeNotComplete, "job-a");
-        Assert.True(movedTo3b, "expected 'job-a' to be moved into 3b-code-not-complete");
+        var movedToReview = await WaitForFolderAsync(TaskStates.HumanReview, "job-a");
+        Assert.True(movedToReview, "expected 'job-a' to be moved into 5-human-review");
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "job-a")),
             "expected 'job-a' to have left 3-progress");
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "job-a")),
-            "park must NOT route into 5-human-review");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.CodeNotComplete, "job-a")),
+            "quarantine must not route into 3b-code-not-complete");
+        var movedJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "job-a", "task.json"));
+        Assert.Contains("auto-halted", movedJson);
         Assert.Equal(1, runner.GetParkedFailedTaskCountForTest());
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
     }
 
     /// <summary>
-    /// 3x3 systemic halt: only when AutoFailureDistinctTaskHaltThreshold
+    /// 3x3 systemic cooldown: only when AutoFailureDistinctTaskHaltThreshold
     /// DISTINCT tasks have each failed out (3 retries each) does the project
-    /// flip to manual.
+    /// pause globally, and that pause carries an automatic resume timestamp.
     /// </summary>
     [Fact]
-    public void AutoFailure_ThreeDistinctTasksFailOut_HaltsToManual()
+    public void AutoFailure_ThreeDistinctTasksFailOut_EntersCooldown()
     {
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
@@ -269,11 +270,35 @@ public sealed class ProjectRunnerModeTests : IDisposable
             Assert.Equal("auto-continuous", runner.GetStatus().Mode);
         }
 
-        // third distinct task failing out trips the systemic breaker
+        // third distinct task failing out trips the systemic breaker cooldown
         for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
             runner.RecordAutoPickupFailureForTest("job-c");
 
         Assert.Equal("manual", runner.GetStatus().Mode);
+        Assert.Equal("cooldown", runner.GetStatus().BreakerState);
+        Assert.NotNull(runner.GetStatus().BreakerCooldownUntil);
+        Assert.Contains("distinct tasks failed out", runner.GetStatus().BreakerReason);
+    }
+
+    [Fact]
+    public async Task AutoFailure_CooldownElapsed_AutoResumes()
+    {
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        foreach (var job in new[] { "job-a", "job-b", "job-c" })
+        {
+            for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
+                runner.RecordAutoPickupFailureForTest(job);
+        }
+
+        Assert.Equal("manual", runner.GetStatus().Mode);
+        runner.ForceGlobalBreakerCooldownElapsedForTest();
+
+        await runner.TickAsync(CancellationToken.None);
+
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.Null(runner.GetStatus().BreakerState);
     }
 
     /// <summary>
