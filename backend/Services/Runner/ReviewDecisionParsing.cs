@@ -180,7 +180,9 @@ public static class ReviewDecisionParsing
     /// from a model response, or <c>null</c> when none is present or the
     /// action keyword is unknown. Tolerant of field order, whitespace,
     /// and case so a fast-model reply with the sentinel on its own line
-    /// or buried in narrative still resolves.
+    /// or buried in narrative still resolves. Multiple sentinels are
+    /// intentional "last wins"; duplicate fields inside the winning
+    /// sentinel are malformed and fail closed.
     /// </summary>
     public static OrchestratorDecisionVerdict? ParseDecision(string output)
     {
@@ -242,6 +244,7 @@ public static class ReviewDecisionParsing
             var key = trimmed[..eq].Trim();
             var value = trimmed[(eq + 1)..].Trim();
             if (key.Length == 0) continue;
+            if (dict.ContainsKey(key)) return null;
             dict[key] = value;
         }
         return dict.Count == 0 ? null : dict;

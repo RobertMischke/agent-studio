@@ -148,6 +148,36 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task NeedsInput_MalformedDecision_EscalatesRatherThanAcceptingOrLooping()
+    {
+        SeedReviewJobWithNeedsInput("malformed-decision", "which provider should I use?");
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "I choose provider A, but forgot the required sentinel.",
+            onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(1, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "malformed-decision")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "malformed-decision")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "malformed-decision")));
+
+        var log = ReadCliLog(TaskStates.HumanReview, "malformed-decision");
+        Assert.Contains("[supervisor]", log);
+        Assert.Contains("no parseable [[ORCHESTRATOR_DECISION]]", log);
+
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Single(records);
+        Assert.Equal(ReviewDecisionKind.Escalate, records[0].Kind);
+        Assert.DoesNotContain(records, r => r.Kind == ReviewDecisionKind.AcceptAsDone);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+        Assert.Equal(1, calls);
+        Assert.Single(ReviewDecisionLog.ReadAll(_workspace, Project));
+    }
+
+    [Fact]
     public async Task AcceptAsDone_OperatorBannerLine_FiresOnlyAfterLaneMoveSucceeds()
     {
         // Regression for 2026-05-15: the operator saw "Orchestrator decided

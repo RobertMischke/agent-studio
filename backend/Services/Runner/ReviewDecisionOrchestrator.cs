@@ -804,18 +804,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var verdict = ReviewDecisionParsing.ParseDecision(response);
         if (verdict == null)
         {
-            _logger.LogInformation(
-                "ReviewDecisionOrchestrator: no decision sentinel parsed for {Project}/{JobId}; skipping",
+            var fallback = new OrchestratorDecisionVerdict(
+                OrchestratorDecisionAction.Escalate,
+                "Review-decision model returned no parseable [[ORCHESTRATOR_DECISION]]; human review required.");
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: no decision sentinel parsed for {Project}/{JobId}; escalating to human review",
                 entry.Name, pending.Job.Id);
-            ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
-                CreatedAt: DateTime.UtcNow,
-                JobId: pending.Job.Id,
-                Project: entry.Name,
-                Kind: ReviewDecisionKind.Skipped,
-                Reason: "no [[ORCHESTRATOR_DECISION]] sentinel in response",
-                Prompt: prompt,
-                Response: response,
-                FollowUp: string.Empty));
+            await HandleEscalateAsync(workspace, entry, pending, prompt, response, fallback, ct);
             return;
         }
 
@@ -3701,6 +3696,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         OrchestratorDecisionVerdict verdict)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var reason = verdict.Reason ?? string.Empty;
 
         // ADR-0025: accept-as-done routes to 5-human-review, NOT directly
         // to 6-completed. The user always gets the final say on whether a
@@ -3725,7 +3721,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
         var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.PassToHumanReview,
-            summary: verdict.Reason,
+            summary: reason,
             performerCliType: CliTypes.Claude,
             stepId: PipelineCatalogue.OrchestratorDecisionStepId,
             evidenceRef: "pipeline-execution.json");
@@ -3736,14 +3732,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Decision,
-            $"Auto-review accepted \"{title}\" as done. Moved to 5-human-review for your approval. Reason: {verdict.Reason}");
+            $"Auto-review accepted \"{title}\" as done. Moved to 5-human-review for your approval. Reason: {reason}");
 
         EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorVerdictAccepted,
             TimelineActors.Orchestrator,
-            $"Accepted as done. {verdict.Reason}", new Dictionary<string, string>
+            $"Accepted as done. {reason}", new Dictionary<string, string>
             {
                 ["verdict"] = "accept",
-                ["reason"] = Truncate(verdict.Reason ?? string.Empty, 600),
+                ["reason"] = Truncate(reason, 600),
             });
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -3751,7 +3747,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             JobId: current.Id,
             Project: entry.Name,
             Kind: ReviewDecisionKind.AcceptAsDone,
-            Reason: verdict.Reason,
+            Reason: reason,
             Prompt: prompt,
             Response: response,
             FollowUp: string.Empty));

@@ -14,7 +14,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Opt-in CI benchmark for ASS-870. It seeds the post-ASS-617 flat storage
-/// shape (tasks/&lt;bucket&gt;/&lt;key&gt; plus id/by-state.json) and gates hot task
+/// shape (jobs/&lt;bucket&gt;/&lt;key&gt; plus index/by-state.json) and gates hot task
 /// operations against the explicit 30 ms p95 budget.
 ///
 /// Enable with RUN_TASK_OPERATION_PERF=1. It is skipped by default because the

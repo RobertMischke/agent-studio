@@ -356,12 +356,24 @@ public class ReviewDecisionParsingTests
         Assert.Equal("final ruling", verdict.Reason);
     }
 
+    [Fact]
+    public void ParseDecision_MultipleSentinels_LastMalformedWinsAndFailsClosed()
+    {
+        var verdict = ReviewDecisionParsing.ParseDecision(string.Join('\n',
+            "[[ORCHESTRATOR_DECISION: action=accept-as-done; reason=first draft]]",
+            "[[ORCHESTRATOR_DECISION: action=panic; reason=unknown final action]]"));
+
+        Assert.Null(verdict);
+    }
+
     [Theory]
     [InlineData("[[ORCHESTRATOR_DECISION: action=reissue]]")]
     [InlineData("[[ORCHESTRATOR_DECISION: reason=missing action]]")]
     [InlineData("[[ORCHESTRATOR_DECISION: action=panic; reason=unknown]]")]
     [InlineData("[[ORCHESTRATOR_DECISION action=reissue; reason=missing colon]]")]
     [InlineData("[[ORCHESTRATOR_DECISION: action reissue; reason=no equals]]")]
+    [InlineData("[[ORCHESTRATOR_DECISION: action=reissue; action=escalate; reason=duplicate action]]")]
+    [InlineData("[[ORCHESTRATOR_DECISION: reason=first; action=reissue; reason=duplicate reason]]")]
     public void ParseDecision_ReturnsNull_OnMalformedOrPartialSentinel(string output)
     {
         Assert.Null(ReviewDecisionParsing.ParseDecision(output));
