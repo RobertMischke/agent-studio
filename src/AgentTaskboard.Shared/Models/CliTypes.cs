@@ -29,6 +29,14 @@ public static class CliTypes
     public const string Codex   = "codex";
     public const string Gemini  = "gemini";
 
+    /// <summary>
+    /// Sentinel for "no automated CLI resolver" (e.g. a router fallback that needs
+    /// a human). Mirrors <see cref="AgentTypes.Human"/>. Deliberately NOT part of
+    /// <see cref="All"/>/<see cref="IsValid"/> — it is a comparison sentinel, not a
+    /// selectable backend.
+    /// </summary>
+    public const string Human   = "human";
+
     public static readonly string[] All = [Copilot, Claude, Codex, Gemini];
 
     public static bool IsValid(string? type) =>
