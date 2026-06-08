@@ -263,6 +263,10 @@ export class CliModelSelectorComponent {
     });
   }
 
+  onCliPillKeydown(current: CliType, event: KeyboardEvent): void {
+    this.moveRadioSelection(event, this.cliTypes, current, next => this.onCliPillClick(next));
+  }
+
   onModelPillClick(modelId: string): void {
     const previous = this.draftThinkingLevel();
     this.draftModel.set(modelId);
@@ -280,11 +284,23 @@ export class CliModelSelectorComponent {
     }
   }
 
+  onModelPillKeydown(current: string, event: KeyboardEvent): void {
+    const ids = ['', ...this.draftAvailableModels().map(m => m.id)];
+    this.moveRadioSelection(event, ids, current, next => {
+      if (next === '') this.onDefaultModelClick();
+      else this.onModelPillClick(next);
+    });
+  }
+
   onThinkingLevelPillClick(level: string): void {
     this.draftThinkingLevel.set(level);
     if (this.draftCliType() === this.cliType()) {
       this.onDoneClick();
     }
+  }
+
+  onThinkingLevelPillKeydown(current: string, event: KeyboardEvent): void {
+    this.moveRadioSelection(event, [...this.draftThinkingLevels()], current, next => this.onThinkingLevelPillClick(next));
   }
 
   onDoneClick(): void {
@@ -354,6 +370,26 @@ export class CliModelSelectorComponent {
     if (levels.length === 0) return null;
     if (requested && levels.includes(requested)) return requested;
     return info?.defaultThinkingLevel ?? levels[0] ?? null;
+  }
+
+  private moveRadioSelection<T>(event: KeyboardEvent, items: readonly T[], current: T, commit: (next: T) => void): void {
+    if (items.length === 0) return;
+    const key = event.key;
+    const forward = key === 'ArrowRight' || key === 'ArrowDown';
+    const backward = key === 'ArrowLeft' || key === 'ArrowUp';
+    const home = key === 'Home';
+    const end = key === 'End';
+    if (!forward && !backward && !home && !end) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const currentIndex = Math.max(0, items.findIndex(item => item === current));
+    let nextIndex = currentIndex;
+    if (forward) nextIndex = (currentIndex + 1) % items.length;
+    if (backward) nextIndex = (currentIndex - 1 + items.length) % items.length;
+    if (home) nextIndex = 0;
+    if (end) nextIndex = items.length - 1;
+    commit(items[nextIndex]);
   }
 
   // ---------------------------------------------------------------------------

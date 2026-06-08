@@ -253,4 +253,55 @@ describe('CliModelSelectorComponent', () => {
     expect(fixture.componentInstance.draftThinkingLevels()).toEqual([]);
     expect(fixture.componentInstance.draftThinkingLevel()).toBeNull();
   });
+
+  it('uses the same trigger and picker contract for chat and code-review call sites', async () => {
+    await configure();
+
+    const cases = [
+      { trigger: 'chat-compose-model', picker: 'chat-model-picker' },
+      { trigger: 'code-review-model', picker: 'code-review-model-picker' },
+    ];
+
+    for (const c of cases) {
+      const fixture = TestBed.createComponent(CliModelSelectorComponent);
+      fixture.componentRef.setInput('cliType', 'claude');
+      fixture.componentRef.setInput('model', 'claude-opus-4-7');
+      fixture.componentRef.setInput('availableModels', claudeModels);
+      fixture.componentRef.setInput('triggerTestid', c.trigger);
+      fixture.componentRef.setInput('pickerTestidPrefix', c.picker);
+      fixture.detectChanges();
+
+      const trigger = fixture.nativeElement.querySelector(`[data-testid="${c.trigger}"]`) as HTMLButtonElement | null;
+      expect(trigger).not.toBeNull();
+
+      fixture.componentInstance.openPicker(new MouseEvent('click'));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.pickerOpen()).toBe(true);
+      expect(document.body.querySelector(`[data-testid="${c.picker}"]`)).not.toBeNull();
+      expect(document.body.querySelector(`[data-testid="${c.picker}-cli-codex"]`)).not.toBeNull();
+      expect(document.body.querySelector(`[data-testid="${c.picker}-model-claude-sonnet-4-6"]`)).not.toBeNull();
+      fixture.componentInstance.closePicker();
+      fixture.destroy();
+    }
+  });
+
+  it('supports arrow-key selection inside radio groups', async () => {
+    await configure();
+    const fixture = TestBed.createComponent(CliModelSelectorComponent);
+    fixture.componentRef.setInput('cliType', 'claude');
+    fixture.componentRef.setInput('model', 'claude-opus-4-7');
+    fixture.componentRef.setInput('availableModels', claudeModels);
+    fixture.componentRef.setInput('disabled', false);
+    fixture.detectChanges();
+
+    const commits: { cliType: string; model: string; thinkingLevel: string | null }[] = [];
+    fixture.componentInstance.commit.subscribe((c) => commits.push(c));
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+    fixture.componentInstance.onModelPillKeydown('claude-opus-4-7', new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+
+    expect(commits).toEqual([{ cliType: 'claude', model: 'claude-sonnet-4-6', thinkingLevel: 'high' }]);
+    expect(fixture.componentInstance.pickerOpen()).toBe(false);
+  });
 });

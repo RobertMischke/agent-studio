@@ -887,32 +887,11 @@
     }
   }
 
-  // Inline per-step model selector for the aspect reviews: a quiet, compact
-  // native select sitting next to the resolved-model chip so the operator can
-  // pin the model the step WILL run on, before the run, without leaving the
-  // Overview. Styled to recede until hovered so it does not compete with the
-  // status / verdict glyphs.
-  &__model-select {
+  // Inline per-step agent selector for the aspect reviews: the same compact
+  // chip used elsewhere, sized down so it can sit inside the dense pipeline row.
+  &__agent-select {
     flex: 0 0 auto;
-    font-family: inherit;
-    font-size: 10px;
-    color: var(--studio-fg-muted);
-    background: transparent;
-    border: 1px solid var(--studio-border);
-    border-radius: 4px;
-    padding: 0 2px;
-    max-width: 96px;
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      color: var(--studio-fg);
-      border-color: var(--studio-fg-dim);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
+    max-width: 132px;
   }
 
   // Per-step timing: the recorded start clock ("19:56") next to the

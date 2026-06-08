@@ -68,7 +68,7 @@ export class PromptPaneComponent {
   readonly save = output<string>();
   readonly evidenceAcknowledge = output<{ entry: ReviewEvidenceEntry; acknowledged: boolean }>();
   readonly evidenceCreateFollowup = output<ReviewEvidenceEntry>();
-  /** Atomic CLI + model commit from the Overview tab's chat-model-badge picker.
+  /** Atomic CLI + model commit from the Overview tab's unified selector.
    *  Forwarded to the parent task-detail which issues both PUTs in sequence. */
   readonly agentConfigCommit = output<{ cliType: CliType; model: string; thinkingLevel: string | null }>();
   /** Forwarded from the Overview tab's compact References section after a

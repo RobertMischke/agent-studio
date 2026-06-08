@@ -87,6 +87,7 @@ interface PipelineRowVm {
   /** Effective display status: 'disabled' for project-disabled steps. */
   status: PipelineStepStatus | 'disabled';
   model: string | null;
+  cliType: CliType | null;
   /**
    * Whether {@link model} is the pre-run resolved effective model (no run has
    * recorded one yet) vs the model an actual execution used. Drives a subtler
@@ -96,10 +97,10 @@ interface PipelineRowVm {
   /** Tooltip explaining where {@link model} comes from (the resolution chain). */
   modelTooltip: StructuredTooltip | null;
   /**
-   * Whether this row exposes an inline per-step model selector. True for the
+   * Whether this row exposes an inline per-step agent selector. True for the
    * always-on aspect review steps (the models the operator most wants to pin
    * before a run); the full per-step catalogue lives on the project-settings
-   * page. Drives the editable `<select>` next to the resolved-model chip.
+   * page. Drives the editable unified selector next to the resolved-model chip.
    */
   modelEditable: boolean;
   /**
@@ -109,6 +110,7 @@ interface PipelineRowVm {
    * value.
    */
   modelOverride: string;
+  thinkingLevelOverride: string | null;
   verdict: string | null;
   /**
    * Structured tooltip for the verdict pill, built from the per-aspect
@@ -371,20 +373,6 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
     'A pipeline step.';
   return { title: label, body };
 }
-
-/**
- * Models a per-step LLM call can be pinned to from the Overview pipeline.
- * Empty `id` clears the override so the step inherits the project model and
- * then the runtime default (see backend PipelineStepConfigResolver). Kept in
- * sync with the project-settings page list; defined locally to avoid a
- * cross-feature import into project-detail.
- */
-const PIPELINE_STEP_MODEL_OPTIONS: readonly { id: string; label: string; defaultThinkingLevel: string | null }[] = [
-  { id: '',                  label: 'Inherit',     defaultThinkingLevel: null },
-  { id: 'claude-opus-4-7',   label: 'Opus 4.7',    defaultThinkingLevel: 'high' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6',  defaultThinkingLevel: 'high' },
-  { id: 'claude-haiku-4-5',  label: 'Haiku 4.5',   defaultThinkingLevel: null },
-];
 
 @Component({
   selector: 'app-overview-pane',
@@ -802,6 +790,7 @@ export class OverviewPaneComponent {
       const recordedModel = e?.model ?? null;
       const resolvedModel = cfg?.resolvedModel ?? null;
       const model = recordedModel ?? resolvedModel ?? cfg?.model ?? step.model ?? null;
+      const cliType = this.asCliType(cfg?.cliType ?? step.cliType ?? this.effectiveCliType());
       const modelIsResolved = recordedModel == null && model != null;
       const modelTooltip = this.buildModelTooltip(label, model, modelIsResolved, cfg?.modelSource ?? null);
       // Inline model editing is offered for the always-on aspect reviews:
@@ -811,6 +800,7 @@ export class OverviewPaneComponent {
       // raw override (cfg.model), not the resolved effective model.
       const modelEditable = step.kind === 'aspect' && (cfg?.resolvedModel ?? null) != null;
       const modelOverride = cfg?.model ?? '';
+      const thinkingLevelOverride = cfg?.thinkingLevel ?? null;
       let verdict = e?.verdict ?? null;
       if (step.kind === 'core') verdict = reconcileCoreVerdict(status, verdict);
       const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
@@ -829,10 +819,12 @@ export class OverviewPaneComponent {
         enabled,
         status,
         model,
+        cliType,
         modelIsResolved,
         modelTooltip,
         modelEditable,
         modelOverride,
+        thinkingLevelOverride,
         verdict,
         concernTooltip: buildConcernTooltip(label, verdict, e?.verdictSummary ?? null),
         explanation: buildStepExplanation(step.id, label, step.kind),
@@ -1083,10 +1075,7 @@ export class OverviewPaneComponent {
     }
   }
 
-  /** Options for the inline per-step model selector. */
-  readonly pipelineStepModelOptions = PIPELINE_STEP_MODEL_OPTIONS;
-
-  /** Step ids with a per-step model write in flight (disable the selector). */
+  /** Step ids with a per-step agent write in flight (disable the selector). */
   private readonly savingStepModel = signal<ReadonlySet<string>>(new Set());
 
   stepModelBusy(stepId: string): boolean {
@@ -1094,23 +1083,20 @@ export class OverviewPaneComponent {
   }
 
   /**
-   * Persist a per-step model override for an aspect review and re-resolve the
+   * Persist a per-step agent override for an aspect review and re-resolve the
    * pipeline so the row's effective-model chip + source update in place. The
    * override is project-scoped (mirrors the project-settings page), so this is
-   * the in-context way to change the model a step WILL run on before the run.
+   * the in-context way to change the CLI/model a step WILL run on before the run.
    *
    * The backend replaces the whole step entry, so the unchanged facets are
    * resent: aspect steps carry no mode/condition and are enabled by default,
    * so `enabled` is preserved only when explicitly disabled and the model's
    * default thinking level rides along (matching the project-settings write).
    */
-  onStepModelChange(stepId: string, model: string): void {
+  onStepAgentCommit(stepId: string, selection: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
     if (this.isRunning() || this.stepModelBusy(stepId)) return;
-    const value = (model ?? '').trim();
+    const value = (selection.model ?? '').trim();
     const cfg = this.pipelinePoll.pipeline()?.config?.[stepId] ?? null;
-    const thinkingLevel = value
-      ? this.pipelineStepModelOptions.find(o => o.id === value)?.defaultThinkingLevel ?? null
-      : null;
 
     this.savingStepModel.update(set => new Set(set).add(stepId));
     this.jobService.setProjectPipelineStep(this.job().projectName, {
@@ -1119,8 +1105,9 @@ export class OverviewPaneComponent {
       // project explicitly disabled this one, otherwise null clears the facet
       // and lets it fall back to the built-in default.
       enabled: cfg?.enabled === false ? false : null,
+      cliType: selection.cliType,
       model: value || null,
-      thinkingLevel,
+      thinkingLevel: selection.thinkingLevel,
       mode: cfg?.mode ?? null,
       condition: null,
     }).subscribe({
@@ -1138,6 +1125,12 @@ export class OverviewPaneComponent {
         );
       },
     });
+  }
+
+  asCliType(value: string | null | undefined): CliType | null {
+    return value && (['copilot', 'claude', 'codex', 'gemini'] as readonly string[]).includes(value)
+      ? value as CliType
+      : null;
   }
 
   private clearStepModelBusy(stepId: string): void {

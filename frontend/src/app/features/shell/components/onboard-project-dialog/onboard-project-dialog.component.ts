@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, ef
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
-import { CLI_TYPES, type CliType } from '../../../../models/task.model';
+import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
+import type { CliType } from '../../../../models/task.model';
 import { TaskService } from '../../../../services/task.service';
 import { NotificationService } from '../../../../services/notification.service';
 import { CliCatalogStore } from '../../../../services/cli-catalog.store';
@@ -22,7 +23,7 @@ function deriveCode(value: string): string {
 @Component({
   selector: 'app-onboard-project-dialog',
   standalone: true,
-  imports: [FormsModule, DialogComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './onboard-project-dialog.component.html',
   styleUrl: './onboard-project-dialog.component.scss',
@@ -33,7 +34,6 @@ export class OnboardProjectDialogComponent {
   private readonly notifications = inject(NotificationService);
   private readonly catalog = inject(CliCatalogStore);
 
-  readonly cliTypes = CLI_TYPES;
   readonly swatches = COLORS;
   readonly workspaceId = signal('');
   readonly displayName = signal('');
@@ -100,6 +100,11 @@ export class OnboardProjectDialogComponent {
   onCodeChange(value: string): void {
     this.userEditedCode.set(true);
     this.shortCode.set(value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
+  }
+
+  onAgentCommit(selection: { cliType: CliType; model: string; thinkingLevel: string | null }): void {
+    this.cliDefault.set(selection.cliType);
+    this.modelDefault.set(selection.model);
   }
 
   onCancel(): void {

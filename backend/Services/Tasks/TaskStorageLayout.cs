@@ -21,8 +21,19 @@ namespace OrchestratorApi.Services.Tasks;
 /// </summary>
 internal static class TaskStorageLayout
 {
-    public const string JobsDirName = "jobs";
-    public const string IndexDirName = "index";
+    // Folder names for the flat task storage layout. Renamed from the
+    // legacy "jobs"/"index" to "tasks"/"id" (terminology: everything is a
+    // "task"; the derived index is the project's "id" layer). The boot
+    // migration TaskLayoutRename moves any pre-existing jobs/ -> tasks/ and
+    // index/ -> id/ so old workspaces upgrade transparently.
+    public const string JobsDirName = "tasks";
+    public const string IndexDirName = "id";
+
+    // Legacy folder names, kept only so the one-time rename migration can
+    // find + move old workspaces. Do not use for new reads/writes.
+    public const string LegacyJobsDirName = "jobs";
+    public const string LegacyIndexDirName = "index";
+
     public const int BucketSize = 1000;
 
     /// <summary>Three-digit zero-padded shard for a key number (floor / 1000).</summary>

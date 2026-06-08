@@ -696,6 +696,38 @@ public class TaskStateMachine
             {
                 Directory.CreateDirectory(watchPath);
             }
+
+            // One-time, idempotent rename of the flat-layout folders to the
+            // current terminology: legacy "jobs"/"index" -> "tasks"/"id".
+            // Runs BEFORE JobsRoot is (re)created so we never leave an empty
+            // tasks/ next to a populated jobs/. A crash leaves either the old
+            // or the new name present (single atomic Directory.Move), never a
+            // half state; the next boot finds the legacy name gone and skips.
+            foreach (var (legacy, current) in new[]
+            {
+                (TaskStorageLayout.LegacyJobsDirName, TaskStorageLayout.JobsDirName),   // jobs  -> tasks
+                (TaskStorageLayout.LegacyIndexDirName, TaskStorageLayout.IndexDirName), // index -> id
+            })
+            {
+                var legacyDir = Path.Combine(watchPath, legacy);
+                var currentDir = Path.Combine(watchPath, current);
+                if (Directory.Exists(legacyDir) && !Directory.Exists(currentDir))
+                {
+                    var renameFailure = MoveDirectoryWithRetry(
+                        legacyDir,
+                        currentDir,
+                        operation: "rename-layout-folder",
+                        subject: legacy,
+                        targetState: current);
+                    if (renameFailure != null)
+                        _logger.LogError(
+                            "Failed to rename layout folder {Old} -> {New}: {Message}",
+                            legacy, current, renameFailure.Message);
+                    else
+                        _logger.LogInformation("Renamed layout folder {Old} -> {New}", legacy, current);
+                }
+            }
+
             Directory.CreateDirectory(TaskStorageLayout.JobsRoot(watchPath));
 
             // Rename old unnumbered state folders to numbered ones

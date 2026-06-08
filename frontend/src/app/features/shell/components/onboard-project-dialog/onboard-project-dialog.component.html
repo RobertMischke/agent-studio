@@ -33,28 +33,17 @@
                [ngModel]="shortCode()"
                (ngModelChange)="onCodeChange($event)" />
       </label>
-      <label class="opd__field">
+      <div class="opd__field">
         <span class="opd__label">CLI Default</span>
-        <select class="opd__input"
-                data-testid="onboard-project-cli"
-                [ngModel]="cliDefault()"
-                (ngModelChange)="cliDefault.set($event)">
-          @for (cli of cliTypes; track cli) {
-            <option [value]="cli">{{ cli }}</option>
-          }
-        </select>
-      </label>
-      <label class="opd__field">
-        <span class="opd__label">Model Default</span>
-        <select class="opd__input"
-                data-testid="onboard-project-model"
-                [ngModel]="modelDefault()"
-                (ngModelChange)="modelDefault.set($event)">
-          @for (model of models(); track model.id) {
-            <option [value]="model.id">{{ model.label || model.id }}</option>
-          }
-        </select>
-      </label>
+        <app-cli-model-selector
+          [cliType]="cliDefault()"
+          [model]="modelDefault()"
+          [availableModels]="models()"
+          eyebrow="Project default agent"
+          triggerTestid="onboard-project-agent"
+          pickerTestidPrefix="onboard-project-agent-picker"
+          (commit)="onAgentCommit($event)" />
+      </div>
       <div class="opd__field">
         <span class="opd__label">Color</span>
         <div class="opd__swatches" data-testid="onboard-project-color">

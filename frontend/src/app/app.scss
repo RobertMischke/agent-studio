@@ -1197,33 +1197,6 @@
         &:hover:not(:disabled) { background: var(--notify-info-icon-bg); }
       }
     }
-    .create-cli-picker {
-      display: inline-flex;
-      gap: 2px;
-      padding: 2px;
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px;
-      background: rgba(0,0,0,0.3);
-    }
-    .create-cli-picker__btn {
-      border: 0;
-      background: transparent;
-      color: var(--studio-fg-dim);
-      padding: 5px 14px;
-      font-size: 13px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .create-cli-picker__icon { font-size: 14px; line-height: 1; }
-    .create-cli-picker__btn:hover { color: var(--studio-fg); background: rgba(255,255,255,0.06); }
-    .create-cli-picker__btn--active {
-      background: rgba(99,102,241,0.22);
-      color: #c7d2fe;
-    }
     .create-type-picker {
       display: inline-flex;
       gap: 2px;

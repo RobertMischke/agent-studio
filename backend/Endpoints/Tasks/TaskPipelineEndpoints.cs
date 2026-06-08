@@ -61,6 +61,7 @@ public static class TaskPipelineEndpoints
                     return new
                     {
                         enabled = PipelineStepConfigResolver.IsEnabled(settings, step.Id),
+                        cliType = PipelineStepConfigResolver.Lookup(settings, step.Id)?.CliType ?? step.CliType,
                         model = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Model,
                         thinkingLevel = PipelineStepConfigResolver.Lookup(settings, step.Id)?.ThinkingLevel,
                         mode = PipelineStepConfigResolver.Lookup(settings, step.Id)?.Mode,

@@ -128,6 +128,7 @@ export interface PipelineCostSummary {
 /** Per-project override resolved for one step (from project-settings.json). */
 export interface PipelineStepConfig {
   enabled: boolean;
+  cliType?: string | null;
   model?: string | null;
   thinkingLevel?: string | null;
   mode?: string | null;

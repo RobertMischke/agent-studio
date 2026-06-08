@@ -360,17 +360,19 @@
                     [appTooltip]="row.modelTooltip">{{ row.model }}</span>
             }
             @if (row.modelEditable) {
-              <select class="ov-pl-step__model-select"
-                      data-testid="overview-pipeline-step-model-select"
-                      [attr.data-model-override]="row.modelOverride || null"
-                      [appTooltip]="'Pin the model for this step (project-level). Inherit falls back to the project model, then the runtime default.'"
-                      [disabled]="isRunning() || stepModelBusy(row.id)"
-                      [ngModel]="row.modelOverride"
-                      (ngModelChange)="onStepModelChange(row.id, $event)">
-                @for (opt of pipelineStepModelOptions; track opt.id) {
-                  <option [value]="opt.id">{{ opt.label }}</option>
-                }
-              </select>
+              <app-cli-model-selector
+                class="ov-pl-step__agent-select"
+                [cliType]="row.cliType"
+                [model]="row.modelOverride"
+                [thinkingLevel]="row.thinkingLevelOverride"
+                [availableModels]="availableModels()"
+                [disabled]="isRunning() || stepModelBusy(row.id)"
+                [disabledReason]="isRunning() ? 'Stop the run before changing this step agent.' : 'Pipeline step update in progress.'"
+                [tooltipOverride]="'Pin the CLI, model, and thinking level for this step (project-level). Empty model uses the project/runtime default.'"
+                eyebrow="Pipeline step"
+                [triggerTestid]="'overview-pipeline-step-agent-' + row.id"
+                [pickerTestidPrefix]="'overview-pipeline-step-agent-picker-' + row.id"
+                (commit)="onStepAgentCommit(row.id, $event)" />
             }
             <span class="ov-pl-step__timing"
                   data-testid="overview-pipeline-step-timing"

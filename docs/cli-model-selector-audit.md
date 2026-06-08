@@ -1,146 +1,112 @@
 # CLI + Model Selector Audit
 
-Snapshot of every place in `frontend/src/` where the user picks a CLI (`copilot`
-/ `claude` / `codex` / `gemini`) and/or a model. Captured to scope the
-"homogenise the CLI + model selector" task: produce one reusable component and
-delete the bespoke widgets each surface owns today.
+Snapshot of every place in `frontend/src/` where the user picks a task-agent CLI
+(`copilot` / `claude` / `codex` / `gemini`) and/or a task-agent model.
 
-The CLI vocabulary is fixed by `frontend/src/app/models/task.model.ts`:
+The shared control is `frontend/src/app/components/cli-model-selector/`. It
+renders one chip-style trigger and one popover containing every CLI from
+`CLI_TYPES`, the CLI-aware model catalog from `CliCatalogStore`, optional
+thinking levels, and stable `data-testid` values. No task-agent call site hides
+a CLI; defaults are expressed by input values, not by filtering the list.
 
-```ts
-export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
-export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
-```
+## Unified Selector Sites
 
-Per-CLI model catalogs come from `CliCatalogStore`
-(`frontend/src/app/services/cli-catalog.store.ts`), hydrated at app boot via
-`hydrateAll()` (ADR-0046). Every surface below should consume that store
-instead of re-querying or hard-coding model lists.
+### 1. Code Review Panel
 
-## Sites in scope (migrate to the unified selector)
+- **File:** `frontend/src/app/features/task-detail/components/protocol-pane/code-review-panel/code-review-panel.component.html:5`
+- **Shape:** `app-cli-model-selector` chip next to `Run Code Review`.
+- **CLI list filtered?** No. The shared picker iterates all `CLI_TYPES`.
+- **Model list CLI-aware?** Yes. The shared picker reads `CliCatalogStore` and reloads when the CLI changes.
+- **Writes:** `(commit)` calls `CodeReviewPanelComponent.onAgentCommit`, which updates `selectedCli`, `selectedModel`, `selectedThinkingLevel`, and local storage. `runReview()` posts `{ cliType, model, thinkingLevel }`.
 
-### 1. Chat composer in the protocol pane — `<app-chat-model-badge>`
-- **Component:** `frontend/src/app/features/job-detail/components/chat-model-badge/chat-model-badge.component.ts:53`
-- **Template:** `frontend/src/app/features/job-detail/components/chat-model-badge/chat-model-badge.component.html:1`
-- **Used by:** protocol-pane chat-compose footer
-  (`frontend/src/app/features/job-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html:435`)
-  and the overview tab's Agent block
-  (`frontend/src/app/features/job-detail/components/prompt-pane/overview-pane/overview-pane.component.html:92`).
-- **Shape:** chip trigger ("✴️ opus 4.7 ▾") that opens a custom popover with
-  one row of CLI pills + a column of model pills + Cancel / Done. CLI switch
-  re-loads the model list inside the open popover; clicking a model without
-  changing CLI auto-commits.
-- **CLI list filtered?** No — iterates `CLI_TYPES`.
-- **Model list CLI-aware?** Yes — reads from `CliCatalogStore.ensure(cli)` on
-  pill click.
-- **Writes:** emits `commit = { cliType, model }`; parent (`JobDetailComponent.onAgentConfigCommit`,
-  `frontend/src/app/features/job-detail/task-detail.ts:825`) PUTs cli-type + model in
-  sequence with optimistic UI.
+### 2. Protocol Chat Composer
 
-### 2. Code-Review panel — flat `<select>` (the user's call-out)
-- **Template:** `frontend/src/app/features/job-detail/components/protocol-pane/code-review-panel/code-review-panel.component.html:5`
-- **Controller:** `frontend/src/app/features/job-detail/components/protocol-pane/code-review-panel/code-review-panel.component.ts:45`
-- **Shape:** Bootstrap-style `<select>` with three hard-coded Claude entries
-  (`Opus 4.7 (default)`, `Sonnet 4.6`, `Haiku 4.5`) next to a "▶ Run Code
-  Review" button. This is the one the user flagged as "doesn't match the
-  typical look-and-feel".
-- **CLI list filtered?** Yes — Claude-only, no picker.
-- **Model list CLI-aware?** No — hard-coded to a curated Claude list, not
-  read from `CliCatalogStore`.
-- **Writes:** `runCodeReview(jobId, { model: selectedModel() }, watchPath)` →
-  `POST /api/tasks/{id}/code-review`. The backend already accepts `cliType`
-  too (`backend/Endpoints/Jobs/JobCodeReviewEndpoints.cs:162`); the frontend
-  just never sends it.
-- **Migration note:** the backend has accepted both fields since the endpoint
-  shipped, so wiring up a full CLI+model picker is purely a frontend change.
-
-### 3. Command-deck (job-detail toolbar)
-- **Template:** `frontend/src/app/features/job-detail/components/command-deck/command-deck.component.html:42`
-- **Controller:** `frontend/src/app/features/job-detail/components/command-deck/command-deck.component.ts:25`
-- **Shape:** a tab-strip of CLI pills (one per `CLI_TYPES` entry) plus a flat
-  `<select>` for model. Distinct visual treatment from the chat badge.
+- **File:** `frontend/src/app/features/task-detail/components/protocol-pane/protocol-pane/protocol-pane.component.html:497`
+- **Shape:** `app-cli-model-selector` chip in the composer action row.
 - **CLI list filtered?** No.
-- **Model list CLI-aware?** Yes — parent owner (`task-detail.ts` →
-  `loadModelCatalog`) re-fetches via `CliCatalogStore` on CLI change.
-- **Writes:** `(cliTypeChange)` and `(modelChange)` events; parent owns the
-  PUT calls.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(commit)` emits `agentConfigCommit` to `JobDetailComponent.onAgentConfigCommit`, which persists the task CLI/model/thinking override through the existing task update endpoints.
 
-### 4. Create-task dialog (board)
-- **Template:** `frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html:94`
-  (CLI buttons) and `:110` (model `<select>`).
-- **Controller:** `frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.ts:63`
-- **Owning service:** `frontend/src/app/features/board/state/create-task-form.service.ts`
-- **Shape:** "Agent" row of CLI pills + "Model" row with a flat `<select>`,
-  visually different again from the command-deck and the chat-model-badge.
+### 3. Overview Agent Row
+
+- **File:** `frontend/src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.html:104`
+- **Shape:** same `app-cli-model-selector` chip as the protocol composer.
 - **CLI list filtered?** No.
-- **Model list CLI-aware?** Yes — service owner re-fetches via
-  `CliCatalogStore` on CLI change.
-- **Writes:** mutates form fields `newCliType`, `newModel`; sent on submit
-  via `createJob({ cliType, model })`.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(commit)` emits `agentConfigCommit` through `PromptPaneComponent` to `JobDetailComponent.onAgentConfigCommit`.
 
-### 5. Status-bar default-CLI + default-model pickers
-- **Template:** `frontend/src/app/features/shell/components/status-bar/status-bar.html:42`
-  (default CLI) and `:65` (default model).
-- **Controller:** `frontend/src/app/features/shell/components/status-bar/status-bar.ts:36`
-- **Menu builders:** `frontend/src/app/features/shell/components/status-bar/status-bar-menu-builders.ts`
-- **Shape:** two separate status-bar button-triggers, each opening
-  `<app-menu>` popups (one for CLI, one for model). Two pickers visually,
-  conceptually one default. Models served through `CliCatalogStore` with an
-  explicit "Refresh catalog" row.
+### 4. Command Deck
+
+- **File:** `frontend/src/app/features/task-detail/components/command-deck/command-deck.component.html:46`
+- **Shape:** `app-cli-model-selector` chip in the start/stop command bar; a disabled copy appears in the collapsed running state at line 10.
 - **CLI list filtered?** No.
-- **Model list CLI-aware?** Yes — re-loads on CLI selection.
-- **Writes:** emits `defaultCliChange` and `defaultModelChange` to the shell,
-  which persist via `ClientDefaultsService`. Listened to by the create-task
-  form (`create-task-form.service.ts:148`).
+- **Model list CLI-aware?** Yes.
+- **Writes:** split `(cliTypeChange)`, `(modelChange)`, and `(thinkingLevelChange)` events for the parent `JobDetailComponent` draft state.
 
-## Sites that look related but stay out of scope
+### 5. Create Task Dialog
 
-### 6. Project-detail "Orchestrator model" `<select>`
-- **Template:** `frontend/src/app/features/project-detail/components/project-detail/project-detail.html:178`
-- **Hardcoded list:** `frontend/src/app/features/project-detail/components/project-detail/project-detail.models.ts:9`
-- **Why excluded:** this is not a CLI/model choice for a task agent. The
-  orchestrator process always runs on Claude and the list is intentionally
-  narrow (Default Opus 4.7 / Opus 4.7 / Sonnet 4.6 — Haiku and non-Claude
-  CLIs are deliberately excluded for capability reasons documented in the
-  same file). The unified selector is for task-agent CLI+model choice; the
-  orchestrator-model picker is a different concept and stays as-is.
-- **Verdict:** leave the existing `<select>` in place.
+- **File:** `frontend/src/app/features/board/components/create-task-dialog/create-task-dialog.component.html:94`
+- **Shape:** `app-cli-model-selector` chip in the Agent field.
+- **CLI list filtered?** No.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(cliTypeChange)` emits to `CreateTaskFormService`; `(modelChange)` and `(thinkingLevelChange)` update the dialog draft signals used on submit.
 
-### 7. CLI-config card — `<app-cli-config-card>`
-- **File:** `frontend/src/app/features/job-detail/components/cli-config-card/cli-config-card.component.ts:17`
-- **Why excluded:** configures *how* a CLI is reachable on the box (path,
-  GitHub token). It does not pick a CLI for a task.
+### 6. Status Bar Workspace Defaults
 
-### 8. CLI usage / admin sheets — `CliUsageSheetComponent`, `CliAdminPanelComponent`, `CliSessionsPanelComponent`
-- **Why excluded:** read-only inventory and admin surfaces. They display the
-  installed CLIs and current sessions, they do not let the user pick one for
-  task execution.
+- **File:** `frontend/src/app/features/shell/components/status-bar/status-bar.html:45`
+- **Shape:** `app-cli-model-selector` chip in the status bar.
+- **CLI list filtered?** No.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(commit)` calls `StatusBarComponent.onDefaultCommit`, persists local storage and `ClientDefaultsService`, then emits default changes to the shell/create-task form.
 
-## Cross-cutting helpers worth keeping
+### 7. Project Settings Inherited Default
 
-- `frontend/src/app/services/format.util.ts` — `cliTypeLabel`,
-  `cliTypeIcon`, `shortModelName`, `formatMultiplier`. The unified selector
-  should reuse these instead of duplicating the per-CLI label/icon switch.
-- `frontend/src/app/services/cli-catalog.store.ts` — single source of truth
-  for per-CLI model catalogs. The unified selector must read through this
-  store; new sites must not re-issue `GET /api/cli/{cliType}/models` on
-  their own.
+- **File:** `frontend/src/app/features/project-detail/components/project-settings-panel/project-settings-panel.component.html:34`
+- **Shape:** disabled `app-cli-model-selector` chip showing the inherited workspace default.
+- **CLI list filtered?** No, but disabled because this card is read-only.
+- **Model list CLI-aware?** Yes when opened elsewhere; this instance does not open because it is disabled.
+- **Writes:** none. The card links to Workspace settings for edits.
 
-## Summary
+### 8. Project Onboarding Default Agent
 
-| # | Site | Shape today | CLI filter | Model CLI-aware |
-|---|------|-------------|------------|-----------------|
-| 1 | Chat composer / Overview Agent row | chip trigger → custom popover | none | yes |
-| 2 | Code-Review panel | flat `<select>` (Claude-only hard-coded) | **Claude-only** | **no** |
-| 3 | Command-deck (job-detail) | CLI pill strip + flat `<select>` | none | yes |
-| 4 | Create-task dialog | CLI pill strip + flat `<select>` | none | yes |
-| 5 | Status-bar default pickers | two separate `<app-menu>` triggers | none | yes |
-| 6 | Project orchestrator model | flat `<select>` (Claude-only, narrow) | **Claude-only, intentional** | — |
-| 7 | CLI-config card | not a selector | — | — |
-| 8 | CLI usage / admin sheets | read-only inventory | — | — |
+- **File:** `frontend/src/app/features/shell/components/onboard-project-dialog/onboard-project-dialog.component.html:38`
+- **Shape:** `app-cli-model-selector` chip in the new-project dialog.
+- **CLI list filtered?** No.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(commit)` updates `cliDefault` and `modelDefault`; submit sends those values in `createRegistryProject`.
 
-Sites 1–5 collapse into a single `<app-cli-model-selector>` chip control whose
-default presentation mirrors the existing chat-model-badge (`CLI · model ▾`
-trigger → CLI pills + model pills inside one popover). Site 2 specifically
-loses its Claude-only restriction; the backend already accepts arbitrary
-`cliType` / `model` values for code-review. Sites 6–8 stay as they are.
+### 9. Project Pipeline Step Agents
+
+- **File:** `frontend/src/app/features/project-detail/components/project-detail/project-detail.html:273`
+- **Shape:** `app-cli-model-selector` chip for every configurable LLM pipeline step.
+- **CLI list filtered?** No.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(commit)` calls `ProjectDetailComponent.onStepAgentCommit`, which writes `cliType`, `model`, and `thinkingLevel` through `setProjectPipelineStep`.
+
+### 10. Task Overview Pipeline Step Agents
+
+- **File:** `frontend/src/app/features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.html:363`
+- **Shape:** compact `app-cli-model-selector` chip for editable aspect-step rows.
+- **CLI list filtered?** No.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(commit)` calls `OverviewPaneComponent.onStepAgentCommit`, which writes `cliType`, `model`, and `thinkingLevel` through `setProjectPipelineStep`, then refreshes the pipeline projection.
+
+### 11. Epic Rollup Agent
+
+- **File:** `frontend/src/app/features/task-detail/components/epic-rollup-pane/epic-rollup-pane.component.html:81`
+- **Shape:** `app-cli-model-selector` chip for an epic's agent config.
+- **CLI list filtered?** No.
+- **Model list CLI-aware?** Yes.
+- **Writes:** `(commit)` emits `agentConfigCommit` to the epic overlay parent, which persists the epic task agent config.
+
+## Related Controls Deliberately Out Of Scope
+
+- `frontend/src/app/features/project-detail/components/project-detail/project-detail.html:180` is the **orchestrator model** selector. It chooses the model for the orchestrator decision process, not a task-agent CLI/model pair, and the orchestrator is intentionally Claude-only.
+- `frontend/src/app/features/project-detail/components/project-detail/project-detail.html:378` chooses per-CLI **permission mode**, not which CLI/model should run a task.
+- Observability, quota, token, usage, and session panels filter or display CLI/model data but do not choose an execution agent.
+- Project, workspace, lane, condition, and mode `<select>` elements are unrelated to CLI/model execution choice.
+
+## Verification Notes
+
+- `frontend/src/app/components/cli-model-selector/cli-model-selector.component.spec.ts` covers the shared popover behavior, keyboard arrow selection, all-CLI availability, and identical selector contract for the chat composer and code-review trigger IDs.
+- The old bespoke `chat-model-badge` component is deleted; remaining comments that mention it describe historical behavior only.

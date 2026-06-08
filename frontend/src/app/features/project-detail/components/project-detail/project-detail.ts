@@ -8,7 +8,6 @@ import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import {
   OrchestratorRunner_KnownModels,
-  PipelineStep_KnownModels,
   PipelineStep_GateModes,
   PipelineStep_Conditions,
   PipelineStep_ConditionValueTokens,
@@ -62,7 +61,6 @@ interface PipelineAdminRow {
   model: string;
   thinkingLevel: string;
   prompt: string;
-  thinkingLevels: readonly string[];
   mode: string;
   condition: string;
   conditionValue: string;
@@ -202,7 +200,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   // overrides come from the settings projection. Both feed pipelineRows().
   readonly pipelineCatalogue = signal<readonly PipelineCatalogueStep[]>([]);
   readonly pipelineOverrides = signal<Record<string, PipelineStepSetting>>({});
-  readonly pipelineStepModels = PipelineStep_KnownModels;
   readonly pipelineCliTypes = CLI_TYPES;
   readonly pipelineGateModes = PipelineStep_GateModes;
   readonly pipelineConditions = PipelineStep_Conditions;
@@ -242,7 +239,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         model: ov?.model ?? '',
         thinkingLevel: ov?.thinkingLevel ?? '',
         prompt: ov?.prompt ?? '',
-        thinkingLevels: this.thinkingLevelsForModel(ov?.model ?? ''),
         mode: ov?.mode ?? '',
         condition: conditionWhen,
         conditionValue,
@@ -592,25 +588,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.writeStep(stepId, { enabled });
   }
 
-  onStepModelChange(stepId: string, model: string): void {
-    const cur = this.pipelineOverrides()[stepId] ?? {};
-    const valid = this.thinkingLevelsForModel(model);
-    const nextThinkingLevel = valid.includes(cur.thinkingLevel ?? '')
-      ? cur.thinkingLevel
-      : this.defaultThinkingLevelForModel(model);
-    this.writeStep(stepId, { model, thinkingLevel: nextThinkingLevel });
-  }
-
-  onStepCliTypeChange(stepId: string, cliType: string): void {
-    this.writeStep(stepId, { cliType });
-  }
-
   onStepModeChange(stepId: string, mode: string): void {
     this.writeStep(stepId, { mode });
-  }
-
-  onStepThinkingLevelChange(stepId: string, thinkingLevel: string): void {
-    this.writeStep(stepId, { thinkingLevel });
   }
 
   onStepPromptChange(stepId: string, prompt: string): void {
@@ -757,18 +736,6 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         this.clearConditionDraft(stepId);
       }
     });
-  }
-
-  private thinkingLevelsForModel(model: string | null | undefined): readonly string[] {
-    const id = (model ?? '').trim();
-    if (!id) return [];
-    return this.pipelineStepModels.find(m => m.id === id)?.thinkingLevels ?? [];
-  }
-
-  private defaultThinkingLevelForModel(model: string | null | undefined): string | null {
-    const id = (model ?? '').trim();
-    if (!id) return null;
-    return this.pipelineStepModels.find(m => m.id === id)?.defaultThinkingLevel ?? null;
   }
 
   asCliType(value: string | null | undefined): CliType | null {

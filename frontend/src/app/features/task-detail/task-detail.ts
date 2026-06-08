@@ -861,7 +861,7 @@ export class TaskDetailComponent implements OnDestroy {
   }
 
   /**
-   * Atomic CLI + model commit from the chat-model-badge picker. The picker
+   * Atomic CLI + model commit from the unified selector. The picker
    * collects both fields locally; this handler sequences the two PUT calls
    * (cli-type, then model) and updates the local draft signals optimistically.
    * `model` of '' clears back to the CLI default. The two backend endpoints

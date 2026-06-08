@@ -49,6 +49,7 @@
                   role="radio"
                   [attr.aria-checked]="draftCliType() === t"
                   [attr.data-testid]="pickerTestidPrefix() + '-cli-' + t"
+                  (keydown)="onCliPillKeydown(t, $event)"
                   (click)="onCliPillClick(t)">
             <span class="cli-model-picker__pill-icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
             <span class="cli-model-picker__pill-label">{{ cliTypeLabel(t) }}</span>
@@ -76,6 +77,7 @@
                   role="radio"
                   [attr.aria-checked]="draftModel() === ''"
                   [attr.data-testid]="pickerTestidPrefix() + '-model-default'"
+                  (keydown)="onModelPillKeydown('', $event)"
                   (click)="onDefaultModelClick()">
             <span class="cli-model-picker__pill-label">(CLI default)</span>
           </button>
@@ -86,6 +88,7 @@
                     role="radio"
                     [attr.aria-checked]="draftModel() === m.id"
                     [attr.data-testid]="pickerTestidPrefix() + '-model-' + m.id"
+                    (keydown)="onModelPillKeydown(m.id, $event)"
                     (click)="onModelPillClick(m.id)">
               <span class="cli-model-picker__pill-label">{{ m.label || m.id }}</span>
               @if (m.isDefault) {
@@ -115,6 +118,7 @@
                     role="radio"
                     [attr.aria-checked]="draftThinkingLevel() === level"
                     [attr.data-testid]="pickerTestidPrefix() + '-thinking-' + level"
+                    (keydown)="onThinkingLevelPillKeydown(level, $event)"
                     (click)="onThinkingLevelPillClick(level)">
               <span class="cli-model-picker__pill-label">{{ level }}</span>
             </button>
