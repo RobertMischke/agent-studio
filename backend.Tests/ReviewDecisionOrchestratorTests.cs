@@ -178,16 +178,14 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     public async Task AcceptAsDone_LaneMoveFails_NoBannerLineWritten_NoJournalRecord()
     {
         // The complementary half: if the lane move fails (we simulate by
-        // pre-populating the destination slug so the move returns Conflict),
+        // placing a file where the destination directory would be),
         // no operator-facing decision line goes out and no journal entry
         // records the accept. The banner must not claim "moved to human
         // review" when the folder is still in 4-auto-review.
         SeedReviewJobWithNeedsInput("blocked-move", "anything?");
-        // Pre-create the destination so MoveJob returns Conflict.
-        Directory.CreateDirectory(Path.Combine(_watchPath, TaskStates.HumanReview, "blocked-move"));
-        File.WriteAllText(
-            Path.Combine(_watchPath, TaskStates.HumanReview, "blocked-move", "job.json"),
-            $"{{\"id\":\"blocked-move\",\"title\":\"x\",\"state\":\"{TaskStates.HumanReview}\",\"order\":1,\"agent\":\"claude\"}}");
+        // Pre-existing directories are deduped by MoveJob; a file at the
+        // target path still forces the move to fail.
+        File.WriteAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "blocked-move"), "not a directory");
 
         var spy = new RecordingChatLog();
         var orchestrator = BuildOrchestrator(
@@ -591,14 +589,13 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task NoCompletionSignal_WithRealPrompt_UsesReviewDecisionFallback_ToAcceptAsDone()
+    public async Task NoCompletionSignal_ModelAccept_FallsBackToDeterministicReissue()
     {
         // Requirement 4 (deterministic completion): a run landed in
         // 4-auto-review with NO terminal sentinel - only heuristic
-        // "done"-ish prose. ASS-684 adds a fast-model fallback before the
-        // deterministic reissue path, so clearly completed evidence can move
-        // forward for human approval instead of stranding on classifier-
-        // unknown / missing-terminal-sentinel.
+        // "done"-ish prose. The fast-model fallback may choose reissue or
+        // escalate, but it must not override the missing-sentinel gate with a
+        // softer accept-as-done decision.
         SeedReviewJobWithoutSentinel("ghosted-completion",
             title: "Add pagination to the task list endpoint",
             promptBody: "# Add pagination\n\nAdd cursor-based pagination to GET /api/tasks so the kanban can lazy-load lanes with hundreds of cards.\n");
@@ -611,19 +608,18 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(1, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "ghosted-completion")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ghosted-completion")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "ghosted-completion")));
-        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "ghosted-completion")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "ghosted-completion")));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "ghosted-completion");
+        var log = ReadCliLog(TaskStates.Ready, "ghosted-completion");
         Assert.Contains("[orchestrator]", log);
-        Assert.Contains("accepted", log, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("missing sentinel", log);
+        Assert.Contains("no completion signal", log);
 
         var record = ReadOnlyDecisionRecord();
-        Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
-        Assert.Contains("complete", record.Reason);
-        Assert.Contains("ORCHESTRATOR_DECISION", record.Prompt);
+        Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
+        Assert.Equal("(deterministic no-completion-signal branch)", record.Prompt);
+        Assert.Contains("terminal sentinel", record.Reason);
     }
 
     [Fact]

@@ -35,7 +35,7 @@ public static class ReviewDecisionParsing
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex DecisionRegex = new(
-        @"\[\[ORCHESTRATOR_DECISION:\s*(?<body>[^\]]+)\]\]",
+        @"\[\[\s*ORCHESTRATOR_DECISION\s*:\s*(?<body>[^\]]+?)\s*\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -187,13 +187,15 @@ public static class ReviewDecisionParsing
         if (string.IsNullOrWhiteSpace(output)) return null;
         var matches = DecisionRegex.Matches(output);
         if (matches.Count == 0) return null;
+
         var last = matches[^1];
         var body = last.Groups["body"].Value;
         var fields = ParseFields(body);
         if (fields == null) return null;
 
         var actionRaw = fields.GetValueOrDefault("action")?.Trim().ToLowerInvariant();
-        var reason = fields.GetValueOrDefault("reason")?.Trim() ?? string.Empty;
+        var reason = fields.GetValueOrDefault("reason")?.Trim();
+        if (string.IsNullOrWhiteSpace(actionRaw) || string.IsNullOrWhiteSpace(reason)) return null;
         var action = actionRaw switch
         {
             "reissue" => OrchestratorDecisionAction.Reissue,

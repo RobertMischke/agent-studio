@@ -1046,8 +1046,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                             await HandleEscalateAsync(workspace, entry, pending, prompt, response, verdict, ct);
                             return;
                         case OrchestratorDecisionAction.AcceptAsDone:
-                            HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict);
-                            return;
+                            _logger.LogInformation(
+                                "ReviewDecisionOrchestrator: no-completion accept decision ignored for {Project}/{JobId}; falling back to deterministic reissue",
+                                entry.Name, pending.Job.Id);
+                            break;
                     }
                 }
 
@@ -1098,11 +1100,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var prevDecisions = LoadPreviousDecisionsSummary(workspace, entry.Name, pending.Job.Id);
 
         return "You are the orchestrator reviewing a 4-auto-review task whose latest run ended without any terminal "
-             + "[[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel. Decide whether the visible evidence means the task should be reissued, escalated, or accepted as done.\n"
+             + "[[TASK_DONE]] / [[TASK_BLOCKED]] / [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]] sentinel. Decide whether the visible evidence means the task should be reissued or escalated.\n"
              + "Rules:\n"
              + "- Use reissue when work appears incomplete, ambiguous, or the agent only needs to close out with a sentinel.\n"
              + "- Use escalate when the evidence requires human judgment or repeated automation would be unsafe.\n"
-             + "- Use accept-as-done only when the recent log and task evidence clearly show the requested work is complete despite the missing sentinel.\n\n"
+             + "- Do not use accept-as-done here; the missing terminal sentinel is a deterministic gate and the next run must close out explicitly.\n\n"
              + $"Project: {entry.Name}\n"
              + $"Job: {pending.Job.Id} - {pending.Job.Title}\n\n"
              + $"Task body:\n{taskBody}\n\n"
@@ -1110,7 +1112,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
              + $"Roadmap excerpt:\n{roadmapExcerpt}\n\n"
              + $"ADR titles:\n{adrTitles}\n\n"
              + $"Previous decisions:\n{prevDecisions}\n\n"
-             + "Reply with exactly one [[ORCHESTRATOR_DECISION: action=<reissue|escalate|accept-as-done>; reason=<short>]] sentinel then [[TASK_DONE]].";
+             + "Reply with exactly one [[ORCHESTRATOR_DECISION: action=<reissue|escalate>; reason=<short>]] sentinel then [[TASK_DONE]].";
     }
 
     private async Task ReissueNoCompletionSignalAsync(

@@ -167,6 +167,17 @@ public class ReviewDecisionParsingTests
     }
 
     [Fact]
+    public void FindUnresolvedDone_ReturnsNull_WhenUserFollowUpAfterTechnicalMarker()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_DONE]]",
+            "[12:00:01.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review)",
+            "[12:00:30.000] [user] please also cover the empty-state case");
+
+        Assert.Null(ReviewDecisionParsing.FindUnresolvedDone(log));
+    }
+
+    [Fact]
     public void FindUnresolvedBlocked_IgnoresRunnerActiveStateClearedMarker()
     {
         var log = string.Join('\n',
@@ -283,6 +294,20 @@ public class ReviewDecisionParsingTests
     }
 
     [Fact]
+    public void FindUnresolvedSentinels_LatestRunTerminalWins()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_DONE]]",
+            "[12:00:10.000] [orchestrator] [reissue] previous done was rejected",
+            "[12:01:00.000] [stdout] [[TASK_BLOCKED: credential missing]]");
+
+        Assert.Null(ReviewDecisionParsing.FindUnresolvedDone(log));
+        var blocked = ReviewDecisionParsing.FindUnresolvedBlocked(log);
+        Assert.NotNull(blocked);
+        Assert.Equal("credential missing", blocked!.Reason);
+    }
+
+    [Fact]
     public void ParseDecision_Reissue_RoundTripsActionAndReason()
     {
         var output = "After reading the roadmap...\n[[ORCHESTRATOR_DECISION: action=reissue; reason=Roadmap names option A as canonical.]]\n[[TASK_DONE]]";
@@ -314,9 +339,32 @@ public class ReviewDecisionParsingTests
     public void ParseDecision_TolerantOfFieldOrderAndCase()
     {
         var verdict = ReviewDecisionParsing.ParseDecision(
-            "[[orchestrator_decision: REASON=fine; ACTION=Accept]]");
+            "[[ orchestrator_decision : REASON=fine; ACTION=Accept ]]");
         Assert.NotNull(verdict);
         Assert.Equal(OrchestratorDecisionAction.AcceptAsDone, verdict!.Action);
+    }
+
+    [Fact]
+    public void ParseDecision_MultipleSentinels_LastWins()
+    {
+        var verdict = ReviewDecisionParsing.ParseDecision(string.Join('\n',
+            "[[ORCHESTRATOR_DECISION: action=reissue; reason=first draft]]",
+            "[[ORCHESTRATOR_DECISION: reason=final ruling; action=escalate]]"));
+
+        Assert.NotNull(verdict);
+        Assert.Equal(OrchestratorDecisionAction.Escalate, verdict!.Action);
+        Assert.Equal("final ruling", verdict.Reason);
+    }
+
+    [Theory]
+    [InlineData("[[ORCHESTRATOR_DECISION: action=reissue]]")]
+    [InlineData("[[ORCHESTRATOR_DECISION: reason=missing action]]")]
+    [InlineData("[[ORCHESTRATOR_DECISION: action=panic; reason=unknown]]")]
+    [InlineData("[[ORCHESTRATOR_DECISION action=reissue; reason=missing colon]]")]
+    [InlineData("[[ORCHESTRATOR_DECISION: action reissue; reason=no equals]]")]
+    public void ParseDecision_ReturnsNull_OnMalformedOrPartialSentinel(string output)
+    {
+        Assert.Null(ReviewDecisionParsing.ParseDecision(output));
     }
 
     [Fact]
