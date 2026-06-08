@@ -71,8 +71,28 @@
           </button>
           @if (expandedFile() === entry.fileName) {
             <div class="cr-body" data-testid="code-review-body">
+              <header class="cr-body-header" [attr.data-verdict]="verdictTone(entry.verdict)">
+                <div class="cr-body-title">
+                  <span class="cr-body-eyebrow">Review result</span>
+                  <strong>{{ entry.summary || 'Code review result' }}</strong>
+                </div>
+                <div class="cr-body-meta" aria-label="Code review metadata">
+                  <span class="cr-body-chip cr-body-chip--{{ verdictTone(entry.verdict) }}">
+                    {{ entry.verdict || 'unknown' }}
+                  </span>
+                  <span class="cr-body-chip">{{ entry.model || 'unknown model' }}</span>
+                  @if (entry.thinkingLevel) {
+                    <span class="cr-body-chip">{{ entry.thinkingLevel }}</span>
+                  }
+                  @if (entry.commit) {
+                    <span class="cr-body-chip">{{ entry.commit.substring(0, 7) }}</span>
+                  }
+                  <span class="cr-body-chip">{{ formatTimestamp(entry.runAt) }}</span>
+                </div>
+              </header>
               @if (expandedBody(); as body) {
                 <app-markdown
+                  class="cr-body-markdown"
                   [source]="body"
                   [dense]="true"
                   testId="code-review-body-markdown" />

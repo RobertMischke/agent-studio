@@ -27,8 +27,19 @@ async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
 
 function parseRgb(value: string): [number, number, number, number] {
   const m = /rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+))?\s*\)/.exec(value);
-  if (!m) throw new Error(`Cannot parse colour: ${value}`);
-  return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+  if (m) {
+    return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+  }
+  const color = /color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/.exec(value);
+  if (color) {
+    return [
+      Math.round(Number(color[1]) * 255),
+      Math.round(Number(color[2]) * 255),
+      Math.round(Number(color[3]) * 255),
+      color[4] === undefined ? 1 : Number(color[4]),
+    ];
+  }
+  throw new Error(`Cannot parse colour: ${value}`);
 }
 
 function luminance(rgb: [number, number, number]): number {
@@ -170,10 +181,25 @@ test.describe('Code-review markdown result contrast', () => {
       await page.evaluate(() => {
         const host = document.createElement('section');
         host.id = 'code-review-markdown-probe';
-        host.style.cssText = 'position: fixed; inset: 40px; z-index: 99999;'
-          + 'background: var(--studio-bg-elevated); color: var(--studio-fg);'
-          + 'border: 1px solid var(--studio-border); padding: 16px;';
+        host.className = 'cr-body';
+        host.style.cssText = 'position: fixed; inset: 40px; z-index: 99999; display: flex; flex-direction: column; gap: 12px;'
+          + 'background: var(--studio-surface); color: var(--studio-fg); border: 1px solid var(--studio-border); padding: 12px;';
         host.innerHTML = [
+          '<header class="cr-body-header" data-verdict="concerns" style="display: flex; gap: 8px; justify-content: space-between;'
+            + 'background: var(--studio-bg-hover); border: 1px solid var(--studio-border); padding: 8px 12px;">',
+          '<div class="cr-body-title">',
+          '<span class="cr-body-eyebrow" data-probe="eyebrow" style="display: block; color: var(--studio-fg-dim);'
+            + 'font-size: 11px; font-weight: 700; text-transform: uppercase;">Review result</span>',
+          '<strong data-probe="title" style="color: var(--studio-fg-strong);">Readable review summary</strong>',
+          '</div>',
+          '<div class="cr-body-meta" style="display: flex; gap: 4px;">',
+          '<span class="cr-body-chip cr-body-chip--concerns" data-probe="chip" style="color: color-mix(in srgb, var(--severity-warn) 75%, var(--studio-fg-strong));'
+            + 'background: color-mix(in srgb, var(--severity-warn) 12%, transparent);'
+            + 'border: 1px solid color-mix(in srgb, var(--severity-warn) 40%, var(--studio-border)); padding: 1px 8px;">concerns</span>',
+          '<span class="cr-body-chip" data-probe="meta" style="color: var(--studio-fg-dim);'
+            + 'background: var(--studio-bg-elevated); border: 1px solid var(--studio-border); padding: 1px 8px;">claude-haiku-4-5</span>',
+          '</div>',
+          '</header>',
           '<div class="markdown-body markdown-body--dense">',
           '<h3 data-probe="heading">Findings</h3>',
           '<ul><li data-probe="body">Review result with <code data-probe="code">helper</code> code.</li></ul>',
@@ -197,7 +223,7 @@ test.describe('Code-review markdown result contrast', () => {
         return out;
       });
 
-      for (const probe of ['heading', 'body', 'code']) {
+      for (const probe of ['eyebrow', 'title', 'chip', 'meta', 'heading', 'body', 'code']) {
         const { color, bg } = probes[probe];
         const ratio = contrastOnSurface(color, bg, surfaceColour);
         expect(

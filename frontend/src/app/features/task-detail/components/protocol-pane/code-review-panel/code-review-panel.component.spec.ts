@@ -270,6 +270,8 @@ describe('CodeReviewPanelComponent', () => {
 
     const body = root.querySelector('[data-testid="code-review-body"]');
     expect(body).toBeTruthy();
+    expect(body?.querySelector('.cr-body-header')?.textContent).toContain('Helper duplicated.');
+    expect(body?.querySelector('.cr-body-chip--concerns')?.textContent?.trim()).toBe('concerns');
     // No raw <pre> dark blob; the canonical markdown surface rendered structure.
     expect(body?.querySelector('pre')).toBeNull();
     expect(body?.querySelector('app-markdown')).toBeTruthy();
