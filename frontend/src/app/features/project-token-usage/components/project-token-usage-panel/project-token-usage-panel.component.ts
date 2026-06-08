@@ -178,6 +178,7 @@ export class ProjectTokenUsagePanelComponent {
     aspect: 'Aspects',
     tool: 'Tool steps',
     orchestrator: 'Orchestrator',
+    drift: 'Drift',
     module: 'Modules',
   };
 

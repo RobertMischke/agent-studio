@@ -108,7 +108,7 @@ export interface ProjectJobTokenDetail {
  * folds every task's pipeline-execution.json into a per-day series per
  * step kind, priced through the single TokenPricing table.
  */
-export type PipelineStepKindKey = 'core' | 'aspect' | 'tool' | 'orchestrator' | 'module';
+export type PipelineStepKindKey = 'core' | 'aspect' | 'tool' | 'orchestrator' | 'drift' | 'module';
 
 export interface PipelineKindDayCell {
   day: string;

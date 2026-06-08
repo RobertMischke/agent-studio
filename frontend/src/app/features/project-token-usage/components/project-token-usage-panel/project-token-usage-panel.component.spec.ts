@@ -83,9 +83,20 @@ describe('ProjectTokenUsagePanelComponent (pipeline cost)', () => {
             { day: days[2], totalTokens: 40_000, costUsd: 0.04 },
           ],
         },
+        {
+          kind: 'drift',
+          totalTokens: 20_000,
+          totalCostUsd: 0.04,
+          anyModelUnknown: false,
+          cells: [
+            { day: days[0], totalTokens: 0, costUsd: 0 },
+            { day: days[1], totalTokens: 0, costUsd: 0 },
+            { day: days[2], totalTokens: 20_000, costUsd: 0.04 },
+          ],
+        },
       ],
-      totalTokens: 380_000,
-      totalCostUsd: 0.83,
+      totalTokens: 400_000,
+      totalCostUsd: 0.87,
       anyModelUnknown: false,
       taskCount: 4,
       hasData: true,
@@ -121,14 +132,15 @@ describe('ProjectTokenUsagePanelComponent (pipeline cost)', () => {
     expect(legend).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-cost-legend-core"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-cost-legend-aspect"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="pipeline-cost-legend-drift"]')).toBeTruthy();
 
     const total = host.querySelector('[data-testid="pipeline-cost-total"]');
-    expect(total?.textContent).toContain('$0.83');
+    expect(total?.textContent).toContain('$0.87');
 
     const cols = host.querySelectorAll('[data-testid="pipeline-cost-bars"] .tup__pl-col');
     expect(cols.length).toBe(3);
-    // Busiest day (3rd: 140k tokens) carries two stacked segments.
+    // Busiest day (3rd: 160k tokens) carries core, aspect, and drift segments.
     const lastColSegs = cols[2].querySelectorAll('.tup__pl-seg');
-    expect(lastColSegs.length).toBe(2);
+    expect(lastColSegs.length).toBe(3);
   });
 });
