@@ -39,6 +39,34 @@ builder.Services.Configure<HostOptions>(o =>
 // committing the toggle.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+// Test-isolation guard (prevention). An integration test that boots
+// WebApplicationFactory<Program> must never touch the production task
+// workspace or registry. A loaded xunit assembly is the reliable in-process
+// test-host signal; if we detect it and TaskRepository still resolves to a
+// real (non-temp) workspace, redirect it to an isolated per-run temp dir.
+// Everything storage-related (the flat tasks/ tree, the id/ index, and the
+// <TaskRepository>/.metadata/projects.json registry) is derived from
+// TaskRepository, so this single redirect prevents a test from creating,
+// renaming or deleting anything in the live board — the root cause of both
+// the atp-orphan-delete-api-tests registry junk and the shared-workspace
+// migration corruption. Never fires in production (xunit is not loaded).
+var underTestHost = Array.Exists(
+    AppDomain.CurrentDomain.GetAssemblies(),
+    a => a.GetName().Name?.StartsWith("xunit", StringComparison.OrdinalIgnoreCase) == true);
+if (underTestHost)
+{
+    var configuredRepo = builder.Configuration["TaskRepository"];
+    var tempRoot = Path.GetTempPath().Replace('\\', '/');
+    var repoIsIsolated = string.IsNullOrWhiteSpace(configuredRepo)
+        || configuredRepo.Replace('\\', '/').Contains(tempRoot, StringComparison.OrdinalIgnoreCase);
+    if (!repoIsIsolated)
+    {
+        var iso = Path.Combine(Path.GetTempPath(), "atp-test-iso-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(iso);
+        builder.Configuration["TaskRepository"] = iso;
+    }
+}
+
 // Rolling backend file logger + crash marker (see Services/Diagnostics).
 // Built before WebApplication so the process-wide crash handlers below
 // can capture the very first throw, even if it lands during DI build.
