@@ -5,10 +5,10 @@ namespace OrchestratorApi.Services.Tasks;
 /// <summary>
 /// Pure path + bucket helpers for the flat, ID-named task storage layout
 /// (F45 restscope). Tasks live under
-/// <c>&lt;projectRoot&gt;/jobs/&lt;bucket&gt;/&lt;taskId&gt;/</c> where
+/// <c>&lt;projectRoot&gt;/tasks/&lt;bucket&gt;/&lt;taskId&gt;/</c> where
 /// <c>bucket = floor(keyNumber / 1000)</c> zero-padded to three digits and
 /// <c>taskId</c> is the stable task key (e.g. <c>ASS-617</c>). The derived
-/// index lives under <c>&lt;projectRoot&gt;/index/</c>. Lane is metadata
+/// index lives under <c>&lt;projectRoot&gt;/id/</c>. Lane is metadata
 /// (<c>task.json.state</c>), no longer folder position.
 ///
 /// <para>
@@ -21,18 +21,13 @@ namespace OrchestratorApi.Services.Tasks;
 /// </summary>
 internal static class TaskStorageLayout
 {
-    // Folder names for the flat task storage layout. Renamed from the
-    // legacy "jobs"/"index" to "tasks"/"id" (terminology: everything is a
-    // "task"; the derived index is the project's "id" layer). The boot
-    // migration TaskLayoutRename moves any pre-existing jobs/ -> tasks/ and
-    // index/ -> id/ so old workspaces upgrade transparently.
+    // Folder names for the flat task storage layout: tasks live under
+    // <projectRoot>/tasks/<bucket>/<key>/ and the derived index under
+    // <projectRoot>/id/. Lane is metadata (task.json.state), not folder
+    // position. (Terminology: everything is a "task"; the index is the
+    // project's "id" layer.)
     public const string JobsDirName = "tasks";
     public const string IndexDirName = "id";
-
-    // Legacy folder names, kept only so the one-time rename migration can
-    // find + move old workspaces. Do not use for new reads/writes.
-    public const string LegacyJobsDirName = "jobs";
-    public const string LegacyIndexDirName = "index";
 
     public const int BucketSize = 1000;
 
@@ -80,9 +75,9 @@ internal static class TaskStorageLayout
     }
 
     /// <summary>
-    /// Absolute paths of every task folder under <c>jobs/</c>, skipping any
+    /// Absolute paths of every task folder under <c>tasks/</c>, skipping any
     /// dot-prefixed bucket or entry (reserved for staging / hidden state). A
-    /// missing <c>jobs/</c> yields an empty sequence.
+    /// missing <c>tasks/</c> yields an empty sequence.
     /// </summary>
     public static IEnumerable<string> EnumerateJobDirs(string projectRoot)
     {

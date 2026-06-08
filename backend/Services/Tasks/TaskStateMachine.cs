@@ -20,7 +20,6 @@ public class TaskStateMachine
 {
     private const int DirectoryMoveMaxAttempts = 8;
     private static readonly int[] DirectoryMoveBackoffMs = [50, 100, 200, 400, 800, 1200, 1600];
-    private static int _fallbackMigrationKeyCounter;
 
     private readonly TaskScannerService _scanner;
     private readonly LaneMutexRegistry _laneMutex;
@@ -593,102 +592,8 @@ public class TaskStateMachine
             CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
     }
 
-    /// <summary>
-    /// One-shot migration step for ADR-0025: if <paramref name="oldName"/>
-    /// exists in the workspace, move every job folder under it to
-    /// <paramref name="newName"/>, rewrite each task.json's <c>state</c>
-    /// field, and remove the now-empty old folder. Idempotent: on the
-    /// next boot the old folder no longer exists and the call is a no-op.
-    /// </summary>
-    private void MigrateNumberedLane(string watchPath, string oldName, string newName)
-    {
-        var oldDir = Path.Combine(watchPath, oldName);
-        if (!Directory.Exists(oldDir)) return;
-
-        var newDir = Path.Combine(watchPath, newName);
-        Directory.CreateDirectory(newDir);
-
-        var jobFolders = Directory.GetDirectories(oldDir);
-        var movedJobs = 0;
-        foreach (var jobFolder in jobFolders)
-        {
-            var folderName = Path.GetFileName(jobFolder);
-            var targetFolder = Path.Combine(newDir, folderName);
-            if (Directory.Exists(targetFolder))
-            {
-                _logger.LogWarning(
-                    "ADR-0025 migration: target {Target} already exists; leaving source {Source} in place for manual reconciliation",
-                    targetFolder, jobFolder);
-                continue;
-            }
-            try
-            {
-                var moveFailure = MoveDirectoryWithRetry(
-                    jobFolder,
-                    targetFolder,
-                    operation: "migrate-numbered-lane",
-                    subject: folderName,
-                    targetState: newName);
-                if (moveFailure != null)
-                {
-                    _logger.LogError(
-                        "ADR-0025 migration: failed to move {Source} to {Target}: {Message}",
-                        jobFolder, targetFolder, moveFailure.Message);
-                    continue;
-                }
-                if (File.Exists(Path.Combine(targetFolder, "task.json")))
-                {
-                    TaskJsonFile.UpdateField(targetFolder, "state", newName, _logger);
-                }
-                movedJobs++;
-                LastNumberedLaneMigrationCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "ADR-0025 migration: failed to move {Source} to {Target}",
-                    jobFolder, targetFolder);
-            }
-        }
-
-        // Try to remove the old (now-empty) lane folder so the next boot has
-        // nothing to do. Leftover non-job items (loose files, hidden state)
-        // keep it around; that's fine, the migration is still idempotent
-        // because we only act on directories with a task.json shape.
-        try
-        {
-            if (!Directory.EnumerateFileSystemEntries(oldDir).Any())
-            {
-                Directory.Delete(oldDir);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "ADR-0025 migration: could not remove emptied lane {OldDir}",
-                oldDir);
-        }
-
-        _logger.LogInformation(
-            "ADR-0025 migration: moved {Count} job(s) from {Old} to {New} in {Workspace}",
-            movedJobs, oldName, newName, watchPath);
-    }
-
-    /// <summary>
-    /// Total number of jobs whose <c>state</c> field was rewritten by the
-    /// most recent ADR-0025 numbered-lane migration sweep
-    /// (<c>4-review → 4-auto-review</c>, <c>5-completed → 6-completed</c>,
-    /// <c>6-archive → 7-archive</c>). Useful for reporting back on the
-    /// migration without mining the logs. Reset at the start of every
-    /// <see cref="EnsureStateFoldersAndMigrate"/> call so the value
-    /// reflects this boot's work and not cumulative startups.
-    /// </summary>
-    public int LastNumberedLaneMigrationCount { get; private set; }
-
     public void EnsureStateFoldersAndMigrate()
     {
-        LastNumberedLaneMigrationCount = 0;
-
         foreach (var entry in _scanner.GetWatchPaths())
         {
             var watchPath = entry.Path;
@@ -706,57 +611,6 @@ public class TaskStateMachine
             // there is a single local instance (an auto-migrating boot against
             // the shared workspace is exactly what corrupted it twice).
             TaskLayoutIndex.Rebuild(watchPath, _logger);
-        }
-    }
-
-    private string MintMigrationKey(string watchPath)
-    {
-        var project = _projectRegistry?.FindByStorageLocation(watchPath);
-        if (project != null)
-        {
-            var floor = HighestExistingKeyNumber(watchPath, project.ShortCode) + 1;
-            _projectRegistry!.EnsureTaskKeyFloor(project.Id, floor);
-            var seq = _projectRegistry!.IssueNextTaskKey(project.Id);
-            return $"{project.ShortCode}-{seq}";
-        }
-        var fallbackSeq = Interlocked.Increment(ref _fallbackMigrationKeyCounter);
-        return "TASK-" + fallbackSeq.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static int HighestExistingKeyNumber(string watchPath, string shortCode)
-    {
-        var max = 0;
-        foreach (var jobDir in EnumerateAnyJobDirs(watchPath))
-        {
-            var jobJson = Path.Combine(jobDir, "task.json");
-            if (!File.Exists(jobJson)) continue;
-            try
-            {
-                using var doc = JsonDocument.Parse(File.ReadAllText(jobJson));
-                if (!doc.RootElement.TryGetProperty("key", out var keyEl)) continue;
-                var key = keyEl.GetString();
-                if (TaskKeyNumbers.TryParse(key, shortCode, out var n) && n > max)
-                    max = n;
-            }
-            catch
-            {
-                // Migration is best-effort per folder; an unreadable task.json
-                // will be logged by the migrator/index rebuild path.
-            }
-        }
-        return max;
-    }
-
-    private static IEnumerable<string> EnumerateAnyJobDirs(string watchPath)
-    {
-        foreach (var dir in TaskStorageLayout.EnumerateJobDirs(watchPath))
-            yield return dir;
-        foreach (var state in TaskStates.All)
-        {
-            var laneDir = Path.Combine(watchPath, state);
-            if (!Directory.Exists(laneDir)) continue;
-            foreach (var dir in Directory.EnumerateDirectories(laneDir))
-                yield return dir;
         }
     }
 

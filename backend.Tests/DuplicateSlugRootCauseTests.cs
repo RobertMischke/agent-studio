@@ -62,8 +62,8 @@ public class DuplicateSlugRootCauseTests : IDisposable
         Assert.NotNull(secondInfo);
         Assert.Equal(TaskStates.Backlog, firstInfo.State);
         Assert.Equal(TaskStates.Backlog, secondInfo.State);
-        Assert.Contains(Path.Combine("jobs", "000", "same-title"), firstInfo.FolderPath);
-        Assert.Contains(Path.Combine("jobs", "000", "same-title-2"), secondInfo.FolderPath);
+        Assert.Contains(Path.Combine("tasks", "000", "same-title"), firstInfo.FolderPath);
+        Assert.Contains(Path.Combine("tasks", "000", "same-title-2"), secondInfo.FolderPath);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class DuplicateSlugRootCauseTests : IDisposable
         Assert.NotNull(archived);
         Assert.Equal(TaskStates.Archive, archived.State);
         Assert.Equal(outcome.NewFolderPath, archived.FolderPath);
-        Assert.Contains(Path.Combine("jobs", "000", "dup-title"), archived.FolderPath);
+        Assert.Contains(Path.Combine("tasks", "000", "dup-title"), archived.FolderPath);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "dup-title")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Archive, "dup-title-2")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "dup-title-2")));

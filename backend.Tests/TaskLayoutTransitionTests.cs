@@ -35,7 +35,7 @@ public class TaskLayoutTransitionTests : IDisposable
         SeedLaneTask(TaskStates.Ready, "task-a", "TST-10");
         Migrate();
 
-        var folder = Path.Combine(_root, "jobs", "000", "TST-10");
+        var folder = Path.Combine(_root, "tasks", "000", "TST-10");
         Assert.True(Directory.Exists(folder));
 
         var result = TaskLayoutTransition.ChangeState(_root, "TST-10", TaskStates.Progress, NullLogger.Instance);
@@ -139,25 +139,24 @@ public class TaskLayoutTransitionTests : IDisposable
 
     // ---- helpers -----------------------------------------------------------
 
-    private void Migrate() =>
-        TaskLayoutMigrator.Migrate(_root, NoMint, NullLogger.Instance);
+    // The fixtures seed the flat layout directly (tasks/<bucket>/<key>/),
+    // carrying the lane as task.json.state — the post-migration shape the
+    // production code now assumes. The boot migrator was removed, so "Migrate"
+    // just rebuilds the derived index from the seeded task.json authority.
+    private void Migrate() => TaskLayoutIndex.Rebuild(_root, NullLogger.Instance);
 
-    // Every fixture task is seeded with a key, so the migrator must never need
-    // to mint one; a throwing delegate makes that assumption explicit.
-    private static string NoMint() =>
-        throw new InvalidOperationException("fixture has no keyless folders; mintKey must not be called");
-
-    private string JobJson(string key) => Path.Combine(_root, "jobs", "000", key, "task.json");
+    private string JobJson(string key) => Path.Combine(_root, "tasks", "000", key, "task.json");
 
     private void SeedLaneTask(string lane, string slug, string key)
     {
-        var dir = Path.Combine(_root, lane, slug);
+        var dir = Path.Combine(_root, "tasks", "000", key);
         Directory.CreateDirectory(dir);
         var doc = new Dictionary<string, object?>
         {
             ["id"] = slug,
             ["title"] = slug + " title",
             ["key"] = key,
+            ["state"] = lane,
         };
         File.WriteAllText(Path.Combine(dir, "task.json"),
             JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));

@@ -58,7 +58,7 @@ public class BacklogLaneAndTagsTests : IDisposable
         var info = scanner.FindJob("alpha", _watchPath);
         Assert.NotNull(info);
         Assert.Equal(TaskStates.Backlog, info!.State);
-        Assert.Contains(Path.Combine("jobs", "000", "alpha"), info.FolderPath);
+        Assert.Contains(Path.Combine("tasks", "000", "alpha"), info.FolderPath);
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Backlog, "alpha")));
         Assert.Equal(TaskTypes.Chore, info.TaskType);
     }
@@ -104,8 +104,8 @@ public class BacklogLaneAndTagsTests : IDisposable
     {
         var (machine, _, _) = Build();
         machine.EnsureStateFoldersAndMigrate();
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, "jobs")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, "index")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, "tasks")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, "id")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Backlog)));
     }
 
