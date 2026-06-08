@@ -109,6 +109,7 @@ Read these before re-litigating a decision they already explored.
 | [research/arhciv-loop-postmortem-2026-05.md](research/arhciv-loop-postmortem-2026-05.md) | The 31-run loop where a stuck `3-progress` folder vanished into `7-archive`; informs ADR-0029. |
 | [research/embedded-chat-integration-2026-05.md](research/embedded-chat-integration-2026-05.md) | The grounding for the project-chat-redesign work. |
 | [research/project-chat-progress-indicator-2026-05-08.md](research/project-chat-progress-indicator-2026-05-08.md) | Progress indicator + responsiveness analysis: current state, competitor patterns, latency budgets, redesign recommendation (caret-pulse + wall-clock state ladder, no backend change in v1). |
+| [research/project-chat-progress-indicator-2026-06-08.md](research/project-chat-progress-indicator-2026-06-08.md) | Refresh of the project-chat progress-indicator research with current code refs, stable Playwright timing evidence, competitor-capture boundary, and Phase-2 recommendation. |
 | [research/kanban-layout-reconciliation-2026-05.md](research/kanban-layout-reconciliation-2026-05.md) | Kanban layout drift between docs/mockups and the live frontend. |
 | [research/path-forward-plan-2026-05.md](research/path-forward-plan-2026-05.md) | Phase plan that the autonomy-scale work executes against. |
 | [research/planning-research-task-kinds-2026-05.md](research/planning-research-task-kinds-2026-05.md) | Task-kind taxonomy (Bug / User Story / Chore) that informed the backlog-lane work. |
