@@ -12,6 +12,7 @@ import {
   buildTagChips,
   buildReviewBadge,
   buildHumanReviewBadge,
+  buildGitStateBadge,
   buildPhaseBadge,
 } from './task-card-view-model';
 

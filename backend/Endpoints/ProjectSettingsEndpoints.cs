@@ -62,6 +62,13 @@ public static class ProjectSettingsEndpoints
                     maxParallelism = kv.Value.MaxParallelism < 1 ? 1 : kv.Value.MaxParallelism,
                     integrationBranch = kv.Value.IntegrationBranch,
                     integrationStrategy = IntegrationStrategies.Normalize(kv.Value.IntegrationStrategy),
+                    // Slice P (ASS-1663): per-project build profile + onboarding
+                    // status. Null when the project never declared one (legacy
+                    // "no gate" behaviour). pickupAllowed mirrors the runner's
+                    // BuildProfileGate so the UI can show why a declared-but-
+                    // unvalidated project is not being picked up.
+                    buildProfile = kv.Value.BuildProfile,
+                    buildProfilePickupAllowed = BuildProfileGate.AllowsAutoPickup(kv.Value.BuildProfile),
                     // F35: resolved per-lane strategy map (defaults filled in).
                     // The board uses this for the lane-header icon + the
                     // drag-disabled hint without a per-project round-trip.
@@ -347,6 +354,86 @@ public static class ProjectSettingsEndpoints
 
             settings.SetIntegrationStrategy(projectName, req.Strategy);
             return Results.Ok(settings.Get(projectName));
+        });
+
+        // Slice P (ASS-1663): per-project build profile + onboarding.
+        // GET returns the declared profile (or null), the resolved onboarding
+        // status, and whether the runner would auto-pick the project right now
+        // (mirrors BuildProfileGate). The UI uses this to render the onboarding
+        // wizard state without a second round-trip.
+        app.MapGet("/api/projects/{projectName}/build-profile", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var profile = settings.Get(projectName).BuildProfile;
+            var gate = BuildProfileGate.Evaluate(profile);
+            return Results.Ok(new
+            {
+                profile,
+                status = profile is null ? null : BuildProfileStatuses.Normalize(profile.Status),
+                pickupAllowed = gate.AllowsPickup,
+                gateReason = gate.Reason,
+                plannedDryRun = BuildProfileDryRunPlanner.Plan(profile),
+            });
+        });
+
+        // PUT declares (or re-declares) the build profile. Always resets
+        // onboarding to "declared" - the project must re-run a green validation
+        // dry-run before the runner picks it up again.
+        app.MapPut("/api/projects/{projectName}/build-profile", (string projectName, SetBuildProfileRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetBuildProfile(projectName, new BuildProfile
+            {
+                Stack = req.Stack,
+                InstallCmd = req.InstallCmd,
+                BuildCmds = req.BuildCmds,
+                TestCmds = req.TestCmds,
+                Lockfiles = req.Lockfiles,
+                PreserveGlobs = req.PreserveGlobs,
+                PoolSize = req.PoolSize,
+            });
+            var profile = settings.Get(projectName).BuildProfile;
+            return Results.Ok(new { profile, pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile) });
+        });
+
+        // DELETE clears the build profile entirely, reverting the project to the
+        // legacy "no onboarding gate" behaviour.
+        app.MapDelete("/api/projects/{projectName}/build-profile", (string projectName, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetBuildProfile(projectName, null);
+            return Results.Ok(new { cleared = true });
+        });
+
+        // POST runs the validation dry-run (install + build in the project's
+        // checkout). On green the profile flips to pipeline-ready and the runner
+        // may auto-pick the project; on red it lands in validation-failed with a
+        // recorded reason. Synchronous: the caller waits for the verdict.
+        app.MapPost("/api/projects/{projectName}/build-profile/validate", async (string projectName, ProjectSettingsService settings, TaskScannerService scanner, BuildProfileValidationService validator, CancellationToken ct) =>
+        {
+            var entry = scanner.GetWatchPaths().FirstOrDefault(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (entry is null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            if (settings.Get(projectName).BuildProfile is null)
+                return Results.BadRequest(new { error = "no build profile declared for this project" });
+
+            var result = await validator.ValidateAsync(projectName, entry.Path, ct);
+            var profile = settings.Get(projectName).BuildProfile;
+            return Results.Ok(new
+            {
+                green = result.Green,
+                status = result.Status,
+                summary = result.Summary,
+                failedCommand = result.FailedCommand,
+                profile,
+                pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile),
+            });
         });
 
         // The orchestrator's model can be tuned per project. Defaults to

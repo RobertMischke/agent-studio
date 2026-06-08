@@ -16,6 +16,7 @@ import {
   buildCommitEmptyBadge,
   buildEffectiveModelChip,
   buildExecutionBadge,
+  buildGitStateBadge,
   buildHumanReviewBadge,
   buildLoopTooltip,
   buildModeBadge,
@@ -206,6 +207,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   );
 
   readonly humanReviewBadge = computed(() => buildHumanReviewBadge(this.job()));
+
+  /**
+   * Git-integration-state badge (ASS-1665). Pure lane-derived: pre-merge (work
+   * on the task branch) / post-merge (in develop) / tagged (archived). No
+   * `state` key rename and no new backend field — see {@link buildGitStateBadge}.
+   */
+  readonly gitStateBadge = computed(() => buildGitStateBadge(this.job()));
 
   /**
    * Host-level "this card needs a human" flag. Drives the red uniform ring +

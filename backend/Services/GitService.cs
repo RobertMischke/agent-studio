@@ -1354,6 +1354,163 @@ public class GitService
     }
 
     /// <summary>
+    /// Creates a fresh pooled worktree at <paramref name="worktreePath"/> on a
+    /// DETACHED HEAD at <paramref name="atRef"/> (<c>git worktree add --detach</c>).
+    /// The recycling pool (Slice A / ASS-1664) keeps idle worktrees on a detached
+    /// HEAD rather than on a branch so that any <c>task/&lt;id&gt;</c> branch can be
+    /// checked out into the slot later without colliding with git's "branch already
+    /// checked out in another worktree" rule. The shared <c>.git</c> is reused.
+    /// </summary>
+    public GitWorktreeResult WorktreeAddDetached(string repoRoot, string worktreePath, string atRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (string.IsNullOrWhiteSpace(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path is required.");
+        if (!IsLikelyBranchName(atRef))
+            return new GitWorktreeResult(false, null, $"Invalid base ref '{atRef}'.");
+
+        var (_, err, code) = RunGitArgs(repoRoot, "worktree", "add", "--detach", worktreePath, atRef);
+        if (code != 0)
+        {
+            _logger.LogWarning("Detached worktree add failed at {Path} ({AtRef}): {Error}", worktreePath, atRef, err.Trim());
+            return new GitWorktreeResult(false, null, err.Trim());
+        }
+        _logger.LogInformation("Pooled worktree added (detached): {Path} at {AtRef}", worktreePath, atRef);
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Best-effort <c>git fetch</c> for the worktree-checkout pre-step. A
+    /// single-machine repo with no remote (or an offline run) must not fail the
+    /// pre-step, so a missing-remote / network error is swallowed and reported as
+    /// success-with-no-op. Pass an explicit <paramref name="remote"/> (default
+    /// <c>origin</c>); when the remote is absent the call is skipped.
+    /// </summary>
+    public GitWorktreeResult Fetch(string root, string remote = "origin")
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            return new GitWorktreeResult(false, null, "Path does not exist.");
+
+        var (remotesOut, _, remotesCode) = RunGitArgs(root, "remote");
+        var hasRemote = remotesCode == 0 && remotesOut
+            .Replace("\r\n", "\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Contains(remote, StringComparer.Ordinal);
+        if (!hasRemote)
+            return new GitWorktreeResult(true, root, null); // no remote -> nothing to fetch
+
+        var (_, err, code) = RunGitArgs(root, "fetch", "--prune", remote);
+        if (code != 0)
+        {
+            // Offline / transient: do not wedge the run, but surface the reason.
+            _logger.LogWarning("Fetch from {Remote} at {Path} failed (continuing offline): {Error}", remote, root, err.Trim());
+            return new GitWorktreeResult(true, root, err.Trim());
+        }
+        return new GitWorktreeResult(true, root, null);
+    }
+
+    /// <summary>
+    /// Checks the <paramref name="branch"/> out into the worktree at
+    /// <paramref name="worktreePath"/>, creating it off <paramref name="baseRef"/>
+    /// when it does not exist yet. <c>--force</c> is used so a pooled worktree that
+    /// still carries the previous occupant's (already committed / integrated) HEAD
+    /// switches cleanly. This is the "checkout" half of the recycling-pool pre-step
+    /// (Slice A): an existing <c>task/&lt;id&gt;</c> branch is reused with its
+    /// commits (resume), a new one is cut fresh off the integration branch.
+    /// </summary>
+    public GitWorktreeResult CheckoutTaskBranch(string worktreePath, string branch, string baseRef)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path does not exist.");
+        if (!IsLikelyBranchName(branch))
+            return new GitWorktreeResult(false, null, $"Invalid branch name '{branch}'.");
+        if (!IsLikelyBranchName(baseRef))
+            return new GitWorktreeResult(false, null, $"Invalid base ref '{baseRef}'.");
+
+        var exists = RunGitArgs(worktreePath, "rev-parse", "--verify", "--quiet", $"refs/heads/{branch}").Code == 0;
+        var (_, err, code) = exists
+            ? RunGitArgs(worktreePath, "checkout", "--force", branch)
+            : RunGitArgs(worktreePath, "checkout", "--force", "-b", branch, baseRef);
+        if (code != 0)
+        {
+            _logger.LogWarning("Checkout of {Branch} (base {Base}) at {Path} failed: {Error}", branch, baseRef, worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim());
+        }
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Detaches HEAD in the worktree at <paramref name="worktreePath"/>
+    /// (<c>git checkout --detach</c>), freeing whatever branch it had checked out
+    /// so another pooled worktree can claim that branch. Used by the recycling
+    /// pool to release a <c>task/&lt;id&gt;</c> branch left checked out in an idle
+    /// slot before checking it out into the acquired slot (git forbids the same
+    /// branch in two live worktrees).
+    /// </summary>
+    public GitWorktreeResult DetachHead(string worktreePath)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path does not exist.");
+
+        var (_, err, code) = RunGitArgs(worktreePath, "checkout", "--detach");
+        if (code != 0)
+        {
+            _logger.LogWarning("Detach HEAD at {Path} failed: {Error}", worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim());
+        }
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Hard-resets the worktree at <paramref name="worktreePath"/> to its current
+    /// branch tip (or to <paramref name="toRef"/> when given), dropping any
+    /// uncommitted index / working-tree changes left by a previous occupant. The
+    /// reset half of the recycling-pool pre-step.
+    /// </summary>
+    public GitWorktreeResult ResetHard(string worktreePath, string? toRef = null)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path does not exist.");
+        if (toRef != null && !IsLikelyBranchName(toRef))
+            return new GitWorktreeResult(false, null, $"Invalid reset ref '{toRef}'.");
+
+        var (_, err, code) = toRef is null
+            ? RunGitArgs(worktreePath, "reset", "--hard")
+            : RunGitArgs(worktreePath, "reset", "--hard", toRef);
+        if (code != 0)
+        {
+            _logger.LogWarning("Reset --hard at {Path} failed: {Error}", worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim());
+        }
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Removes untracked files and directories from the worktree while PRESERVING
+    /// <c>node_modules</c> (<c>git clean -fd -e node_modules</c>). Slice A
+    /// invariant: <b>NEVER</b> <c>-x</c> - ignored build artefacts AND the
+    /// dependency cache must survive recycling so <c>deps-ensure</c> can skip the
+    /// install when the lockfiles are unchanged. This is the leak-proof
+    /// replacement for the old <c>git add -A</c> cross-sweep: a recycled worktree
+    /// starts each task with only tracked files + node_modules, so a commit can
+    /// never sweep in a sibling task's stray output.
+    /// </summary>
+    public GitWorktreeResult CleanPreservingNodeModules(string worktreePath)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path does not exist.");
+
+        var (_, err, code) = RunGitArgs(worktreePath, "clean", "-fd", "-e", "node_modules");
+        if (code != 0)
+        {
+            _logger.LogWarning("Clean (preserve node_modules) at {Path} failed: {Error}", worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim());
+        }
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
     /// Returns the working tree's current HEAD SHA, or null when the path
     /// is not a git repository or git is unavailable. Used by the run
     /// timeline to capture the deterministic "before / after" SHAs that

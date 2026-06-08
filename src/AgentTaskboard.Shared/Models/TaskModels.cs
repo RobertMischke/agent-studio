@@ -1493,6 +1493,19 @@ public record ProjectSettings
     public string IntegrationStrategy { get; init; } = IntegrationStrategies.DirectMerge;
 
     /// <summary>
+    /// Slice P (ASS-1663): per-project build profile - the declared stack plus
+    /// the install / build / test commands, lockfile paths, clean preserve-globs,
+    /// and recycled-worktree pool size that drive the worktree pre/post steps.
+    /// Null means "no profile declared" (legacy behaviour: the runner picks the
+    /// project up with no onboarding gate). Once declared, the runner refuses
+    /// auto-pickup until a green validation dry-run flips
+    /// <see cref="BuildProfile.Status"/> to
+    /// <see cref="BuildProfileStatuses.PipelineReady"/>. Persisted in
+    /// <c>project-settings.json</c>.
+    /// </summary>
+    public BuildProfile? BuildProfile { get; init; }
+
+    /// <summary>
     /// Per-CLI permission / sandbox mode override. Map of <see cref="CliTypes"/>
     /// id (<c>claude</c> / <c>codex</c> / <c>gemini</c> / <c>copilot</c>) to a
     /// mode id from <see cref="CliPermissionModes"/>. A missing CLI key means
@@ -1926,9 +1939,145 @@ public static class IntegrationStrategies
     }
 }
 
+/// <summary>
+/// Onboarding lifecycle of a project's <see cref="BuildProfile"/> (Slice P /
+/// ASS-1663). A project only becomes <see cref="PipelineReady"/> after a green
+/// validation dry-run (fresh worktree -&gt; install -&gt; build). Until then the
+/// runner refuses auto-pickup (<see cref="OrchestratorApi.Services.Runner.BuildProfileGate"/>).
+/// A project that has never declared a profile carries no profile at all (null)
+/// and keeps the legacy "pickup allowed" behaviour, so existing projects are
+/// untouched.
+/// </summary>
+public static class BuildProfileStatuses
+{
+    /// <summary>Stack + commands declared, but no green dry-run yet. Pickup is blocked.</summary>
+    public const string Declared = "declared";
+
+    /// <summary>A validation dry-run is currently running. Pickup is blocked.</summary>
+    public const string Validating = "validating";
+
+    /// <summary>The dry-run went green: install + build succeeded. Pickup is allowed.</summary>
+    public const string PipelineReady = "pipeline-ready";
+
+    /// <summary>The dry-run failed (install or build red). Pickup is blocked until re-validated.</summary>
+    public const string ValidationFailed = "validation-failed";
+
+    public static readonly string[] All = [Declared, Validating, PipelineReady, ValidationFailed];
+
+    /// <summary>
+    /// Canonicalizes a status token. A null/blank/unknown value collapses to
+    /// <see cref="Declared"/> - the safe default, since an un-validated profile
+    /// must never be treated as pipeline-ready.
+    /// </summary>
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Declared;
+        var v = value.Trim();
+        foreach (var s in All)
+            if (string.Equals(s, v, StringComparison.OrdinalIgnoreCase))
+                return s;
+        return Declared;
+    }
+}
+
+/// <summary>
+/// Per-project build profile (Slice P / ASS-1663; builds on ASS-850/878 and the
+/// ADR-0052 parallel-execution work). Declares how a project's stack is
+/// installed, built, and tested so the worktree pre/post steps (deps-ensure,
+/// clean, build gate) are driven by registered commands instead of hardcoded
+/// npm/dotnet assumptions. Lives on <see cref="ProjectSettings"/> and is
+/// persisted in <c>project-settings.json</c>.
+///
+/// <para>
+/// A project with no profile (null) behaves exactly as today. Once a profile is
+/// declared it gates auto-pickup: the runner only picks the project up after a
+/// green validation dry-run flips <see cref="Status"/> to
+/// <see cref="BuildProfileStatuses.PipelineReady"/>.
+/// </para>
+/// </summary>
+public record BuildProfile
+{
+    /// <summary>
+    /// Declared stack id (free-form, e.g. <c>node</c>, <c>dotnet</c>,
+    /// <c>node+dotnet</c>). Informational - drives onboarding defaults and the
+    /// timeline label; the runner keys behaviour off the concrete commands below.
+    /// </summary>
+    public string? Stack { get; init; }
+
+    /// <summary>
+    /// Dependency-install command run once per fresh/recycled worktree before the
+    /// build (e.g. <c>npm ci</c>, <c>dotnet restore</c>). Null/blank = no install
+    /// step.
+    /// </summary>
+    public string? InstallCmd { get; init; }
+
+    /// <summary>
+    /// Ordered build commands run after install (e.g. <c>["npm run build",
+    /// "dotnet build"]</c>). The dry-run is green only when every one exits zero.
+    /// </summary>
+    public IReadOnlyList<string>? BuildCmds { get; init; }
+
+    /// <summary>
+    /// Ordered test commands (e.g. <c>["npm test", "dotnet test"]</c>). Not part
+    /// of the install/build dry-run gate; registered here so a later verify/test
+    /// post-step can drive them.
+    /// </summary>
+    public IReadOnlyList<string>? TestCmds { get; init; }
+
+    /// <summary>
+    /// Lockfile paths (worktree-relative, e.g. <c>["package-lock.json",
+    /// "frontend/package-lock.json"]</c>) whose content hash decides whether a
+    /// recycled worktree must re-install. Feeds the deps-ensure pre-step
+    /// (<see cref="OrchestratorApi.Services.Runner.DepsState"/>).
+    /// </summary>
+    public IReadOnlyList<string>? Lockfiles { get; init; }
+
+    /// <summary>
+    /// Glob patterns the worktree clean step must preserve (e.g.
+    /// <c>["node_modules", ".angular", "bin", "obj"]</c>) so an expensive
+    /// dependency/build cache survives recycling. Maps to the clean step's
+    /// exclude list.
+    /// </summary>
+    public IReadOnlyList<string>? PreserveGlobs { get; init; }
+
+    /// <summary>
+    /// Size of the recycled-worktree pool kept warm for this project. Null =
+    /// "no dedicated pool" (worktrees are created/torn down per task). When set,
+    /// the runner keeps up to this many worktrees with preserved caches around.
+    /// </summary>
+    public int? PoolSize { get; init; }
+
+    /// <summary>Onboarding status; one of <see cref="BuildProfileStatuses"/>.</summary>
+    public string Status { get; init; } = BuildProfileStatuses.Declared;
+
+    /// <summary>UTC instant of the last green validation dry-run, or null if never green.</summary>
+    public DateTime? LastValidatedAt { get; init; }
+
+    /// <summary>Short reason from the last failed validation dry-run, or null.</summary>
+    public string? LastValidationError { get; init; }
+}
+
 public record SetAutoCommitRequest
 {
     public bool Enabled { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/build-profile</c> (Slice P / ASS-1663).
+/// Declares (or re-declares) the project's build profile. Setting a profile
+/// always resets onboarding to <see cref="BuildProfileStatuses.Declared"/> -
+/// changing how the project builds invalidates any prior green dry-run, so the
+/// project must re-validate before the runner picks it up again.
+/// </summary>
+public record SetBuildProfileRequest
+{
+    public string? Stack { get; init; }
+    public string? InstallCmd { get; init; }
+    public IReadOnlyList<string>? BuildCmds { get; init; }
+    public IReadOnlyList<string>? TestCmds { get; init; }
+    public IReadOnlyList<string>? Lockfiles { get; init; }
+    public IReadOnlyList<string>? PreserveGlobs { get; init; }
+    public int? PoolSize { get; init; }
 }
 
 /// <summary>

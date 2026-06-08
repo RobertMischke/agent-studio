@@ -118,6 +118,106 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// Slice P (ASS-1663): declares (or re-declares) the project's build profile.
+    /// Normalizes blank command/path entries away and always resets onboarding to
+    /// <see cref="BuildProfileStatuses.Declared"/> - changing how the project
+    /// builds invalidates any prior green dry-run, so the project must re-validate
+    /// before the runner picks it up. Pass a null <paramref name="profile"/> to
+    /// clear the profile entirely (revert to legacy "no gate" behaviour).
+    /// </summary>
+    public void SetBuildProfile(string projectName, BuildProfile? profile)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { BuildProfile = NormalizeProfile(profile) };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Build profile {Action} for project {Project}",
+            profile is null ? "cleared" : "declared", projectName);
+    }
+
+    /// <summary>
+    /// Marks the project's build profile as a validation dry-run in progress. No-op
+    /// when the project has no declared profile.
+    /// </summary>
+    public void MarkBuildProfileValidating(string projectName) =>
+        TransitionProfileStatus(projectName, BuildProfileStatuses.Validating, validatedAt: null, error: null);
+
+    /// <summary>
+    /// Marks the project's build profile pipeline-ready after a green validation
+    /// dry-run (install + build succeeded). Stamps <see cref="BuildProfile.LastValidatedAt"/>
+    /// and clears any prior error. No-op when the project has no declared profile.
+    /// </summary>
+    public void MarkBuildProfileValidated(string projectName) =>
+        TransitionProfileStatus(projectName, BuildProfileStatuses.PipelineReady, validatedAt: DateTime.UtcNow, error: null);
+
+    /// <summary>
+    /// Marks the project's build profile validation as failed and records a short
+    /// reason. The project stays blocked from auto-pickup until it re-validates
+    /// green. No-op when the project has no declared profile.
+    /// </summary>
+    public void MarkBuildProfileValidationFailed(string projectName, string? error) =>
+        TransitionProfileStatus(projectName, BuildProfileStatuses.ValidationFailed, validatedAt: null,
+            error: string.IsNullOrWhiteSpace(error) ? "validation failed" : error.Trim());
+
+    private void TransitionProfileStatus(string projectName, string status, DateTime? validatedAt, string? error)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            if (current.BuildProfile is null) return; // nothing to transition
+            _cache[projectName] = current with
+            {
+                BuildProfile = current.BuildProfile with
+                {
+                    Status = status,
+                    LastValidatedAt = validatedAt ?? current.BuildProfile.LastValidatedAt,
+                    LastValidationError = status == BuildProfileStatuses.ValidationFailed ? error : null,
+                }
+            };
+            Persist();
+        }
+        _logger.LogInformation("Build profile status -> {Status} for project {Project}", status, projectName);
+    }
+
+    /// <summary>
+    /// Trims blank command/path entries, clamps a non-positive pool size to null,
+    /// and forces the onboarding status to <see cref="BuildProfileStatuses.Declared"/>.
+    /// Returns null when the input is null.
+    /// </summary>
+    private static BuildProfile? NormalizeProfile(BuildProfile? profile)
+    {
+        if (profile is null) return null;
+
+        static IReadOnlyList<string>? Clean(IReadOnlyList<string>? items)
+        {
+            var list = (items ?? Array.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .ToList();
+            return list.Count == 0 ? null : list;
+        }
+
+        return new BuildProfile
+        {
+            Stack = string.IsNullOrWhiteSpace(profile.Stack) ? null : profile.Stack.Trim(),
+            InstallCmd = string.IsNullOrWhiteSpace(profile.InstallCmd) ? null : profile.InstallCmd.Trim(),
+            BuildCmds = Clean(profile.BuildCmds),
+            TestCmds = Clean(profile.TestCmds),
+            Lockfiles = Clean(profile.Lockfiles),
+            PreserveGlobs = Clean(profile.PreserveGlobs),
+            PoolSize = profile.PoolSize is > 0 ? profile.PoolSize : null,
+            Status = BuildProfileStatuses.Declared,
+            LastValidatedAt = null,
+            LastValidationError = null,
+        };
+    }
+
+    /// <summary>
     /// Persists the runner mode for a project so the auto-pickup toggle survives
     /// a backend restart. Null clears the persisted value (revert to default).
     /// </summary>

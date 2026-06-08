@@ -1,3 +1,4 @@
+import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo, ClientSummary, CliType, TagRegistryEntry, EpicRollup, AutoLoopSnapshot, PendingIntent, TaskMode } from '../../../../models/task.model';
 import type { TaskCommitInfo } from '../../../../features/git';
 import type { StructuredTooltip } from '../../../../components/tooltip';
@@ -524,6 +525,68 @@ export function buildOwnerChip(owner: ClientSummary): OwnerChip {
 export function formatStateLabel(state: string): string {
   const name = state.includes('-') ? state.substring(state.indexOf('-') + 1) : state;
   return name.replace(/-/g, ' ');
+}
+
+export type GitStateBadgeKind = 'pre-merge' | 'post-merge' | 'tagged';
+
+export interface GitStateBadge {
+  kind: GitStateBadgeKind;
+  label: string;
+  glyph: string;
+  tooltip: string;
+}
+
+// Lane -> git-integration phase. Pure lane-derived (ASS-1665): NO key rename,
+// no new data source. The lane key is the single input, so this stays
+// "Risiko ~0" until the post-SSOT lane rename (concept doc section 4):
+//   pre-merge  -> work lives on the task branch, not yet in develop
+//   post-merge -> commits integrated into develop
+//   tagged     -> archived / final, out of the active git flow
+const GIT_STATE_BY_LANE: Readonly<Record<string, GitStateBadgeKind>> = {
+  [TaskState.Progress]: 'pre-merge',
+  [TaskState.CodeNotComplete]: 'pre-merge',
+  [TaskState.AutoReview]: 'pre-merge',
+  [TaskState.HumanReview]: 'pre-merge',
+  [TaskState.Completed]: 'post-merge',
+  [TaskState.Archive]: 'tagged',
+};
+
+/**
+ * Git-integration-state badge (ASS-1665). Tells the operator at a glance where
+ * a card's work sits in the branch/merge flow, derived purely from the existing
+ * lane key — no `state` rename, no new backend field. Backlog / preparation /
+ * ready / failed-pickup carry no useful git context, so they return null and
+ * stay quiet. The pre-merge label names the task branch (`task/<key>`) so it
+ * lines up with the worktree/branch model.
+ */
+export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
+  const kind = GIT_STATE_BY_LANE[job.state];
+  if (!kind) return null;
+  switch (kind) {
+    case 'pre-merge': {
+      const branch = `task/${job.key || job.id}`;
+      return {
+        kind,
+        label: branch,
+        glyph: '⎇',
+        tooltip: `Git state: pre-merge — this task's work lives on its task branch (${branch}) and is not yet integrated into develop.`,
+      };
+    }
+    case 'post-merge':
+      return {
+        kind,
+        label: 'develop',
+        glyph: '⬇',
+        tooltip: "Git state: post-merge — this task's commits are integrated into the develop branch.",
+      };
+    case 'tagged':
+      return {
+        kind,
+        label: 'tagged',
+        glyph: '🏷',
+        tooltip: "Git state: archived — this task is out of the active git flow; its work, if any, was integrated into develop before it was archived.",
+      };
+  }
 }
 
 export type PhaseBadgeTone = 'human-ready' | 'intake-running' | 'intake-blocked' | 'intake-passed';

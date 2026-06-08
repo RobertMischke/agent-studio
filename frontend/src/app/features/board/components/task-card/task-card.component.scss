@@ -490,6 +490,7 @@
     .task-card__auto-review-pill,
     .task-card__issue-pill,
     .task-card__human-review-pill,
+    .task-card__git-state-pill,
     .task-card__phase-pill {
       display: inline-flex;
       align-items: center;
@@ -811,6 +812,34 @@
       border: 1px solid color-mix(in srgb, var(--task-card-state-color) 36%, transparent);
       font-weight: 650;
       text-transform: lowercase;
+    }
+    /* Git-integration-state badge (ASS-1665). Pure lane-derived phase: a card's
+       work is either still on its task branch (pre-merge), merged into develop
+       (post-merge), or archived/tagged. Cyan for branch work, green for merged,
+       slate for the archived end-state. */
+    .task-card__git-state-pill {
+      border: 1px solid transparent;
+      cursor: help;
+      white-space: nowrap;
+    }
+    .task-card__git-state-glyph {
+      font-size: 11px;
+      line-height: 1;
+    }
+    .task-card__git-state-pill--pre-merge {
+      color: #7dd3fc;
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.32);
+    }
+    .task-card__git-state-pill--post-merge {
+      color: #86efac;
+      background: rgba(74, 222, 128, 0.12);
+      border-color: rgba(74, 222, 128, 0.32);
+    }
+    .task-card__git-state-pill--tagged {
+      color: var(--studio-fg-dim);
+      background: rgba(148, 163, 184, 0.10);
+      border-color: rgba(148, 163, 184, 0.30);
     }
     .task-card__type-pill--bug {
       color: #fca5a5;

@@ -316,6 +316,9 @@ builder.Services.AddSingleton<IntakeRunner>();
 builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
+// Slice P (ASS-1663): build-profile onboarding validation dry-run.
+builder.Services.AddSingleton<IBuildCommandRunner, ProcessBuildCommandRunner>();
+builder.Services.AddSingleton<BuildProfileValidationService>();
 // Completed-job auto-push runs off the request path: TaskTransitionService
 // enqueues here on the move to 6-completed (instant), CompletedPushWorker
 // drains and performs the git push, CompletedPushBackstopHostedService is the

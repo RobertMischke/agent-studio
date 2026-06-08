@@ -21,6 +21,7 @@ import type {
   CreateRegistryProjectRequest,
   RegistryProjectSummary,
 } from '../models/task.model';
+import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail } from '../features/git';
@@ -111,17 +112,17 @@ type LaneKey = keyof GroupedJobs;
 // historical folder still parses into its group while the boot drain empties
 // the lane.
 const STATE_TO_LANE: Record<string, LaneKey> = {
-  '0-backlog': 'backlog',
-  '1-preparation': 'preparation',
-  '1a-orchestrator-prep': 'orchestratorPrep',
-  '2-ready': 'ready',
-  '3-progress': 'progress',
-  '3a-failed-pickup': 'failedPickup',
-  '3b-code-not-complete': 'codeNotComplete',
-  '4-auto-review': 'autoReview',
-  '5-human-review': 'humanReview',
-  '6-completed': 'completed',
-  '7-archive': 'archive',
+  [TaskState.Backlog]: 'backlog',
+  [TaskState.Preparation]: 'preparation',
+  [TaskState.OrchestratorPrep]: 'orchestratorPrep',
+  [TaskState.Ready]: 'ready',
+  [TaskState.Progress]: 'progress',
+  [TaskState.FailedPickup]: 'failedPickup',
+  [TaskState.CodeNotComplete]: 'codeNotComplete',
+  [TaskState.AutoReview]: 'autoReview',
+  [TaskState.HumanReview]: 'humanReview',
+  [TaskState.Completed]: 'completed',
+  [TaskState.Archive]: 'archive',
 };
 
 @Injectable({ providedIn: 'root' })

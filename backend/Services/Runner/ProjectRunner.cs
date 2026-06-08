@@ -158,6 +158,10 @@ public class ProjectRunner
     private DateTime? _globalBreakerCooldownUntil;
     private string? _globalBreakerReason;
     private int _globalBreakerTripCount;
+    // Slice P (ASS-1663): last reason the build-profile onboarding gate blocked
+    // auto-pickup, so the tick logs the block once on change instead of every
+    // tick. Null when the gate is open.
+    private string? _lastBuildGateBlockReason;
     // Backend role (orchestrator vs test-subject). Set in the ctor from
     // Runner:Role config; defaults to Orchestrator so an unconfigured backend
     // behaves like stable rather than silently going dark. TestSubject skips
@@ -665,6 +669,26 @@ public class ProjectRunner
         TryAutoResumeGlobalBreaker();
 
         if (_mode is "manual" or "paused") return;
+
+        // Onboarding gate (Slice P / ASS-1663): a project that has DECLARED a
+        // build profile but has not yet passed a green validation dry-run is not
+        // "pipeline-ready" - refuse auto-pickup until install+build went green
+        // ("Ohne gruenen Dry-Run kein Auto-Pickup"). A project with no declared
+        // profile is unaffected (legacy behaviour). Explicit POST .../start still
+        // routes through RunCliAsync directly and bypasses this loop.
+        var buildGate = BuildProfileGate.Evaluate(_projectSettings.Get(ProjectName).BuildProfile);
+        if (!buildGate.AllowsPickup)
+        {
+            if (!string.Equals(_lastBuildGateBlockReason, buildGate.Reason, StringComparison.Ordinal))
+            {
+                _lastBuildGateBlockReason = buildGate.Reason;
+                _logger.LogInformation(
+                    "[build-profile] auto-pickup gated for {Project}: {Reason}", ProjectName, buildGate.Reason);
+            }
+            return;
+        }
+        _lastBuildGateBlockReason = null;
+
         var slotMax = SlotMax();
         if (_processing || !_activeRuns.HasFreeSlot(slotMax)) return;
 

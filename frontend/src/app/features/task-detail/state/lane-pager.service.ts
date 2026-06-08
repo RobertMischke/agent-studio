@@ -1,5 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { TaskInfo } from '../../../models/task.model';
+import { TaskInfo, TaskState } from '../../../models/task.model';
 
 /**
  * Lane pager snapshot: the captured iteration the detail header walks
@@ -32,16 +32,16 @@ export interface LanePagerSnapshot {
 const STORAGE_KEY = 'app:lanePager:v1';
 
 export const LANE_LABELS: Record<string, string> = {
-  '0-backlog':              'Backlog',
-  '1-preparation':          'Preparation',
-  '1a-orchestrator-prep':   'Orchestrator Prep',
-  '2-ready':                'Ready',
-  '3-progress':             'In Progress',
-  '3b-code-not-complete':   'Code not complete',
-  '4-auto-review':          'Post Processing',
-  '5-human-review':         'Review',
-  '6-completed':            'Completed',
-  '7-archive':              'Archive',
+  [TaskState.Backlog]:          'Backlog',
+  [TaskState.Preparation]:      'Preparation',
+  [TaskState.OrchestratorPrep]: 'Orchestrator Prep',
+  [TaskState.Ready]:            'Ready',
+  [TaskState.Progress]:         'In Progress',
+  [TaskState.CodeNotComplete]:  'Code not complete',
+  [TaskState.AutoReview]:       'Post Processing',
+  [TaskState.HumanReview]:      'Review',
+  [TaskState.Completed]:        'Completed',
+  [TaskState.Archive]:          'Archive',
 };
 
 @Injectable({ providedIn: 'root' })

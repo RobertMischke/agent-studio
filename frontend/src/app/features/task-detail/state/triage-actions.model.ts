@@ -10,6 +10,8 @@
  * directly without rehydrating a separate Angular component.
  */
 
+import { TaskState } from '../../../models/task.model';
+
 export type TriageActionIntent =
   | { kind: 'move'; targetState: string }
   | { kind: 'moveToTop' }
@@ -36,18 +38,18 @@ export interface TriageButton {
   intent: TriageActionIntent;
 }
 
-const PROMOTE_TO_PREP: TriageButton          = { id: 'promote-prep',       label: 'Promote to Preparation',           variant: 'primary',   intent: { kind: 'move', targetState: '1-preparation' } };
-const PROMOTE_TO_READY: TriageButton         = { id: 'promote-ready',      label: 'Promote to Ready',                 variant: 'primary',   intent: { kind: 'move', targetState: '2-ready' } };
-const PROMOTE_TO_READY_SKIP_PREP: TriageButton = { id: 'promote-ready-skip', label: 'Promote to Ready (skip prep)',  variant: 'secondary', intent: { kind: 'move', targetState: '2-ready' } };
-const FORCE_TO_READY: TriageButton           = { id: 'force-to-ready',     label: 'Force to Ready',                   variant: 'secondary', intent: { kind: 'move', targetState: '2-ready' } };
-const SEND_TO_BACKLOG: TriageButton          = { id: 'send-to-backlog',    label: 'Send to Backlog',                  variant: 'secondary', intent: { kind: 'move', targetState: '0-backlog' } };
-const SEND_TO_PREP: TriageButton             = { id: 'send-to-prep',       label: 'Send to Preparation',              variant: 'secondary', intent: { kind: 'move', targetState: '1-preparation' } };
+const PROMOTE_TO_PREP: TriageButton          = { id: 'promote-prep',       label: 'Promote to Preparation',           variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Preparation } };
+const PROMOTE_TO_READY: TriageButton         = { id: 'promote-ready',      label: 'Promote to Ready',                 variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Ready } };
+const PROMOTE_TO_READY_SKIP_PREP: TriageButton = { id: 'promote-ready-skip', label: 'Promote to Ready (skip prep)',  variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Ready } };
+const FORCE_TO_READY: TriageButton           = { id: 'force-to-ready',     label: 'Force to Ready',                   variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Ready } };
+const SEND_TO_BACKLOG: TriageButton          = { id: 'send-to-backlog',    label: 'Send to Backlog',                  variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Backlog } };
+const SEND_TO_PREP: TriageButton             = { id: 'send-to-prep',       label: 'Send to Preparation',              variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Preparation } };
 // "Move toward Completed / Archive" mirror "Send to Backlog": plain move
 // actions surfaced in the overflow menu from (almost) every lane so the
 // operator can park a card in 6-completed / 7-archive without opening the
 // lane dropdown. overflowActionsFor() handles dedup + current-lane skip.
-export const MOVE_TO_COMPLETED: TriageButton = { id: 'move-to-completed',   label: 'Move to Completed',                variant: 'secondary', intent: { kind: 'move', targetState: '6-completed' } };
-export const MOVE_TO_ARCHIVE: TriageButton   = { id: 'move-to-archive',     label: 'Move to Archive',                  variant: 'secondary', intent: { kind: 'move', targetState: '7-archive' } };
+export const MOVE_TO_COMPLETED: TriageButton = { id: 'move-to-completed',   label: 'Move to Completed',                variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Completed } };
+export const MOVE_TO_ARCHIVE: TriageButton   = { id: 'move-to-archive',     label: 'Move to Archive',                  variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Archive } };
 export const EDIT_BUTTON: TriageButton       = { id: 'edit-prompt',        label: 'Edit prompt',                      variant: 'secondary', intent: { kind: 'editPrompt' } };
 export const DELETE_BUTTON: TriageButton     = { id: 'delete',             label: 'Delete task',                      variant: 'danger',    intent: { kind: 'delete' } };
 
@@ -58,28 +60,28 @@ export const DELETE_BUTTON: TriageButton     = { id: 'delete',             label
  * entry — Enter is a no-op there to discourage rubber-stamp clicks.
  */
 export const LANE_ACTIONS: Record<string, TriageButton[]> = {
-  '0-backlog': [
+  [TaskState.Backlog]: [
     PROMOTE_TO_PREP,
     PROMOTE_TO_READY_SKIP_PREP,
     EDIT_BUTTON,
     DELETE_BUTTON,
   ],
-  '1-preparation': [
+  [TaskState.Preparation]: [
     PROMOTE_TO_READY,
     SEND_TO_BACKLOG,
     EDIT_BUTTON,
   ],
-  '1a-orchestrator-prep': [
+  [TaskState.OrchestratorPrep]: [
     SEND_TO_BACKLOG,
     FORCE_TO_READY,
   ],
-  '2-ready': [
+  [TaskState.Ready]: [
     { id: 'run-now',     label: 'Run now',      variant: 'primary',   intent: { kind: 'start' } },
     { id: 'move-to-top', label: 'Move to top',  variant: 'secondary', intent: { kind: 'moveToTop' } },
     SEND_TO_BACKLOG,
     EDIT_BUTTON,
   ],
-  '3-progress': [
+  [TaskState.Progress]: [
     { id: 'stop-run',         label: 'Stop run',         variant: 'primary',   intent: { kind: 'stop' } },
     { id: 'view-live-output', label: 'View live output', variant: 'secondary', intent: { kind: 'showActivity' } },
   ],
@@ -87,45 +89,45 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
   // auto-pickup retry budget without reaching review. The operator's natural
   // moves are to requeue it (after fixing context) or send it back for
   // preparation/triage.
-  '3b-code-not-complete': [
-    { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)', variant: 'primary',   intent: { kind: 'move', targetState: '2-ready' } },
+  [TaskState.CodeNotComplete]: [
+    { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)', variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Ready } },
     SEND_TO_PREP,
     SEND_TO_BACKLOG,
     EDIT_BUTTON,
   ],
-  '4-auto-review': [
-    { id: 'force-accept', label: 'Force-accept (→ Review)', variant: 'secondary', intent: { kind: 'move', targetState: '5-human-review' } },
-    { id: 'reissue',      label: 'Reissue (→ Progress)',          variant: 'secondary', intent: { kind: 'move', targetState: '3-progress' } },
+  [TaskState.AutoReview]: [
+    { id: 'force-accept', label: 'Force-accept (→ Review)', variant: 'secondary', intent: { kind: 'move', targetState: TaskState.HumanReview } },
+    { id: 'reissue',      label: 'Reissue (→ Progress)',          variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Progress } },
   ],
-  '5-human-review': [
-    { id: 'mark-done',          label: 'Send to Complete',                          variant: 'primary',   intent: { kind: 'move', targetState: '6-completed' } },
-    { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)',                variant: 'secondary', intent: { kind: 'move', targetState: '2-ready' } },
+  [TaskState.HumanReview]: [
+    { id: 'mark-done',          label: 'Send to Complete',                          variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Completed } },
+    { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)',                variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Ready } },
     SEND_TO_BACKLOG,
   ],
-  '6-completed': [
+  [TaskState.Completed]: [
     // "Archive & Next" mirrors the review lanes' Complete-and-advance primary:
     // the move to 7-archive auto-advances the detail view to the next card in
     // 6-completed (TriageController.move → advanceToNextInLane). The "& Next"
     // wording makes the queue-sweep affordance explicit on the Completed lane.
-    { id: 'archive', label: 'Archive & Next',      variant: 'primary',   intent: { kind: 'move', targetState: '7-archive' } },
-    { id: 'reopen',  label: 'Re-open (→ Backlog)', variant: 'secondary', intent: { kind: 'move', targetState: '0-backlog' } },
+    { id: 'archive', label: 'Archive & Next',      variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Archive } },
+    { id: 'reopen',  label: 'Re-open (→ Backlog)', variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Backlog } },
   ],
-  '7-archive': [
-    { id: 'restore', label: 'Restore (→ Backlog)', variant: 'primary', intent: { kind: 'move', targetState: '0-backlog' } },
+  [TaskState.Archive]: [
+    { id: 'restore', label: 'Restore (→ Backlog)', variant: 'primary', intent: { kind: 'move', targetState: TaskState.Backlog } },
   ],
 };
 
 export const LANE_LABELS: Record<string, string> = {
-  '0-backlog':              'Backlog',
-  '1-preparation':          'Preparation',
-  '1a-orchestrator-prep':   'Orchestrator Prep',
-  '2-ready':                'Ready',
-  '3-progress':             'In Progress',
-  '3b-code-not-complete':   'Code not complete',
-  '4-auto-review':          'Post Processing',
-  '5-human-review':         'Review',
-  '6-completed':            'Completed',
-  '7-archive':              'Archive',
+  [TaskState.Backlog]:          'Backlog',
+  [TaskState.Preparation]:      'Preparation',
+  [TaskState.OrchestratorPrep]: 'Orchestrator Prep',
+  [TaskState.Ready]:            'Ready',
+  [TaskState.Progress]:         'In Progress',
+  [TaskState.CodeNotComplete]:  'Code not complete',
+  [TaskState.AutoReview]:       'Post Processing',
+  [TaskState.HumanReview]:      'Review',
+  [TaskState.Completed]:        'Completed',
+  [TaskState.Archive]:          'Archive',
 };
 
 /**
@@ -139,8 +141,8 @@ export const LANE_LABELS: Record<string, string> = {
  * targets either).
  */
 export const ORCHESTRATOR_CONTROLLED_LANES: ReadonlySet<string> = new Set([
-  '3-progress',
-  '4-auto-review',
+  TaskState.Progress,
+  TaskState.AutoReview,
 ]);
 
 export function laneActionsFor(state: string): TriageButton[] {
@@ -186,8 +188,8 @@ export function overflowActionsFor(state: string): TriageButton[] {
       .map(b => (b.intent.kind === 'move' ? b.intent.targetState : null))
       .filter((s): s is string => s !== null),
   );
-  if (state !== '6-completed' && !laneTargets.has('6-completed')) body.push(MOVE_TO_COMPLETED);
-  if (state !== '7-archive' && !laneTargets.has('7-archive')) body.push(MOVE_TO_ARCHIVE);
+  if (state !== TaskState.Completed && !laneTargets.has(TaskState.Completed)) body.push(MOVE_TO_COMPLETED);
+  if (state !== TaskState.Archive && !laneTargets.has(TaskState.Archive)) body.push(MOVE_TO_ARCHIVE);
 
   const items = [...body, ...tail];
   if (!items.some(i => i.id === EDIT_BUTTON.id)) items.push(EDIT_BUTTON);

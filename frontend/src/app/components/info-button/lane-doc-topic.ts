@@ -1,3 +1,5 @@
+import { TaskState } from '../../models/task.model';
+
 /**
  * Lane state -> concept-doc topic for the lane-info modal.
  *
@@ -12,17 +14,17 @@
  * never drift on which lanes have help.
  */
 const LANE_DOC_TOPIC: Record<string, string> = {
-  '0-backlog': 'lane-0-backlog',
-  '1-preparation': 'lane-1-preparation',
-  '1a-orchestrator-prep': 'lane-1a-orchestrator-prep',
-  '2-ready': 'lane-2-ready',
+  [TaskState.Backlog]: 'lane-0-backlog',
+  [TaskState.Preparation]: 'lane-1-preparation',
+  [TaskState.OrchestratorPrep]: 'lane-1a-orchestrator-prep',
+  [TaskState.Ready]: 'lane-2-ready',
   '2-ready-intake': 'lane-2-ready',
-  '3-progress': 'lane-3-progress',
+  [TaskState.Progress]: 'lane-3-progress',
   '4-review': 'lane-4-auto-review',
-  '4-auto-review': 'lane-4-auto-review',
-  '5-human-review': 'lane-5-human-review',
-  '6-completed': 'lane-6-completed',
-  '7-archive': 'lane-7-archive',
+  [TaskState.AutoReview]: 'lane-4-auto-review',
+  [TaskState.HumanReview]: 'lane-5-human-review',
+  [TaskState.Completed]: 'lane-6-completed',
+  [TaskState.Archive]: 'lane-7-archive',
 };
 
 /** Resolve a lane state to its concept-doc topic, or `null` when none exists. */

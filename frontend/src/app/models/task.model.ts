@@ -1,6 +1,33 @@
 export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
 export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 
+/**
+ * Single source of truth for lane / task-state keys. Mirrors backend
+ * `TaskStates` (src/AgentTaskboard.Shared/Models/TaskModels.cs) one-for-one.
+ * Every lane literal in frontend prod code routes through this constant so a
+ * future lane rename is a two-place value change (here + backend `TaskStates`)
+ * plus a data migration, not a 27-file string hunt.
+ */
+export const TaskState = {
+  Backlog: '0-backlog',
+  Preparation: '1-preparation',
+  OrchestratorPrep: '1a-orchestrator-prep',
+  Ready: '2-ready',
+  Progress: '3-progress',
+  FailedPickup: '3a-failed-pickup',
+  CodeNotComplete: '3b-code-not-complete',
+  AutoReview: '4-auto-review',
+  HumanReview: '5-human-review',
+  Completed: '6-completed',
+  Archive: '7-archive',
+} as const;
+
+/** Union of the canonical lane-key string literals. */
+export type TaskStateKey = (typeof TaskState)[keyof typeof TaskState];
+
+/** All canonical lane keys, in board order. */
+export const ALL_TASK_STATES: readonly TaskStateKey[] = Object.values(TaskState);
+
 // Cycle 9i: this file is the canonical "shared kernel" — TaskInfo,
 // TaskDetail, GroupedJobs, CliExecution, etc. Feature-specific types
 // (git, tokens, orchestrator, screenshots, claude, run-timeline,

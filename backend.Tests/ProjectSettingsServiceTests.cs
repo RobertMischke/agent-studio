@@ -256,6 +256,101 @@ public sealed class ProjectSettingsServiceTests : IDisposable
         Assert.Equal(CliPermissionModes.Yolo, svc.ResolveCliMode("runbook", CliTypes.Copilot).Mode);
     }
 
+    [Fact]
+    public void Get_UnconfiguredProject_HasNoBuildProfile()
+    {
+        var svc = Build();
+
+        Assert.Null(svc.Get("new-project").BuildProfile);
+    }
+
+    [Fact]
+    public void SetBuildProfile_NormalizesAndStartsDeclared_PersistsAcrossReload()
+    {
+        var svc = Build();
+
+        svc.SetBuildProfile("runbook", new BuildProfile
+        {
+            Stack = "  node  ",
+            InstallCmd = "  npm ci  ",
+            BuildCmds = ["npm run build", "  ", ""],
+            Lockfiles = ["package-lock.json", "  "],
+            PreserveGlobs = ["node_modules"],
+            PoolSize = 0,
+            Status = BuildProfileStatuses.PipelineReady, // must be forced back to declared
+        });
+
+        var reloaded = Build().Get("runbook").BuildProfile;
+        Assert.NotNull(reloaded);
+        Assert.Equal("node", reloaded!.Stack);
+        Assert.Equal("npm ci", reloaded.InstallCmd);
+        Assert.Equal(["npm run build"], reloaded.BuildCmds);
+        Assert.Equal(["package-lock.json"], reloaded.Lockfiles);
+        Assert.Null(reloaded.PoolSize); // non-positive clamps to null
+        Assert.Equal(BuildProfileStatuses.Declared, reloaded.Status);
+    }
+
+    [Fact]
+    public void MarkBuildProfileValidated_FlipsToPipelineReadyAndStampsTime()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+
+        svc.MarkBuildProfileValidated("runbook");
+
+        var p = svc.Get("runbook").BuildProfile;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, p!.Status);
+        Assert.NotNull(p.LastValidatedAt);
+        Assert.Null(p.LastValidationError);
+    }
+
+    [Fact]
+    public void MarkBuildProfileValidationFailed_RecordsReason()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+
+        svc.MarkBuildProfileValidationFailed("runbook", "install exited 1");
+
+        var p = svc.Get("runbook").BuildProfile;
+        Assert.Equal(BuildProfileStatuses.ValidationFailed, p!.Status);
+        Assert.Equal("install exited 1", p.LastValidationError);
+    }
+
+    [Fact]
+    public void ReDeclaringBuildProfile_ResetsAnyPriorGreenValidation()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+        svc.MarkBuildProfileValidated("runbook");
+        Assert.Equal(BuildProfileStatuses.PipelineReady, svc.Get("runbook").BuildProfile!.Status);
+
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
+
+        Assert.Equal(BuildProfileStatuses.Declared, svc.Get("runbook").BuildProfile!.Status);
+    }
+
+    [Fact]
+    public void SetBuildProfileNull_ClearsProfile()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+
+        svc.SetBuildProfile("runbook", null);
+
+        Assert.Null(svc.Get("runbook").BuildProfile);
+    }
+
+    [Fact]
+    public void MarkValidating_OnProjectWithoutProfile_IsNoOp()
+    {
+        var svc = Build();
+
+        svc.MarkBuildProfileValidated("new-project");
+
+        Assert.Null(svc.Get("new-project").BuildProfile);
+    }
+
     private ProjectSettingsService Build()
     {
         var config = new ConfigurationBuilder()
