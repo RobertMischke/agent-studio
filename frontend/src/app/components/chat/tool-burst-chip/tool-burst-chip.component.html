@@ -76,6 +76,49 @@
         </section>
       }
 
+      @if (commands().length > 0) {
+        <section class="burst__commands" data-testid="tool-burst-commands">
+          <header>Command output</header>
+          @for (cmd of commands(); track commandKey($index); let i = $index) {
+            <article class="burst__command" [attr.data-status]="cmd.status">
+              <div class="burst__command-head">
+                <code class="burst__command-text" [title]="cmd.command">{{ shortCommand(cmd.command) }}</code>
+                <span class="burst__command-badge">{{ statusLabel(cmd.status, cmd.exitCode) }}</span>
+                @if (formattedDuration()) {
+                  <span class="burst__command-time">{{ formattedDuration() }}</span>
+                }
+              </div>
+              @if ((cmd.hits?.length ?? 0) > 0) {
+                <ul class="burst__hits" data-testid="tool-burst-output-hits">
+                  @for (hit of cmd.hits ?? []; track hit.path + ':' + hit.line + ':' + ($index)) {
+                    <li>
+                      <button type="button" class="burst__hit-path" [title]="hit.path">
+                        {{ hit.path }}:{{ hit.line }}{{ hit.column ? ':' + hit.column : '' }}
+                      </button>
+                      <span class="burst__hit-text">{{ hit.text }}</span>
+                    </li>
+                  }
+                </ul>
+              }
+              @if (cmd.output) {
+                <pre class="burst__output" data-testid="tool-burst-command-output">{{ commandOutput(i) }}</pre>
+                @if (commandHiddenLines(i) > 0 || isCommandOutputExpanded(i)) {
+                  <button type="button"
+                          class="burst__output-toggle"
+                          data-testid="tool-burst-output-toggle"
+                          [attr.aria-expanded]="isCommandOutputExpanded(i)"
+                          (click)="toggleCommandOutput(i)">
+                    {{ isCommandOutputExpanded(i) ? 'show less' : 'show ' + commandHiddenLines(i) + ' more lines' }}
+                  </button>
+                }
+              } @else {
+                <span class="burst__output-empty">No stdout captured.</span>
+              }
+            </article>
+          }
+        </section>
+      }
+
       @if ((event().artifacts?.length ?? 0) > 0) {
         <section class="burst__sub" data-testid="tool-burst-artifacts-list">
           <header>Artifacts</header>

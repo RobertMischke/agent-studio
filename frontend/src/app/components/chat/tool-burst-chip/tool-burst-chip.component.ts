@@ -28,6 +28,7 @@ export class ToolBurstChipComponent {
   readonly initialOpen = input<boolean>(false);
 
   readonly open = signal<boolean>(false);
+  private readonly expandedCommandOutputs = signal<ReadonlySet<string>>(new Set());
 
   constructor() {
     queueMicrotask(() => {
@@ -64,6 +65,8 @@ export class ToolBurstChipComponent {
   readonly artifactCount = computed(() => this.event().artifacts?.length ?? 0);
 
   readonly formattedDuration = computed(() => formatBurstDuration(this.event().durationMs ?? 0));
+
+  readonly commands = computed(() => this.event().commands ?? []);
 
   readonly detailRows = computed<DetailRow[]>(() => {
     const event = this.event();
@@ -112,6 +115,45 @@ export class ToolBurstChipComponent {
     } catch {
       return '';
     }
+  }
+
+  commandKey(index: number): string {
+    const command = this.commands()[index];
+    return `${index}:${command?.command ?? ''}`;
+  }
+
+  isCommandOutputExpanded(index: number): boolean {
+    return this.expandedCommandOutputs().has(this.commandKey(index));
+  }
+
+  toggleCommandOutput(index: number): void {
+    const key = this.commandKey(index);
+    const next = new Set(this.expandedCommandOutputs());
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this.expandedCommandOutputs.set(next);
+  }
+
+  commandOutput(commandIndex: number): string {
+    const command = this.commands()[commandIndex];
+    if (!command) return '';
+    if (this.isCommandOutputExpanded(commandIndex)) return command.output;
+    return command.output.split(/\r?\n/).slice(0, 24).join('\n');
+  }
+
+  commandHiddenLines(commandIndex: number): number {
+    const command = this.commands()[commandIndex];
+    if (!command || this.isCommandOutputExpanded(commandIndex)) return 0;
+    return Math.max(0, command.outputLineCount - 24);
+  }
+
+  shortCommand(command: string): string {
+    return command.length > 140 ? `${command.slice(0, 137)}...` : command;
+  }
+
+  statusLabel(status: string, exitCode: number | null): string {
+    if (exitCode !== null) return `exit ${exitCode}`;
+    return status;
   }
 }
 

@@ -21,9 +21,9 @@ import { ConnectionStatusService } from '../../services/connection-status.servic
       <div class="offline-banner" role="alert" aria-live="assertive" data-testid="offline-banner">
         <span class="offline-banner__dot" aria-hidden="true"></span>
         <span class="offline-banner__text">
-          <strong>Backend nicht erreichbar.</strong>
-          Die Verbindung ist unterbrochen — angezeigte Daten können veraltet sein und Aktionen
-          schlagen fehl, bis die Verbindung zurück ist. Reconnect läuft automatisch…
+          <strong>Backend not reachable.</strong>
+          The connection is down — data shown may be stale and actions are blocked until the
+          connection returns. Reconnecting automatically…
         </span>
       </div>
     }

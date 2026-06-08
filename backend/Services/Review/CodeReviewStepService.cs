@@ -2,6 +2,7 @@ using System.Diagnostics;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli.OneShot;
+using OrchestratorApi.Services.GeneratedFiles;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Runner;
 
@@ -35,6 +36,7 @@ public sealed class CodeReviewStepService
     private readonly ILogger<CodeReviewStepService> _logger;
     private readonly AdHocUsageRecorder? _usage;
     private readonly CliOneShotRegistry? _oneShotRegistry;
+    private readonly FileGenerationIndex? _fileGenerationIndex;
 
     /// <summary>
     /// CLI invocation seam. Production wires it through <see cref="ICliOneShot"/>
@@ -50,12 +52,14 @@ public sealed class CodeReviewStepService
         RuntimePromptService prompts,
         ILogger<CodeReviewStepService> logger,
         AdHocUsageRecorder? usage = null,
-        CliOneShotRegistry? oneShotRegistry = null)
+        CliOneShotRegistry? oneShotRegistry = null,
+        FileGenerationIndex? fileGenerationIndex = null)
     {
         _prompts = prompts;
         _logger = logger;
         _usage = usage;
         _oneShotRegistry = oneShotRegistry;
+        _fileGenerationIndex = fileGenerationIndex;
 
         if (_oneShotRegistry != null)
         {
@@ -146,6 +150,24 @@ public sealed class CodeReviewStepService
         {
             var report = RenderReport(request, verdict, rawResponse, startedAt);
             await File.WriteAllTextAsync(filePath, report, ct);
+            _fileGenerationIndex?.Upsert(request.JobFolderPath, new FileGenerationMeta
+            {
+                File = fileName,
+                Kind = "code-review",
+                Model = callUsage?.Model ?? request.Model,
+                Cli = request.CliType,
+                TokensIn = callUsage?.InputTokens ?? 0,
+                TokensOut = callUsage?.OutputTokens ?? 0,
+                TokensTotal = (callUsage?.InputTokens ?? 0)
+                    + (callUsage?.OutputTokens ?? 0)
+                    + (callUsage?.CacheReadTokens ?? 0)
+                    + (callUsage?.CacheCreationTokens ?? 0),
+                StartedAt = startedAt,
+                EndedAt = startedAt.AddMilliseconds(sw.ElapsedMilliseconds),
+                DurationMs = sw.ElapsedMilliseconds,
+                StepId = UsageSource,
+                HeadShaAfter = request.Commit,
+            });
         }
         catch (Exception ex)
         {

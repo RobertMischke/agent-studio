@@ -22,6 +22,7 @@ import type {
   SystemCaptureFailEvent,
   SystemParserWarningEvent,
   SystemSchemaDriftEvent,
+  SystemStatusEvent,
   TaskMarkerEvent,
   ToolBurstEvent,
   TraceLinkEvent,
@@ -83,6 +84,7 @@ type RenderRow =
   | { kind: 'needsInput'; id: string; event: AgentNeedsInputEvent }
   | { kind: 'captureFail'; id: string; event: SystemCaptureFailEvent }
   | { kind: 'parserWarning'; id: string; event: SystemParserWarningEvent }
+  | { kind: 'systemStatus'; id: string; event: SystemStatusEvent }
   | { kind: 'schemaDrift'; id: string; event: SystemSchemaDriftEvent }
   | { kind: 'feedbackQueued'; id: string; event: FeedbackQueuedEvent }
   | { kind: 'image'; id: string; event: ArtifactImageEvent }
@@ -439,6 +441,9 @@ export class ConversationViewComponent {
           break;
         case 'system.parserWarning':
           out.push({ kind: 'parserWarning', id: e.id, event: e });
+          break;
+        case 'system.status':
+          out.push({ kind: 'systemStatus', id: e.id, event: e });
           break;
         case 'system.schemaDrift':
           out.push({ kind: 'schemaDrift', id: e.id, event: e });

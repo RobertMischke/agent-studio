@@ -1,31 +1,9 @@
 @if (visibleRuns().length === 0) {
-  <div class="run-timeline__empty">No CLI runs yet — start the task to populate the timeline.</div>
+  <div class="run-timeline__empty">No CLI runs yet - start the task to populate the timeline.</div>
 } @else {
-  <div class="run-timeline">
-    <!--
-      Chat-first redesign: runs collapse to a compact icon row by
-      default. Each square icon represents one CLI invocation; the
-      colour conveys status (green = ok, red = fail, blue = running,
-      amber = stopped/cancelled). Clicking an icon expands that run's
-      full card inline below — same data the verbose timeline showed,
-      one click away. The aggregate summary stays inline so the user
-      knows how many runs there are without expanding anything.
-    -->
-    <div class="run-timeline__header run-timeline__header--icons">
+  <div class="run-timeline" data-testid="run-timeline">
+    <div class="run-timeline__header">
       <span class="run-timeline__title">Runs</span>
-      <div class="run-timeline__icons" role="list" data-testid="runs-icon-row">
-        @for (r of iconRuns(); track r.index) {
-          <button type="button"
-                  class="run-timeline__icon"
-                  role="listitem"
-                  [class.run-timeline__icon--active]="expandedIndex() === r.index"
-                  [attr.data-status]="r.status"
-                  [attr.data-testid]="'run-icon-' + r.index"
-                  [attr.aria-label]="'Run #' + r.index + ' ' + statusLabel(r)"
-                  [appTooltip]="iconTooltip(r)"
-                  (click)="toggle(r.index)">{{ iconChar(r) }}</button>
-        }
-      </div>
       <span class="run-timeline__aggregate" data-testid="runs-aggregate">
         {{ visibleRuns().length }} run{{ visibleRuns().length === 1 ? '' : 's' }}
         @if (statusSummary().completed > 0) { · {{ statusSummary().completed }} ok }
@@ -33,139 +11,8 @@
         @if (statusSummary().running > 0)   { · {{ statusSummary().running }} live }
         @if (statusSummary().other > 0)     { · {{ statusSummary().other }} other }
       </span>
-      <button type="button"
-              class="run-timeline__listtoggle"
-              data-testid="runs-toggle"
-              [attr.aria-expanded]="listExpanded()"
-              [appTooltip]="listExpanded() ? 'Collapse run list' : 'Show full run list'"
-              (click)="toggleListExpanded()">{{ listExpanded() ? '▾' : '▸' }}</button>
     </div>
 
-    <!--
-      When a single run icon is clicked we render that one run's
-      full card (the same content the legacy expanded list showed).
-      This is the in-place popover variant of "click an icon for
-      the full card" — the data the user is looking for is the
-      first thing they see, no modal stack to navigate.
-    -->
-    @if (expandedIndex() !== null) {
-      @for (r of visibleRuns(); track r.index) {
-        @if (r.index === expandedIndex()) {
-          <div class="run-card run-card--popover"
-               [attr.data-status]="r.status"
-               [attr.data-testid]="'run-popover-' + r.index">
-            <div class="run-card__head run-card__head--peek">
-              <span class="run-card__index">#{{ r.index }}</span>
-              <span class="run-card__chip run-card__chip--intent" [attr.data-intent]="r.intent">{{ intentLabel(r.intent) }}</span>
-              <span class="run-card__chip run-card__chip--status" [attr.data-status]="r.status">{{ statusLabel(r) }}</span>
-              <span class="run-card__followup" [class.run-card__followup--empty]="!r.userFollowup">
-                {{ r.userFollowup || '(no follow-up)' }}
-              </span>
-              <span class="run-card__meta">
-                @if (r.durationSeconds !== null) { <span>{{ formatDuration(r.durationSeconds) }}</span> }
-                @if (r.exitCode !== null) { <span class="run-card__exit">exit {{ r.exitCode }}</span> }
-                <span class="run-card__time">{{ formatTime(r.startedAt) }}</span>
-              </span>
-              <button type="button"
-                      class="run-card__close"
-                      [attr.data-testid]="'run-popover-close-' + r.index"
-                      aria-label="Close run details"
-                      [appTooltip]="'Close'"
-                      (click)="closePopover(); $event.stopPropagation()">×</button>
-            </div>
-            <div class="run-card__body">
-              @if (r.reason) {
-                <div class="run-card__row"><span class="run-card__row-label">Reason</span><span>{{ r.reason }}</span></div>
-              }
-              @if (r.inputSessionId || r.capturedSessionId) {
-                <div class="run-card__row">
-                  <span class="run-card__row-label">Session</span>
-                  <span class="run-card__session">
-                    @if (r.inputSessionId) { <code>{{ short(r.inputSessionId) }}</code> → }
-                    @if (r.capturedSessionId) { <code>{{ short(r.capturedSessionId) }}</code> }
-                    @if (!r.capturedSessionId) { <em>not captured</em> }
-                  </span>
-                </div>
-              }
-              <div class="run-card__row run-card__row--commits">
-                <span class="run-card__row-label">Software change</span>
-                @if (commitsState() === 'loading') {
-                  <span class="run-card__commits-loading">loading…</span>
-                } @else if (commitsError()) {
-                  <span class="run-card__commits-error">{{ commitsError() }}</span>
-                } @else if (commits().length === 0) {
-                  <span class="run-card__commits-empty">No commits in this run's window.</span>
-                } @else {
-                  <div class="run-card__commits">
-                    <div class="run-card__commits-summary">
-                      {{ commits().length }} commit{{ commits().length === 1 ? '' : 's' }} ·
-                      +{{ totalAdded() }} / -{{ totalRemoved() }} across {{ totalFiles() }} file{{ totalFiles() === 1 ? '' : 's' }}
-                    </div>
-                    <ul class="run-card__commit-list">
-                      @for (c of commits(); track c.sha) {
-                        <li class="run-card__commit">
-                          <code class="run-card__commit-sha">{{ c.shortSha }}</code>
-                          <span class="run-card__commit-subject">{{ c.subject }}</span>
-                          <span class="run-card__commit-stats">+{{ c.added }}/-{{ c.removed }} · {{ c.filesChanged }}f</span>
-                        </li>
-                      }
-                    </ul>
-                  </div>
-                }
-              </div>
-              <div class="run-card__row run-card__row--context">
-                <span class="run-card__row-label">Passed context</span>
-                @if (r.contextRef) {
-                  <div class="run-card__context">
-                    <button type="button"
-                            class="run-card__context-toggle"
-                            [attr.data-testid]="'run-context-toggle-' + r.index"
-                            [attr.aria-expanded]="contextExpandedIndex() === r.index"
-                            (click)="toggleContext(r.index); $event.stopPropagation()">
-                      {{ contextExpandedIndex() === r.index ? 'Hide passed context' : 'Show passed context' }}
-                    </button>
-                    @if (contextExpandedIndex() === r.index) {
-                      @if (contextState() === 'loading') {
-                        <span class="run-card__context-loading">loading…</span>
-                      } @else if (contextError()) {
-                        <span class="run-card__context-error">{{ contextError() }}</span>
-                      } @else if (!contextText()) {
-                        <span class="run-card__context-empty">No context captured for this run.</span>
-                      } @else {
-                        <pre class="run-card__context-pre" [attr.data-testid]="'run-context-pre-' + r.index">{{ contextText() }}</pre>
-                      }
-                    }
-                  </div>
-                } @else {
-                  <span class="run-card__context-empty">Not captured for this run.</span>
-                }
-              </div>
-              <div class="run-card__row run-card__row--actions">
-                <button type="button"
-                        class="run-card__filter"
-                        (click)="emitFilter(r); $event.stopPropagation()"
-                        [disabled]="r.lineStart === null">
-                  Filter activity log to this run
-                </button>
-                <button type="button"
-                        class="run-card__filter run-card__filter--primary"
-                        (click)="openGitViewer.emit(r); $event.stopPropagation()"
-                        [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
-                        [appTooltip]="(!r.headShaBefore || !r.headShaAfter)
-                          ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
-                          : (r.headShaBefore === r.headShaAfter
-                            ? 'No commits made during this run.'
-                            : 'Open the file-tree + diff viewer for this run.')">
-                  Open git viewer
-                </button>
-              </div>
-            </div>
-          </div>
-        }
-      }
-    }
-
-    @if (listExpanded()) {
     @for (r of visibleRuns(); track r.index) {
       <div class="run-card"
            [attr.data-status]="r.status"
@@ -175,7 +22,10 @@
                 class="run-card__head"
                 (click)="toggle(r.index)"
                 [attr.aria-expanded]="expandedIndex() === r.index">
-          <span class="run-card__index">#{{ r.index }}</span>
+          <span class="run-card__index">Attempt {{ r.index }}</span>
+          <span class="run-card__cli" [appTooltip]="cliLabel(r.cli)" [attr.aria-label]="cliLabel(r.cli)">
+            {{ cliIcon(r.cli) }}
+          </span>
           <span class="run-card__chip run-card__chip--intent" [attr.data-intent]="r.intent">{{ intentLabel(r.intent) }}</span>
           <span class="run-card__chip run-card__chip--status" [attr.data-status]="r.status">{{ statusLabel(r) }}</span>
           <span class="run-card__followup" [class.run-card__followup--empty]="!r.userFollowup">
@@ -185,17 +35,24 @@
             @if (r.durationSeconds !== null) {
               <span>{{ formatDuration(r.durationSeconds) }}</span>
             }
+            @if (tokenLabel(r.tokenSummary); as tokens) {
+              <span>{{ tokens }}</span>
+            }
             @if (r.exitCode !== null) {
               <span class="run-card__exit">exit {{ r.exitCode }}</span>
             }
-            <span class="run-card__time">{{ formatTime(r.startedAt) }}</span>
+            <span class="run-card__time">started {{ formatTime(r.startedAt) }}</span>
+            @if (r.endedAt) {
+              <span class="run-card__time">finished {{ formatTime(r.endedAt) }}</span>
+            }
           </span>
           <span class="run-card__caret">{{ expandedIndex() === r.index ? '▾' : '▸' }}</span>
         </button>
+
         @if (expandedIndex() === r.index) {
           <div class="run-card__body">
             @if (r.reason) {
-              <div class="run-card__row"><span class="run-card__row-label">Reason</span><span>{{ r.reason }}</span></div>
+              <div class="run-card__row"><span class="run-card__row-label">Verdict</span><span>{{ r.reason }}</span></div>
             }
             @if (r.inputSessionId || r.capturedSessionId) {
               <div class="run-card__row">
@@ -210,7 +67,7 @@
             <div class="run-card__row run-card__row--commits">
               <span class="run-card__row-label">Software change</span>
               @if (commitsState() === 'loading') {
-                <span class="run-card__commits-loading">loading…</span>
+                <span class="run-card__commits-loading">loading...</span>
               } @else if (commitsError()) {
                 <span class="run-card__commits-error">{{ commitsError() }}</span>
               } @else if (commits().length === 0) {
@@ -246,7 +103,7 @@
                   </button>
                   @if (contextExpandedIndex() === r.index) {
                     @if (contextState() === 'loading') {
-                      <span class="run-card__context-loading">loading…</span>
+                      <span class="run-card__context-loading">loading...</span>
                     } @else if (contextError()) {
                       <span class="run-card__context-error">{{ contextError() }}</span>
                     } @else if (!contextText()) {
@@ -282,8 +139,14 @@
           </div>
         }
       </div>
-    }
+
+      @if (nextRunAfter(r.index); as next) {
+        <div class="run-transition" [attr.data-testid]="'run-transition-' + r.index + '-' + next.index">
+          <span class="run-transition__line"></span>
+          <span class="run-transition__text">{{ transitionLabel(r, next) }}</span>
+          <span class="run-transition__line"></span>
+        </div>
+      }
     }
   </div>
 }
-

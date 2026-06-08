@@ -181,6 +181,129 @@
 .burst__sub li[data-status='fail'] strong { color: #f87171; }
 .burst__sub li[data-status='unknown'] strong { color: #94a3b8; }
 
+.burst__commands {
+  display: grid;
+  gap: 6px;
+}
+.burst__commands > header {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.burst__command {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 3%, transparent);
+}
+.burst__command[data-status='failed'] {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.08);
+}
+.burst__command-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+.burst__command-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.burst__command-badge,
+.burst__command-time {
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.burst__command[data-status='failed'] .burst__command-badge {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+}
+.burst__hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 132px;
+  overflow: auto;
+}
+.burst__hits li {
+  display: grid;
+  grid-template-columns: minmax(120px, 32%) minmax(0, 1fr);
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11.5px;
+}
+.burst__hit-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, #38bdf8 28%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, #38bdf8 8%, transparent);
+  color: inherit;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: left;
+}
+.burst__hit-path:hover {
+  background: color-mix(in srgb, #38bdf8 16%, transparent);
+}
+.burst__hit-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+.burst__output {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 7px;
+  border-radius: 5px;
+  background: color-mix(in srgb, black 24%, transparent);
+  color: color-mix(in srgb, currentColor 86%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre;
+}
+.burst__output-toggle {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, currentColor 70%, transparent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.burst__output-toggle:hover { color: inherit; }
+.burst__output-empty {
+  font-size: 11.5px;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+}
+
 /* Compact density: hide secondary chips first so the row stays one line. */
 .burst[data-density='compact'] .burst__chip--time,
 .burst[data-density='compact'] .burst__chip--file {

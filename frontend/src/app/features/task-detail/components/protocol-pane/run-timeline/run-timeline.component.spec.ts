@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelineComponent } from './run-timeline.component';
+import type { RunRecord } from '../../../../../features/run-timeline';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -37,4 +38,72 @@ describe('RunTimelineComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('renders every run chronologically with re-open transitions', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('runs', [
+      runRecord(3, 'restart', 'completed', 'Fix review note', 15),
+      runRecord(1, 'start', 'completed', null, 125),
+      runRecord(2, 'continue', 'failed', 'Please try again', 33),
+    ]);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text.indexOf('Attempt 1')).toBeLessThan(text.indexOf('Attempt 2'));
+    expect(text.indexOf('Attempt 2')).toBeLessThan(text.indexOf('Attempt 3'));
+    expect(text).toContain('Run #1 re-opened into #2 via user follow-up');
+    expect(text).toContain('Run #2 re-opened into #3 via user follow-up');
+    expect(text).toContain('2m5s');
+    expect(text).toContain('2.5k tok');
+  });
 });
+
+function runRecord(
+  index: number,
+  intent: string,
+  status: string,
+  userFollowup: string | null,
+  durationSeconds: number
+): RunRecord {
+  return {
+    index,
+    intent,
+    status,
+    userFollowup,
+    durationSeconds,
+    startedAt: `2026-06-08T10:0${index}:00Z`,
+    endedAt: `2026-06-08T10:0${index}:30Z`,
+    cli: 'codex',
+    exitCode: status === 'failed' ? 1 : 0,
+    inputSessionId: null,
+    capturedSessionId: null,
+    resumed: index > 1,
+    reason: status,
+    lineStart: index,
+    lineEnd: index + 1,
+    headShaBefore: null,
+    headShaAfter: null,
+    contextRef: null,
+    tokenSummary: index === 3 ? {
+      calls: 1,
+      inputTokens: 2000,
+      outputTokens: 500,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 2500,
+      lastModel: 'gpt-5',
+      lastUpdate: '2026-06-08T10:03:30Z',
+      entries: [],
+    } : null,
+  };
+}

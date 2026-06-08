@@ -255,6 +255,24 @@
           </li>
         }
 
+        @case ('systemStatus') {
+          <li class="conv__row conv__row--system-status"
+              data-testid="conversation-system-status"
+              [attr.data-category]="row.event.category"
+              [attr.data-severity]="row.event.severity ?? 'info'">
+            <span class="status-row__chip">{{ row.event.label }}</span>
+            <span class="status-row__text">{{ row.event.explanation }}</span>
+            @if (row.event.nextStep) {
+              <span class="status-row__next">{{ row.event.nextStep }}</span>
+            }
+            <button type="button"
+                    class="status-row__trace"
+                    data-testid="conversation-status-open-trace"
+                    [appTooltip]="'Open the source range in Trace mode'"
+                    (click)="emitOpenTrace(row.event.rawRange)">trace</button>
+          </li>
+        }
+
         @case ('schemaDrift') {
           <li class="conv__row conv__row--system conv__row--warn"
               data-testid="conversation-schema-drift">

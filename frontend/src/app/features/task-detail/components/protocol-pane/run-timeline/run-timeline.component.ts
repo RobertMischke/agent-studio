@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import type { TaskInfo } from '../../../../../models/task.model';
 import type { RunCommitInfo, RunRecord } from '../../../../../features/run-timeline';
+import type { TaskTokenSummary } from '../../../../../features/tokens';
 import { TaskService } from '../../../../../services/task.service';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
@@ -46,21 +47,6 @@ export class RunTimelineComponent {
 
   readonly expandedIndex = signal<number | null>(null);
 
-  /**
-   * Whether the per-run cards list is expanded. Default collapsed: a job
-   * with 12 failed runs (the original symptom) takes well over half the
-   * viewport otherwise. Collapsed view shows only the latest run's chip
-   * plus aggregate counts; clicking the header toggles full list.
-   */
-  readonly listExpanded = signal<boolean>(false);
-
-  toggleListExpanded() { this.listExpanded.update(v => !v); }
-
-  readonly latestRun = computed<RunRecord | null>(() => {
-    const v = this.visibleRuns();
-    return v.length > 0 ? v[0] : null;
-  });
-
   readonly statusSummary = computed(() => {
     const v = this.visibleRuns();
     let completed = 0, failed = 0, running = 0, other = 0;
@@ -95,8 +81,8 @@ export class RunTimelineComponent {
     return this.contextByRun().get(idx) ?? null;
   });
 
-  /** Most recent first - the user usually wants to see what just happened. */
-  readonly visibleRuns = computed(() => [...this.runs()].sort((a, b) => b.index - a.index));
+  /** Chronological order - reissues must read as separate run segments. */
+  readonly visibleRuns = computed(() => [...this.runs()].sort((a, b) => a.index - b.index));
 
   readonly commits = computed<RunCommitInfo[]>(() => {
     const idx = this.expandedIndex();
@@ -136,36 +122,29 @@ export class RunTimelineComponent {
     this.loadContext(index);
   }
 
-  /**
-   * Order for the icon row: chronological (oldest → newest), so the
-   * timeline reads left-to-right like a progress bar. The full-card
-   * list above continues to show newest-first because that's what
-   * matters when the user wants to read what just happened.
-   */
-  readonly iconRuns = computed(() => [...this.runs()].sort((a, b) => a.index - b.index));
-
-  /** Single character glyph for the icon. Uses the run index when small,
-   *  otherwise a status-shaped marker so the row stays calm. */
-  iconChar(r: RunRecord): string {
-    if (r.index <= 99) return String(r.index);
-    if (r.status === 'failed') return '✕';
-    if (r.status === 'running') return '●';
-    if (r.status === 'completed') return '✓';
-    return '·';
+  nextRunAfter(index: number): RunRecord | null {
+    const runs = this.visibleRuns();
+    const pos = runs.findIndex(r => r.index === index);
+    return pos >= 0 && pos + 1 < runs.length ? runs[pos + 1] : null;
   }
 
-  /** Multi-line tooltip carrying the full info the verbose card showed. */
-  iconTooltip(r: RunRecord): string {
-    const parts: string[] = [
-      `Run #${r.index} — ${this.statusLabel(r)} (${this.intentLabel(r.intent)})`,
-      `Started ${this.formatTime(r.startedAt)}`
-    ];
-    if (r.durationSeconds != null) parts.push(`Duration: ${this.formatDuration(r.durationSeconds)}`);
-    if (r.exitCode != null) parts.push(`Exit code: ${r.exitCode}`);
-    if (r.userFollowup) parts.push(`Follow-up: ${r.userFollowup}`);
-    if (r.reason) parts.push(`Reason: ${r.reason}`);
-    parts.push('Click to expand');
-    return parts.join('\n');
+  transitionLabel(current: RunRecord, next: RunRecord): string {
+    const trigger = next.userFollowup ? 'user follow-up' : this.intentLabel(next.intent);
+    return `Run #${current.index} re-opened into #${next.index} via ${trigger}`;
+  }
+
+  cliIcon(cli: string | null): string {
+    switch ((cli ?? '').toLowerCase()) {
+      case 'codex': return 'Cx';
+      case 'claude': return 'C';
+      case 'copilot': return 'GH';
+      case 'gemini': return 'G';
+      default: return 'CLI';
+    }
+  }
+
+  cliLabel(cli: string | null): string {
+    return cli?.trim() || 'CLI';
   }
 
   emitFilter(r: RunRecord): void {
@@ -197,7 +176,18 @@ export class RunTimelineComponent {
     if (seconds < 60) return `${seconds.toFixed(0)}s`;
     const m = Math.floor(seconds / 60);
     const s = Math.round(seconds % 60);
-    return s === 0 ? `${m}m` : `${m}m ${s}s`;
+    return s === 0 ? `${m}m` : `${m}m${s}s`;
+  }
+
+  tokenLabel(summary: TaskTokenSummary | null | undefined): string | null {
+    if (!summary || summary.totalTokens <= 0) return null;
+    return `${this.compactNumber(summary.totalTokens)} tok`;
+  }
+
+  private compactNumber(value: number): string {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+    return value.toFixed(0);
   }
 
   formatTime(iso: string): string {

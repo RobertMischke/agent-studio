@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.GeneratedFiles;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Review;
 using OrchestratorApi.Services.Runner;
@@ -76,12 +77,13 @@ public static class TaskCodeReviewEndpoints
         // newest-first. Each entry carries the parsed frontmatter so the
         // frontend can render verdict + summary without fetching each file.
         group.MapGet("/{jobId}/code-review/list",
-            (string jobId, string? watchPath, TaskScannerService scanner) =>
+            (string jobId, string? watchPath, TaskScannerService scanner, FileGenerationIndex generationIndex) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
 
             var entries = new List<CodeReviewListEntry>();
+            var generated = generationIndex.ReadForJob(info.FolderPath);
             try
             {
                 if (Directory.Exists(info.FolderPath))
@@ -104,6 +106,7 @@ public static class TaskCodeReviewEndpoints
                                 ThinkingLevel = fields.GetValueOrDefault("thinkingLevel"),
                                 Commit = fields.GetValueOrDefault("commit"),
                                 RunAt = fields.GetValueOrDefault("runAt") ?? string.Empty,
+                                Generation = generated.GetValueOrDefault(fileName),
                             });
                         }
                         catch
@@ -289,6 +292,7 @@ public sealed record CodeReviewListEntry
     public string? ThinkingLevel { get; init; }
     public string? Commit { get; init; }
     public required string RunAt { get; init; }
+    public FileGenerationMeta? Generation { get; init; }
 }
 
 /// <summary>Response for <c>GET /api/tasks/{jobId}/code-review/list</c>.</summary>

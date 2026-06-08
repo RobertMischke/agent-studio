@@ -41,4 +41,52 @@ describe('ToolBurstChipComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('renders command output with exit badge, hits, and show-more control', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ToolBurstChipComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ToolBurstChipComponent);
+    const output = Array.from({ length: 30 }, (_, i) =>
+      i === 0 ? 'frontend/src/app/a.ts:12:const needle = true;' : `line ${i}`
+    ).join('\n');
+    fixture.componentRef.setInput('event', {
+      id: 'burst-1',
+      kind: 'toolBurst',
+      timestamp: '2026-04-26T12:00:00.000Z',
+      rawRange: { source: 'cli-output.log', start: 1, end: 31 },
+      count: 1,
+      families: { command: 1 },
+      failures: 0,
+      durationMs: 1500,
+      collapsedByDefault: true,
+      commands: [
+        {
+          command: 'rg -n "needle" frontend/src/app',
+          status: 'completed',
+          exitCode: 0,
+          output,
+          outputLineCount: 30,
+          outputTruncated: false,
+          hits: [{ path: 'frontend/src/app/a.ts', line: 12, text: 'const needle = true;' }]
+        }
+      ]
+    });
+    fixture.componentRef.setInput('initialOpen', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="tool-burst-commands"]')?.textContent).toContain('rg -n');
+    expect(el.querySelector('.burst__command-badge')?.textContent).toContain('exit 0');
+    expect(el.querySelector('[data-testid="tool-burst-output-hits"]')?.textContent).toContain('frontend/src/app/a.ts:12');
+    expect(el.querySelector('[data-testid="tool-burst-output-toggle"]')?.textContent).toContain('show 6 more lines');
+  });
 });

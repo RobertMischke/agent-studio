@@ -23,8 +23,13 @@ import {
 import { CONVERSATION_EVENT_KINDS } from './conversation-event';
 import type { ConversationEvent, RawLineRange } from './conversation-event';
 import { projectConversation } from './conversation-projection';
+import type { CliOutputLine } from '../../models/task.model';
 
 const SOURCE = 'fixture-job';
+
+function line(text: string, stream = 'stdout', timestamp = '2026-04-26T12:00:00.000Z'): CliOutputLine {
+  return { timestamp, stream, text };
+}
 
 interface EventProbe {
   action?: string;
@@ -49,6 +54,15 @@ interface EventProbe {
   cliType?: string;
   collapsedByDefault: boolean;
   count: number;
+  commands: readonly {
+    command: string;
+    exitCode: number | null;
+    output: string;
+    outputLineCount: number;
+    outputTruncated: boolean;
+    hits?: readonly { path: string; line: number; text: string }[];
+  }[];
+  category?: string;
   decisionType?: string;
   durablePath?: string;
   expectedKind?: string;
@@ -136,6 +150,48 @@ describe('projectConversation', () => {
       expect(ev.rawRange.source).toBe(SOURCE);
       expect(ev.rawRange.end).toBeGreaterThanOrEqual(ev.rawRange.start);
     }
+  });
+
+  it('projects Codex command executions as expandable command output inside the tool burst', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        line('{"type":"item.completed","item":{"id":"cmd_1","type":"command_execution","command":"rg -n \\"needle\\" frontend/src/app","aggregated_output":"frontend/src/app/a.ts:12:const needle = true;\\nfrontend/src/app/b.ts:8:needle();","exit_code":0,"status":"completed"}}')
+      ]
+    });
+    const burst = probe(events.find((e) => e.kind === 'toolBurst'));
+    expect(burst.commands).toHaveLength(1);
+    expect(burst.commands[0].command).toContain('rg -n');
+    expect(burst.commands[0].exitCode).toBe(0);
+    expect(burst.commands[0].output).toContain('frontend/src/app/a.ts:12');
+    expect(burst.commands[0].hits).toHaveLength(2);
+    expect(burst.commands[0].hits?.[0].path).toBe('frontend/src/app/a.ts');
+    expect(burst.commands[0].hits?.[0].line).toBe(12);
+  });
+
+  it('turns Codex tool-router errors into typed parser warning rows', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        line('ERROR codex_core::tools::router: error=Exit code: 1', 'stderr')
+      ]
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.parserWarning');
+    expect(probe(events[0]).expectedKind).toBe('tool-result');
+  });
+
+  it('renders codex silent-completion as a typed status event instead of raw bracket text', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        line('[codex-silent-completion] Codex stopped after final tool call (silence=64s >= 60s)', 'orchestrator')
+      ]
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.status');
+    expect(probe(events[0]).category).toBe('codex-silent-completion');
+    expect(probe(events[0]).severity).toBe('warn');
   });
 
   it('emits a supervisor.wait quiet event then resumed event for watchdog quiet/resume', () => {
@@ -544,6 +600,7 @@ describe('projectConversation', () => {
     expect(CONVERSATION_EVENT_KINDS).toContain('runMarker');
     expect(CONVERSATION_EVENT_KINDS).toContain('traceLink');
     expect(CONVERSATION_EVENT_KINDS).toContain('workbench.debug');
+    expect(CONVERSATION_EVENT_KINDS).toContain('system.status');
     expect(CONVERSATION_EVENT_KINDS).toContain('system.schemaDrift');
     expect(CONVERSATION_EVENT_KINDS).toContain('feedback.queued');
   });

@@ -4,6 +4,7 @@ using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli.OneShot;
+using OrchestratorApi.Services.GeneratedFiles;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Pipeline;
 
@@ -52,19 +53,22 @@ public sealed class AspectRunnerService
     private readonly AdHocUsageRecorder? _usage;
     private readonly CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
+    private readonly FileGenerationIndex? _fileGenerationIndex;
 
     public AspectRunnerService(
         RuntimePromptService prompts,
         ILogger<AspectRunnerService> logger,
         AdHocUsageRecorder? usage = null,
         CliOneShotRegistry? oneShotRegistry = null,
-        PipelineExecutionLog? pipelineLog = null)
+        PipelineExecutionLog? pipelineLog = null,
+        FileGenerationIndex? fileGenerationIndex = null)
     {
         _prompts = prompts;
         _logger = logger;
         _usage = usage;
         _oneShotRegistry = oneShotRegistry;
         _pipelineLog = pipelineLog;
+        _fileGenerationIndex = fileGenerationIndex;
 
         // Wire production CLI invocation to the OneShot service so prompts
         // travel via stdin (the failure mode this fix exists to prevent
@@ -287,8 +291,27 @@ public sealed class AspectRunnerService
             try
             {
                 var report = AspectVerdictParsing.RenderReport(verdict, now);
-                var path = Path.Combine(inputs.JobFolderPath, $"aspect-{def.Id}.md");
+                var fileName = $"aspect-{def.Id}.md";
+                var path = Path.Combine(inputs.JobFolderPath, fileName);
                 await File.WriteAllTextAsync(path, report, ct);
+                var endedAt = DateTime.UtcNow;
+                _fileGenerationIndex?.Upsert(inputs.JobFolderPath, new FileGenerationMeta
+                {
+                    File = fileName,
+                    Kind = "aspect",
+                    Model = callUsage?.Model ?? model,
+                    Cli = cliBinary,
+                    TokensIn = callUsage?.InputTokens ?? 0,
+                    TokensOut = callUsage?.OutputTokens ?? 0,
+                    TokensTotal = (callUsage?.InputTokens ?? 0)
+                        + (callUsage?.OutputTokens ?? 0)
+                        + (callUsage?.CacheReadTokens ?? 0)
+                        + (callUsage?.CacheCreationTokens ?? 0),
+                    StartedAt = startedAt,
+                    EndedAt = endedAt,
+                    DurationMs = durationMs > 0 ? durationMs : (long)(endedAt - startedAt).TotalMilliseconds,
+                    StepId = pipelineStepId,
+                });
             }
             catch (Exception ex)
             {

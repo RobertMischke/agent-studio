@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.GeneratedFiles;
 
 namespace OrchestratorApi.Services.Tasks;
 
@@ -25,6 +26,7 @@ public class TaskScannerService : ITaskScanner
     private readonly IConfiguration _config;
     private readonly ILogger<TaskScannerService> _logger;
     private readonly SummaryGenerationService _summaryService;
+    private readonly FileGenerationIndex? _fileGenerationIndex;
 
     /// <summary>
     /// Optional in-memory snapshot cache. Wired by DI through
@@ -47,11 +49,16 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private readonly ConcurrentDictionary<string, byte> _warnedMissingWatchPaths = new(StringComparer.OrdinalIgnoreCase);
 
-    public TaskScannerService(IConfiguration config, ILogger<TaskScannerService> logger, SummaryGenerationService summaryService)
+    public TaskScannerService(
+        IConfiguration config,
+        ILogger<TaskScannerService> logger,
+        SummaryGenerationService summaryService,
+        FileGenerationIndex? fileGenerationIndex = null)
     {
         _config = config;
         _logger = logger;
         _summaryService = summaryService;
+        _fileGenerationIndex = fileGenerationIndex;
     }
 
     /// <summary>
@@ -1018,6 +1025,8 @@ public class TaskScannerService : ITaskScanner
         var dir = info.FolderPath;
         if (!Directory.Exists(dir)) return new TaskArtifactsResponse { JobId = jobId, Files = [] };
 
+        var generated = _fileGenerationIndex?.ReadForJob(dir)
+            ?? new Dictionary<string, FileGenerationMeta>(StringComparer.OrdinalIgnoreCase);
         var artifacts = new List<TaskArtifact>();
         foreach (var path in Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly))
         {
@@ -1036,6 +1045,7 @@ public class TaskScannerService : ITaskScanner
                 Mtime = fi.LastWriteTimeUtc,
                 Kind = kind,
                 AspectName = aspectName,
+                Generation = generated.GetValueOrDefault(name),
             });
         }
 
@@ -1056,6 +1066,10 @@ public class TaskScannerService : ITaskScanner
             return (TaskArtifactKind.Aspect, aspect);
         }
 
+        if (fileName.StartsWith("code-review-", StringComparison.OrdinalIgnoreCase) &&
+            fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            return (TaskArtifactKind.CodeReview, null);
+
         if (fileName.EndsWith("_NOTE.md", StringComparison.OrdinalIgnoreCase) ||
             fileName.EndsWith("_NOTES.md", StringComparison.OrdinalIgnoreCase))
             return (TaskArtifactKind.Note, null);
@@ -1070,8 +1084,9 @@ public class TaskScannerService : ITaskScanner
         {
             TaskArtifactKind.Prompt => 0,
             TaskArtifactKind.Aspect => 1,
-            TaskArtifactKind.Note   => 2,
-            _                      => 3,
+            TaskArtifactKind.CodeReview => 2,
+            TaskArtifactKind.Note   => 3,
+            _                      => 4,
         };
 
         var rA = rank(a);

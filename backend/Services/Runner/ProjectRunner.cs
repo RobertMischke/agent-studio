@@ -986,7 +986,7 @@ public class ProjectRunner
         try
         {
             var resolver = _router.Get(CliTypes.Codex);
-            if (resolver.CliType == CliTypes.Human || !resolver.IsAvailable())
+            if (resolver.CliType == AgentTypes.Human || !resolver.IsAvailable())
             {
                 var unavailable = $"Codex resolver is unavailable at `{resolver.GetCliPath()}`.";
                 var result = new IntegrationResult(IntegrationOutcome.Conflict, null, unavailable, conflict.ConflictedFiles);

@@ -53,6 +53,23 @@ export type ToolBurstSamples = Readonly<Record<string, string | undefined>>;
 
 export type ConversationEventSeverity = 'info' | 'warn' | 'error';
 
+export interface ToolOutputHit {
+  path: string;
+  line: number;
+  column?: number;
+  text: string;
+}
+
+export interface ToolCommandExecution {
+  command: string;
+  status: 'running' | 'completed' | 'failed' | 'unknown';
+  exitCode: number | null;
+  output: string;
+  outputLineCount: number;
+  outputTruncated: boolean;
+  hits?: readonly ToolOutputHit[];
+}
+
 /** Stable kind list. New kinds must be appended; existing values must not be reused. */
 export type ConversationEventKind =
   // Message stream
@@ -68,6 +85,7 @@ export type ConversationEventKind =
   | 'agent.needsInput'
   | 'system.captureFail'
   | 'system.parserWarning'
+  | 'system.status'
   | 'artifact.image'
   | 'metric.token'
   // V7 workbench events
@@ -140,6 +158,8 @@ export interface ToolBurstEvent extends ConversationEventBase {
   artifacts?: readonly string[];
   /** Representative example per family for the collapsed badge. */
   samples?: ToolBurstSamples;
+  /** Shell / PowerShell executions with compact output previews. */
+  commands?: readonly ToolCommandExecution[];
 }
 
 export interface SupervisorWaitEvent extends ConversationEventBase {
@@ -194,6 +214,14 @@ export interface SystemParserWarningEvent extends ConversationEventBase {
   message: string;
   /** Key used to dedupe identical warnings within a single chat. */
   dedupeKey: string;
+}
+
+export interface SystemStatusEvent extends ConversationEventBase {
+  kind: 'system.status';
+  category: string;
+  label: string;
+  explanation: string;
+  nextStep?: string;
 }
 
 export interface ArtifactImageEvent extends ConversationEventBase {
@@ -435,6 +463,7 @@ export type ConversationEvent =
   | AgentNeedsInputEvent
   | SystemCaptureFailEvent
   | SystemParserWarningEvent
+  | SystemStatusEvent
   | SystemSchemaDriftEvent
   | FeedbackQueuedEvent
   | ArtifactImageEvent
@@ -460,6 +489,7 @@ export const CONVERSATION_EVENT_KINDS: readonly ConversationEventKind[] = [
   'agent.needsInput',
   'system.captureFail',
   'system.parserWarning',
+  'system.status',
   'system.schemaDrift',
   'feedback.queued',
   'artifact.image',

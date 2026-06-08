@@ -26,6 +26,8 @@ import {
 import type {
   ConversationEvent,
   RawLineRange,
+  ToolCommandExecution,
+  ToolOutputHit,
   ToolFamily,
   TraceLink,
   WorkbenchSummaryAggregate
@@ -208,6 +210,24 @@ function projectGroup(
   }
 
   if (firstLine.stream === 'orchestrator') {
+    const status = parseOrchestratorStatus(firstLine.text);
+    if (status) {
+      return [
+        {
+          id: `${baseId}:status`,
+          kind: 'system.status',
+          timestamp: ts,
+          runId,
+          rawRange: range,
+          severity: status.severity,
+          category: status.category,
+          label: status.label,
+          explanation: status.explanation,
+          nextStep: status.nextStep
+        }
+      ];
+    }
+
     // [watchdog] orchestrator messages get classified as supervisor.wait so
     // the chat row uses the correct family. The parser already filters them
     // out of conversation mode but the projection is the single source of
@@ -341,12 +361,46 @@ function projectGroup(
     ];
   }
 
+  if (isCodexDebugGroup(group)) {
+    return [
+      {
+        id: `${baseId}:codex-status`,
+        kind: 'system.status',
+        timestamp: ts,
+        runId,
+        rawRange: range,
+        severity: 'info',
+        category: 'codex',
+        label: group.title.replace(/^Codex\s+/i, 'Codex '),
+        explanation: codexLifecycleExplanation(group.title),
+        nextStep: 'No action needed; raw frame is available in Trace.'
+      }
+    ];
+  }
+
   // Tool / tool-error groups never reach this branch: the main loop
   // collapses contiguous tool activity into a single merged ToolBurst
   // before delegating non-tool groups here. That keeps every burst in
   // the conversation a single dense row and lets the renderer summarise
   // multi-family activity without re-walking the event list.
   if (group.kind === 'error' || group.status === 'error') {
+    const routerError = parseToolRouterError(joinGroupBody(group));
+    if (routerError) {
+      return [
+        {
+          id: `${baseId}:tool-router`,
+          kind: 'system.parserWarning',
+          timestamp: ts,
+          runId,
+          rawRange: range,
+          severity: 'warn',
+          expectedKind: 'tool-result',
+          message: routerError,
+          dedupeKey: `tool-router:${routerError}`,
+          collapsedByDefault: true
+        }
+      ];
+    }
     return [
       {
         id: `${baseId}:agent-error`,
@@ -433,6 +487,7 @@ function toMergedToolBurst(
   const files: string[] = [];
   const artifacts: string[] = [];
   const tests: { command: string; status: 'pass' | 'fail' | 'unknown' }[] = [];
+  const commands: ToolCommandExecution[] = [];
   const allLines: CliOutputLine[] = [];
 
   let count = 0;
@@ -456,6 +511,8 @@ function toMergedToolBurst(
     if (family === 'command') {
       const test = detectTest(group);
       if (test) tests.push(test);
+      const command = commandExecutionFromGroup(group);
+      if (command) commands.push(command);
     }
     allLines.push(...group.lines);
   }
@@ -480,9 +537,144 @@ function toMergedToolBurst(
     files: files.length > 0 ? files : undefined,
     artifacts: artifacts.length > 0 ? artifacts : undefined,
     tests: collapsedTests.length > 0 ? collapsedTests : undefined,
+    commands: commands.length > 0 ? commands : undefined,
     samples,
     collapsedByDefault: true
   };
+}
+
+function isCodexDebugGroup(group: ActivityLogGroup): boolean {
+  return group.kind === 'other' && /^Codex\b/i.test(group.title);
+}
+
+function codexLifecycleExplanation(title: string): string {
+  const label = title.replace(/^Codex\s+/i, '').trim();
+  if (/turn\.started/i.test(label)) return 'Codex started a model turn.';
+  if (/turn\.completed/i.test(label)) return 'Codex completed the model turn.';
+  if (/thread|session/i.test(label)) return 'Codex emitted session lifecycle metadata.';
+  return 'Codex emitted a structured runtime frame.';
+}
+
+function parseToolRouterError(text: string): string | null {
+  if (!/codex_core::tools::router/i.test(text)) return null;
+  const exit = /Exit code:\s*(-?\d+)/i.exec(text)?.[1];
+  return exit
+    ? `Tool router reported exit code ${exit}.`
+    : 'Tool router reported an execution error.';
+}
+
+interface ParsedStatus {
+  category: string;
+  label: string;
+  explanation: string;
+  nextStep?: string;
+  severity: 'info' | 'warn' | 'error';
+}
+
+function parseOrchestratorStatus(text: string): ParsedStatus | null {
+  const match = /^\s*\[([a-z0-9_.:-]+)\]\s*(.*)$/i.exec(text);
+  if (!match) return null;
+  const category = match[1].toLowerCase();
+  const body = match[2].trim();
+  switch (category) {
+    case 'codex-silent-completion':
+      return {
+        category,
+        label: 'Silent completion recovery',
+        explanation: body || 'Codex stopped producing output after a final tool call, so the runner finalized the run through its recovery path.',
+        nextStep: 'Review the result evidence; this is a recovery signal, not proof of completion.',
+        severity: 'warn'
+      };
+    case 'watchdog':
+    case 'watchdog-warning':
+    case 'watchdog-timeout':
+      return {
+        category,
+        label: 'Watchdog',
+        explanation: body || 'The watchdog observed a quiet or stuck run.',
+        nextStep: /kill|timeout/i.test(category + body) ? 'The runner will stop or escalate the run.' : 'Waiting for output or the timeout threshold.',
+        severity: /timeout|kill|cancel/i.test(category + body) ? 'error' : 'warn'
+      };
+    case 'quarantined':
+    case 'circuit-breaker':
+      return {
+        category,
+        label: 'Circuit breaker',
+        explanation: body || 'The runner stopped a repeated no-progress loop.',
+        nextStep: 'Human review should inspect the repeated failure before rerunning.',
+        severity: 'error'
+      };
+    case 'environment-blocker':
+      return {
+        category,
+        label: 'Environment blocker',
+        explanation: body || 'The local environment blocked the run.',
+        nextStep: 'Fix the environment issue, then retry the task.',
+        severity: 'error'
+      };
+    case 'worktree-containment':
+      return {
+        category,
+        label: 'Worktree containment',
+        explanation: body || 'The runner detected a worktree or path containment guard.',
+        nextStep: 'Keep review inside the task worktree boundary.',
+        severity: 'warn'
+      };
+    default:
+      return null;
+  }
+}
+
+const COMMAND_SUMMARY_RE = /^\$\s+(?<command>.*?)\s*(?:\[(?<status>[^\]]+)\])?\s*(?:\[exit\s+(?<exit>-?\d+)\])?\s*$/i;
+function commandExecutionFromGroup(group: ActivityLogGroup): ToolCommandExecution | null {
+  const first = group.lines[0]?.text ?? '';
+  const parsed = COMMAND_SUMMARY_RE.exec(first);
+  const command = (parsed?.groups?.['command'] ?? group.title).trim();
+  if (!command) return null;
+  const statusRaw = (parsed?.groups?.['status'] ?? '').toLowerCase();
+  const exitRaw = parsed?.groups?.['exit'];
+  const exitCode = exitRaw === undefined ? null : Number(exitRaw);
+  const outputLines = group.lines.slice(parsed ? 1 : 0).map((l) => l.text ?? '');
+  return {
+    command,
+    status: normalizeCommandStatus(statusRaw, group.status, Number.isFinite(exitCode) ? exitCode : null),
+    exitCode: Number.isFinite(exitCode) ? exitCode : null,
+    output: outputLines.join('\n').trimEnd(),
+    outputLineCount: outputLines.length,
+    outputTruncated: false,
+    hits: parseOutputHits(outputLines)
+  };
+}
+
+function normalizeCommandStatus(
+  status: string,
+  groupStatus: ActivityLogGroup['status'],
+  exitCode: number | null
+): ToolCommandExecution['status'] {
+  if (/progress|running|started/.test(status)) return 'running';
+  if (/fail|error|cancel/.test(status) || groupStatus === 'error' || (exitCode !== null && exitCode !== 0)) return 'failed';
+  if (/complete|success|done/.test(status) || exitCode === 0) return 'completed';
+  return 'unknown';
+}
+
+const HIT_RE = /^(?<path>(?:[A-Za-z]:)?[^:\n]+?):(?<line>\d+)(?::(?<col>\d+))?:\s*(?<text>.*)$/;
+
+function parseOutputHits(lines: readonly string[]): ToolOutputHit[] | undefined {
+  const hits: ToolOutputHit[] = [];
+  for (const raw of lines) {
+    const match = HIT_RE.exec(raw.trim());
+    if (!match?.groups) continue;
+    const path = match.groups['path'].trim();
+    if (!/[\\/]|[.][A-Za-z0-9]+$/.test(path)) continue;
+    hits.push({
+      path,
+      line: Number(match.groups['line']),
+      column: match.groups['col'] ? Number(match.groups['col']) : undefined,
+      text: match.groups['text'] ?? ''
+    });
+    if (hits.length >= 40) break;
+  }
+  return hits.length > 0 ? hits : undefined;
 }
 
 function stripBatchSuffix(title: string): string {

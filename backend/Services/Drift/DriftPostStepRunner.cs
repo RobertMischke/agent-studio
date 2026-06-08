@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Analysis;
 using OrchestratorApi.Services.Cli.OneShot;
+using OrchestratorApi.Services.GeneratedFiles;
 using OrchestratorApi.Services.Pipeline;
 using OrchestratorApi.Services.Runner;
 
@@ -54,6 +55,7 @@ public sealed class DriftPostStepRunner
     private readonly IConfiguration _config;
     private readonly ILogger<DriftPostStepRunner> _logger;
     private readonly CliOneShotRegistry? _oneShotRegistry;
+    private readonly FileGenerationIndex _fileGenerationIndex;
 
     /// <summary>
     /// CLI invocation seam. Production wires it onto the shared
@@ -77,7 +79,8 @@ public sealed class DriftPostStepRunner
         PipelineExecutionLog pipelineLog,
         IConfiguration config,
         ILogger<DriftPostStepRunner> logger,
-        CliOneShotRegistry? oneShotRegistry = null)
+        CliOneShotRegistry? oneShotRegistry = null,
+        FileGenerationIndex? fileGenerationIndex = null)
     {
         _prompts = prompts;
         _driftStore = driftStore;
@@ -91,6 +94,9 @@ public sealed class DriftPostStepRunner
         _config = config;
         _logger = logger;
         _oneShotRegistry = oneShotRegistry;
+        _fileGenerationIndex = fileGenerationIndex ?? new FileGenerationIndex(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<FileGenerationIndex>.Instance,
+            pipelineLog);
 
         if (_oneShotRegistry != null)
         {
@@ -212,7 +218,9 @@ public sealed class DriftPostStepRunner
             var markdown = _codePattern.RenderMarkdown(cpReport, project);
             var report = MapCodePatternReport(cpReport, project, NewReportId(), DateTime.UtcNow, DriftReportTrigger.Scheduled);
             await _driftStore.AppendAsync(workspace, project, report, markdown, ct).ConfigureAwait(false);
-            RecordStep(jobFolderPath, step.Id, model, PipelineStepStatus.Passed, null, null, startedAt, DateTime.UtcNow);
+            var completedAt = DateTime.UtcNow;
+            RecordStep(jobFolderPath, step.Id, model, PipelineStepStatus.Passed, null, null, startedAt, completedAt);
+            RegisterGenerated(jobFolderPath, step.Id, model, null, null, startedAt, completedAt, report.ReportId);
             return;
         }
 
@@ -237,10 +245,41 @@ public sealed class DriftPostStepRunner
         await persist(agentText, reportId, markdownBody, ct).ConfigureAwait(false);
 
         var usage = cli.Usage;
+        var endedAt = DateTime.UtcNow;
         RecordStep(
             jobFolderPath, step.Id, usage?.Model ?? model,
             cli.Ok ? PipelineStepStatus.Passed : PipelineStepStatus.Failed,
-            usage, cli.Ok ? null : "drift-cli-failed", startedAt, DateTime.UtcNow);
+            usage, cli.Ok ? null : "drift-cli-failed", startedAt, endedAt);
+        RegisterGenerated(jobFolderPath, step.Id, usage?.Model ?? model, usage, "claude", startedAt, endedAt, reportId);
+    }
+
+    private void RegisterGenerated(
+        string jobFolderPath,
+        string stepId,
+        string model,
+        OrchestratorTokenUsage? usage,
+        string? cli,
+        DateTime startedAt,
+        DateTime endedAt,
+        string reportId)
+    {
+        _fileGenerationIndex.Upsert(jobFolderPath, new FileGenerationMeta
+        {
+            File = $"logs/drift/{reportId}.md",
+            Kind = "drift",
+            Model = usage?.Model ?? model,
+            Cli = cli,
+            TokensIn = usage?.InputTokens ?? 0,
+            TokensOut = usage?.OutputTokens ?? 0,
+            TokensTotal = (usage?.InputTokens ?? 0)
+                + (usage?.OutputTokens ?? 0)
+                + (usage?.CacheReadTokens ?? 0)
+                + (usage?.CacheCreationTokens ?? 0),
+            StartedAt = startedAt,
+            EndedAt = endedAt,
+            DurationMs = (long)(endedAt - startedAt).TotalMilliseconds,
+            StepId = stepId,
+        });
     }
 
     /// <summary>

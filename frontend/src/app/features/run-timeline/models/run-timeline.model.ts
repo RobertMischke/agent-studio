@@ -8,6 +8,7 @@
  * 1-based indices into cli-output.log so the drill-down activity-log
  * filter does not have to re-derive the boundaries.
  */
+import type { TaskTokenSummary } from '../../tokens';
 
 export interface RunRecord {
   index: number;
@@ -36,6 +37,11 @@ export interface RunRecord {
    * `/api/tasks/{id}/runs/{index}/context`, never inlined in the polled list.
    */
   contextRef: string | null;
+  /**
+   * Optional per-run token rollup. Older backend payloads omit this; the
+   * timeline renders the value only when present.
+   */
+  tokenSummary?: TaskTokenSummary | null;
 }
 
 /** Response of `GET /api/tasks/{id}/runs/{index}/context`. `context` is null when nothing was captured for the run. */
