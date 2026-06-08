@@ -52,12 +52,25 @@ public sealed record PhaseBudget(
         // (60 s, 180 s) budget. Widen the kill threshold to several
         // minutes so a slow-but-alive turn-start no longer reads as hung;
         // the early Suspicious warning still surfaces the stall loudly.
-        RunPhase.PromptConsumed       => new PhaseBudget(SuspiciousSeconds: 120, HungSeconds: 420),
-        // Inside a turn we expect output deltas every few seconds; one
-        // minute of silence between deltas is the upper bound, two
-        // minutes triggers a kill.
-        RunPhase.TurnInProgress       => new PhaseBudget(SuspiciousSeconds: 60,  HungSeconds: 180),
-        RunPhase.OutputDelta          => new PhaseBudget(SuspiciousSeconds: 60,  HungSeconds: 180),
+        //
+        // 2026-06-09 Extra-High (xhigh) calibration: Codex at xhigh reasons
+        // SILENTLY for many minutes BEFORE it emits its first turn frame, so
+        // it stays in PromptConsumed the whole time and emits no stdout that
+        // resets the silence clock (reasoning frames are not yet wired to a
+        // liveness ping - see follow-up task). The 420 s kill auto-cancelled
+        // healthy xhigh runs mid-think (observed ASS-1670: killed at 423 s in
+        // PromptConsumed while still reasoning, zero work produced). Widen the
+        // kill backstop to 20 min so xhigh's pre-turn reasoning is not killed
+        // as a hang; the Suspicious warning still fires early (5 min) so the
+        // stall stays loud, not silent.
+        RunPhase.PromptConsumed       => new PhaseBudget(SuspiciousSeconds: 300, HungSeconds: 1200),
+        // Inside a turn we expect output deltas every few seconds; under
+        // xhigh, Codex can interleave long silent reasoning between deltas,
+        // so the old (60 s, 180 s) budget killed alive runs mid-turn. The
+        // early Suspicious warning still fires at 3 min; the kill backstop
+        // sits at 10 min to cover an xhigh reasoning pause between deltas.
+        RunPhase.TurnInProgress       => new PhaseBudget(SuspiciousSeconds: 180, HungSeconds: 600),
+        RunPhase.OutputDelta          => new PhaseBudget(SuspiciousSeconds: 180, HungSeconds: 600),
         // Tool execution legitimately runs longer than ordinary turns
         // (Bash builds, grep over big repos, web fetches) and - for Codex -
         // a single long reasoning/tool turn can stay stdout-silent for

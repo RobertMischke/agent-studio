@@ -51,28 +51,28 @@ public class PhaseAwareWatchdogTests
     }
 
     [Fact]
-    public void PromptConsumed_StaysQuietUntil120s_ThenSuspiciousThenHungAt420s()
+    public void PromptConsumed_StaysQuietUntil300s_ThenSuspiciousThenHungAt1200s()
     {
-        // The "init then silence" hang sits here, but the same API
-        // backpressure that stretches SessionInitializing stretches this
-        // window too. The 2026-06 mass-false-positive survey saw kills
-        // clustered at 183 s under the old (60s, 180s) budget; the budget
-        // is now (120s, 420s). Locked so a regression cannot quietly
-        // re-tighten it.
+        // The "init then silence" hang sits here. The 2026-06-09 Extra-High
+        // calibration widened this from (120s, 420s) to (300s, 1200s):
+        // Codex at xhigh reasons silently for many minutes before its first
+        // turn frame, so it stays in PromptConsumed and emits no stdout; the
+        // old 420 s kill auto-cancelled healthy xhigh runs mid-think
+        // (ASS-1670: killed at 423 s while still reasoning, zero work).
+        // Locked so a regression cannot quietly re-tighten it.
         Assert.Equal(WatchdogState.Quiet,
             PhaseAwareWatchdog.DecideState(45, 100, RunPhase.PromptConsumed, Cfg));
-        // 65 s used to be Suspicious under the old 60 s threshold; now it is
-        // still only Quiet.
+        // 250 s is still only Quiet under the widened 300 s Suspicious band.
         Assert.Equal(WatchdogState.Quiet,
-            PhaseAwareWatchdog.DecideState(65, 100, RunPhase.PromptConsumed, Cfg));
+            PhaseAwareWatchdog.DecideState(250, 300, RunPhase.PromptConsumed, Cfg));
         Assert.Equal(WatchdogState.Suspicious,
-            PhaseAwareWatchdog.DecideState(125, 200, RunPhase.PromptConsumed, Cfg));
-        // 183 s - the reported false-positive kill point - is now merely
+            PhaseAwareWatchdog.DecideState(305, 400, RunPhase.PromptConsumed, Cfg));
+        // 423 s - the ASS-1670 false-positive kill point - is now merely
         // Suspicious, never Hung.
         Assert.Equal(WatchdogState.Suspicious,
-            PhaseAwareWatchdog.DecideState(183, 300, RunPhase.PromptConsumed, Cfg));
+            PhaseAwareWatchdog.DecideState(423, 500, RunPhase.PromptConsumed, Cfg));
         Assert.Equal(WatchdogState.Hung,
-            PhaseAwareWatchdog.DecideState(425, 500, RunPhase.PromptConsumed, Cfg));
+            PhaseAwareWatchdog.DecideState(1250, 1400, RunPhase.PromptConsumed, Cfg));
     }
 
     [Fact]
@@ -229,7 +229,7 @@ public class PhaseAwareWatchdogTests
         var msg = PhaseAwareWatchdog.FormatBudgetReason(RunPhase.PromptConsumed, 70);
         Assert.Contains("phase=PromptConsumed", msg);
         Assert.Contains("silence=70s", msg);
-        Assert.Contains("allowed=120/420s", msg);
+        Assert.Contains("allowed=300/1200s", msg);
     }
 
     [Fact]
