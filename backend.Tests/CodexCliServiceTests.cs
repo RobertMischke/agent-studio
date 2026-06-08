@@ -294,6 +294,37 @@ public class CodexCliServiceTests
     }
 
     [Fact]
+    public void BuildStartInfo_Resume_PlacesOptionFlagsBeforeResumeSubcommand()
+    {
+        // Regression: codex marks --sandbox as an EXEC option (NOT clap-global),
+        // so `codex exec resume <id> --sandbox ...` errors with
+        // "unexpected argument '--sandbox'" (exitCode 2) and broke every codex
+        // resume / crash-recovery into a relaunch loop. All option flags must
+        // therefore precede the `resume` subcommand.
+        var svc = BuildService();
+        var args = svc.BuildStartInfoForTest(
+            "do work",
+            Environment.CurrentDirectory,
+            sessionName: "019dee65-7a9b-7843-bfd9-06e555fff02b",
+            resumeSession: true,
+            model: "gpt-5-codex",
+            thinkingLevel: "high").ArgumentList.ToArray();
+
+        var resumeIdx = Array.IndexOf(args, "resume");
+        Assert.True(resumeIdx >= 0, "resume subcommand missing");
+        Assert.True(Array.IndexOf(args, "--experimental-json") < resumeIdx,
+            "exec options must precede the resume subcommand");
+
+        // After `resume` only the session id then the `-` stdin-prompt sentinel
+        // may follow — never an option flag.
+        var afterResume = args.Skip(resumeIdx + 1).ToArray();
+        Assert.Equal("019dee65-7a9b-7843-bfd9-06e555fff02b", afterResume[0]);
+        foreach (var a in afterResume.Skip(1))
+            Assert.False(a.StartsWith("--") || a == "-m" || a == "-c",
+                $"option flag '{a}' must not follow the resume subcommand (codex rejects e.g. --sandbox there)");
+    }
+
+    [Fact]
     public void TryExtractCommandExecution_ParsesCanonicalFrame()
     {
         // Real Codex frame shape from the 2026-05-12 Lotta-dashboard bug.

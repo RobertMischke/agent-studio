@@ -92,11 +92,17 @@ public sealed class CodexCliService : CliExecutionServiceBase
         };
         psi.ArgumentList.Add("exec");
 
-        if (resumeSession && !string.IsNullOrWhiteSpace(sessionName))
-        {
-            psi.ArgumentList.Add("resume");
-            psi.ArgumentList.Add(sessionName);
-        }
+        // IMPORTANT - argument ORDER vs the `resume` subcommand.
+        // In the codex CLI, exec options must precede the `resume`
+        // subcommand. Only `--model`/`-m`, the bypass flag, and `--json`
+        // are marked clap-`global` and therefore tolerate either position;
+        // crucially `--sandbox` is an EXEC-level option that is NOT global,
+        // so `codex exec resume <id> --sandbox danger-full-access` fails with
+        // `error: unexpected argument '--sandbox' found` (exitCode 2), which
+        // broke EVERY codex resume / crash-recovery into a relaunch loop
+        // (observed 2026-06-09 on a re-/start of an interrupted task). We
+        // therefore emit ALL option flags here, BEFORE adding `resume`, so
+        // they bind to `exec` where they are valid.
 
         // --experimental-json is the SDK-backed exec protocol: stdout stays
         // machine-readable, while completion is the process exit after the
@@ -118,6 +124,15 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
         foreach (var flag in CliReasoningFlags.For(CliType, model, thinkingLevel))
             psi.ArgumentList.Add(flag);
+
+        // The `resume <session-id>` subcommand comes AFTER the exec options
+        // above (see the ORDER note). On a resume the prompt positional
+        // belongs to the resume subcommand; on a fresh run it belongs to exec.
+        if (resumeSession && !string.IsNullOrWhiteSpace(sessionName))
+        {
+            psi.ArgumentList.Add("resume");
+            psi.ArgumentList.Add(sessionName);
+        }
 
         // Use `-` to tell Codex to read the prompt from stdin instead of
         // taking it as a positional argv. The actual bytes are written by
