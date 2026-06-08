@@ -129,6 +129,62 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
     }
 
     [Fact]
+    public async Task MoveProgressToAutoReview_ScopesCommitToTaskFiles_IgnoresForeignDirtyChanges()
+    {
+        // The mega-blob / mis-attribution bug: at maxParallelism==1 the agent
+        // works in the SHARED main checkout, so foreign dirty changes (operator
+        // edits, an earlier task that never committed) sit alongside this task's
+        // edits. A blanket `git add -A` would sweep them all into this task's
+        // commit. The scoped commit must stage ONLY the task's own files.
+        WriteJob(TaskStates.Progress, "task-a");
+
+        // Foreign dirty changes left in the checkout BEFORE the task ran.
+        var foreign1 = Path.Combine(_repoRoot, "AGENTS.md");
+        File.WriteAllText(foreign1, "seed line\nforeign edit\n");
+        File.SetLastWriteTimeUtc(foreign1, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var foreign2 = Path.Combine(_repoRoot, "foreign.txt");
+        File.WriteAllText(foreign2, "foreign new file\n");
+        File.SetLastWriteTimeUtc(foreign2, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        // Task A's run starts AFTER the foreign changes already exist.
+        var firstActivity = DateTime.UtcNow;
+        AppendSessionEvent("task-a", firstActivity);
+
+        // The agent edits exactly TWO files during the run.
+        var edit1 = Path.Combine(_repoRoot, "alpha.txt");
+        File.WriteAllText(edit1, "agent alpha\n");
+        File.SetLastWriteTimeUtc(edit1, firstActivity.AddSeconds(30));
+        var edit2 = Path.Combine(_repoRoot, "beta.txt");
+        File.WriteAllText(edit2, "agent beta\n");
+        File.SetLastWriteTimeUtc(edit2, firstActivity.AddSeconds(30));
+
+        var deps = BuildDeps();
+        var outcome = await deps.Transitions.MoveAsync("task-a", TaskStates.AutoReview, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+
+        // A real SHA is stamped and the commit records exactly the two files.
+        var movedA = ReadJob(TaskStates.AutoReview, "task-a");
+        Assert.NotNull(movedA?.Commit);
+        Assert.Equal(2, movedA!.Commit!.FilesChanged);
+
+        // Inspect the actual HEAD commit: it must contain ONLY the task's two
+        // files, never the foreign dirty ones swept in by a whole-tree add -A.
+        var committed = RunGitCapture(_repoRoot, "show", "--name-only", "--pretty=format:", "HEAD")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        Assert.Equal(2, committed.Count);
+        Assert.Contains("alpha.txt", committed);
+        Assert.Contains("beta.txt", committed);
+        Assert.DoesNotContain("AGENTS.md", committed);
+        Assert.DoesNotContain("foreign.txt", committed);
+
+        // The foreign dirty changes are STILL uncommitted in the working tree.
+        var status = deps.Git.GetStatus("task-a", _watchPath);
+        Assert.Contains(status.Files, f => f.Path.EndsWith("AGENTS.md", StringComparison.Ordinal));
+        Assert.Contains(status.Files, f => f.Path.EndsWith("foreign.txt", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task MoveProgressToAutoReview_NoSessionEvents_LegacyBehaviorAutoCommits()
     {
         // Legacy job folders that pre-date session-events still need the
@@ -283,6 +339,24 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         foreach (var arg in args) psi.ArgumentList.Add(arg);
         using var p = Process.Start(psi)!;
         p.WaitForExit(15_000);
+    }
+
+    private static string RunGitCapture(string cwd, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        using var p = Process.Start(psi)!;
+        var so = p.StandardOutput.ReadToEnd();
+        p.WaitForExit(15_000);
+        return so;
     }
 
     private sealed record Deps(TaskScannerService Scanner, TaskTransitionService Transitions, GitService Git);

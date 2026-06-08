@@ -398,14 +398,17 @@ public sealed class TaskTransitionService
     {
         try
         {
-            // Pre-flight attribution guard: if every currently dirty path was last
-            // modified before this task's first CLI run started, the working-tree
-            // changes did not originate from this task's agent. Bundling them into
-            // an auto-commit would stamp an unrelated SHA onto the job (see the
-            // 2026-05-26 markdown task that ended up owning an AGENTS.md commit).
-            // The guard is gated on TaskSessionLog so unit-test fixtures that
-            // construct the service without it keep the legacy behavior.
-            if (!IsWorkingTreeAttributableToTask(jobId, watchPath))
+            // Pre-flight attribution scoping. In a sequential run (maxParallelism
+            // ==1) the agent works in the SHARED main checkout, so the dirty tree
+            // can mix this task's edits with leftover changes from an operator or
+            // an earlier task that never committed. A blanket `git add -A` would
+            // sweep all of them into this task's commit (the mega-blob / mis-
+            // attribution bug). We classify each dirty path by mtime against the
+            // task's first CLI run and commit only the ones authored during it.
+            // Gated on TaskSessionLog so unit-test fixtures without it keep the
+            // legacy whole-tree behavior.
+            var plan = PlanAutoCommitScope(jobId, watchPath);
+            if (plan.Scope == AutoCommitScope.None)
             {
                 _logger.LogInformation(
                     "Auto-commit skipped for {JobId}: working-tree dirty paths predate the task's first run",
@@ -413,7 +416,13 @@ public sealed class TaskTransitionService
                 return null;
             }
 
-            var (result, message) = await _git.AutoCommitAsync(jobId, watchPath, ct);
+            var pathspecs = plan.Scope == AutoCommitScope.Scoped ? plan.Paths : null;
+            if (pathspecs != null)
+                _logger.LogInformation(
+                    "Auto-commit for {JobId}: scoping commit to {Count} task-attributable path(s); foreign dirty changes left untouched",
+                    jobId, pathspecs.Count);
+
+            var (result, message) = await _git.AutoCommitAsync(jobId, watchPath, ct, pathspecs);
             if (!result.Success || string.IsNullOrWhiteSpace(result.Sha))
             {
                 _logger.LogInformation("Auto-commit skipped for {JobId}: {Error}", jobId, result.Error);
@@ -456,67 +465,89 @@ public sealed class TaskTransitionService
         return pushed;
     }
 
+    private enum AutoCommitScope
+    {
+        /// <summary>Commit the whole tree (legacy / unknown - no session window to scope against).</summary>
+        All,
+        /// <summary>Nothing is attributable to this task; skip the commit entirely.</summary>
+        None,
+        /// <summary>Commit only <see cref="AutoCommitPlan.Paths"/>.</summary>
+        Scoped,
+    }
+
+    private sealed record AutoCommitPlan(AutoCommitScope Scope, IReadOnlyList<string> Paths);
+
     /// <summary>
-    /// Returns false when every currently dirty path in the project's working
-    /// tree was last modified before this task's first recorded CLI run
-    /// started - the signal that the changes were left over from another
-    /// context (operator edit, an earlier task that never committed) rather
-    /// than authored by this task's agent. Returns true (allow the auto-commit
-    /// to proceed) in any of these cases:
+    /// Classifies the project's dirty working tree against this task's first
+    /// recorded CLI run so the auto-commit can stage only the task's own work.
+    /// A dirty path is attributable when its last-write time is at or after the
+    /// task's first session event (the agent touched it during the run) or when
+    /// its timestamp cannot be read (deletion / rename / permission error - we
+    /// defer to commit so a real agent-driven change is never lost). Paths whose
+    /// mtime predates the run are leftover from another context (operator edit,
+    /// an earlier task that never committed) and are excluded.
+    ///
+    /// <para>
+    /// Returns <see cref="AutoCommitScope.All"/> (commit the whole tree, legacy
+    /// <c>git add -A</c> path) when there is no window to scope against:
     /// <list type="bullet">
     /// <item>No <see cref="TaskSessionLog"/> is wired (legacy fixtures).</item>
-    /// <item>The task has no recorded session events yet (first-ever pickup,
-    ///   no run history to compare against).</item>
-    /// <item>The working tree is clean - <see cref="GitService.AutoCommitAsync"/>
-    ///   will short-circuit on its own.</item>
-    /// <item>At least one dirty path was modified at or after the task's first
-    ///   run timestamp, or its mtime cannot be read (deleted, permission
-    ///   error). When in doubt we defer to the auto-commit so a legitimately
-    ///   edited file is never lost.</item>
+    /// <item>The task has no recorded session events (first-ever pickup).</item>
+    /// <item>The working tree is clean or the repo root can't be resolved -
+    ///   <see cref="GitService.AutoCommitAsync"/> short-circuits on its own.</item>
     /// </list>
+    /// Returns <see cref="AutoCommitScope.None"/> when every dirty path predates
+    /// the run, and <see cref="AutoCommitScope.Scoped"/> with the attributable
+    /// subset otherwise.
+    /// </para>
     /// </summary>
-    private bool IsWorkingTreeAttributableToTask(string jobId, string? watchPath)
+    private AutoCommitPlan PlanAutoCommitScope(string jobId, string? watchPath)
     {
-        if (_sessions == null) return true;
+        var all = new AutoCommitPlan(AutoCommitScope.All, []);
+        if (_sessions == null) return all;
 
         List<SessionEvent> events;
         try { events = _sessions.ReadSessionEvents(jobId, watchPath); }
-        catch { return true; }
-        if (events.Count == 0) return true;
+        catch { return all; }
+        if (events.Count == 0) return all;
 
         var firstActivityUtc = events.Min(e => e.Ts);
-        if (firstActivityUtc == default) return true;
+        if (firstActivityUtc == default) return all;
 
         var status = _git.GetStatus(jobId, watchPath);
-        if (!status.IsRepo || status.Files.Count == 0) return true;
+        if (!status.IsRepo || status.Files.Count == 0) return all;
 
         var repoRoot = _git.ResolveRepoRootForWatchPath(watchPath);
-        if (string.IsNullOrWhiteSpace(repoRoot)) return true;
+        if (string.IsNullOrWhiteSpace(repoRoot)) return all;
 
+        var scoped = new List<string>();
         foreach (var file in status.Files)
         {
             if (string.IsNullOrWhiteSpace(file.Path)) continue;
             var fullPath = Path.Combine(repoRoot, file.Path.Replace('/', Path.DirectorySeparatorChar));
-            DateTime mtime;
             try
             {
                 if (!File.Exists(fullPath))
                 {
                     // Deletion or rename - we cannot timestamp it. Treat as
-                    // potentially attributable so a real agent-driven delete
-                    // is still committed.
-                    return true;
+                    // attributable so a real agent-driven delete is still
+                    // committed, but keep it scoped to this path; never widen
+                    // back to a whole-tree `git add -A`.
+                    scoped.Add(file.Path);
+                    continue;
                 }
-                mtime = File.GetLastWriteTimeUtc(fullPath);
+                if (File.GetLastWriteTimeUtc(fullPath) >= firstActivityUtc)
+                    scoped.Add(file.Path);
             }
             catch
             {
-                return true;
+                // Unreadable mtime: defer to commit, but still scoped to the path.
+                scoped.Add(file.Path);
             }
-            if (mtime >= firstActivityUtc) return true;
         }
 
-        return false;
+        if (scoped.Count == 0) return new AutoCommitPlan(AutoCommitScope.None, []);
+        return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
     }
 
     private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string jobId, string reason, CancellationToken ct)

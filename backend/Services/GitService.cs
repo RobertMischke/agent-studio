@@ -680,7 +680,8 @@ public class GitService
         return new GitCommitResult(true, sha.Trim(), null);
     }
 
-    public GitCommitResult Commit(string jobId, string? watchPath, string message)
+    public GitCommitResult Commit(string jobId, string? watchPath, string message,
+        IReadOnlyCollection<string>? pathspecs = null)
     {
         if (string.IsNullOrWhiteSpace(message))
             return new GitCommitResult(false, null, "Commit message is required.");
@@ -689,6 +690,38 @@ public class GitService
         if (configured == null) return new GitCommitResult(false, null, "Could not resolve repo root.");
         var root = ResolveGitToplevel(configured);
         if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {configured}");
+
+        // Scoped commit: when the caller names the task's own paths, stage and
+        // commit ONLY those. A sequential (maxParallelism==1) run shares the
+        // main checkout, so unrelated dirty changes from operator edits or an
+        // earlier task that never committed pile up there. A blanket `git add
+        // -A` would sweep all of them into THIS task's commit (the mega-blob /
+        // mis-attribution bug). Restricting the pathspec keeps the commit - and
+        // its stamped SHA - to exactly the files this task touched, and leaves
+        // the foreign changes dirty for their own owner to handle.
+        if (pathspecs is { Count: > 0 })
+        {
+            var addArgs = new List<string> { "add", "-A", "--" };
+            addArgs.AddRange(pathspecs);
+            var (_, sAddErr, sAddCode) = RunGitArgs(root, addArgs.ToArray());
+            if (sAddCode != 0) return new GitCommitResult(false, null, $"git add failed: {sAddErr.Trim()}");
+
+            // `commit -- <pathspec>` performs a partial commit from those paths
+            // only, so even a (policy-violating) pre-staged foreign change in
+            // the index cannot ride along. Message via stdin (-F -).
+            var commitArgs = new List<string> { "commit", "-F", "-", "--" };
+            commitArgs.AddRange(pathspecs);
+            var (_, sCommitErr, sCommitCode) = RunGitArgs(root, commitArgs.ToArray(), stdin: message);
+            if (sCommitCode != 0)
+            {
+                if (sCommitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                    return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
+                return new GitCommitResult(false, null, sCommitErr.Trim());
+            }
+
+            var (scopedSha, _, _) = RunGit(root, "rev-parse --short HEAD");
+            return new GitCommitResult(true, scopedSha.Trim(), null);
+        }
 
         var (_, addErr, addCode) = RunGit(root, "add -A");
         if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
@@ -723,14 +756,20 @@ public class GitService
     /// </para>
     /// </summary>
     public async Task<GenerateMessageResult> GenerateCommitMessageAsync(
-        string jobId, string? watchPath, CancellationToken ct = default)
+        string jobId, string? watchPath, CancellationToken ct = default,
+        IReadOnlyCollection<string>? pathspecs = null)
     {
         var configured = ResolveRepoRoot(jobId, watchPath);
         if (configured == null) return new GenerateMessageResult(null, "Could not resolve repo root.");
         var root = ResolveGitToplevel(configured);
         if (root == null) return new GenerateMessageResult(null, $"Not a git repository: {configured}");
 
-        var (diff, _, code) = RunGit(root, "diff HEAD");
+        // Scope the diff to the task's own paths when the caller supplies them
+        // (scoped auto-commit) so the generated subject describes only this
+        // task's work, never foreign dirty changes sharing the checkout.
+        var (diff, _, code) = pathspecs is { Count: > 0 }
+            ? RunGitArgs(root, new[] { "diff", "HEAD", "--" }.Concat(pathspecs).ToArray())
+            : RunGit(root, "diff HEAD");
         if (code != 0 || string.IsNullOrWhiteSpace(diff))
             return new GenerateMessageResult(null, "No diff against HEAD. Nothing to summarise.");
 
@@ -980,7 +1019,8 @@ public class GitService
     /// caller can persist it on the job.
     /// </summary>
     public async Task<(GitCommitResult Result, string Message)> AutoCommitAsync(
-        string jobId, string? watchPath, CancellationToken ct = default)
+        string jobId, string? watchPath, CancellationToken ct = default,
+        IReadOnlyCollection<string>? pathspecs = null)
     {
         var statusBefore = GetStatus(jobId, watchPath);
         if (!statusBefore.IsRepo)
@@ -988,14 +1028,18 @@ public class GitService
         if (statusBefore.FilesChanged == 0)
             return (new GitCommitResult(false, null, "Nothing to commit. Working tree is clean."), "");
 
-        var msg = await GenerateCommitMessageAsync(jobId, watchPath, ct);
+        // When scoped, the deterministic-fallback count must reflect the task's
+        // own paths, not the (possibly larger) whole-tree dirty count.
+        var fileCount = pathspecs is { Count: > 0 } ? pathspecs.Count : statusBefore.FilesChanged;
+
+        var msg = await GenerateCommitMessageAsync(jobId, watchPath, ct, pathspecs);
         var message = msg.Message;
         if (string.IsNullOrWhiteSpace(message))
         {
             // Fall back to a deterministic message so an LLM hiccup does not block the auto-commit.
-            message = $"chore: snapshot for review ({statusBefore.FilesChanged} file{(statusBefore.FilesChanged == 1 ? "" : "s")} changed)";
+            message = $"chore: snapshot for review ({fileCount} file{(fileCount == 1 ? "" : "s")} changed)";
         }
-        var result = Commit(jobId, watchPath, message);
+        var result = Commit(jobId, watchPath, message, pathspecs);
         return (result, message);
     }
 
@@ -1870,12 +1914,15 @@ public class GitService
     /// quoting to get wrong and no shell to inject into.
     /// </summary>
     private static (string Out, string Err, int Code) RunGitArgs(string cwd, params string[] args)
+        => RunGitArgs(cwd, args, stdin: null);
+
+    private static (string Out, string Err, int Code) RunGitArgs(string cwd, string[] args, string? stdin)
     {
         var psi = new ProcessStartInfo
         {
             FileName = "git",
             WorkingDirectory = cwd,
-            RedirectStandardInput = false,
+            RedirectStandardInput = stdin != null,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -1883,7 +1930,7 @@ public class GitService
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
 
-        return RunGitProcess(psi, null);
+        return RunGitProcess(psi, stdin);
     }
 
     private static (string Out, string Err, int Code) RunGitProcess(ProcessStartInfo psi, string? stdin)

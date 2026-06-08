@@ -2,6 +2,21 @@ import { effect, inject, Injectable } from '@angular/core';
 import { UpdateClientService } from './update.service';
 import { NotificationService } from './notification.service';
 
+/** localStorage key holding dismissed run IDs so a click-away survives F5. */
+const DISMISSED_STORAGE_KEY = 'atp.update.dismissedRuns';
+/** Cap on persisted dismissed run IDs; keeps the key bounded over time. */
+const DISMISSED_MAX = 50;
+/**
+ * Freshness window for the failed toast. A failed run whose
+ * `lastRunFinishedAt` is older than this is treated as stale history and
+ * is NOT re-toasted on a fresh page load (where the in-memory handled /
+ * dismissed sets are empty). A genuine failure during the session has a
+ * recent `lastRunFinishedAt` and still surfaces immediately. The window is
+ * wider than the done branch's 60 s because a failure warrants a longer
+ * grace period for the operator to actually catch it after a reload.
+ */
+const FAILED_FRESH_WINDOW_MS = 5 * 60_000;
+
 /**
  * F56: bridges UpdateClientService status changes to toast notifications.
  * Replaces the old <app-update-banner> component. Watches status() and
@@ -17,7 +32,7 @@ export class UpdateNotificationBridge {
   private activeToastId: number | null = null;
   private lastHandledRunId: string | null = null;
   private lastHandledPhase: string | null = null;
-  private dismissed = new Set<string>();
+  private dismissed = this.loadDismissed();
 
   constructor() {
     effect(() => {
@@ -38,6 +53,19 @@ export class UpdateNotificationBridge {
       if (sameRunIdAlreadyHandled && !isFailedToDoneUpgrade) return;
 
       if (s.phase === 'failed') {
+        // Freshness gate (analogous to the done branch): a long-finished
+        // failed run must not re-toast on a fresh page load. Without this,
+        // the update-service keeps reporting `phase: failed` for an old run
+        // and — because `dismissed`/`lastHandledRunId` are in-memory and
+        // empty after F5 — the toast reappears on every reload. A real
+        // failure during the session has a recent `lastRunFinishedAt` and
+        // is still surfaced. The failed -> done upgrade path bypasses the
+        // gate (mirrors the done branch) but that path never reaches here.
+        const failedFinishedMs = s.lastRunFinishedAt ? Date.parse(s.lastRunFinishedAt) : NaN;
+        const failedFresh =
+          !Number.isNaN(failedFinishedMs) && Date.now() - failedFinishedMs <= FAILED_FRESH_WINDOW_MS;
+        if (!failedFresh) return;
+
         this.dismissActive();
         this.lastHandledRunId = runId;
         this.lastHandledPhase = 'failed';
@@ -74,7 +102,7 @@ export class UpdateNotificationBridge {
               testId: 'toast-update-rollback',
               primary: true,
               callback: () => {
-                this.dismissed.add(runId);
+                this.recordDismissed(runId);
                 this.client.rollback(runId).catch(() => { /* status poll surfaces failure */ });
               },
             },
@@ -82,7 +110,7 @@ export class UpdateNotificationBridge {
               label: 'Other runs…',
               testId: 'toast-update-other-runs',
               callback: () => {
-                this.dismissed.add(runId);
+                this.recordDismissed(runId);
                 const el = document.querySelector('[data-testid="update-center-trigger"]') as HTMLElement | null;
                 el?.click();
               },
@@ -90,7 +118,7 @@ export class UpdateNotificationBridge {
             {
               label: 'Dismiss',
               testId: 'toast-update-dismiss',
-              callback: () => { this.dismissed.add(runId); },
+              callback: () => { this.recordDismissed(runId); },
             },
           ],
         });
@@ -124,14 +152,14 @@ export class UpdateNotificationBridge {
                 testId: 'toast-update-reload',
                 primary: true,
                 callback: () => {
-                  this.dismissed.add(runId);
+                  this.recordDismissed(runId);
                   if (typeof window !== 'undefined') window.location.reload();
                 },
               },
               {
                 label: 'Dismiss',
                 testId: 'toast-update-done-dismiss',
-                callback: () => { this.dismissed.add(runId); },
+                callback: () => { this.recordDismissed(runId); },
               },
             ],
           });
@@ -142,7 +170,7 @@ export class UpdateNotificationBridge {
             message: `No code change (${s.lastRunHeadAfter?.slice(0, 7) ?? '?'}); reload not required.`,
             durationMs: 6000,
           });
-          this.dismissed.add(runId);
+          this.recordDismissed(runId);
         }
       }
     });
@@ -152,6 +180,37 @@ export class UpdateNotificationBridge {
     if (this.activeToastId !== null) {
       this.notify.dismiss(this.activeToastId);
       this.activeToastId = null;
+    }
+  }
+
+  /** Mark a run dismissed for this session AND persist it across reloads. */
+  private recordDismissed(runId: string): void {
+    this.dismissed.add(runId);
+    this.persistDismissed();
+  }
+
+  private loadDismissed(): Set<string> {
+    try {
+      if (typeof localStorage === 'undefined') return new Set();
+      const raw = localStorage.getItem(DISMISSED_STORAGE_KEY);
+      if (!raw) return new Set();
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return new Set();
+      return new Set(parsed.filter((x): x is string => typeof x === 'string'));
+    } catch {
+      // Corrupt / disabled storage must never break the toast bridge.
+      return new Set();
+    }
+  }
+
+  private persistDismissed(): void {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      // Keep only the most-recent IDs so the key cannot grow unbounded.
+      const ids = [...this.dismissed].slice(-DISMISSED_MAX);
+      localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify(ids));
+    } catch {
+      // Storage full / disabled — the in-memory set still gates this session.
     }
   }
 }

@@ -1,7 +1,8 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 import type { CliType } from '../../../models/task.model';
 import { cliTypeIcon } from '../../../services/format.util';
+import { JobsHubClient } from '../../../services/jobs-hub-client.service';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../quota';
 import { QuotaApiService } from '../../quota';
 import { TokensApiService } from './tokens-api.service';
@@ -55,6 +56,7 @@ export class CliUsageStore {
   private readonly quotaApi = inject(QuotaApiService);
   private readonly tokensApi = inject(TokensApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly hub = inject(JobsHubClient);
 
   readonly report = signal<QuotaReport | null>(null);
   readonly tokens = signal<TokenSummaryAggregate | null>(null);
@@ -85,6 +87,10 @@ export class CliUsageStore {
   // the user returns to the tab. Same exception as NowTickService.
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
+  // Tracks the last-seen hub connection state so the reconnect effect only
+  // re-hydrates on a genuine down→up transition, not on every signal read.
+  private wasHubConnected = false;
+
   constructor() {
     this.destroyRef.onDestroy(() => {
       if (this.quotaPollTimer != null) clearVisibleInterval(this.quotaPollTimer);
@@ -92,6 +98,30 @@ export class CliUsageStore {
       this.clearDetailTimers();
     });
   }
+
+  /**
+   * Re-hydrate on SignalR reconnect. The board re-pulls itself via the hub's
+   * `reconnected` hook, but this store polls on its own 60 s cadence and would
+   * otherwise leave the status-bar quota strip (and any open detail panel)
+   * showing pre-restart numbers for up to a minute after the backend returns.
+   * Reacting to the connection flipping back up pulls fresh data immediately,
+   * so the strip converges with the rest of the shell instead of staying stale
+   * until the next tick or a manual reload.
+   */
+  private readonly reconnectEffect = effect(() => {
+    const up = this.hub.connected();
+    untracked(() => {
+      const reconnected = up && !this.wasHubConnected;
+      this.wasHubConnected = up;
+      if (!reconnected) return;
+      if (this.quotaStarted) this.fetchQuota();
+      if (this.detailConsumers > 0) {
+        this.fetchTokensFresh();
+        this.fetchAdHoc();
+        this.fetchDetail();
+      }
+    });
+  });
 
   /** Start the lightweight quota poll + relative-time tick (idempotent). */
   ensureQuotaStarted(): void {

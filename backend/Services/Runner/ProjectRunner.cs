@@ -1339,10 +1339,18 @@ public class ProjectRunner
                 info.SessionChain,
                 continueMode: mode);
 
+            // Pick<->Start atomicity (ASS-1655): remember whether THIS call is the
+            // one that moved the task into 3-progress. Every early return between
+            // here and a confirmed CLI start must roll that move back to 2-ready,
+            // otherwise the task is stranded as a zombie in 3-progress while its
+            // slot is already free -> the runner picks the next task and ends up
+            // with two folders in 3-progress at maxParallelism=1.
+            var movedToProgressThisCall = false;
             if (plan.MoveJobToProgress && info.State != TaskStates.Progress)
             {
                 _states.MoveJob(jobId, TaskStates.Progress, Entry.Path);
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
+                movedToProgressThisCall = true;
             }
 
             // Way 3 (non-deterministic half): an epic card runs a planning /
@@ -1443,6 +1451,11 @@ public class ProjectRunner
                     _activeRuns.Release(jobId);
                     ReleasePickupLockIfHeld();
                     _mutations.RollbackStashedPendingIntent(info.FolderPath);
+                    // The run never started: roll the just-applied 3-progress move
+                    // back to 2-ready so the deferred task does not linger as a
+                    // zombie in 3-progress while its slot is free.
+                    if (movedToProgressThisCall)
+                        RevertFailedStartFromProgress(jobId, info, intent);
                     NotifyStatus();
                     return RunOutcome.Reject(new RunRejection(
                         Reason: RunRejectReason.ProjectBusy,
@@ -1644,6 +1657,14 @@ public class ProjectRunner
                         durationSeconds: 0.0,
                         executionStatus: SpawnFailedExecutionStatus);
                 }
+                // Pick<->Start atomicity (ASS-1655): the CLI never started, so the
+                // task must not stay parked in 3-progress. Roll the lane move this
+                // call applied straight back to 2-ready (or, once it has burned the
+                // per-slug spawn budget, hand off to the over-budget reroute which
+                // also pauses the runner). This must run AFTER RecordPickupAttemptResult
+                // so the budget decision sees this attempt.
+                if (movedToProgressThisCall)
+                    RevertFailedStartFromProgress(jobId, info, intent);
                 // Spawn failure is the terminal end of this run's lifecycle:
                 // no OnCliFinishedAsync will fire, so release the pickup lock
                 // and drain any deferred mode change here so the project does
@@ -2838,13 +2859,24 @@ public class ProjectRunner
             var followUpPath = Path.Combine(info.FolderPath, "orchestrator-follow-up.md");
             var followUpText = File.Exists(followUpPath) ? File.ReadAllText(followUpPath) : string.Empty;
 
+            // Foreground BOTH the auto-review aspect concerns AND the user-run
+            // code-review findings (code-review-*.md). The latter were the
+            // explicit gap (ASS-1658): a code-review:block/concerns verdict
+            // produced a finding the reissue change-prompt never surfaced, so a
+            // re-run only saw the old prompt and not "what the review said was
+            // wrong". Both feed the same open-items channel - the pre-check
+            // treats them generically as items to resolve before anything else.
+            var reviewFindings = GatherAspectConcernSummaries(info.FolderPath)
+                .Concat(GatherCodeReviewFindings(info.FolderPath))
+                .ToList();
+
             return ReissueOpenItemsPreCheck.Evaluate(new ReissueOpenItemsPreCheck.PreCheckInput
             {
                 HasReissueTag = hasReissueTag,
                 PriorRunCompleted = prior?.IsComplete == true,
                 PriorRunCount = prior?.Attempt ?? 0,
                 FollowUpText = followUpText,
-                AspectConcernSummaries = GatherAspectConcernSummaries(info.FolderPath),
+                AspectConcernSummaries = reviewFindings,
             });
         }
         catch (Exception ex)
@@ -2879,6 +2911,45 @@ public class ProjectRunner
             var fm = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(text);
             if (fm.Ok && fm.Fields.TryGetValue("summary", out var summary) && !string.IsNullOrWhiteSpace(summary))
                 summaries.Add(summary.Trim());
+        }
+        return summaries;
+    }
+
+    /// <summary>
+    /// Lift the one-line summaries from the previous run's user-triggered
+    /// code-review reports (<c>code-review-*.md</c>, written by
+    /// <see cref="OrchestratorApi.Services.Review.CodeReviewStepService"/>) so a
+    /// re-issue foregrounds them as open items. These reports carry a
+    /// <c>verdict:</c> frontmatter field (not the aspect reports' <c>status:</c>),
+    /// so they need their own gather; <c>pass</c> verdicts and unreadable files
+    /// are skipped. Each finding is prefixed with <c>code review:</c> so the
+    /// foregrounded checklist reads unambiguously next to aspect concerns.
+    /// Internal for unit coverage of the ASS-1658 gap (the explicit Beleg that
+    /// code-review findings were never merged into the reissue change-prompt).
+    /// </summary>
+    internal static IReadOnlyList<string> GatherCodeReviewFindings(string jobFolderPath)
+    {
+        var summaries = new List<string>();
+        string[] files;
+        try { files = Directory.GetFiles(jobFolderPath, "code-review-*.md"); }
+        catch { return summaries; }
+
+        // Deterministic order so the foregrounded list is stable across runs.
+        Array.Sort(files, StringComparer.Ordinal);
+        foreach (var path in files)
+        {
+            string text;
+            try { text = File.ReadAllText(path); }
+            catch { continue; }
+
+            var fm = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(text);
+            if (!fm.Ok) continue;
+            if (!fm.Fields.TryGetValue("verdict", out var verdict)) continue;
+            var token = verdict.Trim().ToLowerInvariant();
+            if (token is not ("concerns" or "block")) continue;
+
+            if (fm.Fields.TryGetValue("summary", out var summary) && !string.IsNullOrWhiteSpace(summary))
+                summaries.Add($"code review ({token}): {summary.Trim()}");
         }
         return summaries;
     }
@@ -5943,6 +6014,76 @@ public class ProjectRunner
         // and the in-memory state does not grow unboundedly when a move keeps
         // refusing.
         while (state.History.Count > PickupFailureThreshold) state.History.Dequeue();
+    }
+
+    /// <summary>
+    /// Pick&lt;-&gt;Start atomicity (ASS-1655). A run that moved its task into
+    /// <c>3-progress</c> but whose CLI process never started must not leave the
+    /// task stranded there: a session-less folder in <c>3-progress</c> with no
+    /// running run and a freed slot is exactly the zombie that lets the runner
+    /// pick the next task and end up with two folders in <c>3-progress</c> at
+    /// <c>maxParallelism=1</c>. This rolls the lane move straight back to
+    /// <c>2-ready</c> the moment the start fails, instead of waiting for the
+    /// 60-minute boot sweep (<see cref="StaleProgressArchiver"/>) or the next
+    /// pickup tick to notice.
+    ///
+    /// <para>Bounded by the existing per-slug spawn budget so a persistently
+    /// un-spawnable task cannot tight-loop the requeue: once it has burned
+    /// <see cref="PickupFailureThreshold"/> spawn attempts the over-budget
+    /// reroute (<see cref="RerouteOverBudgetFolder"/>) returns it to
+    /// <c>2-ready</c> AND pauses the runner so it stops spinning against an
+    /// unavailable CLI. Below the budget the requeue is spaced with the same
+    /// exponential <see cref="RapidCrashBreaker"/> backoff the rapid-crash
+    /// finish path arms.</para>
+    /// </summary>
+    private void RevertFailedStartFromProgress(string jobId, TaskInfo info, RunIntent intent)
+    {
+        var attempts = GetPickupAttempts(jobId);
+
+        // Over budget: the folder is still in 3-progress here, which is the
+        // precondition the reroute expects. For a spawn failure it returns the
+        // unchanged task to 2-ready and pauses the runner (CLI unavailable);
+        // there is nothing more to do.
+        if (intent == RunIntent.AutoPickup && attempts >= PickupFailureThreshold)
+        {
+            var candidate = new ProgressPickupCandidate(info.FolderPath, jobId, info, DateTime.UtcNow);
+            RerouteOverBudgetFolder(candidate, jobId, attempts);
+            return;
+        }
+
+        var move = _states.MoveJob(jobId, TaskStates.Ready, Entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "[taskboard] could not revert failed-start job {JobId} on {Project} from 3-progress to 2-ready: {Status} {Message}; folder left for the over-budget reroute / boot sweep",
+                jobId, ProjectName, move.Status, move.Message);
+            return;
+        }
+
+        // Space the next pickup so a transient-but-repeating spawn failure cannot
+        // tight-loop the requeue while it is still under the per-slug budget.
+        if (intent == RunIntent.AutoPickup)
+            _rapidCrashBackoffUntil[jobId] = DateTime.UtcNow + RapidCrashBreaker.Backoff(Math.Max(1, attempts));
+
+        _logger.LogInformation(
+            "[taskboard] reverted job {JobId} on {Project} from 3-progress back to 2-ready (run never started; no zombie left in 3-progress)",
+            jobId, ProjectName);
+
+        try
+        {
+            var moved = _scanner.FindJob(jobId, Entry.Path);
+            if (moved != null)
+                _chatLog.AppendSupervisor(
+                    moved,
+                    "pick-reverted-no-run",
+                    "The task was picked into 3-progress but the agent process never started. " +
+                    "It was returned to 2-ready immediately so it is not stranded as a zombie in 3-progress; " +
+                    "the orchestrator will retry it.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[taskboard] chat-log append failed for reverted pick {JobId}", jobId);
+        }
     }
 
     /// <summary>
