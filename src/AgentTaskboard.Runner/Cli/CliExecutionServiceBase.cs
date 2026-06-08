@@ -381,6 +381,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             psi.Environment["JOB_RESULTS_DIR"]            = Path.Combine(jobFolderPath, "results");
         }
 
+        AgentGitCommandGuard.Apply(psi);
+
         ChildHandle child;
         try
         {

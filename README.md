@@ -170,7 +170,7 @@ The next layer of this thinking is *supervision*: a meta-loop that watches the o
 
 ## Meta documentation, task evidence, and commits
 
-Meta-level work is allowed to run as small, parallel CLI interactions when it is truly independent from active coding work. Examples: analyze the orchestration model, update README or ROADMAP, write a research note under `docs/`, then commit that documentation immediately. These commits are normal product-memory commits. They do not consume a coding slot because they do not execute task work inside a watched target project.
+Meta-level work is allowed to run as small, parallel CLI interactions when it is truly independent from active coding work. Examples: analyze the orchestration model, update README or ROADMAP, or write a research note under `docs/`. These reports and edits are normal product memory, but directly-invoked agents leave them in the working tree unless the operator explicitly asks for commit or push in that task.
 
 Recurring or manual meta-analyses are also product memory. Examples: "are we on track?", "what changed in the last few hours?", "which jobs are stale?", "does the queue match the roadmap?", "which docs drifted?", or "what should become follow-up work?" Their result should be a Markdown report for humans plus structured JSON when the app needs to aggregate, filter, or trend the findings. These reports belong in a project-level analysis area or in the relevant task evidence, depending on scope. They should reference raw evidence rather than copying entire logs, and any implementation follow-up becomes a normal queued task.
 
@@ -182,7 +182,7 @@ Task-level feedback is different. Security audits, code-review findings, task ch
 
 Repositories should not stay dirty after a task is accepted. When a task reaches review or completion and its changes are accepted, the changed software and the task evidence should be committed promptly in the target repository and pushed unless the user has explicitly held the push back. The product should make uncommitted and unpushed task work visible so finished work does not quietly pile up on disk.
 
-Direct-agent maintenance follows the same hygiene at the human session level: a small documentation, mockup, prompt, roadmap, or task-queue change should be committed and pushed as soon as it is coherent. That keeps project memory durable and avoids losing steering in a local checkout.
+Direct-agent maintenance follows the same ownership boundary as managed task runs: a small documentation, mockup, prompt, roadmap, or task-queue change should be reported with changed files and verification, then committed or pushed only by an explicit operator action. That keeps project memory durable without letting a worker session author history on its own.
 
 ---
 

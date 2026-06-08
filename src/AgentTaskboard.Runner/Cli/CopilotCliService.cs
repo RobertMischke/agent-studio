@@ -616,6 +616,8 @@ public class CopilotCliService : ICliExecutionService
             psi.Environment["JOB_RESULTS_DIR"] = Path.Combine(jobFolderPath, "results");
         }
 
+        AgentGitCommandGuard.Apply(psi);
+
         return psi;
     }
 
