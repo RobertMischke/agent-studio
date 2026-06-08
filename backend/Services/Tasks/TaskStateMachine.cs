@@ -6,15 +6,15 @@ using OrchestratorApi.Services.Registry;
 namespace OrchestratorApi.Services.Tasks;
 
 /// <summary>
-/// Folder-level state transitions for jobs: moving a job between
-/// state folders (<c>2-ready</c>, <c>3-progress</c>, …), deleting a
-/// job folder entirely, copying a job to a different watched
-/// workspace, the one-shot startup migration that creates the state
-/// directories and rehomes legacy flat folders, and the bulk
-/// reorder-within-state operation.
+/// State transitions for tasks in the flat storage layout: a lane change is
+/// a metadata + index mutation (<c>task.json.state</c> + <c>id/by-state</c>),
+/// not a folder move; plus deleting a task folder, copying a task to a
+/// different watched workspace, ensuring the storage folders exist and
+/// rebuilding the derived index at boot, and the bulk reorder-within-lane
+/// operation.
 ///
-/// All operations on disk; no callers should write to the state
-/// folders directly. Reads still go through <see cref="TaskScannerService"/>.
+/// All operations on disk; no callers should write to the storage folders
+/// directly. Reads still go through <see cref="TaskScannerService"/>.
 /// </summary>
 public class TaskStateMachine
 {
