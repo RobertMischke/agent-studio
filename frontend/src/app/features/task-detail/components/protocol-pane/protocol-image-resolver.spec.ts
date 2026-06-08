@@ -12,6 +12,11 @@ describe('resolveProtocolImageSrc', () => {
       .toBe('/api/tasks/task-1/results/proof.png?watchPath=C%3A%2Fwork');
   });
 
+  it('maps nested results paths to the screenshot endpoint', () => {
+    expect(resolveProtocolImageSrc('results/playwright/spec/proof.png', 'task-1', 'C:/work'))
+      .toBe('/api/tasks/task-1/screenshot?path=playwright%2Fspec%2Fproof.png&watchPath=C%3A%2Fwork');
+  });
+
   it('treats bare filenames as results/<name> for legacy protocols', () => {
     expect(resolveProtocolImageSrc('proof.png', 'task-1', 'C:/work'))
       .toBe('/api/tasks/task-1/results/proof.png?watchPath=C%3A%2Fwork');

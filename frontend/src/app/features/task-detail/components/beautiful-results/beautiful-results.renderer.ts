@@ -161,6 +161,14 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
         if (lang === 'diff') return renderDiff(text);
         return renderCodeBlock(text, lang || null);
       },
+      html(token: Tokens.HTML | Tokens.Tag): string {
+        return escapeHtml(stripEventHandlerAttributes(token.text ?? token.raw ?? ''));
+      },
+      paragraph(token: Tokens.Paragraph): string {
+        const inline = this.parser.parseInline(token.tokens);
+        const standaloneImage = token.tokens.length === 1 && token.tokens[0]?.type === 'image';
+        return standaloneImage ? inline : `<p>${inline}</p>`;
+      },
       // Inline images: resolve attachments/results paths through the
       // existing resolver and wrap in a zoom-capable figure. Captions
       // come from the alt text when present.
@@ -265,6 +273,10 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function stripEventHandlerAttributes(value: string): string {
+  return value.replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '');
 }
 
 function escapeAttr(value: string): string {

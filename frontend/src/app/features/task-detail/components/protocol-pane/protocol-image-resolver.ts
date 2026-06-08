@@ -4,9 +4,10 @@
  *
  *   `attachments/foo.png` → /api/tasks/{id}/attachments/foo.png
  *   `results/foo.png`     → /api/tasks/{id}/results/foo.png
+ *   `results/a/foo.png`   → /api/tasks/{id}/screenshot?path=a%2Ffoo.png
  *   `foo.png`             → /api/tasks/{id}/results/foo.png  (legacy fallback)
  *
- * Anything else (`http(s)://…`, `data:`, paths with sub-folders) is passed
+ * Anything else (`http(s)://…`, `data:`, unsafe traversals) is passed
  * through unchanged.
  *
  * Folder semantics live in docs/protocol-style.md — keep that in sync if you
@@ -35,8 +36,12 @@ export function resolveProtocolImageSrc(
 
   if (src.startsWith(RESULTS_PREFIX)) {
     const name = src.slice(RESULTS_PREFIX.length);
-    if (!isPlainFileName(name)) return src;
-    return `/api/tasks/${encodeURIComponent(jobId)}/results/${encodeURIComponent(name)}${watchQs}`;
+    if (isPlainFileName(name)) {
+      return `/api/tasks/${encodeURIComponent(jobId)}/results/${encodeURIComponent(name)}${watchQs}`;
+    }
+    if (!isSafeResultsPath(name)) return src;
+    const qs = `?path=${encodeURIComponent(name)}${watchPath ? `&watchPath=${encodeURIComponent(watchPath)}` : ''}`;
+    return `/api/tasks/${encodeURIComponent(jobId)}/screenshot${qs}`;
   }
 
   if (isPlainFileName(src)) {
@@ -48,4 +53,10 @@ export function resolveProtocolImageSrc(
 
 function isPlainFileName(name: string): boolean {
   return name.length > 0 && !name.includes('/') && !name.includes('\\') && !name.includes('..');
+}
+
+function isSafeResultsPath(path: string): boolean {
+  if (!path || path.includes('\\') || path.includes('..')) return false;
+  const parts = path.split('/');
+  return parts.length > 1 && parts.every(part => isPlainFileName(part));
 }

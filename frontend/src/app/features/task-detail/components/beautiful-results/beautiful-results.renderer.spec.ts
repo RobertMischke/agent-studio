@@ -90,6 +90,22 @@ describe('renderResultsHtml', () => {
     expect(html).toContain('<figure');
   });
 
+  it('resolves flat results/* image paths through the job-folder API', () => {
+    const md = '![proof](results/proof.png)';
+    const { html } = renderResultsHtml(md, CTX);
+    expect(html).toContain('/api/tasks/abc/results/proof.png?watchPath=C%3A%2FProjects%2Frepo');
+    expect(html).toContain('data-results-lightbox');
+    expect(html).toContain('<img');
+  });
+
+  it('resolves nested results/* image paths through the screenshot endpoint', () => {
+    const md = '![proof](results/playwright/spec/proof.png)';
+    const { html } = renderResultsHtml(md, CTX);
+    expect(html).toContain('/api/tasks/abc/screenshot?path=playwright%2Fspec%2Fproof.png&amp;watchPath=C%3A%2FProjects%2Frepo');
+    expect(html).toContain('data-results-lightbox');
+    expect(html).toContain('<img');
+  });
+
   it('passes through absolute http(s) image URLs unchanged', () => {
     const md = '![logo](https://example.com/x.png)';
     const { html } = renderResultsHtml(md, CTX);
