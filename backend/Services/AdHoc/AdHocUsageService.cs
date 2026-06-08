@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Services.AdHoc;
 
@@ -29,10 +30,12 @@ public sealed class AdHocUsageService
         "(Pro / Max / Team / Enterprise), so the dollar number is a comparison, not a bill.";
 
     private readonly AdHocUsageRecorder _recorder;
+    private readonly BusBackedAdHocUsageReader? _busReader;
 
-    public AdHocUsageService(AdHocUsageRecorder recorder)
+    public AdHocUsageService(AdHocUsageRecorder recorder, BusBackedAdHocUsageReader? busReader = null)
     {
         _recorder = recorder;
+        _busReader = busReader;
     }
 
     /// <summary>
@@ -40,6 +43,9 @@ public sealed class AdHocUsageService
     /// </summary>
     public AdHocUsageAggregate Aggregate(DateTime? since = null)
     {
+        if (_busReader != null)
+            return _busReader.Aggregate(since);
+
         var records = _recorder.ReadAll();
         if (since is DateTime cutoff)
             records = records.Where(r => r.Ts >= cutoff).ToList();

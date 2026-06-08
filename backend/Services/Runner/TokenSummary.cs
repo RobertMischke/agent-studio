@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -55,15 +56,26 @@ public class TokenSummaryService
 
     private readonly OrchestratorLog _log;
     private readonly TokenSummaryCacheStore? _cache;
+    private readonly BusBackedTokenSummaryReader? _busReader;
+    private readonly IConfiguration? _config;
 
-    public TokenSummaryService(OrchestratorLog log, TokenSummaryCacheStore? cache = null)
+    public TokenSummaryService(
+        OrchestratorLog log,
+        TokenSummaryCacheStore? cache = null,
+        BusBackedTokenSummaryReader? busReader = null,
+        IConfiguration? config = null)
     {
         _log = log;
         _cache = cache;
+        _busReader = busReader;
+        _config = config;
     }
 
     public TokenSummary Summarize(string projectName, string watchPath)
     {
+        if (_busReader != null)
+            return _busReader.Summarize(projectName);
+
         var entries = _log.Read(watchPath);
         return Summarize(projectName, entries);
     }
@@ -84,6 +96,14 @@ public class TokenSummaryService
     /// </summary>
     public Dictionary<string, TaskTokenSummary> SummarizePerJob(string watchPath)
     {
+        if (_busReader != null)
+        {
+            var projectName = ResolveProjectName(watchPath);
+            return string.IsNullOrWhiteSpace(projectName)
+                ? new Dictionary<string, TaskTokenSummary>(StringComparer.Ordinal)
+                : _busReader.SummarizePerJob(projectName);
+        }
+
         var entries = _log.Read(watchPath);
         return SummarizePerJob(entries);
     }
@@ -167,6 +187,9 @@ public class TokenSummaryService
     /// </summary>
     public TokenSummaryAggregate Aggregate(IEnumerable<(string Name, string WatchPath)> projects)
     {
+        if (_busReader != null)
+            return _busReader.Aggregate(projects, _cache);
+
         var perProject = projects.Select(p => (p.Name, Summary: Summarize(p.Name, p.WatchPath))).ToList();
         return AggregateSummaries(perProject, _cache);
     }
@@ -273,6 +296,24 @@ public class TokenSummaryService
     /// the cache file does not exist or fails to parse.
     /// </summary>
     public TokenSummaryAggregate? ReadCachedAggregate() => _cache?.Read();
+
+    private string? ResolveProjectName(string watchPath)
+    {
+        if (string.IsNullOrWhiteSpace(watchPath)) return null;
+
+        if (_config != null)
+        {
+            foreach (var child in _config.GetSection("WatchedPaths").GetChildren())
+            {
+                var path = child["Path"];
+                var name = child["Name"];
+                if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(name)) continue;
+                if (string.Equals(path, watchPath, StringComparison.OrdinalIgnoreCase)) return name;
+            }
+        }
+
+        return Path.GetFileName(watchPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    }
 
     /// <summary>
     /// Pure overload: takes the entries directly. Used by the unit tests

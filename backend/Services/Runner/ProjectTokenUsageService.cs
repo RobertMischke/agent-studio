@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Tasks;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -68,11 +69,13 @@ public class ProjectTokenUsageService
 
     private readonly OrchestratorLog _log;
     private readonly TaskScannerService _scanner;
+    private readonly BusBackedProjectTokenUsageReader? _busReader;
 
-    public ProjectTokenUsageService(OrchestratorLog log, TaskScannerService scanner)
+    public ProjectTokenUsageService(OrchestratorLog log, TaskScannerService scanner, BusBackedProjectTokenUsageReader? busReader = null)
     {
         _log = log;
         _scanner = scanner;
+        _busReader = busReader;
     }
 
     /// <summary>
@@ -84,6 +87,9 @@ public class ProjectTokenUsageService
     /// </summary>
     public ProjectTokenUsageSummary BuildSummary(string projectName, string watchPath, DateTime? nowUtc = null)
     {
+        if (_busReader != null)
+            return _busReader.BuildSummary(projectName, watchPath, nowUtc);
+
         var entries = _log.Read(watchPath);
         var jobsById = BuildJobsById(watchPath);
         return BuildSummaryFromEntries(projectName, entries, jobsById, nowUtc);
@@ -164,6 +170,9 @@ public class ProjectTokenUsageService
     /// </summary>
     public ProjectTokenHeatmap BuildHeatmap(string projectName, string watchPath, int days, DateTime? nowUtc = null)
     {
+        if (_busReader != null)
+            return _busReader.BuildHeatmap(projectName, watchPath, days, nowUtc);
+
         var entries = _log.Read(watchPath);
         var jobsById = BuildJobsById(watchPath);
         return BuildHeatmapFromEntries(projectName, entries, jobsById, days, nowUtc);
@@ -267,6 +276,9 @@ public class ProjectTokenUsageService
     /// </summary>
     public IReadOnlyList<ProjectExpensiveJob> BuildExpensiveJobs(string projectName, string watchPath, int limit)
     {
+        if (_busReader != null)
+            return _busReader.BuildExpensiveJobs(projectName, watchPath, limit);
+
         var entries = _log.Read(watchPath);
         var jobsById = BuildJobsById(watchPath);
         return BuildExpensiveJobsFromEntries(entries, jobsById, limit);
@@ -331,6 +343,9 @@ public class ProjectTokenUsageService
     public ProjectJobTokenDetail? BuildJobDetail(string projectName, string watchPath, string jobId)
     {
         if (string.IsNullOrWhiteSpace(jobId)) return null;
+        if (_busReader != null)
+            return _busReader.BuildJobDetail(projectName, watchPath, jobId);
+
         var entries = _log.Read(watchPath);
         var jobsById = BuildJobsById(watchPath);
         return BuildJobDetailFromEntries(projectName, entries, jobsById, jobId);

@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -27,10 +28,12 @@ public class WorkspaceTokensTimelineService
     public const int DefaultBucketMinutes = 60;
 
     private readonly OrchestratorLog _log;
+    private readonly BusBackedWorkspaceTimelineReader? _busReader;
 
-    public WorkspaceTokensTimelineService(OrchestratorLog log)
+    public WorkspaceTokensTimelineService(OrchestratorLog log, BusBackedWorkspaceTimelineReader? busReader = null)
     {
         _log = log;
+        _busReader = busReader;
     }
 
     /// <summary>
@@ -43,6 +46,9 @@ public class WorkspaceTokensTimelineService
         int bucketMinutes,
         DateTime? nowUtc = null)
     {
+        if (_busReader != null)
+            return _busReader.Build(projects, windowHours, bucketMinutes, nowUtc);
+
         var w = ResolveWindowHours(windowHours);
         var b = ResolveBucketMinutes(bucketMinutes);
         var now = nowUtc ?? DateTime.UtcNow;

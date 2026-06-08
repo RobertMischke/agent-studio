@@ -93,10 +93,11 @@ severityIfBad: Warn
 # Tokens/ or Bus/ namespaces drifts from the single source of truth and
 # produces "tokens today" numbers that disagree across surfaces.
 #
-# Severity is Info while Phase 4 (legacy-service migration to bus-backed
-# shims) is in flight. Once the four legacy aggregators have been converted,
-# the excludeFilePattern shrinks back to just the canonical files and the
-# severity moves to Warn. Tracking: docs/token-aggregation.md "Migration order".
+# Severity is Warn now that Phase 4 (legacy-service migration to bus-backed
+# shims) is complete. The legacy service files stay excluded because their
+# static pure folds are intentionally reused by the bus-backed readers and
+# parity tests; new consumer-facing aggregation still goes through
+# ITokenAggregator.
 # ---------------------------------------------------------------------------
 id: token-aggregation-canonical
 title: Token aggregation goes through ITokenAggregator
@@ -109,7 +110,7 @@ filePattern: backend/.*\.cs$
 excludeFilePattern: backend\.Tests|Services[/\\]Tokens[/\\]|Services[/\\]Bus[/\\]|Services[/\\]Runner[/\\](ProjectTokenUsageService|WorkspaceTokensTimelineService|TokenSummary|TokenSummaryCacheStore|OrchestratorLog|OrchestratorRunner|OrchestratorChat|OrchestratorSession|GlobalOrchestratorSession|StuckLoopGuard)\.cs|Services[/\\]AdHoc[/\\]
 candidateMarker: \.TokenUsage\b|AgentMessageTokens\b|TokenAggregateBucket\b
 goodVariant: ITokenAggregator|TokenAggregationService|BusAggregationCache
-severityIfBad: Info
+severityIfBad: Warn
 ```
 
 ```yaml
