@@ -21,48 +21,64 @@
        data-testid="git-view-body">
     @if (git.viewMode() === 'commit') {
       @if (git.commitChain().length > 1) {
-        <ol class="git-view__commit-chain"
-            data-testid="git-commit-chain"
-            role="list"
-            aria-label="Commits attributed to this task (oldest first)">
-          <li class="git-view__commit-chain-item git-view__commit-chain-item--all"
-              [class.git-view__commit-chain-item--selected]="git.selectedCommitSha() === null"
-              data-testid="git-commit-chain-all">
-            <button type="button"
-                    class="git-view__commit-chain-button"
-                    [attr.aria-pressed]="git.selectedCommitSha() === null"
-                    [appTooltip]="'Combined diff across all ' + git.commitChain().length + ' task commits'"
-                    (click)="git.selectAllCommits()">
-              <span class="git-view__commit-chain-step">∑</span>
-              <span class="git-view__commit-chain-subject">All {{ git.commitChain().length }} commits</span>
-            </button>
-          </li>
-          @for (entry of git.commitChain(); track entry.sha; let i = $index) {
-            <li class="git-view__commit-chain-item"
-                [class.git-view__commit-chain-item--selected]="git.selectedCommitSha() === entry.sha"
-                [attr.data-testid]="'git-commit-chain-item'"
-                [attr.data-sha]="entry.sha">
-              <button type="button"
-                      class="git-view__commit-chain-button"
-                      [attr.aria-pressed]="git.selectedCommitSha() === entry.sha"
-                      [appTooltip]="commitChainTooltip(entry, i)"
-                      (click)="git.selectChainCommit(entry.sha)">
-                <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
-                <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
-                <span class="git-view__commit-chain-subject">{{ entry.message.split('\n')[0] }}</span>
-                @if (confidencePercent(entry); as pct) {
-                  <span class="git-view__commit-confidence"
-                        data-testid="git-commit-confidence"
-                        [appTooltip]="attributionTooltip(entry)">{{ pct }}</span>
-                }
-                <span class="git-view__commit-chain-meta">{{ entry.filesChanged }}f · {{ entry.at | date:'shortTime' }}</span>
-              </button>
-            </li>
+        <section class="git-view__commit-group"
+                 [class.git-view__commit-group--collapsed]="commitGroupCollapsed()"
+                 data-testid="git-commit-group">
+          <button type="button"
+                  class="git-view__commit-group-toggle"
+                  data-testid="git-commit-group-toggle"
+                  [attr.aria-expanded]="!commitGroupCollapsed()"
+                  [appTooltip]="commitGroupCollapsed() ? 'Show task commits' : 'Hide task commits'"
+                  (click)="toggleCommitGroupCollapsed()">
+            <span class="git-view__commit-group-caret">{{ commitGroupCollapsed() ? '▾' : '▴' }}</span>
+            <span class="git-view__commit-group-title">{{ git.commitChain().length }} task commits</span>
+            <span class="git-view__commit-group-summary">{{ selectedCommitSummary() }}</span>
+          </button>
+          @if (!commitGroupCollapsed()) {
+            <ol class="git-view__commit-chain"
+                data-testid="git-commit-chain"
+                role="list"
+                aria-label="Commits attributed to this task (oldest first)">
+              <li class="git-view__commit-chain-item git-view__commit-chain-item--all"
+                  [class.git-view__commit-chain-item--selected]="git.selectedCommitSha() === null"
+                  data-testid="git-commit-chain-all">
+                <button type="button"
+                        class="git-view__commit-chain-button"
+                        [attr.aria-pressed]="git.selectedCommitSha() === null"
+                        [appTooltip]="'Combined diff across all ' + git.commitChain().length + ' task commits'"
+                        (click)="git.selectAllCommits()">
+                  <span class="git-view__commit-chain-step">∑</span>
+                  <span class="git-view__commit-chain-subject">All {{ git.commitChain().length }} commits</span>
+                </button>
+              </li>
+              @for (entry of git.commitChain(); track entry.sha; let i = $index) {
+                <li class="git-view__commit-chain-item"
+                    [class.git-view__commit-chain-item--selected]="git.selectedCommitSha() === entry.sha"
+                    [attr.data-testid]="'git-commit-chain-item'"
+                    [attr.data-sha]="entry.sha">
+                  <button type="button"
+                          class="git-view__commit-chain-button"
+                          [attr.aria-pressed]="git.selectedCommitSha() === entry.sha"
+                          [appTooltip]="commitChainTooltip(entry, i)"
+                          (click)="git.selectChainCommit(entry.sha)">
+                    <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
+                    <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
+                    <span class="git-view__commit-chain-subject">{{ entry.message.split('\n')[0] }}</span>
+                    @if (confidencePercent(entry); as pct) {
+                      <span class="git-view__commit-confidence"
+                            data-testid="git-commit-confidence"
+                            [appTooltip]="attributionTooltip(entry)">{{ pct }}</span>
+                    }
+                    <span class="git-view__commit-chain-meta">{{ entry.filesChanged }}f · {{ entry.at | date:'shortTime' }}</span>
+                  </button>
+                </li>
+              }
+            </ol>
           }
-        </ol>
+        </section>
       }
       @if (git.isAggregate()) {
-        <div class="git-view__commit-header"
+        <div class="git-view__commit-header git-view__commit-header--aggregate"
              data-testid="git-commit-aggregate-header">
           <div class="git-view__commit-row">
             <span class="git-view__commit-sha" data-testid="git-commit-sha">∑ All commits</span>
@@ -213,27 +229,6 @@
             }
           </div>
 
-          <div class="git-view__commit">
-            <textarea class="git-view__msg" rows="3"
-                      data-testid="git-commit-msg"
-                      placeholder="Commit message — Conventional Commit recommended."
-                      [value]="git.commitMessage()"
-                      (input)="setCommitMessage($any($event.target).value)"></textarea>
-            <div class="git-view__commit-actions">
-              <button class="btn-sm" (click)="git.generateCommitMessage()"
-                      [disabled]="git.generatingMsg() || isRunning()"
-                      data-testid="git-generate-msg"
-                      [appTooltip]="'Use Claude Haiku to draft a commit message from the diff.'">
-                {{ git.generatingMsg() ? '⏳' : '✨ Generate' }}
-              </button>
-              <button class="btn-sm btn-sm--primary"
-                      (click)="git.commit()"
-                      [disabled]="git.committing() || !git.commitMessage().trim() || isRunning()"
-                      data-testid="git-commit">
-                {{ git.committing() ? '⏳ Committing…' : '✓ Commit all' }}
-              </button>
-            </div>
-          </div>
         }
       }
     } @else {

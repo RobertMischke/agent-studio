@@ -88,11 +88,18 @@ export class GitPaneComponent {
    * fullscreened layouts so the mental model stays simple.
    */
   readonly commitHeaderCollapsed = signal<boolean>(readCommitHeaderCollapsed());
+  readonly commitGroupCollapsed = signal<boolean>(readCommitGroupCollapsed());
 
   toggleCommitHeaderCollapsed(): void {
     const next = !this.commitHeaderCollapsed();
     this.commitHeaderCollapsed.set(next);
     writeCommitHeaderCollapsed(next);
+  }
+
+  toggleCommitGroupCollapsed(): void {
+    const next = !this.commitGroupCollapsed();
+    this.commitGroupCollapsed.set(next);
+    writeCommitGroupCollapsed(next);
   }
 
   /**
@@ -137,16 +144,24 @@ export class GitPaneComponent {
     return this.sanitizer.bypassSecurityTrustHtml(rendered);
   });
 
-  setCommitMessage(value: string): void {
-    this.git.commitMessage.set(value);
-  }
-
   toggleDiffMaximize(): void {
     this.diffMaximized.update(v => !v);
   }
 
   commitChainTooltip(entry: TaskCommitInfo, index: number): string {
     return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${entry.message}`;
+  }
+
+  selectedCommitSummary(): string {
+    if (this.git.isAggregate()) {
+      const files = this.git.commitFiles().length;
+      const commits = this.git.commitChain().length;
+      return `All ${commits} commits · ${files} ${files === 1 ? 'file' : 'files'}`;
+    }
+    const sha = this.git.selectedCommitSha();
+    const entry = this.git.commitChain().find(c => c.sha === sha);
+    if (!entry) return `${this.git.commitChain().length} task commits`;
+    return `${entry.shortSha} · ${entry.message.split('\n')[0]}`;
   }
 
   /** Confidence as a whole-percent string (e.g. "90%"); empty when absent. */
@@ -167,6 +182,7 @@ export class GitPaneComponent {
 }
 
 const COMMIT_HEADER_COLLAPSED_KEY = 'taskboard.gitPane.commitHeaderCollapsed';
+const COMMIT_GROUP_COLLAPSED_KEY = 'taskboard.gitPane.commitGroupCollapsed';
 
 function readCommitHeaderCollapsed(): boolean {
   try { return localStorage.getItem(COMMIT_HEADER_COLLAPSED_KEY) === '1'; }
@@ -175,5 +191,18 @@ function readCommitHeaderCollapsed(): boolean {
 
 function writeCommitHeaderCollapsed(value: boolean): void {
   try { localStorage.setItem(COMMIT_HEADER_COLLAPSED_KEY, value ? '1' : '0'); }
+  catch { /* ignore quota / privacy-mode errors */ }
+}
+
+function readCommitGroupCollapsed(): boolean {
+  try {
+    const stored = localStorage.getItem(COMMIT_GROUP_COLLAPSED_KEY);
+    return stored === null ? true : stored === '1';
+  }
+  catch { return true; }
+}
+
+function writeCommitGroupCollapsed(value: boolean): void {
+  try { localStorage.setItem(COMMIT_GROUP_COLLAPSED_KEY, value ? '1' : '0'); }
   catch { /* ignore quota / privacy-mode errors */ }
 }

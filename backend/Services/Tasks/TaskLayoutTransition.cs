@@ -83,7 +83,7 @@ internal static class TaskLayoutTransition
         if (!byState.TryGetValue(newState, out var dest))
             byState[newState] = dest = new List<string>();
         dest.Add(location);
-        TaskLayoutIndex.Write(projectRoot, byState, byKey, logger);
+        TaskLayoutIndex.WriteByState(projectRoot, byState, logger);
 
         logger.LogInformation(
             "task-transition key={Key} from={From} to={To} location={Location} (metadata-only, no folder move)",

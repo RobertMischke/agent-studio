@@ -15,7 +15,8 @@ public static class EndpointMapping
 {
     public static void MapAllEndpoints(this WebApplication app)
     {
-        var tasks = app.MapGroup("/api/tasks");
+        var tasks = app.MapGroup("/api/tasks")
+            .AddEndpointFilter<TaskOperationTimingFilter>();
         tasks.MapTaskCrudEndpoints();
         tasks.MapTaskFilesEndpoints();
         tasks.MapTaskRunnerEndpoints();
@@ -30,7 +31,8 @@ public static class EndpointMapping
         // Compatibility route for operator scripts and docs that still use
         // "jobs" terminology. Keep this mapped to the same CRUD handlers so
         // /api/jobs/batch-move cannot drift from /api/tasks/batch-move.
-        var jobs = app.MapGroup("/api/jobs");
+        var jobs = app.MapGroup("/api/jobs")
+            .AddEndpointFilter<TaskOperationTimingFilter>();
         jobs.MapTaskCrudEndpoints();
 
         app.MapEpicEndpoints();

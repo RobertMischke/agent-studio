@@ -596,7 +596,8 @@ public class TaskMutationService
         if (!string.IsNullOrWhiteSpace(req.PromptMarkdown))
             File.WriteAllText(Path.Combine(jobDir, "prompt.md"), req.PromptMarkdown);
 
-        TaskLayoutIndex.Rebuild(entry.Path, _logger);
+        var location = TaskStorageLayout.Location(storageNumber, storageId);
+        TaskLayoutIndex.Upsert(entry.Path, storageId, location, targetState, _logger);
 
         // ADR-0049: open the per-job timeline with prompt_created so the
         // Overview strip has something to render before the first agent run.

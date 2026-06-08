@@ -215,6 +215,8 @@ public class JobsEndpointPerfTests : IDisposable
             sw.Stop();
 
             response.EnsureSuccessStatusCode();
+            Assert.Contains(response.Headers, h => h.Key == "Server-Timing"
+                                                   && h.Value.Any(v => v.StartsWith("task-op;dur=", StringComparison.Ordinal)));
             var grouped = await response.Content.ReadFromJsonAsync<Dictionary<string, JsonElement>>(cancellationToken: timeout.Token);
             Assert.NotNull(grouped);
             Assert.Contains(grouped!.Keys, key => string.Equals(key, "progress", StringComparison.OrdinalIgnoreCase));

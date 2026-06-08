@@ -107,6 +107,40 @@ internal static class TaskLayoutIndex
         WriteAtomic(ByKeyPath(projectRoot), JsonSerializer.Serialize(byKey, WriteOpts), logger);
     }
 
+    public static void WriteByState(
+        string projectRoot,
+        IReadOnlyDictionary<string, List<string>> byState,
+        ILogger logger)
+    {
+        Directory.CreateDirectory(TaskStorageLayout.IndexRoot(projectRoot));
+        WriteAtomic(ByStatePath(projectRoot), JsonSerializer.Serialize(byState, WriteOpts), logger);
+    }
+
+    public static void Upsert(
+        string projectRoot,
+        string key,
+        string location,
+        string state,
+        ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(location))
+            return;
+
+        var byState = ReadByState(projectRoot);
+        var byKey = ReadByKey(projectRoot);
+
+        foreach (var list in byState.Values)
+            list.RemoveAll(l => string.Equals(l, location, StringComparison.Ordinal));
+        foreach (var emptied in byState.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key).ToList())
+            byState.Remove(emptied);
+        if (!byState.TryGetValue(state, out var stateEntries))
+            byState[state] = stateEntries = new List<string>();
+        stateEntries.Add(location);
+        byKey[key] = location;
+
+        Write(projectRoot, byState, byKey, logger);
+    }
+
     public static Dictionary<string, List<string>> ReadByState(string projectRoot) =>
         ReadMap<List<string>>(ByStatePath(projectRoot));
 

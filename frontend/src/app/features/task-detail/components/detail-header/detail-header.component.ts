@@ -67,6 +67,11 @@ export class DetailHeaderComponent {
   readonly mutationsBlocked = input(false);
   /** Stable id of the triage action currently in flight (null when idle). */
   readonly triageActingId = input<string | null>(null);
+  /** Whether the task-level commit actions should be exposed in the overflow menu. */
+  readonly commitActionsAvailable = input(false);
+  readonly commitMessageDraft = input<string>('');
+  readonly generatingCommitMessage = input(false);
+  readonly committing = input(false);
 
   readonly back = output<void>();
   readonly startTitleEdit = output<void>();
@@ -90,6 +95,8 @@ export class DetailHeaderComponent {
   readonly pagerNext = output<void>();
   /** Lane-action chosen via the primary button or the overflow menu. */
   readonly triageAction = output<TriageActionPayload>();
+  readonly generateCommitMessage = output<void>();
+  readonly addCommit = output<void>();
 
   /**
    * Tooltip text explaining the snapshot iteration, surfaced through the
@@ -171,7 +178,7 @@ export class DetailHeaderComponent {
 
   /** True when a primary or any overflow action is available. */
   readonly hasTriageActions = computed(
-    () => this.triagePrimary() !== null || this.triageOverflow().length > 0,
+    () => this.triagePrimary() !== null || this.triageOverflow().length > 0 || this.commitActionsAvailable(),
   );
 
   /**
@@ -192,13 +199,32 @@ export class DetailHeaderComponent {
 
   readonly triageMenuItems = computed<MenuItem[]>(() => {
     const disabled = this.mutationsBlocked() || this.triageActingId() !== null;
-    return this.triageOverflow().map<MenuItem>(b => ({
+    const items = this.triageOverflow().map<MenuItem>(b => ({
       kind: 'row',
       id: b.id,
       label: b.label,
       danger: b.variant === 'danger',
       disabled,
     }));
+    if (this.commitActionsAvailable()) {
+      if (items.length > 0) items.push({ kind: 'separator' });
+      items.push(
+        {
+          kind: 'row',
+          id: 'generate-commit-message',
+          label: this.generatingCommitMessage() ? 'Generating Commit Message...' : 'Generate Commit Message',
+          disabled: disabled || this.generatingCommitMessage() || this.committing(),
+        },
+        {
+          kind: 'row',
+          id: 'add-commit',
+          label: this.committing() ? 'Committing...' : 'Add Commit...',
+          hint: this.commitMessageDraft().trim() ? 'Draft ready' : undefined,
+          disabled: disabled || this.generatingCommitMessage() || this.committing(),
+        },
+      );
+    }
+    return items;
   });
 
   primaryTooltip(): string {
@@ -211,7 +237,7 @@ export class DetailHeaderComponent {
 
   overflowTooltip(): string {
     if (this.mutationsBlocked()) return 'Update in progress — actions paused.';
-    const count = this.triageOverflow().length;
+    const count = this.triageMenuItems().filter(i => i.kind === 'row').length;
     return `${this.triageLaneLabel()} actions (${count})`;
   }
 
@@ -233,6 +259,16 @@ export class DetailHeaderComponent {
   }
 
   onTriageMenuItemClick(ev: MenuItemClickEvent): void {
+    if (ev.id === 'generate-commit-message') {
+      this.triageOverflowOpen.set(false);
+      this.generateCommitMessage.emit();
+      return;
+    }
+    if (ev.id === 'add-commit') {
+      this.triageOverflowOpen.set(false);
+      this.addCommit.emit();
+      return;
+    }
     const button = this.triageOverflow().find(b => b.id === ev.id);
     if (!button) return;
     // Delete keeps its dedicated output (boardMutations.deleteFromDetail

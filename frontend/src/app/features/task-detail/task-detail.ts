@@ -236,6 +236,14 @@ export class TaskDetailComponent implements OnDestroy {
   readonly commitMessage = this.git.commitMessage;
   readonly committing = this.git.committing;
   readonly generatingMsg = this.git.generatingMsg;
+  readonly commitActionsAvailable = computed(() => {
+    const status = this.git.status();
+    return this.git.viewMode() === 'worktree'
+      && this.isActiveJob()
+      && !!status?.isRepo
+      && !status.error
+      && status.files.length > 0;
+  });
   // CLI output buffer + run-state lives in CliOutputPollService.
   private readonly cliPoll = inject(CliOutputPollService);
   readonly cliOutput = this.cliPoll.output;
@@ -1335,6 +1343,20 @@ export class TaskDetailComponent implements OnDestroy {
   }
   openInVsCode(): void {
     this.git.openInVsCode();
+  }
+  generateCommitMessage(): void {
+    if (this.isRunning() || !this.commitActionsAvailable()) return;
+    this.git.generateCommitMessage();
+  }
+  addCommitFromMenu(): void {
+    if (this.isRunning() || !this.commitActionsAvailable() || this.committing()) return;
+    const initial = this.git.commitMessage();
+    const message = window.prompt('Commit message', initial);
+    if (message === null) return;
+    const trimmed = message.trim();
+    if (!trimmed) return;
+    this.git.commitMessage.set(trimmed);
+    this.git.commit();
   }
 
   // === Claude live session telemetry =====================================

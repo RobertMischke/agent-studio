@@ -16,6 +16,10 @@
     [laneSize]="laneSize()"
     [mutationsBlocked]="mutationsBlocked()"
     [triageActingId]="triageActingId()"
+    [commitActionsAvailable]="commitActionsAvailable()"
+    [commitMessageDraft]="commitMessage()"
+    [generatingCommitMessage]="generatingMsg()"
+    [committing]="committing()"
     (back)="back.emit()"
     (titleDraftChange)="titleDraft.set($event)"
     (startTitleEdit)="startTitleEdit()"
@@ -26,7 +30,9 @@
     (deleteRequested)="deleteRequested.emit()"
     (pagerPrev)="prevInLaneRequested.emit()"
     (pagerNext)="nextInLaneRequested.emit()"
-    (triageAction)="onTriageAction($event)" />
+    (triageAction)="onTriageAction($event)"
+    (generateCommitMessage)="generateCommitMessage()"
+    (addCommit)="addCommitFromMenu()" />
 
   @if (detail().info.epicId && detail().info.kind !== 'epic') {
     <app-epic-membership-banner
