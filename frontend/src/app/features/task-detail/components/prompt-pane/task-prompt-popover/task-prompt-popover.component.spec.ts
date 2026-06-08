@@ -60,6 +60,9 @@ describe('TaskPromptPopoverComponent', () => {
     trigger.click();
     fixture.detectChanges();
     expect(fixture.componentInstance.open()).toBe(true);
+    const backdrop = overlayEl('overview-prompt-popover-backdrop');
+    expect(backdrop).not.toBeNull();
+    expect(backdrop?.classList.contains('prompt-pop__backdrop')).toBe(true);
     const modal = overlayEl('overview-prompt-popover');
     expect(modal).not.toBeNull();
     expect(modal?.classList.contains('prompt-pop__modal')).toBe(true);
@@ -88,18 +91,15 @@ describe('TaskPromptPopoverComponent', () => {
     expect(stack.topId()).toBeNull();
   });
 
-  it('closes on click outside the host', async () => {
+  it('keeps the modal open when the panel itself is clicked', async () => {
     const fixture = await mount('Task body markdown');
     fixture.componentInstance.toggle(new MouseEvent('click'));
     fixture.detectChanges();
     expect(fixture.componentInstance.open()).toBe(true);
 
-    fixture.componentInstance.onDocClick(
-      new MouseEvent('click', { bubbles: true }),
-    );
+    overlayEl('overview-prompt-popover')?.click();
     fixture.detectChanges();
-    // target defaults to null (outside the host) -> closes.
-    expect(fixture.componentInstance.open()).toBe(false);
+    expect(fixture.componentInstance.open()).toBe(true);
   });
 
   it('closes on backdrop click', async () => {
@@ -108,7 +108,7 @@ describe('TaskPromptPopoverComponent', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.open()).toBe(true);
 
-    overlayEl('overview-prompt-popover')?.click();
+    overlayEl('overview-prompt-popover-backdrop')?.click();
     fixture.detectChanges();
     expect(fixture.componentInstance.open()).toBe(false);
   });

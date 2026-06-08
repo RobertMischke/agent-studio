@@ -15,14 +15,23 @@
 
     @if (open()) {
       <div
-        class="prompt-pop__modal"
+        class="prompt-pop__backdrop"
         appOverlayPortal="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Task prompt"
-        data-testid="overview-prompt-popover"
-        (click)="close()">
-        <div class="prompt-pop__panel" (click)="$event.stopPropagation()">
+        data-testid="overview-prompt-popover-backdrop"
+        tabindex="0"
+        (click)="close()"
+        (keydown.enter)="close()"
+        (keydown.space)="close(); $event.preventDefault()">
+        <div
+          class="prompt-pop__modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Task prompt"
+          data-testid="overview-prompt-popover"
+          tabindex="-1"
+          (click)="$event.stopPropagation()"
+          (keydown.enter)="$event.stopPropagation()"
+          (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
           <header class="prompt-pop__head">
             <h4 class="prompt-pop__title">Task prompt</h4>
             <button

@@ -28,14 +28,14 @@ async function openTaskDirectly(page: Page, jobId: string, watchPath: string): P
 }
 
 /**
- * Feature (Job-Details — Task-Prompt in einem Popover anzeigen): the Overview
- * tab carries a "Prompt" affordance next to the title that opens an anchored,
- * read-only popover rendering the task prompt (promptMarkdown / prompt.md) as
- * Markdown. It must be scrollable, closable via the close button / click-outside
- * / Escape, and Escape must not close the whole detail panel behind it.
+ * Feature (Job Details - Task Prompt modal): the Overview tab carries a
+ * "Prompt" affordance next to the title that opens a centered, read-only modal
+ * rendering the task prompt (promptMarkdown / prompt.md) as Markdown. It must
+ * be large enough for long prompts, closable via close button / backdrop /
+ * Escape, and Escape must not close the whole detail panel behind it.
  */
-test.describe('Overview tab — task prompt popover', () => {
-  const PROMPT_HEADING = 'Prompt popover acceptance heading';
+test.describe('Overview tab - task prompt modal', () => {
+  const PROMPT_HEADING = 'Prompt modal acceptance heading';
   const PROMPT_BODY = [
     `# ${PROMPT_HEADING}`,
     '',
@@ -43,14 +43,19 @@ test.describe('Overview tab — task prompt popover', () => {
     '',
     '- first bullet',
     '- second bullet',
+    '',
+    ...Array.from(
+      { length: 80 },
+      (_, index) => `Long prompt paragraph ${index + 1}: keep enough detail visible while the modal body scrolls.`,
+    ),
   ].join('\n');
 
-  test('trigger opens a read-only popover that renders the prompt markdown', async ({ page }) => {
+  test('trigger opens a centered read-only modal that renders long prompt markdown', async ({ page }) => {
     const wp = await pickWatchPath();
     const id = uid('render');
     await createJob({
       id,
-      title: `Prompt popover render ${id}`,
+      title: `Prompt modal render ${id}`,
       watchPath: wp.path,
       promptMarkdown: PROMPT_BODY,
       targetState: '1-preparation',
@@ -66,6 +71,7 @@ test.describe('Overview tab — task prompt popover', () => {
       await expect(page.getByTestId('overview-prompt-popover')).toHaveCount(0);
 
       await trigger.click();
+      await expect(page.getByTestId('overview-prompt-popover-backdrop')).toBeVisible();
       const panel = page.getByTestId('overview-prompt-popover');
       await expect(panel).toBeVisible();
 
@@ -73,6 +79,19 @@ test.describe('Overview tab — task prompt popover', () => {
       const body = page.getByTestId('overview-prompt-popover-body');
       await expect(body.locator('h1')).toHaveText(PROMPT_HEADING);
       await expect(body.locator('li')).toHaveCount(2);
+      await expect.poll(() => body.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+
+      const viewport = page.viewportSize() ?? await page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }));
+      const box = await panel.boundingBox();
+      expect(box).not.toBeNull();
+      if (!box) throw new Error('Prompt modal bounding box missing');
+      expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(8);
+      expect(Math.abs(box.y + box.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(8);
+      expect(box.width).toBeCloseTo(Math.min(viewport.width * 0.9, 820), 0);
+      expect(box.height).toBeLessThanOrEqual(Math.min(viewport.height * 0.8, 720) + 2);
 
       await page.screenshot({ path: 'test-results/overview-prompt-popover-open.png', fullPage: false });
     } finally {
@@ -80,12 +99,12 @@ test.describe('Overview tab — task prompt popover', () => {
     }
   });
 
-  test('Escape closes the popover but keeps the detail panel open', async ({ page }) => {
+  test('Escape closes the modal but keeps the detail panel open', async ({ page }) => {
     const wp = await pickWatchPath();
     const id = uid('escape');
     await createJob({
       id,
-      title: `Prompt popover escape ${id}`,
+      title: `Prompt modal escape ${id}`,
       watchPath: wp.path,
       promptMarkdown: PROMPT_BODY,
       targetState: '1-preparation',
@@ -107,12 +126,12 @@ test.describe('Overview tab — task prompt popover', () => {
     }
   });
 
-  test('clicking outside the popover closes it', async ({ page }) => {
+  test('clicking the backdrop closes it', async ({ page }) => {
     const wp = await pickWatchPath();
     const id = uid('outside');
     await createJob({
       id,
-      title: `Prompt popover outside ${id}`,
+      title: `Prompt modal outside ${id}`,
       watchPath: wp.path,
       promptMarkdown: PROMPT_BODY,
       targetState: '1-preparation',
@@ -125,8 +144,7 @@ test.describe('Overview tab — task prompt popover', () => {
       await page.getByTestId('overview-prompt-trigger').click();
       await expect(page.getByTestId('overview-prompt-popover')).toBeVisible();
 
-      // Click the Status section heading — clearly outside the popover host.
-      await page.getByTestId('overview-status').click({ position: { x: 5, y: 5 } });
+      await page.getByTestId('overview-prompt-popover-backdrop').click({ position: { x: 5, y: 5 } });
       await expect(page.getByTestId('overview-prompt-popover')).toHaveCount(0);
     } finally {
       await deleteTask(id, wp.path);

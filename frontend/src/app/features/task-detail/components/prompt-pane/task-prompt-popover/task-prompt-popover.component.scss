@@ -39,7 +39,7 @@
   }
 }
 
-.prompt-pop__modal {
+.prompt-pop__backdrop {
   position: fixed;
   inset: 0;
   display: grid;
@@ -50,8 +50,9 @@
   pointer-events: auto;
 }
 
-.prompt-pop__panel {
+.prompt-pop__modal {
   width: var(--studio-modal-width-prompt);
+  max-width: 100%;
   max-height: var(--studio-modal-height-prompt);
   display: flex;
   flex-direction: column;

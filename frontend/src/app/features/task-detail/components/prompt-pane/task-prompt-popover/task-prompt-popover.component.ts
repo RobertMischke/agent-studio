@@ -2,8 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  ElementRef,
-  HostListener,
   computed,
   effect,
   inject,
@@ -59,7 +57,6 @@ export class TaskPromptPopoverComponent {
     return (src: string) => resolveProtocolImageSrc(src, jobId, watchPath);
   });
 
-  private readonly host = inject(ElementRef<HTMLElement>);
   private readonly modalStack = inject(ModalStackService);
   private readonly destroyRef = inject(DestroyRef);
   private modalStackDispose: (() => void) | null = null;
@@ -72,14 +69,6 @@ export class TaskPromptPopoverComponent {
 
   close(): void {
     this.open.set(false);
-  }
-
-  @HostListener('document:click', ['$event'])
-  onDocClick(event: MouseEvent): void {
-    if (!this.open()) return;
-    const root = this.host.nativeElement as HTMLElement;
-    if (root && event.target instanceof Node && root.contains(event.target)) return;
-    this.close();
   }
 
   // Escape routes through ModalStack so a real modal above wins first and the
