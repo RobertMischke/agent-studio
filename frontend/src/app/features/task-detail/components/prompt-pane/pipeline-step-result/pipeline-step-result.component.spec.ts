@@ -92,6 +92,7 @@ describe('PipelineStepResultComponent', () => {
     const card = root(fixture).querySelector('[data-testid="pipeline-step-result-card"]');
     expect(card?.textContent).toContain('Code quality');
     expect(card?.textContent).toContain('Passed');
+    expect(card?.classList.contains('step-result__popover')).toBe(true);
     expect(
       root(fixture).querySelector('[data-testid="pipeline-step-result-verdict"]')?.textContent,
     ).toContain('pass');

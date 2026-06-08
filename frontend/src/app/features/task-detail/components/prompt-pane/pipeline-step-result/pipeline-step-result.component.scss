@@ -40,11 +40,12 @@
     line-height: 1;
   }
 
-  &__card {
+  &__popover {
     position: absolute;
     z-index: 40;
-    top: calc(100% + 6px);
-    left: 0;
+    top: 50%;
+    left: calc(100% + 6px);
+    transform: translateY(-18px);
     width: min(560px, calc(100vw - 48px));
     max-height: min(520px, calc(100vh - 96px));
     border: 1px solid var(--studio-border);
@@ -164,5 +165,17 @@
     font-size: 12px;
 
     &--error { color: var(--severity-high); }
+  }
+}
+
+@media (max-width: 720px) {
+  .step-result {
+    &__popover {
+      top: calc(100% + 6px);
+      left: auto;
+      right: 0;
+      transform: none;
+      width: min(520px, calc(100vw - 32px));
+    }
   }
 }

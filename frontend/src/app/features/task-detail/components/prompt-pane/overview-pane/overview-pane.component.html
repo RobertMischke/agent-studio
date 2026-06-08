@@ -289,7 +289,6 @@
                  data-testid="overview-pipeline-phase">
               <span class="ov-pl-phase__label">{{ row.phaseLabel }}</span>
               <span class="ov-pl-phase__rule" aria-hidden="true"></span>
-              <span class="ov-pl-phase__description">{{ row.phaseDescription }}</span>
               <span class="ov-pl-phase__info"
                     tabindex="0"
                     aria-label="{{ row.phaseLabel }} phase explanation"
@@ -369,7 +368,7 @@
                     [attr.data-model-resolved]="row.modelIsResolved ? 'true' : null"
                     [appTooltip]="row.modelTooltip">{{ row.model }}</span>
             }
-            @if (row.modelEditable) {
+            @if (row.modelEditable && row.kind !== 'aspect') {
               <app-cli-model-selector
                 class="ov-pl-step__agent-select"
                 [cliType]="row.cliType"

@@ -795,16 +795,17 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(groups.map(g => g.querySelector('.ov-pl-phase__label')?.textContent?.trim())).toEqual([
       'PRE', 'CORE', 'ASPECT', 'TOOL', 'DECISION', 'DRIFT',
     ]);
-    expect(groups.map(g => g.querySelector('.ov-pl-phase__description')?.textContent?.trim())).toEqual([
-      'Preparation checks before the agent gets the task.',
-      'The coding agent run.',
-      'Parallel review passes over the finished work.',
-      'Deterministic post-run tooling and evidence steps.',
-      'The orchestrator ruling that accepts, reissues, or escalates.',
-      'Optional drift-analysis passes.',
-    ]);
     expect(groups.map(g => g.querySelector('.ov-pl-phase__info')?.textContent?.trim())).toEqual([
       'i', 'i', 'i', 'i', 'i', 'i',
+    ]);
+    expect(groups.some(g => g.querySelector('.ov-pl-phase__description'))).toBe(false);
+    expect(groups.map(g => g.getAttribute('aria-label'))).toEqual([
+      'PRE pipeline phase: Preparation checks before the agent gets the task.',
+      'CORE pipeline phase: The coding agent run.',
+      'ASPECT pipeline phase: Parallel review passes over the finished work.',
+      'TOOL pipeline phase: Deterministic post-run tooling and evidence steps.',
+      'DECISION pipeline phase: The orchestrator ruling that accepts, reissues, or escalates.',
+      'DRIFT pipeline phase: Optional drift-analysis passes.',
     ]);
     expect(groups.map(g => g.getAttribute('data-phase'))).toEqual([
       'pre', 'core', 'aspect', 'tool', 'decision', 'drift',

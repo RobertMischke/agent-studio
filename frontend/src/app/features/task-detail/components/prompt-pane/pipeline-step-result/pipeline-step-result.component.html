@@ -3,14 +3,17 @@
   <button type="button"
           class="step-result__toggle"
           data-testid="pipeline-step-result-toggle"
+          aria-haspopup="dialog"
           [attr.aria-expanded]="open()"
-          [attr.aria-label]="open() ? 'Hide step result' : 'Show step result'"
-          (click)="toggle()">
+          [attr.aria-label]="open() ? 'Hide result for ' + h.label : 'Show result for ' + h.label"
+          [appTooltip]="open() ? 'Hide result' : 'Show result'"
+          (click)="toggle()"
+          (keydown.escape)="close()">
     <span class="step-result__icon" aria-hidden="true">◰</span>
   </button>
 
   @if (open()) {
-    <div class="step-result__card" data-testid="pipeline-step-result-card" role="dialog" aria-label="Step result">
+    <div class="step-result__popover" data-testid="pipeline-step-result-card" role="dialog" [attr.aria-label]="h.label + ' result'">
       <header class="step-result__header" [attr.data-status]="h.status">
         <span class="step-result__title">{{ h.label }}</span>
         <span class="step-result__status" data-testid="pipeline-step-result-status">

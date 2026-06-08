@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { TaskService } from '../../../../../services/task.service';
+import { TooltipDirective } from '../../../../../components/tooltip';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
 import { cleanStepResultMarkdown } from './pipeline-step-result.util';
 
@@ -30,24 +31,24 @@ export interface PipelineStepResultHeader {
 }
 
 /**
- * Expandable, well-formatted result view for one pipeline step (Epic: per-step
- * structured result). Renders directly where the result originates — under its
- * Overview pipeline row — as a card with a header (title + status + verdict +
- * model / timing / token / cost meta) and a body that lazily fetches the
+ * Popover, well-formatted result view for one pipeline step (Epic: per-step
+ * structured result). Renders beside its Overview pipeline row trigger as a
+ * card with a header (title + status + verdict + model / timing / token / cost
+ * meta) and a body that lazily fetches the
  * step's on-disk markdown (`status.md` for the CORE run, `aspect-{id}.md` for
  * a review aspect) and renders it through the canonical {@link
  * MarkdownViewComponent}. Cleaning ({@link cleanStepResultMarkdown}) strips the
  * frontmatter, unwraps the model-reply fence, and drops machine sentinels so
  * the operator reads formatted prose, not a raw blob.
  *
- * Self-contained: a collapsed card costs nothing; the file is fetched on the
- * first expand and cached for the card's lifetime.
+ * Self-contained: a closed popover costs nothing; the file is fetched on the
+ * first open and cached for the component's lifetime.
  */
 @Component({
   selector: 'app-pipeline-step-result',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownViewComponent],
+  imports: [MarkdownViewComponent, TooltipDirective],
   templateUrl: './pipeline-step-result.component.html',
   styleUrl: './pipeline-step-result.component.scss',
 })
@@ -72,6 +73,10 @@ export class PipelineStepResultComponent {
     const next = !this.open();
     this.open.set(next);
     if (next && !this.loaded() && !this.loading()) this.load();
+  }
+
+  close(): void {
+    this.open.set(false);
   }
 
   private load(): void {
