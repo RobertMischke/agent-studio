@@ -76,6 +76,13 @@
 .rgv__status[data-status="R"] { background: color-mix(in srgb, var(--studio-accent-4) 30%, transparent); color: var(--studio-accent-4); }
 .rgv__status[data-status="C"] { background: color-mix(in srgb, var(--studio-accent-warn) 30%, transparent); color: var(--studio-accent-warn); }
 
+.rgv__gated { padding: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.rgv__gated-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rgv__gated-name { font-family: var(--font-mono); color: var(--studio-fg); word-break: break-all; }
+.rgv__gated-size { color: var(--studio-fg-dim); }
+.rgv__gated-hint { margin: 0; color: var(--studio-fg-dim); }
+.rgv__gated-actions { display: flex; gap: 8px; }
+
 .rgv__diff { overflow: auto; display: flex; flex-direction: column; min-width: 0; }
 .rgv__diff-head {
   padding: 8px 14px;

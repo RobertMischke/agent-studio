@@ -139,7 +139,22 @@
                       </button>
                     }
                   </div>
-                  @if (diffHtml(); as dh) {
+                  @if (diffGated()) {
+                    <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
+                      <div class="git-view__gated-meta">
+                        @if (selectedFileStatus(); as st) {
+                          <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
+                        }
+                        <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
+                        <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
+                      </div>
+                      <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
+                      <div class="git-view__gated-actions">
+                        <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
+                        <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
+                      </div>
+                    </div>
+                  } @else if (diffHtml(); as dh) {
                     <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
                   } @else {
                     <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
@@ -207,7 +222,22 @@
                       </button>
                     }
                   </div>
-                  @if (diffHtml(); as dh) {
+                  @if (diffGated()) {
+                    <div class="git-view__diff git-view__diff--gated" data-testid="git-diff-gated">
+                      <div class="git-view__gated-meta">
+                        @if (selectedFileStatus(); as st) {
+                          <span class="git-view__gated-status" [attr.data-status]="st">{{ st }}</span>
+                        }
+                        <span class="git-view__gated-name">{{ git.selectedDiffPath() }}</span>
+                        <span class="git-view__gated-size">{{ diffSizeLabel() }}</span>
+                      </div>
+                      <p class="git-view__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
+                      <div class="git-view__gated-actions">
+                        <button type="button" class="btn-sm" data-testid="git-diff-show" (click)="revealCurrentDiff()">Show diff</button>
+                        <button type="button" class="btn-sm" data-testid="git-diff-show-all" (click)="revealAll()">Show all large diffs</button>
+                      </div>
+                    </div>
+                  } @else if (diffHtml(); as dh) {
                     <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
                   } @else {
                     <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>

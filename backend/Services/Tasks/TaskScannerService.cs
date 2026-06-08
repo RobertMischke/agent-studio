@@ -243,9 +243,10 @@ public class TaskScannerService : ITaskScanner
         // cache hits (which never reach here) and fast scans stay quiet.
         if (sw.ElapsedMilliseconds >= 250)
         {
+            var archived = jobs.Count(j => string.Equals(j.State, TaskStates.Archive, StringComparison.Ordinal));
             _logger.LogInformation(
-                "ScanAllJobsRaw scanned {Count} task folders in {ElapsedMs}ms (parallel x{Dop})",
-                jobs.Count, sw.ElapsedMilliseconds, Math.Max(2, Environment.ProcessorCount));
+                "ScanAllJobsRaw scanned {Count} task folders ({Archived} archived slim-hydrated) in {ElapsedMs}ms (parallel x{Dop})",
+                jobs.Count, archived, sw.ElapsedMilliseconds, Math.Max(2, Environment.ProcessorCount));
         }
         return jobs;
     }
@@ -259,8 +260,6 @@ public class TaskScannerService : ITaskScanner
         {
             var json = File.ReadAllText(jobJsonPath);
             var raw = JsonSerializer.Deserialize<JsonElement>(json, TaskJsonFile.ReadOpts);
-
-            var lastActivity = GetLastActivityTime(jobDir);
 
             var folderId = Path.GetFileName(jobDir);
             var isFlatLayout = IsFlatLayoutJobDir(jobDir);
@@ -303,6 +302,23 @@ public class TaskScannerService : ITaskScanner
             // path logs the underlying bad task.json separately.
             if (string.IsNullOrWhiteSpace(resolvedState)) return null;
 
+            // Slim hydration for the terminal 7-archive lane. The per-folder cost
+            // of a scan is dominated by three disk walks - the recursive
+            // last-activity walk, the cli-output.log tail read, and the
+            // session-events.jsonl scan - and all three only feed live-card
+            // affordances (freshness sort, outcome chip, code-activity flag) that
+            // a terminal archived card does not need. Skipping them for the ~748
+            // archived folders is the memory/CPU/garbage win this lane targets;
+            // the cheap task.json header below still carries Id/Title/State/
+            // Commits so archived cards render and stats drill-downs resolve their
+            // title. Aggregate token/usage numbers come from the Agent Message Bus
+            // (logs/bus/), never from these records, so slimming them changes no
+            // statistic.
+            var isArchive = string.Equals(resolvedState, TaskStates.Archive, StringComparison.Ordinal);
+            var lastActivity = isArchive
+                ? File.GetLastWriteTime(jobJsonPath)
+                : GetLastActivityTime(jobDir);
+
             var ownerClientId = ResolveOwnerClientId(raw, jobDir);
             var (commitChain, legacyCommit) = ReadCommitChain(raw);
 
@@ -341,10 +357,10 @@ public class TaskScannerService : ITaskScanner
                     : null,
                 Commit = legacyCommit,
                 Commits = commitChain,
-                CodeActivityDetected = DetectCodeActivity(raw, jobDir),
+                CodeActivityDetected = DetectCodeActivity(raw, jobDir, scanSessionLog: !isArchive),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
-                OutcomeIssue = ResolveOutcomeIssue(jobDir, resolvedState),
+                OutcomeIssue = isArchive ? null : ResolveOutcomeIssue(jobDir, resolvedState),
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, resolvedState, jobDir),
@@ -480,11 +496,22 @@ public class TaskScannerService : ITaskScanner
     /// no auto-commit AND no session log (the majority of <c>1-preparation</c>
     /// / <c>2-ready</c> jobs), and short-circuits on the first range that
     /// moved HEAD.
+    ///
+    /// <para><paramref name="scanSessionLog"/> is <c>false</c> on the slim
+    /// archive-hydration path: an archived card only needs the O(1) inline
+    /// auto-commit check, not the full <c>session-events.jsonl</c> scan that
+    /// dominates the per-folder cost. Archived tasks that landed work carry the
+    /// inline <c>commit</c> field, so the flag stays correct for them; the only
+    /// loss is the rare archived task whose sole evidence of code activity was a
+    /// HEAD-moving session range with no stamped commit, which the terminal lane
+    /// does not surface anyway.</para>
     /// </summary>
-    private static bool DetectCodeActivity(JsonElement raw, string jobFolder)
+    private static bool DetectCodeActivity(JsonElement raw, string jobFolder, bool scanSessionLog = true)
     {
         if (raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object)
             return true;
+
+        if (!scanSessionLog) return false;
 
         var sessionLog = TaskPaths.SessionEventsLog(jobFolder);
         if (!File.Exists(sessionLog)) return false;

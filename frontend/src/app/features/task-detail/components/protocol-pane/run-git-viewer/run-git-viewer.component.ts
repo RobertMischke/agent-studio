@@ -25,6 +25,7 @@ import {
   type DiffLine,
   type HighlightedLine,
 } from './diff-utils';
+import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
 
 @Component({
   selector: 'app-run-git-viewer',
@@ -59,6 +60,28 @@ export class RunGitViewerComponent implements DoCheck {
   readonly diffLines = computed<DiffLine[]>(() => splitDiff(this.diffText()));
   readonly highlightedLines = signal<HighlightedLine[] | null>(null);
   readonly isNewFile = computed<boolean>(() => detectNewFile(this.diffText()));
+
+  // Large-file gate (central threshold in utils/large-diff-gate): a huge
+  // diff is not rendered automatically - building one DOM node per line
+  // plus the per-line syntax-highlight pass is what makes the overlay
+  // sluggish. Show a compact placeholder until the operator clicks
+  // "Show diff"; reveal is remembered per-path for the session, with a
+  // "show all" escape hatch.
+  private readonly revealedPaths = signal<Set<string>>(new Set<string>());
+  readonly revealAllLarge = signal(false);
+  readonly diffIsLarge = computed<boolean>(() => isLargeDiff(this.diffText()));
+  readonly diffSizeLabel = computed<string>(() => describeDiffSize(this.diffText()));
+  readonly selectedFileStatus = computed<string>(() => {
+    const path = this.selectedPath();
+    if (!path) return '';
+    return this.files().find((f) => f.path === path)?.status ?? '';
+  });
+  readonly diffGated = computed<boolean>(() => {
+    if (!this.diffIsLarge()) return false;
+    if (this.revealAllLarge()) return false;
+    const path = this.selectedPath();
+    return !(path && this.revealedPaths().has(path));
+  });
 
   private readonly runGitCache = inject(RunGitCacheService);
   private currentLoadKey = '';
@@ -139,6 +162,21 @@ export class RunGitViewerComponent implements DoCheck {
     });
   }
 
+  revealCurrentDiff(): void {
+    const path = this.selectedPath();
+    if (!path) return;
+    const next = new Set(this.revealedPaths());
+    next.add(path);
+    this.revealedPaths.set(next);
+    this.highlightCurrentDiff(path);
+  }
+
+  revealAll(): void {
+    this.revealAllLarge.set(true);
+    const path = this.selectedPath();
+    if (path) this.highlightCurrentDiff(path);
+  }
+
   private loadDiff(path: string): void {
     const job = this.job(), run = this.run();
     if (!job || !run) return;
@@ -153,7 +191,9 @@ export class RunGitViewerComponent implements DoCheck {
         this.diffState.set('loaded');
         perfMark('run-diff-rendered');
         perfMeasure('run-diff-fetch-to-rendered', 'run-diff-fetch', 'run-diff-rendered');
-        this.highlightCurrentDiff(path);
+        // Skip the per-line highlight pass while the diff is gated; it
+        // runs once the operator reveals it.
+        if (!this.diffGated()) this.highlightCurrentDiff(path);
       },
       error: (err) => {
         this.diffError.set(err?.error?.error || err?.message || 'Could not load diff.');

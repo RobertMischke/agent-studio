@@ -89,6 +89,21 @@
           <div class="rgv__placeholder rgv__placeholder--error">{{ diffError() }}</div>
         } @else if (!diffText()) {
           <div class="rgv__placeholder">No diff available for <code>{{ selectedPath() }}</code> in this range.</div>
+        } @else if (diffGated()) {
+          <div class="rgv__gated" data-testid="rgv-diff-gated">
+            <div class="rgv__gated-meta">
+              @if (selectedFileStatus(); as st) {
+                <span class="rgv__status" [attr.data-status]="st">{{ st }}</span>
+              }
+              <code class="rgv__gated-name">{{ selectedPath() }}</code>
+              <span class="rgv__gated-size">{{ diffSizeLabel() }}</span>
+            </div>
+            <p class="rgv__gated-hint">Large file - not rendered automatically to keep the editor fast.</p>
+            <div class="rgv__gated-actions">
+              <button class="rgv__copy" type="button" data-testid="rgv-diff-show" (click)="revealCurrentDiff()">Show diff</button>
+              <button class="rgv__copy" type="button" data-testid="rgv-diff-show-all" (click)="revealAll()">Show all large diffs</button>
+            </div>
+          </div>
         } @else {
           <div class="rgv__diff-head">
             <code class="rgv__diff-path">{{ selectedPath() }}</code>

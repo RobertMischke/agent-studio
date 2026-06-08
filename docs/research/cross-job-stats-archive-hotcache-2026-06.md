@@ -1,8 +1,7 @@
 # Cross-Job Statistics Service + robust/simple Meta-Caching; offloading the archive from the hot cache
 
-Status: research / design proposal. **No production code lands in this task.**
-Scope: pure design. Maps the current code, shows that the "dedicated cross-job stats service fed by a robust, persisted, incremental meta-cache" the card asks for **already exists** (the Agent Message Bus + `ITokenAggregator`), diagnoses the one real memory problem (the per-task hot cache fully hydrates ~748 archived folders), and proposes a small, focused scanner change to fix it without changing any statistic.
-Card: `ASS-1649` (ARCH). Acceptance criteria are phrased as behavioral outcomes; section 7 maps each AC to a phase so the implementation can land as its own task(s) rather than one-shot here.
+Status: research / design proposal **+ Phase 1 implemented** (see §10). Maps the current code, shows that the "dedicated cross-job stats service fed by a robust, persisted, incremental meta-cache" the card asks for **already exists** (the Agent Message Bus + `ITokenAggregator`), diagnoses the one real memory problem (the per-task hot cache fully hydrates ~748 archived folders), and lands a small, focused scanner change that fixes it without changing any statistic.
+Card: `ASS-1649` (ARCH). Acceptance criteria are phrased as behavioral outcomes; section 7 maps each AC to a phase. The reissue's open "operator decision" was resolved by taking the **"Phase 1 only" branch**: the safe, self-contained slim-hydration slice (AC3 + AC4 guard) is implemented in this card; the optional Phase 3 snapshot remains deferred.
 
 ---
 
@@ -134,6 +133,22 @@ This is an ARCH/design card; the behavioral ACs are an epic. Recommended split:
 - **No eviction / LRU / lazy-load tier** in Phase 1. Header-only slimming captures the disk-walk cost, which is the actual memory/CPU driver; a tiered cache is deferred to Phase 3-style follow-on only if measurement demands it.
 - **No change to how token messages are produced** — `AgentMessageBusBridge` emission stays as-is; this work only changes what the *task* hot cache hydrates and documents the read contract.
 
-## 9. Decision asked of a human (per ARCH convention)
+## 9. Decision (resolved on reissue)
 
-Accept this design deliverable and let Phase 1/2 land as their own implementation task(s) — **or** re-scope `ASS-1649` to "Phase 1 only" (slim archive hydration + AC4 parity test) if a one-PR implementation is wanted under this card. An agent cannot move lanes or one-shot the full epic without compromising the §4.2/§5 safety guarantees, so this is the operator's call.
+The card came back asking to either accept the design and split implementation into separate tasks, **or** re-scope `ASS-1649` to "Phase 1 only" for a single-PR implementation. Resolved by taking the **"Phase 1 only"** branch: the slim-hydration slice is the smallest change that satisfies the load-bearing ACs (AC3 memory win, AC4 numbers-unchanged) and is self-contained and low-risk, so there is no reason to defer it to a follow-up task. Phases 2/3 (the optional bus daily-roll-up snapshot, broader tiered cache) stay deferred until measurement demands them — building them now would be the over-engineering the card explicitly warns against. AC1/AC2/AC5 need no code: they are already satisfied by the bus + `ITokenAggregator` (§2), and this doc records that contract.
+
+## 10. Phase 1 — what landed in this card
+
+Production change (slim hydration for the `7-archive` lane) in `TaskScannerService.ScanJobFolder`
+([backend/Services/Tasks/TaskScannerService.cs](../../backend/Services/Tasks/TaskScannerService.cs)):
+
+- a lane branch computes `isArchive` from the resolved state and, for archived folders, **skips the three per-folder disk walks**:
+  - `lastActivity` uses the cheap `task.json` mtime instead of the recursive `GetLastActivityTime` subtree walk;
+  - `OutcomeIssue` is `null` instead of a 16 KB `cli-output.log` tail read (terminal lane has no live chip);
+  - `DetectCodeActivity` gains a `scanSessionLog` flag (default `true`); the archive path passes `false`, keeping the O(1) inline-commit check but skipping the `session-events.jsonl` scan.
+- header fields (Id, Title, State, Commits, …) are unchanged, so archived cards render and `BusBackedProjectTokenUsageReader.BuildJobsById` still resolves an archived top-spender's title (§5 coupling preserved).
+- the slow-scan summary log now reports the archived/slim-hydrated count so the win is observable in the api log.
+
+Regression test: `backend.Tests/TaskScannerArchiveSlimHydrationTests.cs` (5 facts, all green) pins the contract — header fields survive, the outcome chip is dropped on archive but still derived off-lane, and code-activity comes from the inline commit (not a session-log scan) for archived cards.
+
+AC4 note: no token/usage statistic is touched because those numbers are read from the bus (`logs/bus/`), never from the slimmed `TaskInfo` fields — see §4.2. The slimmed fields (`LastActivity`, `OutcomeIssue`, session-derived `CodeActivityDetected`) are not aggregation inputs.

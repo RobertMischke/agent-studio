@@ -160,6 +160,39 @@
   padding: 10px 12px;
   font: 12px/1.5 var(--font-mono, monospace);
 }
+.git-view__diff--gated {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 14px;
+  font-size: 12px;
+}
+.git-view__gated-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.git-view__gated-status {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  opacity: 0.85;
+}
+.git-view__gated-name {
+  font-family: var(--font-mono, monospace);
+  word-break: break-all;
+}
+.git-view__gated-size {
+  opacity: 0.7;
+}
+.git-view__gated-hint {
+  margin: 0;
+  opacity: 0.7;
+}
+.git-view__gated-actions {
+  display: flex;
+  gap: 8px;
+}
 .git-view__diff-wrap--maximized .git-view__diff {
   max-height: none;
   height: 100%;

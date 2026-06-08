@@ -6,6 +6,7 @@ import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
 import type { TaskCommitInfo } from '../../../../git';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
+import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
 // import was static, which dragged the whole library into the initial
@@ -126,13 +127,58 @@ export class GitPaneComponent {
   private readonly _ensureDiff2HtmlLoaded = effect(() => {
     const text = this.git.diffText();
     if (!text) return;
+    if (this.diffGated()) return;
     if (this.diff2htmlReady()) return;
     loadDiff2Html().then(() => this.diff2htmlReady.set(true));
   });
 
+  /**
+   * Large-file gate (central threshold in utils/large-diff-gate). Big
+   * diffs are not auto-rendered - the full diff2html render of a huge
+   * block is what makes the pane feel slow - so a compact placeholder is
+   * shown until the operator clicks "Show diff". Reveal is remembered
+   * per-path for the session, plus a "show all" escape hatch.
+   */
+  private readonly revealedPaths = signal<Set<string>>(new Set<string>());
+  readonly revealAllLargeDiffs = signal(false);
+
+  readonly diffIsLarge = computed<boolean>(() => isLargeDiff(this.git.diffText()));
+  readonly diffSizeLabel = computed<string>(() => describeDiffSize(this.git.diffText()));
+
+  /** Status char (A/M/D/…) of the selected file, for the gated placeholder. */
+  readonly selectedFileStatus = computed<string>(() => {
+    const path = this.git.selectedDiffPath();
+    if (!path) return '';
+    const fromCommit = this.git.commitFiles().find((f) => f.path === path);
+    if (fromCommit) return fromCommit.status;
+    const fromStatus = this.git.status()?.files.find((f) => f.path === path);
+    return fromStatus?.status ?? '';
+  });
+
+  /** True when the current diff is large and the operator hasn't revealed it. */
+  readonly diffGated = computed<boolean>(() => {
+    if (!this.diffIsLarge()) return false;
+    if (this.revealAllLargeDiffs()) return false;
+    const path = this.git.selectedDiffPath();
+    return !(path && this.revealedPaths().has(path));
+  });
+
+  revealCurrentDiff(): void {
+    const path = this.git.selectedDiffPath();
+    if (!path) return;
+    const next = new Set(this.revealedPaths());
+    next.add(path);
+    this.revealedPaths.set(next);
+  }
+
+  revealAll(): void {
+    this.revealAllLargeDiffs.set(true);
+  }
+
   readonly diffHtml = computed<SafeHtml | null>(() => {
     const text = this.git.diffText();
     if (!text) return null;
+    if (this.diffGated()) return null;
     if (!this.diff2htmlReady() || !diff2htmlModuleCache) return null;
     const sideBySide = this.maximized() || this.diffMaximized();
     const rendered = diff2htmlModuleCache.html(text, {
