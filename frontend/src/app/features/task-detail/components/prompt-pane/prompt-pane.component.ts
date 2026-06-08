@@ -44,13 +44,6 @@ export function buildPromptTabs(filesCount: number, visualEvidenceCount: number)
       testid: 'prompt-tab-overview',
     },
     {
-      id: 'description',
-      label: 'Files',
-      icon: 'folder',
-      testid: 'prompt-tab-description',
-      badge: filesCount > 1 ? filesCount : null,
-    },
-    {
       id: 'timeline',
       label: 'Timeline',
       icon: 'activity',
@@ -68,6 +61,13 @@ export function buildPromptTabs(filesCount: number, visualEvidenceCount: number)
       label: 'Code Review',
       icon: 'diff',
       testid: 'prompt-tab-code-review',
+    },
+    {
+      id: 'description',
+      label: 'Files',
+      icon: 'folder',
+      testid: 'prompt-tab-description',
+      badge: filesCount > 1 ? filesCount : null,
     },
   ];
 }
