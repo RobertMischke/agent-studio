@@ -48,6 +48,7 @@ public static class RunQuarantineBreaker
         RunIssueKind.CliLaunchFailed    => false,
         RunIssueKind.SilentCompletion   => false,
         RunIssueKind.Quarantined        => false,
+        RunIssueKind.AgentGitViolation  => false,
         _                               => true
     };
 

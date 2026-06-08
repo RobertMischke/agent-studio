@@ -87,7 +87,16 @@ public enum RunIssueKind
     /// not by <see cref="AgentOutcomeAnalyzer"/> - to stop an endless
     /// reissue/leave-in-progress loop and park the task in human review.
     /// </summary>
-    Quarantined
+    Quarantined,
+    /// <summary>
+    /// The worker CLI advanced repository HEAD during its own run, which means
+    /// it ran <c>git commit</c> or an equivalent history-mutating operation
+    /// before the platform-owned transition could stamp the job. Synthetic -
+    /// set by the runner around the CLI subprocess window, not by
+    /// <see cref="AgentOutcomeAnalyzer"/> - so autonomous agent commits are
+    /// surfaced as process violations instead of clean completions.
+    /// </summary>
+    AgentGitViolation
 }
 
 /// <summary>

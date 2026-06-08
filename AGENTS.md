@@ -135,7 +135,7 @@ When NOT to update stable:
 - A change is purely exploratory (mockups under `docs/mockups/`, research under `docs/research/`). These do not affect runtime; they can sit in dev.
 - The stable instance is currently being used to drive a long task. Wait for the task to finish or stop, then update.
 
-Direct-agent work in this repository should not remain local after it is finished. When Codex or another directly-invoked agent changes source, docs, mockups, prompts, or task evidence, commit the coherent batch and push it before reporting done, unless the user explicitly says not to push. Keep the commit scoped to the files touched for the request and do not sweep in unrelated dirty work.
+Direct-agent work in this repository should not be committed or pushed autonomously. When Codex or another directly-invoked agent changes source, docs, mockups, prompts, or task evidence, leave the coherent batch in the working tree and report the changed files and verification unless the operator explicitly asks for commit and/or push in that exact task. If the operator does ask, keep the commit scoped to the files touched for the request and do not sweep in unrelated dirty work.
 
 This rule does not allow worker CLIs spawned by agent-orchestrator to commit or push on their own. Managed task runs still follow [docs/commit-push-doctrine.md](docs/commit-push-doctrine.md): the platform owns the commit and push boundary. The direct-agent rule is for interactive repository work like this file, documentation updates, mockups, and task-queue maintenance.
 

@@ -48,6 +48,16 @@ public static class TerminalRunOutcomeClassifier
 
     public static TerminalRunOutcome Classify(string? executionStatus, AgentOutcome agentOutcome, int commitsDuringRun = 0)
     {
+        if (agentOutcome.IssueKind == RunIssueKind.AgentGitViolation)
+        {
+            return new TerminalRunOutcome(
+                TerminalRunOutcomeKinds.Failed,
+                "Failed",
+                ShouldMoveToReview: false,
+                ShouldShowFailureToast: true,
+                Reason: agentOutcome.Reason ?? "worker agent advanced git HEAD before the platform commit step");
+        }
+
         if (agentOutcome.MatchedSentinel)
         {
             return agentOutcome.Kind switch

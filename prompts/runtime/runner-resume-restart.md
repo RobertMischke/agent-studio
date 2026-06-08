@@ -20,7 +20,7 @@ Run context:
 - Attachments folder:
 {{attachments_list}}
 
-Rules: work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for or start another task. The application owns pickup, stop, continue, and state transitions.
+Rules: work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for or start another task. Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push. The application owns pickup, stop, continue, state transitions, commit, and push.
 
 Build-time observability (when your change affects product behavior):
 

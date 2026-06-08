@@ -23,6 +23,15 @@ public class ProjectRunner
     private static readonly Regex CompactTokenValueRegex = new(
         @"(?<value>\d+(?:[.,]\d+)?)\s*(?<suffix>[kKmM])?",
         RegexOptions.Compiled);
+    private static readonly Regex GitMutationCommandRegex = new(
+        @"(?:^|[`""'\s>$:])git\s+(?:-C\s+\S+\s+)?(?:commit|push)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex GitMutationClaimRegex = new(
+        @"\b(?:i(?:'ve| have)?|changes?\s+(?:were|are)?|work\s+(?:was|is)?)\s*(?:committed|pushed)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex NegatedGitMutationRegex = new(
+        @"\b(?:did not|didn't|do not|don't|without|not going to|never)\b.{0,60}\b(?:git\s+)?(?:commit|push|committed|pushed)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private sealed record CoreAgentUsage(
         string? Model,
@@ -3162,6 +3171,27 @@ public class ProjectRunner
                 _logger.LogDebug(ex, "commit-count for {JobId} failed; treating as 0", jobId);
             }
 
+            var agentGitMutationClaim = DetectAgentGitMutationClaim(liveOutputSnapshot);
+            if (activeInfo != null
+                && (commitsDuringRun > 0 || agentGitMutationClaim != null)
+                && _activeRuns.Get(jobId)?.IsWorktreeRun != true
+                && !IsAgentGitMutationAllowed(activeInfo))
+            {
+                var message = commitsDuringRun > 0
+                    ? $"[agent-git-violation] Worker CLI advanced git HEAD during the run ({commitsDuringRun} commit(s)) before the platform-owned commit step. Worker agents must not run git commit or git push."
+                    : $"[agent-git-violation] Worker CLI output suggests it ran or claimed a git commit/push command before the platform-owned commit step: {agentGitMutationClaim}. Worker agents must not run git commit or git push.";
+                _logger.LogWarning(
+                    "agent-git-violation job={JobId} cli={Cli} commits={Commits} claim={Claim} status={Status}",
+                    jobId, cliType, commitsDuringRun, agentGitMutationClaim ?? "<head-changed>", execution.Status);
+                _chatLog.Append(activeInfo, OrchestratorMessageKind.AgentGitViolation, message);
+                outcome = outcome with
+                {
+                    IssueKind = RunIssueKind.AgentGitViolation,
+                    Summary = message,
+                    Reason = "worker agent changed git history during its run"
+                };
+            }
+
             var terminalOutcome = TerminalRunOutcomeClassifier.Classify(execution.Status, outcome, commitsDuringRun);
             if (string.Equals(terminalOutcome.Kind, TerminalRunOutcomeKinds.CommittedPartial, StringComparison.Ordinal))
             {
@@ -3356,7 +3386,7 @@ public class ProjectRunner
                     // a context-overflow walks straight back into the same input
                     // window, and the quarantine breaker exists precisely to STOP
                     // re-running this task. Both go directly to human review.
-                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.Quarantined)
+                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         _projectSettings.Get(ProjectName),
@@ -3718,7 +3748,8 @@ public class ProjectRunner
                      or RunIssueKind.WatchdogTimeout
                      or RunIssueKind.EnvironmentBlocker
                      or RunIssueKind.ContextOverflow
-                     or RunIssueKind.Quarantined;
+                     or RunIssueKind.Quarantined
+                     or RunIssueKind.AgentGitViolation;
 
     /// <summary>Remaining completion-loop re-trigger budget for a job
     /// (loop id completion.retrigger-transient-abort-per-job). Counts down
@@ -3758,6 +3789,7 @@ public class ProjectRunner
         RunIssueKind.SilentCompletion         => "codex-silent-completion",
         RunIssueKind.ContextOverflow          => "context-overflow",
         RunIssueKind.Quarantined              => "quarantined",
+        RunIssueKind.AgentGitViolation        => "agent-git-violation",
         _                                     => "none"
     };
 
@@ -3771,8 +3803,29 @@ public class ProjectRunner
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
+        RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,
         _                               => HumanReviewEscalationCategories.AutoFailurePark
     };
+
+    private static bool IsAgentGitMutationAllowed(TaskInfo info)
+        => info.Tags.Any(tag => string.Equals(tag, "allow-agent-git-mutation", StringComparison.OrdinalIgnoreCase));
+
+    private static string? DetectAgentGitMutationClaim(IReadOnlyList<CliOutputLine> lines)
+    {
+        foreach (var line in lines)
+        {
+            var text = (line.Text ?? string.Empty).Trim();
+            if (text.Length == 0) continue;
+            if (string.Equals(line.Stream, "system", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(line.Stream, "user", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(line.Stream, "orchestrator", StringComparison.OrdinalIgnoreCase)) continue;
+            if (NegatedGitMutationRegex.IsMatch(text)) continue;
+            if (!GitMutationCommandRegex.IsMatch(text) && !GitMutationClaimRegex.IsMatch(text)) continue;
+            return text.Length <= 180 ? text : text[..177] + "...";
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Runs the abort-review step for a non-clean run end and applies its

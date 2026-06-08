@@ -61,6 +61,28 @@ public class RunOutcomePolicyTests
         int agentChars = 200) =>
         new(kind, "summary", sentinel, sentinel ? "DONE" : null, sentinel ? null : "heuristic", agentChars, agentChars / 5, duration);
 
+    [Fact]
+    public void AgentGitViolation_StopsAndSurfacesProcessViolation()
+    {
+        var outcome = Outcome(AgentOutcomeKind.Done, sentinel: true) with
+        {
+            IssueKind = RunIssueKind.AgentGitViolation,
+            Summary = "[agent-git-violation] Worker CLI advanced git HEAD during the run."
+        };
+
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            outcome,
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.AgentGitViolation, action.IssueKind);
+        Assert.Contains("Process violation", action.MetaMessage);
+        Assert.Contains("must not commit or push", action.MetaMessage);
+    }
+
     /// <summary>
     /// Graceful Recovery (ADR-0006): even when the prior session is
     /// unrecoverable, Recovery + follow-up + no-output gets ONE re-issue

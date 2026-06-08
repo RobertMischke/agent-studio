@@ -170,6 +170,18 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.AgentGitViolation)
+        {
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: "Process violation: the worker agent changed git history during its run. Worker CLIs must not commit or push; the platform owns commit and push after review transitions.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.AgentGitViolation,
+                MessageKind = OrchestratorMessageKind.AgentGitViolation
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.ContextOverflow)
         {
             // Context overflow (prompt too long / context length exceeded) is

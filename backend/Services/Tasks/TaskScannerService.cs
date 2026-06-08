@@ -658,6 +658,9 @@ public class TaskScannerService : ITaskScanner
             // task never carries a stale classifier-unknown/Warn chip (ASS-775).
             if (IsAcceptReconcileLine(line)) return null;
 
+            if (line.Contains("[agent-git-violation]", StringComparison.OrdinalIgnoreCase))
+                return BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
+
             // Never derive an outcome issue from an orchestrator decision/reissue/
             // meta line or a supervisor line. Those carry prose - e.g. an accept
             // reason that mentions "classifier-unknown" - that must not be read as
@@ -773,6 +776,11 @@ public class TaskScannerService : ITaskScanner
         if (lower.Contains("[worktree-containment]"))
         {
             issue = BuildOutcomeIssue("worktree-containment", "Worktree containment", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("[agent-git-violation]"))
+        {
+            issue = BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
             return true;
         }
         if (lower.Contains("context-overflow"))

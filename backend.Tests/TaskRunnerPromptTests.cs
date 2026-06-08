@@ -59,7 +59,7 @@ public class TaskRunnerPromptTests
         Assert.Contains(@"C:\jobs\fix-bug", p);
         Assert.Contains(@"C:\Projects\Runbook\App", p);
         Assert.Contains(@"C:\Projects\Runbook", p);
-        Assert.Contains("task.json", p);
+        Assert.Contains("job.json", p);
         Assert.Contains("prompt.md", p);
         Assert.Contains("status.md", p);
         Assert.Contains("logs", p);
@@ -217,6 +217,35 @@ public class TaskRunnerPromptTests
             if (blockEnd < 0) blockEnd = rendered.Length;
             var blockLength = blockEnd - blockStart;
             Assert.InRange(blockLength, 1, 1200);
+        }
+    }
+
+    [Fact]
+    public void AllRunnerTemplates_ForbidAgentCommitAndPush()
+    {
+        var prompts = Prompts();
+        foreach (var template in new[]
+        {
+            RuntimePromptService.RunnerFreshStart,
+            RuntimePromptService.RunnerResumeInterrupted,
+            RuntimePromptService.RunnerResumeRestart,
+            RuntimePromptService.RunnerRecoveryContinuation
+        })
+        {
+            var rendered = prompts.Render(template, new Dictionary<string, string?>
+            {
+                ["prompt_path"] = "prompt.md",
+                ["job_folder"] = "job",
+                ["working_directory"] = "work",
+                ["repository_path"] = "repo",
+                ["user_followup"] = "follow up",
+                ["title"] = "title",
+                ["prompt_text"] = "body"
+            });
+
+            Assert.Contains("Do not run `git commit`", rendered);
+            Assert.Contains("`git push`", rendered);
+            Assert.Contains("unless this individual task explicitly asks", rendered);
         }
     }
 

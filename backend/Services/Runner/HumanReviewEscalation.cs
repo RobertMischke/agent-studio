@@ -28,6 +28,10 @@ public static class HumanReviewEscalationCategories
     /// loop.</summary>
     public const string Quarantined = "quarantined";
 
+    /// <summary>The worker CLI advanced git history during its own run, bypassing
+    /// the platform-owned commit/push boundary.</summary>
+    public const string AgentGitViolation = "agent-git-violation";
+
     /// <summary>A card carrying the human-decision-needed marker: it exists for
     /// a person to decide, never for an agent to run. Routed to 5-human-review
     /// after the retired 1b-needs-human-review lane was removed.</summary>

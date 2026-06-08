@@ -182,6 +182,19 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void AgentGitViolationMarker_OnInterventionLine_SurfacesHighSeverityOutcome()
+    {
+        SeedJob("agent-git-violation", TaskStates.HumanReview,
+            $"[09:10:00.000] [orchestrator] [intervention] [agent-git-violation] Worker CLI advanced git HEAD during the run before the platform-owned commit step.{Environment.NewLine}");
+
+        var issue = Outcome("agent-git-violation");
+
+        Assert.NotNull(issue);
+        Assert.Equal("agent-git-violation", issue!.Kind);
+        Assert.Equal("High", issue.Severity);
+    }
+
+    [Fact]
     public void AgentStdoutMentioningContainmentInProse_DoesNotFalselySurface()
     {
         // ASS-914 regression (scanner self-reference): a self-modifying task whose

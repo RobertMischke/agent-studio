@@ -104,4 +104,27 @@ public class RunStatusClassifierTests
             RunStatuses.Completed,
             RunStatusClassifier.Classify(exitCode, RunStopReason.SilentCompletion));
     }
+
+    [Fact]
+    public void AgentGitViolation_OverridesTaskDoneSentinel()
+    {
+        var outcome = new AgentOutcome(
+            AgentOutcomeKind.Done,
+            Summary: "[agent-git-violation] Worker CLI advanced git HEAD.",
+            MatchedSentinel: true,
+            SentinelKeyword: "DONE",
+            Reason: "worker agent changed git history during its run",
+            AgentTextChars: 40,
+            OutputLineCount: 2,
+            DurationSeconds: 30)
+        {
+            IssueKind = RunIssueKind.AgentGitViolation
+        };
+
+        var terminal = TerminalRunOutcomeClassifier.Classify(RunStatuses.Completed, outcome, commitsDuringRun: 1);
+
+        Assert.Equal(TerminalRunOutcomeKinds.Failed, terminal.Kind);
+        Assert.False(terminal.ShouldMoveToReview);
+        Assert.True(terminal.ShouldShowFailureToast);
+    }
 }

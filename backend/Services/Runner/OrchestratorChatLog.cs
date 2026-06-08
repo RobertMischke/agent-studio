@@ -204,7 +204,12 @@ public enum OrchestratorMessageKind
     /// A worktree-isolated run modified the shared main checkout. The runner
     /// skipped integration and surfaced the harness integrity violation.
     /// </summary>
-    WorktreeContainment
+    WorktreeContainment,
+    /// <summary>
+    /// A worker CLI advanced git history during its own run, bypassing the
+    /// platform-owned commit/push boundary.
+    /// </summary>
+    AgentGitViolation
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -229,6 +234,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
+        OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         _ => "info"
     };
 
@@ -248,6 +254,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
+        OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         _ => kind.ToString().ToLowerInvariant()
     };
 }

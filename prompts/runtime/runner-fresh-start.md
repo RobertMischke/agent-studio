@@ -19,6 +19,7 @@ Rules for this run:
 - Do not move the job folder. Do not edit `state` in `job.json`. The application owns pickup, stop, continue, and state transitions.
 - Do the implementation in the working directory above. Read or write task evidence in the job folder.
 - Run git status and git diff in the repository path above when you need to inspect changes.
+- Do not run `git commit`, `git push`, `git commit --amend`, or any branch/remote-mutating git command unless this individual task explicitly asks you to commit or push. The platform owns commit and push after the run.
 - Place review-relevant screenshots / result files under the job folder's `results/` directory.
 - Do not rely on hand-written `status.md`; the application regenerates it from logs.
 

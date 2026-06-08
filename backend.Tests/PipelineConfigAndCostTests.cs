@@ -28,6 +28,18 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void IsEnabled_CatalogueStep_HonoursDefaultOffOptInSteps()
+    {
+        var drift = PipelineCatalogue.Standard.Post.Single(s => s.Id == PipelineCatalogue.DriftAdrCodeStepId);
+
+        Assert.False(PipelineStepConfigResolver.IsEnabled(null, drift));
+        Assert.False(PipelineStepConfigResolver.IsEnabled(new ProjectSettings(), drift));
+
+        var enabled = SettingsWith((drift.Id, new PipelineStepSetting { Enabled = true }));
+        Assert.True(PipelineStepConfigResolver.IsEnabled(enabled, drift));
+    }
+
+    [Fact]
     public void IsEnabled_RespectsExplicitDisable_ByFullIdOrBareSuffix()
     {
         var byFull = SettingsWith(("aspect-code-quality", new PipelineStepSetting { Enabled = false }));
