@@ -74,7 +74,7 @@ describe('ChatRowComponent markdown rendering', () => {
       ts: '2026-01-01T00:00:00.000Z',
       body:
         '| Field | Value |\n' +
-        '|---|---|\n' +
+        '| --- | --- |\n' +
         '| ID | ASS-704 |\n\n' +
         '- **Done**\n' +
         '- [Docs](https://example.com)\n\n' +
@@ -85,7 +85,8 @@ describe('ChatRowComponent markdown rendering', () => {
     const row = root.querySelector('[data-row-id="orchestrator-table"]') as HTMLElement | null;
 
     expect(row?.querySelector('table')).toBeTruthy();
-    expect(row?.querySelector('td')?.textContent?.trim()).toBe('ASS-704');
+    const tableCells = [...(row?.querySelectorAll('td') ?? [])].map(cell => cell.textContent?.trim());
+    expect(tableCells).toContain('ASS-704');
     expect(row?.querySelector('ul')).toBeTruthy();
     expect(row?.querySelector('strong')?.textContent).toBe('Done');
     expect(row?.querySelector('a')?.getAttribute('href')).toBe('https://example.com');

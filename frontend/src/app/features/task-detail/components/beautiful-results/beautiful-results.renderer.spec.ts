@@ -85,7 +85,7 @@ describe('renderResultsHtml', () => {
   it('resolves attachments/* image paths through the job-folder API', () => {
     const md = '![shot](attachments/screen.png)';
     const { html } = renderResultsHtml(md, CTX);
-    expect(html).toContain('/api/jobs/abc/attachments/screen.png');
+    expect(html).toContain('/api/tasks/abc/attachments/screen.png');
     expect(html).toContain('data-results-lightbox');
     expect(html).toContain('<figure');
   });

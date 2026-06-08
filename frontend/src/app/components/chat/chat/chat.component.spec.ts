@@ -60,7 +60,7 @@ describe('ChatComponent markdown rendering', () => {
       {
         id: 'user-table',
         role: 'user',
-        text: '| Field | Value |\n|---|---|\n| ID | ASS-704 |',
+        text: '| Field | Value |\n| --- | --- |\n| ID | ASS-704 |',
         timestamp: '2026-01-01T00:00:00.000Z',
       },
       {
@@ -77,7 +77,8 @@ describe('ChatComponent markdown rendering', () => {
     const orchTurn = root.querySelector('[data-turn-id="orch-formatting"]') as HTMLElement | null;
 
     expect(userTurn?.querySelector('table')).toBeTruthy();
-    expect(userTurn?.querySelector('td')?.textContent?.trim()).toBe('ASS-704');
+    const tableCells = [...(userTurn?.querySelectorAll('td') ?? [])].map(cell => cell.textContent?.trim());
+    expect(tableCells).toContain('ASS-704');
     expect(orchTurn?.querySelector('ul')).toBeTruthy();
     expect(orchTurn?.querySelector('strong')?.textContent).toBe('Done');
     expect(orchTurn?.querySelector('a')?.getAttribute('href')).toBe('https://example.com');

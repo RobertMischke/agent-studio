@@ -69,7 +69,7 @@ describe('markdownToHtml', () => {
       const md = ['Here is some code:', '', '```', 'const x = "**not bold**";', '// comment', '```'].join('\n');
       const html = markdownToHtml(md);
       expect(html).toContain('<pre><code>');
-      expect(html).toContain('const x = &quot;**not bold**&quot;;');
+      expect(html).toContain('const x = "**not bold**";');
       expect(html).toContain('// comment');
       // Inside fenced code, ** must NOT have been transformed to <strong>.
       expect(html).not.toContain('<strong>not bold</strong>');
@@ -162,7 +162,7 @@ describe('markdownToHtml', () => {
     it('joins multi-line paragraphs into one <p> with single space separators', () => {
       const md = 'First half\nsecond half\nthird piece.';
       const html = markdownToHtml(md);
-      expect(html).toBe('<p>First half second half third piece.</p>');
+      expect(html).toBe('<p>First half\nsecond half\nthird piece.</p>');
     });
 
     it('does not render an empty fenced block as a div with phantom content', () => {

@@ -4,22 +4,22 @@ import { resolveProtocolImageSrc } from './protocol-image-resolver';
 describe('resolveProtocolImageSrc', () => {
   it('maps attachments/<name> to the attachments endpoint', () => {
     expect(resolveProtocolImageSrc('attachments/abc.png', 'task-1', 'C:/work'))
-      .toBe('/api/jobs/task-1/attachments/abc.png?watchPath=C%3A%2Fwork');
+      .toBe('/api/tasks/task-1/attachments/abc.png?watchPath=C%3A%2Fwork');
   });
 
   it('maps results/<name> to the results endpoint', () => {
     expect(resolveProtocolImageSrc('results/proof.png', 'task-1', 'C:/work'))
-      .toBe('/api/jobs/task-1/results/proof.png?watchPath=C%3A%2Fwork');
+      .toBe('/api/tasks/task-1/results/proof.png?watchPath=C%3A%2Fwork');
   });
 
   it('treats bare filenames as results/<name> for legacy protocols', () => {
     expect(resolveProtocolImageSrc('proof.png', 'task-1', 'C:/work'))
-      .toBe('/api/jobs/task-1/results/proof.png?watchPath=C%3A%2Fwork');
+      .toBe('/api/tasks/task-1/results/proof.png?watchPath=C%3A%2Fwork');
   });
 
   it('omits watchPath query when none is given', () => {
     expect(resolveProtocolImageSrc('results/proof.png', 'task-1', null))
-      .toBe('/api/jobs/task-1/results/proof.png');
+      .toBe('/api/tasks/task-1/results/proof.png');
   });
 
   it('passes absolute URLs through unchanged', () => {

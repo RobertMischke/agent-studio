@@ -3,7 +3,7 @@ import { MarkdownViewComponent } from '../../../../components/markdown-view/mark
 import { TaskArtifact, TaskInfo, TaskPromptHistoryEntry, TaskTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/task.model';
 import type { CliType } from '../../../../models/task.model';
 import type { CliModelInfo } from '../../../cli';
-import type { TaskScreenshot } from '../../../screenshots';
+import type { TaskScreenshot } from '../../../screenshots/models/screenshots.model';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
 import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel/review-evidence-panel.component';
 import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel/code-review-panel.component';
@@ -12,7 +12,7 @@ import { PaneHeaderComponent } from '../../../../components/pane-header/pane-hea
 import { PaneTabsComponent, PaneTabDef } from '../../../../components/pane-tabs/pane-tabs.component';
 import { FilesPaneComponent } from './files-pane/files-pane.component';
 import { OverviewPaneComponent } from './overview-pane/overview-pane.component';
-import { TaskTimelinePaneComponent } from '../../../task-timeline';
+import { TaskTimelinePaneComponent } from '../../../task-timeline/components/task-timeline-pane/task-timeline-pane.component';
 
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
@@ -21,6 +21,55 @@ interface EvidenceSection {
   /** Optional brand-accent token; falls back to `--studio-accent`. */
   accent: 'var(--accent-2)' | 'var(--accent-3)' | 'var(--accent-4)' | 'var(--studio-accent)' | 'var(--accent-warn)';
   entries: ReviewEvidenceEntry[];
+}
+
+export type PromptPaneTabId = 'overview' | 'description' | 'timeline' | 'evidence' | 'code-review';
+
+export function nextPromptPaneTabForJobSwitch(
+  activeTab: PromptPaneTabId,
+  previousJobKey: string | null,
+  nextJobKey: string | null,
+): PromptPaneTabId {
+  return previousJobKey !== null && nextJobKey !== null && nextJobKey !== previousJobKey
+    ? 'overview'
+    : activeTab;
+}
+
+export function buildPromptTabs(filesCount: number, visualEvidenceCount: number): readonly PaneTabDef[] {
+  return [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: 'layout',
+      testid: 'prompt-tab-overview',
+    },
+    {
+      id: 'description',
+      label: 'Files',
+      icon: 'folder',
+      testid: 'prompt-tab-description',
+      badge: filesCount > 1 ? filesCount : null,
+    },
+    {
+      id: 'timeline',
+      label: 'Timeline',
+      icon: 'activity',
+      testid: 'prompt-tab-timeline',
+    },
+    {
+      id: 'evidence',
+      label: 'Evidence',
+      icon: 'check',
+      testid: 'prompt-tab-evidence',
+      badge: visualEvidenceCount > 0 ? visualEvidenceCount : null,
+    },
+    {
+      id: 'code-review',
+      label: 'Code Review',
+      icon: 'diff',
+      testid: 'prompt-tab-code-review',
+    },
+  ];
 }
 
 /**
@@ -89,7 +138,7 @@ export class PromptPaneComponent {
    * another task. Persistence across page reloads is intentionally out of
    * scope.
    */
-  readonly activeTab = signal<'overview' | 'description' | 'timeline' | 'evidence' | 'code-review'>('overview');
+  readonly activeTab = signal<PromptPaneTabId>('overview');
 
   /** Resets the active tab to Overview whenever the underlying task changes,
    *  so navigating between tasks always lands on Overview. Within the same
@@ -97,13 +146,14 @@ export class PromptPaneComponent {
   private lastJobKey: string | null = null;
   private resetTabOnJobSwitch = effect(() => {
     const key = this.job()?.taskKey ?? null;
-    if (this.lastJobKey !== null && key !== null && key !== this.lastJobKey) {
-      this.activeTab.set('overview');
+    const nextTab = nextPromptPaneTabForJobSwitch(this.activeTab(), this.lastJobKey, key);
+    if (nextTab !== this.activeTab()) {
+      this.activeTab.set(nextTab);
     }
     this.lastJobKey = key;
   });
 
-  setTab(tab: 'overview' | 'description' | 'timeline' | 'evidence' | 'code-review'): void {
+  setTab(tab: PromptPaneTabId): void {
     this.activeTab.set(tab);
   }
 
@@ -126,40 +176,8 @@ export class PromptPaneComponent {
    * testid) for backward-compat with pre-F48 specs; the user-facing label
    * is now "Files" since the tab carries every `.md` in the job folder.
    */
-  readonly promptTabs = computed<readonly PaneTabDef[]>(() => [
-    {
-      id: 'overview',
-      label: 'Overview',
-      icon: 'layout',
-      testid: 'prompt-tab-overview',
-    },
-    {
-      id: 'description',
-      label: 'Files',
-      icon: 'folder',
-      testid: 'prompt-tab-description',
-      badge: this.filesCount() > 1 ? this.filesCount() : null,
-    },
-    {
-      id: 'timeline',
-      label: 'Timeline',
-      icon: 'activity',
-      testid: 'prompt-tab-timeline',
-    },
-    {
-      id: 'evidence',
-      label: 'Evidence',
-      icon: 'check',
-      testid: 'prompt-tab-evidence',
-      badge: this.visualEvidenceCount() > 0 ? this.visualEvidenceCount() : null,
-    },
-    {
-      id: 'code-review',
-      label: 'Code Review',
-      icon: 'diff',
-      testid: 'prompt-tab-code-review',
-    },
-  ]);
+  readonly promptTabs = computed<readonly PaneTabDef[]>(() =>
+    buildPromptTabs(this.filesCount(), this.visualEvidenceCount()));
 
   /** Evidence entries grouped into the reference's Evidence-tab sections. */
   readonly evidenceSections = computed<EvidenceSection[]>(() => {

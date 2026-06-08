@@ -130,6 +130,7 @@
 
   @if (showCreate() && scopedProject(); as scope) {
     <app-epic-create-dialog
+      data-testid="epic-create-dialog"
       [projectName]="scope.name"
       [watchPath]="scope.watchPath"
       (created)="onEpicCreated()"
