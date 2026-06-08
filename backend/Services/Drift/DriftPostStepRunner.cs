@@ -38,7 +38,7 @@ namespace OrchestratorApi.Services.Drift;
 public sealed class DriftPostStepRunner
 {
     /// <summary>Model used when neither the step nor the project sets one.</summary>
-    public const string DefaultModel = "claude-haiku-4-5";
+    public const string DefaultModel = ModelIds.ClaudeHaiku45;
 
     private static readonly TimeSpan PerDimensionTimeout = TimeSpan.FromMinutes(5);
 

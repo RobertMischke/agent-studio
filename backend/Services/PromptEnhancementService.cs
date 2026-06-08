@@ -78,7 +78,7 @@ public class PromptEnhancementService
         var fallbackModel = _configuration["PromptEnhancement:Model"]
                             ?? _configuration["TitleGeneration:Model"]
                             ?? _configuration["ClaudeCli:SummaryModel"]
-                            ?? "claude-haiku-4-5";
+                            ?? ModelIds.ClaudeHaiku45;
         var (text, usage) = AdHocClaudeInvoker.ParseOrFallback(raw, fallbackModel);
         AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.PromptEnhancement, fallbackModel, usage, sw.ElapsedMilliseconds, ok);
 
@@ -210,7 +210,7 @@ public class PromptEnhancementService
         var model = _configuration["PromptEnhancement:Model"]
                     ?? _configuration["TitleGeneration:Model"]
                     ?? _configuration["ClaudeCli:SummaryModel"]
-                    ?? "claude-haiku-4-5";
+                    ?? ModelIds.ClaudeHaiku45;
 
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot != null)

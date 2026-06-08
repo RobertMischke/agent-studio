@@ -1,0 +1,266 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using OrchestratorApi.Models;
+
+namespace OrchestratorApi.Services.Pty;
+
+/// <summary>
+/// Discovers Claude Code's model picker through the interactive /model command.
+/// The CLI currently has no stable machine-readable list-models endpoint, so
+/// this mirrors the existing PTY discovery pattern used for Copilot.
+/// </summary>
+public sealed class ClaudeModelDiscovery
+{
+    private static readonly Regex ModelLineRegex = new(
+        @"^\s*(?:[\u276F>\?\*\u2713\u2714\u2705]\s*)?(?<label>Claude\s+[A-Za-z0-9 .\-_]+?)(?:\s+\((?:default|selected)\))?\s*$",
+        RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+    private readonly ILogger<ClaudeModelDiscovery> _logger;
+    private readonly IConfiguration _config;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    private CliModelCatalog? _memCache;
+    private DateTime _memCacheAt = DateTime.MinValue;
+
+    public ClaudeModelDiscovery(ILogger<ClaudeModelDiscovery> logger, IConfiguration config)
+    {
+        _logger = logger;
+        _config = config;
+    }
+
+    private string CachePath
+    {
+        get
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "agent-taskboard");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "claude-model-catalog.json");
+        }
+    }
+
+    private TimeSpan Ttl =>
+        TimeSpan.FromMinutes(_config.GetValue<int?>("ClaudeModelsCacheMinutes") ?? 60);
+
+    public async Task<CliModelCatalog> GetAsync(string cliPath, bool forceRefresh = false, CancellationToken ct = default)
+    {
+        if (!forceRefresh)
+        {
+            if (_memCache != null && DateTime.UtcNow - _memCacheAt < Ttl) return _memCache;
+            var fromDisk = TryLoadDisk();
+            if (fromDisk != null && DateTime.UtcNow - fromDisk.FetchedAt < Ttl)
+            {
+                _memCache = fromDisk;
+                _memCacheAt = fromDisk.FetchedAt;
+                return fromDisk;
+            }
+        }
+
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (!forceRefresh && _memCache != null && DateTime.UtcNow - _memCacheAt < Ttl)
+                return _memCache;
+
+            try
+            {
+                var fresh = await DiscoverViaPtyAsync(cliPath, ct);
+                _memCache = fresh;
+                _memCacheAt = fresh.FetchedAt;
+                TrySaveDisk(fresh);
+                return fresh;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Claude PTY model discovery failed; falling back to registry catalog");
+                if (_memCache != null) return WithSource(_memCache, "pty-failed-mem-cache");
+                var fromDisk = TryLoadDisk();
+                if (fromDisk != null)
+                {
+                    _memCache = fromDisk;
+                    _memCacheAt = fromDisk.FetchedAt;
+                    return WithSource(fromDisk, "pty-failed-disk-cache");
+                }
+                return FallbackCatalog("pty-failed-registry-fallback");
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<CliModelCatalog> DiscoverViaPtyAsync(string cliPath, CancellationToken ct)
+    {
+        var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-pty-scratch", "claude");
+        Directory.CreateDirectory(scratch);
+
+        _logger.LogInformation("Spawning Claude CLI in PTY for /model discovery");
+        var (app, args, verbatimCommandLine) = BuildInteractiveCommand(cliPath);
+        await using var pty = await PtySession.SpawnAsync(
+            app: app,
+            args: args,
+            cwd: scratch,
+            cols: 220,
+            rows: 80,
+            verbatimCommandLine: verbatimCommandLine,
+            ct: ct);
+
+        await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: 8000, ct);
+        await pty.SendKeysAsync("/model<Enter>", ct);
+
+        var appeared = await pty.WaitForPatternAsync(
+            new Regex(@"(Select\s+Model|model)", RegexOptions.IgnoreCase),
+            timeoutMs: 6000,
+            ct);
+        if (appeared == null)
+        {
+            _logger.LogWarning("Claude /model picker did not appear in PTY");
+            await pty.SendKeysAsync("<Esc>", ct);
+            throw new InvalidOperationException("Claude model picker did not appear");
+        }
+
+        await pty.WaitForIdleAsync(idleMs: 700, timeoutMs: 3000, ct);
+        var snapshot = pty.SnapshotStripped();
+        try { await pty.SendKeysAsync("<Esc>", ct); } catch { }
+
+        var discovered = ParsePickerSnapshot(snapshot);
+        if (discovered.Count == 0)
+        {
+            _logger.LogWarning("Claude model discovery captured 0 models. Snapshot tail:\n{Tail}",
+                snapshot.Length > 1200 ? snapshot[^1200..] : snapshot);
+            throw new InvalidOperationException("No models parsed from Claude picker");
+        }
+
+        return new CliModelCatalog
+        {
+            Models = Reconcile(discovered),
+            Source = "cli-pty",
+            FetchedAt = DateTime.UtcNow
+        };
+    }
+
+    public static List<CliModelInfo> ParsePickerSnapshot(string snapshot)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<CliModelInfo>();
+        foreach (Match match in ModelLineRegex.Matches(snapshot))
+        {
+            var label = Regex.Replace(match.Groups["label"].Value.Trim(), @"\s+", " ");
+            var id = LabelToId(label);
+            if (string.IsNullOrWhiteSpace(id) || !seen.Add(id)) continue;
+
+            var metadata = ModelMetadataRegistry.Find(id);
+            result.Add(metadata != null
+                ? ModelMetadataRegistry.ToCliModelInfo(metadata, CliTypes.Claude)
+                : ModelMetadataRegistry.UnknownCliModel(id, label, "anthropic", CliTypes.Claude));
+        }
+        return result;
+    }
+
+    public static List<CliModelInfo> Reconcile(IReadOnlyList<CliModelInfo> discovered)
+    {
+        var discoveredIds = new HashSet<string>(discovered.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
+        var result = discovered
+            .Where(m => m.Available)
+            .Select(m => m with { IsDefault = false })
+            .ToList();
+
+        foreach (var known in ModelMetadataRegistry.ForVendor("anthropic"))
+        {
+            if (discoveredIds.Contains(known.Id)) continue;
+            result.Add(ModelMetadataRegistry.ToCliModelInfo(known, CliTypes.Claude) with
+            {
+                IsDefault = false,
+                Available = false,
+                Deprecated = true,
+                AvailabilityNote = "Known in registry but not reported by the installed Claude CLI."
+            });
+        }
+
+        MarkDefault(result);
+        return result;
+    }
+
+    public static CliModelCatalog FallbackCatalog(string source = "registry-fallback")
+    {
+        var models = ModelMetadataRegistry.ForVendor("anthropic")
+            .Select(m => ModelMetadataRegistry.ToCliModelInfo(m, CliTypes.Claude))
+            .Where(m => m.Available)
+            .ToList();
+        MarkDefault(models);
+        return new CliModelCatalog
+        {
+            Models = models,
+            Source = source,
+            FetchedAt = DateTime.UtcNow
+        };
+    }
+
+    private static void MarkDefault(List<CliModelInfo> models)
+    {
+        var defaultId = ModelMetadataRegistry.ForVendor("anthropic").FirstOrDefault(m => m.IsDefault)?.Id;
+        var defaultIndex = models.FindIndex(m => m.Available && string.Equals(m.Id, defaultId, StringComparison.OrdinalIgnoreCase));
+        if (defaultIndex < 0) defaultIndex = models.FindIndex(m => m.Available);
+        for (var i = 0; i < models.Count; i++)
+            models[i] = models[i] with { IsDefault = i == defaultIndex };
+    }
+
+    private static string LabelToId(string label)
+    {
+        var id = Regex.Replace(label.Trim().ToLowerInvariant(), @"\s+", "-");
+        return Regex.Replace(id, @"(?<=\d)\.(?=\d)", "-");
+    }
+
+    private static (string App, string[] Args, bool VerbatimCommandLine) BuildInteractiveCommand(string cliPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var comspec = Environment.GetEnvironmentVariable("ComSpec");
+            if (string.IsNullOrWhiteSpace(comspec))
+                comspec = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+            return (comspec, ["/d", "/c", QuoteForCmd(cliPath)], true);
+        }
+
+        return ("/bin/sh", ["-lc", QuoteForSh(cliPath)], false);
+    }
+
+    private static string QuoteForCmd(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value;
+        if (!value.Any(ch => char.IsWhiteSpace(ch) || ch is '&' or '(' or ')' or '^' or '%' or '!' or '"' or '<' or '>' or '|'))
+            return value;
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
+    private static string QuoteForSh(string value)
+        => "'" + value.Replace("'", "'\"'\"'") + "'";
+
+    private static CliModelCatalog WithSource(CliModelCatalog cat, string source)
+        => cat with { Source = source };
+
+    private CliModelCatalog? TryLoadDisk()
+    {
+        try
+        {
+            if (!File.Exists(CachePath)) return null;
+            var json = File.ReadAllText(CachePath);
+            return JsonSerializer.Deserialize<CliModelCatalog>(json, JsonOpts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to load Claude model catalog cache");
+            return null;
+        }
+    }
+
+    private void TrySaveDisk(CliModelCatalog cat)
+    {
+        try { File.WriteAllText(CachePath, JsonSerializer.Serialize(cat, JsonOpts)); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Failed to persist Claude model catalog cache"); }
+    }
+
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+}

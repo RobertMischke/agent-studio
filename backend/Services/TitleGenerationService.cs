@@ -72,7 +72,7 @@ public class TitleGenerationService
 
         var fallbackModel = _configuration["TitleGeneration:Model"]
                             ?? _configuration["ClaudeCli:SummaryModel"]
-                            ?? "claude-haiku-4-5";
+                            ?? ModelIds.ClaudeHaiku45;
         var (text, usage) = AdHocClaudeInvoker.ParseOrFallback(raw, fallbackModel);
         AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.TitleGeneration, fallbackModel, usage, sw.ElapsedMilliseconds, ok);
 
@@ -139,7 +139,7 @@ public class TitleGenerationService
     {
         var model = _configuration["TitleGeneration:Model"]
                     ?? _configuration["ClaudeCli:SummaryModel"]
-                    ?? "claude-haiku-4-5";
+                    ?? ModelIds.ClaudeHaiku45;
 
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot != null)

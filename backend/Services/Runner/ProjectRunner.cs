@@ -3856,7 +3856,7 @@ public class ProjectRunner
         var model = OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ResolveModel(
             settings,
             OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,
-            runtimeDefault: execution.Model ?? activeInfo.Model ?? "claude-haiku-4-5");
+            runtimeDefault: execution.Model ?? activeInfo.Model ?? ModelIds.ClaudeHaiku45);
         var thinkingLevel = OrchestratorApi.Services.Pipeline.PipelineStepConfigResolver.ResolveThinkingLevel(
             settings,
             OrchestratorApi.Services.Pipeline.PipelineCatalogue.AbortReviewStep,

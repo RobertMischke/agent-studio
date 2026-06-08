@@ -2401,6 +2401,12 @@ public record CliModelInfo
     public List<string> ThinkingLevels { get; init; } = [];
     /// <summary>Default thinking / reasoning level for this model, or null when unsupported.</summary>
     public string? DefaultThinkingLevel { get; init; }
+    /// <summary>Whether this model should be offered for new work.</summary>
+    public bool Available { get; init; } = true;
+    /// <summary>Known but no longer preferred or not found in live CLI discovery.</summary>
+    public bool Deprecated { get; init; }
+    /// <summary>Short note explaining why an entry is unavailable or metadata-light.</summary>
+    public string? AvailabilityNote { get; init; }
 }
 
 public record CliModelCatalog
@@ -2410,6 +2416,136 @@ public record CliModelCatalog
     public string Source { get; init; } = "config";
     /// <summary>UTC timestamp of the most recent (re)build. Useful for cache diagnostics.</summary>
     public DateTime FetchedAt { get; init; }
+}
+
+/// <summary>Canonical model id constants. Call sites should reference these instead of repeated literals.</summary>
+public static class ModelIds
+{
+    public const string ClaudeOpus48 = "claude-opus-4-8";
+    public const string ClaudeOpus47 = "claude-opus-4-7";
+    public const string ClaudeOpus46 = "claude-opus-4-6";
+    public const string ClaudeOpus45 = "claude-opus-4-5";
+    public const string ClaudeSonnet46 = "claude-sonnet-4-6";
+    public const string ClaudeSonnet45 = "claude-sonnet-4-5";
+    public const string ClaudeHaiku45 = "claude-haiku-4-5";
+    public const string Gpt5Codex = "gpt-5-codex";
+    public const string Gpt41 = "gpt-4.1";
+    public const string Gpt4o = "gpt-4o";
+    public const string Gemini25Pro = "gemini-2.5-pro";
+    public const string Gemini25Flash = "gemini-2.5-flash";
+}
+
+public sealed record ModelMetadata(
+    string Id,
+    string Label,
+    string? Vendor,
+    bool IsDefault,
+    bool Deprecated,
+    bool Available,
+    decimal? InputPricePerMillion,
+    decimal? OutputPricePerMillion,
+    long? ContextWindow,
+    string[]? Aliases = null,
+    decimal? CacheReadPerMillionOverride = null,
+    decimal? CacheWritePerMillionOverride = null);
+
+/// <summary>
+/// Single server-side source of truth for known model metadata: catalog labels,
+/// defaults, pricing, context windows, aliases, and deprecation status.
+/// </summary>
+public static class ModelMetadataRegistry
+{
+    private static readonly ModelMetadata[] Entries =
+    [
+        Claude(ModelIds.ClaudeOpus48, "Claude Opus 4.8", isDefault: true, input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.8"]),
+        Claude(ModelIds.ClaudeOpus47, "Claude Opus 4.7", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.7"]),
+        Claude(ModelIds.ClaudeOpus46, "Claude Opus 4.6", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.6"]),
+        Claude(ModelIds.ClaudeOpus45, "Claude Opus 4.5", input: 5.00m, output: 25.00m, context: 200_000, aliases: ["claude-opus-4.5"]),
+        Claude(ModelIds.ClaudeSonnet46, "Claude Sonnet 4.6", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.6"]),
+        Claude(ModelIds.ClaudeSonnet45, "Claude Sonnet 4.5", input: 3.00m, output: 15.00m, context: 200_000, aliases: ["claude-sonnet-4.5"]),
+        Claude(ModelIds.ClaudeHaiku45, "Claude Haiku 4.5", input: 1.00m, output: 5.00m, context: 200_000, aliases: ["claude-haiku-4.5"]),
+        new(ModelIds.Gpt5Codex, "GPT-5 Codex", "openai", IsDefault: true, Deprecated: false, Available: true,
+            InputPricePerMillion: 1.25m, OutputPricePerMillion: 10.00m, ContextWindow: 272_000,
+            CacheReadPerMillionOverride: 0.125m, CacheWritePerMillionOverride: 1.25m),
+        new(ModelIds.Gpt41, "GPT-4.1", "openai", IsDefault: false, Deprecated: false, Available: true,
+            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 1_000_000),
+        new(ModelIds.Gpt4o, "GPT-4o", "openai", IsDefault: false, Deprecated: false, Available: true,
+            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 128_000),
+        new(ModelIds.Gemini25Pro, "Gemini 2.5 Pro", "google", IsDefault: false, Deprecated: false, Available: true,
+            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 2_000_000),
+        new(ModelIds.Gemini25Flash, "Gemini 2.5 Flash", "google", IsDefault: false, Deprecated: false, Available: true,
+            InputPricePerMillion: null, OutputPricePerMillion: null, ContextWindow: 1_000_000),
+    ];
+
+    private static readonly IReadOnlyDictionary<string, ModelMetadata> ById = Entries
+        .SelectMany(e => new[] { e.Id }.Concat(e.Aliases ?? []).Select(id => (id, e)))
+        .ToDictionary(x => x.id, x => x.e, StringComparer.OrdinalIgnoreCase);
+
+    public static IReadOnlyList<ModelMetadata> All => Entries;
+
+    public static IReadOnlyList<ModelMetadata> ForVendor(string vendor)
+        => Entries.Where(e => string.Equals(e.Vendor, vendor, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    public static ModelMetadata? Find(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        return ById.TryGetValue(id.Trim(), out var metadata) ? metadata : null;
+    }
+
+    public static string NormalizeId(string? id)
+        => Find(id)?.Id ?? id?.Trim() ?? "";
+
+    public static long? ContextWindowFor(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        var metadata = Find(id);
+        if (metadata?.ContextWindow is { } exact) return exact;
+
+        foreach (var entry in Entries)
+        {
+            if (id.StartsWith(entry.Id, StringComparison.OrdinalIgnoreCase))
+                return entry.ContextWindow;
+        }
+        return null;
+    }
+
+    public static CliModelInfo ToCliModelInfo(ModelMetadata metadata, string cliType, bool? isDefault = null)
+        => new()
+        {
+            Id = metadata.Id,
+            Label = metadata.Label,
+            Vendor = metadata.Vendor,
+            IsDefault = isDefault ?? metadata.IsDefault,
+            Available = metadata.Available && !metadata.Deprecated,
+            Deprecated = metadata.Deprecated,
+            ThinkingLevels = CliThinkingLevels.For(cliType, metadata.Id).ToList(),
+            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(cliType, metadata.Id)
+        };
+
+    public static CliModelInfo UnknownCliModel(string id, string? label, string? vendor, string cliType)
+        => new()
+        {
+            Id = id,
+            Label = string.IsNullOrWhiteSpace(label) ? id : label.Trim(),
+            Vendor = vendor,
+            IsDefault = false,
+            Available = true,
+            Deprecated = false,
+            AvailabilityNote = "Discovered from CLI; missing registry metadata.",
+            ThinkingLevels = CliThinkingLevels.For(cliType, id).ToList(),
+            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(cliType, id)
+        };
+
+    private static ModelMetadata Claude(
+        string id,
+        string label,
+        bool isDefault = false,
+        decimal input = 0,
+        decimal output = 0,
+        long context = 200_000,
+        string[]? aliases = null)
+        => new(id, label, "anthropic", isDefault, Deprecated: false, Available: true,
+            InputPricePerMillion: input, OutputPricePerMillion: output, ContextWindow: context, Aliases: aliases);
 }
 
 

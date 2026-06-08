@@ -53,7 +53,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
     /// cheap pass, so this fallback is a small model; the project's selection
     /// still wins via <see cref="PipelineStepConfigResolver.ResolveModel(ProjectSettings?, PipelineStep, string)"/>.
     /// </summary>
-    public const string PrepFallbackModel = "claude-haiku-4-5";
+    public const string PrepFallbackModel = ModelIds.ClaudeHaiku45;
 
     /// <summary>The catalogue prep step, resolved once for config + recording.</summary>
     private static readonly PipelineStep PrepStep =

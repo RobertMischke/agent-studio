@@ -89,7 +89,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
 
         var maxPerHour = _configuration.GetValue("Supervisor:SoftReasoningCallsPerHour", 60);
         var cliBinary = _configuration.GetValue("Supervisor:SoftReasoningCli", "claude");
-        var model = _configuration.GetValue("Supervisor:SoftReasoningModel", "claude-haiku-4-5");
+        var model = _configuration.GetValue("Supervisor:SoftReasoningModel", ModelIds.ClaudeHaiku45);
 
         foreach (var (project, projectStatus) in status.Projects)
         {

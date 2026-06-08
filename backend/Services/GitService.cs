@@ -745,7 +745,7 @@ public class GitService
             });
 
         var claudePath = _config["ClaudeCli:Path"] ?? "claude";
-        var model = _config["ClaudeCli:CommitMsgModel"] ?? "claude-haiku-4-5";
+        var model = _config["ClaudeCli:CommitMsgModel"] ?? ModelIds.ClaudeHaiku45;
 
         var psi = new ProcessStartInfo
         {

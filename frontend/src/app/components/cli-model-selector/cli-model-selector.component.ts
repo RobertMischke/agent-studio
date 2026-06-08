@@ -195,7 +195,7 @@ export class CliModelSelectorComponent {
     this.catalogError.set(null);
     this.loadingCatalog.set(false);
     const cached = currentCli ? this.catalogStore.modelsFor(currentCli) : [];
-    this.draftAvailableModels.set(cached.length > 0 ? cached : this.availableModels());
+    this.draftAvailableModels.set(this.selectableModels(cached.length > 0 ? cached : this.availableModels()));
     this.draftThinkingLevel.set(this.normalizeThinkingLevel(currentModel, this.thinkingLevel()));
     this.pickerOpen.set(true);
   }
@@ -323,16 +323,21 @@ export class CliModelSelectorComponent {
   }
 
   private applyCatalog(models: readonly CliModelInfo[]): void {
-    this.draftAvailableModels.set(models);
+    const selectable = this.selectableModels(models);
+    this.draftAvailableModels.set(selectable);
     const current = this.draftModel();
-    const stillValid = current.length > 0 && models.some((m) => m.id === current);
+    const stillValid = current.length > 0 && selectable.some((m) => m.id === current);
     if (stillValid) {
       this.draftThinkingLevel.set(this.normalizeThinkingLevel(current, this.draftThinkingLevel()));
       return;
     }
-    const def = models.find((m) => m.isDefault);
+    const def = selectable.find((m) => m.isDefault);
     this.draftModel.set(def ? def.id : '');
     this.draftThinkingLevel.set(def?.defaultThinkingLevel ?? null);
+  }
+
+  private selectableModels(models: readonly CliModelInfo[]): readonly CliModelInfo[] {
+    return models.filter(m => m.available !== false);
   }
 
   private normalizeThinkingLevel(modelId: string, requested: string | null): string | null {

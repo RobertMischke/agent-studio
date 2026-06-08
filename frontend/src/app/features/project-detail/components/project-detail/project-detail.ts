@@ -7,11 +7,11 @@ import { CLI_TYPES, type CliType } from '../../../../models/task.model';
 import { cliTypeLabel, cliTypeIcon } from '../../../../services/format.util';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import {
-  OrchestratorRunner_KnownModels,
   PipelineStep_GateModes,
   PipelineStep_Conditions,
   PipelineStep_ConditionValueTokens,
 } from './project-detail.models';
+import { CliCatalogStore } from '../../../../services/cli-catalog.store';
 import type {
   PipelineCatalogueStep,
   PipelineStepSetting,
@@ -121,6 +121,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly openReport = output<AnalysisReport>();
 
   private readonly jobService = inject(TaskService);
+  private readonly cliCatalog = inject(CliCatalogStore);
 
   readonly settings = signal<ProjectSettingsRow | null>(null);
   readonly runnerStatus = signal<RunnerStatus | null>(null);
@@ -281,7 +282,12 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     { id: 'paused', label: 'Paused', tooltip: 'Hold all auto-pickup; manual starts still allowed.' }
   ];
 
-  readonly orchModelOptions = OrchestratorRunner_KnownModels;
+  readonly orchModelOptions = computed(() => [
+    { id: '', label: 'Default' },
+    ...this.cliCatalog.modelsFor('claude')
+      .filter(model => model.available !== false)
+      .map(model => ({ id: model.id, label: model.isDefault ? `Default (${model.label})` : model.label })),
+  ]);
   readonly autoPushOptions: readonly { id: AutoPushStrategy; label: string; tooltip: string; isDefault?: boolean }[] = [
     {
       id: 'never',
@@ -387,6 +393,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   private pollTimer: VisibleIntervalHandle | null = null;
 
   ngOnInit(): void {
+    this.cliCatalog.ensure('claude').subscribe({ error: () => void 0 });
     this.refreshAll();
     this.loadPipelineConfig();
     this.refreshCliModes();

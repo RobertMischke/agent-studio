@@ -229,6 +229,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.ITaskAccessHos
 builder.Services.AddSingleton<CopilotCliEnvironment>();
 builder.Services.AddSingleton<CopilotModelDiscovery>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
+builder.Services.AddSingleton<ClaudeModelDiscovery>();
 builder.Services.AddSingleton<CopilotCliService>();
 builder.Services.AddSingleton<ClaudeCliService>();
 builder.Services.AddSingleton<CodexCliService>();

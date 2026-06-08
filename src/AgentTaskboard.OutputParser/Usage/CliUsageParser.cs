@@ -59,54 +59,17 @@ public interface ICliUsageParser
     bool TryParse(JsonElement frame, string? modelHint, ICliModelRegistry modelRegistry, out ParsedTurnUsage usage);
 }
 
-/// <summary>
-/// Resolves a model id to its known context-window size. Small, in-memory; the
-/// list is static at process start. Adding a model is a one-line edit; we keep
-/// it local so a Claude/Codex release does not break parsing on a model
-/// rename - the parser just leaves the field unset and the timeline still
-/// shows tokens.
-/// </summary>
+/// <summary>Resolves a model id to its known context-window size.</summary>
 public interface ICliModelRegistry
 {
     /// <summary>Total context-window size in tokens, or null when unknown.</summary>
     long? TotalContextSize(string? modelId);
 }
 
-/// <summary>Static, in-memory registry. See class docs for entries.</summary>
+/// <summary>Adapter over the canonical model metadata registry.</summary>
 public sealed class CliModelRegistry : ICliModelRegistry
 {
-    // Conservative defaults pulled from public model cards as of 2026-05.
-    // Adding a model: one line. Removing one: safe - parser leaves the field unset.
-    private static readonly Dictionary<string, long> Sizes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Claude family
-        ["claude-opus-4-8"]     = 200_000,
-        ["claude-opus-4-7"]     = 200_000,
-        ["claude-opus-4-6"]     = 200_000,
-        ["claude-sonnet-4-6"]   = 200_000,
-        ["claude-sonnet-4-5"]   = 200_000,
-        ["claude-haiku-4-5"]    = 200_000,
-        // Codex / OpenAI family
-        ["gpt-5-codex"]         = 272_000,
-        ["gpt-4.1"]             = 1_000_000,
-        ["gpt-4o"]              =   128_000,
-        // Gemini
-        ["gemini-2.5-pro"]      = 2_000_000,
-        ["gemini-2.5-flash"]    = 1_000_000,
-    };
-
-    public long? TotalContextSize(string? modelId)
-    {
-        if (string.IsNullOrWhiteSpace(modelId)) return null;
-        if (Sizes.TryGetValue(modelId, out var v)) return v;
-
-        // Prefix match for forward compat: "claude-sonnet-4-6-20260301" -> 200k.
-        foreach (var (key, val) in Sizes)
-        {
-            if (modelId.StartsWith(key, StringComparison.OrdinalIgnoreCase)) return val;
-        }
-        return null;
-    }
+    public long? TotalContextSize(string? modelId) => ModelMetadataRegistry.ContextWindowFor(modelId);
 }
 
 /// <summary>

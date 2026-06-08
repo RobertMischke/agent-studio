@@ -218,7 +218,7 @@ public sealed class SummaryGenerationService
     private async Task<(bool Ok, string? Summary, string? Error)> RunHaikuAsync(
         string prompt, string workingDirectory, CancellationToken ct)
     {
-        var model = _configuration["ClaudeCli:SummaryModel"] ?? "claude-haiku-4-5";
+        var model = _configuration["ClaudeCli:SummaryModel"] ?? ModelIds.ClaudeHaiku45;
 
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot != null)

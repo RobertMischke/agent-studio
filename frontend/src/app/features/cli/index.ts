@@ -13,3 +13,4 @@ export type {
   CliUsageReport,
   LinkedJobRef,
 } from './models/cli.model';
+export { CLAUDE_FALLBACK_MODEL_ID } from './models/model-ids';

@@ -1,4 +1,5 @@
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Models;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -95,5 +96,25 @@ public class TokenPricingTests
         var lower = TokenPricing.Estimate("claude-opus-4-7", 1_000_000, 0, 0, 0);
         var upper = TokenPricing.Estimate("CLAUDE-OPUS-4-7", 1_000_000, 0, 0, 0);
         Assert.Equal(lower.Total, upper.Total);
+    }
+
+    [Fact]
+    public void Catalog_IsDerivedFromModelMetadataWithContextWindows()
+    {
+        foreach (var entry in ModelMetadataRegistry.All.Where(m => m.InputPricePerMillion is not null))
+        {
+            Assert.True(TokenPricing.Catalog.ContainsKey(entry.Id), entry.Id);
+            Assert.NotNull(ModelMetadataRegistry.ContextWindowFor(entry.Id));
+        }
+    }
+
+    [Fact]
+    public void Estimate_NormalizesRegisteredAliases()
+    {
+        var dashed = TokenPricing.Estimate("claude-opus-4-7", 1_000_000, 0, 0, 0);
+        var dotted = TokenPricing.Estimate("claude-opus-4.7", 1_000_000, 0, 0, 0);
+        Assert.True(dotted.ModelKnown);
+        Assert.Equal(dashed.Total, dotted.Total);
+        Assert.Equal(ModelIds.ClaudeOpus47, dotted.ModelId);
     }
 }

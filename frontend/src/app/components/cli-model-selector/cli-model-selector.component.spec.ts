@@ -91,6 +91,23 @@ describe('CliModelSelectorComponent', () => {
     expect(fixture.componentInstance.hasChanges()).toBe(false);
   });
 
+  it('does not offer unavailable catalog models', async () => {
+    await configure();
+    const fixture = TestBed.createComponent(CliModelSelectorComponent);
+    fixture.componentRef.setInput('cliType', 'claude');
+    fixture.componentRef.setInput('model', 'claude-opus-4-7');
+    fixture.componentRef.setInput('availableModels', [
+      ...claudeModels,
+      { id: 'claude-opus-4-6', label: 'Opus 4.6', multiplier: null, vendor: 'anthropic', isDefault: false, available: false, deprecated: true },
+    ]);
+    fixture.componentRef.setInput('disabled', false);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+
+    expect(fixture.componentInstance.draftAvailableModels().map(m => m.id)).not.toContain('claude-opus-4-6');
+  });
+
   it('clicking a model pill without a CLI change auto-commits + closes', async () => {
     await configure();
     const fixture = TestBed.createComponent(CliModelSelectorComponent);

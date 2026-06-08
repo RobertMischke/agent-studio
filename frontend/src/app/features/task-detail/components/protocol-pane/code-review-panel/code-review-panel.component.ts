@@ -16,6 +16,7 @@ import { CodeReviewActivityStore } from '../../../../../services/code-review-act
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
 import { cleanStepResultMarkdown } from '../../prompt-pane/pipeline-step-result/pipeline-step-result.util';
+import { CLAUDE_FALLBACK_MODEL_ID } from '../../../../cli';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -30,7 +31,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
  *       expand to show the MD body inline.</li>
  *   <li>Drive the "Run Code Review" action: a unified
  *       <code>&lt;app-cli-model-selector&gt;</code> (CLI + model) defaults
- *       to <code>claude</code> + <code>claude-haiku-4-5</code>, the Run
+ *       to <code>claude</code> plus the shared Claude fallback model, the Run
  *       button POSTs the chosen pair and shows a spinner until the
  *       response arrives.</li>
  *   <li>Cover the user's "Progress an die Karte, dass da gerade eine
@@ -58,7 +59,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
 export class CodeReviewPanelComponent implements OnInit {
   readonly job = input.required<TaskInfo>();
   /** Optional override for the model dropdown's initial value. */
-  readonly defaultModel = input<string>('claude-haiku-4-5');
+  readonly defaultModel = input<string>(CLAUDE_FALLBACK_MODEL_ID);
   /** Optional override for the CLI dropdown's initial value. */
   readonly defaultCli = input<CliType>('claude');
 
@@ -68,7 +69,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly expandedFile = signal<string | null>(null);
   readonly expandedBody = signal<string | null>(null);
-  readonly selectedModel = signal<string>('claude-haiku-4-5');
+  readonly selectedModel = signal<string>(CLAUDE_FALLBACK_MODEL_ID);
   readonly selectedThinkingLevel = signal<string | null>(null);
   readonly selectedCli = signal<CliType>('claude');
 
@@ -83,7 +84,7 @@ export class CodeReviewPanelComponent implements OnInit {
     // model" + "configurable default if there is no last one" asks):
     //   1. last-used pair persisted in localStorage,
     //   2. the deployment-configured default from the backend,
-    //   3. the hard-coded input fallbacks (claude / claude-haiku-4-5).
+    //   3. the shared input fallbacks.
     const remembered = this.readLastAgent();
     if (remembered) {
       this.selectedCli.set(remembered.cliType);

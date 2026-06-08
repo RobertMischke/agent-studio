@@ -345,7 +345,7 @@ public sealed class CodePatternDriftAnalysisService
     public async Task<CodePatternDriftReport> EnrichWithLlmVerdictsAsync(
         CodePatternDriftReport report,
         ICliOneShot oneShot,
-        string model = "claude-haiku-4-5",
+        string model = ModelIds.ClaudeHaiku45,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(report);

@@ -18,6 +18,9 @@ export interface CliModelInfo {
   isDefault: boolean;
   thinkingLevels?: string[];
   defaultThinkingLevel?: string | null;
+  available?: boolean;
+  deprecated?: boolean;
+  availabilityNote?: string | null;
 }
 
 export interface CliModelCatalog {

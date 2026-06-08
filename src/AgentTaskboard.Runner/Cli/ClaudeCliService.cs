@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli.Adapters;
+using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Cli;
@@ -32,11 +33,12 @@ public record ClaudeRateLimitSnapshot(
 /// </summary>
 public sealed class ClaudeCliService : CliExecutionServiceBase
 {
-    public const string DefaultOpusModel = "claude-opus-4-8";
+    public const string DefaultOpusModel = ModelIds.ClaudeOpus48;
 
     private string? _cliPathOverride;
     private readonly CliUsageParserRegistry? _usageParsers;
     private readonly ICliModelRegistry _modelRegistry;
+    private readonly ClaudeModelDiscovery? _modelDiscovery;
 
     // The usage registries are optional so the many test callsites that
     // construct this driver with just (logger, configuration) keep compiling;
@@ -46,11 +48,13 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         ILogger<ClaudeCliService> logger,
         IConfiguration configuration,
         CliUsageParserRegistry? usageParsers = null,
-        ICliModelRegistry? modelRegistry = null)
+        ICliModelRegistry? modelRegistry = null,
+        ClaudeModelDiscovery? modelDiscovery = null)
         : base(logger, configuration)
     {
         _usageParsers = usageParsers;
         _modelRegistry = modelRegistry ?? new CliModelRegistry();
+        _modelDiscovery = modelDiscovery;
     }
 
     public override string CliType => CliTypes.Claude;
@@ -699,34 +703,9 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         => _processes.TryGetValue(jobKey, out var info) ? info.LastRateLimit : null;
 
     public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
-    {
-        // No live discovery yet — surface the well-known Claude 4.x family. The
-        // user picks one, the CLI validates. Empty list also works (default).
-        var models = new List<CliModelInfo>
-        {
-            Model(DefaultOpusModel,    "Claude Opus 4.8",   isDefault: true),
-            Model("claude-opus-4-7",   "Claude Opus 4.7"),
-            Model("claude-sonnet-4-6", "Claude Sonnet 4.6"),
-            Model("claude-haiku-4-5",  "Claude Haiku 4.5")
-        };
-        return Task.FromResult(new CliModelCatalog
-        {
-            Models = models,
-            Source = "hardcoded",
-            FetchedAt = DateTime.UtcNow
-        });
-    }
-
-    private static CliModelInfo Model(string id, string label, bool isDefault = false)
-        => new()
-        {
-            Id = id,
-            Label = label,
-            Vendor = "anthropic",
-            IsDefault = isDefault,
-            ThinkingLevels = CliThinkingLevels.For(CliTypes.Claude, id).ToList(),
-            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(CliTypes.Claude, id)
-        };
+        => _modelDiscovery != null
+            ? _modelDiscovery.GetAsync(GetCliPath(), forceRefresh, ct)
+            : Task.FromResult(ClaudeModelDiscovery.FallbackCatalog());
 
     /// <summary>
     /// Coerces the dotted model-version forms users tend to type or paste
@@ -741,7 +720,8 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         if (!trimmed.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)) return trimmed;
         // Replace dots between digits ("4.7" → "4-7") without touching dots in
         // unrelated positions (none exist in real Claude ids today, but be safe).
-        return System.Text.RegularExpressions.Regex.Replace(trimmed, @"(?<=\d)\.(?=\d)", "-");
+        return ModelMetadataRegistry.NormalizeId(
+            System.Text.RegularExpressions.Regex.Replace(trimmed, @"(?<=\d)\.(?=\d)", "-"));
     }
 
     private static string Quote(string s) => $"\"{s.Replace("\"", "\\\"")}\"";

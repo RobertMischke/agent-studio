@@ -329,7 +329,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", "claude");
-        var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", "claude-haiku-4-5");
+        var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.ClaudeHaiku45);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
         var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
         var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);

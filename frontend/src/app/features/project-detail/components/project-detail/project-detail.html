@@ -181,7 +181,7 @@
                 data-testid="project-detail-orch-model"
                 [(ngModel)]="orchModelDraft"
                 (ngModelChange)="onOrchModelChange()">
-          @for (opt of orchModelOptions; track opt.id) {
+          @for (opt of orchModelOptions(); track opt.id) {
             <option [value]="opt.id">{{ opt.label }}</option>
           }
         </select>

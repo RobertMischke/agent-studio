@@ -1,3 +1,5 @@
+using OrchestratorApi.Models;
+
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
@@ -22,11 +24,6 @@ namespace OrchestratorApi.Services.Runner;
 /// run at 10% of base input, 5-minute cache writes at 125% of base input.
 /// (1-hour cache writes at 2x are not exposed by the orchestrator's
 /// short-lived single-turn calls; we assume 5-minute writes.)
-/// </para>
-/// <para>
-/// When you bump these numbers: this file is the single source of truth.
-/// Update the table, the unit tests in <c>TokenPricingTests</c> will
-/// re-pin the math.
 /// </para>
 /// </summary>
 public sealed record ModelPrice(
@@ -59,28 +56,22 @@ public sealed record TokenCostEstimate(
 public static class TokenPricing
 {
     /// <summary>
-    /// Curated price table. Models not listed return null prices; the
-    /// caller renders the token amounts but suppresses the cost line.
-    /// We include API-priced OpenAI Codex models when an official model
-    /// page lists text-token rates, but the UI still labels these as
-    /// theoretical API-price estimates. CLI subscription billing remains
-    /// separate from this comparison value.
+    /// Price view derived from <see cref="ModelMetadataRegistry"/>. Models
+    /// without price metadata return null prices; callers render token amounts
+    /// but suppress the cost line.
     /// </summary>
-    public static readonly IReadOnlyDictionary<string, ModelPrice> Catalog =
-        new Dictionary<string, ModelPrice>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["claude-opus-4-8"]   = new("claude-opus-4-8",   5.00m, 25.00m),
-            ["claude-opus-4-7"]   = new("claude-opus-4-7",   5.00m, 25.00m),
-            ["claude-opus-4-6"]   = new("claude-opus-4-6",   5.00m, 25.00m),
-            ["claude-opus-4-5"]   = new("claude-opus-4-5",   5.00m, 25.00m),
-            ["claude-sonnet-4-6"] = new("claude-sonnet-4-6", 3.00m, 15.00m),
-            ["claude-sonnet-4-5"] = new("claude-sonnet-4-5", 3.00m, 15.00m),
-            ["claude-haiku-4-5"]  = new("claude-haiku-4-5",  1.00m,  5.00m),
-            // OpenAI GPT-5-Codex API page: $1.25/M input, $0.125/M cached input,
-            // $10/M output. OpenAI does not list a separate cache-write rate,
-            // so cache-write tokens are compared at normal input-token price.
-            ["gpt-5-codex"]       = new("gpt-5-codex",       1.25m, 10.00m, 0.125m, 1.25m)
-        };
+    public static IReadOnlyDictionary<string, ModelPrice> Catalog { get; } =
+        ModelMetadataRegistry.All
+            .Where(m => m.InputPricePerMillion is not null && m.OutputPricePerMillion is not null)
+            .ToDictionary(
+                m => m.Id,
+                m => new ModelPrice(
+                    m.Id,
+                    m.InputPricePerMillion!.Value,
+                    m.OutputPricePerMillion!.Value,
+                    m.CacheReadPerMillionOverride,
+                    m.CacheWritePerMillionOverride),
+                StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Compute the theoretical API cost for one usage record. When the
@@ -95,7 +86,7 @@ public static class TokenPricing
         long cacheReadTokens,
         long cacheCreationTokens)
     {
-        var key = modelId?.Trim() ?? "";
+        var key = ModelMetadataRegistry.NormalizeId(modelId);
         if (string.IsNullOrWhiteSpace(key) || !Catalog.TryGetValue(key, out var price))
         {
             return new TokenCostEstimate(0, 0, 0, 0, 0, key, ModelKnown: false);
