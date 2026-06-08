@@ -140,101 +140,6 @@
     <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
   </div>
 
-  <!-- Tokens block. Orchestrator-side LLM spend + the agent's own CLI footer.
-       Run count and elapsed time used to live here too, but they duplicated
-       the Runs section at the foot of the tab; both now live there as the one
-       canonical run representation. Rendered only when there is token data to
-       show; an empty task hides the whole section rather than show a placeholder. -->
-  @if (hasTokens()) {
-  <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-tokens">
-    <h3 class="ov-section__title">Tokens</h3>
-
-    @if (hasOrchestratorTokens()) {
-      <div class="studio-panel ov-token-panel" data-testid="overview-tokens-orchestrator">
-        <div class="ov-token-panel__header">
-          <span class="studio-label">Orchestrator</span>
-          <span class="studio-badge"
-                data-testid="overview-tokens-orchestrator-calls"
-                appTooltip="Auto-review summaries, title-generate, and other orchestrator-side Haiku calls attributed to this task. The agent's own CLI footer is shown separately below.">
-            {{ tokenSummary()!.calls }} calls
-          </span>
-        </div>
-        <div class="studio-metric-grid">
-        <div class="studio-metric">
-          <span class="studio-metric__label">Input</span>
-          <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.inputTokens) }}</span>
-        </div>
-        <div class="studio-metric">
-          <span class="studio-metric__label">Output</span>
-          <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.outputTokens) }}</span>
-        </div>
-        @if (tokenSummary()!.cacheReadTokens > 0) {
-          <div class="studio-metric">
-            <span class="studio-metric__label">Cache Read</span>
-            <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.cacheReadTokens) }}</span>
-          </div>
-        }
-        @if (tokenSummary()!.cacheCreationTokens > 0) {
-          <div class="studio-metric">
-            <span class="studio-metric__label">Cache Write</span>
-            <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.cacheCreationTokens) }}</span>
-          </div>
-        }
-        <div class="studio-metric studio-metric--primary">
-          <span class="studio-metric__label">Total</span>
-          <span class="studio-metric__value studio-mono">{{ formatTokens(tokenSummary()!.totalTokens) }}</span>
-        </div>
-        </div>
-        <p class="studio-helper ov-token-panel__helper">
-          Orchestrator-side LLM usage attributed to this task. The agent CLI footer is reported separately when available.
-        </p>
-      </div>
-    }
-
-    @if (agentUsage(); as au) {
-      <div class="studio-panel studio-panel--muted ov-token-panel" [class.ov-token-panel--after]="hasOrchestratorTokens()" data-testid="overview-tokens-agent">
-        <div class="ov-token-panel__header">
-          <span class="studio-label">Agent CLI Footer</span>
-        </div>
-        <div class="ov-token-panel__pairs">
-        @if (au.tokens) {
-          <div class="studio-label-value">
-            <span class="studio-label">Tokens</span>
-            <span class="studio-label-value__value studio-mono">{{ au.tokens }}</span>
-          </div>
-        }
-        @if (au.requests) {
-          <div class="studio-label-value">
-            <span class="studio-label">Requests</span>
-            <span class="studio-label-value__value studio-mono">{{ au.requests }}</span>
-          </div>
-        }
-        @if (au.changes) {
-          <div class="studio-label-value">
-            <span class="studio-label">Changes</span>
-            <span class="studio-label-value__value studio-mono">{{ au.changes }}</span>
-          </div>
-        }
-        @if (au.at) {
-          <div class="studio-label-value">
-            <span class="studio-label">Reported</span>
-            <span class="studio-label-value__value">
-              <span>{{ formatRelativeTime(au.at) }}</span>
-              <span class="studio-helper">({{ formatAbsoluteTime(au.at) }})</span>
-            </span>
-          </div>
-        }
-        </div>
-        <p class="studio-helper ov-token-panel__helper"
-           [appTooltip]="'Latest token / request count reported by the CLI agent itself in its terminal footer. Format varies per CLI; shown verbatim.'">
-          CLI-reported usage is shown verbatim and is not merged with orchestrator-side tokens.
-        </p>
-      </div>
-    }
-
-  </section>
-  }
-
   <!-- Pipeline block: ordered pre/core/post steps with per-step status,
        model used, tokens and cost, plus the task total. Configuration of
        which steps run and on which model lives in project Settings; this
@@ -393,11 +298,19 @@
                     [class.ov-pl-step__duration--live]="row.status === 'running'"
                     data-testid="overview-pipeline-step-duration">{{ formatStepDuration(liveStepDurationMs(row)) }}</span>
             </span>
-            <span class="ov-pl-step__tokens ov-value--mono"
-                  data-testid="overview-pipeline-step-tokens"
-                  [appTooltip]="row.tokenTooltip">
-              {{ row.totalTokens > 0 ? formatTokens(row.totalTokens) : '—' }}
-            </span>
+            @if (row.totalTokens > 0) {
+              <button type="button"
+                      class="ov-pl-step__tokens ov-pl-step__tokens-button ov-value--mono"
+                      data-testid="overview-pipeline-step-tokens"
+                      [appTooltip]="row.tokenTooltip"
+                      [attr.aria-label]="'Open token details for ' + row.label"
+                      (click)="openStepTokenModal(row)">
+                {{ formatTokens(row.totalTokens) }}
+              </button>
+            } @else {
+              <span class="ov-pl-step__tokens ov-value--mono"
+                    data-testid="overview-pipeline-step-tokens">—</span>
+            }
             <span class="ov-pl-step__cost ov-value--mono"
                   data-testid="overview-pipeline-step-cost"
                   [appTooltip]="row.costTooltip">
@@ -471,6 +384,117 @@
       }
       }
     </section>
+  }
+
+  @if (selectedTokenRow(); as tokenRow) {
+    <app-dialog
+      eyebrow="Pipeline tokens"
+      [title]="tokenRow.label"
+      [subtitle]="tokenStepSourceLabel(tokenRow)"
+      role="dialog"
+      widthTier="lg"
+      testid="overview-step-token-modal"
+      (closeRequest)="closeStepTokenModal()"
+      (backdropClick)="closeStepTokenModal()">
+      <div class="ov-token-modal" data-testid="overview-step-token-modal-body">
+        <section class="ov-token-modal__summary" aria-label="Step token summary">
+          <div class="ov-token-modal__metric ov-token-modal__metric--primary">
+            <span class="ov-token-modal__label">Total</span>
+            <span class="ov-token-modal__value ov-value--mono">{{ formatTokens(tokenRow.totalTokens) }}</span>
+          </div>
+          <div class="ov-token-modal__metric">
+            <span class="ov-token-modal__label">Calls</span>
+            <span class="ov-token-modal__value">{{ tokenStepCallsLabel(tokenRow) }}</span>
+          </div>
+          <div class="ov-token-modal__metric">
+            <span class="ov-token-modal__label">Cost</span>
+            <span class="ov-token-modal__value ov-value--mono">
+              @if (!tokenRow.costKnown) {
+                n/a
+              } @else {
+                {{ formatCost(tokenRow.costUsd) }}
+              }
+            </span>
+          </div>
+          <div class="ov-token-modal__metric">
+            <span class="ov-token-modal__label">Model</span>
+            <span class="ov-token-modal__value ov-token-modal__model">{{ tokenRow.model || 'unknown' }}</span>
+          </div>
+        </section>
+
+        <section class="ov-token-modal__panel">
+          <h4 class="ov-token-modal__panel-title">Breakdown</h4>
+          <table class="ov-token-modal__table" data-testid="overview-step-token-modal-breakdown">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th class="ov-token-modal__num">Tokens</th>
+                <th class="ov-token-modal__num">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (part of tokenBreakdownRows(tokenRow); track part.label) {
+                <tr>
+                  <td>{{ part.label }}</td>
+                  <td class="ov-token-modal__num ov-value--mono">{{ formatTokens(part.tokens) }}</td>
+                  <td class="ov-token-modal__num ov-value--mono">
+                    @if (!tokenRow.costKnown) {
+                      n/a
+                    } @else {
+                      {{ formatCost(part.costUsd) }}
+                    }
+                  </td>
+                </tr>
+              }
+              <tr class="ov-token-modal__total-row">
+                <td>Total</td>
+                <td class="ov-token-modal__num ov-value--mono">{{ formatTokens(tokenRow.totalTokens) }}</td>
+                <td class="ov-token-modal__num ov-value--mono">
+                  @if (!tokenRow.costKnown) {
+                    n/a
+                  } @else {
+                    {{ formatCost(tokenRow.costUsd) }}
+                  }
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          @if (!tokenComponentMatchesTotal(tokenRow)) {
+            <p class="ov-token-modal__note" data-testid="overview-step-token-modal-total-note">
+              Component sum is {{ formatTokens(tokenComponentTotal(tokenRow)) }}; the reported step total is {{ formatTokens(tokenRow.totalTokens) }}.
+            </p>
+          }
+        </section>
+
+        <section class="ov-token-modal__panel">
+          <h4 class="ov-token-modal__panel-title">Context</h4>
+          <dl class="ov-token-modal__facts">
+            <div>
+              <dt>Step</dt>
+              <dd>{{ stepKindLabel(tokenRow.kind) }} · {{ tokenRow.id }}</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd>{{ tokenStepSourceLabel(tokenRow) }}</dd>
+            </div>
+            <div>
+              <dt>Time</dt>
+              <dd>{{ tokenStepTimeLabel(tokenRow) }}</dd>
+            </div>
+            @if (!tokenRow.costKnown) {
+              <div>
+                <dt>Cost</dt>
+                <dd>No API price on file for this model.</dd>
+              </div>
+            }
+          </dl>
+          <p class="ov-token-modal__note">
+            {{ tokenRow.kind === 'core' ? 'CORE totals come from the agent CLI footer when reported by the run.' : 'This total is scoped to the pipeline step that produced it.' }}
+          </p>
+          <p class="ov-token-modal__note">Actual CLI billing uses the subscription or plan, not these API rates.</p>
+        </section>
+      </div>
+    </app-dialog>
   }
 
   <!-- Agent Work block (replaces the raw SESSION row).

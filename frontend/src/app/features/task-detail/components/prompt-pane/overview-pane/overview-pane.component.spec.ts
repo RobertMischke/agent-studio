@@ -137,32 +137,20 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('agentUsage falls back to lastUsage when present (so TOKENS is not empty after an agent run)', async () => {
+  it('tokens: standalone section is removed even when lastUsage exists', async () => {
     const fixture = await build(baseJob({
       state: '4-auto-review',
       lastUsage: { at: new Date().toISOString(), tokens: '12.4k', changes: '5 files', requests: '8' },
     }));
-    const c = fixture.componentInstance;
-    expect(c.hasOrchestratorTokens()).toBe(false);
-    expect(c.agentUsage()).not.toBeNull();
-    expect(c.agentUsage()!.tokens).toBe('12.4k');
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens-agent"]')).toBeNull();
   });
 
-  it('agentUsage stays null when lastUsage is present but all fields are empty', async () => {
-    const fixture = await build(baseJob({
-      lastUsage: { at: new Date().toISOString(), tokens: null, changes: null, requests: null },
-    }));
-    expect(fixture.componentInstance.agentUsage()).toBeNull();
-  });
-
-  it('tokens: section is hidden (no placeholder) when no token data exists; Runs section is also absent', async () => {
+  it('tokens: no standalone placeholder exists when no token data exists; Runs section is also absent', async () => {
     const fixture = await build(baseJob({ state: '2-ready' }));
     const c = fixture.componentInstance;
-    expect(c.hasOrchestratorTokens()).toBe(false);
-    expect(c.agentUsage()).toBeNull();
     expect(c.runCount()).toBe(0);
     expect(c.totalDuration()).toBe(0);
-    expect(c.hasTokens()).toBe(false);
     // The whole section is absent — and the old empty-state placeholder is gone.
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens-empty"]')).toBeNull();
@@ -171,14 +159,12 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).toBeNull();
   });
 
-  it('tokens: a CLI footer (lastUsage) alone makes the section render; run count no longer gates it', async () => {
+  it('tokens: a CLI footer (lastUsage) alone does not render a separate token section', async () => {
     const fixture = await build(baseJob({
       state: '4-auto-review',
       lastUsage: { at: new Date().toISOString(), tokens: '12.4k', changes: null, requests: null },
     }));
-    const c = fixture.componentInstance;
-    expect(c.hasTokens()).toBe(true);
-    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
   });
 
   it('runs section: a recorded run renders count + total duration (folded out of Tokens), Tokens stays hidden', async () => {
@@ -191,7 +177,6 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.runCount()).toBe(2);
     expect(c.hasRunsSection()).toBe(true);
     // Runs moved out of Tokens & Performance: with no token data that section is gone.
-    expect(c.hasTokens()).toBe(false);
     expect(fixture.nativeElement.querySelector('[data-testid="overview-tokens"]')).toBeNull();
     // The single Runs section carries the count + duration summary and the strip.
     expect(fixture.nativeElement.querySelector('[data-testid="overview-runs"]')).not.toBeNull();

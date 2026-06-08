@@ -102,9 +102,10 @@
 
   &__status {
     flex: none;
-    width: 11px;
+    width: 18px;
     text-align: center;
     font-size: 9px;
+    font-family: var(--font-mono);
     color: var(--severity-pass);
 
     &--error { color: var(--severity-high); }

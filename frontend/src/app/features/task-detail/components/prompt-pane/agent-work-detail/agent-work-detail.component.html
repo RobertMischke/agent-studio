@@ -4,14 +4,14 @@
   data-testid="agent-work-detail-toggle"
   [attr.aria-expanded]="open()"
   (click)="toggleOpen()">
-  <span class="awd-toggle__chevron" [class.awd-toggle__chevron--open]="open()">▸</span>
+  <span class="awd-toggle__chevron" [class.awd-toggle__chevron--open]="open()">></span>
   <span>{{ open() ? 'Hide tool detail' : 'Show tool detail' }}</span>
 </button>
 
 @if (open()) {
   <div class="awd-body" data-testid="agent-work-detail-body">
     @if (loading()) {
-      <p class="awd-note" data-testid="agent-work-detail-loading">Loading…</p>
+      <p class="awd-note" data-testid="agent-work-detail-loading">Loading...</p>
     } @else if (failed()) {
       <p class="awd-note awd-note--error" data-testid="agent-work-detail-error">
         Could not load tool detail.
@@ -28,7 +28,7 @@
               [attr.aria-expanded]="isExpanded(group.tool)"
               (click)="toggleGroup(group.tool)">
               <span class="awd-group__chevron"
-                    [class.awd-group__chevron--open]="isExpanded(group.tool)">▸</span>
+                    [class.awd-group__chevron--open]="isExpanded(group.tool)">></span>
               <span class="awd-group__name">{{ group.tool }}</span>
               <span class="awd-group__count">{{ group.count }}</span>
             </button>
@@ -43,8 +43,9 @@
                       data-testid="agent-work-detail-call">
                     <span class="awd-call__status"
                           [class.awd-call__status--error]="call.isError"
-                          [class.awd-call__status--pending]="!call.completed">
-                      @if (call.isError) { ✕ } @else if (!call.completed) { · } @else { ✓ }
+                          [class.awd-call__status--pending]="!call.completed"
+                          [attr.aria-label]="callStatusLabel(call)">
+                      {{ callStatusMarker(call) }}
                     </span>
                     <span class="awd-call__arg">{{ argPreview(call) }}</span>
                     @if (call.ts) {

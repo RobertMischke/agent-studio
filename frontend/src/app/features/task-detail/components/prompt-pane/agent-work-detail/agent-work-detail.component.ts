@@ -12,7 +12,7 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 
 /**
  * Drill-down for the Overview "Agent Work" block: a lazily-loaded, grouped,
- * expandable view of every tool call the agent made (the *what* - command,
+ * expandable view of every tool call the agent made (the what: command,
  * file, grep pattern - behind the per-tool count chips). Self-contained:
  * takes the job id/watchPath and fetches `agent-work-detail` on first
  * expand, so a collapsed Overview tab costs nothing.
@@ -63,10 +63,22 @@ export class AgentWorkDetailComponent {
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
   }
 
-  /** Single-line preview of a call's argument; em-dash placeholder when empty. */
+  /** Single-line preview of a call's argument; dash placeholder when empty. */
   argPreview(call: AgentWorkCall): string {
     const a = call.argument?.trim();
-    return a ? a : '—';
+    return a ? a : '-';
+  }
+
+  callStatusLabel(call: AgentWorkCall): string {
+    if (call.isError) return 'Error';
+    if (!call.completed) return 'Open';
+    return 'Done';
+  }
+
+  callStatusMarker(call: AgentWorkCall): string {
+    if (call.isError) return '!';
+    if (!call.completed) return '...';
+    return 'ok';
   }
 
   /** HTML tooltip: full argument in a code block + the captured result line. */
@@ -75,7 +87,7 @@ export class AgentWorkDetailComponent {
     if (call.argument?.trim()) parts.push(`<code>${escapeHtml(call.argument.trim())}</code>`);
     if (call.resultFirstLine?.trim()) {
       const tone = call.isError ? 'error' : '';
-      parts.push(`<small class="${tone}">→ ${escapeHtml(call.resultFirstLine.trim())}</small>`);
+      parts.push(`<small class="${tone}">Result: ${escapeHtml(call.resultFirstLine.trim())}</small>`);
     }
     return parts.join('<br>');
   }

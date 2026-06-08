@@ -72,8 +72,9 @@ export type InspectorTab = 'protocol' | 'activity';
 
 /**
  * Sub-view of the Activity tab: the agent's own task Plan, the next-gen
- * Conversation renderer, or the raw Trace (legacy activity-log view). The
- * segmented toggle above the panel body switches between them.
+ * CLI conversation renderer, or the raw Trace (legacy activity-log view).
+ * Trace is reached from the Activity overflow menu; the primary segmented
+ * toggle stays intentionally small: Plan | CLI.
  */
 export type ActivityView = 'plan' | 'conversation' | 'trace';
 
@@ -702,8 +703,8 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly verboseDebugOpen = signal(false);
 
   /**
-   * The Activity tab is a single panel with a [Plan] [Conversation] [Trace]
-   * toggle above it. `activityViewOverride` holds the user's explicit pick;
+   * The Activity tab is a single panel with a compact [Plan] [CLI] toggle in
+   * its toolbar and secondary actions in the overflow menu. `activityViewOverride` holds the user's explicit pick;
    * when null the panel falls back to {@link defaultActivityView} (Plan when
    * a plan exists, else Conversation when `Frontend:NextGenChat` is on, else
    * the raw Trace). The constructor effect resets it per job.
@@ -714,6 +715,8 @@ export class ProtocolPaneComponent implements OnDestroy {
    * exactly the raw Trace as before.
    */
   private readonly activityViewOverride = signal<ActivityView | null>(null);
+  readonly activityMenuOpen = signal(false);
+  readonly activityMenuAnchor = signal<HTMLElement | null>(null);
 
   /** True once a usable task plan exists - mirrors `PlanStripComponent.visible`. */
   readonly planAvailable = computed<boolean>(() => {
@@ -739,32 +742,85 @@ export class ProtocolPaneComponent implements OnDestroy {
     return picked ?? this.defaultActivityView();
   });
 
-  /** Segmented [Plan] [Conversation] [Trace] toggle above the panel body. */
-  readonly activityViewTabs = computed<PaneTabDef[]>(() => {
+  /** Primary segmented [Plan] [CLI] toggle in the Activity toolbar. */
+  readonly activityPrimaryTabs = computed<PaneTabDef[]>(() => {
     const tabs: PaneTabDef[] = [];
     if (this.planAvailable()) {
-      tabs.push({ id: 'plan', label: 'Plan', emoji: '◆', testid: 'activity-view-tab-plan' });
+      tabs.push({ id: 'plan', label: 'Plan', testid: 'activity-view-tab-plan' });
     }
     if (this.conversationAvailable()) {
       tabs.push({
         id: 'conversation',
-        label: 'Conversation',
-        emoji: '💬',
+        label: 'CLI',
         testid: 'activity-view-tab-conversation',
       });
     }
-    tabs.push({ id: 'trace', label: 'Trace', emoji: '≣', testid: 'activity-view-tab-trace' });
     return tabs;
   });
+
+  readonly activityPrimaryTabId = computed<string>(() => {
+    const view = this.activityView();
+    if (view === 'plan') return 'plan';
+    return 'conversation';
+  });
+
+  readonly activityMenuItems = computed<readonly MenuItem[]>(() => [
+    {
+      kind: 'row',
+      id: 'trace',
+      label: 'Trace',
+      active: this.activityView() === 'trace',
+      disabled: this.filteredCliOutput().length === 0,
+    },
+    {
+      kind: 'row',
+      id: 'debug',
+      label: 'Debug',
+      disabled: this.filteredCliOutput().length === 0 && !this.runTimeline(),
+    },
+    { kind: 'separator' },
+    {
+      kind: 'row',
+      id: 'copy',
+      label: this.activityCopyLabel(),
+      disabled: !this.activityCopyText().trim(),
+    },
+  ]);
 
   setActivityView(view: ActivityView): void {
     this.activityViewOverride.set(view);
   }
 
-  onActivityViewChange(id: string): void {
-    if (id === 'plan' || id === 'conversation' || id === 'trace') {
+  onActivityPrimaryTabChange(id: string): void {
+    if (id === 'plan' || id === 'conversation') {
       this.setActivityView(id);
     }
+  }
+
+  openActivityMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activityMenuAnchor.set(event.currentTarget as HTMLElement);
+    this.activityMenuOpen.set(true);
+  }
+
+  closeActivityMenu(): void {
+    this.activityMenuOpen.set(false);
+  }
+
+  onActivityMenuItemClick(ev: MenuItemClickEvent): void {
+    switch (ev.id) {
+      case 'trace':
+        this.setActivityView('trace');
+        break;
+      case 'debug':
+        this.verboseDebugOpen.set(true);
+        break;
+      case 'copy':
+        void this.copyActivityView();
+        break;
+    }
+    this.closeActivityMenu();
   }
 
   /**
@@ -870,6 +926,80 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (s === 'copied') return '✓';
     if (s === 'failed') return '⚠';
     return '📋';
+  }
+
+  activityCopyLabel(): string {
+    const s = this.copyState();
+    if (s === 'copied') return 'Copied';
+    if (s === 'failed') return 'Copy Failed';
+    return 'Copy';
+  }
+
+  async copyActivityView(): Promise<void> {
+    const text = this.activityCopyText();
+    if (!text.trim()) return;
+    const ok = await copyTextToClipboard(text);
+    this.copyState.set(ok ? 'copied' : 'failed');
+    if (this.copyResetTimer !== null) clearTimeout(this.copyResetTimer);
+    this.copyResetTimer = setTimeout(() => {
+      this.copyState.set('idle');
+      this.copyResetTimer = null;
+    }, 2000);
+  }
+
+  private activityCopyText(): string {
+    switch (this.activityView()) {
+      case 'plan':
+        return this.planCopyText();
+      case 'trace':
+        return this.traceCopyText();
+      default:
+        return this.cliCopyText();
+    }
+  }
+
+  private planCopyText(): string {
+    const p = this.plan();
+    if (!p || !p.hasPlan || p.items.length === 0) return '';
+    const lines = [`Task plan (${p.source || 'plan'})`];
+    for (const item of p.items) {
+      lines.push(`[${item.status}] ${item.title}`);
+      for (const sub of item.subActions) {
+        lines.push(`  - ${sub.tool}: ${sub.label ?? sub.tool}`);
+      }
+    }
+    if (p.unassignedSubActions.length > 0) {
+      lines.push('Before plan');
+      for (const sub of p.unassignedSubActions) {
+        lines.push(`  - ${sub.tool}: ${sub.label ?? sub.tool}`);
+      }
+    }
+    return lines.join('\n');
+  }
+
+  private cliCopyText(): string {
+    const turns = buildConversationTurns(parseActivityLog(this.filteredCliOutput()));
+    const parts: string[] = [];
+    for (const turn of turns) {
+      if (turn.kind === 'tools') {
+        parts.push(`[${this.formatActivityTime(turn.timestamp)}] Tools (${turn.groups.length} group${turn.groups.length === 1 ? '' : 's'})`);
+      } else {
+        parts.push(`[${this.formatActivityTime(turn.timestamp)}] ${turn.kind}\n${turn.text}`);
+      }
+    }
+    return parts.join('\n\n');
+  }
+
+  private traceCopyText(): string {
+    return this.filteredCliOutput()
+      .map((line) => `[${this.formatActivityTime(line.timestamp)}] ${line.stream.toUpperCase()} ${line.text}`)
+      .join('\n');
+  }
+
+  private formatActivityTime(dateStr: string): string {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
   // --- Protocol context menu (F54) ---

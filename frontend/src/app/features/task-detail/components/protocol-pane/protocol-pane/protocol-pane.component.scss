@@ -71,8 +71,12 @@
 }
 
 .activity-panel__header--compact {
+  display: flex;
   align-items: center;
-  padding-bottom: 4px;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  padding-bottom: 6px;
 }
 
 .activity-panel__title {
@@ -88,6 +92,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 // Compact "N Runs" opener + info button. Replaces the always-on run
@@ -999,12 +1005,13 @@
 }
 
 /*
- * Plan / Conversation / Trace segmented toggle that sits above the Activity
- * panel body. The pane-tabs `pill` variant owns the chrome; the host just
- * adds breathing room so it reads as a distinct control between the run
- * header and the sub-view content.
+ * Plan / CLI segmented toggle in the Activity toolbar. The pane-tabs `pill`
+ * variant owns the chrome; this host keeps it flush with the overflow actions
+ * so the toolbar reads as one row.
  */
 .activity-view-toggle {
-  display: block;
-  margin: 2px 0 8px;
+  display: inline-flex;
+  margin: 0;
+  flex: 0 1 auto;
+  min-width: 0;
 }

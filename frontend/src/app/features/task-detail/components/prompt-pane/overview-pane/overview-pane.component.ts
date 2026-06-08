@@ -33,6 +33,7 @@ import type {
 } from '../../../../task-pipeline';
 import { ClientService } from '../../../../../services/client.service';
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
+import { DialogComponent } from '../../../../../components/dialog/dialog.component';
 import { RegressionRadarComponent } from '../../../../regression-radar';
 import { AgentWorkDetailComponent } from '../agent-work-detail/agent-work-detail.component';
 import {
@@ -168,6 +169,12 @@ interface PipelineTotalVm {
   anyModelUnknown: boolean;
   tokenTooltip: StructuredTooltip | null;
   costTooltip: StructuredTooltip | null;
+}
+
+interface TokenBreakdownRowVm {
+  label: string;
+  tokens: number;
+  costUsd: number;
 }
 
 /**
@@ -377,7 +384,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   selector: 'app-overview-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent, PipelineStepResultComponent],
+  imports: [FormsModule, DialogComponent, CliModelSelectorComponent, RegressionRadarComponent, AgentWorkDetailComponent, ReferencesSectionComponent, TooltipDirective, CompletionLoopIndicatorComponent, TaskPromptPopoverComponent, SteeringDetailComponent, PipelineStepResultComponent],
   templateUrl: './overview-pane.component.html',
   styleUrl: './overview-pane.component.scss',
 })
@@ -429,8 +436,10 @@ export class OverviewPaneComponent {
   readonly editingTitle = signal(false);
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
+  readonly selectedTokenStepId = signal<string | null>(null);
   private readonly optimisticTitle = signal<string | null>(null);
   private modalStackDisposer: (() => void) | null = null;
+  private tokenModalStackDisposer: (() => void) | null = null;
 
   /** Title the H1 renders. Falls back to the job id when no title is set. */
   readonly displayedTitle = computed<string>(() => {
@@ -673,27 +682,6 @@ export class OverviewPaneComponent {
     return null;
   });
 
-  readonly tokenSummary = computed(() => this.job().tokenSummary ?? null);
-
-  readonly hasOrchestratorTokens = computed(() => {
-    const ts = this.tokenSummary();
-    return ts !== null && ts.totalTokens > 0;
-  });
-
-  /**
-   * Token / request / changes counts the CLI agent itself reported in its
-   * terminal footer at the end of a run. Format is unstructured strings
-   * because each CLI uses a different one (e.g. Claude `~12.5k tokens`,
-   * Copilot `tokens: 8,123`). Surfaced verbatim — combining with
-   * `tokenSummary` (orchestrator-side, structured) would lose information.
-   */
-  readonly agentUsage = computed(() => {
-    const lu = this.job().lastUsage;
-    if (!lu) return null;
-    if (!lu.tokens && !lu.requests && !lu.changes) return null;
-    return lu;
-  });
-
   readonly lastRunRecord = computed<RunRecord | null>(() => {
     const r = this.runs();
     return r.length > 0 ? r[r.length - 1] : null;
@@ -740,18 +728,6 @@ export class OverviewPaneComponent {
 
   /** Recorded run count, from the run-timeline. 0 before the first run. */
   readonly runCount = computed<number>(() => this.timeline()?.runCount ?? 0);
-
-  /**
-   * Whether the "Tokens" section has anything worth showing: orchestrator
-   * tokens or a CLI-footer reading. Run count + elapsed time moved to the
-   * Runs section ({@link hasRunsSection}), so they no longer gate this block.
-   * When both token sources are absent the section is hidden entirely rather
-   * than rendering a placeholder (the empty-state text was removed).
-   */
-  readonly hasTokens = computed<boolean>(() =>
-    this.hasOrchestratorTokens()
-    || this.agentUsage() !== null,
-  );
 
   /**
    * Per-step pipeline rows for the Overview pipeline block. Joins the
@@ -848,6 +824,12 @@ export class OverviewPaneComponent {
   });
 
   readonly hasPipeline = computed(() => this.pipelineRows().length > 0);
+
+  readonly selectedTokenRow = computed<PipelineRowVm | null>(() => {
+    const id = this.selectedTokenStepId();
+    if (!id) return null;
+    return this.pipelineRows().find(r => r.id === id && r.totalTokens > 0) ?? null;
+  });
 
   /**
    * The single core "Agent execution" row, used to surface the run count and
@@ -1009,6 +991,59 @@ export class OverviewPaneComponent {
         costLabel: row.totalTokens > 0 && row.costKnown ? this.formatCost(row.costUsd) : null,
       },
     };
+  }
+
+  openStepTokenModal(row: PipelineRowVm): void {
+    if (row.totalTokens <= 0) return;
+    this.selectedTokenStepId.set(row.id);
+  }
+
+  closeStepTokenModal(): void {
+    this.selectedTokenStepId.set(null);
+  }
+
+  tokenBreakdownRows(row: PipelineRowVm): TokenBreakdownRowVm[] {
+    return [
+      { label: 'Input', tokens: row.inputTokens, costUsd: row.inputCostUsd },
+      { label: 'Output', tokens: row.outputTokens, costUsd: row.outputCostUsd },
+      { label: 'Cache read', tokens: row.cacheReadTokens, costUsd: row.cacheReadCostUsd },
+      { label: 'Cache write', tokens: row.cacheCreationTokens, costUsd: row.cacheCreationCostUsd },
+    ];
+  }
+
+  tokenComponentTotal(row: PipelineRowVm): number {
+    return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens;
+  }
+
+  tokenComponentMatchesTotal(row: PipelineRowVm): boolean {
+    return this.tokenComponentTotal(row) === row.totalTokens;
+  }
+
+  tokenStepCallsLabel(row: PipelineRowVm): string {
+    if (row.kind === 'core') {
+      const n = this.agentRunCount();
+      if (n > 0) return n === 1 ? '1 agent run' : `${n} agent runs`;
+    }
+    if (row.status === 'passed' || row.status === 'failed' || row.status === 'skipped') {
+      return '1 step execution';
+    }
+    return 'Not reported';
+  }
+
+  tokenStepSourceLabel(row: PipelineRowVm): string {
+    const source = row.tokenUsageSource?.trim();
+    if (source) return source;
+    if (row.kind === 'core') return 'CORE agent run';
+    return 'Pipeline step usage';
+  }
+
+  tokenStepTimeLabel(row: PipelineRowVm): string {
+    const parts: string[] = [];
+    if (row.startedAt) parts.push(`Started ${this.formatAbsoluteTime(row.startedAt)}`);
+    if (row.completedAt) parts.push(`Ended ${this.formatAbsoluteTime(row.completedAt)}`);
+    const duration = this.liveStepDurationMs(row);
+    if (duration > 0) parts.push(`Duration ${this.formatStepDuration(duration)}`);
+    return parts.length > 0 ? parts.join(' · ') : 'No step time recorded';
   }
 
   /** Task-total tokens + cost across all recorded steps. */
@@ -1335,7 +1370,22 @@ export class OverviewPaneComponent {
   });
 
   constructor() {
+    effect(() => {
+      const row = this.selectedTokenRow();
+      if (row && this.tokenModalStackDisposer == null) {
+        this.tokenModalStackDisposer = this.modalStack.push('overview-step-token-modal', () => {
+          this.closeStepTokenModal();
+        });
+      } else if (!row && this.tokenModalStackDisposer != null) {
+        this.tokenModalStackDisposer();
+        this.tokenModalStackDisposer = null;
+      }
+    });
     this.destroyRef.onDestroy(() => {
+      if (this.tokenModalStackDisposer != null) {
+        this.tokenModalStackDisposer();
+        this.tokenModalStackDisposer = null;
+      }
       if (this.tickHandle != null) {
         clearInterval(this.tickHandle);
         this.tickHandle = null;

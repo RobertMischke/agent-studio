@@ -27,6 +27,7 @@ import {
 } from './activity-log-view-model';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../../../components/menu';
 type ViewMode = 'conversation' | 'trace';
 
 /**
@@ -49,7 +50,7 @@ type ViewMode = 'conversation' | 'trace';
 @Component({
   selector: 'app-activity-log-view',
   standalone: true,
-  imports: [ScrollingModule, MarkdownViewComponent, TooltipDirective],
+  imports: [ScrollingModule, MarkdownViewComponent, TooltipDirective, MenuComponent],
   // Cycle 7b: OnPush. The activity log re-derives conversation turns
   // from a capped lines() signal whenever new CLI output arrives. With
   // default CD, every parent change-detection pass also walked through
@@ -63,6 +64,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly lines = input<CliOutputLine[]>([]);
   readonly bodyMaxHeight = input('400px');
   readonly variant = input<'framed' | 'embedded'>('framed');
+  readonly showToolbar = input(true);
   /**
    * When true the live-status row renders at the bottom of the body
    * (in both Conversation and Trace mode). The row pulses, names what
@@ -88,6 +90,8 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly showTools = signal(false);
   readonly showDebug = signal(false);
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
+  readonly toolbarMenuOpen = signal(false);
+  readonly toolbarMenuAnchor = signal<HTMLElement | null>(null);
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Open/closed state for tool bursts (Conversation) and groups (Trace), keyed by id. */
@@ -176,6 +180,30 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     deriveLiveStatus(this.lines(), this.isRunning(), this.nowMs())
   );
 
+  readonly toolbarMenuItems = computed<readonly MenuItem[]>(() => [
+    {
+      kind: 'row',
+      id: 'trace',
+      label: 'Trace',
+      active: this.mode() === 'trace',
+      disabled: this.lines().length === 0,
+    },
+    {
+      kind: 'row',
+      id: 'debug',
+      label: 'Debug',
+      active: this.mode() === 'conversation' ? this.showTools() : this.showDebug(),
+      disabled: this.lines().length === 0,
+    },
+    { kind: 'separator' },
+    {
+      kind: 'row',
+      id: 'copy',
+      label: this.copyMenuLabel(),
+      disabled: this.copyDisabled(),
+    },
+  ]);
+
   formatSince(ms: number): string {
     return formatLiveSince(ms);
   }
@@ -232,6 +260,13 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     return '📋 Copy';
   }
 
+  copyMenuLabel(): string {
+    const s = this.copyState();
+    if (s === 'copied') return 'Copied';
+    if (s === 'failed') return 'Copy Failed';
+    return 'Copy';
+  }
+
   copyTooltip(): string {
     return this.mode() === 'conversation'
       ? 'Copy the visible conversation transcript'
@@ -248,6 +283,36 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       this.copyState.set('idle');
       this.copyResetTimer = null;
     }, 2000);
+  }
+
+  openToolbarMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.toolbarMenuAnchor.set(event.currentTarget as HTMLElement);
+    this.toolbarMenuOpen.set(true);
+  }
+
+  closeToolbarMenu(): void {
+    this.toolbarMenuOpen.set(false);
+  }
+
+  onToolbarMenuItemClick(ev: MenuItemClickEvent): void {
+    switch (ev.id) {
+      case 'trace':
+        this.mode.set('trace');
+        break;
+      case 'debug':
+        if (this.mode() === 'conversation') {
+          this.showTools.update(v => !v);
+        } else {
+          this.showDebug.update(v => !v);
+        }
+        break;
+      case 'copy':
+        void this.copyVisible();
+        break;
+    }
+    this.closeToolbarMenu();
   }
 
   private buildCopyText(): string {

@@ -1,42 +1,35 @@
     <div class="activity-log" [class.activity-log--embedded]="variant() === 'embedded'">
-      <div class="activity-log__toolbar">
+      @if (showToolbar()) {
+        <div class="activity-log__toolbar">
         <div class="activity-log__tabs" role="tablist">
           <button class="activity-log__tab"
                   data-testid="activity-log-mode-conversation"
                   [class.activity-log__tab--active]="mode() === 'conversation'"
                   (click)="mode.set('conversation')">
-            Conversation
-          </button>
-          <button class="activity-log__tab"
-                  data-testid="activity-log-mode-trace"
-                  [class.activity-log__tab--active]="mode() === 'trace'"
-                  (click)="mode.set('trace')">
-            Trace
+            CLI
           </button>
         </div>
         <div class="activity-log__actions">
-          @if (mode() === 'conversation') {
-            <label class="activity-log__toggle" data-testid="activity-log-show-tools">
-              <input type="checkbox"
-                     [checked]="showTools()"
-                     (change)="showTools.set(!showTools())" />
-              <span>Show tool activity</span>
-            </label>
-          } @else {
-            <label class="activity-log__toggle" data-testid="activity-log-show-debug">
-              <input type="checkbox"
-                     [checked]="showDebug()"
-                     (change)="showDebug.set(!showDebug())" />
-              <span>Show debug noise</span>
-            </label>
-          }
           <button class="activity-log__btn"
-                  data-testid="activity-log-copy"
-                  [appTooltip]="copyTooltip()"
-                  [disabled]="copyDisabled()"
-                  (click)="copyVisible()">{{ copyLabel() }}</button>
+                  data-testid="activity-log-toolbar-menu"
+                  aria-label="More activity actions"
+                  aria-haspopup="menu"
+                  [attr.aria-expanded]="toolbarMenuOpen()"
+                  [appTooltip]="'More activity actions'"
+                  (click)="openToolbarMenu($event)">⋯</button>
+          <app-menu
+            [items]="toolbarMenuItems()"
+            [open]="toolbarMenuOpen()"
+            [anchorEl]="toolbarMenuAnchor()"
+            placement="below"
+            testIdPrefix="activity-log-toolbar-menu"
+            ariaLabel="Activity log actions"
+            [minWidth]="180"
+            (itemClick)="onToolbarMenuItemClick($event)"
+            (closeRequest)="closeToolbarMenu()" />
         </div>
       </div>
+      }
 
       <div #body
            class="activity-log__body"

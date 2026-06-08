@@ -309,7 +309,14 @@
           <div class="inspector__stack">
             <section class="activity-panel" data-testid="activity-panel">
               <div class="activity-panel__header activity-panel__header--compact">
-                <h3 class="section__title activity-panel__title">Activity log</h3>
+                @if (cliOutput().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
+                  <app-pane-tabs variant="pill"
+                                 class="activity-view-toggle"
+                                 ariaLabel="Plan / CLI"
+                                 [tabs]="activityPrimaryTabs()"
+                                 [activeTabId]="activityPrimaryTabId()"
+                                 (tabChange)="onActivityPrimaryTabChange($event)" />
+                }
                 <div class="activity-panel__actions">
                   @if (runCount() > 0) {
                     <span class="activity-runs" data-testid="activity-runs">
@@ -337,10 +344,22 @@
                   }
                   <button type="button"
                           class="btn-icon"
-                          data-testid="protocol-open-verbose-debug"
-                          aria-label="Open Verbose Debug"
-                          [appTooltip]="'Open the read-only Verbose Debug view for this run'"
-                          (click)="verboseDebugOpen.set(true)">🐞</button>
+                          data-testid="activity-toolbar-menu"
+                          aria-label="More activity actions"
+                          aria-haspopup="menu"
+                          [attr.aria-expanded]="activityMenuOpen()"
+                          [appTooltip]="'More activity actions'"
+                          (click)="openActivityMenu($event)">⋯</button>
+                  <app-menu
+                    [items]="activityMenuItems()"
+                    [open]="activityMenuOpen()"
+                    [anchorEl]="activityMenuAnchor()"
+                    placement="below"
+                    testIdPrefix="activity-toolbar-menu"
+                    ariaLabel="Activity actions"
+                    [minWidth]="180"
+                    (itemClick)="onActivityMenuItemClick($event)"
+                    (closeRequest)="closeActivityMenu()" />
                 </div>
               </div>
 
@@ -385,14 +404,6 @@
                 (closeRequest)="closeGitViewer()" />
 
               @if (cliOutput().length > 0 || isRunning() || isActiveJob() || queuedFollowUp()) {
-                @if (activityViewTabs().length > 1) {
-                  <app-pane-tabs variant="pill"
-                                 class="activity-view-toggle"
-                                 ariaLabel="Plan / Conversation / Trace"
-                                 [tabs]="activityViewTabs()"
-                                 [activeTabId]="activityView()"
-                                 (tabChange)="onActivityViewChange($event)" />
-                }
                 @switch (activityView()) {
                   @case ('plan') {
                     <app-plan-strip [plan]="plan()" [isRunning]="isRunning()" />
@@ -422,6 +433,7 @@
                                            [bodyMaxHeight]="'none'"
                                            [isRunning]="isRunning()"
                                            variant="embedded"
+                                           [showToolbar]="false"
                                            (applyComposeSuggestion)="onSteerOptionApply($event)"
                                            (requestUploadScreenshot)="onSteerUploadRequest()" />
                   }
