@@ -2091,7 +2091,7 @@
       max-height: 42vh;
       overflow: auto;
       border-bottom: 1px solid var(--studio-border, rgba(255, 255, 255, 0.12));
-      background: var(--studio-bg, #111318);
+      background: var(--studio-surface, var(--studio-bg));
     }
     .epic-overlay__master .epic-rollup {
       min-height: 0;

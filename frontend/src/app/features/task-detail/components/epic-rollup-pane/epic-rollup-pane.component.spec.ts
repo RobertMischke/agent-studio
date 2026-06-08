@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { EpicRollupPaneComponent } from './epic-rollup-pane.component';
+import type { EpicRollup } from '../../../../models/task.model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -90,6 +91,73 @@ describe('EpicRollupPaneComponent host scroll contract (ASS-733)', () => {
       expect(['auto', 'scroll']).toContain(style.overflowY);
     } finally {
       host.remove();
+    }
+  });
+});
+
+describe('EpicRollupPaneComponent visual framing (ASS-873)', () => {
+  it('renders sub-task lanes and cards as flat lists instead of nested boxes', async () => {
+    await TestBed.configureTestingModule({
+      imports: [EpicRollupPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(EpicRollupPaneComponent);
+    fixture.componentRef.setInput('epicId', 'epic-under-test');
+    fixture.componentInstance.rollup.set({
+      id: 'epic-under-test',
+      title: 'Epic under test',
+      projectName: 'agent-taskboard',
+      watchPath: '',
+      state: '3-progress',
+      subTaskTotal: 2,
+      completed: 0,
+      inProgress: 1,
+      open: 1,
+      byState: { '2-ready': 1, '3-progress': 1 },
+      subTasks: [
+        { id: 'sub-ready', title: 'Ready sub-task', state: '2-ready', order: 0 },
+        { id: 'sub-progress', title: 'Progress sub-task', state: '3-progress', order: 1 },
+      ],
+    } satisfies EpicRollup);
+
+    document.body.style.setProperty('--studio-surface', 'rgb(255, 255, 255)');
+    document.body.style.setProperty('--studio-bg', 'rgb(245, 247, 250)');
+    document.body.appendChild(fixture.nativeElement);
+    try {
+      try { fixture.detectChanges(); } catch { /* fetch effect is not part of this style contract */ }
+
+      const lane = fixture.nativeElement.querySelector('[data-testid="epic-rollup-lane"]') as HTMLElement;
+      const card = fixture.nativeElement.querySelector('[data-testid="epic-rollup-card"]') as HTMLElement;
+      const laneStyle = getComputedStyle(lane);
+      const cardStyle = getComputedStyle(card);
+      const emittedCss = Array.from(document.styleSheets)
+        .flatMap((sheet) => {
+          try { return Array.from(sheet.cssRules); } catch { return []; }
+        })
+        .map((rule) => rule.cssText)
+        .join('\n');
+
+      expect(emittedCss).toContain('background: var(--studio-surface, var(--studio-bg))');
+      expect(laneStyle.borderTopStyle).toBe('none');
+      expect(laneStyle.borderRightStyle).toBe('none');
+      expect(laneStyle.borderBottomStyle).toBe('none');
+      expect(laneStyle.borderLeftStyle).toBe('none');
+      expect(cardStyle.borderTopStyle).toBe('none');
+      expect(cardStyle.borderRightStyle).toBe('none');
+      expect(cardStyle.borderBottomStyle).toBe('none');
+      expect(cardStyle.borderLeftStyle).toBe('none');
+      expect(cardStyle.borderRadius).toBe('0px');
+      expect(['', 'none']).toContain(cardStyle.boxShadow);
+    } finally {
+      fixture.nativeElement.remove();
+      document.body.style.removeProperty('--studio-surface');
+      document.body.style.removeProperty('--studio-bg');
     }
   });
 });
