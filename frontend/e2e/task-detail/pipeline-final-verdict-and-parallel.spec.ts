@@ -235,6 +235,26 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
       body: JSON.stringify(pipelineBody()),
     }),
   );
+  await page.route(new RegExp(`/api/tasks/${idEsc}/files/(status\\.md|aspect-[^?]+\\.md)(\\?|$)`), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/plain',
+      body: [
+        '---',
+        'status: pass',
+        '---',
+        '',
+        '## Model reply',
+        '',
+        '```',
+        '## Requirement Fit Review',
+        '',
+        'The implementation matches the task prompt and no blocking gap remains.',
+        '```',
+        '[[ASPECT_VERDICT: status=pass]]',
+      ].join('\n'),
+    }),
+  );
   await page.route(new RegExp(`/api/tasks/${idEsc}(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail) }),
   );
@@ -280,7 +300,8 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     // Each aspect row carries quiet parallel metadata (read-only pool, Req 1 + 3).
     const parallelNotes = page.getByTestId('overview-pipeline-step-parallel');
     await expect(parallelNotes).toHaveCount(3);
-    await expect(parallelNotes.first()).toHaveText('parallel');
+    await expect(parallelNotes.first()).toHaveText('∥');
+    await expect(parallelNotes.first()).toHaveAttribute('aria-label', 'Parallel review pool');
 
     // The orchestrator decision is its own, clearly separated final-verdict row.
     const decisionRow = page.locator('[data-step-id="post-orchestrator-decision"]');
@@ -297,11 +318,21 @@ test.describe('Pipeline: parallel aspects + orchestrator final verdict', () => {
     const verdict = decisionRow.getByTestId('overview-pipeline-step-verdict');
     await expect(verdict).toHaveAttribute('data-verdict', 'accept');
 
+    const aspectRow = page.locator('[data-step-id="aspect-requirement-fit"]');
+    const resultTrigger = aspectRow.getByTestId('pipeline-step-result-toggle');
+    await expect(resultTrigger).toBeVisible();
+    await resultTrigger.click();
+    await expect(aspectRow.getByTestId('pipeline-step-result-card')).toBeVisible();
+    await expect(aspectRow.getByTestId('pipeline-step-result-body')).toContainText('Requirement Fit Review');
+
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
       await page.screenshot({
         path: path.join(RESULTS_DIR, 'pipeline-parallel-aspects-and-final-verdict.png'),
         fullPage: true,
+      });
+      await aspectRow.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-result-popover-open.png'),
       });
     }
   });

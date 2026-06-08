@@ -749,7 +749,8 @@ describe('OverviewPaneComponent (smoke)', () => {
     // final-verdict chip on the orchestrator row.
     const parallelNotes = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-parallel"]');
     expect(parallelNotes.length).toBe(2);
-    expect(parallelNotes[0].textContent?.trim()).toBe('parallel');
+    expect(parallelNotes[0].textContent?.trim()).toBe('∥');
+    expect(parallelNotes[0].getAttribute('aria-label')).toBe('Parallel review pool');
     expect(parallelNotes[0].classList.contains('ov-pl-step__parallel-note')).toBe(true);
     const finalChips = fixture.nativeElement.querySelectorAll('[data-testid="overview-pipeline-step-final-verdict"]');
     expect(finalChips.length).toBe(1);
@@ -801,6 +802,9 @@ describe('OverviewPaneComponent (smoke)', () => {
       'Deterministic post-run tooling and evidence steps.',
       'The orchestrator ruling that accepts, reissues, or escalates.',
       'Optional drift-analysis passes.',
+    ]);
+    expect(groups.map(g => g.querySelector('.ov-pl-phase__info')?.textContent?.trim())).toEqual([
+      'i', 'i', 'i', 'i', 'i', 'i',
     ]);
     expect(groups.map(g => g.getAttribute('data-phase'))).toEqual([
       'pre', 'core', 'aspect', 'tool', 'decision', 'drift',

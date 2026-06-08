@@ -290,6 +290,11 @@
               <span class="ov-pl-phase__label">{{ row.phaseLabel }}</span>
               <span class="ov-pl-phase__rule" aria-hidden="true"></span>
               <span class="ov-pl-phase__description">{{ row.phaseDescription }}</span>
+              <span class="ov-pl-phase__info"
+                    tabindex="0"
+                    aria-label="{{ row.phaseLabel }} phase explanation"
+                    [appTooltip]="row.phaseDescription"
+                    tooltipSeverity="info">i</span>
             </div>
           }
           <div class="ov-pl-step"
@@ -311,8 +316,9 @@
             @if (row.runMode === 'parallel') {
               <span class="ov-pl-step__parallel-note"
                     data-testid="overview-pipeline-step-parallel"
+                    aria-label="Parallel review pool"
                     [appTooltip]="'Runs in parallel with the other aspect reviews (read-only pool)'">
-                parallel
+                ∥
               </span>
             }
             @if (row.isFinalVerdict) {
@@ -347,6 +353,14 @@
                     [appTooltip]="row.concernTooltip"
                     [tooltipSeverity]="row.verdict === 'block' || row.verdict === 'loop-detected' ? 'error' : 'warn'"
                     data-testid="overview-pipeline-step-verdict">{{ row.verdict }}</span>
+            }
+            @if (resultForRow(row); as res) {
+              <app-pipeline-step-result class="ov-pl-step__result"
+                                        [header]="res.header"
+                                        [jobId]="job().id"
+                                        [watchPath]="job().watchPath"
+                                        [fileName]="res.fileName"
+                                        data-testid="overview-pipeline-step-result" />
             }
             @if (row.model) {
               <span class="ov-pl-step__model"
@@ -406,17 +420,6 @@
                                  [info]="steer"
                                  [showVerdictChip]="true"
                                  data-testid="overview-pipeline-step-steering" />
-          }
-          @if (resultForRow(row); as res) {
-            <!-- Per-step structured result (HTML header + formatted markdown),
-                 rendered where the result originates. CORE -> status.md;
-                 each aspect -> its aspect-{id}.md report. -->
-            <app-pipeline-step-result class="ov-pl-result"
-                                      [header]="res.header"
-                                      [jobId]="job().id"
-                                      [watchPath]="job().watchPath"
-                                      [fileName]="res.fileName"
-                                      data-testid="overview-pipeline-step-result" />
           }
         }
       </div>

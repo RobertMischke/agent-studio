@@ -255,15 +255,17 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
 
     // Phase headers group the flat pipeline list without changing row order.
     const phaseHeaders = page.getByTestId('overview-pipeline-phase');
-    await expect(phaseHeaders).toHaveText([
-      /PRE\s+Preparation checks before the agent gets the task\./,
-      /CORE\s+The coding agent run\./,
-      /ASPECT\s+Parallel review passes over the finished work\./,
-      /TOOL\s+Deterministic post-run tooling and evidence steps\./,
-      /DECISION\s+The orchestrator ruling that accepts, reissues, or escalates\./,
-      /DRIFT\s+Optional drift-analysis passes\./,
+    await expect(phaseHeaders.locator('.ov-pl-phase__label')).toHaveText([
+      'PRE',
+      'CORE',
+      'DECISION',
+      'ASPECT',
+      'TOOL',
+      'DECISION',
+      'DRIFT',
     ]);
-    await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="decision"]')).toHaveCount(1);
+    await expect(phaseHeaders.locator('.ov-pl-phase__info')).toHaveCount(7);
+    await expect(page.locator('[data-testid="overview-pipeline-phase"][data-phase="decision"]')).toHaveCount(2);
 
     // The accepted completion-loop strip shows the verdict but no redundant Note.
     await expect(page.getByTestId('overview-loop-verdict')).toHaveAttribute('data-verdict', 'accepted');
@@ -274,6 +276,12 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
       await page.screenshot({
         path: path.join(RESULTS_DIR, 'pipeline-orchestrator-review-distinct-after.png'),
         fullPage: true,
+      });
+      await phaseHeaders.first().locator('.ov-pl-phase__info').hover();
+      await expect(page.getByTestId('app-tooltip')).toContainText('Preparation checks before the agent gets the task.');
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-phase-info-tooltip.png'),
+        fullPage: false,
       });
     }
   });

@@ -539,6 +539,7 @@
   --ov-pl-phase-accent: var(--studio-accent-2);
   --ov-pl-phase-tint: color-mix(in srgb, var(--ov-pl-phase-accent) 12%, transparent);
 
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--studio-spacing-2);
@@ -572,12 +573,33 @@
   }
 
   &__description {
-    min-width: 0;
+    position: absolute;
+    width: 1px;
+    height: 1px;
     overflow: hidden;
-    text-overflow: ellipsis;
+    clip: rect(0 0 0 0);
     white-space: nowrap;
-    font-size: 10.5px;
+  }
+
+  &__info {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--studio-border);
+    border-radius: 999px;
     color: var(--studio-fg-muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent-2);
+      outline-offset: 1px;
+    }
   }
 
   &[data-phase='core'] { --ov-pl-phase-accent: var(--studio-accent-3); }
@@ -640,14 +662,6 @@
   margin: 2px 0 6px;
   padding: 6px 0 6px 10px;
   border-left: 2px solid var(--studio-border);
-  margin-left: calc(var(--ov-pipeline-status-col) + var(--studio-spacing-1));
-}
-
-// Per-step structured-result card, indented under its row to read as a child
-// of the step (same gutter the steering trace uses).
-.ov-pl-result {
-  display: block;
-  margin: 2px 0 8px;
   margin-left: calc(var(--ov-pipeline-status-col) + var(--studio-spacing-1));
 }
 
@@ -759,9 +773,18 @@
   // orchestrator pool. The status column carries the row's visual weight.
   &__parallel-note {
     flex: 0 0 auto;
-    font-size: 0.85em;
-    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1px solid var(--studio-border);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
     color: var(--studio-fg-muted);
+    background: transparent;
     cursor: help;
   }
 
@@ -840,11 +863,12 @@
   }
 
   &__parallel-note { grid-column: 4; }
-  &__final-badge { grid-column: 5; }
+  &__final-badge { grid-column: 4; }
   &__running-badge { grid-column: 6; }
   &__runs { grid-column: 7; }
-  &__verdict { grid-column: 4; }
-  &__model { grid-column: 5; }
+  &__verdict { grid-column: 5; }
+  &__result { grid-column: 6; }
+  &__model { grid-column: 7; }
   &__model-select { grid-column: 6; }
   &__timing { grid-column: 8; }
   &__tokens { grid-column: 9; }
@@ -852,18 +876,31 @@
 
   &__verdict {
     flex: 0 0 auto;
-    font-size: 9.5px;
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    font-size: 9px;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 1px 5px;
-    border-radius: 999px;
-    background: var(--studio-bg-hover);
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--studio-border);
+    background: transparent;
     color: var(--studio-fg-dim);
 
-    &[data-verdict='pass']     { color: var(--lane-completed); }
+    &[data-verdict='pass'] {
+      color: var(--severity-pass);
+      border-color: color-mix(in srgb, var(--severity-pass) 42%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-pass) 10%, transparent);
+    }
     &[data-verdict='concerns'] { color: var(--severity-warn); }
-    &[data-verdict='block']    { color: var(--severity-high); }
+    &[data-verdict='block'] {
+      color: var(--severity-high);
+      border-color: color-mix(in srgb, var(--severity-high) 46%, var(--studio-border));
+      background: color-mix(in srgb, var(--severity-high) 10%, transparent);
+    }
 
     // Regression-radar spec-change categories (reporting only - the step
     // status stays Passed; the pill carries the signal).
@@ -884,12 +921,12 @@
   &__model {
     flex: 0 0 auto;
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--studio-fg-dim);
-    background: var(--studio-bg-hover);
+    font-size: 9.5px;
+    color: var(--studio-fg-muted);
+    background: transparent;
     border-radius: 4px;
-    padding: 1px 5px;
-    max-width: 160px;
+    padding: 0 4px;
+    max-width: 128px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -898,8 +935,7 @@
     // outline + no fill so it reads as "will run on" rather than "ran on".
     &--resolved {
       background: transparent;
-      border: 1px dashed var(--studio-border);
-      padding: 0 4px;
+      border: 1px dashed color-mix(in srgb, var(--studio-border) 72%, transparent);
     }
   }
 

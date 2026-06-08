@@ -4,13 +4,13 @@
           class="step-result__toggle"
           data-testid="pipeline-step-result-toggle"
           [attr.aria-expanded]="open()"
+          [attr.aria-label]="open() ? 'Hide step result' : 'Show step result'"
           (click)="toggle()">
-    <span class="step-result__chevron" aria-hidden="true">{{ open() ? '▾' : '▸' }}</span>
-    <span class="step-result__toggle-label">{{ open() ? 'Hide result' : 'View result' }}</span>
+    <span class="step-result__icon" aria-hidden="true">◰</span>
   </button>
 
   @if (open()) {
-    <div class="step-result__card" data-testid="pipeline-step-result-card">
+    <div class="step-result__card" data-testid="pipeline-step-result-card" role="dialog" aria-label="Step result">
       <header class="step-result__header" [attr.data-status]="h.status">
         <span class="step-result__title">{{ h.label }}</span>
         <span class="step-result__status" data-testid="pipeline-step-result-status">

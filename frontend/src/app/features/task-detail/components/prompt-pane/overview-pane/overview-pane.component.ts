@@ -97,10 +97,9 @@ interface PipelineRowVm {
   /** Tooltip explaining where {@link model} comes from (the resolution chain). */
   modelTooltip: StructuredTooltip | null;
   /**
-   * Whether this row exposes an inline per-step agent selector. True for the
-   * always-on aspect review steps (the models the operator most wants to pin
-   * before a run); the full per-step catalogue lives on the project-settings
-   * page. Drives the editable unified selector next to the resolved-model chip.
+   * Whether this row exposes an inline per-step agent selector. The Overview
+   * rows now only display the resolved model; per-step model changes live in
+   * project/global configuration instead of individual aspect rows.
    */
   modelEditable: boolean;
   /**
@@ -793,12 +792,7 @@ export class OverviewPaneComponent {
       const cliType = this.asCliType(cfg?.cliType ?? step.cliType ?? this.effectiveCliType());
       const modelIsResolved = recordedModel == null && model != null;
       const modelTooltip = this.buildModelTooltip(label, model, modelIsResolved, cfg?.modelSource ?? null);
-      // Inline model editing is offered for the always-on aspect reviews:
-      // they resolve a per-step LLM model, are never mode-/condition-gated,
-      // and default-enabled, so a model write can safely clear the other
-      // facets without re-enabling an opt-in step. The selector binds to the
-      // raw override (cfg.model), not the resolved effective model.
-      const modelEditable = step.kind === 'aspect' && (cfg?.resolvedModel ?? null) != null;
+      const modelEditable = false;
       const modelOverride = cfg?.model ?? '';
       const thinkingLevelOverride = cfg?.thinkingLevel ?? null;
       let verdict = e?.verdict ?? null;

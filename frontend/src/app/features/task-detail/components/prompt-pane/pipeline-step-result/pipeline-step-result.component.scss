@@ -1,41 +1,57 @@
-:host { display: block; }
+:host {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
 
 .step-result {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
 
   &__toggle {
-    align-self: flex-start;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 2px 8px;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
     border: 1px solid var(--studio-border);
-    border-radius: 6px;
-    background: var(--studio-bg-hover);
+    border-radius: 5px;
+    background: transparent;
     color: var(--studio-fg-dim);
-    font-size: 11px;
-    font-weight: 600;
     cursor: pointer;
-    transition: color 0.12s ease, border-color 0.12s ease;
+    transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 
     &:hover {
       color: var(--studio-fg);
       border-color: var(--studio-border-strong, var(--studio-border));
+      background: var(--studio-bg-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent-2);
+      outline-offset: 1px;
     }
   }
 
-  &__chevron {
-    font-size: 10px;
+  &__icon {
+    font-size: 12px;
     line-height: 1;
   }
 
   &__card {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 6px);
+    left: 0;
+    width: min(560px, calc(100vw - 48px));
+    max-height: min(520px, calc(100vh - 96px));
     border: 1px solid var(--studio-border);
     border-radius: 8px;
     background: var(--studio-bg-raised, var(--studio-bg));
-    overflow: hidden;
+    box-shadow: var(--elevation-tooltip, 0 12px 32px rgba(0, 0, 0, 0.35));
+    overflow: auto;
   }
 
   // The "schöner HTML-Header": title + outcome + run meta on a tinted strip.
