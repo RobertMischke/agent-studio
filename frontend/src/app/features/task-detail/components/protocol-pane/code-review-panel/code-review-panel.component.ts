@@ -15,6 +15,7 @@ import { CodeReviewActivityStore } from '../../../../../services/code-review-act
 
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
+import { cleanStepResultMarkdown } from '../../prompt-pane/pipeline-step-result/pipeline-step-result.util';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -219,7 +220,7 @@ export class CodeReviewPanelComponent implements OnInit {
     this.jobs.readCodeReview(job.id, entry.fileName, job.watchPath).subscribe({
       next: (resp) => {
         if (this.expandedFile() === entry.fileName) {
-          this.expandedBody.set(resp.content);
+          this.expandedBody.set(cleanStepResultMarkdown(resp.content));
         }
       },
       error: () => {

@@ -71,6 +71,34 @@ describe('cleanStepResultMarkdown', () => {
     expect(out).not.toMatch(/```\s*```/);
   });
 
+  it('unwraps the Reviewer reply fence used by code-review reports', () => {
+    const raw = [
+      '---',
+      'type: code-review-step',
+      'verdict: concerns',
+      '---',
+      '',
+      '# Code Review Step',
+      '',
+      '**Verdict:** concerns',
+      '',
+      '## Reviewer reply',
+      '',
+      '```',
+      '### Findings',
+      '',
+      '- Fix `token` handling.',
+      '',
+      '[[ASPECT_VERDICT: status=concerns; summary=token handling]]',
+      '```',
+    ].join('\n');
+    const out = cleanStepResultMarkdown(raw);
+    expect(out).toContain('### Findings');
+    expect(out).toContain('- Fix `token` handling.');
+    expect(out).not.toContain('ASPECT_VERDICT');
+    expect(out).not.toMatch(/```\s*### Findings/);
+  });
+
   it('keeps a fenced code block that carries a language tag', () => {
     const raw = ['Some prose.', '', '```ts', 'const a = 1;', '```'].join('\n');
     const out = cleanStepResultMarkdown(raw);

@@ -19,6 +19,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
   await page.evaluate((t) => {
     document.documentElement.dataset['studioTheme'] = t;
+    document.documentElement.setAttribute('data-studio-theme', t);
     try { localStorage.setItem('atp.studio.theme', t); } catch { /* ignore */ }
   }, theme);
   await page.waitForTimeout(80);
@@ -152,6 +153,67 @@ test.describe('F53 — Diff-view contrast (added/removed lines)', () => {
       if (process.env.F53_RESULTS_DIR) {
         await page.screenshot({
           path: `${process.env.F53_RESULTS_DIR}/f53-diff-view-${theme}-after.png`,
+          fullPage: false
+        });
+      }
+    });
+  }
+});
+
+test.describe('Code-review markdown result contrast', () => {
+  for (const theme of ['dark', 'light'] as const) {
+    test(`shared markdown tokens stay legible in code-review body (${theme})`, async ({ page }, testInfo) => {
+      await page.goto('/');
+      await expect(page.getByTestId('studio-shell-root')).toBeVisible({ timeout: 10_000 });
+      await setTheme(page, theme);
+
+      await page.evaluate(() => {
+        const host = document.createElement('section');
+        host.id = 'code-review-markdown-probe';
+        host.style.cssText = 'position: fixed; inset: 40px; z-index: 99999;'
+          + 'background: var(--studio-bg-elevated); color: var(--studio-fg);'
+          + 'border: 1px solid var(--studio-border); padding: 16px;';
+        host.innerHTML = [
+          '<div class="markdown-body markdown-body--dense">',
+          '<h3 data-probe="heading">Findings</h3>',
+          '<ul><li data-probe="body">Review result with <code data-probe="code">helper</code> code.</li></ul>',
+          '</div>',
+        ].join('');
+        document.body.appendChild(host);
+      });
+
+      const surfaceColour = await page.evaluate(() => {
+        const host = document.getElementById('code-review-markdown-probe')!;
+        return getComputedStyle(host).backgroundColor;
+      });
+
+      const probes = await page.evaluate(() => {
+        const host = document.getElementById('code-review-markdown-probe')!;
+        const out: Record<string, { color: string; bg: string }> = {};
+        for (const el of host.querySelectorAll<HTMLElement>('[data-probe]')) {
+          const cs = getComputedStyle(el);
+          out[el.dataset['probe']!] = { color: cs.color, bg: cs.backgroundColor };
+        }
+        return out;
+      });
+
+      for (const probe of ['heading', 'body', 'code']) {
+        const { color, bg } = probes[probe];
+        const ratio = contrastOnSurface(color, bg, surfaceColour);
+        expect(
+          ratio,
+          `[${theme}] ${probe}: contrast ${ratio.toFixed(2)} (${color} on ${bg} over ${surfaceColour}) must be >= 4.5`
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+
+      await testInfo.attach(`code-review-markdown-${theme}.png`, {
+        body: await page.screenshot({ fullPage: false }),
+        contentType: 'image/png'
+      });
+
+      if (process.env.F53_RESULTS_DIR) {
+        await page.screenshot({
+          path: `${process.env.F53_RESULTS_DIR}/code-review-markdown-${theme}-after.png`,
           fullPage: false
         });
       }

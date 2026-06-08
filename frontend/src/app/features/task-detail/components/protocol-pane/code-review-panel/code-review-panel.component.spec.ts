@@ -243,7 +243,28 @@ describe('CodeReviewPanelComponent', () => {
     const read = httpCtrl.expectOne((r) => r.url.includes('/code-review/code-review-2026-05-14T12-00-00Z.md'));
     read.flush({
       fileName: 'code-review-2026-05-14T12-00-00Z.md',
-      content: '# Verdict: concerns\n\n- duplicated `helper`\n- second point',
+      content: [
+        '---',
+        'type: code-review-step',
+        'verdict: concerns',
+        'summary: Helper duplicated.',
+        '---',
+        '',
+        '# Code Review Step',
+        '',
+        '**Verdict:** concerns',
+        '',
+        '## Reviewer reply',
+        '',
+        '```',
+        '### Findings',
+        '',
+        '- duplicated `helper`',
+        '- second point',
+        '',
+        '[[ASPECT_VERDICT: status=concerns; summary=Helper duplicated.]]',
+        '```',
+      ].join('\n'),
     });
     fixture.detectChanges();
 
@@ -252,9 +273,11 @@ describe('CodeReviewPanelComponent', () => {
     // No raw <pre> dark blob; the canonical markdown surface rendered structure.
     expect(body?.querySelector('pre')).toBeNull();
     expect(body?.querySelector('app-markdown')).toBeTruthy();
-    expect(body?.querySelector('h1')?.textContent).toMatch(/Verdict: concerns/);
+    expect(body?.querySelector('h1')?.textContent).toMatch(/Code Review Step/);
+    expect(body?.querySelector('h3')?.textContent).toMatch(/Findings/);
     expect(body?.querySelectorAll('li').length).toBe(2);
     expect(body?.querySelector('code')?.textContent).toBe('helper');
+    expect(body?.textContent).not.toContain('ASPECT_VERDICT');
     httpCtrl.verify();
   });
 

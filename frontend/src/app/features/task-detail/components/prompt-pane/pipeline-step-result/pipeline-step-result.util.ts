@@ -5,7 +5,9 @@
  * (`status.md`) are the two sources; the aspect file in particular wraps the
  * model's prose in a bare ``` fence and trails machine sentinels
  * (`[[ASPECT_VERDICT: …]]`, `[[TASK_DONE]]`) that should never reach the
- * rendered card.
+ * rendered card. The user-triggered code-review report uses the same shape
+ * with a "Reviewer reply" heading, so this helper also normalises that report
+ * before the code-review panel hands it to the shared markdown renderer.
  *
  * Pure string transforms with no markdown parsing, so they are cheap and
  * unit-testable without a DOM. A `status.md` (already clean prose, no
@@ -27,7 +29,7 @@ export function cleanStepResultMarkdown(raw: string | null | undefined): string 
   if (!raw) return '';
   let lines = raw.replace(/\r\n/g, '\n').split('\n');
   lines = stripFrontmatter(lines);
-  lines = unwrapModelReplyFence(lines);
+  lines = unwrapReplyFence(lines);
   lines = stripSentinelLines(lines);
   lines = removeEmptyFences(lines);
   return collapseBlankRuns(lines).join('\n').trim();
@@ -43,12 +45,12 @@ function stripFrontmatter(lines: string[]): string[] {
 }
 
 /**
- * Remove the pair of bare ``` fence lines that wrap the first "Model reply"
- * section so the reply renders as prose. Only a language-less fence is
+ * Remove the pair of bare ``` fence lines that wrap the first model/reviewer
+ * reply section so the reply renders as prose. Only a language-less fence is
  * unwrapped (a fenced code sample with a language tag is left intact).
  */
-function unwrapModelReplyFence(lines: string[]): string[] {
-  const heading = lines.findIndex((l) => /^#+\s*model reply\b/i.test(l.trim()));
+function unwrapReplyFence(lines: string[]): string[] {
+  const heading = lines.findIndex((l) => /^#+\s*(model|reviewer) reply\b/i.test(l.trim()));
   if (heading === -1) return lines;
 
   let open = -1;
