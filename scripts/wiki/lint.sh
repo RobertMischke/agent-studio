@@ -1,134 +1,147 @@
 #!/usr/bin/env bash
-# Validate frontmatter on every docs/wiki/common-problems/<slug>/README.md.
+# Validate every docs/wiki/common-problems/<slug>/ entry.
 # Exits non-zero with a per-file reason on failure. Silent on success except for a final OK line.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-root="$repo_root/docs/wiki/common-problems"
 
-required_keys="id title status first-seen last-seen severity category tags affects related-tasks related-adrs"
-allowed_status="open mitigated fixed archived"
-allowed_severity="blocker major minor nuisance"
-allowed_category="permission filesystem cli runner ui state-machine misc"
+node - "$repo_root" <<'NODE'
+const fs = require('fs');
+const path = require('path');
 
-errors=0
-checked=0
+const repoRoot = process.argv[2];
+const root = path.join(repoRoot, 'docs', 'wiki', 'common-problems');
 
-fail() {
-  printf 'lint: %s: %s\n' "$1" "$2" >&2
-  errors=$((errors + 1))
+const requiredKeys = ['id', 'title', 'status', 'first-seen', 'last-seen', 'severity', 'category', 'tags', 'affects', 'related-tasks', 'related-adrs'];
+const listKeys = new Set(['tags', 'affects', 'related-tasks', 'related-adrs']);
+const allowedStatus = new Set(['open', 'mitigated', 'fixed', 'archived']);
+const allowedSeverity = new Set(['blocker', 'major', 'minor', 'nuisance']);
+const allowedCategory = new Set(['permission', 'filesystem', 'cli', 'runner', 'ui', 'state-machine', 'misc']);
+const scaffoldPlaceholderPattern = /TODO: one-line human-readable title|TODO: one-sentence symptom description|TODO: best current understanding|TODO: shortest reliable mitigation|TODO: the fix or design change|TODO: detailed analyses, reproducers, log excerpts|Hypotheses, open questions, ruled-out approaches\. Move into measures\.md once attempted\./;
+const todoTableCellPattern = /\|\s*TODO\s*\|/;
+
+let errors = 0;
+let checked = 0;
+
+function fail(rel, message) {
+  console.error(`lint: ${rel}: ${message}`);
+  errors += 1;
 }
 
-in_list() {
-  needle="$1"
-  shift
-  for v in "$@"; do
-    [ "$v" = "$needle" ] && return 0
-  done
-  return 1
-}
+function parseFrontmatter(text) {
+  const lines = text.split(/\r?\n/);
+  if (lines[0]?.trim() !== '---') {
+    return null;
+  }
 
-# Extract a top-level scalar value from frontmatter. Lines like `key: value`.
-# Returns empty if missing.
-fm_scalar() {
-  file="$1"
-  key="$2"
-  awk -v key="$key" '
-    /^---[[:space:]]*$/ { fm = !fm; next }
-    fm && $0 ~ "^"key":" {
-      sub("^"key":[[:space:]]*", "", $0)
-      sub("[[:space:]]*$", "", $0)
-      print
-      exit
+  const values = new Map();
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim() === '---') {
+      return values;
     }
-  ' "$file"
+
+    const match = /^([A-Za-z0-9-]+):\s*(.*)$/.exec(line);
+    if (match) {
+      values.set(match[1], match[2].trim());
+    }
+  }
+
+  return null;
 }
 
-# Does the file have an opened-and-closed YAML frontmatter block at the top?
-has_frontmatter() {
-  awk '
-    NR == 1 && $0 !~ /^---[[:space:]]*$/ { exit 1 }
-    NR == 1 { opened = 1; next }
-    opened && $0 ~ /^---[[:space:]]*$/ { closed = 1; exit 0 }
-    END { exit (closed ? 0 : 1) }
-  ' "$1"
+function readIfExists(file) {
+  if (!fs.existsSync(file)) {
+    return null;
+  }
+
+  return fs.readFileSync(file, 'utf8');
 }
 
-shopt -s nullglob
-for dir in "$root"/*/; do
-  slug="$(basename "$dir")"
-  case "$slug" in
-    archive) continue ;;
-  esac
-  readme="$dir/README.md"
-  rel="docs/wiki/common-problems/$slug/README.md"
-  checked=$((checked + 1))
+for (const dirent of fs.readdirSync(root, { withFileTypes: true })) {
+  if (!dirent.isDirectory() || dirent.name === 'archive') {
+    continue;
+  }
 
-  if [ ! -f "$readme" ]; then
-    fail "$rel" "missing README.md"
-    continue
-  fi
+  const slug = dirent.name;
+  const dir = path.join(root, slug);
+  const readme = path.join(dir, 'README.md');
+  const rel = `docs/wiki/common-problems/${slug}/README.md`;
+  checked += 1;
 
-  if ! has_frontmatter "$readme"; then
-    fail "$rel" "missing or malformed YAML frontmatter block"
-    continue
-  fi
+  const readmeText = readIfExists(readme);
+  if (readmeText === null) {
+    fail(rel, 'missing README.md');
+    continue;
+  }
 
-  if grep -Eq 'TODO: one-line human-readable title|TODO: one-sentence symptom description|TODO: best current understanding|TODO: shortest reliable mitigation|TODO: the fix or design change' "$readme"; then
-    fail "$rel" "README.md still contains scaffold placeholder text"
-  fi
+  const frontmatter = parseFrontmatter(readmeText);
+  if (frontmatter === null) {
+    fail(rel, 'missing or malformed YAML frontmatter block');
+    continue;
+  }
 
-  for k in $required_keys; do
-    # Special-case list-shaped keys: presence-check only.
-    case "$k" in
-      tags|affects|related-tasks|related-adrs)
-        if ! grep -Eq "^${k}:" "$readme"; then
-          fail "$rel" "missing required key: $k"
-        fi
-        ;;
-      *)
-        v="$(fm_scalar "$readme" "$k")"
-        if [ -z "$v" ]; then
-          fail "$rel" "missing required key: $k"
-        fi
-        ;;
-    esac
-  done
+  if (scaffoldPlaceholderPattern.test(readmeText)) {
+    fail(rel, 'README.md still contains scaffold placeholder text');
+  }
 
-  id_v="$(fm_scalar "$readme" id)"
-  if [ -n "$id_v" ] && [ "$id_v" != "$slug" ]; then
-    fail "$rel" "id ($id_v) does not match folder name ($slug)"
-  fi
+  for (const key of requiredKeys) {
+    if (!frontmatter.has(key)) {
+      fail(rel, `missing required key: ${key}`);
+      continue;
+    }
 
-  status_v="$(fm_scalar "$readme" status)"
-  if [ -n "$status_v" ] && ! in_list "$status_v" $allowed_status; then
-    fail "$rel" "status not in [$allowed_status]: $status_v"
-  fi
+    if (!listKeys.has(key) && frontmatter.get(key) === '') {
+      fail(rel, `missing required key: ${key}`);
+    }
+  }
 
-  sev_v="$(fm_scalar "$readme" severity)"
-  if [ -n "$sev_v" ] && ! in_list "$sev_v" $allowed_severity; then
-    fail "$rel" "severity not in [$allowed_severity]: $sev_v"
-  fi
+  const id = frontmatter.get('id');
+  if (id && id !== slug) {
+    fail(rel, `id (${id}) does not match folder name (${slug})`);
+  }
 
-  cat_v="$(fm_scalar "$readme" category)"
-  if [ -n "$cat_v" ] && ! in_list "$cat_v" $allowed_category; then
-    fail "$rel" "category not in [$allowed_category]: $cat_v"
-  fi
+  const status = frontmatter.get('status');
+  if (status && !allowedStatus.has(status)) {
+    fail(rel, `status not in [${Array.from(allowedStatus).join(' ')}]: ${status}`);
+  }
 
-  for f in occurrences.md protocol.md measures.md ideas.md related.md; do
-    if [ ! -f "$dir/$f" ]; then
-      fail "$rel" "sibling file missing: $f"
-    fi
-  done
+  const severity = frontmatter.get('severity');
+  if (severity && !allowedSeverity.has(severity)) {
+    fail(rel, `severity not in [${Array.from(allowedSeverity).join(' ')}]: ${severity}`);
+  }
 
-  if [ -f "$dir/occurrences.md" ] && grep -Eq '\|[[:space:]]*TODO[[:space:]]*\|' "$dir/occurrences.md"; then
-    fail "$rel" "occurrences.md still contains scaffold TODO row"
-  fi
-done
+  const category = frontmatter.get('category');
+  if (category && !allowedCategory.has(category)) {
+    fail(rel, `category not in [${Array.from(allowedCategory).join(' ')}]: ${category}`);
+  }
 
-if [ "$errors" -gt 0 ]; then
-  printf 'lint: %d error(s) across %d folder(s)\n' "$errors" "$checked" >&2
-  exit 1
-fi
+  for (const sibling of ['occurrences.md', 'protocol.md', 'measures.md', 'ideas.md', 'related.md']) {
+    if (!fs.existsSync(path.join(dir, sibling))) {
+      fail(rel, `sibling file missing: ${sibling}`);
+    }
+  }
 
-printf 'lint: ok (%d folder(s))\n' "$checked"
+  const occurrences = readIfExists(path.join(dir, 'occurrences.md'));
+  if (occurrences !== null && todoTableCellPattern.test(occurrences)) {
+    fail(rel, 'occurrences.md still contains scaffold TODO row');
+  }
+
+  const measures = readIfExists(path.join(dir, 'measures.md'));
+  if (measures !== null) {
+    if (scaffoldPlaceholderPattern.test(measures)) {
+      fail(rel, 'measures.md still contains scaffold placeholder text');
+    }
+    if (todoTableCellPattern.test(measures)) {
+      fail(rel, 'measures.md still contains scaffold TODO row');
+    }
+  }
+}
+
+if (errors > 0) {
+  console.error(`lint: ${errors} error(s) across ${checked} folder(s)`);
+  process.exit(1);
+}
+
+console.log(`lint: ok (${checked} folder(s))`);
+NODE

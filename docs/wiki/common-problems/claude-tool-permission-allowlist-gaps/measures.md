@@ -2,4 +2,4 @@
 
 | Status | Date (UTC) | Measure | Owner | Outcome |
 |---|---|---|---|---|
-| TODO | TODO | Add a typed outcome category for non-interactive permission denial. | Platform | Would let the UI explain the exact unblocker. |
+| tried | 2026-06-03 | Add a typed outcome category for non-interactive permission denial. | Platform | Proposed follow-up; not yet implemented. |

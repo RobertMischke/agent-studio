@@ -2,4 +2,4 @@
 
 | Status | Date (UTC) | Measure | Owner | Outcome |
 |---|---|---|---|---|
-| TODO | TODO | Add a regression test for empty workspace visibility. | Platform | Would lock create/list symmetry. |
+| tried | 2026-06-03 | Add a regression test for empty workspace visibility. | Platform | Proposed follow-up; not yet implemented. |
