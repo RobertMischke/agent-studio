@@ -14,6 +14,7 @@ public static class CliThinkingLevels
     public const string Max = "max";
 
     private static readonly IReadOnlyList<string> OpenAiLevels = [Minimal, Low, Medium, High];
+    private static readonly IReadOnlyList<string> OpenAiXHighLevels = [Minimal, Low, Medium, High, XHigh];
     private static readonly IReadOnlyList<string> ClaudeBasicLevels = [Low, Medium, High];
     private static readonly IReadOnlyList<string> ClaudeOpus45And46Levels = [Low, Medium, High, Max];
     private static readonly IReadOnlyList<string> ClaudeOpus47And48Levels = [Low, Medium, High, XHigh, Max];
@@ -24,7 +25,10 @@ public static class CliThinkingLevels
         var m = (model ?? string.Empty).Trim();
 
         if (string.Equals(cli, CliTypes.Codex, StringComparison.OrdinalIgnoreCase))
-            return IsForeignCodexModel(m) ? [] : OpenAiLevels;
+        {
+            if (IsForeignCodexModel(m)) return [];
+            return IsXHighCapableCodexModel(m) ? OpenAiXHighLevels : OpenAiLevels;
+        }
 
         if (string.Equals(cli, CliTypes.Claude, StringComparison.OrdinalIgnoreCase))
         {
@@ -71,4 +75,19 @@ public static class CliThinkingLevels
         => model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)
            || model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase)
            || model.StartsWith("copilot", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Codex exposes the "Extra High" (<c>xhigh</c>) reasoning effort only on
+    /// newer OpenAI models (gpt-5.5 and later). The codex <c>ReasoningEffort</c>
+    /// enum serializes to lowercase, so the selector maps directly to
+    /// <c>model_reasoning_effort="xhigh"</c>. Older codex models (gpt-5, gpt-5-codex)
+    /// top out at <c>high</c>.
+    /// </summary>
+    private static bool IsXHighCapableCodexModel(string model)
+    {
+        var m = model.Replace('.', '-').ToLowerInvariant();
+        return m.Contains("gpt-5-5", StringComparison.Ordinal)   // gpt-5.5
+               || m.Contains("gpt-6", StringComparison.Ordinal)
+               || m.Contains("gpt-7", StringComparison.Ordinal);
+    }
 }

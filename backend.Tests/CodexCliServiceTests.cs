@@ -259,6 +259,41 @@ public class CodexCliServiceTests
     }
 
     [Fact]
+    public void BuildStartInfo_AddsXHighReasoningEffort_ForGpt55()
+    {
+        var svc = BuildService();
+
+        var args = svc.BuildStartInfoForTest(
+            "do work",
+            Environment.CurrentDirectory,
+            sessionName: null,
+            resumeSession: false,
+            model: "gpt-5.5",
+            thinkingLevel: "xhigh").ArgumentList.ToArray();
+
+        // Codex exposes "Extra High" (xhigh) for gpt-5.5+; the enum serializes lowercase.
+        Assert.Contains("model_reasoning_effort=\"xhigh\"", args);
+    }
+
+    [Fact]
+    public void BuildStartInfo_RejectsXHigh_ForLegacyCodexModel()
+    {
+        var svc = BuildService();
+
+        var args = svc.BuildStartInfoForTest(
+            "do work",
+            Environment.CurrentDirectory,
+            sessionName: null,
+            resumeSession: false,
+            model: "gpt-5-codex",
+            thinkingLevel: "xhigh").ArgumentList.ToArray();
+
+        // gpt-5-codex tops out at "high" → xhigh falls back to the codex default (medium).
+        Assert.Contains("model_reasoning_effort=\"medium\"", args);
+        Assert.DoesNotContain("model_reasoning_effort=\"xhigh\"", args);
+    }
+
+    [Fact]
     public void TryExtractCommandExecution_ParsesCanonicalFrame()
     {
         // Real Codex frame shape from the 2026-05-12 Lotta-dashboard bug.
