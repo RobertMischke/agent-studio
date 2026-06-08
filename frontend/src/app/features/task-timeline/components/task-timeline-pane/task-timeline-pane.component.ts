@@ -12,6 +12,8 @@ import {
   type SteeringInfo,
 } from '../../../../components/steering-detail';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
+import { RunTimelinePollService } from '../../../polling/services/run-timeline-poll.service';
+import type { RunRecord } from '../../../run-timeline';
 import {
   TIMELINE_KIND,
   verdictLabel,
@@ -44,12 +46,30 @@ import {
 })
 export class TaskTimelinePaneComponent {
   private readonly poll = inject(TaskTimelinePollService);
+  private readonly runPoll = inject(RunTimelinePollService, { optional: true });
 
   /** Raw ledger rows, oldest first (the story reads forward). */
   readonly events = this.poll.events;
   readonly completionLoop = this.poll.completionLoop;
+  readonly runs = computed(() => this.runPoll?.runs() ?? []);
 
-  readonly hasEvents = computed(() => this.events().length > 0);
+  /**
+   * Chronological story rows for the tab. New tasks should already carry
+   * agent_run_* rows in timeline.jsonl. Legacy / recovered original cards
+   * can predate those mirrors, so the Timeline tab synthesizes one compact
+   * run-summary row per recorded RunRecord instead of showing an empty story
+   * while the Protocol pane has run data.
+   */
+  readonly displayEvents = computed<TaskTimelineEvent[]>(() => {
+    const events = this.events();
+    if (events.some(e => e.kind === TIMELINE_KIND.agentRunStarted || e.kind === TIMELINE_KIND.agentRunFinished)) {
+      return events;
+    }
+    const synthesized = this.runs().map(r => this.runSummaryEvent(r));
+    return [...events, ...synthesized].sort((a, b) => this.compareIso(a.ts, b.ts));
+  });
+
+  readonly hasEvents = computed(() => this.displayEvents().length > 0);
   readonly hasLoop = computed(() => this.completionLoop().hasActivity);
 
   /** "N / M" attempt counter for the banner, or "N" when budget is unknown. */
@@ -122,6 +142,7 @@ export class TaskTimelinePaneComponent {
     switch (kind) {
       case TIMELINE_KIND.promptCreated:               return 'Prompt created';
       case TIMELINE_KIND.agentRunStarted:             return 'Run started';
+      case TIMELINE_KIND.runnerSlotAdmission:         return 'Slot admitted';
       case TIMELINE_KIND.agentRunFinished:            return 'Run finished';
       case TIMELINE_KIND.preStepStarted:              return 'Pre-step started';
       case TIMELINE_KIND.preStepFinished:             return 'Pre-step finished';
@@ -133,6 +154,7 @@ export class TaskTimelinePaneComponent {
       case TIMELINE_KIND.qualityLoopReopened:         return 'Re-opened (go again)';
       case TIMELINE_KIND.humanReviewDecided:          return 'Human review decided';
       case TIMELINE_KIND.laneChanged:                 return 'Lane changed';
+      case TIMELINE_KIND.epicDecomposed:              return 'Epic decomposed';
       case TIMELINE_KIND.mergedIn:                    return 'Merged in';
       case TIMELINE_KIND.readOnlyContainmentViolation: return 'Containment violation';
       default:                                        return kind;
@@ -195,5 +217,57 @@ export class TaskTimelinePaneComponent {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
     return d.toLocaleString();
+  }
+
+  private runSummaryEvent(run: RunRecord): TaskTimelineEvent {
+    const started = this.formatTime(run.startedAt);
+    const duration = run.durationSeconds != null ? ` after ${this.formatDuration(run.durationSeconds)}` : '';
+    const status = this.runStatusLabel(run.status);
+    const details: Record<string, string> = {
+      run: `#${run.index}`,
+      intent: run.intent || 'run',
+      status,
+    };
+    if (run.cli) details['cli'] = run.cli;
+    if (run.exitCode != null) details['exitCode'] = String(run.exitCode);
+    if (run.userFollowup) details['userFollowup'] = run.userFollowup;
+    if (run.reason) details['reason'] = run.reason;
+
+    return {
+      ts: run.endedAt ?? run.startedAt,
+      kind: TIMELINE_KIND.agentRunFinished,
+      actor: 'agent',
+      runId: run.capturedSessionId ?? run.inputSessionId ?? `run-${run.index}`,
+      summary: `Run #${run.index} ${status}${duration}${started ? `, started ${started}` : ''}`,
+      details,
+    };
+  }
+
+  private runStatusLabel(status: string): string {
+    switch (status) {
+      case 'completed': return 'completed';
+      case 'failed': return 'failed';
+      case 'running': return 'running';
+      case 'stopped':
+      case 'cancelled': return 'stopped';
+      default: return status || 'unknown';
+    }
+  }
+
+  private formatDuration(seconds: number): string {
+    if (seconds < 1) return '<1s';
+    if (seconds < 60) return `${seconds.toFixed(0)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s === 0 ? `${m}m` : `${m}m ${s}s`;
+  }
+
+  private compareIso(a: string, b: string): number {
+    const ta = new Date(a).getTime();
+    const tb = new Date(b).getTime();
+    if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+    if (Number.isNaN(ta)) return 1;
+    if (Number.isNaN(tb)) return -1;
+    return ta - tb;
   }
 }

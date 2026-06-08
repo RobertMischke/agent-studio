@@ -31,6 +31,7 @@ export interface TaskTimelineEvent {
 export const TIMELINE_KIND = {
   promptCreated: 'prompt_created',
   agentRunStarted: 'agent_run_started',
+  runnerSlotAdmission: 'runner_slot_admission',
   agentRunFinished: 'agent_run_finished',
   preStepStarted: 'pre_step_started',
   preStepFinished: 'pre_step_finished',
@@ -42,6 +43,7 @@ export const TIMELINE_KIND = {
   qualityLoopReopened: 'quality_loop_reopened',
   humanReviewDecided: 'human_review_decided',
   laneChanged: 'lane_changed',
+  epicDecomposed: 'epic_decomposed',
   mergedIn: 'merged_in',
   readOnlyContainmentViolation: 'read_only_containment_violation',
 } as const;

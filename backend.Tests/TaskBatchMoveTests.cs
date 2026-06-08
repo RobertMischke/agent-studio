@@ -1,3 +1,6 @@
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
@@ -60,6 +63,63 @@ public class TaskBatchMoveTests : IDisposable
 
         Assert.Equal(5, results.Count);
         Assert.All(results, r => Assert.Equal("moved", r.Status));
+
+        var laneByJob = ReadLaneByJob();
+        Assert.Equal(TaskStates.Ready,       laneByJob["alpha"]);
+        Assert.Equal(TaskStates.Ready,       laneByJob["beta"]);
+        Assert.Equal(TaskStates.Backlog,     laneByJob["gamma"]);
+        Assert.Equal(TaskStates.Backlog,     laneByJob["delta"]);
+        Assert.Equal(TaskStates.Preparation, laneByJob["epsilon"]);
+    }
+
+    [Fact]
+    public async Task JobsBatchMoveEndpoint_FiveMovesAcrossThreeLanes_ReturnsOrderedPerItemResults()
+    {
+        WriteJob(TaskStates.Archive, "alpha");
+        WriteJob(TaskStates.Archive, "beta");
+        WriteJob(TaskStates.Archive, "gamma");
+        WriteJob(TaskStates.Archive, "delta");
+        WriteJob(TaskStates.Archive, "epsilon");
+
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(b =>
+            {
+                b.UseEnvironment("Test");
+                b.ConfigureAppConfiguration((_, cfg) =>
+                {
+                    cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["WatchPaths:0:Name"] = "batchmove-test",
+                        ["WatchPaths:0:Path"] = _watchPath,
+                        ["WatchPaths:0:RootPath"] = _watchPath
+                    });
+                });
+            });
+
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/jobs/batch-move")
+        {
+            Content = JsonContent.Create(new BatchMoveRequest
+            {
+                Items =
+                [
+                    new() { JobId = "alpha",   WatchPath = _watchPath, TargetState = TaskStates.Ready },
+                    new() { JobId = "beta",    WatchPath = _watchPath, TargetState = TaskStates.Ready },
+                    new() { JobId = "gamma",   WatchPath = _watchPath, TargetState = TaskStates.Backlog },
+                    new() { JobId = "delta",   WatchPath = _watchPath, TargetState = TaskStates.Backlog },
+                    new() { JobId = "epsilon", WatchPath = _watchPath, TargetState = TaskStates.Preparation },
+                ]
+            })
+        };
+        request.Headers.Add("X-Client-Id", "local-default");
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<BatchMoveResponse>();
+
+        Assert.NotNull(body);
+        Assert.Equal(["alpha", "beta", "gamma", "delta", "epsilon"], body!.Results.Select(r => r.JobId).ToArray());
+        Assert.All(body.Results, r => Assert.Equal("moved", r.Status));
 
         var laneByJob = ReadLaneByJob();
         Assert.Equal(TaskStates.Ready,       laneByJob["alpha"]);

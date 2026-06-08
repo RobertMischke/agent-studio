@@ -15,17 +15,23 @@ public static class EndpointMapping
 {
     public static void MapAllEndpoints(this WebApplication app)
     {
-        var jobs = app.MapGroup("/api/tasks");
+        var tasks = app.MapGroup("/api/tasks");
+        tasks.MapTaskCrudEndpoints();
+        tasks.MapTaskFilesEndpoints();
+        tasks.MapTaskRunnerEndpoints();
+        tasks.MapTaskGitEndpoints();
+        tasks.MapTaskClaudeEndpoints();
+        tasks.MapTaskReviewEvidenceEndpoints();
+        tasks.MapTaskCodeReviewEndpoints();
+        tasks.MapTaskRegressionRadarEndpoints();
+        tasks.MapTaskPipelineEndpoints();
+        tasks.MapTaskMergeEndpoints();
+
+        // Compatibility route for operator scripts and docs that still use
+        // "jobs" terminology. Keep this mapped to the same CRUD handlers so
+        // /api/jobs/batch-move cannot drift from /api/tasks/batch-move.
+        var jobs = app.MapGroup("/api/jobs");
         jobs.MapTaskCrudEndpoints();
-        jobs.MapTaskFilesEndpoints();
-        jobs.MapTaskRunnerEndpoints();
-        jobs.MapTaskGitEndpoints();
-        jobs.MapTaskClaudeEndpoints();
-        jobs.MapTaskReviewEvidenceEndpoints();
-        jobs.MapTaskCodeReviewEndpoints();
-        jobs.MapTaskRegressionRadarEndpoints();
-        jobs.MapTaskPipelineEndpoints();
-        jobs.MapTaskMergeEndpoints();
 
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();

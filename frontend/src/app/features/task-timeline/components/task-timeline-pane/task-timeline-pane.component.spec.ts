@@ -3,11 +3,47 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskTimelinePaneComponent } from './task-timeline-pane.component';
 import { TaskTimelinePollService } from '../../../polling/services/task-timeline-poll.service';
+import { RunTimelinePollService } from '../../../polling/services/run-timeline-poll.service';
+import type { RunRecord, RunTimeline } from '../../../run-timeline';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TIMELINE_KIND, type TaskTimelineEvent } from '../../models/task-timeline.model';
 
-async function build(events: TaskTimelineEvent[] = []) {
+function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
+  return {
+    index: 1,
+    intent: 'start',
+    startedAt: '2026-05-30T10:00:00Z',
+    endedAt: '2026-05-30T10:10:00Z',
+    status: 'completed',
+    cli: 'codex',
+    exitCode: 0,
+    durationSeconds: 600,
+    inputSessionId: null,
+    capturedSessionId: null,
+    resumed: false,
+    reason: null,
+    userFollowup: null,
+    lineStart: null,
+    lineEnd: null,
+    headShaBefore: null,
+    headShaAfter: null,
+    contextRef: null,
+    ...overrides,
+  };
+}
+
+function runTimeline(runs: RunRecord[]): RunTimeline {
+  return {
+    runCount: runs.length,
+    firstStartedAt: runs[0]?.startedAt ?? null,
+    lastActivityAt: runs.at(-1)?.endedAt ?? runs.at(-1)?.startedAt ?? null,
+    hasActiveRun: runs.some(r => r.status === 'running'),
+    runs,
+  };
+}
+
+async function build(events: TaskTimelineEvent[] = [], runs: RunRecord[] = []) {
   await TestBed.configureTestingModule({
     imports: [TaskTimelinePaneComponent],
     providers: [
@@ -15,9 +51,11 @@ async function build(events: TaskTimelineEvent[] = []) {
       provideHttpClient(),
       provideHttpClientTesting(),
       TaskTimelinePollService,
+      RunTimelinePollService,
     ],
   }).compileComponents();
   TestBed.inject(TaskTimelinePollService).events.set(events);
+  TestBed.inject(RunTimelinePollService).timeline.set(runs.length > 0 ? runTimeline(runs) : null);
   const fixture = TestBed.createComponent(TaskTimelinePaneComponent);
   try { fixture.detectChanges(); } catch (e) {
     console.warn('[smoke] TaskTimelinePaneComponent render skipped:', (e as Error).message);
@@ -68,7 +106,56 @@ describe('TaskTimelinePaneComponent', () => {
     expect(c.rowTone(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('danger');
     expect(c.verdictLabel('escalated')).toBe('Escalated to human');
     expect(c.kindLabel(TIMELINE_KIND.qualityLoopReopened)).toBe('Re-opened (go again)');
+    expect(c.kindLabel(TIMELINE_KIND.runnerSlotAdmission)).toBe('Slot admitted');
+    expect(c.kindLabel(TIMELINE_KIND.epicDecomposed)).toBe('Epic decomposed');
     expect(c.kindLabel(TIMELINE_KIND.readOnlyContainmentViolation)).toBe('Containment violation');
+  });
+
+  it('renders run-summary rows when a legacy card has run records but no ledger run events', async () => {
+    const fixture = await build(
+      [
+        {
+          ts: '2026-05-30T09:55:00Z',
+          kind: TIMELINE_KIND.promptCreated,
+          actor: 'system',
+          summary: 'Prompt created',
+        },
+      ],
+      [
+        runRecord({
+          index: 2,
+          intent: 'continue',
+          userFollowup: 'Finish the original task without creating a wrapper.',
+        }),
+      ],
+    );
+    const c = fixture.componentInstance;
+    expect(c.hasEvents()).toBe(true);
+    expect(c.displayEvents().map(e => e.kind)).toEqual([
+      TIMELINE_KIND.promptCreated,
+      TIMELINE_KIND.agentRunFinished,
+    ]);
+    expect(c.displayEvents()[1].summary).toContain('Run #2 completed');
+    expect(c.displayEvents()[1].details?.['userFollowup']).toContain('Finish the original task');
+
+    const html = fixture.nativeElement as HTMLElement;
+    expect(html.querySelectorAll('[data-testid="timeline-event"]').length).toBe(2);
+    expect(html.textContent).toContain('Run #2 completed');
+  });
+
+  it('does not synthesize duplicate run rows when timeline already carries agent run events', async () => {
+    const fixture = await build(
+      [
+        {
+          ts: '2026-05-30T10:00:00Z',
+          kind: TIMELINE_KIND.agentRunStarted,
+          actor: 'system',
+          summary: 'codex CLI start',
+        },
+      ],
+      [runRecord()],
+    );
+    expect(fixture.componentInstance.displayEvents().length).toBe(1);
   });
 
   it('formatTime shows time only for today and date + time for other days', async () => {
