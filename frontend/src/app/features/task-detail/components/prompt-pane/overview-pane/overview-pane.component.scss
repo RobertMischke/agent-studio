@@ -255,6 +255,22 @@
   > app-agent-work-detail {
     grid-column: 1 / -1;
   }
+
+  &--definition {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ov-agent-inline {
+  display: grid;
+  grid-template-columns: 1fr;
+  row-gap: var(--studio-row-gap);
+  min-width: 0;
+}
+
+.ov-agent-inline.studio-measure {
+  width: 100%;
+  max-width: none;
 }
 
 .ov-token-panel {

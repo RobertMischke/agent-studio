@@ -62,10 +62,10 @@
     }
   </section>
 
-  <!-- Status block -->
+  <!-- Compact status + agent block -->
   <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-status">
-    <h3 class="ov-section__title">Status</h3>
-    <div class="ov-grid">
+    <h3 class="ov-section__title">Status + Agent</h3>
+    <div class="ov-grid ov-grid--definition">
       @if (failureInfo(); as reason) {
         <div class="ov-row ov-row--failure" data-testid="overview-failure-reason">
           <span class="ov-label">Failure</span>
@@ -87,62 +87,58 @@
           <span class="ov-dim">({{ formatAbsoluteTime(job().createdAt) }})</span>
         </span>
       </div>
+
+      <div class="ov-agent-inline studio-measure studio-measure--tabular" data-testid="overview-agent">
+        <div class="ov-row ov-row--wide">
+          <span class="ov-label">Model</span>
+          <span class="ov-value">
+            <app-cli-model-selector
+              [cliType]="effectiveCliType()"
+              [model]="effectiveModel()"
+              [thinkingLevel]="effectiveThinkingLevel()"
+              [availableModels]="availableModels()"
+              [disabled]="isRunning()"
+              triggerTestid="chat-compose-model"
+              pickerTestidPrefix="chat-model-picker"
+              (commit)="agentConfigCommit.emit($event)" />
+          </span>
+        </div>
+
+        <div class="ov-row">
+          <span class="ov-label">CLI</span>
+          <span class="ov-value">
+            @if (job().cliType; as ct) {
+              <span class="ov-cli-chip">
+                <span aria-hidden="true">{{ cliTypeIcon(ct) }}</span>
+                {{ cliTypeLabel(ct) }}
+              </span>
+            } @else {
+              <span class="ov-dim">Not set</span>
+            }
+          </span>
+        </div>
+
+        <div class="ov-row">
+          <span class="ov-label">Owner</span>
+          <span class="ov-value">
+            @if (owner(); as ow) {
+              <span class="ov-owner-chip"
+                    [style.color]="ow.colour || 'var(--studio-fg)'"
+                    [appTooltip]="ow.displayName + ' (' + ow.kind + ')'">
+                <span aria-hidden="true">{{ ow.emoji || '·' }}</span>
+                {{ ow.displayName }}
+              </span>
+            }
+          </span>
+        </div>
+
+      </div>
     </div>
   </section>
 
   <div class="studio-measure studio-measure--tabular">
     <app-references-section [info]="job()" (changed)="referencesChanged.emit()" />
   </div>
-
-  <!-- Agent block -->
-  <section class="ov-section studio-measure studio-measure--tabular" data-testid="overview-agent">
-    <h3 class="ov-section__title">Agent</h3>
-    <div class="ov-grid">
-      <div class="ov-row ov-row--wide">
-        <span class="ov-label">Model</span>
-        <span class="ov-value">
-          <app-cli-model-selector
-            [cliType]="effectiveCliType()"
-            [model]="effectiveModel()"
-            [thinkingLevel]="effectiveThinkingLevel()"
-            [availableModels]="availableModels()"
-            [disabled]="isRunning()"
-            triggerTestid="chat-compose-model"
-            pickerTestidPrefix="chat-model-picker"
-            (commit)="agentConfigCommit.emit($event)" />
-        </span>
-      </div>
-
-      <div class="ov-row">
-        <span class="ov-label">CLI</span>
-        <span class="ov-value">
-          @if (job().cliType; as ct) {
-            <span class="ov-cli-chip">
-              <span aria-hidden="true">{{ cliTypeIcon(ct) }}</span>
-              {{ cliTypeLabel(ct) }}
-            </span>
-          } @else {
-            <span class="ov-dim">Not set</span>
-          }
-        </span>
-      </div>
-
-      <div class="ov-row">
-        <span class="ov-label">Owner</span>
-        <span class="ov-value">
-          @if (owner(); as ow) {
-            <span class="ov-owner-chip"
-                  [style.color]="ow.colour || 'var(--studio-fg)'"
-                  [appTooltip]="ow.displayName + ' (' + ow.kind + ')'">
-              <span aria-hidden="true">{{ ow.emoji || '·' }}</span>
-              {{ ow.displayName }}
-            </span>
-          }
-        </span>
-      </div>
-
-    </div>
-  </section>
 
   <!-- Tokens block. Orchestrator-side LLM spend + the agent's own CLI footer.
        Run count and elapsed time used to live here too, but they duplicated
