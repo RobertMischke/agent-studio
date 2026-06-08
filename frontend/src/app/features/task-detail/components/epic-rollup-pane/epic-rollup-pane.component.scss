@@ -15,7 +15,7 @@
   padding: var(--studio-spacing-3);
   border: 0;
   border-radius: 0;
-  background: color-mix(in srgb, var(--studio-accent) 7%, transparent);
+  background: var(--studio-bg-elevated);
 
   /* Editable epic properties (description / references / model+CLI). Sits
      above the status board so the pane reads as Edit-then-Status. */
@@ -182,8 +182,8 @@
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: var(--studio-spacing-4);
-    margin-top: var(--studio-spacing-1);
+    gap: var(--studio-spacing-5);
+    margin-top: var(--studio-spacing-2);
   }
 
   &__lane {
@@ -191,7 +191,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--studio-spacing-2);
+    gap: var(--studio-spacing-1);
     padding: 0;
     border: 0;
     background: transparent;
@@ -213,7 +213,7 @@
     gap: var(--studio-spacing-1);
     min-height: 24px;
     padding-bottom: var(--studio-spacing-1);
-    border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 70%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 44%, transparent);
   }
 
   &__lane-dot {
@@ -255,7 +255,7 @@
   }
 
   &__lane-list li {
-    border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 62%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--studio-border) 46%, transparent);
 
     &:last-child {
       border-bottom: 0;
@@ -268,11 +268,11 @@
     width: 100%;
     text-align: left;
     border: 0;
-    border-radius: 3px;
+    border-radius: 2px;
     background: transparent;
     color: var(--studio-fg);
     cursor: pointer;
-    padding: var(--studio-spacing-2) var(--studio-spacing-1);
+    padding: var(--studio-spacing-2) 0;
     font-size: 12px;
     line-height: 1.3;
     overflow: hidden;
