@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -29,7 +29,16 @@ function el(fixture: { nativeElement: HTMLElement }, testid: string): HTMLElemen
   return fixture.nativeElement.querySelector(`[data-testid="${testid}"]`);
 }
 
+function overlayEl(testid: string): HTMLElement | null {
+  return document.body.querySelector(`[data-testid="${testid}"]`);
+}
+
 describe('TaskPromptPopoverComponent', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    document.body.querySelector('.studio-overlay-root')?.remove();
+  });
+
   it('hides the trigger when there is no prompt text', async () => {
     const fixture = await mount('   ');
     expect(fixture.componentInstance.hasPrompt()).toBe(false);
@@ -44,20 +53,25 @@ describe('TaskPromptPopoverComponent', () => {
     expect(el(fixture, 'overview-prompt-popover')).toBeNull();
   });
 
-  it('opens the read-only popover on trigger click and closes on close button', async () => {
+  it('opens a centered read-only modal on trigger click and closes on close button', async () => {
     const fixture = await mount('Task body markdown');
     const trigger = el(fixture, 'overview-prompt-trigger') as HTMLButtonElement;
 
     trigger.click();
     fixture.detectChanges();
     expect(fixture.componentInstance.open()).toBe(true);
-    expect(el(fixture, 'overview-prompt-popover')).not.toBeNull();
-    expect(el(fixture, 'overview-prompt-popover-body')).not.toBeNull();
+    const modal = overlayEl('overview-prompt-popover');
+    expect(modal).not.toBeNull();
+    expect(modal?.classList.contains('prompt-pop__modal')).toBe(true);
+    expect(modal?.getAttribute('aria-modal')).toBe('true');
+    expect(modal?.style.left).toBe('');
+    expect(modal?.style.top).toBe('');
+    expect(overlayEl('overview-prompt-popover-body')).not.toBeNull();
 
-    (el(fixture, 'overview-prompt-popover-close') as HTMLButtonElement).click();
+    (overlayEl('overview-prompt-popover-close') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.componentInstance.open()).toBe(false);
-    expect(el(fixture, 'overview-prompt-popover')).toBeNull();
+    expect(overlayEl('overview-prompt-popover')).toBeNull();
   });
 
   it('registers a modal-stack entry only while open (Escape arbitration)', async () => {
@@ -85,6 +99,17 @@ describe('TaskPromptPopoverComponent', () => {
     );
     fixture.detectChanges();
     // target defaults to null (outside the host) -> closes.
+    expect(fixture.componentInstance.open()).toBe(false);
+  });
+
+  it('closes on backdrop click', async () => {
+    const fixture = await mount('Task body markdown');
+    fixture.componentInstance.toggle(new MouseEvent('click'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.open()).toBe(true);
+
+    overlayEl('overview-prompt-popover')?.click();
+    fixture.detectChanges();
     expect(fixture.componentInstance.open()).toBe(false);
   });
 });

@@ -195,6 +195,33 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void IntegrationConflictMarker_SurfacesHighSeverityOutcomeWithFiles()
+    {
+        SeedJob("integration-conflict", TaskStates.AutoReview,
+            $"[09:10:00.000] [orchestrator] [integration-conflict] Worktree branch integration is blocked by a merge conflict. Task branch `task/ASS-111` was not merged into `develop`. Worktree: `C:\\temp\\ass-worktrees\\ASS-111`. Conflicted files: frontend/src/app/tree.ts. Error: could not apply commit{Environment.NewLine}");
+
+        var issue = Outcome("integration-conflict");
+
+        Assert.NotNull(issue);
+        Assert.Equal("integration-conflict", issue!.Kind);
+        Assert.Equal("High", issue.Severity);
+        Assert.Contains("frontend/src/app/tree.ts", issue.Summary);
+    }
+
+    [Fact]
+    public void IntegrationErrorMarker_SurfacesHighSeverityOutcome()
+    {
+        SeedJob("integration-error", TaskStates.AutoReview,
+            $"[09:10:00.000] [orchestrator] [integration-error] Worktree branch integration failed with outcome `Error`. Task branch `task/ASS-112` was not merged into `develop`. Worktree: `C:\\temp\\ass-worktrees\\ASS-112`. Conflicted files: none reported. Error: ff-only failed{Environment.NewLine}");
+
+        var issue = Outcome("integration-error");
+
+        Assert.NotNull(issue);
+        Assert.Equal("integration-error", issue!.Kind);
+        Assert.Equal("High", issue.Severity);
+    }
+
+    [Fact]
     public void AgentStdoutMentioningContainmentInProse_DoesNotFalselySurface()
     {
         // ASS-914 regression (scanner self-reference): a self-modifying task whose

@@ -81,6 +81,8 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.ClassifierUnknown, "Warn", "classifier-unknown")]
     [InlineData(OrchestratorMessageKind.CliLaunchFailed, "Warn", "cli-launch-failed")]
     [InlineData(OrchestratorMessageKind.GiveUp, "High", "giveup")]
+    [InlineData(OrchestratorMessageKind.IntegrationConflict, "High", "integration-conflict")]
+    [InlineData(OrchestratorMessageKind.IntegrationError, "High", "integration-error")]
     public async Task EmitOrchestratorChatAsync_MapsKindToSeverityAndTopic(OrchestratorMessageKind kind, string expectedSeverity, string expectedTopic)
     {
         var info = NewJobInfo();

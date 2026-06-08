@@ -43,6 +43,27 @@ public class ConversationProjectionTests
     }
 
     [Fact]
+    public void ImageRewriter_NestedResultsFolder_RoutesThroughScreenshotHandler()
+    {
+        var html = "<img src=\"results/playwright/spec-name/proof.png\" alt=\"proof\" />";
+        var ctx = new ImageContext { JobId = "job-1", WatchPath = "C:/work/project" };
+        var result = ImageUrlRewriter.Rewrite(html, ctx);
+
+        Assert.Contains("/api/tasks/job-1/screenshot?path=playwright%2Fspec-name%2Fproof.png&amp;watchPath=C%3A%2Fwork%2Fproject", result);
+        Assert.Contains("data-lightbox-src=\"/api/tasks/job-1/screenshot?path=playwright%2Fspec-name%2Fproof.png&amp;watchPath=C%3A%2Fwork%2Fproject\"", result);
+    }
+
+    [Fact]
+    public void ImageRewriter_TopLevelResultsFolder_KeepsResultsHandlerWithWatchPath()
+    {
+        var html = "<img src=\"results/before.png\" alt=\"r\" />";
+        var ctx = new ImageContext { JobId = "job-1", WatchPath = "C:/work/project" };
+        var result = ImageUrlRewriter.Rewrite(html, ctx);
+
+        Assert.Contains("/api/tasks/job-1/results/before.png?watchPath=C%3A%2Fwork%2Fproject", result);
+    }
+
+    [Fact]
     public void ImageRewriter_ChatAttachments_UsesProjectScopedHandler()
     {
         var html = "<img src=\"chat-attachments/screen.png\" alt=\"c\" />";

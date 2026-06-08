@@ -324,7 +324,8 @@
                                   (projectChanged)="onProjectChanged($event)"
                                   (deleteRequested)="onDeleteFromDetail(detail.info)"
                                   (navigateLaneRequested)="onNavigateLane($event)"
-                                  (openEpicRequested)="onOpenJobDetailFromSheet($event)"
+                                  (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)"
+                                  (openSubTaskRequested)="onOpenJobDetailFromSheet($event)"
                                   (triageMoveRequested)="onTriageMove(detail.info, $event)"
                                   (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
                                   (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
@@ -338,6 +339,53 @@
                   <p>The task tab requires a selected job. Open one from the Explorer panel
                     or from the board.</p>
                 </div>
+              }
+            }
+            @case ('epic') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'epic' && selectedJob(); as detail) {
+                  <main class="workspace__main workspace__main--studio" data-testid="studio-epic">
+                    <app-job-detail #jobDetail
+                                    [detail]="detail"
+                                    [watchPaths]="watchPaths()"
+                                    [lanePeers]="triageLanePeers()"
+                                    [mutationsBlocked]="updateClient.mutationsBlocked()"
+                                    [selectedSubTaskId]="epicTabTaskDetail()?.info?.id ?? null"
+                                    (back)="closeDetail()"
+                                    (fileSaved)="onFileSaved()"
+                                    (projectChanged)="onProjectChanged($event)"
+                                    (deleteRequested)="onDeleteFromDetail(detail.info)"
+                                    (navigateLaneRequested)="onNavigateLane($event)"
+                                    (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)"
+                                    (openSubTaskRequested)="onEpicTabOpenSubTask($event)"
+                                    (triageMoveRequested)="onTriageMove(detail.info, $event)"
+                                    (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
+                                    (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
+                                    (triageStartRequested)="onTriageStart(detail.info, $event)"
+                                    (nextInLaneRequested)="onTriageNext(detail.info)"
+                                    (prevInLaneRequested)="onTriagePrev(detail.info)" />
+                    @if (epicTabTaskDetail(); as subDetail) {
+                      <app-job-detail
+                        [detail]="subDetail"
+                        [watchPaths]="watchPaths()"
+                        [lanePeers]="epicTabSubTaskPeers()"
+                        [mutationsBlocked]="updateClient.mutationsBlocked()"
+                        (back)="closeEpicTabTaskDetail()"
+                        (fileSaved)="onFileSaved()"
+                        (projectChanged)="onProjectChanged($event)"
+                        (deleteRequested)="onDeleteFromDetail(subDetail.info)"
+                        (navigateLaneRequested)="onEpicTabNavigateLane($event)"
+                        (openEpicRequested)="onOpenEpicFromTaskAnchor(subDetail.info, $event)"
+                        (openSubTaskRequested)="onOpenJobDetailFromSheet($event)"
+                        (triageMoveRequested)="onTriageMove(subDetail.info, $event)"
+                        (triageMoveToTopRequested)="onTriageMoveToTop(subDetail.info, $event)"
+                        (triageDeleteRequested)="onTriageDelete(subDetail.info, $event)"
+                        (triageStartRequested)="onTriageStart(subDetail.info, $event)"
+                        (nextInLaneRequested)="onEpicTabNextSubTask(subDetail.info)"
+                        (prevInLaneRequested)="onEpicTabPrevSubTask(subDetail.info)" />
+                    }
+                  </main>
+                }
               }
             }
             @case ('hub') {
@@ -636,7 +684,8 @@
                               (projectChanged)="onProjectChanged($event)"
                               (deleteRequested)="onDeleteFromDetail(detail.info)"
                               (navigateLaneRequested)="onNavigateLane($event)"
-                              (openEpicRequested)="onOpenJobDetailFromSheet($event)"
+                              (openEpicRequested)="onOpenEpicFromTaskAnchor(detail.info, $event)"
+                              (openSubTaskRequested)="onOpenJobDetailFromSheet($event)"
                               (triageMoveRequested)="onTriageMove(detail.info, $event)"
                               (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
                               (triageDeleteRequested)="onTriageDelete(detail.info, $event)"

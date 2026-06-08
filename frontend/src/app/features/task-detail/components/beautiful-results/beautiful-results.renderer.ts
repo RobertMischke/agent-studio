@@ -175,13 +175,12 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
       image(token: Tokens.Image): string {
         const resolved = resolveProtocolImageSrc(token.href, context.jobId, context.watchPath);
         const alt = token.text ?? '';
-        const titleAttr = token.title ? ` title="${escapeAttr(token.title)}"` : '';
         const caption = alt
           ? `<figcaption class="results-figure__caption">${escapeHtml(alt)}</figcaption>`
           : '';
         return `<figure class="results-figure">`
           + `<button type="button" class="results-figure__btn" data-results-lightbox="${escapeAttr(resolved)}" data-results-alt="${escapeAttr(alt)}" aria-label="Open image">`
-          + `<img class="results-figure__img" src="${escapeAttr(resolved)}" alt="${escapeAttr(alt)}"${titleAttr} loading="lazy">`
+          + `<img class="results-figure__img" src="${escapeAttr(resolved)}" alt="${escapeAttr(alt)}" loading="lazy">`
           + `</button>${caption}</figure>`;
       },
       // External links open in a new tab; internal anchors stay in place.
@@ -192,8 +191,7 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
           : escapeHtml(token.text ?? '');
         const external = /^https?:/i.test(href);
         const attrs = external ? ' target="_blank" rel="noopener noreferrer"' : '';
-        const titleAttr = token.title ? ` title="${escapeAttr(token.title)}"` : '';
-        return `<a href="${escapeAttr(href)}"${attrs}${titleAttr}>${inner}</a>`;
+        return `<a href="${escapeAttr(href)}"${attrs}>${inner}</a>`;
       }
     }
   };

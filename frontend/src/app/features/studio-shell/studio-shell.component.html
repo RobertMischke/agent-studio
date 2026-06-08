@@ -644,6 +644,9 @@
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
+              @if (t.kind === 'epic') {
+                <app-studio-icon name="epic" [size]="13"></app-studio-icon>
+              }
               <span class="studio-tab__title">{{ tabLabel(t) }}</span>
               <button type="button"
                       class="studio-tab__close"

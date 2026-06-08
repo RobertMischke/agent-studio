@@ -134,8 +134,7 @@ function buildMarkedExtension(options: MarkdownImageOptions): MarkedExtension {
         const inner = token.tokens && token.tokens.length
           ? this.parser.parseInline(token.tokens)
           : escapeHtml(token.text ?? '');
-        const titleAttr = token.title ? ` title="${escapeAttribute(token.title)}"` : '';
-        return `<a href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer"${titleAttr}>${inner}</a>`;
+        return `<a href="${escapeAttribute(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
       },
       image(token: Tokens.Image): string {
         return renderImage(token.text ?? '', token.href ?? '', token.title ?? null, options);
@@ -208,10 +207,9 @@ function normaliseLang(lang: string): string {
   }
 }
 
-function renderImage(alt: string, src: string, title: string | null, options: MarkdownImageOptions): string {
+function renderImage(alt: string, src: string, _title: string | null, options: MarkdownImageOptions): string {
   const resolved = options.resolveImageSrc ? options.resolveImageSrc(src) : src;
-  const titleAttr = title ? ` title="${escapeAttribute(title)}"` : '';
-  return `<img src="${escapeAttribute(resolved)}" alt="${escapeAttribute(alt)}"${titleAttr}>`;
+  return `<img src="${escapeAttribute(resolved)}" alt="${escapeAttribute(alt)}">`;
 }
 
 export function sanitizeHtml(raw: string): string {

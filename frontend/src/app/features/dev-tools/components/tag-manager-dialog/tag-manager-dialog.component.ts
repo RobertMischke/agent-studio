@@ -12,6 +12,7 @@ import { TaskService } from '../../../../services/task.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
+import { TooltipDirective } from '../../../../components/tooltip';
 import { TagRegistryEntry } from '../../../../models/task.model';
 
 type Phase = 'loading' | 'list' | 'error';
@@ -39,7 +40,7 @@ const ID_PATTERN = /^[a-z0-9-]{1,32}$/;
 @Component({
   selector: 'app-tag-manager-dialog',
   standalone: true,
-  imports: [FormsModule, DialogComponent],
+  imports: [FormsModule, DialogComponent, TooltipDirective],
   templateUrl: './tag-manager-dialog.component.html',
   styleUrl: './tag-manager-dialog.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

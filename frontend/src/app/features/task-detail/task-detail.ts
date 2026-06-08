@@ -120,6 +120,7 @@ export class TaskDetailComponent implements OnDestroy {
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /** Peers in the same on-disk lane as the current job, in kanban order. */
   readonly lanePeers = input<TaskInfo[]>([]);
+  readonly selectedSubTaskId = input<string | null>(null);
   /** True while the update-service is mid-update; disables triage actions. */
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
@@ -128,6 +129,7 @@ export class TaskDetailComponent implements OnDestroy {
    *  routes this through the same getDetail + select flow used to open any
    *  task by id (app.onOpenJobDetailFromSheet). */
   readonly openEpicRequested = output<{ jobId: string; watchPath: string }>();
+  readonly openSubTaskRequested = output<{ jobId: string; watchPath: string }>();
 
   /** Forwarded from the prompt-pane Evidence tab into the existing job
    *  service mutation endpoint; the protocol pane no longer hosts the

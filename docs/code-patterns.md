@@ -48,6 +48,29 @@ deploy.
 
 ```yaml
 # ---------------------------------------------------------------------------
+# Tooltip UI uses the canonical directive. Native browser title attributes
+# are slow, unstyled, cannot render structured HTML, and drift from the app's
+# singleton tooltip layer. Component inputs named `title` are allowed when
+# they render visible headings (`<app-dialog title="...">`), so the rule
+# targets native DOM tags plus generated ` title="..."` strings in renderers.
+# ---------------------------------------------------------------------------
+id: tooltip-canonical-directive
+title: Tooltips use [appTooltip], not native title attributes
+description: >
+  Tooltip behaviour in frontend/src/app must go through the canonical
+  standalone [appTooltip] directive under components/tooltip. Native DOM
+  title attributes and generated ` title="..."` strings reintroduce delayed,
+  unstyled browser tooltips; new custom tooltip components drift from the
+  singleton app tooltip layer.
+filePattern: frontend/src/app/.*\.(html|ts)$
+excludeFilePattern: frontend/src/app/components/tooltip/
+candidateMarker: title=|\[title\]|\[attr\.title\]|appTip|titleAttr|selector:\s*['"][^'"]*tooltip|class\s+\w*Tooltip
+badVariant: (?i)<(?!app-|ng-|mat-|cdk-)[a-z][\w-]*(?=[^>]*(?:\s(?:title|\[title\]|\[attr\.title\])\s*=))|` title="|titleAttr\s*=|\[appTip\]|selector:\s*['"][^'"]*tooltip|class\s+\w*Tooltip
+severityIfBad: Warn
+```
+
+```yaml
+# ---------------------------------------------------------------------------
 # Bus-emit fire-and-forget. EmitXxxAsync calls on AgentMessageBusBridge must
 # be fire-and-forget (`_ = _bus?.EmitXxxAsync(...)`) so the bus's best-effort
 # semantics do not block the canonical write path. An `await` on the bridge

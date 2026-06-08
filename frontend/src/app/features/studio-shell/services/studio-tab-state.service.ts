@@ -82,6 +82,34 @@ export class StudioTabStateService {
     }
   }
 
+  /**
+   * Replace an existing tab in place and focus the replacement. If another
+   * tab already owns the replacement key, remove the source and focus the
+   * existing target instead of duplicating.
+   */
+  retarget(sourceKey: string, tab: StudioTab): void {
+    const normalized = this.normalizeTab(tab);
+    const targetKey = studioTabKey(normalized);
+    const list = this._tabs();
+    const sourceIdx = list.findIndex(t => studioTabKey(t) === sourceKey);
+    if (sourceIdx < 0) {
+      this.open(normalized);
+      return;
+    }
+    const existingIdx = list.findIndex((t, i) => i !== sourceIdx && studioTabKey(t) === targetKey);
+    if (existingIdx >= 0) {
+      this._tabs.set(list.filter((_, i) => i !== sourceIdx));
+      this._activeKey.set(targetKey);
+      this.persist();
+      return;
+    }
+    const next = list.slice();
+    next[sourceIdx] = normalized;
+    this._tabs.set(next);
+    this._activeKey.set(targetKey);
+    this.persist();
+  }
+
   /** Close the tab; if it was active, fall back to the last remaining tab. */
   close(key: string): void {
     const next = this._tabs().filter(t => studioTabKey(t) !== key);
@@ -250,6 +278,12 @@ export class StudioTabStateService {
         return { kind: 'backlog', projectName: tab.projectName };
       case 'epics':
         return { kind: 'epics', projectName: tab.projectName };
+      case 'epic':
+        return {
+          kind: 'epic',
+          epicKey: tab.epicKey,
+          viewTaskKey: tab.viewTaskKey || undefined,
+        };
       case 'task':
         return { kind: 'task', taskKey: tab.taskKey };
       case 'hub':

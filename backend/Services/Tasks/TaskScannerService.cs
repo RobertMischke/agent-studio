@@ -783,6 +783,16 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
             return true;
         }
+        if (lower.Contains("[integration-conflict]"))
+        {
+            issue = BuildOutcomeIssue("integration-conflict", "Integration conflict", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("[integration-error]"))
+        {
+            issue = BuildOutcomeIssue("integration-error", "Integration error", "High", line, lastSeenAt);
+            return true;
+        }
         if (lower.Contains("context-overflow"))
         {
             issue = BuildOutcomeIssue("context-overflow", "Context overflow", "High", line, lastSeenAt);

@@ -10,7 +10,8 @@ namespace OrchestratorApi.Services.Projection;
 /// <list type="bullet">
 /// <item>relative path under <c>attachments/</c> → <c>/api/tasks/{jobId}/attachments/...</c></item>
 /// <item>relative path under <c>chat-attachments/</c> → <c>/api/runner/{project}/orchestrator-chat/attachments/...</c></item>
-/// <item>relative path under <c>results/</c> → <c>/api/tasks/{jobId}/results/...</c></item>
+/// <item>top-level relative path under <c>results/</c> → <c>/api/tasks/{jobId}/results/...</c></item>
+/// <item>nested relative path under <c>results/</c> → <c>/api/tasks/{jobId}/screenshot?path=...</c></item>
 /// <item>absolute <c>http(s)://</c> URLs are passed through (sanitizer enforces scheme)</item>
 /// <item>any <c>..</c> traversal is stripped: the img is replaced by its alt text so
 ///   a malicious link cannot pull from outside the job tree</item>
@@ -83,12 +84,16 @@ public static partial class ImageUrlRewriter
         if (trimmed.StartsWith("attachments/", StringComparison.OrdinalIgnoreCase))
         {
             var rest = trimmed["attachments/".Length..];
-            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(rest)}";
+            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(rest)}{WatchPathQuery(ctx, '?')}";
         }
         if (trimmed.StartsWith("results/", StringComparison.OrdinalIgnoreCase))
         {
             var rest = trimmed["results/".Length..];
-            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/results/{EscapePath(rest)}";
+            if (!rest.Contains('/'))
+            {
+                return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/results/{EscapePath(rest)}{WatchPathQuery(ctx, '?')}";
+            }
+            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/screenshot?path={Uri.EscapeDataString(rest)}{WatchPathQuery(ctx, '&')}";
         }
         if (trimmed.StartsWith("chat-attachments/", StringComparison.OrdinalIgnoreCase))
         {
@@ -102,10 +107,16 @@ public static partial class ImageUrlRewriter
         // emitted screenshot paths historically.
         if (!trimmed.Contains('/') && trimmed.Length > 0)
         {
-            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(trimmed)}";
+            return $"/api/tasks/{Uri.EscapeDataString(ctx.JobId)}/attachments/{EscapePath(trimmed)}{WatchPathQuery(ctx, '?')}";
         }
 
         return null;
+    }
+
+    private static string WatchPathQuery(ImageContext ctx, char prefix)
+    {
+        if (string.IsNullOrWhiteSpace(ctx.WatchPath)) return "";
+        return $"{prefix}watchPath={Uri.EscapeDataString(ctx.WatchPath)}";
     }
 
     private static string EscapePath(string rest)

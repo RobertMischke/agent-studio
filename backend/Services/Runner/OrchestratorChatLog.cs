@@ -209,7 +209,16 @@ public enum OrchestratorMessageKind
     /// A worker CLI advanced git history during its own run, bypassing the
     /// platform-owned commit/push boundary.
     /// </summary>
-    AgentGitViolation
+    AgentGitViolation,
+    /// <summary>
+    /// A parallel worktree branch could not be integrated into the configured
+    /// work branch and needs manual merge/conflict resolution.
+    /// </summary>
+    IntegrationConflict,
+    /// <summary>
+    /// A parallel worktree integration step failed for a non-conflict git error.
+    /// </summary>
+    IntegrationError
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -235,6 +244,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
+        OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
+        OrchestratorMessageKind.IntegrationError  => "integration-error",
         _ => "info"
     };
 
@@ -255,6 +266,8 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Quarantined       => "quarantined",
         OrchestratorMessageKind.WorktreeContainment => "worktree-containment",
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
+        OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
+        OrchestratorMessageKind.IntegrationError  => "integration-error",
         _ => kind.ToString().ToLowerInvariant()
     };
 }

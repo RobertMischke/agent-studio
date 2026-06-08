@@ -37,7 +37,6 @@ import {
   splitReadyByPhase,
 } from './features/board';
 import {
-  EpicRollupPaneComponent,
   TaskDetailComponent,
   TaskSelectionService,
   TriageController,
@@ -119,7 +118,6 @@ import type { TaskScreenshot } from './features/screenshots';
 import { TooltipDirective } from './components/tooltip';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from './components/menu';
 import type { TaskTokenSummary } from './features/tokens'; // verbose-debug overlay context types
-import { OverlayPortalDirective } from './directives/overlay-portal.directive';
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
@@ -181,8 +179,6 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     StudioDiffViewComponent,
     StudioActivityViewComponent,
     StudioIconComponent,
-    EpicRollupPaneComponent,
-    OverlayPortalDirective,
   ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
@@ -226,13 +222,10 @@ export class App implements OnInit, OnDestroy {
   private readonly lanePager = inject(LanePagerService);
   readonly selectedJob = this.jobSelection.selected;
   readonly triageToast = this.jobSelection.triageToast;
-  readonly epicOverlayDetail = signal<TaskDetail | null>(null);
-  readonly epicOverlayTaskDetail = signal<TaskDetail | null>(null);
-  private epicOverlayReturnUrl: string | null = null;
-  private epicOverlayReturnSelection: TaskDetail | null = null;
-  private suppressStudioTaskTabForEpicOverlay = false;
-  readonly epicOverlaySubTaskPeers = computed<TaskInfo[]>(() => {
-    const epic = this.epicOverlayDetail();
+  readonly epicTabTaskDetail = signal<TaskDetail | null>(null);
+  readonly epicTabSubTaskPeers = computed<TaskInfo[]>(() => {
+    const epic = this.selectedJob();
+    if (this.studioTabState.activeTab()?.kind !== 'epic') return [];
     if (!epic) return [];
     const laneRank = new Map(Object.keys(LANE_LABELS).map((state, index) => [state, index]));
     return this.jobService.jobs()
@@ -983,7 +976,19 @@ export class App implements OnInit, OnDestroy {
       const selected = this.selectedJob();
       if (!this.featureFlags.vsCodeLayout()) return;
       if (!selected) return;
-      if (this.isEpicOverlaySubTaskDetail(selected)) return;
+      if (selected.info.kind === 'epic') {
+        const key = `epic:${selected.info.taskKey}`;
+        const tabs = untracked(() => this.studioTabState.tabs());
+        const present = tabs.some((t) => t.kind === 'epic' && t.epicKey === selected.info.taskKey);
+        untracked(() => {
+          if (!present) {
+            this.studioTabState.open({ kind: 'epic', epicKey: selected.info.taskKey });
+          } else {
+            this.studioTabState.select(key);
+          }
+        });
+        return;
+      }
       const key = `task:${selected.info.taskKey}`;
       const tabs = untracked(() => this.studioTabState.tabs());
       const present = tabs.some((t) => t.kind === 'task' && t.taskKey === selected.info.taskKey);
@@ -1029,9 +1034,13 @@ export class App implements OnInit, OnDestroy {
           this.studioActiveTabWasTask = true;
           if (selected?.info.taskKey === tab.taskKey) return;
           this.jobSelection.openDetailByTaskKey(tab.taskKey);
+        } else if (tab?.kind === 'epic') {
+          this.studioActiveTabWasTask = true;
+          this.loadEpicTabDetail(tab.epicKey, tab.viewTaskKey ?? null);
         } else {
           const cameFromTask = this.studioActiveTabWasTask;
           this.studioActiveTabWasTask = false;
+          this.epicTabTaskDetail.set(null);
           if (selected || cameFromTask) {
             this.jobSelection.clearSelectionForTabSwitch();
           }
@@ -1079,23 +1088,6 @@ export class App implements OnInit, OnDestroy {
           next: (detail) => this.jobSelection.setSelectedFromAdvance(detail, token),
         });
       });
-    });
-
-    effect(() => {
-      const epic = this.epicOverlayDetail();
-      const selected = this.selectedJob();
-      if (!epic || !selected) return;
-
-      if (
-        selected.info.kind !== 'epic' &&
-        selected.info.epicId === epic.info.id &&
-        selected.info.watchPath === epic.info.watchPath
-      ) {
-        untracked(() => this.epicOverlayTaskDetail.set(selected));
-        return;
-      }
-
-      untracked(() => this.epicOverlayTaskDetail.set(null));
     });
 
     // F43: clear the user's rail-open compact override the moment the
@@ -1278,7 +1270,7 @@ export class App implements OnInit, OnDestroy {
 
   openDetail(job: TaskInfo) {
     if (job.kind === 'epic') {
-      this.openEpicOverlay({ jobId: job.id, watchPath: job.watchPath });
+      this.openEpicAsTab(job);
       return;
     }
     this.jobSelection.openDetail(job);
@@ -1512,11 +1504,38 @@ export class App implements OnInit, OnDestroy {
 
   /**
    * Epic overview screen "open epic" / "open sub-task" click. The Epics
-   * overview is a normal editor tab, so navigation opens the target task in
-   * its own tab and leaves the overview tab in the tab strip.
+   * overview is a normal editor tab, so navigation opens an inline epic
+   * detail tab and keeps the overview tab in the tab strip.
    */
   onEpicOverviewOpenTask(event: { jobId: string; watchPath: string }): void {
-    this.openRelatedJob(event);
+    const requestToken = ++this.relatedOpenToken;
+    this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
+      next: (detail) => {
+        if (requestToken !== this.relatedOpenToken) return;
+        if (detail.info.kind === 'epic') {
+          this.openEpicDetailAsTab(detail);
+          return;
+        }
+        const epic = this.jobService.jobs().find((job) =>
+          job.kind === 'epic' &&
+          job.id === detail.info.epicId &&
+          job.watchPath === detail.info.watchPath
+        );
+        if (!epic) {
+          this.selectFetchedDetail(detail);
+          return;
+        }
+        this.openEpicAsTab(epic);
+        this.selectEpicTabSubTask(detail);
+      },
+      error: (err) => {
+        if (requestToken !== this.relatedOpenToken) return;
+        this.errorDialog.show(err, {
+          title: 'Failed to open task',
+          source: `task ${event.jobId}`,
+        });
+      },
+    });
   }
 
   closeStudioTab(tab: StudioTab): void {
@@ -1706,30 +1725,57 @@ export class App implements OnInit, OnDestroy {
     this.jobSelection.setSelectedFromAdvance(detail, token);
   }
 
-  /**
-   * Target-aware open helper. Epic targets become a closable master/detail
-   * overlay and do not change the selected task or URL; normal task targets
-   * still use the existing task-selection flow and therefore change lane/task
-   * context only after the operator picked a sub-task.
-   */
+  private openEpicAsTab(job: TaskInfo, viewTaskKey?: string): void {
+    this.studioTabState.open({ kind: 'epic', epicKey: job.taskKey, viewTaskKey });
+    this.jobService.getDetail(job.id, job.watchPath).subscribe({
+      next: (detail) => {
+        if (detail.info.kind === 'epic') {
+          const token = this.jobSelection.bumpOpenDetailToken();
+          this.jobSelection.setSelectedFromAdvance(detail, token);
+        }
+      },
+      error: (err) => this.errorDialog.show(err, { title: 'Failed to open epic', source: `task ${job.id}` }),
+    });
+  }
+
+  private openEpicDetailAsTab(detail: TaskDetail, viewTaskKey?: string): void {
+    this.epicTabTaskDetail.set(null);
+    this.studioTabState.open({ kind: 'epic', epicKey: detail.info.taskKey, viewTaskKey });
+    const token = this.jobSelection.bumpOpenDetailToken();
+    this.jobSelection.setSelectedFromAdvance(detail, token);
+  }
+
+  private loadEpicTabDetail(epicKey: string, viewTaskKey: string | null): void {
+    if (this.selectedJob()?.info.taskKey !== epicKey) {
+      this.jobSelection.openDetailByTaskKey(epicKey);
+    }
+    if (viewTaskKey) {
+      this.fetchDetailByTaskKey(viewTaskKey, (detail) => this.selectEpicTabSubTask(detail));
+    } else {
+      this.epicTabTaskDetail.set(null);
+    }
+  }
+
+  private fetchDetailByTaskKey(taskKey: string, onDetail: (detail: TaskDetail) => void): void {
+    const sep = taskKey.lastIndexOf('::');
+    if (sep < 0) return;
+    const watchPath = taskKey.slice(0, sep);
+    const jobId = taskKey.slice(sep + 2);
+    if (!jobId || !watchPath) return;
+    this.jobService.getDetail(jobId, watchPath).subscribe({
+      next: onDetail,
+      error: (err) => this.errorDialog.show(err, { title: 'Failed to open task', source: `task ${jobId}` }),
+    });
+  }
+
+  /** Target-aware open helper. Epic targets become inline epic tabs. */
   openRelatedJob(event: { jobId: string; watchPath: string }): void {
     const requestToken = ++this.relatedOpenToken;
     this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
       next: (detail) => {
         if (requestToken !== this.relatedOpenToken) return;
         if (detail.info.kind === 'epic') {
-          const currentEpic = this.epicOverlayDetail();
-          if (
-            currentEpic?.info.id !== detail.info.id ||
-            currentEpic?.info.watchPath !== detail.info.watchPath
-          ) {
-            if (!currentEpic) {
-              this.epicOverlayReturnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-              this.epicOverlayReturnSelection = this.selectedJob();
-            }
-            this.epicOverlayTaskDetail.set(null);
-          }
-          this.epicOverlayDetail.set(detail);
+          this.openEpicDetailAsTab(detail);
           return;
         }
         this.selectFetchedDetail(detail);
@@ -1753,23 +1799,40 @@ export class App implements OnInit, OnDestroy {
     this.openRelatedJob(event);
   }
 
-  openEpicOverlay(event: { jobId: string; watchPath: string }): void {
-    this.openRelatedJob(event);
+  onOpenEpicFromTaskAnchor(currentTask: TaskInfo, event: { jobId: string; watchPath: string }): void {
+    const requestToken = ++this.relatedOpenToken;
+    this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
+      next: (detail) => {
+        if (requestToken !== this.relatedOpenToken) return;
+        if (detail.info.kind !== 'epic') {
+          this.selectFetchedDetail(detail);
+          return;
+        }
+        this.openEpicDetailAsTab(detail, currentTask.taskKey);
+      },
+      error: (err) => {
+        if (requestToken !== this.relatedOpenToken) return;
+        this.errorDialog.show(err, {
+          title: 'Failed to open epic',
+          source: `task ${event.jobId}`,
+        });
+      },
+    });
   }
 
-  openEpicOverlaySubTask(event: { jobId: string; watchPath: string }): void {
-    const epic = this.epicOverlayDetail();
+  onEpicTabOpenSubTask(event: { jobId: string; watchPath: string }): void {
+    const tab = this.studioTabState.activeTab();
+    const epic = this.selectedJob();
+    if (tab?.kind !== 'epic') return;
     if (!epic) return;
     const requestToken = ++this.relatedOpenToken;
     this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
       next: (detail) => {
         if (requestToken !== this.relatedOpenToken) return;
-        const currentEpic = this.epicOverlayDetail();
-        if (!currentEpic) return;
         if (
           detail.info.kind === 'epic' ||
-          detail.info.epicId !== currentEpic.info.id ||
-          detail.info.watchPath !== currentEpic.info.watchPath
+          detail.info.epicId !== epic.info.id ||
+          detail.info.watchPath !== epic.info.watchPath
         ) {
           this.errorDialog.show(new Error('The selected task is not part of this epic.'), {
             title: 'Failed to open sub-task',
@@ -1777,7 +1840,19 @@ export class App implements OnInit, OnDestroy {
           });
           return;
         }
-        this.selectEpicOverlaySubTask(detail);
+        if (tab.viewTaskKey) {
+          const taskKey = `task:${detail.info.taskKey}`;
+          if (this.studioTabState.tabs().some(t => studioTabKey(t) === taskKey)) {
+            this.studioTabState.select(taskKey);
+            return;
+          }
+          this.studioTabState.retarget(studioTabKey(tab), {
+            kind: 'epic',
+            epicKey: tab.epicKey,
+            viewTaskKey: detail.info.taskKey,
+          });
+        }
+        this.selectEpicTabSubTask(detail);
       },
       error: (err) => {
         if (requestToken !== this.relatedOpenToken) return;
@@ -1789,139 +1864,43 @@ export class App implements OnInit, OnDestroy {
     });
   }
 
-  private selectEpicOverlaySubTask(detail: TaskDetail): void {
-    this.suppressStudioTaskTabForEpicOverlay = true;
-    this.epicOverlayTaskDetail.set(detail);
-    const token = this.jobSelection.bumpOpenDetailToken();
-    this.jobSelection.setSelectedFromAdvance(detail, token);
-    this.captureEpicOverlayPager(detail);
-    history.replaceState(
-      null,
-      '',
-      `?job=${encodeURIComponent(detail.info.id)}&watchPath=${encodeURIComponent(detail.info.watchPath)}`,
-    );
+  private selectEpicTabSubTask(detail: TaskDetail): void {
+    this.epicTabTaskDetail.set(detail);
+    this.captureEpicTabPager(detail);
   }
 
-  private isEpicOverlaySubTaskDetail(detail: TaskDetail): boolean {
-    if (!this.suppressStudioTaskTabForEpicOverlay) return false;
-    const epic = this.epicOverlayDetail();
-    if (!epic) return false;
-    return (
-      detail.info.kind !== 'epic' &&
-      detail.info.epicId === epic.info.id &&
-      detail.info.watchPath === epic.info.watchPath
-    );
-  }
-
-  private captureEpicOverlayPager(detail: TaskDetail): void {
-    const peers = this.epicOverlaySubTaskPeers();
+  private captureEpicTabPager(detail: TaskDetail): void {
+    const peers = this.epicTabSubTaskPeers();
     if (peers.length === 0) return;
     this.lanePager.capture('epic', peers, detail.info.taskKey);
   }
 
-  closeEpicOverlayTaskDetail(): void {
-    this.epicOverlayTaskDetail.set(null);
+  closeEpicTabTaskDetail(): void {
+    this.epicTabTaskDetail.set(null);
   }
 
-  onEpicOverlayNavigateLane(targetState: string): void {
-    const next = this.epicOverlaySubTaskPeers().find((job) => job.state === targetState);
+  onEpicTabNavigateLane(targetState: string): void {
+    const next = this.epicTabSubTaskPeers().find((job) => job.state === targetState);
     if (!next) return;
-    this.openEpicOverlaySubTask({ jobId: next.id, watchPath: next.watchPath });
+    this.onEpicTabOpenSubTask({ jobId: next.id, watchPath: next.watchPath });
   }
 
-  onEpicOverlayNextSubTask(info: TaskInfo): void {
-    this.openAdjacentEpicOverlaySubTask(info, 1);
+  onEpicTabNextSubTask(info: TaskInfo): void {
+    this.openAdjacentEpicTabSubTask(info, 1);
   }
 
-  onEpicOverlayPrevSubTask(info: TaskInfo): void {
-    this.openAdjacentEpicOverlaySubTask(info, -1);
+  onEpicTabPrevSubTask(info: TaskInfo): void {
+    this.openAdjacentEpicTabSubTask(info, -1);
   }
 
-  private openAdjacentEpicOverlaySubTask(info: TaskInfo, delta: -1 | 1): void {
-    const peers = this.epicOverlaySubTaskPeers();
+  private openAdjacentEpicTabSubTask(info: TaskInfo, delta: -1 | 1): void {
+    const peers = this.epicTabSubTaskPeers();
     if (peers.length === 0) return;
     const idx = peers.findIndex((job) => job.taskKey === info.taskKey);
     const nextIdx = idx < 0 ? 0 : idx + delta;
     if (nextIdx < 0 || nextIdx >= peers.length || nextIdx === idx) return;
     const next = peers[nextIdx];
-    this.openEpicOverlaySubTask({ jobId: next.id, watchPath: next.watchPath });
-  }
-
-  closeEpicOverlay(): void {
-    const returnSelection = this.epicOverlayReturnSelection;
-    this.epicOverlayDetail.set(null);
-    this.epicOverlayTaskDetail.set(null);
-    this.suppressStudioTaskTabForEpicOverlay = false;
-    this.epicOverlayReturnSelection = null;
-    if (returnSelection) {
-      const token = this.jobSelection.bumpOpenDetailToken();
-      this.jobSelection.setSelectedFromAdvance(returnSelection, token);
-    } else {
-      this.jobSelection.selected.set(null);
-    }
-    if (this.epicOverlayReturnUrl !== null) {
-      history.replaceState(null, '', this.epicOverlayReturnUrl);
-      this.epicOverlayReturnUrl = null;
-    }
-  }
-
-  refreshEpicOverlay(): void {
-    const epic = this.epicOverlayDetail();
-    if (!epic) return;
-    this.jobService.getDetail(epic.info.id, epic.info.watchPath).subscribe({
-      next: (detail) => {
-        if (detail.info.kind === 'epic') this.epicOverlayDetail.set(detail);
-      },
-      error: () => {
-        /* keep the current overlay content */
-      },
-    });
-  }
-
-  saveEpicOverlayTitle(title: string): void {
-    const epic = this.epicOverlayDetail();
-    if (!epic) return;
-    this.jobService.setJobTitle(epic.info.id, title, epic.info.watchPath).subscribe({
-      next: () => this.refreshEpicOverlay(),
-      error: (err) => this.errorDialog.show(err, { title: 'Failed to rename epic' }),
-    });
-  }
-
-  saveEpicOverlayDescription(content: string): void {
-    const epic = this.epicOverlayDetail();
-    if (!epic) return;
-    this.jobService.updateJobFile(epic.info.id, 'prompt.md', content, epic.info.watchPath).subscribe({
-      next: () => this.refreshEpicOverlay(),
-      error: (err) => this.errorDialog.show(err, { title: 'Failed to save epic description' }),
-    });
-  }
-
-  onEpicOverlayAgentConfigCommit(change: { cliType: CliType; model: string }): void {
-    const epic = this.epicOverlayDetail();
-    if (!epic) return;
-    const info = epic.info;
-    const cliChanged = change.cliType !== (info.cliType ?? 'copilot');
-    const modelChanged = change.model !== (info.model ?? '');
-    const saveModel = () => {
-      if (!modelChanged) {
-        this.refreshEpicOverlay();
-        return;
-      }
-      this.jobService
-        .setJobModel(info.id, change.model === '' ? null : change.model, info.watchPath)
-        .subscribe({
-          next: () => this.refreshEpicOverlay(),
-          error: (err) => this.errorDialog.show(err, { title: 'Failed to update epic model' }),
-        });
-    };
-    if (cliChanged) {
-      this.jobService.setJobCliType(info.id, change.cliType, info.watchPath).subscribe({
-        next: () => saveModel(),
-        error: (err) => this.errorDialog.show(err, { title: 'Failed to update epic CLI' }),
-      });
-      return;
-    }
-    saveModel();
+    this.onEpicTabOpenSubTask({ jobId: next.id, watchPath: next.watchPath });
   }
 
   /**

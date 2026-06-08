@@ -213,6 +213,7 @@ public class ProjectRunner
     // runner_slot_admission timeline event so the UI can show the pick
     // decision + slot occupancy. Pure observability; never gates execution.
     private string? _lastPickReason;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _pendingPickReasons = new(StringComparer.Ordinal);
     // Run intent / follow-up / plan / reissue-attempt now live on the
     // ActiveRun record inside _activeRuns (see ActiveRuns.cs), so OnCliFinished
     // reads them per-run rather than from shared single-active scalars.
@@ -683,41 +684,17 @@ public class ProjectRunner
         // CLI per project at a time); ADR-0026 was clarified to make the
         // parallelism explicit. See ParallelLanesPickupTests.
 
-        // Strict progress-first pickup: walk every 3-progress folder oldest-first
-        // by mtime BEFORE considering 2-ready. A folder qualifies for resume
-        // regardless of whether it carries a captured session id or even a
-        // cli-output.log: the "no log" case means the previous attempt died
-        // before the CLI streamed anything, which is the most-restartable
-        // case, not the most-skippable. Folders that have failed silently
-        // for the configured retry budget get dead-lettered into 7-archive
-        // here so the iteration drains and falls through to the ready queue.
-        // ADR-0052 slice 2 admit-loop: fill free slots. At slotMax==1 this runs
-        // exactly once and admits one job (byte-identical to the old single-job
-        // latch). At >1 it admits additional ready tasks that the admission
-        // policy proves disjoint from (or, under worktree isolation, optimistic
-        // about) what is already running.
+        // Display-order pickup: the runner consumes the same lane/list order
+        // the UI shows for this project. There is no hidden progress-first
+        // priority; a 3-progress resume only wins when it appears earlier in
+        // the visible candidate stream. The only intentional deviation is
+        // parallel admission: when maxParallelism > 1 and the visible head
+        // conflicts with an active task, the loop may continue to the next
+        // non-conflicting candidate and records that deviation in
+        // _lastPickReason.
         while (_activeRuns.HasFreeSlot(slotMax))
         {
-            TaskInfo? nextJob;
-            if (_activeRuns.Count == 0)
-            {
-                // First slot: strict progress-first pickup (resume 3-progress
-                // oldest-first), else sweep stray human-decision cards + take the
-                // next ready job.
-                nextJob = TryPickProgressJobOrDeadLetter();
-                if (nextJob == null)
-                {
-                    RelocateStrayHumanDecisionCards();
-                    nextJob = GetNextReadyJob();
-                }
-            }
-            else
-            {
-                // Additional parallel slot: only fresh ready work. Progress
-                // resumes belong to the slot that already owns that folder.
-                nextJob = GetNextReadyJob();
-            }
-
+            var nextJob = PickNextDisplayedCandidate(slotMax);
             if (nextJob == null)
             {
                 if (_mode == "auto-single")
@@ -725,23 +702,53 @@ public class ProjectRunner
                 break;
             }
 
-            // Never double-claim a folder already occupying a slot.
-            if (_activeRuns.Contains(nextJob.Id)) break;
-
-            // Admission against running tasks (skip for the empty first slot).
-            if (_activeRuns.Count > 0)
-            {
-                var adm = DecideAdmission(nextJob.Id, PredictParallelism(nextJob), slotMax);
-                _lastPickReason = adm.Reason;
-                if (!adm.Admitted)
-                {
-                    _logger.LogInformation("[taskboard] holding {Job} (slot busy): {Reason}", nextJob.Id, adm.Reason);
-                    break;
-                }
-            }
-
             await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
         }
+    }
+
+    private TaskInfo? PickNextDisplayedCandidate(int slotMax)
+    {
+        RelocateStrayHumanDecisionCards();
+        var skippedForConflict = new List<string>();
+
+        foreach (var candidate in ListPickupCandidatesInDisplayedOrder())
+        {
+            if (_mode is "manual" or "paused") return null;
+            if (candidate.Info == null) continue;
+
+            // Never double-claim a folder already occupying a slot. This is not
+            // a visible-order deviation; the card is already running.
+            if (_activeRuns.Contains(candidate.Info.Id)) continue;
+
+            if (_activeRuns.Count > 0)
+            {
+                var adm = DecideAdmission(candidate.Info.Id, PredictParallelism(candidate.Info), slotMax);
+                if (!adm.Admitted)
+                {
+                    var reason = $"{candidate.Info.Id}: {adm.Reason}";
+                    skippedForConflict.Add(reason);
+                    _lastPickReason = $"parallel-conflict-skip: {reason}";
+                    _logger.LogInformation(
+                        "[taskboard] skipping visible pickup candidate {Job} on {Project}: {Reason}",
+                        candidate.Info.Id, ProjectName, adm.Reason);
+                    continue;
+                }
+
+                var pickReason = skippedForConflict.Count == 0
+                    ? adm.Reason
+                    : $"{adm.Reason}; skipped earlier conflicting candidate(s): {string.Join("; ", skippedForConflict)}";
+                _lastPickReason = pickReason;
+                _pendingPickReasons[candidate.Info.Id] = pickReason;
+                return candidate.Info;
+            }
+
+            var firstPickReason = $"display-order: {candidate.State} {candidate.Info.Id}";
+            _lastPickReason = firstPickReason;
+            _pendingPickReasons[candidate.Info.Id] = firstPickReason;
+            return candidate.Info;
+        }
+
+        return null;
     }
 
     public Task<RunOutcome> StartJobManualAsync(string jobId, CancellationToken ct)
@@ -830,7 +837,7 @@ public class ProjectRunner
     /// by the task, not the run). On conflict the branch is left for resolution.
     /// No-op for the sequential (max==1) path.
     /// </summary>
-    private void IntegrateWorktreeRun(ActiveRun run, TaskInfo info)
+    private async Task IntegrateWorktreeRunAsync(ActiveRun run, TaskInfo info)
     {
         if (!run.IsWorktreeRun) return;
         if (MainCheckoutChangedDuringWorktreeRun(run))
@@ -866,23 +873,255 @@ public class ProjectRunner
             _integrateLock.Wait();
             try
             {
+                var integrateStarted = DateTime.UtcNow;
+                RecordIntegrationStep(info, PipelineStepStatus.Running, "running",
+                    $"Integrating `{run.Branch}` into `{workBranch}`.", integrateStarted);
                 var res = Worktree.Integrate(Entry.RootPath, run.WorktreePath!, run.Branch!, workBranch, strategy);
                 if (res.Outcome == IntegrationOutcome.Merged)
+                {
                     _logger.LogInformation("[taskboard] parallel run {Job} integrated into {Branch} at {Sha}",
                         run.JobId, workBranch, res.IntegratedSha ?? "<unknown>");
+                    RecordIntegrationStep(info, PipelineStepStatus.Passed, "merged",
+                        $"Task branch `{run.Branch}` merged into `{workBranch}` at `{res.IntegratedSha ?? "<unknown>"}`.",
+                        integrateStarted);
+                    RecordConflictResolutionStep(info, PipelineStepStatus.Skipped, "not-needed",
+                        "No merge conflict was detected.", DateTime.UtcNow);
+                }
                 else if (res.Outcome == IntegrationOutcome.Conflict)
+                {
                     _logger.LogWarning("[taskboard] parallel run {Job} merge conflict into {Branch}: {Err} (left for resolution)",
                         run.JobId, workBranch, res.Error);
+                    RecordIntegrationStep(info, PipelineStepStatus.Failed, "conflict",
+                        IntegrationSummary("Merge conflict detected.", run, workBranch, res),
+                        integrateStarted);
+
+                    var resolution = await RunConflictResolutionStepAsync(info, run, workBranch, res);
+                    if (resolution.Outcome == IntegrationOutcome.Merged)
+                    {
+                        _logger.LogInformation("[taskboard] parallel run {Job} conflict resolved and integrated into {Branch} at {Sha}",
+                            run.JobId, workBranch, resolution.IntegratedSha ?? "<unknown>");
+                        RecordIntegrationStep(info, PipelineStepStatus.Passed, "merged-after-resolution",
+                            $"Task branch `{run.Branch}` merged into `{workBranch}` after conflict resolution at `{resolution.IntegratedSha ?? "<unknown>"}`.",
+                            integrateStarted);
+                    }
+                    else
+                    {
+                        AppendWorktreeIntegrationIssue(
+                            info,
+                            OrchestratorMessageKind.IntegrationConflict,
+                            "Merge blockiert: conflict-resolution could not produce a mergeable task branch.",
+                            run,
+                            workBranch,
+                            resolution);
+                    }
+                }
                 else
+                {
                     _logger.LogWarning("[taskboard] parallel run {Job} integration outcome {Outcome}: {Err}",
                         run.JobId, res.Outcome, res.Error);
+                    RecordIntegrationStep(info, PipelineStepStatus.Failed, "error",
+                        IntegrationSummary($"Integration failed with outcome `{res.Outcome}`.", run, workBranch, res),
+                        integrateStarted);
+                    AppendWorktreeIntegrationIssue(
+                        info,
+                        OrchestratorMessageKind.IntegrationError,
+                        $"Worktree branch integration failed with outcome `{res.Outcome}`.",
+                        run,
+                        workBranch,
+                        res);
+                }
             }
             finally { _integrateLock.Release(); }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[taskboard] worktree integration failed for {Job}", run.JobId);
+            RecordIntegrationStep(info, PipelineStepStatus.Failed, "error",
+                $"Worktree branch integration failed before completion: {ex.Message}", DateTime.UtcNow);
+            AppendWorktreeIntegrationIssue(
+                info,
+                OrchestratorMessageKind.IntegrationError,
+                "Worktree branch integration failed before completion.",
+                run,
+                workBranch,
+                new IntegrationResult(IntegrationOutcome.Error, null, ex.Message));
         }
+    }
+
+    private void AppendWorktreeIntegrationIssue(
+        TaskInfo info,
+        OrchestratorMessageKind kind,
+        string summary,
+        ActiveRun run,
+        string workBranch,
+        IntegrationResult result)
+    {
+        var conflicted = result.ConflictedFiles is { Count: > 0 }
+            ? string.Join(", ", result.ConflictedFiles.Take(12))
+            : "none reported";
+        var overflow = result.ConflictedFiles is { Count: > 12 }
+            ? $" (+{result.ConflictedFiles.Count - 12} more)"
+            : "";
+        var error = string.IsNullOrWhiteSpace(result.Error)
+            ? "No git error text was reported."
+            : result.Error.Trim();
+
+        _chatLog.Append(info, kind,
+            $"{summary} Task branch `{run.Branch ?? "<unknown>"}` was not merged into `{workBranch}`. " +
+            $"Worktree: `{run.WorktreePath ?? "<unknown>"}`. Conflicted files: {conflicted}{overflow}. Error: {error}");
+    }
+
+    private async Task<IntegrationResult> RunConflictResolutionStepAsync(
+        TaskInfo info,
+        ActiveRun run,
+        string workBranch,
+        IntegrationResult conflict)
+    {
+        var started = DateTime.UtcNow;
+        RecordConflictResolutionStep(info, PipelineStepStatus.Running, "running",
+            IntegrationSummary("Starting managed Codex conflict-resolution run.", run, workBranch, conflict),
+            started,
+            model: info.Model);
+
+        try
+        {
+            var resolver = _router.Get(CliTypes.Codex);
+            if (resolver.CliType == CliTypes.Human || !resolver.IsAvailable())
+            {
+                var unavailable = $"Codex resolver is unavailable at `{resolver.GetCliPath()}`.";
+                var result = new IntegrationResult(IntegrationOutcome.Conflict, null, unavailable, conflict.ConflictedFiles);
+                RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
+                    IntegrationSummary(unavailable, run, workBranch, result), started, model: info.Model);
+                return result;
+            }
+
+            var resolverJobKey = $"{GetJobKey(info.Id)}:conflict-resolution";
+            var permissionMode = _projectSettings.ResolveCliMode(ProjectName, CliTypes.Codex).Mode;
+            var prompt = BuildConflictResolutionPrompt(info, run, workBranch, conflict);
+            var (execution, error) = await resolver.StartAsync(
+                $"{info.Id}-conflict-resolution",
+                resolverJobKey,
+                prompt,
+                run.WorktreePath!,
+                sessionName: null,
+                resumeSession: false,
+                model: info.Model,
+                thinkingLevel: null,
+                jobFolderPath: info.FolderPath,
+                permissionMode: permissionMode,
+                ct: CancellationToken.None);
+
+            if (execution == null)
+            {
+                var failed = new IntegrationResult(IntegrationOutcome.Conflict, null,
+                    error ?? "Codex resolver failed to start.", conflict.ConflictedFiles);
+                RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
+                    IntegrationSummary(failed.Error ?? "Codex resolver failed to start.", run, workBranch, failed),
+                    started,
+                    model: info.Model);
+                return failed;
+            }
+
+            var deadline = DateTime.UtcNow.Add(TimeSpan.FromMinutes(20));
+            while (DateTime.UtcNow < deadline)
+            {
+                var current = resolver.GetExecution(resolverJobKey);
+                if (current == null || !string.Equals(current.Status, RunStatuses.Running, StringComparison.OrdinalIgnoreCase))
+                    break;
+                await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None);
+            }
+
+            var final = resolver.GetExecution(resolverJobKey) ?? execution;
+            resolver.ReleaseOutputResources(resolverJobKey);
+            resolver.DiscardPersistedOutput(resolverJobKey);
+
+            if (string.Equals(final.Status, RunStatuses.Running, StringComparison.OrdinalIgnoreCase))
+            {
+                resolver.Stop(resolverJobKey, RunStopReason.Watchdog);
+                var timedOut = new IntegrationResult(IntegrationOutcome.Conflict, null,
+                    "Codex conflict resolver timed out.", _git.ListUnmergedFiles(run.WorktreePath!));
+                RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
+                    IntegrationSummary(timedOut.Error!, run, workBranch, timedOut), started, model: final.Model ?? info.Model);
+                return timedOut;
+            }
+
+            var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
+                $"{info.Title}\n\n[conflict-resolution; jobId={run.JobId}]");
+            if (commit.Success)
+                _logger.LogInformation("[taskboard] conflict resolver committed changes for {Job} at {Sha}",
+                    run.JobId, commit.Sha ?? "<unknown>");
+
+            var retry = Worktree.Integrate(Entry.RootPath, run.WorktreePath!, run.Branch!, workBranch, IntegrationStrategies.DirectMerge);
+            if (retry.Outcome == IntegrationOutcome.Merged)
+            {
+                RecordConflictResolutionStep(info, PipelineStepStatus.Passed, "resolved",
+                    $"Conflict resolved and `{run.Branch}` merged into `{workBranch}` at `{retry.IntegratedSha ?? "<unknown>"}`.",
+                    started,
+                    model: final.Model ?? info.Model);
+                return retry;
+            }
+
+            var conflictedFiles = retry.ConflictedFiles is { Count: > 0 }
+                ? retry.ConflictedFiles
+                : _git.ListUnmergedFiles(run.WorktreePath!);
+            var blocked = new IntegrationResult(IntegrationOutcome.Conflict, null,
+                retry.Error ?? "Conflict resolver finished, but the branch is still not mergeable.",
+                conflictedFiles);
+            RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
+                IntegrationSummary("Merge blockiert.", run, workBranch, blocked),
+                started,
+                model: final.Model ?? info.Model);
+            return blocked;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[taskboard] conflict-resolution step failed for {Job}", run.JobId);
+            var failed = new IntegrationResult(IntegrationOutcome.Conflict, null, ex.Message, conflict.ConflictedFiles);
+            RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
+                IntegrationSummary("Merge blockiert.", run, workBranch, failed), started, model: info.Model);
+            return failed;
+        }
+    }
+
+    private static string BuildConflictResolutionPrompt(
+        TaskInfo info,
+        ActiveRun run,
+        string workBranch,
+        IntegrationResult conflict)
+    {
+        var files = conflict.ConflictedFiles is { Count: > 0 }
+            ? string.Join(Environment.NewLine, conflict.ConflictedFiles.Select(f => $"- {f}"))
+            : "- none reported; run git diff --name-only --diff-filter=U";
+        return
+            "You are the orchestrator-owned merge conflict resolver for a parallel task branch.\n" +
+            $"Task: {info.Id} - {info.Title}\n" +
+            $"Task branch: {run.Branch}\n" +
+            $"Integration branch: {workBranch}\n" +
+            $"Worktree: {run.WorktreePath}\n\n" +
+            "Resolve the rebase/merge conflict from outside the core task agent. Work only in this worktree. " +
+            $"Rebase `{run.Branch}` onto `{workBranch}`, resolve conflicts with judgment, run focused verification if practical, " +
+            "and leave the task branch clean and ready for a fast-forward merge into the integration branch. " +
+            "Do not force-push, do not force-merge, and do not edit the shared main checkout.\n\n" +
+            "Conflicted files from the failed integration attempt:\n" +
+            files + "\n\n" +
+            "End with a concise summary. The pipeline harness will perform the final fast-forward merge.";
+    }
+
+    private static string IntegrationSummary(
+        string prefix,
+        ActiveRun run,
+        string workBranch,
+        IntegrationResult result)
+    {
+        var conflicted = result.ConflictedFiles is { Count: > 0 }
+            ? string.Join(", ", result.ConflictedFiles.Take(12))
+            : "none reported";
+        var overflow = result.ConflictedFiles is { Count: > 12 }
+            ? $" (+{result.ConflictedFiles.Count - 12} more)"
+            : "";
+        var error = string.IsNullOrWhiteSpace(result.Error) ? "No git error text was reported." : result.Error.Trim();
+        return $"{prefix} Task branch `{run.Branch ?? "<unknown>"}` into `{workBranch}`. " +
+               $"Worktree: `{run.WorktreePath ?? "<unknown>"}`. Conflicted files: {conflicted}{overflow}. Error: {error}";
     }
 
     private bool MainCheckoutChangedDuringWorktreeRun(ActiveRun run)
@@ -925,6 +1164,73 @@ public class ProjectRunner
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to record worktree-containment step for {JobId}", info.Id);
+        }
+    }
+
+    private void RecordIntegrationStep(
+        TaskInfo info,
+        PipelineStepStatus status,
+        string verdict,
+        string summary,
+        DateTime startedAt)
+        => RecordPipelineStep(
+            info,
+            OrchestratorApi.Services.Pipeline.PipelineCatalogue.IntegrateMergeStepId,
+            StepKind.Tool,
+            status,
+            verdict,
+            summary,
+            startedAt,
+            model: null);
+
+    private void RecordConflictResolutionStep(
+        TaskInfo info,
+        PipelineStepStatus status,
+        string verdict,
+        string summary,
+        DateTime startedAt,
+        string? model = null)
+        => RecordPipelineStep(
+            info,
+            OrchestratorApi.Services.Pipeline.PipelineCatalogue.ConflictResolutionStepId,
+            StepKind.Orchestrator,
+            status,
+            verdict,
+            summary,
+            startedAt,
+            model);
+
+    private void RecordPipelineStep(
+        TaskInfo info,
+        string stepId,
+        StepKind kind,
+        PipelineStepStatus status,
+        string? verdict,
+        string? summary,
+        DateTime startedAt,
+        string? model)
+    {
+        if (_pipelineLog == null) return;
+        try
+        {
+            var completedAt = status == PipelineStepStatus.Running ? (DateTime?)null : DateTime.UtcNow;
+            _pipelineLog.RecordStep(info.FolderPath, new PipelineStepExecution
+            {
+                StepId = stepId,
+                Kind = kind,
+                Model = model,
+                Status = status,
+                StartedAt = startedAt,
+                CompletedAt = completedAt,
+                DurationMs = completedAt.HasValue ? Math.Max(0, (long)(completedAt.Value - startedAt).TotalMilliseconds) : 0,
+                Verdict = verdict,
+                VerdictSummary = summary,
+                Reason = status == PipelineStepStatus.Failed ? summary : null,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to record pipeline step {StepId} for {JobId}", stepId, info.Id);
         }
     }
 
@@ -1264,15 +1570,18 @@ public class ProjectRunner
             var slotMax = ParallelSlotPolicy.ClampMax(_projectSettings.Get(ProjectName).MaxParallelism);
             var slotDecision = ParallelSlotPolicy.Decide(
                 jobId, TaskParallelism.Default, Array.Empty<RunningTask>(), slotMax);
-            _lastPickReason = slotDecision.Reason;
+            var pickReason = _pendingPickReasons.TryRemove(jobId, out var pendingPickReason)
+                ? pendingPickReason
+                : slotDecision.Reason;
+            _lastPickReason = pickReason;
             _logger.LogInformation(
                 "[taskboard] slot admission for {JobId} on {Project}: {Decision} ({Reason}); occupancy 1/{Max}",
-                jobId, ProjectName, slotDecision.Decision, slotDecision.Reason, slotMax);
+                jobId, ProjectName, slotDecision.Decision, pickReason, slotMax);
             _timeline?.Append(
                 info.FolderPath,
                 TimelineEventKinds.RunnerSlotAdmission,
                 TimelineActors.System,
-                summary: $"Slot 1/{slotMax}: {slotDecision.Reason}",
+                summary: $"Slot 1/{slotMax}: {pickReason}",
                 runId: plan.EventInputSessionId,
                 details: new()
                 {
@@ -2973,7 +3282,7 @@ public class ProjectRunner
             if (run.IsWorktreeRun)
             {
                 var wtInfo = _scanner.FindJob(jobId, Entry.Path);
-                if (wtInfo != null) IntegrateWorktreeRun(run, wtInfo);
+                if (wtInfo != null) await IntegrateWorktreeRunAsync(run, wtInfo);
             }
 
             var cli = _router.Get(cliType);
@@ -4337,9 +4646,14 @@ public class ProjectRunner
 
     /// <summary>Test seam: lets a unit test prime the active-job latch
     /// without spinning up a real CLI run.</summary>
-    internal void SetActiveJobForTest(string jobId, string? cliType = null)
+    internal void SetActiveJobForTest(string jobId, string? cliType = null, string[]? predictedScope = null)
     {
-        _activeRuns.TryClaim(new ActiveRun { JobId = jobId, CliType = cliType });
+        _activeRuns.TryClaim(new ActiveRun
+        {
+            JobId = jobId,
+            CliType = cliType,
+            Parallelism = predictedScope == null ? TaskParallelism.Default : new TaskParallelism(false, predictedScope)
+        });
     }
 
     private string RenderPrompt(RunPlan plan, TaskInfo info, string runWorkingDir)
@@ -4445,22 +4759,141 @@ public class ProjectRunner
     /// </remarks>
     internal TaskInfo? GetNextReadyJob()
     {
+        return ListReadyPickupCandidatesInDisplayedOrder().FirstOrDefault();
+    }
+
+    private static readonly string[] RunnerPickupLanesInDisplayedOrder =
+    [
+        TaskStates.Ready,
+        TaskStates.Progress,
+    ];
+
+    private sealed record DisplayedPickupCandidate(string State, TaskInfo? Info, ProgressPickupCandidate? Progress);
+
+    private List<TaskInfo> ListReadyPickupCandidatesInDisplayedOrder()
+    {
         var intakeEnabled = _projectSettings.Get(ProjectName).IntakeEnabled == true;
-        return _scanner.ScanAllJobs()
-            .Where(j => j.ProjectName == ProjectName
-                        && j.State == TaskStates.Ready
-                        && AgentTypes.IsAutoPickupEligible(j.Agent)
-                        // Hard safety net for the human-decision-needed marker:
-                        // never auto-run such a card even if the 2-ready->
-                        // 5-human-review relocation sweep failed to move it.
-                        // Running it just NOOP-burns a CLI and trips the breaker.
-                        && !TaskSlugs.IsHumanDecisionNeeded(j.Id)
-                        // Rapid-crash backoff: skip a task that just crashed fast
-                        // until its exponential cooldown elapses (RapidCrashBreaker).
-                        && !IsInRapidCrashBackoff(j.Id)
-                        && IsPickupAllowed(j, intakeEnabled))
-            .OrderBy(j => j.Order)
-            .FirstOrDefault();
+        var settings = _projectSettings.Get(ProjectName);
+        return LaneSortApplier.Sort(
+                _scanner.ScanAllJobs()
+                    .Where(j => j.ProjectName == ProjectName
+                                && j.State == TaskStates.Ready
+                                && IsReadyPickupCandidate(j, intakeEnabled)),
+                TaskStates.Ready,
+                _ => settings)
+            .ToList();
+    }
+
+    private bool IsReadyPickupCandidate(TaskInfo job, bool intakeEnabled)
+        => AgentTypes.IsAutoPickupEligible(job.Agent)
+           // Hard safety net for the human-decision-needed marker:
+           // never auto-run such a card even if the 2-ready->5-human-review
+           // relocation sweep failed to move it. Running it just NOOP-burns
+           // a CLI and trips the breaker.
+           && !TaskSlugs.IsHumanDecisionNeeded(job.Id)
+           // Rapid-crash backoff: skip a task that just crashed fast until
+           // its exponential cooldown elapses (RapidCrashBreaker).
+           && !IsInRapidCrashBackoff(job.Id)
+           && IsPickupAllowed(job, intakeEnabled);
+
+    private List<DisplayedPickupCandidate> ListPickupCandidatesInDisplayedOrder()
+    {
+        var result = new List<DisplayedPickupCandidate>();
+        foreach (var lane in RunnerPickupLanesInDisplayedOrder)
+        {
+            if (lane == TaskStates.Ready)
+            {
+                result.AddRange(ListReadyPickupCandidatesInDisplayedOrder()
+                    .Select(j => new DisplayedPickupCandidate(TaskStates.Ready, j, null)));
+                continue;
+            }
+
+            result.AddRange(ListProgressPickupCandidatesInDisplayedOrder());
+        }
+        return result;
+    }
+
+    private List<DisplayedPickupCandidate> ListProgressPickupCandidatesInDisplayedOrder()
+    {
+        var settings = _projectSettings.Get(ProjectName);
+        var orderedInfo = LaneSortApplier.Sort(
+                _scanner.ScanAllJobs()
+                    .Where(j => j.ProjectName == ProjectName && j.State == TaskStates.Progress),
+                TaskStates.Progress,
+                _ => settings)
+            .ToList();
+        var folderBySlug = ListProgressFoldersOldestFirst()
+            .ToDictionary(c => c.Slug, StringComparer.OrdinalIgnoreCase);
+
+        var result = new List<DisplayedPickupCandidate>();
+        foreach (var info in orderedInfo)
+        {
+            if (!folderBySlug.TryGetValue(info.Id, out var progress))
+                continue;
+            folderBySlug.Remove(info.Id);
+            var candidate = TryPrepareProgressCandidate(progress);
+            if (candidate != null) result.Add(candidate);
+        }
+
+        // Orphans are not visible kanban cards. Process them after visible
+        // progress cards so they cannot jump ahead of displayed work, but still
+        // let the pickup tick clean them up when the visible queue is drained.
+        foreach (var orphan in folderBySlug.Values)
+        {
+            var candidate = TryPrepareProgressCandidate(orphan);
+            if (candidate != null) result.Add(candidate);
+        }
+
+        return result;
+    }
+
+    private DisplayedPickupCandidate? TryPrepareProgressCandidate(ProgressPickupCandidate candidate)
+    {
+        var slug = Path.GetFileName(candidate.FolderPath);
+        if (candidate.Info == null)
+        {
+            HandleStaleProgressOrphan(candidate, slug);
+            return null;
+        }
+
+        if (!AgentTypes.IsAutoPickupEligible(candidate.Info.Agent))
+            return null;
+
+        // Rapid-crash backoff: a progress folder that just crashed fast is
+        // skipped (not dead-lettered) until its cooldown elapses, so the picker
+        // cannot pull it straight back into a tight loop. Other work is still
+        // free to run this tick.
+        if (IsInRapidCrashBackoff(candidate.Info.Id))
+            return null;
+
+        var attempts = GetPickupAttempts(slug);
+        if (attempts >= PickupFailureThreshold)
+        {
+            RerouteOverBudgetFolder(candidate, slug, attempts);
+            return null;
+        }
+
+        // Zombie guard. Resuming a session-less folder a couple of times is
+        // useful for crash recovery, but once it exhausts that small budget the
+        // folder leaves 3-progress so it cannot hide ahead of visible ready work
+        // forever.
+        if (!HasResumableSession(candidate.Info))
+        {
+            var resumeFailures = GetZombieResumeFailures(slug);
+            if (resumeFailures >= ZombieResumeFailureThreshold)
+            {
+                var zombieReason =
+                    $"Auto-pickup gave up resuming a session-less 3-progress folder after {resumeFailures} failed resume attempts " +
+                    $"(budget {ZombieResumeFailureThreshold}): no active process and no resumable session id to continue.";
+                RerouteOverBudgetFolder(
+                    candidate, slug, resumeFailures,
+                    thresholdOverride: ZombieResumeFailureThreshold,
+                    reasonOverride: zombieReason);
+                return null;
+            }
+        }
+
+        return new DisplayedPickupCandidate(TaskStates.Progress, candidate.Info, candidate);
     }
 
     /// <summary>

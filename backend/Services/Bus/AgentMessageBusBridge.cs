@@ -131,6 +131,8 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.GiveUp            => "High",
             OrchestratorMessageKind.PermissionBlocked => "High",
             OrchestratorMessageKind.WatchdogTimeout   => "High",
+            OrchestratorMessageKind.IntegrationConflict => "High",
+            OrchestratorMessageKind.IntegrationError  => "High",
             OrchestratorMessageKind.Reissue           => "Warn",
             OrchestratorMessageKind.HeuristicFallback => "Warn",
             OrchestratorMessageKind.SoftIntervention  => "Warn",

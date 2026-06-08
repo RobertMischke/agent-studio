@@ -1,6 +1,6 @@
 # UI Tooltip Audit & Canonical Standard
 
-Last sweep: 2026-05-15.
+Last sweep: 2026-06-08.
 
 ## The canonical pattern
 
@@ -33,23 +33,23 @@ Only the `class` attribute survives sanitisation; nothing else is honoured.
 
 ## Hard rules
 
-1. Use `[appTooltip]` everywhere. No native `title=""`, no `[title]=""`, no `[attr.title]=""`. The grep `grep -rn --include='*.html' -P '\btitle=' frontend/src/app/` MUST return zero.
+1. Use `[appTooltip]` everywhere a browser-native tooltip would otherwise appear. No native `title=""`, no `[title]=""`, no `[attr.title]=""` on DOM elements. Angular component inputs named `title` are allowed when they render visible headings, for example `<app-dialog title="...">` or `<app-section-header title="...">`.
 2. No new custom tooltip components or `@HostListener('mouseenter')` popovers. If a richer interaction is needed (modal, hover-panel, command palette), that is a different component, documented separately. Out of scope for the tooltip standard: drag-and-drop hints, popover/modal-like inline panels (e.g. `features/tokens/components/usage-hover-panel.ts`).
 3. Severity is a visual highlight, not a substitute for content. A warn-coloured tooltip still needs a clear body string.
 4. Body content is HTML-safe by virtue of DOMPurify; do not bypass it with raw `innerHTML` assignments.
 
-## Migration sweep (2026-05-15)
+## Migration sweep (2026-06-08)
 
 The migration scripts under `frontend/scripts/`:
 
 - [`migrate-title-to-tooltip.mjs`](../frontend/scripts/migrate-title-to-tooltip.mjs) - rewrites `title=`, `[title]=`, `[attr.title]=`, and `[appTip]` to `[appTooltip]`.
 - [`inject-tooltip-import.mjs`](../frontend/scripts/inject-tooltip-import.mjs) - injects `TooltipDirective` into each standalone component's `imports:` array (creating the array if absent).
 
-After running both, every template renders tooltips through the canonical directive. Counts:
+After the current sweep, tooltip behaviour renders through the canonical directive. Counts:
 
 | Surface | Files touched | Tooltip sites |
 |---------|---------------|---------------|
-| `frontend/src/app/` | 59 templates | 194 tooltip bindings |
+| `frontend/src/app/` | 59+ templates | 200+ tooltip bindings |
 
 ### Migrated tooltip sites (compact)
 
@@ -134,6 +134,33 @@ The list is grouped by feature. Each row is `<file> - <count>`. Anything not in 
 - `features/verbose-debug/components/verbose-debug-overlay.component.html` - 2
 - `features/workforce/components/phase-summary-list/phase-summary-list.component.html` - 1
 - `features/workforce/components/role-badge/role-badge.component.html` - 1
+
+### 2026-06-08 finish sweep
+
+These concrete native-title or divergent tooltip sites were rechecked or migrated:
+
+| Site | Previous pattern | Current pattern |
+|------|------------------|-----------------|
+| `components/info-button/info-button.component.html` | Lane help trigger tooltip | `[appTooltip]="label()"` |
+| `components/cli-model-selector/cli-model-selector.component.html` | Picker chip hint | `[appTooltip]="tooltip()"` |
+| `components/chat/chat/chat.component.html` | Attachment/action hints | `[appTooltip]` on icon buttons |
+| `components/chat/conversation-session-card/conversation-session-card.component.html` | Session id/raw-line hints | `[appTooltip]` |
+| `features/task-detail/components/detail-header/detail-header.component.html` | Title/id/action hints | `[appTooltip]` |
+| `features/task-detail/components/activity-log-view/activity-log-view.html` | Activity action/duration hints | `[appTooltip]` |
+| `features/task-detail/components/prompt-pane/overview-pane/overview-pane.component.html` | Pipeline row/token/cost hints | `[appTooltip]` and component-title inputs only |
+| `features/task-detail/components/prompt-pane/agent-work-detail/agent-work-detail.component.html` | Tool-call argument/result hints | HTML `[appTooltip]` |
+| `features/task-detail/components/hygiene-strip/hygiene-strip/hygiene-strip.component.html` | Commit/tree health hints | `[appTooltip]` |
+| `features/dev-tools/components/tag-manager-dialog/tag-manager-dialog.component.html` | Native `[title]` on tag id/description | `[appTooltip]` |
+| `components/markdown-utils.ts` | Generated link/image `title` attributes | Removed native tooltip attributes from rendered Markdown |
+| `features/task-detail/components/beautiful-results/beautiful-results.renderer.ts` | Generated link/image `title` attributes | Removed native tooltip attributes from rendered results |
+
+Verification grep for native DOM-title patterns:
+
+```powershell
+rg -n "<(?!app-|ng-|mat-|cdk-)[a-z][\\w-]*(?=[^>]*(?:\\s(?:title|\\[title\\]|\\[attr\\.title\\])\\s*=))|` title=\\`\\\"" frontend/src/app -S
+```
+
+This grep intentionally allows component inputs named `title`.
 
 ## Drift enforcement
 

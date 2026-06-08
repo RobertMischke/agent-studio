@@ -19,7 +19,11 @@ public enum IntegrationOutcome
 }
 
 /// <summary>Result of the integration (merge) post-step.</summary>
-public sealed record IntegrationResult(IntegrationOutcome Outcome, string? IntegratedSha, string? Error)
+public sealed record IntegrationResult(
+    IntegrationOutcome Outcome,
+    string? IntegratedSha,
+    string? Error,
+    IReadOnlyList<string>? ConflictedFiles = null)
 {
     public bool Merged => Outcome == IntegrationOutcome.Merged;
 }
@@ -184,7 +188,7 @@ public sealed class WorktreeTaskLifecycle
         {
             _logger.LogWarning("Integration of {Branch} hit a rebase conflict onto {Integration}: {Error}",
                 taskBranch, integrationBranch, rebase.Error);
-            return new IntegrationResult(IntegrationOutcome.Conflict, null, rebase.Error);
+            return new IntegrationResult(IntegrationOutcome.Conflict, null, rebase.Error, rebase.ConflictedFiles);
         }
 
         var ff = _git.MergeFastForward(repoRoot, taskBranch);

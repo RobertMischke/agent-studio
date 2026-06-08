@@ -110,4 +110,32 @@ public class OrchestratorChatLogResidueTests : IDisposable
         Assert.Contains("[decision]", content);
         Assert.Contains("Hello after move.", content);
     }
+
+    [Fact]
+    public void Append_IntegrationConflict_PersistsTaskVisibleMarkerAndDetails()
+    {
+        var liveFolder = Path.Combine(_root, "4-auto-review", "conflicted");
+        Directory.CreateDirectory(liveFolder);
+
+        var info = new TaskInfo
+        {
+            Id = "conflicted",
+            Title = "Conflicted",
+            State = TaskStates.AutoReview,
+            FolderPath = liveFolder,
+            WatchPath = _root,
+        };
+
+        var log = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
+
+        var ok = log.Append(info, OrchestratorMessageKind.IntegrationConflict,
+            "Worktree branch integration is blocked by a merge conflict. Task branch `task/ASS-111` was not merged into `develop`. Worktree: `C:\\temp\\wt`. Conflicted files: frontend/src/app/tree.ts. Error: could not apply commit");
+
+        Assert.True(ok);
+        var content = File.ReadAllText(Path.Combine(liveFolder, "logs", "cli-output.log"));
+        Assert.Contains("[orchestrator]", content);
+        Assert.Contains("[integration-conflict]", content);
+        Assert.Contains("task/ASS-111", content);
+        Assert.Contains("frontend/src/app/tree.ts", content);
+    }
 }

@@ -120,13 +120,11 @@ export class VerboseDebugOverlayComponent {
   readonly source = input<string>('cli-output.log');
   readonly latestResult = input<string | null>(null);
   readonly initialTab = input<VerboseDebugTab>('overview');
-  readonly initialTheme = input<'light' | 'dark'>('dark');
 
   readonly closeRequest = output<void>();
   readonly openTrace = output<RawLineRange>();
 
   readonly activeTab = signal<VerboseDebugTab>('overview');
-  readonly theme = signal<'light' | 'dark'>('dark');
 
   readonly tabs: { id: VerboseDebugTab; label: string; icon: string }[] = [
     { id: 'overview', label: 'Overview', icon: '📊' },
@@ -145,7 +143,6 @@ export class VerboseDebugOverlayComponent {
       const requested = this.initialTab() as VerboseDebugTab | string;
       const known = this.tabs.some((t) => t.id === requested);
       this.activeTab.set(known ? (requested as VerboseDebugTab) : 'overview');
-      this.theme.set(this.initialTheme());
     });
     // Register with the modal stack so Escape closes this overlay first
     // when it sits above the task detail or another lower overlay.
@@ -154,10 +151,6 @@ export class VerboseDebugOverlayComponent {
       () => this.closeRequest.emit(),
       inject(DestroyRef),
     );
-  }
-
-  toggleTheme(): void {
-    this.theme.set(this.theme() === 'dark' ? 'light' : 'dark');
   }
 
   emitTrace(range: RawLineRange): void {

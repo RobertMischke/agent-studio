@@ -124,6 +124,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         var result = life.Integrate(repo, prep.WorktreePath!, prep.Branch!, "develop", IntegrationStrategies.DirectMerge);
 
         Assert.Equal(IntegrationOutcome.Conflict, result.Outcome);
+        Assert.Contains("shared.txt", result.ConflictedFiles ?? Array.Empty<string>());
         // develop is exactly where it was; nothing was merged.
         Assert.Equal(developTipBefore, RunGit(repo, "rev-parse develop").Out.Trim());
         // The branch survives so a conflict-resolution agent / PR can pick it up.

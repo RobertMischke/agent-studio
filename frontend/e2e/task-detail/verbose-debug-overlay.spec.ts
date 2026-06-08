@@ -1,6 +1,8 @@
 import { expect, Page, test } from '@playwright/test';
+import * as fs from 'fs';
 import * as path from 'path';
 import { listJobs } from '../helpers/jobs';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Verbose Debug overlay regression spec.
@@ -24,8 +26,9 @@ import { listJobs } from '../helpers/jobs';
 
 const RESULTS_DIR = path.resolve(
   __dirname,
-  '../../../../agent-taskboard-workspace/projects/agent-taskboard/3-progress/chat-verbose-debug-view/results'
+  '../../../../agent-taskboard-workspace/projects/agent-taskboard/tasks/000/ASS-894/results'
 );
+fs.mkdirSync(RESULTS_DIR, { recursive: true });
 
 interface OutLine { timestamp: string; stream: string; text: string; }
 
@@ -224,6 +227,7 @@ test.describe('Verbose Debug overlay - task workbench', () => {
     await installMocks(page, target);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
+    await setTheme(page, 'dark');
 
     // Land on the activity tab so the open button is reachable.
     const activityTab = page.getByTestId('inspector-tab-activity');
@@ -236,6 +240,8 @@ test.describe('Verbose Debug overlay - task workbench', () => {
 
     const overlay = page.getByTestId('verbose-debug-overlay');
     await expect(overlay).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('verbose-debug-theme-toggle')).toHaveCount(0);
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
     // Default tab is Overview with run-stat metric populated.
     await expect(page.getByTestId('verbose-debug-metric-runs')).toHaveText('2');
     await expect(page.getByTestId('verbose-debug-metric-tools')).not.toHaveText('0');
@@ -295,9 +301,10 @@ test.describe('Verbose Debug overlay - task workbench', () => {
     const tabStrip = page.getByTestId('verbose-debug-tabs');
     await expect(tabStrip).not.toContainText('Trace');
 
-    // Light theme: toggle and snapshot.
-    await page.getByTestId('verbose-debug-theme-toggle').click();
-    await expect(overlay).toHaveAttribute('data-theme', 'light');
+    // Light theme comes from the global studio theme, not a local overlay switch.
+    await setTheme(page, 'light');
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'light');
+    await expect(overlay).not.toHaveAttribute('data-theme', /./);
     await page.getByTestId('verbose-debug-tab-overview').click();
     await page.screenshot({
       path: path.join(RESULTS_DIR, 'verbose-debug-overlay-overview-light.png'),

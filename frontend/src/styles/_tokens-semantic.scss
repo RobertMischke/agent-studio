@@ -362,6 +362,8 @@
   // prose, tables, and non-wrapping diffs read without a horizontal scroll.
   // ---------------------------------------------------------------------------
   --studio-modal-width-lg: min(90vw, 880px);
+  --studio-modal-width-prompt: min(90vw, 820px);
+  --studio-modal-height-prompt: min(80vh, 720px);
   --studio-modal-width-run-details: min(90vw, 680px);
   --studio-modal-height-run-details: min(80vh, 720px);
 

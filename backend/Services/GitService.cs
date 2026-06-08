@@ -28,7 +28,11 @@ public record GitPushResult(bool Success, string Sha, string Status, string? Err
 /// <see cref="GitService.RebaseOnto"/>, <see cref="GitService.MergeFastForward"/>).
 /// <paramref name="Path"/> is the worktree path for add; null otherwise.
 /// </summary>
-public record GitWorktreeResult(bool Success, string? Path, string? Error);
+public record GitWorktreeResult(
+    bool Success,
+    string? Path,
+    string? Error,
+    IReadOnlyList<string>? ConflictedFiles = null);
 
 /// <summary>
 /// One commit in a per-run commit lookup. The numbers are derived from
@@ -1118,12 +1122,32 @@ public class GitService
         var (_, err, code) = RunGitArgs(worktreePath, "rebase", ontoRef);
         if (code != 0)
         {
+            var conflictedFiles = ListUnmergedFiles(worktreePath);
             RunGitArgs(worktreePath, "rebase", "--abort");
             _logger.LogWarning("Rebase onto {OntoRef} failed at {Path}, aborted: {Error}", ontoRef, worktreePath, err.Trim());
-            return new GitWorktreeResult(false, worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim(), conflictedFiles);
         }
         _logger.LogInformation("Rebased worktree {Path} onto {OntoRef}", worktreePath, ontoRef);
         return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Lists currently unmerged files in a worktree (<c>git diff --name-only --diff-filter=U</c>).
+    /// Callers that abort a rebase must read this before the abort clears the index.
+    /// </summary>
+    public IReadOnlyList<string> ListUnmergedFiles(string worktreePath)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return Array.Empty<string>();
+
+        var (output, _, code) = RunGitArgs(worktreePath, "diff", "--name-only", "--diff-filter=U");
+        if (code != 0 || string.IsNullOrWhiteSpace(output))
+            return Array.Empty<string>();
+
+        return output.Replace("\r\n", "\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     /// <summary>

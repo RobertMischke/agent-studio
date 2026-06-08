@@ -24,6 +24,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [design-principles.md](design-principles.md) | UX contract: top-level summary, always-available drill-down, run-as-unit-of-conversation, calm classical style. |
 | [design-system.md](design-system.md) | Visual contract: studio-shell tokens, shape/type/motion scale, component inventory, Material 3 Expressive mapping, theme switching. |
 | [style-guide/](style-guide/README.md) | Canonical UI vocabulary: tokens, small buttons, pills, cards, modals, tabs, forms, audits, and migration status. Check before adding a new visual variant. |
+| [ui-tooltip-audit.md](ui-tooltip-audit.md) | Canonical `[appTooltip]` directive contract, usage examples, migration audit, and drift rule for banning native browser title tooltips. |
 | [cli-model-selector-audit.md](cli-model-selector-audit.md) | Inventory of every CLI + model selection site in `frontend/src/` and the scoping note for the unified `<app-cli-model-selector>` component. |
 | [frontend-scss-quality.md](frontend-scss-quality.md) | SCSS authoring rules + measured audit + 6-wave refactor plan (token consolidation, sidesheet/pane-header extraction, mixins, drop `!important`). |
 | [frontend-scss-quality-eval-2026-05-17.md](frontend-scss-quality-eval-2026-05-17.md) | Result of executing the six-wave plan: −396 hex literals, −13 `!important`, three new layout components, three SCSS mixins. Remaining work tier-ordered. |

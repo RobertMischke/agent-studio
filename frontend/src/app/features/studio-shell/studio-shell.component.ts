@@ -1188,6 +1188,11 @@ export class StudioShellComponent {
         return tab.projectName === null ? 'All projects · Backlog' : `${tab.projectName} · Backlog`;
       case 'epics':
         return tab.projectName === null ? 'All projects · Epics' : `${tab.projectName} · Epics`;
+      case 'epic': {
+        const labelKey = tab.viewTaskKey ?? tab.epicKey;
+        const job = this.findJob(labelKey);
+        return job?.title || job?.id || labelKey;
+      }
       case 'task': {
         const job = this.findJob(tab.taskKey);
         return job?.title || job?.id || tab.taskKey;
@@ -1237,7 +1242,8 @@ export class StudioShellComponent {
    * welcome tabs that do not correspond to a single task.
    */
   tabJob(tab: StudioTab): TaskInfo | null {
-    if (tab.kind !== 'task' && tab.kind !== 'activity') return null;
-    return this.findJob(tab.taskKey);
+    if (tab.kind === 'task' || tab.kind === 'activity') return this.findJob(tab.taskKey);
+    if (tab.kind === 'epic') return this.findJob(tab.viewTaskKey ?? tab.epicKey);
+    return null;
   }
 }

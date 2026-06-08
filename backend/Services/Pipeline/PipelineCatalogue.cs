@@ -134,6 +134,8 @@ public static class PipelineCatalogue
 
     public const string GitCommitAttributionStepId = "post-git-commit-attribution";
     public const string WorktreeContainmentStepId = "post-worktree-containment";
+    public const string IntegrateMergeStepId = "post-integrate-merge";
+    public const string ConflictResolutionStepId = "post-conflict-resolution";
     /// <summary>
     /// Deterministic post-step that compiles the changed repository state before
     /// the orchestrator trusts any self-reported Success. It runs after the
@@ -282,6 +284,8 @@ public static class PipelineCatalogue
     {
         GitCommitAttributionStepId,
         WorktreeContainmentStepId,
+        IntegrateMergeStepId,
+        ConflictResolutionStepId,
     };
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -424,6 +428,24 @@ public static class PipelineCatalogue
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [CoreAgentRunStepId],
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = IntegrateMergeStepId,
+                    DisplayName = "Integrate merge",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [WorktreeContainmentStepId],
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = ConflictResolutionStepId,
+                    DisplayName = "Conflict resolution",
+                    Kind = StepKind.Orchestrator,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [IntegrateMergeStepId],
+                    Idempotent = false,
                 },
                 new PipelineStep
                 {

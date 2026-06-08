@@ -5,10 +5,6 @@
   align-items: center;
 }
 
-.prompt-pop__portal {
-  display: contents;
-}
-
 .prompt-pop__trigger {
   display: inline-flex;
   align-items: center;
@@ -43,18 +39,27 @@
   }
 }
 
-.prompt-pop__panel {
+.prompt-pop__modal {
   position: fixed;
-  z-index: var(--studio-z-overlay-panel);
-  width: min(520px, 80vw);
-  max-height: min(60vh, 480px);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--studio-spacing-5);
+  background: var(--studio-scrim);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.prompt-pop__panel {
+  width: var(--studio-modal-width-prompt);
+  max-height: var(--studio-modal-height-prompt);
   display: flex;
   flex-direction: column;
   background: var(--studio-bg-elevated);
   color: var(--studio-fg);
   border: 1px solid var(--studio-border-strong);
   border-radius: 8px;
-  box-shadow: var(--elevation-popover);
+  box-shadow: var(--elevation-modal);
   overflow: hidden;
 }
 
@@ -63,9 +68,10 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--studio-spacing-3);
-  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  padding: var(--studio-modal-padding-header);
   border-bottom: 1px solid var(--studio-border);
   flex: 0 0 auto;
+  background: var(--studio-bg-sidebar);
 }
 
 .prompt-pop__title {
@@ -95,8 +101,9 @@
 
 .prompt-pop__body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: var(--studio-spacing-3);
+  padding: var(--studio-modal-padding-body);
   // Markdown prose wraps long lines rather than forcing a horizontal scrollbar.
   overflow-wrap: anywhere;
 }

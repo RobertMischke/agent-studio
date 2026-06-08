@@ -1,4 +1,4 @@
-    <div class="vdbg" appOverlayPortal="modal" data-testid="verbose-debug-overlay" [attr.data-theme]="theme()" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()">
+    <div class="vdbg" appOverlayPortal="modal" data-testid="verbose-debug-overlay" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()">
       <section class="vdbg__panel" role="dialog" aria-label="Verbose debug" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header class="vdbg__header">
           <div class="vdbg__title-block">
@@ -6,11 +6,6 @@
             <span class="vdbg__subtitle">{{ subtitle() }}</span>
           </div>
           <div class="vdbg__head-actions">
-            <button class="vdbg__theme"
-                    type="button"
-                    data-testid="verbose-debug-theme-toggle"
-                    [appTooltip]="theme() === 'light' ? 'Switch to dark' : 'Switch to light'"
-                    (click)="toggleTheme()">{{ theme() === 'light' ? '🌙' : '☀' }}</button>
             <button class="vdbg__close"
                     type="button"
                     data-testid="verbose-debug-close"

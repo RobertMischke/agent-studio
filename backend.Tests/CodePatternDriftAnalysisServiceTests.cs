@@ -313,6 +313,74 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         Assert.Equal(0, finding.DriftSites);
     }
 
+    [Fact]
+    public void Analyze_FlagsNativeTitleTooltips_ButAllowsComponentTitleInputs()
+    {
+        WriteFile("frontend/src/app/features/demo/native-title.component.html", """
+            <button type="button" title="Slow native tooltip">Run</button>
+            <code [title]="tag.id">{{ tag.id }}</code>
+            """);
+
+        WriteFile("frontend/src/app/features/demo/generated-title.renderer.ts", """
+            export function render(title: string) {
+              const titleAttr = title ? ` title="${title}"` : '';
+              return `<a href="#">x</a>`;
+            }
+            """);
+
+        WriteFile("frontend/src/app/features/demo/clean.component.html", """
+            <app-dialog title="Visible dialog title"></app-dialog>
+            <app-section-header [title]="heading()"></app-section-header>
+            <button type="button" [appTooltip]="'Instant app tooltip'">Run</button>
+            """);
+
+        var rule = new CodePatternRule(
+            Id: "tooltip-canonical-directive",
+            Title: "Tooltips use [appTooltip], not native title attributes",
+            CanonicalDescription: "Native browser tooltip behaviour must go through [appTooltip].",
+            FilePattern: @"frontend/src/app/.*\.(html|ts)$",
+            ExcludeFilePattern: @"frontend/src/app/components/tooltip/",
+            CandidateMarker: new System.Text.RegularExpressions.Regex(
+                @"title=|\[title\]|\[attr\.title\]|appTip|titleAttr|selector:\s*['""][^'""]*tooltip|class\s+\w*Tooltip"),
+            BadVariant: new System.Text.RegularExpressions.Regex(
+                @"(?i)<(?!app-|ng-|mat-|cdk-)[a-z][\w-]*(?=[^>]*(?:\s(?:title|\[title\]|\[attr\.title\])\s*=))|` title=""|titleAttr\s*=|\[appTip\]|selector:\s*['""][^'""]*tooltip|class\s+\w*Tooltip"),
+            GoodVariant: null,
+            SeverityIfBad: DriftSeverity.Warn);
+
+        var svc = new CodePatternDriftAnalysisService(
+            NullLogger<CodePatternDriftAnalysisService>.Instance,
+            rules: new[] { rule });
+        var report = svc.Analyze(_root);
+        var finding = report.Findings.Single(f => f.RuleId == "tooltip-canonical-directive");
+
+        Assert.Equal(2, finding.DriftSites);
+        Assert.Contains(finding.Hits, h => h.IsDrift && h.FilePath.EndsWith("native-title.component.html"));
+        Assert.Contains(finding.Hits, h => h.IsDrift && h.FilePath.EndsWith("generated-title.renderer.ts"));
+        Assert.DoesNotContain(finding.Hits, h => h.IsDrift && h.FilePath.EndsWith("clean.component.html"));
+    }
+
+    [Fact]
+    public void Analyze_AgainstLiveDevCheckout_ReportsZeroTooltipDirectiveDrift()
+    {
+        var repo = LocateRepoRoot();
+        if (repo is null)
+        {
+            _out.WriteLine("No AGENTS.md upstream; skipping live-repo smoke test");
+            return;
+        }
+
+        var svc = new CodePatternDriftAnalysisService(NullLogger<CodePatternDriftAnalysisService>.Instance);
+        var report = svc.Analyze(repo);
+        var finding = report.Findings.Single(f => f.RuleId == "tooltip-canonical-directive");
+
+        _out.WriteLine($"live-tooltip-canonical-directive: total={finding.TotalSites} canonical={finding.CanonicalSites} drift={finding.DriftSites}");
+        foreach (var drift in finding.Hits.Where(h => h.IsDrift))
+        {
+            _out.WriteLine($"  drift: {drift.FilePath}:{drift.LineNumber} ({drift.Evidence})");
+        }
+        Assert.Equal(0, finding.DriftSites);
+    }
+
     private void WriteFile(string relativePath, string contents)
     {
         var full = Path.Combine(_root, relativePath);

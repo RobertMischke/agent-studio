@@ -200,7 +200,7 @@ The protocol pane renders `status.md` through [`markdownToHtml`](../frontend/src
 | `<name>.png` (no prefix) | `/api/tasks/{jobId}/results/{name}?watchPath=…` (fallback for legacy protocols) |
 | Absolute `http(s)://…` | passed through unchanged |
 
-The backend endpoints serve only files whose names contain no path separators and live directly under `attachments/` or `results/`. They reject `..`, `/`, and `\`; see [`JobScannerService.ResolveAttachment`](../backend/Services/Jobs/JobScannerService.cs) and the `results/` mirror.
+The flat `attachments/<name>` and `results/<name>` endpoints serve only files whose names contain no path separators and live directly under those folders. Nested `results/<subdir>/<name>` protocol images are served by the guarded `/api/tasks/{id}/screenshot?path=...` endpoint. All image-serving paths reject traversal; see `TaskScannerService.ResolveAttachment`, `TaskScannerService.ResolveResult`, and `ScreenshotIndexService.ResolveScreenshotFile`.
 
 ### 4.2.5 Playwright artifact harvesting
 
