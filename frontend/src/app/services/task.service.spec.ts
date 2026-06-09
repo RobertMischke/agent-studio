@@ -5,17 +5,36 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TaskService } from './task.service';
 import { ErrorDialogService } from './error-dialog.service';
-import { JobsHubClient } from './jobs-hub-client.service';
+import { JobsHubClient, type JobsHubHandlers } from './jobs-hub-client.service';
 
 class ErrorDialogServiceStub {
-  show(): void {}
+  show(): void { return undefined; }
 }
 
 class JobsHubClientStub {
   readonly connected = signal(false);
-  start(): void {}
-  stop(): void {}
+  handlers: JobsHubHandlers | null = null;
+  start(handlers: JobsHubHandlers): void {
+    this.handlers = handlers;
+  }
+  stop(): void { return undefined; }
 }
+
+const emptyGrouped = {
+  backlog: [],
+  preparation: [],
+  orchestratorPrep: [],
+  ready: [],
+  progress: [],
+  failedPickup: [],
+  codeNotComplete: [],
+  autoReview: [],
+  humanReview: [],
+  escalated: [],
+  review: [],
+  completed: [],
+  archive: [],
+};
 
 describe('TaskService', () => {
   let service: TaskService;
@@ -79,6 +98,34 @@ describe('TaskService', () => {
     });
 
     expect(actual).toBe(expected);
+  });
+
+  it('rehydrates runner status through the SignalR reconnect hook', () => {
+    const hub = TestBed.inject(JobsHubClient) as unknown as JobsHubClientStub;
+
+    service.startLiveUpdates();
+    http.expectOne('/api/projects/settings').flush({});
+
+    expect(hub.handlers?.reconnected).toBeTruthy();
+    hub.handlers?.reconnected?.();
+
+    http.expectOne('/api/tasks').flush([]);
+    http.expectOne('/api/tasks/grouped').flush(emptyGrouped);
+    http.expectOne('/api/runner/status').flush({
+      projects: {
+        demo: {
+          projectName: 'demo',
+          mode: 'auto-continuous',
+          activeJobId: 'job-1',
+          activeExecution: null,
+          queuedJobIds: ['job-2'],
+        },
+      },
+    });
+
+    expect(service.runnerStatus().projects['demo'].activeJobId).toBe('job-1');
+    expect(service.runnerStatus().projects['demo'].mode).toBe('auto-continuous');
+    service.stopLiveUpdates();
   });
 });
 

@@ -1,9 +1,21 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
+import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
 
@@ -88,6 +100,7 @@ interface QuotaCardModel {
 })
 export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private readonly quotaApi = inject(QuotaApiService);
+  private readonly hub = inject(JobsHubClient);
   readonly report = signal<QuotaReport | null>(null);
   /** Re-evaluated every second so the freshness label ticks live. */
   readonly nowTick = signal(Date.now());
@@ -100,6 +113,23 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   // tickTimer stays raw - 1 s relative-time refresh; pause-on-hidden
   // would show stale "5 min ago" the moment the user comes back.
   private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private pollingStarted = false;
+  private wasHubConnected = false;
+
+  /**
+   * The status-bar quota strip owns its own lightweight cached report signal.
+   * Its 60 s poll is intentionally cheap, but after a backend restart the
+   * operator should not stare at the pre-restart quota snapshot until the next
+   * timer tick. Refresh immediately when the jobs hub returns.
+   */
+  private readonly reconnectEffect = effect(() => {
+    const up = this.hub.connected();
+    untracked(() => {
+      const reconnected = up && !this.wasHubConnected;
+      this.wasHubConnected = up;
+      if (reconnected && this.pollingStarted) this.fetch();
+    });
+  });
 
   readonly cards = computed<QuotaCardModel[]>(() => {
     const r = this.report();
@@ -113,6 +143,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    this.pollingStarted = true;
+    this.wasHubConnected = this.hub.connected();
     this.fetch();
     // Poll the backend every 60s. The backend serves from cache and
     // background-refreshes stale entries, so we get fresh data without

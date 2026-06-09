@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { HeaderQuotaComponent } from './header-quota';
+import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
 
-type WindowDisplay = { value: string; barPct: number; tone: string; windowKind: string };
-type PrimaryDisplay = { value: string; tag: string; barPct: number; hasValue: boolean; tone: string };
-type Chip = { windowKey: string; tag: string; label?: string; value: string; barPct: number; tone: string };
-type QuotaWindowInput = {
+interface WindowDisplay { value: string; barPct: number; tone: string; windowKind: string }
+interface PrimaryDisplay { value: string; tag: string; barPct: number; hasValue: boolean; tone: string }
+interface Chip { windowKey: string; tag: string; label?: string; value: string; barPct: number; tone: string }
+interface QuotaWindowInput {
   label: string;
   usedPct: number | null;
   used: number | null;
@@ -20,6 +21,12 @@ type QuotaWindowInput = {
 };
 
 const noPrimary: PrimaryDisplay = { value: '—', tag: '', barPct: 0, hasValue: false, tone: 'unknown' };
+
+class JobsHubClientStub {
+  readonly connected = signal(false);
+  start(): void { return undefined; }
+  stop(): void { return undefined; }
+}
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -35,13 +42,60 @@ describe('HeaderQuotaComponent (smoke)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(HeaderQuotaComponent);
     try { fixture.detectChanges(); } catch (e) {
       console.warn('[smoke] HeaderQuotaComponent initial render skipped:', (e as Error).message);
     }
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/cli/quota')
+      .flush({ ttlSeconds: 600, snapshots: [] });
     expect(fixture.componentInstance).toBeTruthy();
+  });
+});
+
+describe('HeaderQuotaComponent (reconnect hydration)', () => {
+  it('refreshes the visible quota strip when the jobs hub reconnects', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    const http = TestBed.inject(HttpTestingController);
+    const hub = TestBed.inject(JobsHubClient) as unknown as JobsHubClientStub;
+
+    fixture.detectChanges();
+    http.expectOne('/api/cli/quota').flush({ ttlSeconds: 600, snapshots: [] });
+
+    hub.connected.set(true);
+    fixture.detectChanges();
+
+    http.expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [
+        {
+          cliType: 'codex',
+          plan: 'test',
+          fetchedAt: new Date().toISOString(),
+          source: 'test',
+          error: null,
+          windows: [
+            { label: '5-hour', usedPct: 12, used: null, limit: null, unit: '%', resetAt: null, resetLabel: null },
+          ],
+        },
+      ],
+    });
+    http.verify();
+    fixture.destroy();
   });
 });
 
@@ -67,6 +121,7 @@ describe('HeaderQuotaComponent (semantic state)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(HeaderQuotaComponent);
