@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnInit,
   computed,
   inject,
   input,
@@ -11,11 +12,11 @@ import { TaskService } from '../../../../../services/task.service';
 import { TooltipDirective } from '../../../../../components/tooltip';
 
 /**
- * Drill-down for the Overview "Agent Work" block: a lazily-loaded, grouped,
- * expandable view of every tool call the agent made (the what: command,
- * file, grep pattern - behind the per-tool count chips). Self-contained:
- * takes the job id/watchPath and fetches `agent-work-detail` on first
- * expand, so a collapsed Overview tab costs nothing.
+ * Drill-down for the Overview "Agent Work" block: a grouped, expandable view
+ * of every tool call the agent made (the what: command, file, grep pattern -
+ * behind the per-tool count chips). Self-contained: takes the job id/watchPath
+ * and fetches the capped `agent-work-detail` payload when the block mounts so
+ * the grouped detail is visible immediately under Agent Work.
  */
 @Component({
   selector: 'app-agent-work-detail',
@@ -25,13 +26,13 @@ import { TooltipDirective } from '../../../../../components/tooltip';
   templateUrl: './agent-work-detail.component.html',
   styleUrl: './agent-work-detail.component.scss',
 })
-export class AgentWorkDetailComponent {
+export class AgentWorkDetailComponent implements OnInit {
   readonly jobId = input.required<string>();
   readonly watchPath = input<string>();
 
   private readonly taskService = inject(TaskService);
 
-  readonly open = signal(false);
+  readonly open = signal(true);
   readonly loading = signal(false);
   readonly loaded = signal(false);
   readonly failed = signal(false);
@@ -41,6 +42,10 @@ export class AgentWorkDetailComponent {
 
   readonly groups = computed(() => this.detail()?.groups ?? []);
   readonly hasGroups = computed(() => this.groups().length > 0);
+
+  ngOnInit(): void {
+    this.load();
+  }
 
   toggleOpen(): void {
     const next = !this.open();

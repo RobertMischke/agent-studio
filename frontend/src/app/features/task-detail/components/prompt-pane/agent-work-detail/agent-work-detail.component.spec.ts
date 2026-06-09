@@ -46,15 +46,16 @@ const html = (fixture: { nativeElement: HTMLElement }) =>
   (fixture.nativeElement as HTMLElement);
 
 describe('AgentWorkDetailComponent', () => {
-  it('is collapsed by default and does not fetch', () => {
+  it('is open by default and fetches the grouped detail once', async () => {
     const { fixture, getAgentWorkDetail } = setup();
-    expect(getAgentWorkDetail).not.toHaveBeenCalled();
-    expect(html(fixture).querySelector('[data-testid="agent-work-detail-body"]')).toBeNull();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(getAgentWorkDetail).toHaveBeenCalledTimes(1);
+    expect(html(fixture).querySelector('[data-testid="agent-work-detail-body"]')).not.toBeNull();
   });
 
-  it('lazy-loads and renders one group per tool on first expand', async () => {
+  it('renders one group per tool on mount', async () => {
     const { fixture, getAgentWorkDetail } = setup();
-    fixture.componentInstance.toggleOpen();
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -67,7 +68,6 @@ describe('AgentWorkDetailComponent', () => {
 
   it('does not refetch when toggled closed and open again', async () => {
     const { fixture, getAgentWorkDetail } = setup();
-    fixture.componentInstance.toggleOpen();
     await fixture.whenStable();
     fixture.componentInstance.toggleOpen(); // close
     fixture.componentInstance.toggleOpen(); // open again
@@ -77,7 +77,6 @@ describe('AgentWorkDetailComponent', () => {
 
   it('expands a group to reveal its per-call arguments', async () => {
     const { fixture } = setup();
-    fixture.componentInstance.toggleOpen();
     await fixture.whenStable();
     fixture.componentInstance.toggleGroup('Bash');
     fixture.detectChanges();
@@ -102,7 +101,6 @@ describe('AgentWorkDetailComponent', () => {
 
   it('shows an empty note when there are no groups', async () => {
     const { fixture } = setup({ groups: [], totalCalls: 0 });
-    fixture.componentInstance.toggleOpen();
     await fixture.whenStable();
     fixture.detectChanges();
     expect(html(fixture).querySelector('[data-testid="agent-work-detail-empty"]')).not.toBeNull();

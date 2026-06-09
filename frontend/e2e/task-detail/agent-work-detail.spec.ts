@@ -6,9 +6,9 @@ import * as path from 'path';
  *
  * The Agent Work block used to expose only per-tool count chips (Bash 68,
  * Read 68, …) with no way to see *what* the agent actually did. This spec
- * covers the new `<app-agent-work-detail>` disclosure: a lazily-loaded,
- * grouped, expandable view where each tool group expands to its individual
- * calls (command / file / pattern + pass/fail outcome).
+ * covers the `<app-agent-work-detail>` block: a visible grouped, expandable
+ * view where each tool group expands to its individual calls (command / file /
+ * pattern + pass/fail outcome).
  *
  * Pattern follows activity-plan-toggle: drive the live frontend (proxied to
  * a real backend) but pin only the two evidence routes the block keys off —
@@ -114,7 +114,7 @@ async function openOverview(page: Page, job: { id: string; watchPath: string }):
 }
 
 test.describe('Overview Agent Work — grouped tool detail', () => {
-  test('drill-down lazy-loads, groups by tool, and expands to per-call arguments', async ({ page }) => {
+  test('drill-down is visible, groups by tool, and expands to per-call arguments', async ({ page }) => {
     const job = await pickJob(page);
     if (!job) { test.skip(true, 'No tasks on the board.'); return; }
     await pinEvidence(page, job.id);
@@ -124,13 +124,12 @@ test.describe('Overview Agent Work — grouped tool detail', () => {
     const agentWork = page.getByTestId('overview-agent-work');
     await expect(agentWork).toBeVisible({ timeout: 15_000 });
 
-    // Drill-down starts collapsed: the toggle is present, the body is not.
+    // Drill-down is visible immediately: the toggle is present and the grouped body is mounted.
     const toggle = page.getByTestId('agent-work-detail-toggle');
     await expect(toggle).toBeVisible();
-    await expect(page.getByTestId('agent-work-detail-body')).toHaveCount(0);
+    await expect(page.getByTestId('agent-work-detail-body')).toBeVisible();
 
-    // Expand: groups appear, one per tool, with the honest count.
-    await toggle.click();
+    // Groups appear, one per tool, with the honest count.
     const groups = page.getByTestId('agent-work-detail-group');
     await expect(groups.first()).toBeVisible({ timeout: 10_000 });
     await expect(groups).toHaveCount(5);
