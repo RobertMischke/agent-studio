@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
@@ -330,6 +332,89 @@ public sealed class RegressionRadarServiceTests
     }
 
     [Fact]
+    public void Analyze_UsesOnlyAttributedTaskCommits_NotInterleavedBranchRange()
+    {
+        var workspace = Path.Combine(Path.GetTempPath(), "regression-radar-scope-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var (repoRoot, watchPath) = SetupRadarRepo(workspace);
+
+            WriteFile(repoRoot, "README.md", "seed\n");
+            CommitAll(repoRoot, "seed");
+
+            WriteFile(repoRoot, "src/widget.ts", "export const widget = 1;\n");
+            WriteFile(repoRoot, "src/widget.spec.ts", "it('works', () => expect(1).toBe(1));\n");
+            var ownSha = CommitAll(repoRoot, "feat: widget");
+
+            WriteFile(repoRoot, "frontend/src/app/unrelated.spec.ts", "it('belongs to another task', () => {});\n");
+            var otherSha = CommitAll(repoRoot, "test: unrelated task");
+
+            SeedJob(watchPath, "task-own", "Task with one attributed commit", [ownSha]);
+            var service = BuildService(workspace, repoRoot, watchPath);
+
+            var result = service.Analyze("task-own", watchPath);
+
+            Assert.Null(result.Error);
+            Assert.Equal(1, result.TotalSpecChanges);
+            var entry = Assert.Single(result.Entries);
+            Assert.Equal("src/widget.spec.ts", entry.Path);
+            Assert.DoesNotContain(result.Entries, e => e.Path == "frontend/src/app/unrelated.spec.ts");
+            Assert.Equal(ownSha, result.BaselineSha);
+            Assert.Equal(ownSha, result.HeadSha);
+            Assert.NotEqual(otherSha, result.HeadSha);
+        }
+        finally
+        {
+            DeleteBestEffort(workspace);
+        }
+    }
+
+    [Fact]
+    public void AnalyzeProject_GroupsSpecChangesByEachTasksAttributedCommits()
+    {
+        var workspace = Path.Combine(Path.GetTempPath(), "regression-radar-project-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var (repoRoot, watchPath) = SetupRadarRepo(workspace);
+
+            WriteFile(repoRoot, "README.md", "seed\n");
+            WriteFile(repoRoot, "src/b.ts", "export const b = 1;\n");
+            WriteFile(repoRoot, "src/b.spec.ts", "it('b', () => expect(b).toBe(1));\n");
+            CommitAll(repoRoot, "seed");
+
+            WriteFile(repoRoot, "src/a.ts", "export const a = 1;\n");
+            WriteFile(repoRoot, "src/a.spec.ts", "it('a', () => expect(a).toBe(1));\n");
+            var taskASha = CommitAll(repoRoot, "feat: task a");
+
+            WriteFile(repoRoot, "src/b.spec.ts", "it('b changed without source', () => expect(true).toBe(true));\n");
+            var taskBSha = CommitAll(repoRoot, "test: task b");
+
+            SeedJob(watchPath, "task-a", "Task A", [taskASha]);
+            SeedJob(watchPath, "task-b", "Task B", [taskBSha]);
+            var service = BuildService(workspace, repoRoot, watchPath);
+
+            var result = service.AnalyzeProject("demo");
+
+            Assert.Null(result.Error);
+            Assert.Equal(2, result.TotalSpecChanges);
+            Assert.Equal(2, result.TaskGroups.Count);
+
+            var taskA = Assert.Single(result.TaskGroups, g => g.JobId == "task-a");
+            Assert.Equal("Task A", taskA.JobTitle);
+            Assert.Equal("src/a.spec.ts", Assert.Single(taskA.Entries).Path);
+
+            var taskB = Assert.Single(result.TaskGroups, g => g.JobId == "task-b");
+            var taskBEntry = Assert.Single(taskB.Entries);
+            Assert.Equal("src/b.spec.ts", taskBEntry.Path);
+            Assert.Equal(SpecChangeCategory.AtRisk, taskBEntry.Category);
+        }
+        finally
+        {
+            DeleteBestEffort(workspace);
+        }
+    }
+
+    [Fact]
     public void Analyze_StampsGeneratedAtAndDurationMs()
     {
         // Even on the error path (job not found) the analysis is timestamped and
@@ -362,6 +447,141 @@ public sealed class RegressionRadarServiceTests
         finally
         {
             try { Directory.Delete(workspace, recursive: true); } catch { /* best-effort */ }
+        }
+    }
+
+    private static (string RepoRoot, string WatchPath) SetupRadarRepo(string workspace)
+    {
+        var repoRoot = Path.Combine(workspace, "repo");
+        var watchPath = Path.Combine(workspace, "jobs");
+        Directory.CreateDirectory(repoRoot);
+        Directory.CreateDirectory(watchPath);
+
+        RunGit(workspace, "init", "-q", "-b", "main", repoRoot);
+        RunGit(repoRoot, "config", "user.email", "test@example.com");
+        RunGit(repoRoot, "config", "user.name", "test");
+        RunGit(repoRoot, "config", "commit.gpgsign", "false");
+
+        return (repoRoot, watchPath);
+    }
+
+    private static RegressionRadarService BuildService(string workspace, string repoRoot, string watchPath)
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TaskRepository"] = workspace,
+            ["WatchPaths:0:Name"] = "demo",
+            ["WatchPaths:0:Path"] = watchPath,
+            ["WatchPaths:0:RootPath"] = repoRoot,
+            ["WatchPaths:0:RepositoryPath"] = repoRoot,
+        }).Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        return new RegressionRadarService(git, null!, scanner, NullLogger<RegressionRadarService>.Instance);
+    }
+
+    private static void SeedJob(string watchPath, string jobId, string title, IReadOnlyList<string> commitShas)
+    {
+        var jobDir = Path.Combine(watchPath, TaskStates.HumanReview, jobId);
+        Directory.CreateDirectory(jobDir);
+        File.WriteAllText(Path.Combine(jobDir, "prompt.md"), "fixture");
+
+        var commits = commitShas.Select(sha => new TaskCommitInfo
+        {
+            Sha = sha,
+            ShortSha = sha[..Math.Min(7, sha.Length)],
+            Message = "fixture",
+            At = DateTime.UtcNow,
+            Attribution = CommitAttributionKinds.Automatic,
+            Confidence = 1,
+        }).ToList();
+
+        var jobJson = new
+        {
+            id = jobId,
+            title,
+            state = TaskStates.HumanReview,
+            order = 1,
+            agent = "claude",
+            cliType = "claude",
+            createdAt = DateTime.UtcNow,
+            enteredLaneAt = DateTime.UtcNow,
+            commits,
+        };
+        File.WriteAllText(
+            Path.Combine(jobDir, "task.json"),
+            JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void WriteFile(string root, string relativePath, string content)
+    {
+        var full = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, content);
+    }
+
+    private static string CommitAll(string repoRoot, string message)
+    {
+        RunGit(repoRoot, "add", "-A");
+        RunGit(repoRoot, "commit", "-q", "-m", message);
+        return RunGitCapture(repoRoot, "rev-parse", "HEAD").Trim();
+    }
+
+    private static void RunGit(string cwd, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        using var process = Process.Start(psi)!;
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit(15_000);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(' ', args)} failed: {stderr}");
+    }
+
+    private static string RunGitCapture(string cwd, params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        using var process = Process.Start(psi)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit(15_000);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"git {string.Join(' ', args)} failed: {stderr}");
+        return stdout;
+    }
+
+    private static void DeleteBestEffort(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                try { File.SetAttributes(file, FileAttributes.Normal); } catch { /* best-effort */ }
+            }
+            Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            /* best-effort cleanup for temp git repos on Windows */
         }
     }
 }
