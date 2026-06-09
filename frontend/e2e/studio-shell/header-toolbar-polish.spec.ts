@@ -167,15 +167,31 @@ test.describe('Header toolbar polish', () => {
       await expect(git).not.toHaveClass(/studio-tab-action--active/);
       const activeStyle = await prompt.evaluate((el) => {
         const style = window.getComputedStyle(el);
-        return { color: style.color, background: style.backgroundColor, boxShadow: style.boxShadow };
+        return {
+          color: style.color,
+          background: style.backgroundColor,
+          borderColor: style.borderColor,
+          boxShadow: style.boxShadow,
+        };
       });
       const inactiveStyle = await git.evaluate((el) => {
         const style = window.getComputedStyle(el);
-        return { color: style.color, background: style.backgroundColor, boxShadow: style.boxShadow };
+        return {
+          color: style.color,
+          background: style.backgroundColor,
+          borderColor: style.borderColor,
+          boxShadow: style.boxShadow,
+        };
       });
+      // The active toggle now reads as a centred pill: accent text + soft
+      // accent-tinted fill + a full accent border on all four sides.
       expect(activeStyle.color).not.toBe(inactiveStyle.color);
       expect(activeStyle.background).not.toBe(inactiveStyle.background);
-      expect(activeStyle.boxShadow).toContain('inset');
+      expect(activeStyle.borderColor).not.toBe(inactiveStyle.borderColor);
+      // Regression guard (ASS-1719): the old active indicator was a 2px
+      // `inset 0 -2px 0` bottom underline that looked crooked against the
+      // rounded corners. It must NOT come back — the pill carries the state.
+      expect(activeStyle.boxShadow).not.toContain('inset');
 
       await setTheme(page, 'dark');
       await cluster.screenshot({ path: 'test-results/header-pane-toggles-active-dark.png' });

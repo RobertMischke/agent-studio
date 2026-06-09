@@ -1607,21 +1607,11 @@
   // of pager arrows + Complete pill on the right side.
   padding: 0 2px;
 
+  // position: relative anchors the git-diff count badge. The active state
+  // is intentionally NOT redefined here — pane toggles share the canonical
+  // .studio-tab-action--active pill so all tab-bar button groups match.
   .studio-tab-action {
     position: relative;
-  }
-
-  .studio-tab-action--active {
-    background: color-mix(in srgb, var(--studio-accent) 14%, transparent);
-    border-color: color-mix(in srgb, var(--studio-accent) 38%, transparent);
-    color: var(--studio-accent-strong, var(--studio-accent));
-    box-shadow: inset 0 -2px 0 var(--studio-accent);
-
-    &:hover {
-      background: color-mix(in srgb, var(--studio-accent) 18%, var(--studio-bg-hover));
-      border-color: color-mix(in srgb, var(--studio-accent) 54%, transparent);
-      color: var(--studio-accent-strong, var(--studio-accent));
-    }
   }
 }
 
@@ -1706,10 +1696,21 @@
     }
   }
 
+  // Canonical active/selected treatment shared by every tab-bar button
+  // group (board toggles + pane toggles). A soft accent-tinted fill plus a
+  // full accent border on all four sides reads as a centred pill that
+  // follows the 4px radius symmetrically — deliberately NOT a one-sided
+  // bottom underline, which looked crooked against the rounded corners.
   &--active {
-    background: var(--studio-bg-selected);
-    color: var(--studio-fg-strong);
-    border-color: rgba(217, 119, 87, 0.4);
+    background: color-mix(in srgb, var(--studio-accent) 15%, transparent);
+    border-color: color-mix(in srgb, var(--studio-accent) 42%, transparent);
+    color: var(--studio-accent-strong, var(--studio-accent));
+
+    &:hover {
+      background: color-mix(in srgb, var(--studio-accent) 22%, var(--studio-bg-hover));
+      border-color: color-mix(in srgb, var(--studio-accent) 58%, transparent);
+      color: var(--studio-accent-strong, var(--studio-accent));
+    }
   }
 
   // Pager position counter ("2 / 26") sitting between the prev/next
