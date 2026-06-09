@@ -119,6 +119,10 @@ export class RunTimelineComponent {
       this.contextExpandedIndex.set(null);
       return;
     }
+    if (this.expandedIndex() !== index) {
+      this.expandedIndex.set(index);
+      this.loadCommits(index);
+    }
     this.contextExpandedIndex.set(index);
     this.loadContext(index);
   }
@@ -130,8 +134,17 @@ export class RunTimelineComponent {
   }
 
   transitionLabel(current: RunRecord, next: RunRecord): string {
+    if (next.intent === 'reissue') return `Run #${current.index} re-opened into #${next.index} as auto-review reissue`;
     const trigger = next.userFollowup ? 'user follow-up' : this.intentLabel(next.intent);
     return `Run #${current.index} re-opened into #${next.index} via ${trigger}`;
+  }
+
+  isReissueRun(r: RunRecord): boolean {
+    return r.intent === 'reissue';
+  }
+
+  contextButtonLabel(r: RunRecord): string {
+    return this.isReissueRun(r) ? 'Review prompt' : 'Prompt';
   }
 
   cliIcon(cli: string | null): string {
@@ -154,6 +167,7 @@ export class RunTimelineComponent {
       case 'continue': return 'continue';
       case 'recovery': return 'recovery';
       case 'restart': return 'restart';
+      case 'reissue': return 'reissue';
       default: return intent || 'run';
     }
   }

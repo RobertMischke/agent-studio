@@ -145,6 +145,36 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RunnerReissueChangeTemplate_ForegroundsReviewFindingsBeforeOriginalTask()
+    {
+        var p = Prompts().Render(RuntimePromptService.RunnerReissueChange, new Dictionary<string, string?>
+        {
+            ["title"] = "Fix the toolbar spacing",
+            ["prompt_text"] = "Original task: polish the toolbar.",
+            ["reissue_findings"] = "- [ ] Code review found the save button still wraps on mobile.\n- [ ] Add a regression test for the toolbar.",
+            ["reissue_followup"] = "# Orchestrator follow-up\n\nAuto-review found blocking review findings.",
+            ["prompt_path"] = @"C:\jobs\fix-toolbar\prompt.md",
+            ["job_folder"] = @"C:\jobs\fix-toolbar",
+            ["working_directory"] = @"C:\Projects\Runbook\App",
+            ["repository_path"] = @"C:\Projects\Runbook",
+            ["attachments_list"] = "(none)",
+            ["mode_framing"] = ""
+        });
+
+        Assert.Contains("Reissue change prompt", p);
+        Assert.Contains("review findings below are the primary task", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Code review found the save button still wraps on mobile.", p);
+        Assert.Contains("Add a regression test for the toolbar.", p);
+        Assert.Contains("Original task: polish the toolbar.", p);
+        Assert.Contains("code-review-*.md", p);
+        Assert.Contains("aspect-*.md", p);
+
+        var findingsIndex = p.IndexOf("Code review found", StringComparison.Ordinal);
+        var originalIndex = p.IndexOf("Original task: polish", StringComparison.Ordinal);
+        Assert.InRange(findingsIndex, 0, originalIndex);
+    }
+
+    [Fact]
     public void AllRunnerTemplates_SpellOutTheOutputContract()
     {
         var prompts = Prompts();
@@ -153,7 +183,8 @@ public class TaskRunnerPromptTests
             RuntimePromptService.RunnerFreshStart,
             RuntimePromptService.RunnerResumeInterrupted,
             RuntimePromptService.RunnerResumeRestart,
-            RuntimePromptService.RunnerRecoveryContinuation
+            RuntimePromptService.RunnerRecoveryContinuation,
+            RuntimePromptService.RunnerReissueChange
         })
         {
             var rendered = prompts.Render(template, new Dictionary<string, string?>
@@ -164,7 +195,11 @@ public class TaskRunnerPromptTests
                 ["repository_path"] = "repo",
                 ["user_followup"] = "follow up",
                 ["title"] = "title",
-                ["prompt_text"] = "body"
+                ["prompt_text"] = "body",
+                ["reissue_findings"] = "- [ ] finding",
+                ["reissue_followup"] = "follow up",
+                ["attachments_list"] = "(none)",
+                ["mode_framing"] = ""
             });
             Assert.Contains("[[TASK_DONE]]", rendered);
             Assert.Contains("[[TASK_BLOCKED", rendered);
@@ -181,7 +216,8 @@ public class TaskRunnerPromptTests
             RuntimePromptService.RunnerFreshStart,
             RuntimePromptService.RunnerResumeInterrupted,
             RuntimePromptService.RunnerResumeRestart,
-            RuntimePromptService.RunnerRecoveryContinuation
+            RuntimePromptService.RunnerRecoveryContinuation,
+            RuntimePromptService.RunnerReissueChange
         })
         {
             var rendered = prompts.Render(template, new Dictionary<string, string?>
@@ -192,7 +228,11 @@ public class TaskRunnerPromptTests
                 ["repository_path"] = "repo",
                 ["user_followup"] = "follow up",
                 ["title"] = "title",
-                ["prompt_text"] = "body"
+                ["prompt_text"] = "body",
+                ["reissue_findings"] = "- [ ] finding",
+                ["reissue_followup"] = "follow up",
+                ["attachments_list"] = "(none)",
+                ["mode_framing"] = ""
             });
 
             // Each runner template carries the small observability nudge so
@@ -229,7 +269,8 @@ public class TaskRunnerPromptTests
             RuntimePromptService.RunnerFreshStart,
             RuntimePromptService.RunnerResumeInterrupted,
             RuntimePromptService.RunnerResumeRestart,
-            RuntimePromptService.RunnerRecoveryContinuation
+            RuntimePromptService.RunnerRecoveryContinuation,
+            RuntimePromptService.RunnerReissueChange
         })
         {
             var rendered = prompts.Render(template, new Dictionary<string, string?>
@@ -240,7 +281,11 @@ public class TaskRunnerPromptTests
                 ["repository_path"] = "repo",
                 ["user_followup"] = "follow up",
                 ["title"] = "title",
-                ["prompt_text"] = "body"
+                ["prompt_text"] = "body",
+                ["reissue_findings"] = "- [ ] finding",
+                ["reissue_followup"] = "follow up",
+                ["attachments_list"] = "(none)",
+                ["mode_framing"] = ""
             });
 
             Assert.Contains("Do not run `git commit`", rendered);
@@ -259,6 +304,7 @@ public class TaskRunnerPromptTests
             RuntimePromptService.RunnerResumeInterrupted,
             RuntimePromptService.RunnerResumeRestart,
             RuntimePromptService.RunnerRecoveryContinuation,
+            RuntimePromptService.RunnerReissueChange,
             RuntimePromptService.SummaryProtocol,
             RuntimePromptService.CommitMessage
         })
@@ -274,7 +320,11 @@ public class TaskRunnerPromptTests
                 ["diff"] = "diff",
                 ["task_title"] = "title",
                 ["task_prompt_first_paragraph"] = "first paragraph",
-                ["last_user_continue"] = "follow up"
+                ["last_user_continue"] = "follow up",
+                ["reissue_findings"] = "- [ ] finding",
+                ["reissue_followup"] = "follow up",
+                ["attachments_list"] = "(none)",
+                ["mode_framing"] = ""
             });
 
             Assert.DoesNotContain("\u2014", rendered);

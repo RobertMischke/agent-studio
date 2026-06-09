@@ -12,7 +12,7 @@ import type { TaskTokenSummary } from '../../tokens';
 
 export interface RunRecord {
   index: number;
-  intent: string; // 'start' | 'continue' | 'recovery' | 'restart'
+  intent: string; // 'start' | 'continue' | 'recovery' | 'restart' | 'reissue'
   startedAt: string;
   endedAt: string | null;
   status: string; // 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'

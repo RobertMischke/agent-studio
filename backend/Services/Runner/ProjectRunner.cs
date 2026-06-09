@@ -5,6 +5,7 @@ using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Quota;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace OrchestratorApi.Services.Runner;
@@ -1519,8 +1520,6 @@ public class ProjectRunner
             if (_activeRuns.Get(jobId) is { IsWorktreeRun: true } worktreeRun)
                 worktreeRun.MainCheckoutStatusBefore = _git.GetPorcelainStatus(Entry.RootPath);
 
-            var prompt = RenderPrompt(plan, info, runWorkingDir);
-
             // Reissue open-items pre-check (deterministic pre-pipeline step):
             // when this run is an auto-review re-issue that still carries open
             // items from the previous run, foreground those items at the head of
@@ -1533,15 +1532,17 @@ public class ProjectRunner
             if (!isEpicPlanningRun && string.IsNullOrWhiteSpace(followupPrompt))
             {
                 reissueOpenItems = EvaluateReissueOpenItems(info);
-                if (reissueOpenItems.Intervenes && reissueOpenItems.ForegroundBlock != null)
+                if (reissueOpenItems.Intervenes)
                 {
-                    prompt = reissueOpenItems.ForegroundBlock + prompt;
+                    plan = BuildReissueChangePlan(plan, reissueOpenItems);
                     var interventionKind = reissueOpenItems.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate
                         ? OrchestratorMessageKind.Steer
                         : OrchestratorMessageKind.SoftIntervention;
                     _chatLog.Append(info, interventionKind, $"[reissue-open-items] {reissueOpenItems.Note}");
                 }
             }
+
+            var prompt = RenderPrompt(plan, info, runWorkingDir);
 
             if (plan.ClearStaleSessionName)
                 _sessions.SetJobSessionName(jobId, null, Entry.Path);
@@ -4797,6 +4798,50 @@ public class ProjectRunner
         return IsWorktreePath(runWorkingDir)
             ? BuildWorktreeContainmentNotice(runWorkingDir) + rendered
             : rendered;
+    }
+
+    private static RunPlan BuildReissueChangePlan(
+        RunPlan plan,
+        ReissueOpenItemsPreCheck.PreCheckDecision decision)
+    {
+        var variables = new Dictionary<string, string?>(plan.PromptVariables)
+        {
+            ["reissue_findings"] = BuildReissueFindingsBlock(decision),
+            ["reissue_followup"] = NormalizeReissueFollowUp(decision.FollowUpText),
+        };
+
+        return plan with
+        {
+            PromptTemplate = RuntimePromptService.RunnerReissueChange,
+            PromptVariables = variables,
+            EventKind = "reissue",
+            EventReason = decision.Note ?? "auto-review reissue",
+        };
+    }
+
+    private static string BuildReissueFindingsBlock(ReissueOpenItemsPreCheck.PreCheckDecision decision)
+    {
+        if (decision.OpenItems.Count == 0)
+            return "- [ ] Read the reissue context and resolve the auto-review findings.";
+
+        var sb = new StringBuilder();
+        if (decision.Action == ReissueOpenItemsPreCheck.PreCheckAction.Escalate)
+        {
+            sb.AppendLine(
+                "This task has already been reissued multiple times. Resolve only these findings in this run, or stop with `[[TASK_BLOCKED:<reason>]]`.");
+            sb.AppendLine();
+        }
+        foreach (var item in decision.OpenItems)
+            sb.AppendLine($"- [ ] {item}");
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string NormalizeReissueFollowUp(string? followUpText)
+    {
+        var text = (followUpText ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(text)
+            ? "(No orchestrator-follow-up.md content was captured; use the review findings above and inspect the job folder evidence.)"
+            : text;
     }
 
     private bool IsWorktreePath(string? path)

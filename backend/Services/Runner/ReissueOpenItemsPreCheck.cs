@@ -99,6 +99,7 @@ public static class ReissueOpenItemsPreCheck
     {
         public bool IsReissue { get; init; }
         public IReadOnlyList<string> OpenItems { get; init; } = [];
+        public string? FollowUpText { get; init; }
         public PreCheckAction Action { get; init; } = PreCheckAction.None;
 
         /// <summary>One-line orchestrator chat note describing the intervention,
@@ -141,6 +142,7 @@ public static class ReissueOpenItemsPreCheck
         {
             IsReissue = true,
             OpenItems = openItems,
+            FollowUpText = input.FollowUpText,
             Action = action,
             Note = note,
             ForegroundBlock = BuildForegroundBlock(openItems, escalate),

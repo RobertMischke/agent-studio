@@ -28,6 +28,16 @@
           </span>
           <span class="run-card__chip run-card__chip--intent" [attr.data-intent]="r.intent">{{ intentLabel(r.intent) }}</span>
           <span class="run-card__chip run-card__chip--status" [attr.data-status]="r.status">{{ statusLabel(r) }}</span>
+          @if (r.contextRef) {
+            <button type="button"
+                    class="run-card__prompt-chip"
+                    [class.run-card__prompt-chip--reissue]="isReissueRun(r)"
+                    [attr.data-testid]="'run-context-head-' + r.index"
+                    [attr.aria-expanded]="contextExpandedIndex() === r.index"
+                    (click)="toggleContext(r.index); $event.stopPropagation()">
+              {{ contextButtonLabel(r) }}
+            </button>
+          }
           <span class="run-card__followup" [class.run-card__followup--empty]="!r.userFollowup">
             {{ r.userFollowup || '(no follow-up)' }}
           </span>
@@ -51,6 +61,9 @@
 
         @if (expandedIndex() === r.index) {
           <div class="run-card__body">
+            @if (isReissueRun(r)) {
+              <div class="run-card__reissue-note">Auto-review reissue - findings prompt captured.</div>
+            }
             @if (r.reason) {
               <div class="run-card__row"><span class="run-card__row-label">Verdict</span><span>{{ r.reason }}</span></div>
             }
@@ -91,7 +104,7 @@
               }
             </div>
             <div class="run-card__row run-card__row--context">
-              <span class="run-card__row-label">Passed context</span>
+              <span class="run-card__row-label">Passed prompt</span>
               @if (r.contextRef) {
                 <div class="run-card__context">
                   <button type="button"
@@ -99,7 +112,7 @@
                           [attr.data-testid]="'run-context-toggle-' + r.index"
                           [attr.aria-expanded]="contextExpandedIndex() === r.index"
                           (click)="toggleContext(r.index); $event.stopPropagation()">
-                    {{ contextExpandedIndex() === r.index ? 'Hide passed context' : 'Show passed context' }}
+                    {{ contextExpandedIndex() === r.index ? 'Hide prompt' : 'Show prompt' }}
                   </button>
                   @if (contextExpandedIndex() === r.index) {
                     @if (contextState() === 'loading') {

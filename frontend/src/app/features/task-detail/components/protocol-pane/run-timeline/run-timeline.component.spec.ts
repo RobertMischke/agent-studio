@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelineComponent } from './run-timeline.component';
 import type { RunRecord } from '../../../../../features/run-timeline';
+import type { TaskInfo } from '../../../../../models/task.model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -78,7 +79,70 @@ describe('RunTimelineComponent (smoke)', () => {
     expect(text).toContain('2m5s');
     expect(text).toContain('2.5k tok');
   });
+
+  it('surfaces captured reissue prompt context from the run header', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunTimelineComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RunTimelineComponent);
+    fixture.componentRef.setInput('job', taskInfo());
+    fixture.componentRef.setInput('runs', [
+      runRecord(1, 'start', 'completed', null, 20),
+      { ...runRecord(2, 'reissue', 'completed', null, 25), contextRef: 'logs/run-context/run-2.md', reason: 'auto-review reissue' },
+    ]);
+    fixture.detectChanges();
+
+    const headButton = fixture.nativeElement.querySelector('[data-testid="run-context-head-2"]') as HTMLButtonElement;
+    expect(headButton.textContent?.trim()).toBe('Review prompt');
+    headButton.click();
+
+    const http = TestBed.inject(HttpTestingController);
+    const req = http.expectOne(r =>
+      r.url.endsWith('/tasks/task-1/runs/2/context') &&
+      r.params.get('watchPath') === 'C:\\watch');
+    req.flush({
+      runIndex: 2,
+      context: '## Reissue change prompt\n\nCode review found the save button still wraps on mobile.'
+    });
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Auto-review reissue');
+    expect(text).toContain('Reissue change prompt');
+    expect(text).toContain('Code review found the save button still wraps on mobile.');
+    http.verify();
+  });
 });
+
+function taskInfo(): TaskInfo {
+  return {
+    id: 'task-1',
+    taskKey: 'ASS-1',
+    title: 'Task',
+    state: '3-progress',
+    order: 0,
+    agent: 'codex',
+    createdAt: '2026-06-08T10:00:00Z',
+    watchPath: 'C:\\watch',
+    projectName: 'demo',
+    folderPath: 'C:\\watch\\3-progress\\task-1',
+    lastActivity: '2026-06-08T10:00:00Z',
+    sessionName: null,
+    model: null,
+    cliType: 'codex',
+    useOwnSession: null,
+    lastUsage: null,
+    execution: null,
+    commit: null,
+  } as TaskInfo;
+}
 
 function runRecord(
   index: number,
