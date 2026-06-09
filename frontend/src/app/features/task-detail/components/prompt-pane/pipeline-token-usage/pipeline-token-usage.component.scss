@@ -1,24 +1,131 @@
 :host {
   display: block;
+
+  // --- Central design tokens for this surface --------------------------------
+  // The expanded per-model breakdown rides on ONE shared grid template so the
+  // six numeric columns stay right-aligned and vertically aligned across every
+  // disclosed level (task total + per run). The model column flexes; the six
+  // numeric columns share one width.
+  --ptu-num-col: minmax(3.5rem, 1fr);
+  --ptu-grid: minmax(6rem, 1.4fr) var(--ptu-num-col) var(--ptu-num-col)
+    var(--ptu-num-col) var(--ptu-num-col) var(--ptu-num-col) var(--ptu-num-col);
+  // The breakdown (and only the breakdown) refuses to shrink past this, so a
+  // narrow pane scrolls the seven columns as one block while the always-visible
+  // head lines above keep their at-a-glance Total/Cost pinned in view.
+  --ptu-breakdown-min: 33rem;
+  // Fixed width for the two at-a-glance numbers on every head line; sizing them
+  // alike keeps Total over Total and Cost over Cost down the whole stack.
+  --ptu-total-w: 5rem;
+  --ptu-cost-w: 4.5rem;
+  // Indent that lines a disclosed row's model name up under its parent label,
+  // past the disclosure triangle - the only indentation the hierarchy uses.
+  --ptu-indent: 1.1rem;
 }
 
 .ptu {
   display: flex;
   flex-direction: column;
-  gap: 6px;
 
-  &__title {
+  // --- A "level" = one collapsible block (the task total, or one run) ---------
+  &__level {
+    display: flex;
+    flex-direction: column;
+  }
+
+  // --- Head line: always visible, the level's own total row -------------------
+  // Flex (not grid) so the label can flex while Total + Cost stay pinned right
+  // and never scroll off in a narrow pane - that is the whole point of the
+  // collapsed summary. Disclosure toggles are buttons; strip the chrome.
+  &__head {
+    appearance: none;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--studio-spacing-2);
+    padding-block: var(--studio-spacing-1);
+
+    &:hover {
+      background: var(--studio-bg-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--studio-accent);
+      outline-offset: -2px;
+      border-radius: 4px;
+    }
+  }
+
+  &__head--sum {
+    padding-block: var(--studio-spacing-2);
+  }
+
+  &__head-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--studio-spacing-2);
+    overflow: hidden;
+  }
+
+  // The two at-a-glance numbers: fixed width, right-aligned, never flex away.
+  &__head-total {
+    flex: 0 0 auto;
+    width: var(--ptu-total-w);
+  }
+
+  &__head-cost {
+    flex: 0 0 auto;
+    width: var(--ptu-cost-w);
+  }
+
+  &__disclosure {
+    display: inline-block;
+    width: var(--ptu-indent);
+    flex: 0 0 auto;
+    font-size: 9px;
+    line-height: 1;
+    color: var(--studio-fg-muted);
+    align-self: center;
+  }
+
+  // --- TASK TOTAL SUM (primary) ----------------------------------------------
+  &__sum-title {
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--studio-fg-strong);
+  }
+
+  &__scope {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--studio-fg-muted);
+  }
+
+  // --- "Tokens by run" section heading ---------------------------------------
+  &__title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--studio-spacing-2);
     margin: 0;
+    padding-top: var(--studio-spacing-2);
     padding-bottom: 1px;
-    border-bottom: 1px solid var(--studio-border);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--studio-fg-strong);
+    border-top: 1px solid var(--studio-border);
   }
 
   &__title-sub {
@@ -29,56 +136,29 @@
     color: var(--studio-fg-muted);
   }
 
-  // One card per run.
-  &__run {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 4px 0 2px;
+  // --- Per-run level ----------------------------------------------------------
+  &__level--run {
     border-top: 1px solid var(--studio-border);
-
-    &:first-of-type {
-      border-top: none;
-    }
 
     // The live run gets a subtle accent rail so it reads apart from history.
     &[data-current='true'] {
       border-left: 2px solid var(--studio-accent);
-      padding-left: 6px;
-      margin-left: -8px;
-    }
-  }
 
-  &__run-head {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
+      .ptu__head {
+        padding-left: var(--studio-spacing-1);
+      }
+    }
   }
 
   &__run-name {
     font-weight: 700;
     color: var(--studio-fg-strong);
+    font-size: 12px;
   }
 
   &__run-time {
     color: var(--studio-fg-muted);
     font-size: 11px;
-  }
-
-  &__run-spacer {
-    flex: 1 1 auto;
-  }
-
-  &__run-total {
-    color: var(--studio-fg);
-    font-weight: 700;
-  }
-
-  &__run-cost {
-    color: var(--studio-fg-dim);
-    min-width: 56px;
-    text-align: right;
   }
 
   &__badge {
@@ -90,46 +170,81 @@
     letter-spacing: 0.05em;
     padding: 1px 5px;
     border-radius: 999px;
-
-    &--current {
-      color: var(--studio-on-accent);
-      background: var(--studio-accent);
-    }
+    color: var(--studio-on-accent);
+    background: var(--studio-accent);
   }
 
-  // Horizontal scroll keeps the 7-column table from breaking on narrow rails.
-  &__scroll {
+  // --- Expanded breakdown: the level's per-model summands ----------------------
+  // Its own horizontal-scroll container so the shared seven-column grid can
+  // scroll independently of the always-visible head line above it.
+  &__breakdown {
     overflow-x: auto;
   }
 
-  &__table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11.5px;
+  &__grid {
+    min-width: var(--ptu-breakdown-min);
+    display: grid;
+    grid-template-columns: var(--ptu-grid);
+    align-items: center;
+    column-gap: var(--studio-spacing-2);
+    padding-block: var(--studio-spacing-1);
+    white-space: nowrap;
+  }
 
-    th,
-    td {
-      padding: 2px 6px;
-      white-space: nowrap;
-    }
-
-    thead th {
+  // --- Column header (one per disclosed level) -------------------------------
+  &__grid--colhead {
+    .ptu__col-label,
+    .ptu__cell {
       font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.03em;
       color: var(--studio-fg-muted);
-      text-align: left;
-      border-bottom: 1px solid var(--studio-border);
     }
 
-    tbody tr + tr td {
-      border-top: 1px solid var(--studio-border);
+    .ptu__col-label {
+      padding-left: var(--ptu-indent);
     }
+  }
 
-    tbody tr:hover td {
+  // --- Per-model breakdown row -----------------------------------------------
+  &__grid--model {
+    font-size: 11.5px;
+
+    &:hover {
       background: var(--studio-bg-hover);
     }
+  }
+
+  &__model {
+    display: flex;
+    align-items: center;
+    gap: var(--studio-spacing-1);
+    padding-left: var(--ptu-indent);
+    min-width: 0;
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--studio-fg);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  &__steps {
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--studio-fg-muted);
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--studio-bg-hover);
+  }
+
+  // --- Numeric cells (shared by head numbers and breakdown cells) -------------
+  &__cell {
+    min-width: 0;
   }
 
   &__num {
@@ -139,94 +254,22 @@
 
   &__mono {
     font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--studio-fg);
   }
 
+  // Total + cost carry the weight that signals a sum, the only emphasis the
+  // hierarchy leans on besides the divider and the indent.
   &__strong {
     font-weight: 700;
     color: var(--studio-fg-strong);
   }
 
-  &__model {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-
-    code {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--studio-fg);
-    }
-  }
-
-  &__steps {
-    font-size: 9.5px;
-    font-weight: 600;
-    color: var(--studio-fg-muted);
-    padding: 0 4px;
-    border-radius: 4px;
-    background: var(--studio-bg-hover);
+  &__cell--cost {
+    color: var(--studio-fg-dim);
   }
 
   &__na {
     color: var(--studio-fg-muted);
-  }
-
-  // Grand total over all runs - deliberately set off as an elevated card.
-  &__total {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin-top: 4px;
-    padding: 6px 8px;
-    border: 1px solid var(--studio-border-strong);
-    border-radius: 8px;
-    background: var(--studio-bg-elevated);
-  }
-
-  &__total-head {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  &__total-label {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--studio-fg-strong);
-  }
-
-  &__total-scope {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--studio-accent);
-  }
-
-  &__total-sub {
-    font-size: 10px;
-    color: var(--studio-fg-muted);
-  }
-
-  &__table--total {
-    tfoot .ptu__grand {
-      th,
-      td {
-        padding-top: 3px;
-        border-top: 1px solid var(--studio-border-strong);
-        font-weight: 800;
-        color: var(--studio-fg-strong);
-      }
-    }
-  }
-
-  &__grand-label {
-    text-align: left;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 }

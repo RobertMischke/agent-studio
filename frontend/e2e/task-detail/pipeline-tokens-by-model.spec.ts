@@ -201,7 +201,7 @@ async function saveShot(page: Page, name: string) {
   await writeFile(join(RESULTS_DIR, name), buf);
 }
 
-test('task detail shows per-run tokens grouped by model plus a grand total over all runs', async ({ page }) => {
+test('token usage: collapsible task total sum + per-run rows on one quiet surface', async ({ page }) => {
   await page.addInitScript(() => {
     try {
       localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: true, git: false }));
@@ -214,23 +214,47 @@ test('task detail shows per-run tokens grouped by model plus a grand total over 
   const surface = page.getByTestId('overview-pipeline-tokens-by-model');
   await expect(surface).toBeVisible({ timeout: 10000 });
 
-  // One card per run; the current run breaks down into both models.
+  // TASK TOTAL SUM is collapsed by default: the lifetime total + cost show on
+  // the toggle line, but the all-runs-by-model breakdown is hidden.
+  const total = page.getByTestId('pipeline-token-usage-total');
+  const totalToggle = page.getByTestId('pipeline-token-usage-total-toggle');
+  await expect(total).toBeVisible();
+  await expect(totalToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('pipeline-token-usage-grand-total-tokens')).toContainText('2.62M');
+  await expect(page.getByTestId('pipeline-token-usage-grand-total-cost')).toContainText('$5.50');
+  await expect(page.getByTestId('pipeline-token-usage-total-model')).toHaveCount(0);
+
+  // Each run is its own collapsible row, collapsed by default (no model rows).
   const runs = page.getByTestId('pipeline-token-usage-run');
   await expect(runs).toHaveCount(2);
-  const currentRun = page.locator('[data-testid="pipeline-token-usage-run"][data-current="true"]');
+  await expect(page.getByTestId('pipeline-token-usage-run-model')).toHaveCount(0);
+
+  // Newest-first: the current run renders on top and carries the badge + total.
+  const currentRun = runs.first();
+  await expect(currentRun).toHaveAttribute('data-current', 'true');
+  await expect(currentRun.getByTestId('pipeline-token-usage-run-current')).toBeVisible();
+  await expect(currentRun.getByTestId('pipeline-token-usage-run-total')).toContainText('1.31M');
+
+  await surface.screenshot({
+    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-tokens-collapsed.png') : 'test-results/pipeline-tokens-collapsed.png',
+  });
+
+  // Expand TASK TOTAL SUM -> all-runs-by-model breakdown appears inline.
+  await totalToggle.click();
+  await expect(totalToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(total.getByTestId('pipeline-token-usage-total-model')).toHaveCount(2);
+  await expect(total).toContainText('claude-haiku-4-5');
+  await expect(total).toContainText('claude-opus-4-8');
+
+  // Expand the current run -> only that run's per-model rows appear.
+  await currentRun.getByTestId('pipeline-token-usage-run-toggle').click();
   await expect(currentRun.getByTestId('pipeline-token-usage-run-model')).toHaveCount(2);
+  await expect(page.getByTestId('pipeline-token-usage-run-model')).toHaveCount(2);
   await expect(currentRun).toContainText('claude-haiku-4-5');
   await expect(currentRun).toContainText('claude-opus-4-8');
 
-  // Grand total over all runs, summed by model, with the bold all-models row.
-  const total = page.getByTestId('pipeline-token-usage-total');
-  await expect(total).toBeVisible();
-  await expect(total.getByTestId('pipeline-token-usage-total-model')).toHaveCount(2);
-  await expect(page.getByTestId('pipeline-token-usage-grand-total-tokens')).toContainText('2.62M');
-  await expect(page.getByTestId('pipeline-token-usage-grand-total-cost')).toContainText('$5.50');
-
   await surface.screenshot({
-    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-tokens-by-model.png') : 'test-results/pipeline-tokens-by-model.png',
+    path: RESULTS_DIR ? join(RESULTS_DIR, 'pipeline-tokens-expanded.png') : 'test-results/pipeline-tokens-expanded.png',
   });
   await saveShot(page, 'pipeline-tokens-by-model-full.png');
 });
