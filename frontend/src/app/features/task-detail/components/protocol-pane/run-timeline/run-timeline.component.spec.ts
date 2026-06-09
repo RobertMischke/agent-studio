@@ -111,6 +111,10 @@ describe('RunTimelineComponent (smoke)', () => {
       runIndex: 2,
       context: '## Reissue change prompt\n\nCode review found the save button still wraps on mobile.'
     });
+    const commitsReq = http.expectOne(r =>
+      r.url.endsWith('/tasks/task-1/runs/2/commits') &&
+      r.params.get('watchPath') === 'C:\\watch');
+    commitsReq.flush({ commits: [] });
     fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent as string;

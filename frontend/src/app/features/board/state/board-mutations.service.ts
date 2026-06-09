@@ -5,7 +5,8 @@ import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UndoController } from '../../../services/undo.service';
-import { TaskSelectionService, laneLabelFor } from '../../task-detail';
+import { TaskSelectionService } from '../../task-detail/state/task-selection.service';
+import { laneLabelFor } from '../../task-detail/state/triage-actions.model';
 
 /**
  * Cycle 10b board-feature service: orchestrates the board's mutation

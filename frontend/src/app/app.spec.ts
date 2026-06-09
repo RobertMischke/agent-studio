@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -22,6 +22,10 @@ import { studioTabKey } from './features/studio-shell';
  * stable across template tweaks.
  */
 describe('App (smoke)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
   it('compiles + instantiates without throwing', async () => {
     // The smoke pattern can crash inside Angular's TestBed compile path when
     // module-load order leaves a transitive dependency undefined (cycle or
@@ -55,10 +59,15 @@ describe('App epic tab navigation', () => {
   const TAB_STORAGE_KEY = 'atp.studio.tabs.v1';
   const VSCODE_FLAG_KEY = 'atp.flag.vsCodeLayout';
 
-  function configure(): { app: App; taskService: TaskService; http: HttpTestingController } {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  async function configure(): Promise<{ app: App; taskService: TaskService; http: HttpTestingController }> {
+    TestBed.resetTestingModule();
     localStorage.removeItem(TAB_STORAGE_KEY);
     localStorage.setItem(VSCODE_FLAG_KEY, '0');
-    TestBed.configureTestingModule({
+    await TestBed.configureTestingModule({
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
@@ -66,7 +75,7 @@ describe('App epic tab navigation', () => {
         provideHttpClientTesting(),
         provideRouter([]),
       ],
-    });
+    }).compileComponents();
     const fixture = TestBed.createComponent(App);
     return {
       app: fixture.componentInstance,
@@ -129,8 +138,8 @@ describe('App epic tab navigation', () => {
     });
   }
 
-  it('opens an Epic card as an inline epic tab', () => {
-    const { app, taskService, http } = configure();
+  it('opens an Epic card as an inline epic tab', async () => {
+    const { app, taskService, http } = await configure();
     const epic = task({
       id: 'epic-a',
       taskKey: 'C:/watch::epic-a',
@@ -152,8 +161,8 @@ describe('App epic tab navigation', () => {
     expect(app.selectedJob()?.info.id).toBe('epic-a');
   });
 
-  it('retargets the active task tab when opening its parent Epic from the task anchor', () => {
-    const { app, taskService, http } = configure();
+  it('retargets the active task tab when opening its parent Epic from the task anchor', async () => {
+    const { app, taskService, http } = await configure();
     const child = task({
       id: 'task-a',
       taskKey: 'C:/watch::task-a',

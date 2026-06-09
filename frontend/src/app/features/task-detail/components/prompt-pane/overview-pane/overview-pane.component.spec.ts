@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -107,6 +107,7 @@ function baseJob(overrides: Partial<TaskInfo> = {}): TaskInfo {
 }
 
 async function build(job: TaskInfo, agentWork: AgentWorkSummary | null = null) {
+  TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [OverviewPaneComponent],
     providers: [
@@ -130,6 +131,10 @@ async function build(job: TaskInfo, agentWork: AgentWorkSummary | null = null) {
   }
   return fixture;
 }
+
+afterEach(() => {
+  TestBed.resetTestingModule();
+});
 
 describe('OverviewPaneComponent (smoke)', () => {
   it('compiles + instantiates without throwing', async () => {

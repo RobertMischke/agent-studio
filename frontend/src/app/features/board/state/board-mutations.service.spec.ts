@@ -7,7 +7,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { of } from 'rxjs';
 import { BoardMutationsService } from './board-mutations.service';
 import { TaskService } from '../../../services/task.service';
-import { TaskSelectionService } from '../../task-detail';
+import { TaskSelectionService } from '../../task-detail/state/task-selection.service';
 import type { TaskInfo } from '../../../models/task.model';
 
 /**
