@@ -372,11 +372,12 @@ public class RunOutcomeContractTests
             "Captured result screenshot at results/run-proof.png.",
             "Captured duplicate result screenshot at results/run-proof.png.",
             "Nested Playwright artifact: results/playwright/spec-name/nested-proof.png",
+            new string('x', 65_000),
             "User supplied reference: attachments/input-wireframe.png",
             "Ignore non-image artifact: results/review-evidence.jsonl");
 
         var updated = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
-        updated = OrchestratorApi.Services.SummaryGenerationService.ApplyProtocolImageReferences(updated, log);
+        updated = OrchestratorApi.Services.SummaryGenerationService.ApplyProtocolImageReferences(updated, log, out var appendedCount);
 
         Assert.Contains("- Result: Success", updated);
         Assert.DoesNotContain("- Result: Failed", updated);
@@ -385,6 +386,7 @@ public class RunOutcomeContractTests
         Assert.Contains("![](results/playwright/spec-name/nested-proof.png)", updated);
         Assert.Contains("![](attachments/input-wireframe.png)", updated);
         Assert.DoesNotContain("review-evidence", updated);
+        Assert.Equal(3, appendedCount);
         Assert.Equal(1, updated.Split("![](results/run-proof.png)", StringSplitOptions.None).Length - 1);
     }
 }

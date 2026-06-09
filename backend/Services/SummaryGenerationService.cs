@@ -130,7 +130,12 @@ public sealed class SummaryGenerationService
                 summary = ApplyOutcomeResultLine(summary, runOutcome.ProtocolResult);
             }
 
-            summary = ApplyProtocolImageReferences(summary, truncated);
+            summary = ApplyProtocolImageReferences(summary, rawLog, out var appendedImageCount);
+            if (appendedImageCount > 0)
+            {
+                _logger.LogInformation("Summary protocol image references appended for {JobId}: {ImageCount} references",
+                    info.Id, appendedImageCount);
+            }
 
             var target = Path.Combine(info.FolderPath, "status.md");
             WriteAllTextWithRetry(target, summary);
@@ -204,9 +209,10 @@ public sealed class SummaryGenerationService
             return InterimSummaryResult.Failure(result.Error ?? "Empty Haiku response");
         }
 
-        _logger.LogInformation("Interim summary produced for {JobId} ({Bytes} bytes, {ElapsedMs}ms)",
-            info.Id, result.Summary.Length, sw.ElapsedMilliseconds);
-        return InterimSummaryResult.Success(ApplyProtocolImageReferences(result.Summary, truncated), sw.ElapsedMilliseconds);
+        var markdown = ApplyProtocolImageReferences(result.Summary, rawLog, out var appendedImageCount);
+        _logger.LogInformation("Interim summary produced for {JobId} ({Bytes} bytes, {ElapsedMs}ms, {ImageCount} appended images)",
+            info.Id, markdown.Length, sw.ElapsedMilliseconds, appendedImageCount);
+        return InterimSummaryResult.Success(markdown, sw.ElapsedMilliseconds);
     }
 
     private void Fail(string key, string error)
@@ -388,7 +394,11 @@ public sealed class SummaryGenerationService
     }
 
     public static string ApplyProtocolImageReferences(string markdown, string log)
+        => ApplyProtocolImageReferences(markdown, log, out _);
+
+    public static string ApplyProtocolImageReferences(string markdown, string log, out int appendedCount)
     {
+        appendedCount = 0;
         if (string.IsNullOrWhiteSpace(markdown) || string.IsNullOrWhiteSpace(log)) return markdown;
 
         var imageRefs = ExtractProtocolImageReferences(log);
@@ -397,6 +407,7 @@ public sealed class SummaryGenerationService
         var existing = new HashSet<string>(ExtractProtocolImageReferences(markdown), StringComparer.OrdinalIgnoreCase);
         var missing = imageRefs.Where(existing.Add).ToList();
         if (missing.Count == 0) return markdown;
+        appendedCount = missing.Count;
 
         var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
         var imagesIndex = lines.FindIndex(l => string.Equals(l.Trim(), "## Images", StringComparison.OrdinalIgnoreCase));
