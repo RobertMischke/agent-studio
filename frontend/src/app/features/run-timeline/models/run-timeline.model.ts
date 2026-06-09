@@ -9,6 +9,7 @@
  * filter does not have to re-derive the boundaries.
  */
 import type { TaskTokenSummary } from '../../tokens';
+import type { ContextUsageMetric } from '../../../models/task.model';
 
 export interface RunRecord {
   index: number;
@@ -44,10 +45,36 @@ export interface RunRecord {
   tokenSummary?: TaskTokenSummary | null;
 }
 
+export interface RunPromptContextSnapshot {
+  source: string;
+  ref: string | null;
+  at: string | null;
+  status: string | null;
+  tokenEstimate: number | null;
+  metrics: ContextUsageMetric[];
+}
+
+export interface RunPromptEntry {
+  index: number;
+  runIndex: number;
+  intent: string;
+  at: string;
+  label: string;
+  fileName: string | null;
+  promptTokenSource: string;
+  promptPreview: string | null;
+  promptTokenEstimate: number | null;
+  contextTokenEstimate: number | null;
+  contextRef: string | null;
+  contextSnapshot: RunPromptContextSnapshot | null;
+}
+
 /** Response of `GET /api/tasks/{id}/runs/{index}/context`. `context` is null when nothing was captured for the run. */
 export interface RunContextResponse {
   runIndex: number;
   context: string | null;
+  promptTokenEstimate?: number | null;
+  contextTokenEstimate?: number | null;
   note?: string;
 }
 
@@ -57,6 +84,7 @@ export interface RunTimeline {
   lastActivityAt: string | null;
   hasActiveRun: boolean;
   runs: RunRecord[];
+  promptEntries?: RunPromptEntry[];
 }
 
 export interface RunCommitInfo {

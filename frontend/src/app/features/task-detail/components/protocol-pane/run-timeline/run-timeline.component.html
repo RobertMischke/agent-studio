@@ -3,9 +3,10 @@
 } @else {
   <div class="run-timeline" data-testid="run-timeline">
     <div class="run-timeline__header">
-      <span class="run-timeline__title">Runs</span>
+      <span class="run-timeline__title">Runs and prompts</span>
       <span class="run-timeline__aggregate" data-testid="runs-aggregate">
         {{ visibleRuns().length }} run{{ visibleRuns().length === 1 ? '' : 's' }}
+        · {{ promptItems().length }} prompt{{ promptItems().length === 1 ? '' : 's' }}
         @if (statusSummary().completed > 0) { · {{ statusSummary().completed }} ok }
         @if (statusSummary().failed > 0)    { · {{ statusSummary().failed }} fail }
         @if (statusSummary().running > 0)   { · {{ statusSummary().running }} live }
@@ -13,153 +14,184 @@
       </span>
     </div>
 
-    @for (r of visibleRuns(); track r.index) {
-      <div class="run-card"
-           [attr.data-status]="r.status"
-           [class.run-card--expanded]="expandedIndex() === r.index"
-           [attr.data-testid]="'run-card-' + r.index">
-        <button type="button"
-                class="run-card__head"
-                (click)="toggle(r.index)"
-                [attr.aria-expanded]="expandedIndex() === r.index">
-          <span class="run-card__index">Attempt {{ r.index }}</span>
-          <span class="run-card__cli" [appTooltip]="cliLabel(r.cli)" [attr.aria-label]="cliLabel(r.cli)">
-            {{ cliIcon(r.cli) }}
-          </span>
-          <span class="run-card__chip run-card__chip--intent" [attr.data-intent]="r.intent">{{ intentLabel(r.intent) }}</span>
-          <span class="run-card__chip run-card__chip--status" [attr.data-status]="r.status">{{ statusLabel(r) }}</span>
-          @if (r.contextRef) {
+    <div class="run-timeline__split">
+      <div class="run-timeline__rail" data-testid="runs-icon-row" aria-label="Run prompt timeline">
+        @for (item of promptItems(); track item.entry.index) {
+          <div class="prompt-entry" [attr.data-status]="item.run.status" data-testid="run-timeline-card">
             <button type="button"
-                    class="run-card__prompt-chip"
-                    [class.run-card__prompt-chip--reissue]="isReissueRun(r)"
-                    [attr.data-testid]="'run-context-head-' + r.index"
-                    [attr.aria-expanded]="contextExpandedIndex() === r.index"
-                    (click)="toggleContext(r.index); $event.stopPropagation()">
-              {{ contextButtonLabel(r) }}
-            </button>
-          }
-          <span class="run-card__followup" [class.run-card__followup--empty]="!r.userFollowup">
-            {{ r.userFollowup || '(no follow-up)' }}
-          </span>
-          <span class="run-card__meta">
-            @if (r.durationSeconds !== null) {
-              <span>{{ formatDuration(r.durationSeconds) }}</span>
-            }
-            @if (tokenLabel(r.tokenSummary); as tokens) {
-              <span>{{ tokens }}</span>
-            }
-            @if (r.exitCode !== null) {
-              <span class="run-card__exit">exit {{ r.exitCode }}</span>
-            }
-            <span class="run-card__time">started {{ formatTime(r.startedAt) }}</span>
-            @if (r.endedAt) {
-              <span class="run-card__time">finished {{ formatTime(r.endedAt) }}</span>
-            }
-          </span>
-          <span class="run-card__caret">{{ expandedIndex() === r.index ? '▾' : '▸' }}</span>
-        </button>
-
-        @if (expandedIndex() === r.index) {
-          <div class="run-card__body">
-            @if (isReissueRun(r)) {
-              <div class="run-card__reissue-note">Auto-review reissue - findings prompt captured.</div>
-            }
-            @if (r.reason) {
-              <div class="run-card__row"><span class="run-card__row-label">Verdict</span><span>{{ r.reason }}</span></div>
-            }
-            @if (r.inputSessionId || r.capturedSessionId) {
-              <div class="run-card__row">
-                <span class="run-card__row-label">Session</span>
-                <span class="run-card__session">
-                  @if (r.inputSessionId) { <code>{{ short(r.inputSessionId) }}</code> → }
-                  @if (r.capturedSessionId) { <code>{{ short(r.capturedSessionId) }}</code> }
-                  @if (!r.capturedSessionId) { <em>not captured</em> }
+                    class="prompt-entry__button"
+                    [class.prompt-entry__button--active]="expandedIndex() === item.run.index"
+                    [attr.data-testid]="'run-icon-' + item.run.index"
+                    [attr.aria-pressed]="expandedIndex() === item.run.index"
+                    (click)="toggle(item.run.index)">
+              <span class="prompt-entry__top">
+                <span class="prompt-entry__label">{{ item.entry.label || ('Prompt #' + item.entry.index) }}</span>
+                <span class="run-card__cli" [appTooltip]="cliLabel(item.run.cli)" [attr.aria-label]="cliLabel(item.run.cli)">
+                  {{ cliIcon(item.run.cli) }}
                 </span>
-              </div>
-            }
-            <div class="run-card__row run-card__row--commits">
-              <span class="run-card__row-label">Software change</span>
-              @if (commitsState() === 'loading') {
-                <span class="run-card__commits-loading">loading...</span>
-              } @else if (commitsError()) {
-                <span class="run-card__commits-error">{{ commitsError() }}</span>
-              } @else if (commits().length === 0) {
-                <span class="run-card__commits-empty">No commits in this run's window.</span>
-              } @else {
-                <div class="run-card__commits">
-                  <div class="run-card__commits-summary">
-                    {{ commits().length }} commit{{ commits().length === 1 ? '' : 's' }} ·
-                    +{{ totalAdded() }} / -{{ totalRemoved() }} across {{ totalFiles() }} file{{ totalFiles() === 1 ? '' : 's' }}
-                  </div>
-                  <ul class="run-card__commit-list">
-                    @for (c of commits(); track c.sha) {
-                      <li class="run-card__commit">
-                        <code class="run-card__commit-sha">{{ c.shortSha }}</code>
-                        <span class="run-card__commit-subject">{{ c.subject }}</span>
-                        <span class="run-card__commit-stats">+{{ c.added }}/-{{ c.removed }} · {{ c.filesChanged }}f</span>
-                      </li>
-                    }
-                  </ul>
-                </div>
-              }
-            </div>
-            <div class="run-card__row run-card__row--context">
-              <span class="run-card__row-label">Passed prompt</span>
-              @if (r.contextRef) {
-                <div class="run-card__context">
-                  <button type="button"
-                          class="run-card__context-toggle"
-                          [attr.data-testid]="'run-context-toggle-' + r.index"
-                          [attr.aria-expanded]="contextExpandedIndex() === r.index"
-                          (click)="toggleContext(r.index); $event.stopPropagation()">
-                    {{ contextExpandedIndex() === r.index ? 'Hide prompt' : 'Show prompt' }}
-                  </button>
-                  @if (contextExpandedIndex() === r.index) {
-                    @if (contextState() === 'loading') {
-                      <span class="run-card__context-loading">loading...</span>
-                    } @else if (contextError()) {
-                      <span class="run-card__context-error">{{ contextError() }}</span>
-                    } @else if (!contextText()) {
-                      <span class="run-card__context-empty">No context captured for this run.</span>
-                    } @else {
-                      <pre class="run-card__context-pre" [attr.data-testid]="'run-context-pre-' + r.index">{{ contextText() }}</pre>
-                    }
-                  }
-                </div>
-              } @else {
-                <span class="run-card__context-empty">Not captured for this run.</span>
-              }
-            </div>
-            <div class="run-card__row run-card__row--actions">
-              <button type="button"
-                      class="run-card__filter"
-                      (click)="emitFilter(r); $event.stopPropagation()"
-                      [disabled]="r.lineStart === null">
-                Filter activity log to this run
-              </button>
-              <button type="button"
-                      class="run-card__filter run-card__filter--primary"
-                      (click)="openGitViewer.emit(r); $event.stopPropagation()"
-                      [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
-                      [appTooltip]="(!r.headShaBefore || !r.headShaAfter)
-                        ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
-                        : (r.headShaBefore === r.headShaAfter
-                          ? 'No commits made during this run.'
-                          : 'Open the file-tree + diff viewer for this run.')">
-                Open git viewer
-              </button>
-            </div>
+                <span class="run-card__chip run-card__chip--intent" [attr.data-intent]="item.run.intent">
+                  {{ intentLabel(item.run.intent) }}
+                </span>
+                <span class="run-card__chip run-card__chip--status" [attr.data-status]="item.run.status">
+                  {{ statusLabel(item.run) }}
+                </span>
+              </span>
+              <span class="prompt-entry__preview">
+                {{ item.entry.promptPreview || item.run.userFollowup || '(no follow-up)' }}
+              </span>
+              <span class="prompt-entry__meta">
+                <span>Run #{{ item.run.index }}</span>
+                <span>{{ formatTime(item.entry.at) }}</span>
+                <span>{{ promptTokenLabel(item.entry) }}</span>
+              </span>
+            </button>
           </div>
+
+          @if (nextRunAfter(item.run.index); as next) {
+            <div class="run-transition" [attr.data-testid]="'run-transition-' + item.run.index + '-' + next.index">
+              <span class="run-transition__line"></span>
+              <span class="run-transition__text">{{ transitionLabel(item.run, next) }}</span>
+              <span class="run-transition__line"></span>
+            </div>
+          }
         }
       </div>
 
-      @if (nextRunAfter(r.index); as next) {
-        <div class="run-transition" [attr.data-testid]="'run-transition-' + r.index + '-' + next.index">
-          <span class="run-transition__line"></span>
-          <span class="run-transition__text">{{ transitionLabel(r, next) }}</span>
-          <span class="run-transition__line"></span>
-        </div>
-      }
-    }
+      <section class="run-detail" aria-label="Selected prompt details">
+        @if (selectedRun(); as r) {
+          @if (selectedPrompt(); as prompt) {
+            <div class="run-detail__panel" [attr.data-testid]="'run-popover-' + r.index">
+              <header class="run-detail__head">
+                <div>
+                  <h4 class="run-detail__title">{{ prompt.label || ('Prompt #' + prompt.index) }}</h4>
+                  <div class="run-detail__subtitle">
+                    Run #{{ r.index }} · {{ intentLabel(r.intent) }} · started {{ formatTime(r.startedAt) }}
+                  </div>
+                </div>
+                <button type="button"
+                        class="run-card__close"
+                        aria-label="Close prompt details"
+                        (click)="closePopover()">×</button>
+              </header>
+
+              <div class="run-detail__snapshots">
+                <div class="run-detail__snapshot">
+                  <span class="run-detail__snapshot-label">Prompt tokens</span>
+                  <strong>{{ promptTokenLabel(prompt) }}</strong>
+                  <small>{{ promptSourceLabel(prompt) }}</small>
+                </div>
+                <div class="run-detail__snapshot">
+                  <span class="run-detail__snapshot-label">Context size</span>
+                  <strong>{{ contextTokenLabel(prompt) }}</strong>
+                  <small>{{ snapshotSourceLabel(prompt) }}</small>
+                </div>
+                <div class="run-detail__snapshot">
+                  <span class="run-detail__snapshot-label">Context snapshot</span>
+                  <strong>{{ prompt.contextSnapshot?.status || 'not captured' }}</strong>
+                  <small>{{ snapshotMetrics(prompt) || prompt.contextSnapshot?.ref || 'no metrics' }}</small>
+                </div>
+              </div>
+
+              @if (isReissueRun(r)) {
+                <div class="run-card__reissue-note">Auto-review reissue - findings prompt captured.</div>
+              }
+
+              <div class="run-card__row run-card__row--context">
+                <span class="run-card__row-label">Passed prompt</span>
+                @if (r.contextRef) {
+                  <div class="run-card__context">
+                    <button type="button"
+                            class="run-card__context-toggle"
+                            [attr.data-testid]="'run-context-toggle-' + r.index"
+                            [attr.aria-expanded]="contextExpandedIndex() === r.index"
+                            (click)="toggleContext(r.index); $event.stopPropagation()">
+                      {{ contextExpandedIndex() === r.index ? 'Hide passed context' : 'Show passed context' }}
+                    </button>
+                    @if (contextExpandedIndex() === r.index) {
+                      @if (contextState() === 'loading') {
+                        <span class="run-card__context-loading">loading...</span>
+                      } @else if (contextError()) {
+                        <span class="run-card__context-error">{{ contextError() }}</span>
+                      } @else if (!contextText()) {
+                        <span class="run-card__context-empty">No context captured for this run.</span>
+                      } @else {
+                        <pre class="run-card__context-pre" [attr.data-testid]="'run-context-pre-' + r.index">{{ contextText() }}</pre>
+                      }
+                    }
+                  </div>
+                } @else if (fallbackPromptText(r.index); as fallback) {
+                  <pre class="run-card__context-pre" [attr.data-testid]="'run-context-pre-' + r.index">{{ fallback }}</pre>
+                } @else {
+                  <span class="run-card__context-empty">Not captured for this run.</span>
+                }
+              </div>
+
+              @if (r.reason) {
+                <div class="run-card__row"><span class="run-card__row-label">Verdict</span><span>{{ r.reason }}</span></div>
+              }
+              @if (r.inputSessionId || r.capturedSessionId) {
+                <div class="run-card__row">
+                  <span class="run-card__row-label">Session</span>
+                  <span class="run-card__session">
+                    @if (r.inputSessionId) { <code>{{ short(r.inputSessionId) }}</code> → }
+                    @if (r.capturedSessionId) { <code>{{ short(r.capturedSessionId) }}</code> }
+                    @if (!r.capturedSessionId) { <em>not captured</em> }
+                  </span>
+                </div>
+              }
+
+              <div class="run-card__row run-card__row--commits">
+                <span class="run-card__row-label">Software change</span>
+                @if (commitsState() === 'loading') {
+                  <span class="run-card__commits-loading">loading...</span>
+                } @else if (commitsError()) {
+                  <span class="run-card__commits-error">{{ commitsError() }}</span>
+                } @else if (commits().length === 0) {
+                  <span class="run-card__commits-empty">No commits in this run's window.</span>
+                } @else {
+                  <div class="run-card__commits">
+                    <div class="run-card__commits-summary">
+                      {{ commits().length }} commit{{ commits().length === 1 ? '' : 's' }} ·
+                      +{{ totalAdded() }} / -{{ totalRemoved() }} across {{ totalFiles() }} file{{ totalFiles() === 1 ? '' : 's' }}
+                    </div>
+                    <ul class="run-card__commit-list">
+                      @for (c of commits(); track c.sha) {
+                        <li class="run-card__commit">
+                          <code class="run-card__commit-sha">{{ c.shortSha }}</code>
+                          <span class="run-card__commit-subject">{{ c.subject }}</span>
+                          <span class="run-card__commit-stats">+{{ c.added }}/-{{ c.removed }} · {{ c.filesChanged }}f</span>
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                }
+              </div>
+
+              <div class="run-card__row run-card__row--actions">
+                <button type="button"
+                        class="run-card__filter"
+                        (click)="emitFilter(r); $event.stopPropagation()"
+                        [disabled]="r.lineStart === null">
+                  Filter activity log to this run
+                </button>
+                <button type="button"
+                        class="run-card__filter run-card__filter--primary"
+                        (click)="openGitViewer.emit(r); $event.stopPropagation()"
+                        [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
+                        [appTooltip]="(!r.headShaBefore || !r.headShaAfter)
+                          ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
+                          : (r.headShaBefore === r.headShaAfter
+                            ? 'No commits made during this run.'
+                            : 'Open the file-tree + diff viewer for this run.')">
+                  Open git viewer
+                </button>
+              </div>
+            </div>
+          }
+        } @else {
+          <div class="run-detail__empty">Select a prompt on the left to inspect the full text and snapshots.</div>
+        }
+      </section>
+    </div>
   </div>
 }

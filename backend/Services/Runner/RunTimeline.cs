@@ -57,6 +57,48 @@ public sealed record RunRecord
 }
 
 /// <summary>
+/// One prompt handed to the agent, projected onto the run timeline. The full
+/// prompt/context text stays lazy via <c>/runs/{index}/context</c>; this row is
+/// the compact metadata needed to render Prompt #1, #2, ... in the picker.
+/// </summary>
+public sealed record RunPromptEntry
+{
+    /// <summary>1-based chronological prompt number shown in the UI.</summary>
+    public int Index { get; init; }
+    /// <summary>1-based run index this prompt started, matching <see cref="RunRecord.Index"/>.</summary>
+    public int RunIndex { get; init; }
+    public string Intent { get; init; } = "";
+    public DateTime At { get; init; }
+    public string Label { get; init; } = "";
+    /// <summary><c>prompt.md</c>, <c>prompt-N.md</c>, <c>user-followup</c>, or the captured context ref source.</summary>
+    public string? FileName { get; init; }
+    /// <summary>Where <see cref="PromptTokenEstimate"/> came from.</summary>
+    public string PromptTokenSource { get; init; } = "";
+    public string? PromptPreview { get; init; }
+    /// <summary>Best-effort local estimate; the repo currently has no tokenizer utility.</summary>
+    public int? PromptTokenEstimate { get; init; }
+    /// <summary>Estimated tokens in the captured context handed to the CLI for this run.</summary>
+    public int? ContextTokenEstimate { get; init; }
+    public string? ContextRef { get; init; }
+    public RunPromptContextSnapshot? ContextSnapshot { get; init; }
+}
+
+/// <summary>
+/// Compact context-size snapshot attached to a prompt entry. For modern runs
+/// this is derived from <see cref="SessionEvent.ContextRef"/> and therefore
+/// reflects the captured context at spawn time.
+/// </summary>
+public sealed record RunPromptContextSnapshot
+{
+    public string Source { get; init; } = "";
+    public string? Ref { get; init; }
+    public DateTime? At { get; init; }
+    public string? Status { get; init; }
+    public int? TokenEstimate { get; init; }
+    public List<ContextUsageMetric> Metrics { get; init; } = [];
+}
+
+/// <summary>
 /// Top-level session shape the <c>/api/tasks/{id}/runs</c> endpoint
 /// returns. The runs list is the primary surface; the aggregates above
 /// it (<see cref="RunCount"/>, <see cref="LastActivityAt"/>) are derived
@@ -70,6 +112,135 @@ public sealed record RunTimeline
     /// <summary>True when the last run is still running (no end marker yet).</summary>
     public bool HasActiveRun { get; init; }
     public List<RunRecord> Runs { get; init; } = [];
+    public List<RunPromptEntry> PromptEntries { get; init; } = [];
+}
+
+public static class RunPromptTimelineBuilder
+{
+    public static List<RunPromptEntry> Build(
+        IReadOnlyList<RunRecord> runs,
+        string jobFolder,
+        string? promptMarkdown,
+        IReadOnlyList<TaskPromptHistoryEntry> promptHistory,
+        ContextUsageSnapshot? contextUsage)
+    {
+        runs ??= [];
+        promptHistory ??= [];
+
+        var result = new List<RunPromptEntry>(runs.Count);
+        foreach (var run in runs.OrderBy(r => r.Index))
+        {
+            var contextText = ReadContextText(jobFolder, run.ContextRef);
+            var source = ResolvePromptSource(run, promptMarkdown, promptHistory, contextText);
+            var contextTokenEstimate = PromptTokenEstimator.EstimateOrNull(contextText);
+
+            result.Add(new RunPromptEntry
+            {
+                Index = result.Count + 1,
+                RunIndex = run.Index,
+                Intent = run.Intent,
+                At = run.StartedAt,
+                Label = $"Prompt #{result.Count + 1}",
+                FileName = source.FileName,
+                PromptTokenSource = source.Source,
+                PromptPreview = Preview(source.Text),
+                PromptTokenEstimate = PromptTokenEstimator.EstimateOrNull(source.Text),
+                ContextTokenEstimate = contextTokenEstimate,
+                ContextRef = run.ContextRef,
+                ContextSnapshot = BuildContextSnapshot(run.ContextRef, contextTokenEstimate, contextUsage)
+            });
+        }
+        return result;
+    }
+
+    private static (string? Text, string? FileName, string Source) ResolvePromptSource(
+        RunRecord run,
+        string? promptMarkdown,
+        IReadOnlyList<TaskPromptHistoryEntry> promptHistory,
+        string? contextText)
+    {
+        if (run.Index == 1 && !string.IsNullOrWhiteSpace(promptMarkdown))
+        {
+            return (promptMarkdown, "prompt.md", "task-prompt");
+        }
+
+        var history = promptHistory.FirstOrDefault(h => h.Index == run.Index - 1);
+        if (history is not null && !string.IsNullOrWhiteSpace(history.Markdown))
+        {
+            return (history.Markdown, history.FileName, "prompt-history");
+        }
+
+        if (!string.IsNullOrWhiteSpace(run.UserFollowup))
+        {
+            return (run.UserFollowup, "user-followup", "user-followup");
+        }
+
+        if (!string.IsNullOrWhiteSpace(contextText))
+        {
+            return (contextText, run.ContextRef, "captured-context");
+        }
+
+        return (null, run.ContextRef, "missing");
+    }
+
+    private static RunPromptContextSnapshot? BuildContextSnapshot(
+        string? contextRef,
+        int? contextTokenEstimate,
+        ContextUsageSnapshot? latestContextUsage)
+    {
+        if (!string.IsNullOrWhiteSpace(contextRef))
+        {
+            return new RunPromptContextSnapshot
+            {
+                Source = "captured-context",
+                Ref = contextRef,
+                Status = contextTokenEstimate.HasValue ? "captured" : "missing",
+                TokenEstimate = contextTokenEstimate
+            };
+        }
+
+        if (latestContextUsage is null) return null;
+        return new RunPromptContextSnapshot
+        {
+            Source = "latest-context-usage",
+            At = latestContextUsage.At,
+            Status = latestContextUsage.Status,
+            Metrics = latestContextUsage.Metrics
+        };
+    }
+
+    private static string? ReadContextText(string jobFolder, string? contextRef)
+    {
+        if (string.IsNullOrWhiteSpace(jobFolder) || string.IsNullOrWhiteSpace(contextRef)) return null;
+        try
+        {
+            var folderFull = Path.GetFullPath(jobFolder);
+            var contextFull = Path.GetFullPath(Path.Combine(jobFolder, contextRef));
+            if (!contextFull.StartsWith(folderFull, StringComparison.Ordinal) || !File.Exists(contextFull))
+                return null;
+            return File.ReadAllText(contextFull);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? Preview(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var compact = Regex.Replace(text.Trim(), @"\s+", " ");
+        return compact.Length <= 180 ? compact : compact[..177].TrimEnd() + "...";
+    }
+}
+
+public static class PromptTokenEstimator
+{
+    public static int? EstimateOrNull(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        return Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
+    }
 }
 
 /// <summary>

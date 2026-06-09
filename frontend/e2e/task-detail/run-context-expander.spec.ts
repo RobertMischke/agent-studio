@@ -80,6 +80,65 @@ const RUNS = [
   makeRun({ index: 3, intent: 'continue', status: 'failed', contextRef: null }),
 ];
 
+const PROMPT_ENTRIES = [
+  {
+    index: 1,
+    runIndex: 1,
+    intent: 'start',
+    at: '2026-05-29T10:00:00Z',
+    label: 'Prompt #1',
+    fileName: 'prompt.md',
+    promptTokenSource: 'task-prompt',
+    promptPreview: 'Implement the per-run passed-context view.',
+    promptTokenEstimate: 18,
+    contextTokenEstimate: 36,
+    contextRef: 'logs/run-context/run-1.md',
+    contextSnapshot: {
+      source: 'captured-context',
+      ref: 'logs/run-context/run-1.md',
+      at: null,
+      status: 'captured',
+      tokenEstimate: 36,
+      metrics: [],
+    },
+  },
+  {
+    index: 2,
+    runIndex: 2,
+    intent: 'continue',
+    at: '2026-05-29T10:05:00Z',
+    label: 'Prompt #2',
+    fileName: 'prompt-1.md',
+    promptTokenSource: 'prompt-history',
+    promptPreview: 'please continue',
+    promptTokenEstimate: 4,
+    contextTokenEstimate: 31,
+    contextRef: 'logs/run-context/run-2.md',
+    contextSnapshot: {
+      source: 'captured-context',
+      ref: 'logs/run-context/run-2.md',
+      at: null,
+      status: 'captured',
+      tokenEstimate: 31,
+      metrics: [],
+    },
+  },
+  {
+    index: 3,
+    runIndex: 3,
+    intent: 'continue',
+    at: '2026-05-29T10:10:00Z',
+    label: 'Prompt #3',
+    fileName: 'user-followup',
+    promptTokenSource: 'user-followup',
+    promptPreview: 'please continue',
+    promptTokenEstimate: 4,
+    contextTokenEstimate: null,
+    contextRef: null,
+    contextSnapshot: null,
+  },
+];
+
 function makeDetail(state: string) {
   return {
     info: {
@@ -243,6 +302,7 @@ async function installRoutes(page: Page): Promise<void> {
         lastActivityAt: '2026-05-29T10:05:00Z',
         hasActiveRun: false,
         runs: RUNS,
+        promptEntries: PROMPT_ENTRIES,
       }),
     }),
   );
@@ -334,6 +394,29 @@ test.describe('Run timeline: per-run passed context', () => {
 
     if (RESULTS_DIR) {
       await page.screenshot({ path: path.join(RESULTS_DIR, 'run-context-first-run-expanded.png') });
+    }
+  });
+
+  test('prompt entries show prompt and context token snapshots', async ({ page }) => {
+    await installRoutes(page);
+    await openRunsModal(page);
+
+    const rail = page.getByTestId('runs-icon-row');
+    await expect(rail).toContainText('Prompt #1');
+    await expect(rail).toContainText('Prompt #2');
+    await expect(rail).toContainText('18 tokens');
+
+    await page.getByTestId('run-icon-2').click();
+    const detail = page.getByTestId('run-popover-2');
+    await expect(detail).toBeVisible();
+    await expect(detail).toContainText('Prompt tokens');
+    await expect(detail).toContainText('4 tokens');
+    await expect(detail).toContainText('Context size');
+    await expect(detail).toContainText('31 tokens');
+    await expect(detail).toContainText('captured at run start');
+
+    if (RESULTS_DIR) {
+      await page.screenshot({ path: path.join(RESULTS_DIR, 'run-prompts-token-snapshots.png') });
     }
   });
 

@@ -149,11 +149,21 @@ public static class TaskRunnerEndpoints
         // always-available drill-down.
         group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, TaskScannerService scanner, TaskSessionLog sessions) =>
         {
-            var info = scanner.FindJob(jobId, watchPath);
-            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var detail = scanner.GetJobDetail(jobId, watchPath);
+            if (detail == null) return Results.NotFound(new { error = "Job not found" });
+            var info = detail.Info;
             var events = sessions.ReadSessionEvents(jobId, watchPath);
             var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
             var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+            timeline = timeline with
+            {
+                PromptEntries = RunPromptTimelineBuilder.Build(
+                    timeline.Runs,
+                    info.FolderPath,
+                    detail.PromptMarkdown,
+                    detail.PromptHistory,
+                    detail.ContextUsage)
+            };
             return Results.Ok(timeline);
         });
 
@@ -303,7 +313,13 @@ public static class TaskRunnerEndpoints
             try { context = File.ReadAllText(contextFull); }
             catch { context = string.Empty; }
 
-            return Results.Ok(new { runIndex = run.Index, context });
+            return Results.Ok(new
+            {
+                runIndex = run.Index,
+                context,
+                promptTokenEstimate = PromptTokenEstimator.EstimateOrNull(context),
+                contextTokenEstimate = PromptTokenEstimator.EstimateOrNull(context)
+            });
         });
 
         // Manual re-trigger of the Haiku summary that the runner normally fires

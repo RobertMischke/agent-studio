@@ -1,9 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import type { CliType, TaskInfo } from '../../../../../models/task.model';
-import type { RunCommitInfo, RunRecord } from '../../../../../features/run-timeline';
-import type { TaskTokenSummary } from '../../../../../features/tokens';
+import type { CliType, TaskInfo, TaskPromptHistoryEntry } from '../../../../../models/task.model';
+import type { RunCommitInfo, RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
 import { TaskService } from '../../../../../services/task.service';
-import { cliTypeIcon, cliTypeLabel } from '../../../../../services/format.util';
+import { cliTypeIcon, cliTypeLabel, formatTokens } from '../../../../../services/format.util';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**
@@ -39,6 +38,9 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 export class RunTimelineComponent {
   readonly job = input<TaskInfo | null>(null);
   readonly runs = input<RunRecord[]>([]);
+  readonly promptEntries = input<RunPromptEntry[]>([]);
+  readonly promptMarkdown = input<string | null>(null);
+  readonly promptHistory = input<TaskPromptHistoryEntry[]>([]);
 
   /** Emits when the user clicks "Filter activity log to this run". */
   readonly runFilter = output<RunRecord>();
@@ -47,6 +49,18 @@ export class RunTimelineComponent {
   readonly openGitViewer = output<RunRecord>();
 
   readonly expandedIndex = signal<number | null>(null);
+
+  readonly selectedRun = computed<RunRecord | null>(() => {
+    const idx = this.expandedIndex();
+    if (idx == null) return null;
+    return this.visibleRuns().find(r => r.index === idx) ?? null;
+  });
+
+  readonly selectedPrompt = computed<RunPromptEntry | null>(() => {
+    const run = this.selectedRun();
+    if (!run) return null;
+    return this.promptItems().find(i => i.run.index === run.index)?.entry ?? null;
+  });
 
   readonly statusSummary = computed(() => {
     const v = this.visibleRuns();
@@ -85,6 +99,22 @@ export class RunTimelineComponent {
   /** Chronological order - reissues must read as separate run segments. */
   readonly visibleRuns = computed(() => [...this.runs()].sort((a, b) => a.index - b.index));
 
+  readonly promptItems = computed(() => {
+    const runs = this.visibleRuns();
+    const runByIndex = new Map(runs.map(r => [r.index, r]));
+    const entries = this.promptEntries();
+    if (entries.length > 0) {
+      return entries
+        .map(entry => ({ entry, run: runByIndex.get(entry.runIndex) }))
+        .filter((item): item is { entry: RunPromptEntry; run: RunRecord } => !!item.run)
+        .sort((a, b) => a.entry.index - b.entry.index);
+    }
+    return runs.map((run, idx) => ({
+      run,
+      entry: this.fallbackPromptEntry(run, idx + 1),
+    }));
+  });
+
   readonly commits = computed<RunCommitInfo[]>(() => {
     const idx = this.expandedIndex();
     if (idx == null) return [];
@@ -98,11 +128,6 @@ export class RunTimelineComponent {
   private readonly jobService = inject(TaskService);
 
   toggle(index: number): void {
-    if (this.expandedIndex() === index) {
-      this.expandedIndex.set(null);
-      this.contextExpandedIndex.set(null);
-      return;
-    }
     this.expandedIndex.set(index);
     this.contextExpandedIndex.set(null);
     this.loadCommits(index);
@@ -143,8 +168,44 @@ export class RunTimelineComponent {
     return r.intent === 'reissue';
   }
 
-  contextButtonLabel(r: RunRecord): string {
-    return this.isReissueRun(r) ? 'Review prompt' : 'Prompt';
+  promptTokenLabel(entry: RunPromptEntry | null): string {
+    if (!entry?.promptTokenEstimate) return 'unknown';
+    return `${formatTokens(entry.promptTokenEstimate)} tokens`;
+  }
+
+  contextTokenLabel(entry: RunPromptEntry | null): string {
+    if (!entry?.contextTokenEstimate) return 'not captured';
+    return `${formatTokens(entry.contextTokenEstimate)} tokens`;
+  }
+
+  promptSourceLabel(entry: RunPromptEntry | null): string {
+    switch (entry?.promptTokenSource) {
+      case 'task-prompt': return 'prompt.md';
+      case 'prompt-history': return entry.fileName ?? 'prompt history';
+      case 'user-followup': return 'user follow-up';
+      case 'captured-context': return 'captured context';
+      case 'missing': return 'missing';
+      default: return entry?.promptTokenSource || 'unknown';
+    }
+  }
+
+  snapshotSourceLabel(entry: RunPromptEntry | null): string {
+    const source = entry?.contextSnapshot?.source;
+    if (source === 'captured-context') return 'captured at run start';
+    if (source === 'latest-context-usage') return 'latest /context usage';
+    return 'not captured';
+  }
+
+  snapshotMetrics(entry: RunPromptEntry | null): string {
+    const metrics = entry?.contextSnapshot?.metrics ?? [];
+    if (metrics.length === 0) return '';
+    return metrics.slice(0, 2).map(m => `${m.label}: ${m.value}`).join(' | ');
+  }
+
+  fallbackPromptText(runIndex: number): string | null {
+    if (runIndex === 1) return this.promptMarkdown();
+    const history = this.promptHistory().find(h => h.index === runIndex - 1);
+    return history?.markdown ?? null;
   }
 
   cliIcon(cli: string | null): string {
@@ -190,15 +251,31 @@ export class RunTimelineComponent {
     return s === 0 ? `${m}m` : `${m}m${s}s`;
   }
 
-  tokenLabel(summary: TaskTokenSummary | null | undefined): string | null {
-    if (!summary || summary.totalTokens <= 0) return null;
-    return `${this.compactNumber(summary.totalTokens)} tok`;
+  private fallbackPromptEntry(run: RunRecord, promptIndex: number): RunPromptEntry {
+    const fallback = this.fallbackPromptText(run.index) ?? run.userFollowup ?? null;
+    return {
+      index: promptIndex,
+      runIndex: run.index,
+      intent: run.intent,
+      at: run.startedAt,
+      label: `Prompt #${promptIndex}`,
+      fileName: run.index === 1 ? 'prompt.md' : null,
+      promptTokenSource: fallback ? (run.index === 1 ? 'task-prompt' : 'user-followup') : 'missing',
+      promptPreview: fallback ? this.preview(fallback) : run.userFollowup,
+      promptTokenEstimate: fallback ? this.estimateTokens(fallback) : null,
+      contextTokenEstimate: null,
+      contextRef: run.contextRef,
+      contextSnapshot: null,
+    };
   }
 
-  private compactNumber(value: number): string {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
-    return value.toFixed(0);
+  private estimateTokens(text: string): number {
+    return Math.max(1, Math.ceil(text.length / 4));
+  }
+
+  private preview(text: string): string {
+    const compact = text.trim().replace(/\s+/g, ' ');
+    return compact.length <= 180 ? compact : compact.slice(0, 177).trimEnd() + '...';
   }
 
   private cliType(cli: string | null): CliType | null {

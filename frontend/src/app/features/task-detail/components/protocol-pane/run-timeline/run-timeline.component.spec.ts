@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RunTimelineComponent } from './run-timeline.component';
-import type { RunRecord } from '../../../../../features/run-timeline';
+import type { RunPromptEntry, RunRecord } from '../../../../../features/run-timeline';
 import type { TaskInfo } from '../../../../../models/task.model';
 
 /**
@@ -59,25 +59,24 @@ describe('RunTimelineComponent (smoke)', () => {
     ]);
     fixture.detectChanges();
 
-    const cards = fixture.nativeElement.querySelectorAll('[data-testid^="run-card-"]');
+    const cards = fixture.nativeElement.querySelectorAll('[data-testid="run-timeline-card"]');
     const transitions = fixture.nativeElement.querySelectorAll('[data-testid^="run-transition-"]');
     expect(cards).toHaveLength(3);
     expect(transitions).toHaveLength(2);
 
-    expect(cards[0].getAttribute('data-testid')).toBe('run-card-1');
-    expect(cards[1].getAttribute('data-testid')).toBe('run-card-2');
-    expect(cards[2].getAttribute('data-testid')).toBe('run-card-3');
+    const buttons = fixture.nativeElement.querySelectorAll('[data-testid^="run-icon-"]');
+    expect(buttons[0].getAttribute('data-testid')).toBe('run-icon-1');
+    expect(buttons[1].getAttribute('data-testid')).toBe('run-icon-2');
+    expect(buttons[2].getAttribute('data-testid')).toBe('run-icon-3');
     expect(transitions[0].getAttribute('data-testid')).toBe('run-transition-1-2');
     expect(transitions[1].getAttribute('data-testid')).toBe('run-transition-2-3');
 
     const text = fixture.nativeElement.textContent as string;
-    expect(text.indexOf('Attempt 1')).toBeLessThan(text.indexOf('Attempt 2'));
-    expect(text.indexOf('Attempt 2')).toBeLessThan(text.indexOf('Attempt 3'));
+    expect(text.indexOf('Prompt #1')).toBeLessThan(text.indexOf('Prompt #2'));
+    expect(text.indexOf('Prompt #2')).toBeLessThan(text.indexOf('Prompt #3'));
     expect(text).toContain('Run #1 re-opened into #2 via user follow-up');
     expect(text).toContain('Run #2 re-opened into #3 via user follow-up');
     expect(text).toContain('🌀');
-    expect(text).toContain('2m5s');
-    expect(text).toContain('2.5k tok');
   });
 
   it('surfaces captured reissue prompt context from the run header', async () => {
@@ -97,13 +96,30 @@ describe('RunTimelineComponent (smoke)', () => {
       runRecord(1, 'start', 'completed', null, 20),
       { ...runRecord(2, 'reissue', 'completed', null, 25), contextRef: 'logs/run-context/run-2.md', reason: 'auto-review reissue' },
     ]);
+    fixture.componentRef.setInput('promptEntries', [
+      promptEntry(1, 1, 'start', 'prompt.md', 30, null),
+      promptEntry(2, 2, 'reissue', 'logs/run-context/run-2.md', 44, 180),
+    ]);
     fixture.detectChanges();
 
-    const headButton = fixture.nativeElement.querySelector('[data-testid="run-context-head-2"]') as HTMLButtonElement;
-    expect(headButton.textContent?.trim()).toBe('Review prompt');
-    headButton.click();
-
+    const runButton = fixture.nativeElement.querySelector('[data-testid="run-icon-2"]') as HTMLButtonElement;
+    runButton.click();
     const http = TestBed.inject(HttpTestingController);
+    const commitsReq = http.expectOne(r =>
+      r.url.endsWith('/tasks/task-1/runs/2/commits') &&
+      r.params.get('watchPath') === 'C:\\watch');
+    commitsReq.flush({ commits: [] });
+    fixture.detectChanges();
+
+    const detail = fixture.nativeElement.querySelector('[data-testid="run-popover-2"]') as HTMLElement;
+    expect(detail.textContent).toContain('Prompt #2');
+    expect(detail.textContent).toContain('44 tokens');
+    expect(detail.textContent).toContain('180 tokens');
+
+    const toggle = fixture.nativeElement.querySelector('[data-testid="run-context-toggle-2"]') as HTMLButtonElement;
+    expect(toggle.textContent?.trim()).toBe('Show passed context');
+    toggle.click();
+
     const req = http.expectOne(r =>
       r.url.endsWith('/tasks/task-1/runs/2/context') &&
       r.params.get('watchPath') === 'C:\\watch');
@@ -111,10 +127,6 @@ describe('RunTimelineComponent (smoke)', () => {
       runIndex: 2,
       context: '## Reissue change prompt\n\nCode review found the save button still wraps on mobile.'
     });
-    const commitsReq = http.expectOne(r =>
-      r.url.endsWith('/tasks/task-1/runs/2/commits') &&
-      r.params.get('watchPath') === 'C:\\watch');
-    commitsReq.flush({ commits: [] });
     fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent as string;
@@ -146,6 +158,39 @@ function taskInfo(): TaskInfo {
     execution: null,
     commit: null,
   } as TaskInfo;
+}
+
+function promptEntry(
+  index: number,
+  runIndex: number,
+  intent: string,
+  fileName: string | null,
+  promptTokenEstimate: number | null,
+  contextTokenEstimate: number | null,
+): RunPromptEntry {
+  return {
+    index,
+    runIndex,
+    intent,
+    at: `2026-06-08T10:0${runIndex}:00Z`,
+    label: `Prompt #${index}`,
+    fileName,
+    promptTokenSource: fileName === 'prompt.md' ? 'task-prompt' : 'captured-context',
+    promptPreview: index === 1 ? 'Initial prompt' : 'Review prompt',
+    promptTokenEstimate,
+    contextTokenEstimate,
+    contextRef: fileName?.startsWith('logs/') ? fileName : null,
+    contextSnapshot: contextTokenEstimate
+      ? {
+          source: 'captured-context',
+          ref: fileName,
+          at: null,
+          status: 'captured',
+          tokenEstimate: contextTokenEstimate,
+          metrics: [],
+        }
+      : null,
+  };
 }
 
 function runRecord(

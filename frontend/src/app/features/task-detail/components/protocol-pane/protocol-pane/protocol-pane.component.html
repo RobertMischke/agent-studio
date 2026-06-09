@@ -397,6 +397,9 @@
                       <app-run-timeline
                         [job]="detail().info"
                         [runs]="runTimeline()?.runs ?? []"
+                        [promptEntries]="runTimeline()?.promptEntries ?? []"
+                        [promptMarkdown]="detail().promptMarkdown"
+                        [promptHistory]="detail().promptHistory"
                         (runFilter)="onRunFilter($event)"
                         (openGitViewer)="openGitViewer($event)" />
                     </div>

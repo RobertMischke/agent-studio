@@ -176,6 +176,75 @@ public class RunTimelineBuilderTests
     }
 
     [Fact]
+    public void PromptEntries_ListInitialAndExtensionPromptsWithTokenSnapshots()
+    {
+        var jobFolder = Path.Combine(Path.GetTempPath(), "run-prompt-timeline-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(jobFolder, "logs", "run-context"));
+        try
+        {
+            File.WriteAllText(Path.Combine(jobFolder, "logs", "run-context", "run-1.md"), "# Captured run 1\n\nFull startup prompt.");
+            File.WriteAllText(Path.Combine(jobFolder, "logs", "run-context", "run-2.md"), "# Captured run 2\n\nExtended prompt.");
+
+            var runs = new List<RunRecord>
+            {
+                new()
+                {
+                    Index = 1,
+                    Intent = "start",
+                    StartedAt = T0,
+                    ContextRef = "logs/run-context/run-1.md"
+                },
+                new()
+                {
+                    Index = 2,
+                    Intent = "continue",
+                    StartedAt = T0.AddMinutes(5),
+                    UserFollowup = "Add the token snapshot.",
+                    ContextRef = "logs/run-context/run-2.md"
+                }
+            };
+
+            var prompts = RunPromptTimelineBuilder.Build(
+                runs,
+                jobFolder,
+                "# Initial task\n\nBuild the timeline.",
+                [
+                    new TaskPromptHistoryEntry
+                    {
+                        Index = 1,
+                        FileName = "prompt-1.md",
+                        Markdown = "Add the token snapshot.",
+                        WrittenAt = T0.AddMinutes(4)
+                    }
+                ],
+                new ContextUsageSnapshot
+                {
+                    At = T0.AddMinutes(3),
+                    Status = "ok",
+                    Metrics = [new ContextUsageMetric { Label = "Context", Value = "42%" }]
+                });
+
+            Assert.Equal(2, prompts.Count);
+            Assert.Equal("Prompt #1", prompts[0].Label);
+            Assert.Equal("prompt.md", prompts[0].FileName);
+            Assert.Equal("task-prompt", prompts[0].PromptTokenSource);
+            Assert.True(prompts[0].PromptTokenEstimate > 0);
+            Assert.True(prompts[0].ContextTokenEstimate > 0);
+            Assert.Equal("captured-context", prompts[0].ContextSnapshot?.Source);
+
+            Assert.Equal("Prompt #2", prompts[1].Label);
+            Assert.Equal("prompt-1.md", prompts[1].FileName);
+            Assert.Equal("prompt-history", prompts[1].PromptTokenSource);
+            Assert.Contains("token snapshot", prompts[1].PromptPreview);
+            Assert.Equal("logs/run-context/run-2.md", prompts[1].ContextRef);
+        }
+        finally
+        {
+            Directory.Delete(jobFolder, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ExitMarkerAfterNextEvent_IsNotMisattributed()
     {
         // Defensive: even though the product is sequential per project,
