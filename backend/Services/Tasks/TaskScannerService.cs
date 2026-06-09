@@ -742,7 +742,7 @@ public class TaskScannerService : ITaskScanner
         var tail = ReadTailUtf8(logPath, OutcomeIssueTailBytes);
         if (string.IsNullOrWhiteSpace(tail)) return null;
 
-        var completed = string.Equals(state, TaskStates.Completed, StringComparison.OrdinalIgnoreCase);
+        var acceptedVerdictSeen = string.Equals(state, TaskStates.Completed, StringComparison.OrdinalIgnoreCase);
         var lastSeenAt = File.GetLastWriteTimeUtc(logPath);
         var lines = tail.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         for (var i = lines.Length - 1; i >= 0; i--)
@@ -750,11 +750,15 @@ public class TaskScannerService : ITaskScanner
             var line = lines[i].Trim();
 
             // Reconcile with the final verdict: the orchestrator's accept note
-            // (move to 5-human-review / 6-completed) supersedes every earlier
-            // intermediate-cycle outcome marker. Scanning newest-first, the first
-            // accept line means anything above it is resolved - so an accepted
-            // task never carries a stale classifier-unknown/Warn chip (ASS-775).
-            if (IsAcceptReconcileLine(line)) return null;
+            // (move to 5-human-review / 6-completed) supersedes only the
+            // verdict-contradicting ambiguity chips. Non-suppressible issues,
+            // such as a failed task-branch push, must remain visible after the
+            // lane move.
+            if (IsAcceptReconcileLine(line))
+            {
+                acceptedVerdictSeen = true;
+                continue;
+            }
 
             if (line.Contains("[agent-git-violation]", StringComparison.OrdinalIgnoreCase))
                 return BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
@@ -769,11 +773,11 @@ public class TaskScannerService : ITaskScanner
 
             if (TryResolveOutcomeIssue(line, lastSeenAt, out var issue))
             {
-                // A terminal 6-completed card was accepted; a Warn-class ambiguity
-                // chip contradicts that and is a stale intermediate-cycle artifact
-                // even if the accept note has scrolled out of the read tail.
-                if (completed && TaskOutcomeIssueReconciliation.IsVerdictContradicting(issue))
-                    return null;
+                // An accepted card should drop stale ambiguity chips, but keep
+                // scanning because an older non-suppressible issue can still be
+                // the real visible outcome.
+                if (TaskOutcomeIssueReconciliation.ShouldSuppress(issue, acceptedVerdictSeen))
+                    continue;
                 return issue;
             }
         }

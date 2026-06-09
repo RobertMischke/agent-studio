@@ -249,6 +249,33 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void AcceptedCard_WithTaskBranchUnpushed_KeepsPortabilityWarning()
+    {
+        SeedJob("accepted-unpushed", TaskStates.HumanReview,
+            $"[09:10:00.000] [orchestrator] [task-branch-unpushed] Task branch `task/ASS-1666` could not be pushed to `origin` after retry. Push status: failed. Error: network unavailable{Environment.NewLine}" +
+            $"[09:15:33.000] [orchestrator] [decision] Auto-review accepted \"x\" as done. Moved to 5-human-review for your approval.{Environment.NewLine}");
+
+        var issue = Outcome("accepted-unpushed");
+
+        Assert.NotNull(issue);
+        Assert.Equal("task-branch-unpushed", issue!.Kind);
+        Assert.Equal("Warn", issue.Severity);
+    }
+
+    [Fact]
+    public void CompletedCard_WithTaskBranchUnpushed_KeepsPortabilityWarning()
+    {
+        SeedJob("completed-unpushed", TaskStates.Completed,
+            $"[09:10:00.000] [orchestrator] [task-branch-unpushed] Task branch `task/ASS-1666` could not be pushed to `origin` after retry. Push status: failed. Error: network unavailable{Environment.NewLine}");
+
+        var issue = Outcome("completed-unpushed");
+
+        Assert.NotNull(issue);
+        Assert.Equal("task-branch-unpushed", issue!.Kind);
+        Assert.Equal("Warn", issue.Severity);
+    }
+
+    [Fact]
     public void AgentStdoutMentioningContainmentInProse_DoesNotFalselySurface()
     {
         // ASS-914 regression (scanner self-reference): a self-modifying task whose
