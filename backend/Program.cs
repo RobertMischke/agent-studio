@@ -178,6 +178,7 @@ builder.Services.AddSingleton<LaneMutexRegistry>();
 builder.Services.AddSingleton<TaskChangeNotifier>();
 builder.Services.AddSingleton<TaskStateMachine>();
 builder.Services.AddSingleton<TaskMutationService>();
+builder.Services.AddSingleton<TaskFileHistoryService>();
 // Consolidation/merge API + completed-lane audit (Part 1+2 of the
 // api-consolidationmerge-api task). All mutations route through
 // MergeService / CompletedLaneAuditService; the audit log lives at

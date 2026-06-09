@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Tasks;
 using System.Text;
+using Microsoft.AspNetCore.Mvc;
 
 namespace OrchestratorApi.Endpoints.Tasks;
 
@@ -17,10 +18,30 @@ public static class TaskFilesEndpoints
 {
     public static void MapTaskFilesEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, TaskScannerService scanner) =>
+        group.MapGet("/{jobId}/files/{**path}", (
+            string jobId,
+            string path,
+            [FromQuery] string? watchPath,
+            [FromQuery] string? at,
+            [FromQuery] string? scope,
+            [FromQuery(Name = "from")] string? fromSha,
+            [FromQuery(Name = "to")] string? toSha,
+            TaskFileHistoryService files) =>
         {
-            var content = scanner.ReadJobFile(jobId, fileName, watchPath);
-            return content is null ? Results.NotFound() : JobTextFile(fileName, content);
+            if (TryStripOperationSuffix(path, "history", out var historyPath))
+            {
+                var history = files.GetHistory(jobId, watchPath, historyPath, scope);
+                return HistoryResult(history);
+            }
+
+            if (TryStripOperationSuffix(path, "diff", out var diffPath))
+            {
+                var diff = files.GetDiff(jobId, watchPath, diffPath, fromSha, toSha, scope);
+                return DiffResult(diff);
+            }
+
+            var content = files.ReadFile(jobId, watchPath, path, at, scope);
+            return FileContentResult(content);
         });
 
         // Lists every `.md` file directly in the job root (status.md excluded).
@@ -124,13 +145,52 @@ public static class TaskFilesEndpoints
         });
     }
 
-    private static IResult JobTextFile(string fileName, string content)
+    private static bool TryStripOperationSuffix(string path, string suffix, out string filePath)
     {
-        var contentType = fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? "application/json"
-            : fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
-                ? "text/markdown"
-                : "text/plain";
-        return Results.Text(content, contentType, Encoding.UTF8);
+        filePath = "";
+        if (string.IsNullOrWhiteSpace(path)) return false;
+
+        var normalized = path.Replace('\\', '/').TrimEnd('/');
+        var marker = "/" + suffix;
+        if (!normalized.EndsWith(marker, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        filePath = normalized[..^marker.Length];
+        return !string.IsNullOrWhiteSpace(filePath);
     }
+
+    private static IResult HistoryResult(TaskFileLookupResult<IReadOnlyList<TaskFileHistoryEntry>> result)
+    {
+        if (!result.Success) return ErrorResult(result);
+        return Results.Ok(result.Value ?? []);
+    }
+
+    private static IResult FileContentResult(TaskFileLookupResult<TaskFileContent> result)
+    {
+        if (!result.Success) return ErrorResult(result);
+        var content = result.Value!;
+        return Results.Text(content.Content, content.ContentType, Encoding.UTF8);
+    }
+
+    private static IResult DiffResult(TaskFileLookupResult<TaskFileDiff> result)
+    {
+        if (!result.Success) return ErrorResult(result);
+        var diff = result.Value?.Diff ?? "";
+        return string.IsNullOrWhiteSpace(diff)
+            ? Results.NoContent()
+            : Results.Text(diff, "text/plain", Encoding.UTF8);
+    }
+
+    private static IResult ErrorResult<T>(TaskFileLookupResult<T> result)
+    {
+        var body = new { error = result.Error ?? "File lookup failed." };
+        return result.StatusCode switch
+        {
+            StatusCodes.Status400BadRequest => Results.BadRequest(body),
+            StatusCodes.Status404NotFound => Results.NotFound(body),
+            StatusCodes.Status503ServiceUnavailable => Results.Json(body, statusCode: StatusCodes.Status503ServiceUnavailable),
+            _ => Results.Json(body, statusCode: result.StatusCode)
+        };
+    }
+
 }

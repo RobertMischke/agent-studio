@@ -436,6 +436,10 @@ public class TokenSummaryService
         public long CacheCreate;
         public decimal Cost;
         public bool AnyUnpriced;
+        public ModelBucket(string model) : this(model, model)
+        {
+        }
+
         public ModelBucket(string model, string displayModel)
         {
             Model = model;
