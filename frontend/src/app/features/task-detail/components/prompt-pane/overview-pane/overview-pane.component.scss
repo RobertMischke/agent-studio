@@ -602,6 +602,13 @@
   align-items: baseline;
   column-gap: var(--studio-spacing-1);
   padding-block: var(--studio-row-pad-block);
+  padding-inline: var(--studio-spacing-2);
+  margin-inline: calc(-1 * var(--studio-spacing-2));
+
+  &::before {
+    content: '';
+    grid-column: 1 / 8;
+  }
 
   &__timing {
     display: inline-flex;
@@ -623,8 +630,14 @@
 
   &__time { width: 38px; }
   &__duration { width: 52px; }
-  &__tokens { width: 56px; }
-  &__cost { width: 64px; }
+  &__tokens {
+    grid-column: 9;
+    width: 56px;
+  }
+  &__cost {
+    grid-column: 10;
+    width: 64px;
+  }
 }
 
 // Structured steering trace rendered under an orchestrator step row
