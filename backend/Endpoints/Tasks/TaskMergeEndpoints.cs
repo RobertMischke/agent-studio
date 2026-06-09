@@ -7,7 +7,8 @@ namespace OrchestratorApi.Endpoints.Tasks;
 /// <summary>
 /// Merge / consolidation API for the
 /// <c>api-consolidationmerge-api--completed-lane-audit--agent-claimed-done-but-isnt-re-evaluation</c>
-/// task. Five routes mounted under <c>/api/tasks</c>:
+/// task. Five routes mounted under both <c>/api/tasks</c> and the
+/// operator-facing <c>/api/jobs</c> alias:
 ///
 /// <list type="bullet">
 /// <item><c>GET /{id}/merge/candidates</c> - heuristic wrapper detection.</item>

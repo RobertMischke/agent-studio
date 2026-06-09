@@ -29,11 +29,13 @@ public static class EndpointMapping
         tasks.MapTaskMergeEndpoints();
 
         // Compatibility route for operator scripts and docs that still use
-        // "jobs" terminology. Keep this mapped to the same CRUD handlers so
-        // /api/jobs/batch-move cannot drift from /api/tasks/batch-move.
+        // "jobs" terminology. Keep this mapped to the same handlers so
+        // /api/jobs/batch-move and the consolidation/audit routes cannot
+        // drift from /api/tasks.
         var jobs = app.MapGroup("/api/jobs")
             .AddEndpointFilter<TaskOperationTimingFilter>();
         jobs.MapTaskCrudEndpoints();
+        jobs.MapTaskMergeEndpoints();
 
         app.MapEpicEndpoints();
         app.MapCompletedLaneAuditEndpoints();
