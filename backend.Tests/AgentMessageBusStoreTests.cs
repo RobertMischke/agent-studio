@@ -95,6 +95,38 @@ public class AgentMessageBusStoreTests : IDisposable
     }
 
     [Fact]
+    public void LoadFromDisk_SortsOutOfOrderLegacyFiles()
+    {
+        var project = "agent-taskboard";
+        var day = new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc);
+        var path = AgentMessageBusPaths.DayFile(_workspace, project, day);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        var messages = new[]
+        {
+            NewMessage("01HXYZ0000000000000000D003", project, createdAt: day.AddSeconds(3)),
+            NewMessage("01HXYZ0000000000000000D001", project, createdAt: day.AddSeconds(1)),
+            NewMessage("01HXYZ0000000000000000D002", project, createdAt: day.AddSeconds(2)),
+        };
+        File.WriteAllLines(
+            path,
+            messages.Select(m => JsonSerializer.Serialize(m, AgentMessageBusStore.SerializerOptions)),
+            Encoding.UTF8);
+
+        var store = new AgentMessageBusStore();
+        var recent = store.Recent(_workspace, project, limit: 3);
+
+        Assert.Equal(
+            new[]
+            {
+                "01HXYZ0000000000000000D001",
+                "01HXYZ0000000000000000D002",
+                "01HXYZ0000000000000000D003",
+            },
+            recent.Select(m => m.Id).ToArray());
+    }
+
+    [Fact]
     public async Task Query_FiltersByJobRunParticipantKindSeverityTimeAndTag()
     {
         var store = new AgentMessageBusStore();

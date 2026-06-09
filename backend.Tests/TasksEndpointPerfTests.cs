@@ -176,7 +176,7 @@ public class JobsEndpointPerfTests : IDisposable
     }
 
     [Fact]
-    public async Task GroupedEndpoint_Over300SyntheticJobs_ReturnsWithinVerifierBudget()
+    public async Task JobsGroupedEndpoint_Over300SyntheticJobs_ReturnsWithinFiveSecondRegressionBudget()
     {
         const int jobCount = 300;
         const int messageCount = 50_000;
@@ -211,7 +211,7 @@ public class JobsEndpointPerfTests : IDisposable
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
             var sw = Stopwatch.StartNew();
-            using var response = await client.GetAsync("/api/tasks/grouped", timeout.Token);
+            using var response = await client.GetAsync("/api/jobs/grouped", timeout.Token);
             sw.Stop();
 
             response.EnsureSuccessStatusCode();
@@ -220,9 +220,9 @@ public class JobsEndpointPerfTests : IDisposable
             var grouped = await response.Content.ReadFromJsonAsync<Dictionary<string, JsonElement>>(cancellationToken: timeout.Token);
             Assert.NotNull(grouped);
             Assert.Contains(grouped!.Keys, key => string.Equals(key, "progress", StringComparison.OrdinalIgnoreCase));
-            Assert.True(sw.ElapsedMilliseconds < 10_000,
-                $"/api/tasks/grouped over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
-                + "the grouped endpoint must answer inside the UpdateVerifier budget.");
+            Assert.True(sw.ElapsedMilliseconds < 5_000,
+                $"/api/jobs/grouped over {jobCount} jobs and {messageCount} warmed bus messages took {sw.ElapsedMilliseconds} ms; "
+                + "the grouped endpoint must stay below the post-restart verifier regression budget.");
         }
         finally
         {

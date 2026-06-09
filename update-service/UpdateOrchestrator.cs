@@ -180,10 +180,10 @@ public sealed class UpdateOrchestrator
             }
 
             // PHASE 3 — pulling
-            SetPhase("pulling", "git fetch + pull --ff-only", runId, startedAt);
+            SetPhase("pulling", "git fetch + merge --ff-only", runId, startedAt);
             var (pullRc, pullOut) = await RunBashAsync(
                 "-c",
-                $"git fetch origin main && git pull --ff-only origin main",
+                $"git fetch origin main && git merge --ff-only FETCH_HEAD",
                 _options.StableCheckoutDir, ct);
             folder.WriteOutput("pull-output.txt", pullOut);
             if (pullRc != 0)

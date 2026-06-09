@@ -291,7 +291,7 @@ public sealed class AgentMessageBusStore
             projection.UpsertParticipant(p);
         }
 
-        projection.SortById();
+        projection.SortByIdIfNeeded();
         return projection;
     }
 
@@ -316,9 +316,9 @@ public sealed class AgentMessageBusStore
             }
             if (msg is null) continue;
             if (!AgentMessageValidator.TryValidate(msg, out _)) continue;
-            // Cold load: O(1) in-place add. LoadFromDisk calls SortById() after
-            // all files are replayed. Using Append() here was O(N^2) — see
-            // AppendInitial remarks.
+            // Cold load: O(1) in-place add. LoadFromDisk sorts only if an
+            // out-of-order id was observed during replay. Using Append() here
+            // was O(N^2) - see AppendInitial remarks.
             projection.AppendInitial(msg);
         }
     }
@@ -331,6 +331,7 @@ public sealed class AgentMessageBusStore
         private List<AgentMessage> _messages = new();
         private Dictionary<string, AgentMessage> _byId = new(StringComparer.Ordinal);
         private Dictionary<string, AgentParticipant> _participants = new(StringComparer.Ordinal);
+        private bool _sortedById = true;
 
         public IReadOnlyDictionary<string, AgentParticipant> Participants
         {
@@ -384,8 +385,10 @@ public sealed class AgentMessageBusStore
         /// (each Append clones the whole list + dict). On a 100K-line history
         /// that quadratic was minutes of CPU + multi-GB transient garbage and
         /// was the root cause of the /api/tasks(/grouped) hang + 90% CPU.
-        /// Caller MUST follow the load loop with <see cref="SortById"/> to
-        /// restore id order, since this skips the incremental ordered insert.
+        /// Caller MUST follow the load loop with <see cref="SortByIdIfNeeded"/>
+        /// to restore id order when this detects an out-of-order append. Normal
+        /// day-file replay stays in id order already, so the final O(N log N)
+        /// sort can be skipped on the grouped-endpoint warmup path.
         /// </summary>
         public void AppendInitial(AgentMessage message)
         {
@@ -393,15 +396,23 @@ public sealed class AgentMessageBusStore
             // during cold load (one LoadFromDisk thread owns it). Dedup keeps
             // parity with Append for ids that recur across daily files.
             if (_byId.ContainsKey(message.Id)) return;
+            if (_sortedById
+                && _messages.Count > 0
+                && string.CompareOrdinal(_messages[^1].Id, message.Id) > 0)
+            {
+                _sortedById = false;
+            }
             _messages.Add(message);
             _byId[message.Id] = message;
         }
 
-        public void SortById()
+        public void SortByIdIfNeeded()
         {
+            if (_sortedById) return;
             lock (_lock)
             {
                 _messages.Sort(IdComparer.Instance);
+                _sortedById = true;
             }
         }
 
