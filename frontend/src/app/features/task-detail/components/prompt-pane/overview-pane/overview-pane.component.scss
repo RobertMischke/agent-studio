@@ -695,7 +695,12 @@
   &[data-phase='decision'] { --ov-pl-phase-accent: var(--studio-accent-4); }
   &[data-phase='drift'] { --ov-pl-phase-accent: var(--severity-warn); }
 
-  &--disabled {
+  // Inactive steps: a step that was turned off in project config (disabled,
+  // e.g. "Wiki maintenance OFF") or that the run skipped (e.g. "Orchestrator
+  // prep") reads as struck-through and dimmed so it is unmistakably not part
+  // of what actually ran, without removing it from the ordered list.
+  &--disabled,
+  &[data-status='skipped'] {
     opacity: 0.5;
 
     .ov-pl-step__name {
@@ -966,11 +971,14 @@
     color: var(--studio-fg-muted);
   }
 
+  // Duration is a primary signal ("how long did this step take"): keep it at
+  // full foreground weight, ahead of the secondary tokens / cost numbers.
   &__duration {
     flex: 0 0 auto;
     width: 52px;
     text-align: right;
-    color: var(--studio-fg-dim);
+    color: var(--studio-fg);
+    font-weight: 600;
 
     // While the step is running the value ticks up every second; tint it
     // with the running accent so the live count reads as in-flight, not a
@@ -981,11 +989,13 @@
     }
   }
 
+  // Tokens / cost are secondary cost-accounting columns: muted so the eye
+  // lands on name + status + duration first.
   &__tokens {
     flex: 0 0 auto;
     width: 56px;
     text-align: right;
-    color: var(--studio-fg-dim);
+    color: var(--studio-fg-muted);
   }
 
   &__tokens-button {
@@ -1008,7 +1018,55 @@
     flex: 0 0 auto;
     width: 64px;
     text-align: right;
-    color: var(--studio-fg);
+    color: var(--studio-fg-dim);
+  }
+}
+
+// Responsive degradation, driven by the pipeline block's own inline-size (it
+// sits in a split task-detail pane, so the viewport width is the wrong signal).
+// The columns are dropped from the secondary edge inward — first Cost, then
+// Tokens — by shortening the shared grid template and hiding the matching
+// cells. The slack-absorbing flex track keeps Time / Duration right-pinned at
+// every width, so the grid stays aligned and never overflows horizontally.
+// Schritt-Name + Status + Duration are never dropped.
+@container ov-pipeline (max-width: 560px) {
+  .ov-pl-header,
+  .ov-pl-step {
+    --ov-pl-grid-cols:
+      var(--ov-pipeline-status-col)
+      var(--ov-pipeline-kind-col)
+      var(--ov-pipeline-name-col)
+      var(--ov-pipeline-meta-col)
+      var(--ov-pipeline-meta-col)
+      var(--ov-pipeline-meta-col)
+      var(--ov-pipeline-flex-col)
+      var(--ov-pipeline-time-col)
+      var(--ov-pipeline-tokens-col);
+  }
+
+  .ov-pl-header__cost,
+  .ov-pl-step__cost {
+    display: none;
+  }
+}
+
+@container ov-pipeline (max-width: 460px) {
+  .ov-pl-header,
+  .ov-pl-step {
+    --ov-pl-grid-cols:
+      var(--ov-pipeline-status-col)
+      var(--ov-pipeline-kind-col)
+      var(--ov-pipeline-name-col)
+      var(--ov-pipeline-meta-col)
+      var(--ov-pipeline-meta-col)
+      var(--ov-pipeline-meta-col)
+      var(--ov-pipeline-flex-col)
+      var(--ov-pipeline-time-col);
+  }
+
+  .ov-pl-header__tokens,
+  .ov-pl-step__tokens {
+    display: none;
   }
 }
 

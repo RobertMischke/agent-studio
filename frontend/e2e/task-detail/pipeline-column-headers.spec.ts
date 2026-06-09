@@ -434,6 +434,122 @@ test.describe('Pipeline: per-step metric column headers', () => {
     }
   });
 
+  test('metric columns share one right edge across every phase group (no per-row drift)', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithAllPhases);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+
+    // All six phase rows must be present and populated before measuring.
+    const steps = page.getByTestId('overview-pipeline-step');
+    await expect(steps).toHaveCount(6);
+    await expect(
+      page.locator('[data-step-id="core-agent-run"] .ov-pl-step__cost'),
+    ).not.toHaveText('—');
+
+    // Every step is its own grid; the slack-absorbing flex track is what keeps
+    // Duration / Tokens / Cost on a single shared right edge. Collect the right
+    // edge of each metric cell across all rows and assert they coincide. This
+    // is the guard against the "krumm und schief" misalignment where the metric
+    // block landed at a different x on each row.
+    const spread = await page.evaluate(() => {
+      const rows = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-testid="overview-pipeline-step"]'),
+      );
+      const rightsOf = (sel: string): number[] =>
+        rows
+          .map(r => r.querySelector<HTMLElement>(sel))
+          .filter((el): el is HTMLElement => !!el)
+          .map(el => el.getBoundingClientRect().right);
+      const span = (xs: number[]): number => Math.max(...xs) - Math.min(...xs);
+      const duration = rightsOf('.ov-pl-step__duration');
+      const tokens = rightsOf('.ov-pl-step__tokens');
+      const cost = rightsOf('.ov-pl-step__cost');
+      return {
+        counts: { duration: duration.length, tokens: tokens.length, cost: cost.length },
+        durationSpan: span(duration),
+        tokensSpan: span(tokens),
+        costSpan: span(cost),
+      };
+    });
+
+    // Each metric cell renders once per row.
+    expect(spread.counts).toEqual({ duration: 6, tokens: 6, cost: 6 });
+    // Sub-pixel tolerance for rounding; a per-row grid would drift by tens of px.
+    expect(spread.durationSpan, `duration right edges spread ${spread.durationSpan}px`).toBeLessThanOrEqual(1.5);
+    expect(spread.tokensSpan, `tokens right edges spread ${spread.tokensSpan}px`).toBeLessThanOrEqual(1.5);
+    expect(spread.costSpan, `cost right edges spread ${spread.costSpan}px`).toBeLessThanOrEqual(1.5);
+
+    if (RESULTS_DIR) {
+      await pipeline.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-cross-row-alignment.png'),
+        fullPage: true,
+      });
+    }
+  });
+
+  test('narrow pipeline drops Cost then Tokens, keeps Duration, and never overflows a row', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithAllPhases);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
+
+    // The metric columns degrade off the pipeline block's own inline-size, not
+    // the viewport. Constrain the grid container directly so the container
+    // queries fire deterministically regardless of pane layout.
+    const setContainerWidth = async (px: number) => {
+      await page.evaluate((w) => {
+        let tag = document.getElementById('ov-pl-test-width') as HTMLStyleElement | null;
+        if (!tag) {
+          tag = document.createElement('style');
+          tag.id = 'ov-pl-test-width';
+          document.head.appendChild(tag);
+        }
+        tag.textContent = `.ov-pipeline { width: ${w}px !important; max-width: ${w}px !important; }`;
+      }, px);
+    };
+
+    const cost = page.locator('[data-step-id="core-agent-run"] .ov-pl-step__cost');
+    const tokens = page.locator('[data-step-id="core-agent-run"] .ov-pl-step__tokens');
+    const duration = page.locator('[data-step-id="core-agent-run"] .ov-pl-step__duration');
+
+    // Mid-narrow: Cost drops, Tokens + Duration survive.
+    await setContainerWidth(500);
+    await expect(cost).toBeHidden();
+    await expect(tokens).toBeVisible();
+    await expect(duration).toBeVisible();
+
+    // Very narrow: Tokens drops too; Duration is never dropped.
+    await setContainerWidth(430);
+    await expect(cost).toBeHidden();
+    await expect(tokens).toBeHidden();
+    await expect(duration).toBeVisible();
+
+    // No horizontal overflow / Schieflage inside any row at the narrowest width:
+    // every row's content fits its own box (name ellipsizes, flex track shrinks).
+    const overflow = await page.evaluate(() => {
+      return Array
+        .from(document.querySelectorAll<HTMLElement>('[data-testid="overview-pipeline-step"]'))
+        .map(r => r.scrollWidth - r.clientWidth)
+        .reduce((max, d) => Math.max(max, d), 0);
+    });
+    expect(overflow, `max intra-row overflow ${overflow}px`).toBeLessThanOrEqual(1);
+
+    if (RESULTS_DIR) {
+      await pipeline.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded.png'),
+        fullPage: true,
+      });
+    }
+  });
+
   test('overview content keeps left-aligned prose and tabular measures on ultrawide viewports', async ({ page }) => {
     await page.setViewportSize({ width: 1900, height: 1050 });
     await page.addInitScript(() => {
