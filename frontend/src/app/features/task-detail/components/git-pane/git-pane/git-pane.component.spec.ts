@@ -9,7 +9,7 @@ import { GitPaneComponent } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
 import type { GitFileChange, TaskCommitDetail, TaskCommitInfo } from '../../../../git';
 import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../../utils/large-diff-gate';
-import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
+import { formatCompactDateTime, formatDateTime, formatTime } from '../../../../../services/format.util';
 
 const commits: TaskCommitInfo[] = [
   {
@@ -28,7 +28,7 @@ const commits: TaskCommitInfo[] = [
     message: 'Second commit',
     filesChanged: 1,
     files: ['src/two.ts'],
-    at: '2026-06-08T10:05:00Z',
+    at: '2026-06-09T10:00:00Z',
     attribution: 'automatic',
     confidence: 0.95,
   },
@@ -127,7 +127,7 @@ describe('GitPaneComponent', () => {
     expect(root.querySelector('[data-testid="git-commit-aggregate-header"]')).toBeNull();
   });
 
-  it('shows compact date and time for each expanded commit chain row', async () => {
+  it('shows compact date and time so commit rows from different days are distinguishable', async () => {
     const git = makeGitPaneMock();
     await TestBed.configureTestingModule({
       imports: [GitPaneComponent],
@@ -149,10 +149,15 @@ describe('GitPaneComponent', () => {
     fixture.detectChanges();
 
     const meta = root.querySelectorAll<HTMLElement>('[data-testid="git-commit-chain-meta"]');
+    const firstTimeOnly = formatTime(commits[0].at);
+    const secondTimeOnly = formatTime(commits[1].at);
     expect(meta).toHaveLength(2);
     expect(meta[0].textContent?.trim()).toBe(`1f · ${formatCompactDateTime(commits[0].at)}`);
     expect(meta[1].textContent?.trim()).toBe(`1f · ${formatCompactDateTime(commits[1].at)}`);
-    expect(meta[0].textContent).not.toBe(`1f · ${new Date(commits[0].at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    expect(firstTimeOnly).toBe(secondTimeOnly);
+    expect(meta[0].textContent?.trim()).not.toBe(`1f · ${firstTimeOnly}`);
+    expect(meta[1].textContent?.trim()).not.toBe(`1f · ${secondTimeOnly}`);
+    expect(meta[0].textContent).not.toBe(meta[1].textContent);
     expect(fixture.componentInstance.commitChainTooltip(commits[0], 0)).toContain(formatDateTime(commits[0].at));
   });
 
