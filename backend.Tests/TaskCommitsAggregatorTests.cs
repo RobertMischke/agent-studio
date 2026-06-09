@@ -204,4 +204,80 @@ public class TaskCommitsAggregatorTests
         Assert.Equal(CommitAttributionKinds.Legacy, Assert.Single(result.Commits).Attribution);
     }
 
+    [Fact]
+    public void Aggregate_TaskBranchRunCommitsSurfaceWhenRangesCollapse()
+    {
+        // ASS-1712: an in-progress per-task-worktree job. Every run's SHA range
+        // collapsed to before==after (the ranges track the shared develop HEAD,
+        // not task/<id>) and the attribution chain is still empty (attribution
+        // only runs when the task leaves 3-progress). Before the fix this
+        // surfaced 0 commits; the durable run-trailer reconstruction must now
+        // surface the full per-run history.
+        var info = new TaskInfo();
+        var t0 = DateTime.UtcNow.AddMinutes(-30);
+        var trivial1 = new RunRecord { Index = 1, HeadShaBefore = "dev", HeadShaAfter = "dev" };
+        var trivial2 = new RunRecord { Index = 2, HeadShaBefore = "dev", HeadShaAfter = null };
+        var reconstructed = new List<GitCommitInfo>
+        {
+            new("r3", "r3", t0.AddMinutes(20), "Claude", "feat: run 3", 1, 3, 0),
+            new("r2", "r2", t0.AddMinutes(10), "Claude", "feat: run 2", 2, 5, 1),
+            new("r1", "r1", t0.AddMinutes(1), "Claude", "feat: run 1", 1, 2, 0),
+        };
+
+        var result = TaskCommitsAggregator.Aggregate(
+            info, [trivial1, trivial2], (_, _) => [], reconstructed);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal("feat: run 3", result.Commits[0].Subject); // newest first
+        Assert.Equal("feat: run 1", result.Commits[2].Subject);
+        Assert.All(result.Commits, c => Assert.Null(c.RunIndex));
+        Assert.Equal(10, result.TotalAdded);
+        Assert.Equal(1, result.TotalRemoved);
+    }
+
+    [Fact]
+    public void Aggregate_TaskBranchRunCommitDoesNotDoubleCountWithRange()
+    {
+        // When a run range DID surface a commit, the same SHA arriving via
+        // reconstruction must not double-count, and the richer run-derived
+        // record (with RunIndex) wins.
+        var info = new TaskInfo();
+        var run = new RunRecord { Index = 1, HeadShaBefore = "h0", HeadShaAfter = "shared" };
+        var reconstructed = new List<GitCommitInfo>
+        {
+            new("shared", "shared", DateTime.UtcNow, "Claude", "feat: shared", 1, 4, 0)
+        };
+        var result = TaskCommitsAggregator.Aggregate(info, [run], (_, _) => new List<GitCommitInfo>
+        {
+            new("shared", "shared", DateTime.UtcNow, "Claude", "feat: shared", 1, 4, 0)
+        }, reconstructed);
+
+        Assert.Equal(1, result.Count);
+        Assert.Equal(1, result.Commits[0].RunIndex); // range record wins
+    }
+
+    [Fact]
+    public void Aggregate_TaskBranchRunCommitOverlaysAttributionWhenChainHasIt()
+    {
+        // A reconstructed commit that also has a persisted attribution entry
+        // picks up that attribution/confidence overlay.
+        var info = new TaskInfo
+        {
+            Commits =
+            [
+                new TaskCommitInfo { Sha = "r1", ShortSha = "r1", Message = "feat", At = DateTime.UtcNow, Attribution = CommitAttributionKinds.Automatic, Confidence = 0.8 }
+            ]
+        };
+        var reconstructed = new List<GitCommitInfo>
+        {
+            new("r1", "r1", DateTime.UtcNow, "Claude", "feat: run 1", 1, 2, 0)
+        };
+        var result = TaskCommitsAggregator.Aggregate(info, [], (_, _) => [], reconstructed);
+
+        var c = Assert.Single(result.Commits);
+        Assert.Equal(CommitAttributionKinds.Automatic, c.Attribution);
+        Assert.Equal(0.8, c.Confidence);
+        Assert.Null(c.RunIndex);
+    }
+
 }

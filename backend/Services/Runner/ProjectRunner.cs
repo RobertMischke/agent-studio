@@ -894,7 +894,7 @@ public class ProjectRunner
             //    the agent itself does not commit, so without this the branch tip
             //    stays at develop and Integrate would merge nothing.
             var commit = _git.CrashRecoveryCommit(ProjectName, run.WorktreePath!,
-                $"{info.Title}\n\n[parallel-slot worktree run; jobId={run.JobId}]");
+                $"{info.Title}\n\n{GitService.WorktreeRunCommitTrailer(run.JobId)}");
             if (commit.Success)
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
                     run.JobId, run.Branch, commit.Sha ?? "<unknown>");

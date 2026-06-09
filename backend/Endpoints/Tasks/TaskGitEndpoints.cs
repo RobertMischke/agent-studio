@@ -89,12 +89,7 @@ public static class TaskGitEndpoints
             // git. See ADR "Commit-Attribution-Regel".
             info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
 
-            var events = sessions.ReadSessionEvents(jobId, watchPath);
-            var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
-            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-
-            var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
-                (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
+            var aggregate = BuildJobCommitsAggregate(info, sessions, jobId, watchPath, git);
 
             return Results.Ok(aggregate);
         });
@@ -108,7 +103,8 @@ public static class TaskGitEndpoints
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
 
-            var files = git.GetAggregateCommitFiles(jobId, watchPath, JobCommitShas(info));
+            var shas = JobCommitShas(info, sessions, jobId, watchPath, git);
+            var files = git.GetAggregateCommitFiles(jobId, watchPath, shas);
             return Results.Ok(new { files });
         });
 
@@ -121,7 +117,7 @@ public static class TaskGitEndpoints
             if (info == null) return Results.NotFound(new { error = "Job not found" });
             info = TryBackfillAttribution(info, watchPath, scanner, sessions, git, mutations);
 
-            var shas = JobCommitShas(info);
+            var shas = JobCommitShas(info, sessions, jobId, watchPath, git);
             if (shas.Count == 0)
             {
                 return Results.Ok(DiffJsonResponse("", "This task has no attributed commits."));
@@ -288,6 +284,25 @@ public static class TaskGitEndpoints
         }
     }
 
+    /// <summary>
+    /// Builds the job-level commit aggregate from all three sources: per-run
+    /// SHA ranges, the reconstructed task-branch run commits (durable trailer),
+    /// and the persisted attribution chain + auto-commit. Shared by the
+    /// <c>/commits</c> list, drill-down validation, and the combined files/diff
+    /// endpoints so every surface agrees on which commits belong to the job.
+    /// </summary>
+    private static TaskCommitsAggregate BuildJobCommitsAggregate(
+        TaskInfo info, TaskSessionLog sessions, string jobId, string? watchPath, GitService git)
+    {
+        var events = sessions.ReadSessionEvents(jobId, watchPath);
+        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
+        var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+        var taskRunCommits = git.GetTaskRunCommits(jobId, watchPath);
+        return TaskCommitsAggregator.Aggregate(info, timeline.Runs,
+            (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after),
+            taskRunCommits);
+    }
+
     private static bool IsKnownJobCommit(
         TaskInfo info, TaskSessionLog sessions,
         string jobId, string? watchPath, GitService git, string sha)
@@ -295,26 +310,26 @@ public static class TaskGitEndpoints
         if (string.IsNullOrWhiteSpace(sha)) return false;
         if (info.Commit != null && string.Equals(info.Commit.Sha, sha, StringComparison.OrdinalIgnoreCase))
             return true;
-        var events = sessions.ReadSessionEvents(jobId, watchPath);
-        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
-        var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-        var aggregate = TaskCommitsAggregator.Aggregate(info, timeline.Runs,
-            (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
+        var aggregate = BuildJobCommitsAggregate(info, sessions, jobId, watchPath, git);
         return aggregate.Commits.Any(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static IReadOnlyList<string> JobCommitShas(TaskInfo info)
+    /// <summary>
+    /// SHA set for the combined files/diff endpoints. Derives from the full
+    /// aggregate (same source as the displayed <c>/commits</c> list) so the
+    /// combined change set matches what the user sees - including the
+    /// reconstructed per-run commits of an in-progress per-task-worktree job,
+    /// whose persisted chain is still empty.
+    /// </summary>
+    private static IReadOnlyList<string> JobCommitShas(
+        TaskInfo info, TaskSessionLog sessions, string jobId, string? watchPath, GitService git)
     {
-        if (info.Commits.Count > 0)
-        {
-            return info.Commits
-                .Select(c => c.Sha)
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-
-        return info.Commit?.Sha is { Length: > 0 } sha ? [sha] : [];
+        var aggregate = BuildJobCommitsAggregate(info, sessions, jobId, watchPath, git);
+        return aggregate.Commits
+            .Select(c => c.Sha)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static IResult DiffTextResult(GitDiffLookupResult result)

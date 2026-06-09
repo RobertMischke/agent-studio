@@ -1830,6 +1830,100 @@ public class GitService
     }
 
     /// <summary>
+    /// Single source of truth for the durable per-run worktree-commit body
+    /// trailer. Both the writer (<c>ProjectRunner.IntegrateWorktreeRunAsync</c>
+    /// crash-recovery commit) and the reader (<see cref="GetTaskRunCommits"/>
+    /// grep) MUST use this so reconstruction stays exact. <paramref name="jobId"/>
+    /// is the run's job id (= the <c>task/&lt;slug&gt;</c> branch suffix).
+    /// </summary>
+    public static string WorktreeRunCommitTrailer(string jobId)
+        => $"[parallel-slot worktree run; jobId={jobId}]";
+
+    /// <summary>
+    /// Reconstructs the full per-task commit history for a per-task-worktree
+    /// job by grepping every ref for the durable run trailer
+    /// (<see cref="WorktreeRunCommitTrailer"/>). This is the recoverable
+    /// source the collapsed per-run SHA ranges and the (empty-while-in-progress)
+    /// attribution chain cannot provide: <c>direct-merge</c> integration rebases
+    /// <c>task/&lt;id&gt;</c> onto develop and fast-forwards, so the branch never
+    /// retains more than its un-integrated tip - but the trailer survives the
+    /// rebase+FF and uniquely identifies each run's commit on the mainline.
+    /// Deduped by SHA, newest-first via the caller's sort. Empty when the repo
+    /// can't be resolved or no run commits exist (e.g. shared-checkout tasks).
+    /// </summary>
+    public List<GitCommitInfo> GetTaskRunCommits(string jobId, string? watchPath)
+    {
+        if (string.IsNullOrWhiteSpace(jobId)) return [];
+
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return [];
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return [];
+
+        var marker = WorktreeRunCommitTrailer(jobId);
+        var cacheKey = $"taskruncommits|{root}|{marker}";
+        if (TryGetShaRangeCached<List<GitCommitInfo>>(cacheKey, out var cached)) return cached;
+
+        var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        // RunGitArgs passes args via ArgumentList (no shell re-split), so the
+        // marker's spaces/brackets reach git verbatim. --fixed-strings makes the
+        // bracketed trailer a literal, not a regex.
+        var (output, _, code) = RunGitArgs(root,
+            "log", "--all", "--no-merges", "--shortstat", "--fixed-strings",
+            "--grep=" + marker, "--pretty=format:" + fmt);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = ParseCommitLogBlocks(output);
+        StoreShaRangeCached(cacheKey, list);
+        return list;
+    }
+
+    /// <summary>
+    /// Parses the <c>%H%x1f%h%x1f%aI%x1f%aN%x1f%s</c> + <c>--shortstat</c> block
+    /// stream git emits, into <see cref="GitCommitInfo"/> rows, deduped by SHA.
+    /// Mirrors the inline parse in <see cref="GetCommitsInShaRange"/>; kept
+    /// separate so the range query stays untouched.
+    /// </summary>
+    private static List<GitCommitInfo> ParseCommitLogBlocks(string output)
+    {
+        const char US = '\x1f';
+        var list = new List<GitCommitInfo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var raw = output.Replace("\r\n", "\n");
+        foreach (var block in raw.Split("\n\n", StringSplitOptions.None))
+        {
+            if (string.IsNullOrWhiteSpace(block)) continue;
+            string? recordLine = null;
+            string? shortstatLine = null;
+            foreach (var l in block.Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(l)) continue;
+                if (recordLine == null) recordLine = l;
+                else { shortstatLine = l.Trim(); break; }
+            }
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 5) continue;
+            if (string.IsNullOrWhiteSpace(parts[0]) || !seen.Add(parts[0])) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var ts))
+                continue;
+            var (files, added, removed) = ParseShortstat(shortstatLine);
+            list.Add(new GitCommitInfo(
+                Sha: parts[0],
+                ShortSha: parts[1],
+                AuthorDateUtc: DateTime.SpecifyKind(ts, DateTimeKind.Utc),
+                Author: parts[3],
+                Subject: parts[4],
+                FilesChanged: files,
+                Added: added,
+                Removed: removed));
+        }
+        return list;
+    }
+
+    /// <summary>
     /// Per-SHA enrichment for the commit-attribution step. Returns the full
     /// commit message body and merge flag for each requested SHA in a single
     /// <c>git show -s</c> call. Unknown SHAs are simply absent from the

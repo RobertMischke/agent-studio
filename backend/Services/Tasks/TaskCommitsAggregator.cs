@@ -61,7 +61,8 @@ public static class TaskCommitsAggregator
     public static TaskCommitsAggregate Aggregate(
         TaskInfo info,
         IReadOnlyList<RunRecord> runs,
-        Func<string, string, List<GitCommitInfo>> fetchRangeCommits)
+        Func<string, string, List<GitCommitInfo>> fetchRangeCommits,
+        IReadOnlyList<GitCommitInfo>? taskBranchCommits = null)
     {
         var ordered = new List<TaskCommitRecord>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -96,6 +97,39 @@ public static class TaskCommitsAggregator
                     Added = c.Added,
                     Removed = c.Removed,
                     RunIndex = run.Index,
+                    Attribution = CommitAttributionKinds.Normalize(meta?.Attribution),
+                    Confidence = meta?.Confidence
+                });
+            }
+        }
+
+        // Fold in commits reconstructed from the durable per-run worktree
+        // trailer (GitService.GetTaskRunCommits). This is the source that makes
+        // an in-progress per-task-worktree job's full history visible: its
+        // per-run SHA ranges collapse to before==after (they track the shared
+        // develop HEAD, not task/<id>) and its attribution chain is empty until
+        // the task leaves 3-progress. Deduped against ranges and the chain by
+        // SHA, so real ranges still win where present. RunIndex is unknown for a
+        // reconstructed commit; attribution overlays from the persisted chain
+        // when that SHA happens to be attributed.
+        if (taskBranchCommits != null)
+        {
+            foreach (var c in taskBranchCommits)
+            {
+                if (string.IsNullOrWhiteSpace(c.Sha)) continue;
+                if (!seen.Add(c.Sha)) continue;
+                attrBySha.TryGetValue(c.Sha, out var meta);
+                ordered.Add(new TaskCommitRecord
+                {
+                    Sha = c.Sha,
+                    ShortSha = c.ShortSha,
+                    AuthorDateUtc = c.AuthorDateUtc,
+                    Author = c.Author,
+                    Subject = c.Subject,
+                    FilesChanged = c.FilesChanged,
+                    Added = c.Added,
+                    Removed = c.Removed,
+                    RunIndex = null,
                     Attribution = CommitAttributionKinds.Normalize(meta?.Attribution),
                     Confidence = meta?.Confidence
                 });
