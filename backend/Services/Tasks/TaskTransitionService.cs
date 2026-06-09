@@ -254,7 +254,14 @@ public sealed class TaskTransitionService
         var integrationBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch)
             ? new ProjectSettings().IntegrationBranch
             : settings.IntegrationBranch;
-        return _git.IsAncestor(info.WatchPath, latest, integrationBranch);
+        // The task's commits live in the project's CODE repository, which is not
+        // necessarily WatchPath: in the dogfooding split WatchPath is the workspace
+        // task-store (a separate git repo that does not contain the code SHA).
+        // Passing WatchPath straight to IsAncestor checks the wrong repo, so the
+        // ancestor probe always fails (rc=128, SHA absent) and NO escalated coding
+        // task can ever be accepted. Resolve the real code repo root first.
+        var repoRoot = _git.ResolveRepoRootForWatchPath(info.WatchPath) ?? info.WatchPath;
+        return _git.IsAncestor(repoRoot, latest, integrationBranch);
     }
 
     private void EnterPostProcessingPhase(TaskInfo info)
