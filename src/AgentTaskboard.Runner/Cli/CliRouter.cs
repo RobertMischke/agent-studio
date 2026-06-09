@@ -21,14 +21,18 @@ public sealed class CliRouter
         ClaudeCliService claude,
         CodexCliService codex,
         AntigravityCliService gemini)
+        : this((ICliExecutionService)copilot, claude, codex, gemini)
     {
-        _byType = new(StringComparer.OrdinalIgnoreCase)
+    }
+
+    public CliRouter(params ICliExecutionService[] services)
+    {
+        _byType = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var svc in services)
         {
-            [CliTypes.Copilot] = copilot,
-            [CliTypes.Claude]  = claude,
-            [CliTypes.Codex]   = codex,
-            [CliTypes.Gemini]  = gemini,
-        };
+            if (svc == null) continue;
+            _byType[CliTypes.Normalize(svc.CliType)] = svc;
+        }
 
         foreach (var (type, svc) in _byType)
         {

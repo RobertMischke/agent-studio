@@ -1384,8 +1384,27 @@ public class ProjectRunner
             var movedToProgressThisCall = false;
             if (plan.MoveJobToProgress && info.State != TaskStates.Progress)
             {
-                _states.MoveJob(jobId, TaskStates.Progress, Entry.Path);
-                info = _scanner.FindJob(jobId, Entry.Path) ?? info;
+                var move = _states.MoveJob(jobId, TaskStates.Progress, Entry.Path);
+                if (move.Status != MoveJobStatus.Success)
+                {
+                    _logger.LogWarning(
+                        "[taskboard] refusing to start job {JobId} on {Project}: could not move to 3-progress before spawn ({Status} {Message})",
+                        jobId, ProjectName, move.Status, move.Message);
+                    if (intent == RunIntent.AutoPickup)
+                        _rapidCrashBackoffUntil[jobId] = DateTime.UtcNow + RapidCrashBreaker.Backoff(1);
+                    return RunOutcome.Reject(new RunRejection(
+                        Reason: RunRejectReason.ProjectBusy,
+                        Message: $"Could not move job '{jobId}' to {TaskStates.Progress}: {move.Status} {move.Message}"));
+                }
+
+                var movedInfo = _scanner.FindJob(jobId, Entry.Path);
+                info = movedInfo
+                       ?? (!string.IsNullOrWhiteSpace(move.NewFolderPath)
+                           ? info with { State = TaskStates.Progress, FolderPath = move.NewFolderPath! }
+                           : info with { State = TaskStates.Progress });
+                promptPath = Path.Combine(info.FolderPath, "prompt.md");
+                jobFolder = info.FolderPath;
+                plan = RebindPlanJobPaths(plan, promptPath, jobFolder);
                 movedToProgressThisCall = true;
             }
 
@@ -1432,6 +1451,8 @@ public class ProjectRunner
                         foreign?.Pid ?? -1,
                         foreign?.Hostname ?? "<unknown>",
                         foreign?.Role ?? "<unknown>");
+                    if (movedToProgressThisCall)
+                        RevertFailedStartFromProgress(jobId, info, intent);
                     return RunOutcome.Reject(new RunRejection(
                         Reason: RunRejectReason.ProjectBusy,
                         Message: $"Job '{jobId}' is being processed by backend '{foreign?.BackendName ?? "<unknown>"}' (pid={foreign?.Pid ?? -1}); refusing duplicate pickup.",
@@ -1741,6 +1762,15 @@ public class ProjectRunner
         {
             _processing = false;
         }
+    }
+
+    private static RunPlan RebindPlanJobPaths(RunPlan plan, string promptPath, string jobFolder)
+    {
+        if (plan.PromptVariables.Count == 0) return plan;
+        var variables = plan.PromptVariables.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+        if (variables.ContainsKey("prompt_path")) variables["prompt_path"] = promptPath;
+        if (variables.ContainsKey("job_folder")) variables["job_folder"] = jobFolder;
+        return plan with { PromptVariables = variables };
     }
 
     /// <summary>
