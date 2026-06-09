@@ -28,11 +28,11 @@ import { Injectable, computed, signal } from '@angular/core';
 export interface MediaLightboxRequest {
   readonly src: string;
   readonly alt?: string | null;
-  readonly actions?: ReadonlyArray<MediaLightboxActionRequest>;
+  readonly actions?: readonly MediaLightboxActionRequest[];
 }
 
 export interface MediaLightboxGalleryRequest {
-  readonly images: ReadonlyArray<MediaLightboxRequest>;
+  readonly images: readonly MediaLightboxRequest[];
   /** Index of the image that was clicked; clamped into range. */
   readonly index?: number;
 }

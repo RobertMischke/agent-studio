@@ -33,6 +33,7 @@ const errors = [];
 const warnings = [];
 const byDir = new Map();
 const allowedFolderNameMismatches = new Set([
+  'src/app/components/aspect-findings/aspect-findings-list.component.ts',
   'src/app/features/project-detail/components/project-observability/project-observability-panel.component.ts',
   'src/app/features/project-detail/components/project-product-runtime/project-product-runtime-panel.component.ts',
 ]);

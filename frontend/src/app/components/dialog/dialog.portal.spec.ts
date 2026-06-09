@@ -1,3 +1,4 @@
+/* eslint-disable @angular-eslint/prefer-on-push-component-change-detection, @angular-eslint/component-max-inline-declarations */
 import { describe, expect, it } from 'vitest';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -19,7 +20,7 @@ import { DialogComponent } from './dialog.component';
   standalone: true,
   imports: [DialogComponent],
   template: `
-    <div class="contain-host" style="contain: layout paint">
+    <div class="contain-host">
       @if (open()) {
         <app-dialog [portalToBody]="portal()" [testid]="'spec-modal'">
           <p class="spec-body">hello</p>

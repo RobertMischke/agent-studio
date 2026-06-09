@@ -86,7 +86,7 @@
                   class="cud__project-row"
                   [attr.data-testid]="'cli-usage-detail-project-' + p.slug"
                   [attr.aria-label]="'Open ' + p.project + ' settings'"
-                  [appTooltip]="p.project + ' · ' + formatTokens(p.totalTokens) + ' tokens · ' + p.orchestratorLlmCalls + ' calls · ' + formatUsd(p.estimatedApiCostUsd) + ' — open project settings'"
+                  [appTooltip]="projectTooltip(p)"
                   (click)="openProjectSettings.emit(p.project)">
             <span class="cud__project-name">{{ p.project }}</span>
             <span class="cud__project-stat cud__num">{{ formatTokens(p.totalTokens) }}</span>

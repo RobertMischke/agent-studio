@@ -109,6 +109,10 @@ export class CliUsageDetailComponent {
     return `${Math.max(0, 100 - row.primaryPct)}%`;
   }
 
+  projectTooltip(project: ProjectUsageRow): string {
+    return `${project.project} · ${this.formatTokens(project.totalTokens)} tokens · ${project.orchestratorLlmCalls} calls · ${this.formatUsd(project.estimatedApiCostUsd)} - open project settings`;
+  }
+
   limitText(window: QuotaWindow): string {
     if (window.used !== null && window.limit !== null) {
       return `${window.used} / ${window.limit}${window.unit ? ' ' + window.unit : ''}`;

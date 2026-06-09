@@ -128,7 +128,7 @@ export class MarkdownViewComponent {
     );
   });
 
-  onMarkdownClick(event: MouseEvent): void {
+  onMarkdownClick(event: Event): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const anchor = target.closest<HTMLAnchorElement>('a[data-task-ref="true"][data-task-key]');

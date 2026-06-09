@@ -79,7 +79,7 @@ describe('offlineGuardInterceptor', () => {
     const { http, notify } = configure(true);
 
     for (let i = 0; i < 4; i++) {
-      http.post(`/api/tasks/x/move-${i}`, {}).subscribe({ error: () => {} });
+      http.post(`/api/tasks/x/move-${i}`, {}).subscribe({ error: () => undefined });
     }
 
     expect(notify.notifications().filter((n) => n.kind === 'warning').length).toBe(1);

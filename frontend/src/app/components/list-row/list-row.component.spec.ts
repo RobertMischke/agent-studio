@@ -1,3 +1,4 @@
+/* eslint-disable @angular-eslint/prefer-on-push-component-change-detection, @angular-eslint/component-max-inline-declarations */
 import { describe, expect, it } from 'vitest';
 import { Component } from '@angular/core';
 import { provideZonelessChangeDetection } from '@angular/core';

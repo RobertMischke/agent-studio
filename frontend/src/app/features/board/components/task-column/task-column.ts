@@ -7,7 +7,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 import { groupReviewJobs } from '../review-grouping.util';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
 import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
-import { laneSortStrategyMeta, isManualStrategy, allowsDragReorder } from '../../../../services/lane-sort.util';
+import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 

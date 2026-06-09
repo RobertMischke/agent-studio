@@ -77,7 +77,6 @@ export function perfMeasure(measureName: string, startMark: string, endMark: str
     const entries = performance.getEntriesByName(measureName, 'measure');
     const last = entries[entries.length - 1];
     if (last && typeof console !== 'undefined') {
-      // eslint-disable-next-line no-console
       console.info(`[perf] ${measureName}: ${last.duration.toFixed(1)} ms`);
     }
   } catch { /* one mark missing — drop the measure */ }

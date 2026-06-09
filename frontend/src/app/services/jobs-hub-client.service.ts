@@ -108,7 +108,7 @@ export class JobsHubClient {
     const conn = this.connection;
     this.connection = null;
     this.connected.set(false);
-    if (conn) conn.stop().catch(() => {});
+    if (conn) conn.stop().catch(() => undefined);
   }
 
   private connect(): void {

@@ -7,7 +7,7 @@ import {
   AgentMessageSummary,
   TokenAggregateResponse,
 } from '../models/agent-bus.model';
-import { MODEL_IDS } from '../features/cli/models/model-ids';
+import { MODEL_IDS } from '../features/cli';
 
 /**
  * Read-only client for the project-screen Observability panel. Wraps the

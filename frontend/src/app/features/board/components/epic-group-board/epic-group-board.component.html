@@ -20,7 +20,7 @@
         <span class="epic-board__count"
               [attr.data-testid]="'epic-group-count-' + group.id">{{ group.completed }} / {{ group.total }}</span>
         <div class="epic-board__progress"
-             [appTooltip]="group.completed + ' of ' + group.total + ' sub-tasks done (' + group.inProgress + ' in progress, ' + group.open + ' open)'">
+             [appTooltip]="progressTooltip(group)">
           <div class="epic-board__progress-fill"
                [attr.data-testid]="'epic-group-progress-' + group.id"
                [style.width.%]="group.progressPct"></div>

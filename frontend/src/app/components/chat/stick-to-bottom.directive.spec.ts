@@ -1,3 +1,4 @@
+/* eslint-disable @angular-eslint/prefer-on-push-component-change-detection, @angular-eslint/component-max-inline-declarations, @typescript-eslint/no-explicit-any, @typescript-eslint/no-empty-function */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Component, ElementRef, ViewChild, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -7,13 +8,14 @@ import { StickToBottomDirective } from './stick-to-bottom.directive';
   standalone: true,
   imports: [StickToBottomDirective],
   template: `
-    <div #scroller class="scroller" style="overflow-y: auto">
+    <div #scroller class="scroller">
       <section appStickToBottom #stick="stickToBottom">
         <div class="content"></div>
       </section>
       <textarea class="composer"></textarea>
     </div>
   `,
+  styles: ['.scroller { overflow-y: auto; }'],
 })
 class HostComponent {
   @ViewChild('stick') dir!: StickToBottomDirective;

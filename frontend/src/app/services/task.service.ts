@@ -225,7 +225,7 @@ export class TaskService {
       },
       // A settings-fetch failure must not surface a dialog — the board still
       // renders fine without strategy indicators; they just fall back.
-      error: () => {},
+      error: () => undefined,
     });
   }
 

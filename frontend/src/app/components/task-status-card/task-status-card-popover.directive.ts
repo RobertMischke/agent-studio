@@ -23,17 +23,17 @@ import type { TaskInfo } from '../../models/task.model';
 })
 export class TaskStatusPopoverDirective implements OnDestroy {
   /** The job to render in the popover. `null` disables the trigger. */
-  readonly job = input<TaskInfo | null>(null, { alias: 'appTaskStatusPopover' });
+  readonly appTaskStatusPopover = input<TaskInfo | null>(null);
 
   /** Trigger delay in ms; default 500 ms per task spec. */
-  readonly delayMs = input<number>(500, { alias: 'appTaskStatusPopoverDelay' });
+  readonly appTaskStatusPopoverDelay = input<number>(500);
 
   /**
    * Whether to *only* trigger when the host text is visually truncated
    * (scrollWidth > clientWidth). Default `true` so static-length titles
    * skip the popover entirely.
    */
-  readonly onlyTruncated = input<boolean>(true, { alias: 'appTaskStatusPopoverOnlyTruncated' });
+  readonly appTaskStatusPopoverOnlyTruncated = input<boolean>(true);
 
   private readonly hostRef = inject(ElementRef<HTMLElement>);
   private readonly popover = inject(TaskStatusCardPopover);
@@ -75,17 +75,17 @@ export class TaskStatusPopoverDirective implements OnDestroy {
   }
 
   private scheduleOpen(): void {
-    const job = this.job();
+    const job = this.appTaskStatusPopover();
     if (!job) return;
     this.popover.markHoverEnter();
-    if (this.onlyTruncated() && !this.isTruncated()) return;
+    if (this.appTaskStatusPopoverOnlyTruncated() && !this.isTruncated()) return;
     this.clearOpenTimer();
     this.openTimer = setTimeout(() => {
       this.openTimer = null;
       // Re-check job in case it was nulled between schedule + fire.
-      const j = this.job();
+      const j = this.appTaskStatusPopover();
       if (j) this.popover.show(this.hostRef.nativeElement, j);
-    }, this.delayMs());
+    }, this.appTaskStatusPopoverDelay());
   }
 
   private clearOpenTimer(): void {

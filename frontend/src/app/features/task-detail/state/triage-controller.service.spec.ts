@@ -13,6 +13,8 @@ import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import type { TaskInfo, TaskDetail } from '../../../models/task.model';
 
+const noop = (): void => undefined;
+
 /**
  * Regression for orchestrator-decision-closing-task:
  *
@@ -59,7 +61,7 @@ describe('TriageController · advanceToNextInLane', () => {
     vi.spyOn(selection, 'closeDetail').mockImplementation(() => {
       closedDetail = true;
     });
-    vi.spyOn(selection, 'showTriageToast').mockImplementation(() => {});
+    vi.spyOn(selection, 'showTriageToast').mockImplementation(noop);
   });
 
   it('closes the panel on an internal (user-initiated) lane-clear', () => {
@@ -74,7 +76,7 @@ describe('TriageController · advanceToNextInLane', () => {
   it('does NOT close the panel on an external move when the lane is empty', () => {
     const job = makeJob('task-a', '5-human-review');
     selection.triageLaneState = '4-auto-review';
-    (selection as any).selected = signal<TaskDetail | null>({
+    (selection as unknown as { selected: ReturnType<typeof signal<TaskDetail | null>> }).selected = signal<TaskDetail | null>({
       info: job,
     } as unknown as TaskDetail);
 
@@ -147,8 +149,6 @@ describe('TriageController · optimistic navigation on Accept', () => {
     jobService = TestBed.inject(TaskService);
     prefetch.clear();
   });
-
-  const noop = (): void => undefined;
 
   it('advances synchronously to the prefetched next peer while the move POST is still in flight', () => {
     const taskA = makeJob('task-a', '5-human-review');

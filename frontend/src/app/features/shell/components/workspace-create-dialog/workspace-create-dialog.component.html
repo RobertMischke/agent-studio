@@ -6,7 +6,7 @@
   testid="workspace-create-dialog"
   (closeRequest)="onCancel()"
   (backdropClick)="onCancel()">
-  <div class="wcd__form" (keydown)="onKeydown($event)">
+  <div class="wcd__form" tabindex="-1" (keydown)="onKeydown($event)">
     <label class="wcd__field">
       <span class="wcd__label">Workspace name</span>
       <input #nameInput

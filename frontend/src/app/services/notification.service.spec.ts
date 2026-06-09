@@ -44,7 +44,7 @@ describe('NotificationService', () => {
     service.notify({
       message: 'reload required',
       kind: 'success',
-      actions: [{ label: 'Reload', callback: () => {} }],
+      actions: [{ label: 'Reload', callback: () => undefined }],
     });
     vi.advanceTimersByTime(60_000);
     expect(service.notifications()).toHaveLength(1);

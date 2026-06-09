@@ -51,6 +51,50 @@ function styleMetadataUrls(text) {
   return urls;
 }
 
+function componentMetadataText(text) {
+  const markerIndex = text.indexOf('@Component');
+  if (markerIndex < 0) return '';
+
+  const openParen = text.indexOf('(', markerIndex);
+  const openBrace = text.indexOf('{', openParen);
+  if (openParen < 0 || openBrace < 0) return '';
+
+  let depth = 0;
+  let quote = null;
+  let escaped = false;
+
+  for (let index = openBrace; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '\'' || char === '"' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(openBrace, index + 1);
+      }
+    }
+  }
+
+  return '';
+}
+
 function resolveSidecar(componentFile, relativeUrl, kind) {
   const resolved = normalize(join(dirname(componentFile), relativeUrl));
   if (!existsSync(resolved)) {
@@ -74,22 +118,23 @@ const files = execSync(`git ls-files ${roots.join(' ')}`, { encoding: 'utf8' })
 for (const file of files) {
   const text = readFileSync(file, 'utf8');
   if (!/^\s*@Component\s*\(/m.test(text)) continue;
+  const metadata = componentMetadataText(text);
 
-  if (/\btemplate\s*:/.test(text)) {
+  if (/\btemplate\s*:/.test(metadata)) {
     errors.push({
       file,
       reason: 'inline component templates are not allowed; use templateUrl',
     });
   }
 
-  if (/\bstyles?\s*:/.test(text)) {
+  if (/\bstyles?\s*:/.test(metadata)) {
     errors.push({
       file,
       reason: 'inline component styles are not allowed; use styleUrl or styleUrls',
     });
   }
 
-  const templateUrl = firstMetadataUrl(text, 'templateUrl');
+  const templateUrl = firstMetadataUrl(metadata, 'templateUrl');
   if (!templateUrl) {
     errors.push({
       file,
@@ -98,7 +143,7 @@ for (const file of files) {
   }
 
   const templateFile = templateUrl ? resolveSidecar(file, templateUrl, 'template') : null;
-  const styleFiles = styleMetadataUrls(text)
+  const styleFiles = styleMetadataUrls(metadata)
     .map(styleUrl => resolveSidecar(file, styleUrl, 'style'))
     .filter(Boolean);
 

@@ -58,6 +58,10 @@ export class EpicGroupBoardComponent {
     return stateLabel(state).replace(/-/g, ' ');
   }
 
+  progressTooltip(group: EpicGroupView): string {
+    return `${group.completed} of ${group.total} sub-tasks done (${group.inProgress} in progress, ${group.open} open)`;
+  }
+
   verdictLabel(verdict: TaskInfo['orchestratorVerdict']): string | null {
     return verdict ? verdict.replace(/-/g, ' ') : null;
   }

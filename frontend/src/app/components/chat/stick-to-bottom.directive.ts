@@ -44,7 +44,7 @@ import {
 })
 export class StickToBottomDirective implements AfterViewInit, OnDestroy {
   /** Distance from the bottom (px) within which the view counts as "stuck". */
-  readonly threshold = input(24, { alias: 'stickThreshold' });
+  readonly stickThreshold = input(24);
 
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -110,7 +110,7 @@ export class StickToBottomDirective implements AfterViewInit, OnDestroy {
     const el = this.container;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    this._stuck.set(distanceFromBottom <= this.threshold());
+    this._stuck.set(distanceFromBottom <= this.stickThreshold());
   }
 
   private handleFocusIn(event: FocusEvent): void {

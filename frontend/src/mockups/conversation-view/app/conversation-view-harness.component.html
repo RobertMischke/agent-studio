@@ -1,0 +1,27 @@
+<div class="harness">
+  <div class="harness__pane">
+    <div class="harness__controls" data-testid="mock-controls">
+      <button type="button" data-testid="mock-status-idle" (click)="setStatus('idle')">Idle</button>
+      <button type="button" data-testid="mock-status-queued" (click)="setStatus('queued')">Queued</button>
+      <button type="button" data-testid="mock-status-working" (click)="setStatus('working')">Working</button>
+      <button type="button" data-testid="mock-append-event" (click)="appendEvent()">Append event</button>
+      <button type="button" data-testid="mock-toggle-stream" (click)="toggleStream()">
+        {{ streaming() ? 'Stop stream' : 'Start stream' }}
+      </button>
+    </div>
+    <app-conversation-view
+      [events]="events()"
+      [isRunning]="status() === 'working'"
+      [queuedFollowUp]="status() === 'queued'"
+      variant="framed" />
+    <label class="harness__composer">
+      <span>Follow-up composer</span>
+      <textarea
+        data-testid="mock-composer"
+        rows="4"
+        [value]="draft()"
+        (input)="onDraft($any($event.target).value)"
+        placeholder="Type here while events stream in..."></textarea>
+    </label>
+  </div>
+</div>

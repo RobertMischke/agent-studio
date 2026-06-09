@@ -13,7 +13,7 @@
 
 import type { CliOutputLine } from '../../models/task.model';
 import type { RunRecord, RunTimeline } from '../../features/run-timeline';
-import { MODEL_IDS } from '../../features/cli/models/model-ids';
+import { MODEL_IDS } from '../../features/cli';
 
 let TS_COUNTER = 0;
 function ts(offsetSec = 0): string {
