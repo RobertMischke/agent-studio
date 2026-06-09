@@ -31,7 +31,7 @@ export {
   buildConversationTurns,
   type ActivityLogGroup,
   type ActivityLogKind,
-} from './components/activity-log.parser';
+} from './activity-log';
 export {
   classifyOutcome,
   type OutcomeAssessment,
