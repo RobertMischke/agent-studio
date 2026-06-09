@@ -210,24 +210,6 @@ function projectGroup(
   }
 
   if (firstLine.stream === 'orchestrator') {
-    const status = parseOrchestratorStatus(firstLine.text);
-    if (status) {
-      return [
-        {
-          id: `${baseId}:status`,
-          kind: 'system.status',
-          timestamp: ts,
-          runId,
-          rawRange: range,
-          severity: status.severity,
-          category: status.category,
-          label: status.label,
-          explanation: status.explanation,
-          nextStep: status.nextStep
-        }
-      ];
-    }
-
     // [watchdog] orchestrator messages get classified as supervisor.wait so
     // the chat row uses the correct family. The parser already filters them
     // out of conversation mode but the projection is the single source of
@@ -249,6 +231,24 @@ function projectGroup(
           }
         ];
       }
+    }
+
+    const status = parseOrchestratorStatus(firstLine.text);
+    if (status) {
+      return [
+        {
+          id: `${baseId}:status`,
+          kind: 'system.status',
+          timestamp: ts,
+          runId,
+          rawRange: range,
+          severity: status.severity,
+          category: status.category,
+          label: status.label,
+          explanation: status.explanation,
+          nextStep: status.nextStep
+        }
+      ];
     }
 
     // Heuristic / capture-fail / parser-warning all arrive as orchestrator
