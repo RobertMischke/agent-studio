@@ -679,10 +679,13 @@
   grid-template-columns: var(--ov-pl-grid-cols);
   align-items: center;
   column-gap: var(--studio-spacing-1);
-  max-width: 100%;
   min-height: var(--studio-row-min-h);
   padding-block: var(--studio-row-pad-block);
   padding-inline: var(--studio-spacing-2);
+  // Bleed the row symmetrically into the gutter (matches `.ov-pl-header`). Do
+  // NOT add `max-width: 100%`: it resolves to the content box and clips the
+  // right bleed short by one gutter, so the right-pinned metric block lands
+  // left of the header captions and the columns no longer line up.
   margin-inline: calc(-1 * var(--studio-spacing-2));
   border-radius: 6px;
   background: color-mix(in srgb, var(--ov-pl-phase-accent) 5%, transparent);
