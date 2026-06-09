@@ -526,7 +526,7 @@ describe('TaskCardComponent (smoke)', () => {
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector('[data-testid="task-card-epic-subtasks"]')).not.toBeNull();
     expect(host.textContent).toContain('Inline child task');
-    expect(host.textContent).toContain('auto review');
+    expect(host.textContent).toContain('Post Processing');
     expect(host.querySelector('[data-testid="task-card-epic-subtask-verdict"]')?.textContent?.trim()).toBe('reissue');
 
     host.querySelector<HTMLButtonElement>('[data-testid="task-card-epic-subtask"]')?.click();
@@ -1065,6 +1065,16 @@ describe('buildPhaseBadge — no lane-mirroring "Ready"', () => {
 
   it('still surfaces non-lane intake substates', () => {
     expect(buildPhaseBadge('intake-blocked')?.label).toBe('Intake blocked');
+  });
+
+  it('surfaces post-processing substates separately from the lane label', () => {
+    const running = buildPhaseBadge('post-processing-running');
+    expect(running?.label).toBe('Post processing');
+    expect(running?.tone).toBe('post-processing-running');
+
+    const blocked = buildPhaseBadge('post-processing-blocked');
+    expect(blocked?.label).toBe('Post processing blocked');
+    expect(blocked?.tone).toBe('post-processing-blocked');
   });
 });
 

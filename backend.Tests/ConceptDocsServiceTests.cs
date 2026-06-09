@@ -28,7 +28,7 @@ public class ConceptDocsServiceTests
         var entry = svc.Get("lane-4-auto-review");
         Assert.NotNull(entry);
         Assert.Equal("lane-4-auto-review", entry!.Topic);
-        Assert.Equal("Auto-Review", entry.Title);
+        Assert.Equal("Post Processing", entry.Title);
         Assert.False(entry.Body.StartsWith("# "), "Body must not include the H1 line.");
         Assert.True(entry.Body.Length > 200, "Body should carry the substantive prose, not a stub.");
     }

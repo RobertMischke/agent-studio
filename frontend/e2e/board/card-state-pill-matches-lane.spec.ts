@@ -76,7 +76,7 @@ const HUMAN_REVIEW_TASK = makeTask('pill-lane-C-human', '5-human-review', 'Pill 
 const COMPLETED_TASK = makeTask('pill-lane-D-done', '6-completed', 'Pill lane completed delta', 1);
 
 const NON_PROGRESS = [
-  { task: AUTO_REVIEW_TASK, stateLabel: 'auto review' },
+  { task: AUTO_REVIEW_TASK, stateLabel: 'Post Processing' },
   { task: HUMAN_REVIEW_TASK, stateLabel: 'human review' },
   { task: COMPLETED_TASK, stateLabel: 'completed' },
 ];

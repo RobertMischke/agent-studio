@@ -1,16 +1,16 @@
 import { test, expect, Page } from '@playwright/test';
 
 /**
- * ADR-0025 (three-stage review pipeline) regression spec.
+ * ADR-0025 plus the orchestrator post-processing lane regression spec.
  *
  * The board now renders seven lanes:
  *   1-preparation, 2-ready, 3-progress,
  *   4-auto-review, 5-human-review,
  *   6-completed, 7-archive.
  *
- * The two review lanes are explicit so the user can tell at a glance
- * which cards the orchestrator is still chewing on (auto-review, robot
- * icon) and which are waiting on them (human-review, eye icon). At the
+ * Post Processing and Review are explicit so the user can tell at a glance
+ * which cards the orchestrator is still checking (robot icon) and which
+ * are waiting on them (eye icon). At the
  * canonical 1440 x 900 viewport every lane header must be visible
  * without horizontal overflow; the screenshot is the evidence that the
  * lane-layout-overflow guard from the paired task continues to hold.
@@ -125,6 +125,9 @@ async function installBoardMocks(page: Page): Promise<void> {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ autoCommit: false, runnerMode: 'manual', orchestratorModel: null }) });
   });
+  await page.route('**/api/projects/settings', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+  });
   await page.route('**/api/dev-tools/flags', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ updateStableEnabled: false, deleteE2EJobsEnabled: false }) });
@@ -159,7 +162,8 @@ test.describe('ADR-0025 seven-lane kanban', () => {
 
   test('renders all seven lanes and stays within the 1440x900 viewport', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="studio-board"], [data-testid="kanban-dashboard"]').first())
+      .toBeVisible({ timeout: 10_000 });
 
     // Every ADR-0025 lane must be visible somewhere on the board (either
     // expanded or as a rail).
@@ -181,11 +185,11 @@ test.describe('ADR-0025 seven-lane kanban', () => {
       ).toBeGreaterThan(0);
     }
 
-    // Auto Review and Review carry the distinct icons that
+    // Post Processing and Review carry the distinct icons that
     // identify their audience (machine vs you). Pin to the column
     // heading so we don't also match the lowercase state-pill on each
-    // job card. `exact` on Review so it does not also match Auto Review.
-    await expect(page.getByRole('heading', { name: 'Auto Review' })).toBeVisible();
+    // job card.
+    await expect(page.getByRole('heading', { name: 'Post Processing' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeVisible();
 
     // Container shape: Backlog / Active / Done & Decide. The
@@ -213,7 +217,7 @@ test.describe('ADR-0025 seven-lane kanban', () => {
     // widths; the cheap pairwise check below keeps this seven-lane
     // contract anchored.
     const laneRects = await page.evaluate((laneIds: readonly string[]) => {
-      const rects: Array<{ id: string; left: number; right: number }> = [];
+      const rects: Array<{ id: string; left: number; right: number; top: number; bottom: number }> = [];
       for (const id of laneIds) {
         const el =
           document.querySelector(`[data-testid="lane-${id}"]`) ??
@@ -221,15 +225,21 @@ test.describe('ADR-0025 seven-lane kanban', () => {
         if (!el) continue;
         const r = (el as HTMLElement).getBoundingClientRect();
         if (r.width === 0 && r.height === 0) continue;
-        rects.push({ id, left: r.left, right: r.right });
+        rects.push({ id, left: r.left, right: r.right, top: r.top, bottom: r.bottom });
       }
       return rects.sort((a, b) => a.left - b.left);
     }, lanes);
-    for (let i = 0; i < laneRects.length - 1; i++) {
-      expect(
-        laneRects[i].right,
-        `lane ${laneRects[i].id} (right=${laneRects[i].right.toFixed(1)}) overlaps lane ${laneRects[i + 1].id} (left=${laneRects[i + 1].left.toFixed(1)})`,
-      ).toBeLessThanOrEqual(laneRects[i + 1].left + 0.5);
+    for (let i = 0; i < laneRects.length; i++) {
+      for (let j = i + 1; j < laneRects.length; j++) {
+        const a = laneRects[i];
+        const b = laneRects[j];
+        const verticalOverlap = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (verticalOverlap <= 0.5) continue;
+        expect(
+          a.right,
+          `lane ${a.id} (right=${a.right.toFixed(1)}) overlaps lane ${b.id} (left=${b.left.toFixed(1)})`,
+        ).toBeLessThanOrEqual(b.left + 0.5);
+      }
     }
 
     await page.screenshot({ path: 'test-results/kanban-seven-lanes-1440x900.png', fullPage: false });

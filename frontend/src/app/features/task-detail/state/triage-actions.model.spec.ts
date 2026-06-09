@@ -22,7 +22,7 @@ describe('primaryActionFor — Enter-bound primary per source lane', () => {
     expect(primary!.intent).toEqual({ kind: 'move', targetState: '6-completed' });
   });
 
-  it('leaves the Auto-Review lane without a primary (Enter is a no-op)', () => {
+  it('leaves the Post Processing lane without a primary (Enter is a no-op)', () => {
     expect(primaryActionFor('4-auto-review')).toBeNull();
   });
 });

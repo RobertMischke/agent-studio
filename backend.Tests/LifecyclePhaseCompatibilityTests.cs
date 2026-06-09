@@ -71,13 +71,19 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     [Theory]
     [InlineData(TaskStates.Preparation)]
     [InlineData(TaskStates.OrchestratorPrep)]
-    [InlineData(TaskStates.AutoReview)]
     [InlineData(TaskStates.HumanReview)]
     [InlineData(TaskStates.Completed)]
     [InlineData(TaskStates.Archive)]
     public void DefaultFor_StatesWithoutSubstates_ReturnNull(string state)
     {
         Assert.Null(LifecyclePhases.DefaultFor(state, executionStatus: null, TaskSummaryStatus.None));
+    }
+
+    [Fact]
+    public void DefaultFor_AutoReview_IsPostProcessingRunning()
+    {
+        Assert.Equal(LifecyclePhases.PostProcessingRunning,
+            LifecyclePhases.DefaultFor(TaskStates.AutoReview, executionStatus: null, TaskSummaryStatus.None));
     }
 
     // ---- IsAllowed -----------------------------------------------------------
@@ -97,12 +103,15 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
     }
 
     [Fact]
-    public void IsAllowed_PermissiveOnUnconstrainedStates()
+    public void IsAllowed_KnownUnconstrainedStatesRejectNonEmptyPhase()
     {
-        // Preparation and review lanes have no entry in AllowedByState; a
-        // sidecar that stamps a phase there should be tolerated rather than
-        // wedge the board, mirroring the wire field's lazy-defaulting model.
-        Assert.True(LifecyclePhases.IsAllowed(TaskStates.Preparation, LifecyclePhases.HumanReady));
+        Assert.False(LifecyclePhases.IsAllowed(TaskStates.Preparation, LifecyclePhases.HumanReady));
+    }
+
+    [Fact]
+    public void IsAllowed_UnknownFutureStatesRemainPermissive()
+    {
+        Assert.True(LifecyclePhases.IsAllowed("8-future", LifecyclePhases.HumanReady));
     }
 
     // ---- Scanner: existing jobs without phase --------------------------------
@@ -153,6 +162,17 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
         WriteJob(TaskStates.Progress, "post-card", phase: LifecyclePhases.PostProcessingRunning);
 
         var info = BuildScanner().FindJob("post-card");
+
+        Assert.NotNull(info);
+        Assert.Equal(LifecyclePhases.PostProcessingRunning, info!.Phase);
+    }
+
+    [Fact]
+    public void Scanner_AutoReviewJobWithPostProcessingPhase_RoundTrips()
+    {
+        WriteJob(TaskStates.AutoReview, "post-review-card", phase: LifecyclePhases.PostProcessingRunning);
+
+        var info = BuildScanner().FindJob("post-review-card");
 
         Assert.NotNull(info);
         Assert.Equal(LifecyclePhases.PostProcessingRunning, info!.Phase);
@@ -217,7 +237,8 @@ public class LifecyclePhaseCompatibilityTests : IDisposable
             LifecyclePhases.DefaultFor(jobs["ready-legacy"].State, null, TaskSummaryStatus.None));
         Assert.Equal(LifecyclePhases.ExecutionRunning,
             LifecyclePhases.DefaultFor(jobs["exec-legacy"].State, null, TaskSummaryStatus.None));
-        Assert.Null(LifecyclePhases.DefaultFor(jobs["review-card"].State, null, TaskSummaryStatus.None));
+        Assert.Equal(LifecyclePhases.PostProcessingRunning,
+            LifecyclePhases.DefaultFor(jobs["review-card"].State, null, TaskSummaryStatus.None));
     }
 
     [Fact]

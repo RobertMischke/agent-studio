@@ -128,7 +128,7 @@ describe('EpicGroupBoardComponent epic expansion', () => {
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector('[data-testid="epic-group-subtasks-epic-1"]')).toBeTruthy();
     expect(host.textContent).toContain('Epic overlay navigation');
-    expect(host.textContent).toContain('auto review');
+    expect(host.textContent).toContain('Post Processing');
     expect(host.querySelector('[data-testid="epic-group-subtask-verdict"]')?.textContent?.trim()).toBe('reissue');
 
     toggle?.click();

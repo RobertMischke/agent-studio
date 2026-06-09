@@ -800,6 +800,21 @@
       background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
       border-color: color-mix(in srgb, var(--studio-accent-success) 35%, transparent);
     }
+    .task-card__phase-pill--post-processing-running {
+      color: var(--lane-auto-review);
+      background: color-mix(in srgb, var(--lane-auto-review) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--lane-auto-review) 38%, transparent);
+    }
+    .task-card__phase-pill--post-processing-blocked {
+      color: var(--studio-accent-6-strong);
+      background: color-mix(in srgb, var(--studio-accent-6) 14%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-6) 35%, transparent);
+    }
+    .task-card__phase-pill--awaiting-review {
+      color: var(--studio-accent-3-strong);
+      background: color-mix(in srgb, var(--studio-accent-3) 12%, var(--studio-bg-elevated));
+      border-color: color-mix(in srgb, var(--studio-accent-3) 32%, transparent);
+    }
     /* Backlog-lane spec: structural type chip (Bug / Feature / Chore) and the
        lightweight tag chips. The chore variant is deliberately quieter so
        it does not steal attention from real classifications. */

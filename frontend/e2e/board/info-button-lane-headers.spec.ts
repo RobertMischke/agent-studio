@@ -172,7 +172,7 @@ test.describe('Info button on lane headers (selective placement)', () => {
   test('backend serves the committed concept-docs', async () => {
     const a = await api<{ topic: string; title: string; body: string }>('/api/concept-docs/lane-4-auto-review');
     expect(a.topic).toBe('lane-4-auto-review');
-    expect(a.title).toBe('Auto-Review');
+    expect(a.title).toBe('Post Processing');
     expect(a.body.length).toBeGreaterThan(200);
 
     const b = await api<{ topic: string; title: string; body: string }>('/api/concept-docs/lane-3-progress');
@@ -200,7 +200,7 @@ test.describe('Info button on lane headers (selective placement)', () => {
 
     const modal = page.getByTestId('info-button-modal-lane-4-auto-review');
     await expect(modal).toBeVisible();
-    await expect(modal.locator('.dialog__title')).toHaveText('Auto-Review');
+    await expect(modal.locator('.dialog__title')).toHaveText('Post Processing');
     const body = page.getByTestId('info-button-body-lane-4-auto-review');
     await expect(body).toContainText(/multi-aspect/i);
 

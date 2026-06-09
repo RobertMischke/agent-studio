@@ -4,8 +4,8 @@ import { test, expect, Page } from '@playwright/test';
  * Regression guard for the lane-rename task: the board used to surface the
  * 2-ready and 5-human-review lanes as "Human Ready" and "Human Review".
  * The user dropped the human/non-human distinction entirely - those lanes
- * now read simply "Ready" and "Review". The orchestrator's own pass
- * (4-auto-review) keeps the distinct "Auto Review" label.
+ * now read simply "Ready" and "Review". The orchestrator-owned pass
+ * (4-auto-review) now reads "Post Processing".
  *
  * The underlying state keys (2-ready, 5-human-review, 4-auto-review) are
  * unchanged - this is a display-label change only - so the mock fixture
@@ -96,6 +96,9 @@ async function installBoardMocks(page: Page): Promise<void> {
     await route.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } }) });
   });
+  await page.route('**/api/projects/settings', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+  });
 }
 
 test.describe('lane rename - no "Human" prefix', () => {
@@ -105,20 +108,20 @@ test.describe('lane rename - no "Human" prefix', () => {
     await installBoardMocks(page);
   });
 
-  test('renders Ready / Review / Auto Review headings and never "Human Ready" / "Human Review"', async ({ page }) => {
+  test('renders Ready / Review / Post Processing headings and never legacy human or auto-review headings', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="studio-board"], [data-testid="kanban-dashboard"]').first())
+      .toBeVisible({ timeout: 10_000 });
 
-    // The renamed lanes. `exact` on "Review" so it does not also match the
-    // "Auto Review" heading by substring.
+    // The renamed lanes.
     await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Ready', exact: true })).toBeVisible();
-    // The orchestrator's own pass keeps its distinct label.
-    await expect(page.getByRole('heading', { name: 'Auto Review' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Post Processing' })).toBeVisible();
 
     // The dropped labels must be gone from every heading on the board.
     await expect(page.getByRole('heading', { name: /Human Review/ })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /Human Ready/ })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /Auto Review/ })).toHaveCount(0);
 
     await page.screenshot({ path: 'test-results/lane-rename-no-human-prefix-1440x900.png', fullPage: false });
   });

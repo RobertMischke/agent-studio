@@ -39,6 +39,7 @@ export function formatResetIn(epochSeconds: number, now: number): string {
 }
 
 export function stateLabel(state: string): string {
+  if (state === '4-auto-review') return 'Post Processing';
   return state.replace(/^\d+-/, '');
 }
 

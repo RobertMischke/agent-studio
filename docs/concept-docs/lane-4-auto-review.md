@@ -1,35 +1,44 @@
-# Auto-Review
+# Post Processing
 
-Auto-review is the orchestrator's lane (the machine-icon column on the board). When an agent run ends with `[[TASK_DONE]]` the runner moves the job from `3-progress` into `4-auto-review` and the `ReviewDecisionOrchestrator` takes over. The lane is intentionally narrow in scope: it decides whether a finished run is good enough to put in front of you, and nothing more. It is not a checkpoint where humans re-confirm; that role belongs to `5-human-review` next door.
+Post Processing is the orchestrator-owned lane after the main coding CLI finishes and before the task reaches `5-human-review`. The compatibility state key is still `4-auto-review`, but the visible board label now names what is happening: the system is checking the completed run, collecting evidence, and deciding what should be put in front of a person.
+
+This phase must be performed by the orchestrator or a supporting CLI identity, not silently by the same coding identity that just edited the project. The coding agent's `[[TASK_DONE]]` is an input, not the final verdict.
 
 ## What the orchestrator does here
 
-For every job sitting in this lane, the orchestrator runs a short multi-aspect quality pass. Each aspect is a separate fast-model call against a tightly scoped slice of the evidence (requirement fit, code quality, documentation impact, tests and evidence). Each call writes its own `aspect-*.md` into the job folder so the result is replayable and inspectable. The orchestrator then folds the per-aspect verdicts into one decision and acts on it deterministically. The agent's own self-report is one input among several; the lane never blindly trusts a `[[TASK_DONE]]`.
+The phase can run deterministic checks and configured supporting-agent passes:
 
-The pass has two clearly separated phases, and both are first-class rows in the Overview pipeline table:
+- result sanity checks
+- security analysis
+- QA or test-quality feedback
+- design or UX critique
+- runtime log analysis
+- token summary collection
+- orchestrator review
+- finding extraction
+- follow-up task suggestions.
 
-- **Parallel aspect reviews (read-only pool).** Aspect reviews read evidence and write only their own `aspect-*.md`; they touch no working tree. So they are admitted as **read-only slots** through `ParallelSlotPolicy` (ADR-0052), independent of the single coding seat that serialises file-mutating runs. Several tasks can therefore be in auto-review at the same time, bounded by `ReviewDecisionOrchestrator:MaxParallelReviews` (default 4). Each aspect row carries a "Parallel" badge.
-- **Orchestrator final verdict (one ruling).** After the aspects finish, the orchestrator makes exactly one final decision and records it as its own `post-orchestrator-decision` step (`Auto-review decision`). Its verdict is the aggregate of the aspect verdicts: `accept` (all pass) or `accept-with-concerns` -> `5-human-review`, `reissue` (any block) -> `3-progress`, `escalate` -> `5-human-review`. The row is rendered as a visually separated "Final verdict" step so the single ruling is never confused with the individual aspect checks.
+Each check writes inspectable task evidence such as `aspect-*.md`, `lifecycle.json`, or `post-processing-outcomes.jsonl`. The outcome log records the supporting identity, optional CLI type, step id, summary, evidence reference, finding references, and any follow-up task ids.
 
-## Three outcomes
+The current implementation keeps `4-auto-review` as the durable compatibility lane and stamps `phase = post-processing-running` while the post-processing worker starts. A later lifecycle-lanes migration can collapse this into a `3-progress` sublane without changing the evidence contract.
 
-- **All aspects pass.** The job is promoted to `5-human-review` with no flags. You see a clean card and decide whether to accept it.
-- **Some concerns.** The job is promoted to `5-human-review` carrying a small warning chip on the card. The aspect markdowns spell out what was uneasy.
-- **Any aspect blocks.** The job is reissued back to `3-progress` with a follow-up summarising the findings. This is how the orchestrator catches "looks done, isn't done" outcomes without bothering you.
+## Typed outcomes
 
-## Diff discovery: full job range, not HEAD alone
+- **Pass to Review.** The task moves to `5-human-review` for operator sign-off.
+- **Findings added.** The task can still move to Review, but the card and evidence include non-blocking findings.
+- **Needs follow-up task.** The phase records suggested follow-up work instead of changing source code.
+- **Needs human input.** The task escalates to the human-owned decision surface.
+- **Failed post-processing.** The phase records the failure and routes through the normal human-review escalation path.
 
-Each aspect prompt is fed a diff summary that names the commits the job produced. The summary is built from **every commit attributed to the job across all of its runs** (via the run timeline's `HeadShaBefore..HeadShaAfter` SHA ranges, deduped) plus the auto-commit recorded on `JobInfo.Commit`. This is the same aggregation pipeline that powers `/api/tasks/{id}/commits` in the protocol pane, so the reviewer and the human see the same set of commits.
-
-The lane explicitly does not look at HEAD alone. Crash-recovery commits land as near-empty fixups on top of the real work; if the aspect runner only saw HEAD it would report "0 files changed" and false-positive a block on a successful refactor. Walking the full run range avoids that drift.
-
-When the aggregate is genuinely empty — no run-window range produced commits and no auto-commit was recorded — the summary states this explicitly ("No commits attributed to this task") rather than emitting a misleading "Files changed: 0".
+Post-processing may create findings or follow-up tasks. It should not automatically fix source code unless a future task explicitly enables that behavior.
 
 ## What to do when the lane stalls
 
-If a job sits in this lane longer than feels right: tasks now review concurrently in the read-only pool (bounded by `ReviewDecisionOrchestrator:MaxParallelReviews`), and the aspects within a single task run in parallel too, so the lane no longer head-of-line blocks on one slow task. What can still hold a task up is a slow CLI quota or a stuck fast-model call on that task's own aspect set. The header shows the live status line ("Reviewing X. Last tick: A accept, B reissue, C escalate"). When that line stops updating for many minutes, glance at `logs/meta/<project>/observations.jsonl` for advisories or use the supervisor's pause/resume primitives to nudge it. The kill switch for the multi-aspect pass is `ReviewDecisionOrchestrator:AspectsEnabled`; flipping it off makes auto-review a passthrough. Set `MaxParallelReviews` to `1` to force one-task-at-a-time review without disabling the aspects.
+If a job sits here longer than expected, inspect `lifecycle.json`, `post-processing-outcomes.jsonl`, the `aspect-*.md` files, and `logs/cli-output.log`. The header status still comes from the legacy auto-review status API while the compatibility lane remains in place. When the status line stops updating for many minutes, check `logs/meta/<project>/observations.jsonl` for supervisor advisories or use the supervisor pause/resume primitives to nudge the worker.
 
 ## Reference
 
 - ADR-0025 (three-stage review pipeline)
 - ADR-0026 (multi-aspect orchestrator review)
+- `docs/research/expanded-lifecycle-lanes-plan-2026-05.md`
+- `docs/research/auto-review-postprocessing-consolidation-2026-06.md`

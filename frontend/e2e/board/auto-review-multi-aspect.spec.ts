@@ -1,14 +1,14 @@
 import { test, expect, Page } from '@playwright/test';
 
 /**
- * Multi-aspect auto-review surface (slice 1).
+ * Multi-aspect post-processing surface (slice 1).
  *
  * Verifies the kanban-side contract for the multi-aspect quality pass
  * on jobs in `4-auto-review`:
- *   - the Auto Review lane header stays quiet and does not render the
+ *   - the Post Processing lane header stays quiet and does not render the
  *     old per-tick counter line;
  *   - an info button next to the lane title opens a drawer that explains
- *     what auto-review does;
+ *     what post-processing does;
  *   - jobs that picked up a `<namespace>:concerns` tag from the pipeline
  *     do NOT render a concern chip on the card (ASS-748: the lane already
  *     says the card is in auto-review, so concern/classifier markers are
@@ -118,8 +118,8 @@ async function installMocks(
         contentType: 'application/json',
         body: JSON.stringify({
           topic,
-          title: 'Auto-Review',
-          body: 'Auto-review runs a multi-aspect quality pass on every job that ends with `[[TASK_DONE]]`. Each aspect writes its own `aspect-*.md` into the job folder.\n\nWhen all aspects pass, the orchestrator promotes the job to human review.'
+          title: 'Post Processing',
+          body: 'Post Processing runs a multi-aspect quality pass on every job that ends with `[[TASK_DONE]]`. Each aspect writes its own `aspect-*.md` into the job folder.\n\nWhen all aspects pass, the orchestrator promotes the job to review.'
         })
       });
     }
@@ -264,7 +264,7 @@ test.describe('Auto-review multi-aspect surface', () => {
   });
 
   // ASS-748: concern/classifier tags are lane-derivable noise. A card in
-  // 4-auto-review must NOT repeat that it is being reviewed nor surface the
+  // 4-auto-review must NOT repeat that it is in post-processing nor surface the
   // pipeline's `<namespace>:concerns` markers; the card carries only
   // non-lane-derivable information.
   test('job with quality:concerns tags renders no concern chip and no lane-mirroring status', async ({ page }) => {
@@ -290,16 +290,16 @@ test.describe('Auto-review multi-aspect surface', () => {
     await page.waitForLoadState('domcontentloaded');
     await dismissErrorDialogIfPresent(page);
 
-    const card = page.locator('[data-testid="job-card"]', { hasText: 'Auto-review flagged concerns' });
+    const card = page.locator('[data-testid="task-card"]', { hasText: 'Auto-review flagged concerns' });
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    // Concern chips are suppressed: the lane already says it is in auto-review.
-    await expect(card.locator('[data-testid="job-card-concern-chip"]')).toHaveCount(0);
+    // Concern chips are suppressed: the lane already says it is in post-processing.
+    await expect(card.locator('[data-testid="task-card-concern-chip"]')).toHaveCount(0);
     await expect(card.getByText('quality:concerns')).toHaveCount(0);
     await expect(card.getByText('docs:concerns')).toHaveCount(0);
 
     // No lane-mirroring "queued for review" / "review pending" status pill.
-    await expect(card.getByTestId('job-card-auto-review-status')).toHaveCount(0);
+    await expect(card.getByTestId('task-card-auto-review-status')).toHaveCount(0);
 
     // Capture suppression evidence on the card.
     await page.setViewportSize({ width: 1400, height: 900 });

@@ -591,7 +591,14 @@ export function buildGitStateBadge(job: TaskInfo): GitStateBadge | null {
   }
 }
 
-export type PhaseBadgeTone = 'human-ready' | 'intake-running' | 'intake-blocked' | 'intake-passed';
+export type PhaseBadgeTone =
+  | 'human-ready'
+  | 'intake-running'
+  | 'intake-blocked'
+  | 'intake-passed'
+  | 'post-processing-running'
+  | 'post-processing-blocked'
+  | 'awaiting-review';
 export interface PhaseBadge { label: string; tone: PhaseBadgeTone; tooltip: string; }
 
 /**
@@ -612,6 +619,15 @@ export function buildPhaseBadge(phase: TaskInfo['phase']): PhaseBadge | null {
     case 'intake-passed':
       return { label: 'Intake passed', tone: 'intake-passed',
                tooltip: 'Orchestrator intake approved this card. The coding runner is now allowed to pick it up.' };
+    case 'post-processing-running':
+      return { label: 'Post processing', tone: 'post-processing-running',
+               tooltip: 'The coding CLI has finished. An orchestrator or supporting agent is running post-processing before review.' };
+    case 'post-processing-blocked':
+      return { label: 'Post processing blocked', tone: 'post-processing-blocked',
+               tooltip: 'Orchestrator post-processing needs a human decision or failed before it could pass this task to review.' };
+    case 'awaiting-review':
+      return { label: 'Awaiting review', tone: 'awaiting-review',
+               tooltip: 'Post-processing finished and the task is waiting for the review transition.' };
     default:
       return null;
   }

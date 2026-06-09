@@ -325,7 +325,7 @@ describe('TaskColumnComponent (smoke)', () => {
     }).compileComponents();
 
     const fixture = TestBed.createComponent(TaskColumnComponent);
-    fixture.componentRef.setInput('title', 'Auto Review');
+    fixture.componentRef.setInput('title', 'Post Processing');
     fixture.componentRef.setInput('state', '4-auto-review');
     fixture.componentRef.setInput('jobs', []);
     fixture.detectChanges();
