@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tasks;
 using OrchestratorApi.Services.Tokens;
 using Xunit;
 
@@ -169,6 +171,53 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
     }
 
     [Fact]
+    public async Task InstanceReader_UsesStatsMetadata_ForArchivedSupportingJob()
+    {
+        foreach (var state in TaskStates.All)
+            Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        WriteJob(TaskStates.Archive, "support-archived", "Security audit of archived token flow");
+        var (_, bridge, store) = BuildStack();
+        await bridge.EmitTokenUsageAsync(
+            project: ProjectName,
+            jobId: "support-archived",
+            participantId: AgentMessageBusBridge.ParticipantOrchestratorFor(ProjectName),
+            topic: "orchestrator-decision",
+            usage: new OrchestratorTokenUsage
+            {
+                Model = "claude-haiku-4-5",
+                InputTokens = 10_000,
+                OutputTokens = 1_000,
+            },
+            createdAt: Now);
+        await WaitForBusCountAsync(store, 1);
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _workspace,
+                ["WatchPaths:0:Name"] = ProjectName,
+                ["WatchPaths:0:Path"] = _watchPath,
+                ["TaskIndexCache:SafetyTtlSeconds"] = "60",
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        var hotCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
+        scanner.SetIndexCache(hotCache);
+        Assert.DoesNotContain(scanner.ScanAllJobs(), j => j.State == TaskStates.Archive);
+
+        var stats = new JobStatsMetadataCache(scanner, config, NullLogger<JobStatsMetadataCache>.Instance);
+        var reader = new BusBackedProjectTokenUsageReader(store, config, stats);
+
+        var result = reader.BuildSummary(ProjectName, _watchPath, Now);
+
+        Assert.True(result.HasData);
+        Assert.Equal(11_000, result.LifetimeTotalTokens);
+        Assert.Equal(11_000, result.LifetimeSupportingTokens);
+        Assert.Equal(0, result.LifetimeJobTokens);
+    }
+
+    [Fact]
     public async Task BuildJobDetail_UnknownJob_NullOnBothReaders()
     {
         var (log, bridge, store) = BuildStack();
@@ -309,6 +358,14 @@ public sealed class ProjectTokenUsageBusParityTests : IDisposable
             };
         }
         return map;
+    }
+
+    private void WriteJob(string state, string slug, string title)
+    {
+        var dir = Path.Combine(_watchPath, state, slug);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "task.json"),
+            System.Text.Json.JsonSerializer.Serialize(new { id = slug, title, state, order = 1, agent = "claude" }));
     }
 
     private async Task WriteAsync(OrchestratorLog log, AgentMessageBusBridge bridge, AgentMessageBusStore store, params OrchestratorLogEntry[] entries)
