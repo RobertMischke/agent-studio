@@ -37,6 +37,45 @@ public record GitWorktreeResult(
     IReadOnlyList<string>? ConflictedFiles = null);
 
 /// <summary>
+/// Outcome of the deferred, operator-triggered merge of a task branch into the
+/// integration branch (<see cref="GitService.MergeBranchIntoIntegration"/>),
+/// behind the "Merge into Develop" post-step. Distinguishes the cases the
+/// runner has to surface honestly in the pipeline view.
+/// </summary>
+public enum MergeIntoIntegrationOutcome
+{
+    /// <summary>A real merge commit was just created on the integration branch.</summary>
+    Merged,
+    /// <summary>The task branch was already contained in the integration branch; no-op.</summary>
+    AlreadyMerged,
+    /// <summary>No <c>task/&lt;id&gt;</c> branch exists (e.g. a sequential run); nothing to merge.</summary>
+    NoTaskBranch,
+    /// <summary>The merge hit a conflict. It was aborted (tree left clean) and the conflicted files are reported, not swallowed.</summary>
+    Conflict,
+    /// <summary>A precondition failed (dirty tree, missing branch, checkout failure) or git errored.</summary>
+    Error,
+}
+
+/// <summary>
+/// Result of <see cref="GitService.MergeBranchIntoIntegration"/>. On
+/// <see cref="MergeIntoIntegrationOutcome.Conflict"/> the working tree is left
+/// clean (the merge is aborted) and <see cref="ConflictedFiles"/> names the
+/// files so the conflict is visible rather than silent.
+/// </summary>
+public record MergeIntoIntegrationResult(
+    MergeIntoIntegrationOutcome Outcome,
+    string? MergedSha,
+    string? Error,
+    IReadOnlyList<string> ConflictedFiles)
+{
+    public static MergeIntoIntegrationResult Of(MergeIntoIntegrationOutcome outcome, string? mergedSha = null, string? error = null)
+        => new(outcome, mergedSha, error, Array.Empty<string>());
+
+    public static MergeIntoIntegrationResult Conflicted(IReadOnlyList<string> conflictedFiles, string? error)
+        => new(MergeIntoIntegrationOutcome.Conflict, null, error, conflictedFiles);
+}
+
+/// <summary>
 /// One commit in a per-run commit lookup. The numbers are derived from
 /// <c>git log --shortstat</c> so we never have to re-run a diff to render
 /// "12 files, +200 / -50". Returned by
@@ -1548,6 +1587,80 @@ public class GitService
         if (!IsLikelyBranchName(ancestor) || !IsLikelyBranchName(descendant)) return false;
         var (_, _, code) = RunGitArgs(repoRoot, "merge-base", "--is-ancestor", ancestor, descendant);
         return code == 0;
+    }
+
+    /// <summary>
+    /// Merges <paramref name="taskBranch"/> (e.g. <c>task/&lt;id&gt;</c>) into
+    /// <paramref name="integrationBranch"/> (e.g. <c>develop</c>) with an explicit
+    /// merge commit (<c>git merge --no-ff --no-edit</c>) so an accepted task lands
+    /// on the integration branch as a single, revertable delivery. This is the
+    /// engine behind the deferred, operator-triggered "Merge into Develop"
+    /// post-step (<c>PipelineCatalogue.MergeIntoDevelopStepId</c>); it is NOT the
+    /// automatic in-run integration (<see cref="RebaseOnto"/> +
+    /// <see cref="MergeFastForward"/>) used to keep parallel worktrees in sync.
+    ///
+    /// <para>Contract:
+    /// <list type="bullet">
+    /// <item>No task branch -&gt; <see cref="MergeIntoIntegrationOutcome.NoTaskBranch"/> (benign skip, e.g. a sequential run with no worktree branch).</item>
+    /// <item>Already contained -&gt; <see cref="MergeIntoIntegrationOutcome.AlreadyMerged"/> (idempotent no-op, so a re-trigger is safe).</item>
+    /// <item>Dirty integration tree / missing integration branch / checkout failure -&gt; <see cref="MergeIntoIntegrationOutcome.Error"/> (never merge into a dirty tree).</item>
+    /// <item>Conflict -&gt; the merge is aborted so the tree is left clean and the conflicted files are returned (<see cref="MergeIntoIntegrationOutcome.Conflict"/>); the conflict is surfaced, never silently resolved or left half-applied.</item>
+    /// <item>Otherwise -&gt; <see cref="MergeIntoIntegrationOutcome.Merged"/> with the new integration HEAD sha.</item>
+    /// </list>
+    /// The merge runs in the working tree at <paramref name="repoRoot"/>; the
+    /// integration branch is checked out there first when it is not already HEAD
+    /// (only when the tree is clean).</para>
+    /// </summary>
+    public MergeIntoIntegrationResult MergeBranchIntoIntegration(string repoRoot, string taskBranch, string integrationBranch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Repo root does not exist.");
+        if (!IsLikelyBranchName(taskBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Invalid task branch '{taskBranch}'.");
+        if (!IsLikelyBranchName(integrationBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Invalid integration branch '{integrationBranch}'.");
+
+        if (!BranchExists(repoRoot, taskBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.NoTaskBranch, error: $"Task branch '{taskBranch}' does not exist.");
+        if (!BranchExists(repoRoot, integrationBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Integration branch '{integrationBranch}' does not exist.");
+
+        // Idempotent: a re-trigger after a successful merge is a clean no-op.
+        if (IsAncestor(repoRoot, taskBranch, integrationBranch))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.AlreadyMerged);
+
+        // Never merge into a dirty tree - that would entangle the operator's
+        // in-flight edits with the delivery merge.
+        if (RepoHasUncommittedChanges(repoRoot))
+            return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: "Integration working tree has uncommitted changes; refusing to merge.");
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, coErr, coCode) = RunGitArgs(repoRoot, "checkout", integrationBranch);
+            if (coCode != 0)
+            {
+                _logger.LogWarning("Merge-into-develop: checkout of {Integration} at {Path} failed: {Error}", integrationBranch, repoRoot, coErr.Trim());
+                return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Error, error: $"Could not check out '{integrationBranch}': {coErr.Trim()}");
+            }
+        }
+
+        var (_, mergeErr, mergeCode) = RunGitArgs(repoRoot, "merge", "--no-ff", "--no-edit", taskBranch);
+        if (mergeCode != 0)
+        {
+            var conflicted = ListUnmergedFiles(repoRoot);
+            // Abort so the tree is left clean; the conflict is reported, not silently resolved.
+            RunGitArgs(repoRoot, "merge", "--abort");
+            _logger.LogWarning(
+                "Merge-into-develop: merging {Task} into {Integration} at {Path} conflicted ({Count} files), aborted: {Error}",
+                taskBranch, integrationBranch, repoRoot, conflicted.Count, mergeErr.Trim());
+            return MergeIntoIntegrationResult.Conflicted(conflicted, mergeErr.Trim());
+        }
+
+        var mergedSha = ReadHeadShaAt(repoRoot);
+        _logger.LogInformation("Merge-into-develop: merged {Task} into {Integration} at {Path} ({Sha})", taskBranch, integrationBranch, repoRoot, mergedSha);
+        return MergeIntoIntegrationResult.Of(MergeIntoIntegrationOutcome.Merged, mergedSha: mergedSha);
     }
 
     /// <summary>

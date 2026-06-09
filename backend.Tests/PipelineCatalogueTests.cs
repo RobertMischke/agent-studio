@@ -37,9 +37,10 @@ public class PipelineCatalogueTests
 
         // Post includes the deterministic review/build gates, four aspects,
         // implemented tool steps (incl. the opt-in wiki-maintenance and
-        // wiki-learnings distillation steps), final orchestrator decision, and
-        // opt-in drift dimensions.
-        Assert.Equal(20, p.Post.Count);
+        // wiki-learnings distillation steps), the deferred operator-triggered
+        // "Merge into Develop" step, final orchestrator decision, and opt-in
+        // drift dimensions.
+        Assert.Equal(21, p.Post.Count);
     }
 
     [Fact]
@@ -237,6 +238,40 @@ public class PipelineCatalogueTests
         {
             Assert.Contains(aspectId, commitStep.DependsOn);
         }
+    }
+
+    [Fact]
+    public void StandardPipeline_MergeIntoDevelop_IsDeferredGitStep_RightAfterCommitCollection()
+    {
+        // ASS-1721: the "Merge into Develop" step ships as a deferred,
+        // operator-triggered Tool post-step placed right after the
+        // commit-collection slot (GitCommitAttribution). It is Deferred (not a
+        // Stub): the implementation exists (MergeIntoDevelopRunner) but only runs
+        // when the operator accepts the task, so the pipeline view shows it as a
+        // not-yet-run (pending) step until then. It is a git step, so the
+        // read-only pipeline drops it.
+        var p = PipelineCatalogue.Standard;
+        var merge = p.Post.First(s => s.Id == PipelineCatalogue.MergeIntoDevelopStepId);
+
+        Assert.Equal("post-merge-into-develop", merge.Id);
+        Assert.Equal("Merge into Develop", merge.DisplayName);
+        Assert.Equal(StepKind.Tool, merge.Kind);
+        Assert.Equal(StepRunMode.Sequential, merge.RunMode);
+        Assert.True(merge.Deferred, "merge-into-develop must be a deferred (operator-triggered) step");
+        Assert.False(merge.Stub, "merge-into-develop is implemented, not a stub");
+        Assert.True(merge.Idempotent);
+        Assert.True(merge.DefaultEnabled);
+        Assert.Contains(PipelineCatalogue.GitCommitAttributionStepId, merge.DependsOn);
+
+        // Ordered immediately after the commit-collection slot.
+        var commitIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.GitCommitAttributionStepId);
+        var mergeIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.MergeIntoDevelopStepId);
+        Assert.True(commitIndex >= 0 && mergeIndex >= 0);
+        Assert.Equal(commitIndex + 1, mergeIndex);
+
+        // It is a git step (read-only pipeline drops it).
+        Assert.Contains(PipelineCatalogue.MergeIntoDevelopStepId, PipelineCatalogue.GitStepIds);
+        Assert.DoesNotContain(PipelineCatalogue.ReadOnly.Post, s => s.Id == PipelineCatalogue.MergeIntoDevelopStepId);
     }
 
     [Fact]

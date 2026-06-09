@@ -136,6 +136,24 @@ public static class PipelineCatalogue
     public const string WorktreeContainmentStepId = "post-worktree-containment";
     public const string IntegrateMergeStepId = "post-integrate-merge";
     public const string ConflictResolutionStepId = "post-conflict-resolution";
+
+    /// <summary>
+    /// Deferred, operator-triggered post-step that merges the task branch
+    /// (<c>task/&lt;id&gt;</c>) into the integration branch (<c>develop</c>) once a
+    /// done-green task is accepted. Unlike <see cref="IntegrateMergeStepId"/>
+    /// (which runs automatically during the run to keep parallel worktrees in
+    /// sync, ADR-0052), this step does NOT run on its own: it carries
+    /// <see cref="PipelineStep.Deferred"/> = true and stays "pending" in the
+    /// pipeline view until the operator triggers the "Merge into Develop" action
+    /// (the HumanReview -&gt; Delivered / <c>Completed</c> acceptance signal). On
+    /// trigger it performs the real, scoped git merge; a merge conflict is made
+    /// visible (recorded <see cref="PipelineStepStatus.Failed"/> with the
+    /// conflicted files) rather than swallowed, and the working tree is left
+    /// clean. It closes the delivery gap so accepted work actually lands on
+    /// <c>develop</c>. Implemented by <c>MergeIntoDevelopRunner</c>, triggered
+    /// from <c>TaskTransitionService</c>.
+    /// </summary>
+    public const string MergeIntoDevelopStepId = "post-merge-into-develop";
     /// <summary>
     /// Deterministic post-step that compiles the changed repository state before
     /// the orchestrator trusts any self-reported Success. It runs after the
@@ -304,6 +322,7 @@ public static class PipelineCatalogue
         WorktreeContainmentStepId,
         IntegrateMergeStepId,
         ConflictResolutionStepId,
+        MergeIntoDevelopStepId,
     };
 
     private static readonly TaskPipeline StandardPipeline = BuildStandardPipeline();
@@ -479,6 +498,23 @@ public static class PipelineCatalogue
                     // of this executor bracket, so within the executor the slot
                     // stays a reserved record that surfaces as "planned".
                     Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = MergeIntoDevelopStepId,
+                    DisplayName = "Merge into Develop",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Ordered right after the commit-collection slot: the merge
+                    // only makes sense once the task's commits are attributed.
+                    DependsOn = [GitCommitAttributionStepId],
+                    // Re-runnable: an already-merged branch is a no-op (ancestor
+                    // check), a conflict aborts cleanly and can be retried.
+                    Idempotent = true,
+                    // Implemented but operator-triggered (the "Merge into Develop"
+                    // acceptance action), so it stays "pending" until then rather
+                    // than running automatically in the post-bracket.
+                    Deferred = true,
                 },
                 new PipelineStep
                 {

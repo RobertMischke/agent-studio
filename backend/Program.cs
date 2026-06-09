@@ -301,6 +301,7 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.PipelineExecutionLog>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner>();
 builder.Services.AddSingleton<OrchestratorApi.Services.GeneratedFiles.FileGenerationIndex>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ProjectPipelineCostService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ILintScssRunner,

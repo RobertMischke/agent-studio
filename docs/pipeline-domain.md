@@ -28,6 +28,12 @@ pipeline view.
 - `backend/Services/Pipeline/PipelineExecutionLog.cs`: per-run
   `pipeline-execution.json` history consumed by the Overview and future
   pipeline surfaces.
+- `backend/Services/Pipeline/MergeIntoDevelopRunner.cs`: the deferred,
+  operator-triggered `post-merge-into-develop` post-step. Performs the real
+  `task/<id> -> develop` merge via `GitService.MergeBranchIntoIntegration` when
+  the operator accepts a done-green task (the `HumanReview -> Completed`
+  transition wired in `TaskTransitionService`), then records the outcome so the
+  pending step flips to passed / failed / skipped in place.
 - `backend/Services/Pipeline/PipelineStepConfigResolver.cs`: effective model and
   step config resolution.
 - `backend/Services/Pipeline/PipelineStepConditionEvaluator.cs`: per-step
@@ -55,6 +61,14 @@ pipeline view.
   `PostAbortReviewDecider` owns the binding action and rerun budget.
 - The read-only pipeline drops git steps. Planning and research tasks must not
   be forced through write-oriented post steps.
+- A `Deferred` step (e.g. `post-merge-into-develop`) is fully implemented but
+  runs only on an external operator trigger, not automatically in the
+  post-bracket. It is distinct from a `Stub`: a stub has no implementation and
+  renders "planned", a deferred step renders "pending" until triggered. The
+  merge into develop is best-effort and runs only after the lane move has
+  already landed, so it can never block the transition; a conflict is a visible
+  `Failed` outcome (conflicted files in the verdict summary) and the working
+  tree is left clean, never silently resolved.
 - Pipeline history is per run. Re-opened tasks append a new attempt and keep
   earlier attempts addressable.
 - If a new step emits a disk or wire shape, add or update a schema and the

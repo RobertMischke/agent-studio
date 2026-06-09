@@ -20,6 +20,7 @@ public sealed class TaskTransitionService
     private readonly TaskSessionLog? _sessions;
     private readonly CompletedPushQueue? _pushQueue;
     private readonly OrchestratorApi.Services.Drift.DriftPostStepRunner? _driftRunner;
+    private readonly OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner? _mergeRunner;
     private readonly CliRouter? _cliRouter;
     private readonly IAutoReviewPostProcessingQueue? _autoReviewQueue;
 
@@ -46,7 +47,8 @@ public sealed class TaskTransitionService
         CompletedPushQueue? pushQueue = null,
         OrchestratorApi.Services.Drift.DriftPostStepRunner? driftRunner = null,
         CliRouter? cliRouter = null,
-        IAutoReviewPostProcessingQueue? autoReviewQueue = null)
+        IAutoReviewPostProcessingQueue? autoReviewQueue = null,
+        OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner? mergeRunner = null)
     {
         _scanner = scanner;
         _states = states;
@@ -59,6 +61,7 @@ public sealed class TaskTransitionService
         _driftRunner = driftRunner;
         _cliRouter = cliRouter;
         _autoReviewQueue = autoReviewQueue;
+        _mergeRunner = mergeRunner;
     }
 
     /// <summary>
@@ -194,6 +197,19 @@ public sealed class TaskTransitionService
                     else
                         await PushCompletedJobCommitsAsync(moved, autoPushStrategy, ct);
                 }
+            }
+
+            // Deferred "Merge into Develop" post-step. Accepting a done-green task
+            // (the move into Completed) is the operator trigger that runs the real
+            // task/<id> -> develop merge. Independent of the push strategy above:
+            // a project that never auto-pushes still wants accepted work folded
+            // into the integration branch. Fully guarded - the runner records a
+            // visible conflict / error into the pipeline view but never throws, so
+            // it cannot undo the lane move that already landed on disk.
+            if (targetState == TaskStates.Completed && !isReadOnly && _mergeRunner != null)
+            {
+                var mergeJob = _scanner.FindJob(jobId, watchPath);
+                if (mergeJob != null) TriggerMergeIntoDevelop(mergeJob, settings);
             }
 
             try
@@ -429,6 +445,28 @@ public sealed class TaskTransitionService
                 _logger.LogWarning(ex, "drift post-step trigger failed for {JobId}", moved.Id);
             }
         });
+    }
+
+    /// <summary>
+    /// Triggers the deferred "Merge into Develop" post-step
+    /// (<see cref="OrchestratorApi.Services.Pipeline.PipelineCatalogue.MergeIntoDevelopStepId"/>)
+    /// on task acceptance. The runner performs the real
+    /// <c>task/&lt;id&gt; -&gt; develop</c> merge and records the outcome into the
+    /// pipeline view; it self-guards and never throws, so a conflict is made
+    /// visible without affecting the lane move that already completed.
+    /// </summary>
+    private void TriggerMergeIntoDevelop(TaskInfo moved, ProjectSettings settings)
+    {
+        var runner = _mergeRunner;
+        if (runner == null) return;
+        try
+        {
+            runner.Run(moved.ProjectName, moved.Id, moved.FolderPath, moved.WatchPath, settings.IntegrationBranch);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "merge-into-develop trigger failed for {JobId}", moved.Id);
+        }
     }
 
     private void EnqueueAutoReviewPostProcessing(TaskInfo moved)

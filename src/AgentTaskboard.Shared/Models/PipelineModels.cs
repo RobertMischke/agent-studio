@@ -73,6 +73,19 @@ public sealed record PipelineStep
     /// </summary>
     public bool Stub { get; init; }
     /// <summary>
+    /// When true, the step is fully implemented but runs only on an external
+    /// operator trigger rather than automatically in the post-bracket. It is
+    /// distinct from <see cref="Stub"/>: a stub has no implementation and shows
+    /// as "planned"; a deferred step has a real implementation and shows as
+    /// "pending" until the operator triggers it. The
+    /// <c>post-merge-into-develop</c> post-step is deferred - it performs the
+    /// real <c>task/&lt;id&gt; -&gt; develop</c> merge only when the operator
+    /// runs the "Merge into Develop" action, so it sits in the pipeline as a
+    /// not-yet-run step until then. Implemented by
+    /// <c>OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner</c>.
+    /// </summary>
+    public bool Deferred { get; init; }
+    /// <summary>
     /// Whether the step runs when a project has no explicit override for it.
     /// Most steps default on; the opt-in drift post-steps default off because
     /// a drift run is an expensive extra LLM pass the operator turns on per

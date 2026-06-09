@@ -221,6 +221,113 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
         Assert.Equal(sha, RunGit(_tempDir, $"--git-dir=\"{bare}\" rev-parse refs/heads/{targetBranch}").Out.Trim());
     }
 
+    [Fact]
+    public void MergeBranchIntoIntegration_CreatesMergeCommitOnDevelop()
+    {
+        var repo = SeedRepo("merge-dev");
+        var git = BuildGitService(("Fixture", repo));
+
+        // develop branches off main; task/10 adds a commit on its own file.
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/10");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        var taskTip = RunGit(repo, "rev-parse task/10").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/10", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, result.Outcome);
+        // develop now contains the task tip and the new HEAD is a --no-ff merge
+        // commit (two parents), so the delivery is a single revertable commit.
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {taskTip} develop").Code);
+        Assert.Equal(0, RunGit(repo, "rev-parse --verify develop^2").Code);
+        Assert.Equal(result.MergedSha, RunGit(repo, "rev-parse develop").Out.Trim());
+        // Working tree is clean after the merge.
+        Assert.False(git.RepoHasUncommittedChanges(repo));
+    }
+
+    [Fact]
+    public void MergeBranchIntoIntegration_AlreadyContained_IsIdempotentNoOp()
+    {
+        var repo = SeedRepo("merge-already");
+        var git = BuildGitService(("Fixture", repo));
+
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        // task/11 points at develop's tip, so it is already fully contained.
+        RunGit(repo, "branch task/11 develop");
+        var developTip = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/11", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.AlreadyMerged, result.Outcome);
+        // develop did not move; no spurious merge commit was created.
+        Assert.Equal(developTip, RunGit(repo, "rev-parse develop").Out.Trim());
+    }
+
+    [Fact]
+    public void MergeBranchIntoIntegration_Conflict_AbortsLeavesTreeCleanAndReportsFiles()
+    {
+        var repo = SeedRepo("merge-conflict");
+        var git = BuildGitService(("Fixture", repo));
+
+        RunGit(repo, "checkout -q -b develop");
+        // task/12 edits shared.txt one way ...
+        RunGit(repo, "checkout -q -b task/12");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "task version");
+        Commit(repo, "feat: task edits shared");
+        // ... develop edits the same file differently -> merge must conflict.
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "develop version");
+        Commit(repo, "chore: develop edits shared");
+        var developTipBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/12", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Conflict, result.Outcome);
+        // The conflict is made visible, not silent.
+        Assert.Contains("shared.txt", result.ConflictedFiles);
+        // The merge was aborted: develop is unchanged, the tree is clean, and no
+        // merge is in progress (MERGE_HEAD gone).
+        Assert.Equal(developTipBefore, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.False(git.RepoHasUncommittedChanges(repo));
+        Assert.NotEqual(0, RunGit(repo, "rev-parse --verify MERGE_HEAD").Code);
+    }
+
+    [Fact]
+    public void MergeBranchIntoIntegration_NoTaskBranch_ReturnsNoTaskBranch()
+    {
+        var repo = SeedRepo("merge-no-branch");
+        var git = BuildGitService(("Fixture", repo));
+        RunGit(repo, "checkout -q -b develop");
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/does-not-exist", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.NoTaskBranch, result.Outcome);
+    }
+
+    [Fact]
+    public void MergeBranchIntoIntegration_DirtyTree_RefusesWithError()
+    {
+        var repo = SeedRepo("merge-dirty");
+        var git = BuildGitService(("Fixture", repo));
+
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "checkout -q -b task/13");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+        // Leave an uncommitted edit in the integration working tree.
+        File.WriteAllText(Path.Combine(repo, "README.md"), "operator edit in flight");
+
+        var result = git.MergeBranchIntoIntegration(repo, "task/13", "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Error, result.Outcome);
+        Assert.NotNull(result.Error);
+    }
+
     private string SeedRepo(string name)
     {
         var repo = Path.Combine(_tempDir, name);
