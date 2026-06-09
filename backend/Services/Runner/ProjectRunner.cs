@@ -2797,7 +2797,9 @@ public class ProjectRunner
         {
             var record = _pipelineLog.EnsureRun(
                 info.FolderPath,
-                OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                OrchestratorApi.Services.Pipeline.ProjectPipelineOrder.Apply(
+                    OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                    _projectSettings.Get(ProjectName)),
                 ProjectName,
                 info.Id);
             // Carry the CORE step's accumulated duration forward. A re-run of
@@ -3170,7 +3172,9 @@ public class ProjectRunner
             // step still lands and the row is never left blank.
             var record = _pipelineLog.EnsureRun(
                 folder,
-                OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
+                OrchestratorApi.Services.Pipeline.ProjectPipelineOrder.Apply(
+                    OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info?.Mode),
+                    _projectSettings.Get(ProjectName)),
                 ProjectName,
                 jobId);
 

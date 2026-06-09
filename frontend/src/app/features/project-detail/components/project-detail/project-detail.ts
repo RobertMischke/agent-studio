@@ -66,6 +66,8 @@ interface PipelineAdminRow {
   condition: string;
   conditionValue: string;
   conditionNeedsValue: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
 interface PipelineGroup {
@@ -203,11 +205,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   // overrides come from the settings projection. Both feed pipelineRows().
   readonly pipelineCatalogue = signal<readonly PipelineCatalogueStep[]>([]);
   readonly pipelineOverrides = signal<Record<string, PipelineStepSetting>>({});
+  readonly pipelineOrder = signal<readonly string[]>([]);
   readonly pipelineCliTypes = CLI_TYPES;
   readonly pipelineGateModes = PipelineStep_GateModes;
   readonly pipelineConditions = PipelineStep_Conditions;
   /** Per-step write in flight; disables that row's controls until the PUT resolves. */
   readonly pipelineStepBusy: Record<string, boolean> = {};
+  readonly pipelineOrderBusy = signal(false);
 
   /**
    * One row per configurable step: the catalogue metadata joined with the
@@ -218,7 +222,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly pipelineRows = computed<PipelineAdminRow[]>(() => {
     const overrides = this.pipelineOverrides();
     const drafts = this.pipelineConditionDraft();
-    return this.pipelineCatalogue().map(step => {
+    const catalogue = this.orderedPipelineCatalogue();
+    return catalogue.map((step, index) => {
       const ov = overrides[step.id];
       // A draft (an in-progress condition edit not yet persisted - e.g. a
       // value-bearing token whose value the user is still typing) shadows the
@@ -246,6 +251,8 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         condition: conditionWhen,
         conditionValue,
         conditionNeedsValue: PipelineStep_ConditionValueTokens.includes(conditionWhen),
+        canMoveUp: this.canMovePipelineStep(catalogue, index, -1),
+        canMoveDown: this.canMovePipelineStep(catalogue, index, 1),
       };
     });
   });
@@ -425,7 +432,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   private refreshPipelineOverrides(): void {
     const project = this.projectName();
     this.jobService.getAllProjectSettings().subscribe({
-      next: (all) => this.pipelineOverrides.set(all[project]?.pipelineSteps ?? {}),
+      next: (all) => {
+        this.pipelineOverrides.set(all[project]?.pipelineSteps ?? {});
+        this.pipelineOrder.set(all[project]?.pipelineStepOrder ?? []);
+      },
       error: () => { /* keep last known overrides */ }
     });
   }
@@ -599,6 +609,41 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.writeStep(stepId, { enabled });
   }
 
+  onStepMove(stepId: string, direction: -1 | 1): void {
+    if (this.pipelineOrderBusy()) return;
+    const rows = this.orderedPipelineCatalogue();
+    const index = rows.findIndex(step => step.id === stepId);
+    if (index < 0) return;
+
+    const section = this.pipelineOrderSection(rows[index]);
+    if (section === 'core') return;
+
+    let target = index + direction;
+    while (target >= 0 && target < rows.length && this.pipelineOrderSection(rows[target]) !== section) {
+      target += direction;
+    }
+    if (target < 0 || target >= rows.length) return;
+
+    const next = [...rows];
+    [next[index], next[target]] = [next[target], next[index]];
+    const stepIds = next
+      .filter(step => this.pipelineOrderSection(step) !== 'core')
+      .map(step => step.id);
+
+    this.pipelineOrderBusy.set(true);
+    this.pipelineOrder.set(stepIds);
+    this.jobService.setProjectPipelineStepOrder(this.projectName(), stepIds).subscribe({
+      next: (res) => {
+        this.pipelineOrderBusy.set(false);
+        this.pipelineOrder.set(res.pipelineStepOrder ?? stepIds);
+      },
+      error: () => {
+        this.pipelineOrderBusy.set(false);
+        this.refreshPipelineOverrides();
+      },
+    });
+  }
+
   onStepModeChange(stepId: string, mode: string): void {
     this.writeStep(stepId, { mode });
   }
@@ -762,6 +807,55 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     if (step.id.includes('decision')) return 'decision';
     if (step.id.includes('abort')) return 'abort';
     return 'post';
+  }
+
+  private orderedPipelineCatalogue(): readonly PipelineCatalogueStep[] {
+    const steps = this.pipelineCatalogue();
+    const pre = this.sortPipelineOrderSection(steps.filter(step => this.pipelineOrderSection(step) === 'pre'));
+    const core = steps.filter(step => this.pipelineOrderSection(step) === 'core');
+    const post = this.sortPipelineOrderSection(steps.filter(step => this.pipelineOrderSection(step) === 'post'));
+    return [...pre, ...core, ...post];
+  }
+
+  private sortPipelineOrderSection(steps: readonly PipelineCatalogueStep[]): readonly PipelineCatalogueStep[] {
+    const order = this.pipelineOrder();
+    if (order.length === 0 || steps.length <= 1) return steps;
+
+    const rank = new Map<string, number>();
+    for (const id of order) {
+      const key = id.trim().toLowerCase();
+      if (key && !rank.has(key)) rank.set(key, rank.size);
+    }
+    if (rank.size === 0) return steps;
+
+    return steps
+      .map((step, index) => ({ step, index, rank: rank.get(step.id.toLowerCase()) ?? Number.MAX_SAFE_INTEGER }))
+      .sort((a, b) => a.rank - b.rank || a.index - b.index)
+      .map(x => x.step);
+  }
+
+  private pipelineOrderSection(step: PipelineCatalogueStep): 'pre' | 'core' | 'post' {
+    if (step.kind === 'core') return 'core';
+    if ((step.phase ?? this.phaseForStep(step)) === 'pre') return 'pre';
+    return 'post';
+  }
+
+  private canMovePipelineStep(
+    steps: readonly PipelineCatalogueStep[],
+    index: number,
+    direction: -1 | 1,
+  ): boolean {
+    const step = steps[index];
+    if (!step) return false;
+    const section = this.pipelineOrderSection(step);
+    if (section === 'core') return false;
+
+    let target = index + direction;
+    while (target >= 0 && target < steps.length) {
+      if (this.pipelineOrderSection(steps[target]) === section) return true;
+      target += direction;
+    }
+    return false;
   }
 
   private pipelinePhaseLabel(phase: string): string {

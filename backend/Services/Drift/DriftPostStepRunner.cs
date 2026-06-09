@@ -153,7 +153,7 @@ public sealed class DriftPostStepRunner
             ExitCode = 0,
             AnyAspectFailed = false,
         };
-        var enabled = PipelineCatalogue.Standard.Post
+        var enabled = ProjectPipelineOrder.Apply(PipelineCatalogue.Standard, settings).Post
             .Where(s => s.Kind == StepKind.Drift && PipelineStepConfigResolver.ShouldRun(settings, s, ctx))
             .ToList();
         if (enabled.Count == 0) return;

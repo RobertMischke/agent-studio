@@ -37,7 +37,6 @@ public static class TaskPipelineEndpoints
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
 
-            var pipeline = PipelineCatalogue.Standard;
             var record = pipelineLog.Read(info.FolderPath);
             // Cost is derived from the raw recorded tokens; enrich a copy
             // with per-aspect concern detail for the response so the
@@ -48,6 +47,7 @@ public static class TaskPipelineEndpoints
             var settings = string.IsNullOrWhiteSpace(info.ProjectName)
                 ? null
                 : projectSettings.Get(info.ProjectName);
+            var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(info.Mode), settings);
             var config = pipeline.AllSteps.ToDictionary(
                 step => step.Id,
                 step =>

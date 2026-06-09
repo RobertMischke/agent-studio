@@ -91,6 +91,31 @@ public class PipelineConfigAndCostTests
     }
 
     [Fact]
+    public void ProjectPipelineOrder_ReordersPreAndPost_WhileCoreStaysFixed()
+    {
+        var settings = new ProjectSettings
+        {
+            PipelineStepOrder =
+            [
+                PipelineCatalogue.PreReissueOpenItemsStepId,
+                PipelineCatalogue.LoopGuardStepId,
+                PipelineCatalogue.LintScssStepId,
+                "not-in-this-pipeline",
+                PipelineCatalogue.BuildTestGateStepId,
+            ],
+        };
+
+        var ordered = ProjectPipelineOrder.Apply(PipelineCatalogue.Standard, settings);
+
+        Assert.Equal(PipelineCatalogue.PreReissueOpenItemsStepId, ordered.Pre[0].Id);
+        Assert.Equal(PipelineCatalogue.LoopGuardStepId, ordered.Pre[1].Id);
+        Assert.Equal(PipelineCatalogue.CoreAgentRunStepId, ordered.Core.Single().Id);
+        Assert.Equal(PipelineCatalogue.LintScssStepId, ordered.Post[0].Id);
+        Assert.Equal(PipelineCatalogue.BuildTestGateStepId, ordered.Post[1].Id);
+        Assert.Contains(ordered.Post.Skip(2), step => step.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+    }
+
+    [Fact]
     public void Summarize_EmptyRecord_IsZeroCost()
     {
         var summary = PipelineCostCalculator.Summarize(null);

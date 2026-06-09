@@ -257,6 +257,31 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void SetPipelineStepOrder_NormalizesAndPersistsAcrossReload()
+    {
+        var svc = Build();
+
+        svc.SetPipelineStepOrder("runbook",
+            [" post-lint-scss ", "", "POST-LINT-SCSS", "aspect-code-quality"]);
+
+        var reloaded = Build();
+
+        Assert.Equal(["post-lint-scss", "aspect-code-quality"],
+            reloaded.Get("runbook").PipelineStepOrder);
+    }
+
+    [Fact]
+    public void SetPipelineStepOrder_EmptyClearsOverride()
+    {
+        var svc = Build();
+        svc.SetPipelineStepOrder("runbook", ["post-lint-scss"]);
+
+        svc.SetPipelineStepOrder("runbook", []);
+
+        Assert.Null(svc.Get("runbook").PipelineStepOrder);
+    }
+
+    [Fact]
     public void Get_UnconfiguredProject_HasNoBuildProfile()
     {
         var svc = Build();

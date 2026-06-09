@@ -417,6 +417,42 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// Stores the operator-selected order for configurable pre/post pipeline
+    /// steps. Unknown-step validation is done by the endpoint because only the
+    /// endpoint has the current catalogue in hand; this method normalizes the
+    /// payload to distinct, trimmed ids and clears the setting when empty.
+    /// </summary>
+    public void SetPipelineStepOrder(string projectName, IReadOnlyList<string>? stepIds)
+    {
+        EnsureLoaded();
+        var normalized = NormalizePipelineStepOrder(stepIds);
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { PipelineStepOrder = normalized.Count == 0 ? null : normalized };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Pipeline step order updated for project {Project} ({Count} configured ids)",
+            projectName, normalized.Count);
+    }
+
+    private static IReadOnlyList<string> NormalizePipelineStepOrder(IReadOnlyList<string>? stepIds)
+    {
+        if (stepIds == null || stepIds.Count == 0) return Array.Empty<string>();
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<string>();
+        foreach (var id in stepIds)
+        {
+            if (string.IsNullOrWhiteSpace(id)) continue;
+            var trimmed = id.Trim();
+            if (seen.Add(trimmed)) normalized.Add(trimmed);
+        }
+        return normalized;
+    }
+
+    /// <summary>
     /// Canonicalize a step condition for storage. A null/blank/unknown token,
     /// or an explicit <see cref="PipelineStepConditions.Always"/>, collapses to
     /// null ("no override, always run"). Value-bearing tokens keep a trimmed

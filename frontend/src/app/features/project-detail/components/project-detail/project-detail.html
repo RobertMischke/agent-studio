@@ -270,6 +270,22 @@
             <div class="proj-detail__pl-row"
                  [class.proj-detail__pl-row--disabled]="!step.enabled"
                  [attr.data-testid]="'pipeline-step-row-' + step.id">
+              <span class="proj-detail__pl-order">
+                <button type="button"
+                        class="proj-detail__pl-order-btn"
+                        [attr.aria-label]="'Move ' + step.displayName + ' up'"
+                        [attr.data-testid]="'pipeline-step-move-up-' + step.id"
+                        [appTooltip]="'Move this step earlier in this project pipeline.'"
+                        [disabled]="!step.canMoveUp || pipelineOrderBusy()"
+                        (click)="onStepMove(step.id, -1)">↑</button>
+                <button type="button"
+                        class="proj-detail__pl-order-btn"
+                        [attr.aria-label]="'Move ' + step.displayName + ' down'"
+                        [attr.data-testid]="'pipeline-step-move-down-' + step.id"
+                        [appTooltip]="'Move this step later in this project pipeline.'"
+                        [disabled]="!step.canMoveDown || pipelineOrderBusy()"
+                        (click)="onStepMove(step.id, 1)">↓</button>
+              </span>
               <span class="proj-detail__pl-kind">{{ step.kind }}</span>
               <span class="proj-detail__pl-name">{{ step.displayName }}</span>
 

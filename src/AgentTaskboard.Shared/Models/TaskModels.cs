@@ -1458,14 +1458,22 @@ public record ProjectSettings
     /// A missing step id, or a null field inside an entry, falls through
     /// to the built-in pipeline default. The known step ids come from
     /// <c>PipelineCatalogue.Standard</c>; this map only overrides those
-    /// code-defined steps - it does not add or reorder steps, because the
-    /// runtime maps each step id to a concrete service. Resolution order
-    /// for <c>model</c> is step -&gt; <see cref="OrchestratorModel"/> -&gt;
-    /// global default -&gt; runtime default; for <c>mode</c> it is step -&gt;
-    /// built-in default.
+    /// code-defined steps because the runtime maps each step id to a concrete
+    /// service. Resolution order for <c>model</c> is step -&gt;
+    /// <see cref="OrchestratorModel"/> -&gt; global default -&gt; runtime default;
+    /// for <c>mode</c> it is step -&gt; built-in default.
     /// Persisted in <c>project-settings.json</c>.
     /// </summary>
     public Dictionary<string, PipelineStepSetting>? PipelineSteps { get; init; }
+
+    /// <summary>
+    /// Optional per-project display/execution order for configurable pipeline
+    /// pre/post steps. The list stores step ids in the operator's preferred
+    /// order; ids not present in the list append in catalogue order so newly
+    /// added steps stay visible after upgrades. Core remains fixed and always
+    /// runs as the single agent step.
+    /// </summary>
+    public IReadOnlyList<string>? PipelineStepOrder { get; init; }
 
     /// <summary>
     /// ADR-0052: maximum number of tasks the runner may execute concurrently

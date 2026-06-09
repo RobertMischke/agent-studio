@@ -26,6 +26,15 @@ public record IntakeRunRequestBody
 }
 
 /// <summary>
+/// Body for <c>PUT /api/projects/{name}/pipeline-step-order</c>. Stores the
+/// project-specific order of configurable pre/post pipeline steps.
+/// </summary>
+public record SetPipelineStepOrderRequest
+{
+    public List<string> StepIds { get; init; } = [];
+}
+
+/// <summary>
 /// Per-project preferences under <c>/api/projects</c> — read-all
 /// for the header bar plus the per-project auto-commit toggle.
 /// </summary>
@@ -80,6 +89,7 @@ public static class ProjectSettingsEndpoints
                     // Only the steps the operator has touched appear here;
                     // an absent step is on its built-in default.
                     pipelineSteps = kv.Value.PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+                    pipelineStepOrder = kv.Value.PipelineStepOrder ?? Array.Empty<string>(),
                     // Resolved per-CLI permission mode + source for all four CLIs
                     // (project override → detected global config → YOLO default).
                     // The project-settings UI uses this to render the effective
@@ -185,10 +195,7 @@ public static class ProjectSettingsEndpoints
             // instead of writing dead config that never reaches a real step. The
             // abort-review step lives off the linear AllSteps list but is a valid
             // configurable target, so accept it explicitly.
-            var known_step = PipelineCatalogue.Standard.AllSteps
-                    .Any(s => string.Equals(s.Id, req.StepId, StringComparison.OrdinalIgnoreCase))
-                || string.Equals(PipelineCatalogue.AbortReviewStep.Id, req.StepId, StringComparison.OrdinalIgnoreCase);
-            if (!known_step)
+            if (!IsKnownPipelineStep(req.StepId))
                 return Results.BadRequest(new { error = $"Unknown pipeline step '{req.StepId}'" });
 
             if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
@@ -223,6 +230,28 @@ public static class ProjectSettingsEndpoints
             {
                 stepId = req.StepId,
                 pipelineSteps = settings.Get(projectName).PipelineSteps ?? new Dictionary<string, PipelineStepSetting>(),
+            });
+        });
+
+        // Project-specific pre/post step order. The pipeline remains catalogue-
+        // bounded: callers can reorder known step ids, while missing ids append
+        // in catalogue order so a newly introduced step is never hidden.
+        app.MapPut("/api/projects/{projectName}/pipeline-step-order", (string projectName, SetPipelineStepOrderRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var unknown = (req.StepIds ?? [])
+                .Where(id => !string.IsNullOrWhiteSpace(id) && !IsKnownPipelineStep(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (unknown.Length > 0)
+                return Results.BadRequest(new { error = $"Unknown pipeline step '{unknown[0]}'" });
+
+            settings.SetPipelineStepOrder(projectName, req.StepIds);
+            return Results.Ok(new
+            {
+                pipelineStepOrder = settings.Get(projectName).PipelineStepOrder ?? Array.Empty<string>(),
             });
         });
 
@@ -565,5 +594,13 @@ public static class ProjectSettingsEndpoints
                 return Results.BadRequest(new { error = ex.Message });
             }
         });
+    }
+
+    private static bool IsKnownPipelineStep(string? stepId)
+    {
+        if (string.IsNullOrWhiteSpace(stepId)) return false;
+        return PipelineCatalogue.Standard.AllSteps
+                .Any(s => string.Equals(s.Id, stepId, StringComparison.OrdinalIgnoreCase))
+            || string.Equals(PipelineCatalogue.AbortReviewStep.Id, stepId, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -1315,6 +1315,7 @@ export class TaskService {
           // F35: resolved per-lane sort strategy map (every lane key present).
           laneSortStrategies?: Record<string, string>;
           pipelineSteps?: Record<string, PipelineStepSetting>;
+          pipelineStepOrder?: string[];
           // Per-CLI effective permission mode (YOLO default), one entry per CLI.
           cliModes?: Record<string, { mode: string; source: string; args: string[] }>;
         }
@@ -1405,6 +1406,14 @@ export class TaskService {
     return this.http.put<{ stepId: string; pipelineSteps: Record<string, PipelineStepSetting> }>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-step`,
       step,
+    );
+  }
+
+  /** Persist the project-specific order for configurable pipeline steps. */
+  setProjectPipelineStepOrder(projectName: string, stepIds: readonly string[]) {
+    return this.http.put<{ pipelineStepOrder: string[] }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/pipeline-step-order`,
+      { stepIds },
     );
   }
 

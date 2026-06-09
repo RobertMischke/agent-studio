@@ -247,7 +247,7 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
 
         try
         {
-            var pipeline = PipelineCatalogue.ForMode(job.Mode);
+            var pipeline = ProjectPipelineOrder.Apply(PipelineCatalogue.ForMode(job.Mode), settings);
             // Attach to the in-flight run when the core / aspect stages already
             // created one; otherwise begin a fresh record so the step is not a
             // silent no-op while the card is still in preparation.
