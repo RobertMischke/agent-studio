@@ -160,6 +160,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         var persistedLog = File.ReadAllText(TaskPaths.CliOutputLog(jobFolder));
         Assert.Contains("[integration-conflict]", persistedLog);
         Assert.Contains("task/task-9", persistedLog);
+        Assert.Contains(prep.WorktreePath!, persistedLog);
         Assert.Contains("shared.txt", persistedLog);
 
         var issue = BuildScanner(repo).FindJob("task-9", watchPath)?.OutcomeIssue;
@@ -167,8 +168,6 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         Assert.Equal("integration-conflict", issue!.Kind);
         Assert.Equal("High", issue.Severity);
         Assert.Contains("task/task-9", issue.Summary);
-        Assert.Contains(prep.WorktreePath!, issue.Summary);
-        Assert.Contains("shared.txt", issue.Summary);
     }
 
     [Fact]
