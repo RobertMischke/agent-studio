@@ -8,7 +8,6 @@
   min-height: 0;
 }
 
-<<<<<<< HEAD
 .pwiki {
   display: flex;
   flex-direction: column;
@@ -17,11 +16,7 @@
 }
 
 .pwiki__head { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; }
-.pwiki__title { margin: 0; }
-=======
-.pwiki__head { display: flex; align-items: baseline; gap: 10px; }
 .pwiki__title-h { margin: 0; }
->>>>>>> eeb38cce (Wiki aufwerten: Hierarchie + User-Organisation + Rename-Kontextmenue + History/Metadaten (Modell/Wann/Warum + Git))
 .pwiki__icon { margin-right: 6px; }
 .pwiki__count {
   font-size: 0.74rem;
@@ -62,13 +57,8 @@
 .pwiki__tree {
   display: flex;
   flex-direction: column;
-<<<<<<< HEAD
   gap: 10px;
   min-height: 0;
-=======
-  gap: 8px;
-  max-height: 70vh;
->>>>>>> eeb38cce (Wiki aufwerten: Hierarchie + User-Organisation + Rename-Kontextmenue + History/Metadaten (Modell/Wann/Warum + Git))
   overflow-y: auto;
   padding-right: 4px;
 }
