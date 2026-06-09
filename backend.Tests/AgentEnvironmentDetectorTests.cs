@@ -79,6 +79,32 @@ public class AgentEnvironmentDetectorTests
         Assert.False(AgentEnvironmentDetector.IsAgentToolEcho(line));
     }
 
+    [Theory]
+    [InlineData("Error: EACCES: permission denied, open '/etc/shadow'")]    // real eacces
+    [InlineData("EPERM: operation not permitted, unlink '/srv/x'")]         // real eperm
+    public void MatchRuntimeBlocker_FiresForRealPosixPermissionError(string line)
+    {
+        // A genuine bare-stderr permission error still trips the runtime hook.
+        Assert.False(AgentEnvironmentDetector.IsAgentToolEcho(line));
+        Assert.NotNull(AgentEnvironmentDetector.MatchRuntimeBlocker(line));
+    }
+
+    [Theory]
+    [InlineData("I'll add the EACCES needle to AgentEnvironmentDetector")]  // agent narration
+    [InlineData("    Id: \"posix-eacces\",")]                                // editing this detector's source
+    [InlineData("rg -n EACCES backend/ shows 4 hits")]                       // grep narration
+    [InlineData("the EPERM path should also be hardened")]                   // narration
+    public void MatchRuntimeBlocker_SkipsBareTokenWithoutDenialIndicator(string line)
+    {
+        // 2026-06-09 regression: the c7ccd2b7-gate hardening task (and others
+        // that edit/narrate the token) self-tripped posix-eacces and were killed
+        // even though no real permission error occurred. Match() (pure) still sees
+        // the needle for the lock tests, but the runtime hook must NOT trip without
+        // a co-located permission-denial indicator.
+        Assert.NotNull(AgentEnvironmentDetector.Match(line));
+        Assert.Null(AgentEnvironmentDetector.MatchRuntimeBlocker(line));
+    }
+
     [Fact]
     public void IsAgentToolEcho_TrueForClaudeToolResult()
     {

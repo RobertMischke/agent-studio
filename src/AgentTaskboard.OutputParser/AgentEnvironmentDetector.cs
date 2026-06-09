@@ -162,9 +162,41 @@ public static class AgentEnvironmentDetector
     /// so an agent that reads or greps blocker strings cannot self-terminate its
     /// own run. <see cref="Match"/> stays pure (the pattern-locking tests assert
     /// on bare lines); the guard lives one layer up.
+    /// <para>
+    /// 2026-06-09: the JSON tool-echo guard alone was insufficient. The
+    /// <c>posix-eacces</c> / <c>posix-eperm</c> needles are bare substrings, so a
+    /// task that merely NARRATES about the token ("I'll handle EACCES"), edits this
+    /// detector's own source (<c>Id: "posix-eacces"</c>), or whose multi-line shell
+    /// output split the error across lines still self-tripped the runtime hook and
+    /// got killed — observed killing the very hardening tasks meant to fix it
+    /// (c7ccd2b7-gate). For these two noisy POSIX patterns the runtime hook now
+    /// additionally requires a co-located permission-denial indicator, so only an
+    /// actual permission error trips it. A genuine error always carries it
+    /// ("EACCES: permission denied", "EPERM: operation not permitted"); narration /
+    /// source / grep do not. Match() stays pure for the lock tests.
+    /// </para>
     /// </summary>
     public static EnvironmentBlockerPattern? MatchRuntimeBlocker(string? line)
-        => IsAgentToolEcho(line) ? null : Match(line);
+    {
+        if (IsAgentToolEcho(line)) return null;
+        var match = Match(line);
+        if (match == null) return null;
+        if ((match.Id == "posix-eacces" || match.Id == "posix-eperm")
+            && !MentionsPermissionDenial(line!))
+            return null;
+        return match;
+    }
+
+    /// <summary>
+    /// True when the line carries an actual permission-denial indicator, as a real
+    /// POSIX EACCES/EPERM error always does ("permission denied" / "operation not
+    /// permitted") but the agent's own narration or this detector's source text
+    /// does not. Used to gate the substring-noisy POSIX patterns in the runtime hook.
+    /// </summary>
+    private static bool MentionsPermissionDenial(string line)
+        => line.IndexOf("denied", StringComparison.OrdinalIgnoreCase) >= 0
+        || line.IndexOf("permission", StringComparison.OrdinalIgnoreCase) >= 0
+        || line.IndexOf("permitted", StringComparison.OrdinalIgnoreCase) >= 0;
 
     /// <summary>
     /// True when a later CLI line shows the operation recovered after an
