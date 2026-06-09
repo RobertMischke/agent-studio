@@ -1792,8 +1792,8 @@ export class App implements OnInit, OnDestroy {
 
   /**
    * Slice E: route a click on the bug-confirmation card's "Open task"
-   * action to the kanban detail panel. Epic targets intentionally open the
-   * retained overlay instead of becoming a new task tab.
+   * action to the kanban detail panel. Epic targets open as inline epic
+   * tabs instead of modal overlays.
    */
   onOpenJobDetailFromSheet(event: { jobId: string; watchPath: string }): void {
     this.openRelatedJob(event);
@@ -1808,7 +1808,7 @@ export class App implements OnInit, OnDestroy {
           this.selectFetchedDetail(detail);
           return;
         }
-        this.openEpicDetailAsTab(detail, currentTask.taskKey);
+        this.openEpicDetailFromTaskAnchor(detail, currentTask.taskKey);
       },
       error: (err) => {
         if (requestToken !== this.relatedOpenToken) return;
@@ -1818,6 +1818,27 @@ export class App implements OnInit, OnDestroy {
         });
       },
     });
+  }
+
+  private openEpicDetailFromTaskAnchor(detail: TaskDetail, anchorTaskKey: string): void {
+    this.epicTabTaskDetail.set(null);
+    const target = { kind: 'epic' as const, epicKey: detail.info.taskKey, viewTaskKey: anchorTaskKey };
+    const active = this.studioTabState.activeTab();
+    const sourceKey =
+      active?.kind === 'task' && active.taskKey === anchorTaskKey
+        ? studioTabKey(active)
+        : active?.kind === 'epic' && active.epicKey === detail.info.taskKey
+          ? studioTabKey(active)
+          : null;
+
+    if (sourceKey) {
+      this.studioTabState.retarget(sourceKey, target);
+    } else {
+      this.studioTabState.open(target);
+    }
+
+    const token = this.jobSelection.bumpOpenDetailToken();
+    this.jobSelection.setSelectedFromAdvance(detail, token);
   }
 
   onEpicTabOpenSubTask(event: { jobId: string; watchPath: string }): void {

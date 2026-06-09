@@ -84,8 +84,8 @@ export class StudioTabStateService {
 
   /**
    * Replace an existing tab in place and focus the replacement. If another
-   * tab already owns the replacement key, remove the source and focus the
-   * existing target instead of duplicating.
+   * tab already owns the replacement key, update that target payload, remove
+   * the source, and focus the target instead of duplicating.
    */
   retarget(sourceKey: string, tab: StudioTab): void {
     const normalized = this.normalizeTab(tab);
@@ -98,7 +98,11 @@ export class StudioTabStateService {
     }
     const existingIdx = list.findIndex((t, i) => i !== sourceIdx && studioTabKey(t) === targetKey);
     if (existingIdx >= 0) {
-      this._tabs.set(list.filter((_, i) => i !== sourceIdx));
+      this._tabs.set(
+        list
+          .map((t, i) => i === existingIdx ? normalized : t)
+          .filter((_, i) => i !== sourceIdx),
+      );
       this._activeKey.set(targetKey);
       this.persist();
       return;

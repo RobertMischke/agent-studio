@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { App } from './app';
+import { TaskService } from './services/task.service';
+import type { TaskDetail, TaskInfo } from './models/task.model';
+import { studioTabKey } from './features/studio-shell';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -45,5 +48,140 @@ describe('App (smoke)', () => {
       console.warn('[smoke] App TestBed setup skipped:', (e as Error).message);
       expect(App).toBeTruthy();
     }
+  });
+});
+
+describe('App epic tab navigation', () => {
+  const TAB_STORAGE_KEY = 'atp.studio.tabs.v1';
+  const VSCODE_FLAG_KEY = 'atp.flag.vsCodeLayout';
+
+  function configure(): { app: App; taskService: TaskService; http: HttpTestingController } {
+    localStorage.removeItem(TAB_STORAGE_KEY);
+    localStorage.setItem(VSCODE_FLAG_KEY, '0');
+    TestBed.configureTestingModule({
+      imports: [App],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(App);
+    return {
+      app: fixture.componentInstance,
+      taskService: TestBed.inject(TaskService),
+      http: TestBed.inject(HttpTestingController),
+    };
+  }
+
+  function task(over: Partial<TaskInfo>): TaskInfo {
+    return {
+      id: 'task-a',
+      taskKey: 'C:/watch::task-a',
+      title: 'Task One',
+      state: '2-ready',
+      order: 1,
+      agent: 'codex',
+      createdAt: '2026-01-01T00:00:00Z',
+      watchPath: 'C:/watch',
+      projectName: 'Project A',
+      folderPath: 'C:/watch/.orchestrator/jobs/task-a',
+      lastActivity: '2026-01-01T00:00:00Z',
+      sessionName: null,
+      model: null,
+      cliType: 'codex',
+      useOwnSession: null,
+      lastUsage: null,
+      execution: null,
+      commit: null,
+      ...over,
+    } as TaskInfo;
+  }
+
+  function detail(info: TaskInfo): TaskDetail {
+    return {
+      info,
+      promptMarkdown: '',
+      promptHistory: [],
+      titleHistory: [],
+      statusMarkdown: null,
+      contextUsage: null,
+      log: [],
+      summaryState: null,
+      reviewEvidence: [],
+    };
+  }
+
+  function flushDetail(http: HttpTestingController, jobId: string, watchPath: string, payload: TaskDetail): void {
+    const req = http.expectOne((request) =>
+      request.url.endsWith(`/api/tasks/${encodeURIComponent(jobId)}`) &&
+      request.params.get('watchPath') === watchPath,
+    );
+    req.flush(payload);
+  }
+
+  function seed(taskService: TaskService, jobs: TaskInfo[]): void {
+    taskService.jobs.set(jobs);
+    taskService.grouped.set({
+      ...taskService.grouped(),
+      ready: jobs,
+    });
+  }
+
+  it('opens an Epic card as an inline epic tab', () => {
+    const { app, taskService, http } = configure();
+    const epic = task({
+      id: 'epic-a',
+      taskKey: 'C:/watch::epic-a',
+      title: 'Epic One',
+      kind: 'epic',
+      order: 0,
+    });
+    seed(taskService, [epic]);
+
+    app.openDetail(epic);
+    flushDetail(http, 'epic-a', 'C:/watch', detail(epic));
+
+    expect(app.studioTabState.activeKey()).toBe('epic:C:/watch::epic-a');
+    expect(app.studioTabState.activeTab()).toEqual({
+      kind: 'epic',
+      epicKey: 'C:/watch::epic-a',
+      viewTaskKey: undefined,
+    });
+    expect(app.selectedJob()?.info.id).toBe('epic-a');
+  });
+
+  it('retargets the active task tab when opening its parent Epic from the task anchor', () => {
+    const { app, taskService, http } = configure();
+    const child = task({
+      id: 'task-a',
+      taskKey: 'C:/watch::task-a',
+      title: 'Task One',
+      epicId: 'epic-a',
+      kind: 'task',
+    });
+    const epic = task({
+      id: 'epic-a',
+      taskKey: 'C:/watch::epic-a',
+      title: 'Epic One',
+      kind: 'epic',
+      order: 0,
+    });
+    seed(taskService, [epic, child]);
+    app.studioTabState.open({ kind: 'task', taskKey: child.taskKey });
+
+    app.onOpenEpicFromTaskAnchor(child, { jobId: epic.id, watchPath: epic.watchPath });
+    flushDetail(http, 'epic-a', 'C:/watch', detail(epic));
+
+    expect(app.studioTabState.tabs().map(t => studioTabKey(t))).toEqual([
+      'board:__all__',
+      'epic:C:/watch::epic-a',
+    ]);
+    expect(app.studioTabState.activeTab()).toEqual({
+      kind: 'epic',
+      epicKey: 'C:/watch::epic-a',
+      viewTaskKey: 'C:/watch::task-a',
+    });
   });
 });

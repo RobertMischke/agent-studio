@@ -1,11 +1,13 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { StudioShellComponent } from './studio-shell.component';
-import type { RegistryProjectSummary, RegistryWorkspaceListItem } from '../../models/task.model';
+import type { RegistryProjectSummary, RegistryWorkspaceListItem, TaskInfo } from '../../models/task.model';
+import { TaskService } from '../../services/task.service';
+import { StudioTabStateService } from './services/studio-tab-state.service';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -247,5 +249,98 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
     expect(titlebar?.textContent).not.toContain('Board');
     expect(root.querySelector('[data-testid="studio-titlebar-workspace"]')).toBeNull();
     expect(root.querySelector('[data-testid="studio-titlebar-active-tab"]')).toBeNull();
+  });
+});
+
+describe('StudioShellComponent epic tabs', () => {
+  function configure(): { fixture: ComponentFixture<StudioShellComponent>; component: StudioShellComponent; taskService: TaskService; tabState: StudioTabStateService } {
+    localStorage.removeItem('atp.studio.tabs.v1');
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    return {
+      fixture,
+      component: fixture.componentInstance,
+      taskService: TestBed.inject(TaskService),
+      tabState: TestBed.inject(StudioTabStateService),
+    };
+  }
+
+  function task(over: Partial<TaskInfo>): TaskInfo {
+    return {
+      id: 'task-a',
+      taskKey: 'watch::task-a',
+      title: 'Task One',
+      state: '2-ready',
+      order: 1,
+      agent: 'codex',
+      createdAt: '2026-01-01T00:00:00Z',
+      watchPath: 'C:/watch',
+      projectName: 'Project A',
+      folderPath: 'C:/watch/.orchestrator/jobs/task-a',
+      lastActivity: '2026-01-01T00:00:00Z',
+      sessionName: null,
+      model: null,
+      cliType: 'codex',
+      useOwnSession: null,
+      lastUsage: null,
+      execution: null,
+      commit: null,
+      ...over,
+    } as TaskInfo;
+  }
+
+  function seedJobs(taskService: TaskService): void {
+    const epic = task({
+      id: 'epic-a',
+      taskKey: 'watch::epic-a',
+      title: 'Epic One',
+      kind: 'epic',
+      order: 0,
+    });
+    const child = task({
+      id: 'task-a',
+      taskKey: 'watch::task-a',
+      title: 'Task One',
+      epicId: 'epic-a',
+      kind: 'task',
+    });
+    taskService.jobs.set([epic, child]);
+    taskService.grouped.set({
+      ...taskService.grouped(),
+      ready: [epic, child],
+    });
+  }
+
+  it('labels direct epic tabs with the epic title and task-anchored epic tabs with the task title', () => {
+    const { component, taskService } = configure();
+    seedJobs(taskService);
+
+    expect(component.tabLabel({ kind: 'epic', epicKey: 'watch::epic-a' })).toBe('Epic One');
+    expect(component.tabLabel({
+      kind: 'epic',
+      epicKey: 'watch::epic-a',
+      viewTaskKey: 'watch::task-a',
+    })).toBe('Task One');
+  });
+
+  it('renders the Epic icon inside an epic detail tab', () => {
+    const { fixture, taskService, tabState } = configure();
+    seedJobs(taskService);
+    tabState.open({ kind: 'epic', epicKey: 'watch::epic-a' });
+
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const epicTab = root.querySelector<HTMLElement>('[data-tab-key="epic:watch::epic-a"]');
+    expect(epicTab?.querySelector('app-studio-icon')).not.toBeNull();
+    expect(epicTab?.textContent).toContain('Epic One');
   });
 });

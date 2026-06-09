@@ -143,6 +143,98 @@ describe('StudioTabStateService', () => {
     });
   });
 
+  describe('epic detail tabs', () => {
+    it('keys epic detail tabs by epic task key', () => {
+      const tab: StudioTab = { kind: 'epic', epicKey: 'watch::epic-a' };
+      expect(studioTabKey(tab)).toBe('epic:watch::epic-a');
+    });
+
+    it('opens one epic detail tab and preserves its optional viewed task anchor', () => {
+      svc.open({ kind: 'epic', epicKey: 'watch::epic-a', viewTaskKey: 'watch::task-a' });
+
+      expect(svc.activeKey()).toBe('epic:watch::epic-a');
+      expect(svc.tabs()).toContainEqual({
+        kind: 'epic',
+        epicKey: 'watch::epic-a',
+        viewTaskKey: 'watch::task-a',
+      });
+    });
+
+    it('normalizes empty epic task anchors out of persisted tabs', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          v: 1,
+          tabs: [
+            { kind: 'epic', epicKey: 'watch::epic-a', viewTaskKey: '' },
+          ],
+          activeKey: 'epic:watch::epic-a',
+        }),
+      );
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.tabs()).toEqual([{ kind: 'epic', epicKey: 'watch::epic-a', viewTaskKey: undefined }]);
+      expect(restored.activeKey()).toBe('epic:watch::epic-a');
+    });
+
+    it('dedupes persisted epic detail tabs by epic key', () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          v: 1,
+          tabs: [
+            { kind: 'epic', epicKey: 'watch::epic-a' },
+            { kind: 'epic', epicKey: 'watch::epic-a', viewTaskKey: 'watch::task-a' },
+          ],
+          activeKey: 'epic:watch::epic-a',
+        }),
+      );
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [StudioTabStateService] });
+      const restored = TestBed.inject(StudioTabStateService);
+
+      expect(restored.tabs()).toEqual([{ kind: 'epic', epicKey: 'watch::epic-a', viewTaskKey: undefined }]);
+      expect(restored.activeKey()).toBe('epic:watch::epic-a');
+    });
+
+    it('retargets a task tab into a task-anchored epic tab in place', () => {
+      svc.open({ kind: 'task', taskKey: 'watch::task-a' });
+      svc.retarget('task:watch::task-a', {
+        kind: 'epic',
+        epicKey: 'watch::epic-a',
+        viewTaskKey: 'watch::task-a',
+      });
+
+      expect(svc.tabs().map(t => studioTabKey(t))).toEqual([ALL_BOARD_KEY, 'epic:watch::epic-a']);
+      expect(svc.tabs()[1]).toEqual({
+        kind: 'epic',
+        epicKey: 'watch::epic-a',
+        viewTaskKey: 'watch::task-a',
+      });
+      expect(svc.activeKey()).toBe('epic:watch::epic-a');
+    });
+
+    it('retarget focuses an existing target tab instead of duplicating it', () => {
+      svc.open({ kind: 'epic', epicKey: 'watch::epic-a' });
+      svc.open({ kind: 'task', taskKey: 'watch::task-a' });
+      svc.retarget('task:watch::task-a', {
+        kind: 'epic',
+        epicKey: 'watch::epic-a',
+        viewTaskKey: 'watch::task-a',
+      });
+
+      expect(svc.tabs().map(t => studioTabKey(t))).toEqual([ALL_BOARD_KEY, 'epic:watch::epic-a']);
+      expect(svc.tabs()[1]).toEqual({
+        kind: 'epic',
+        epicKey: 'watch::epic-a',
+        viewTaskKey: 'watch::task-a',
+      });
+      expect(svc.activeKey()).toBe('epic:watch::epic-a');
+    });
+  });
+
   describe('move (drag-reorder)', () => {
     function seed(): void {
       svc.open({ kind: 'board', projectName: 'demo' });
