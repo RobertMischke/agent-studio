@@ -352,4 +352,39 @@ public class RunOutcomeContractTests
         Assert.Contains("![](attachments/input-wireframe.png)", updated);
         Assert.Equal(1, updated.Split("## Images", StringSplitOptions.None).Length - 1);
     }
+
+    [Fact]
+    public void SummaryProtocolImages_AreAppendedFromLogWhenModelOmitsThem()
+    {
+        var summary = """
+            # Status
+
+            - Result: Failed
+            - Duration: 4 sec
+
+            ## What Was Done
+            - Captured screenshots and reviewed the supplied image.
+
+            ## Open Items
+            - None.
+            """;
+        var log = string.Join('\n',
+            "Captured result screenshot at results/run-proof.png.",
+            "Captured duplicate result screenshot at results/run-proof.png.",
+            "Nested Playwright artifact: results/playwright/spec-name/nested-proof.png",
+            "User supplied reference: attachments/input-wireframe.png",
+            "Ignore non-image artifact: results/review-evidence.jsonl");
+
+        var updated = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
+        updated = OrchestratorApi.Services.SummaryGenerationService.ApplyProtocolImageReferences(updated, log);
+
+        Assert.Contains("- Result: Success", updated);
+        Assert.DoesNotContain("- Result: Failed", updated);
+        Assert.Contains("## Images", updated);
+        Assert.Contains("![](results/run-proof.png)", updated);
+        Assert.Contains("![](results/playwright/spec-name/nested-proof.png)", updated);
+        Assert.Contains("![](attachments/input-wireframe.png)", updated);
+        Assert.DoesNotContain("review-evidence", updated);
+        Assert.Equal(1, updated.Split("![](results/run-proof.png)", StringSplitOptions.None).Length - 1);
+    }
 }

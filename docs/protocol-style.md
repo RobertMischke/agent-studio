@@ -209,7 +209,7 @@ When the agent task orchestrator runs a CLI (Claude Code, Codex, Copilot, Gemini
 - **If set (orchestrator mode):** copies all test artifacts (screenshots, videos, traces) from `frontend/e2e/test-results/<spec>/...` into `<job>/results/playwright/<spec>/...`, preserving the subfolder structure. Writes `<job>/results/playwright/index.json` with a summary listing test status and artifact paths.
 - **If unset (local dev):** reporter is silent; Playwright artifacts stay in the ephemeral `test-results/` folder as usual.
 
-The frontend's markdown renderer and protocol pane already handle `results/playwright/<spec>/<name>` paths just like any other `results/` image. Haiku's summary (`status.md`) extracts image references from the CLI output; if the run produced screenshots and the CLI mentioned them, Haiku includes them in the `## Images` section of the protocol.
+The frontend's markdown renderer and protocol pane already handle `results/playwright/<spec>/<name>` paths just like any other `results/` image. Haiku's summary (`status.md`) extracts image references from the CLI output; if the run produced screenshots and the CLI mentioned them, Haiku includes them in the `## Images` section of the protocol. `SummaryGenerationService` also runs a deterministic pass over the same log tail and appends any missing `results/` or `attachments/` image references so visible proof is not lost when the summarizer omits a path.
 
 ### 4.3 Git policy
 

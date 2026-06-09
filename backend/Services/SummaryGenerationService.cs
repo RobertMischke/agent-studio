@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
@@ -21,6 +22,9 @@ public sealed class SummaryGenerationService
 {
     private const int MaxLogChars = 60_000;
     private const int HaikuTimeoutSeconds = 90;
+    private static readonly Regex ProtocolImagePathRegex = new(
+        @"(?<![\w./\\-])(?<path>(?:results|attachments)[/\\][^\s`'""<>)\]]+\.(?:png|jpe?g|gif|webp|bmp|svg))(?:[.,;:!?])?(?![\w./\\-])",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private readonly ILogger<SummaryGenerationService> _logger;
     private readonly IConfiguration _configuration;
@@ -126,6 +130,8 @@ public sealed class SummaryGenerationService
                 summary = ApplyOutcomeResultLine(summary, runOutcome.ProtocolResult);
             }
 
+            summary = ApplyProtocolImageReferences(summary, truncated);
+
             var target = Path.Combine(info.FolderPath, "status.md");
             WriteAllTextWithRetry(target, summary);
             RegisterGeneratedStatus(info, result);
@@ -200,7 +206,7 @@ public sealed class SummaryGenerationService
 
         _logger.LogInformation("Interim summary produced for {JobId} ({Bytes} bytes, {ElapsedMs}ms)",
             info.Id, result.Summary.Length, sw.ElapsedMilliseconds);
-        return InterimSummaryResult.Success(result.Summary, sw.ElapsedMilliseconds);
+        return InterimSummaryResult.Success(ApplyProtocolImageReferences(result.Summary, truncated), sw.ElapsedMilliseconds);
     }
 
     private void Fail(string key, string error)
@@ -379,6 +385,52 @@ public sealed class SummaryGenerationService
 
         lines.Insert(0, $"- Result: {protocolResult}");
         return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
+    }
+
+    public static string ApplyProtocolImageReferences(string markdown, string log)
+    {
+        if (string.IsNullOrWhiteSpace(markdown) || string.IsNullOrWhiteSpace(log)) return markdown;
+
+        var imageRefs = ExtractProtocolImageReferences(log);
+        if (imageRefs.Count == 0) return markdown;
+
+        var existing = new HashSet<string>(ExtractProtocolImageReferences(markdown), StringComparer.OrdinalIgnoreCase);
+        var missing = imageRefs.Where(existing.Add).ToList();
+        if (missing.Count == 0) return markdown;
+
+        var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
+        var imagesIndex = lines.FindIndex(l => string.Equals(l.Trim(), "## Images", StringComparison.OrdinalIgnoreCase));
+        var additions = missing.Select(path => $"- ![]({path})").ToList();
+
+        if (imagesIndex < 0)
+        {
+            if (lines.Count > 0 && !string.IsNullOrWhiteSpace(lines[^1])) lines.Add("");
+            lines.Add("## Images");
+            lines.AddRange(additions);
+            return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
+        }
+
+        var insertIndex = imagesIndex + 1;
+        while (insertIndex < lines.Count && !lines[insertIndex].StartsWith("## ", StringComparison.Ordinal))
+        {
+            insertIndex++;
+        }
+
+        lines.InsertRange(insertIndex, additions);
+        return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
+    }
+
+    private static List<string> ExtractProtocolImageReferences(string text)
+    {
+        var refs = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in ProtocolImagePathRegex.Matches(text))
+        {
+            var path = match.Groups["path"].Value.Replace('\\', '/');
+            if (seen.Add(path)) refs.Add(path);
+        }
+
+        return refs;
     }
 
     private static void WriteAllTextWithRetry(string filePath, string content)
