@@ -95,8 +95,8 @@
       <app-project-wiki-section [projectName]="projectName()" />
     }
   }
-  @defer (when activeRail() === 'settings') {
-    @if (activeRail() === 'settings') {
+  @defer (when isSettingsRail(activeRail())) {
+    @if (isSettingsRail(activeRail())) {
       <app-project-settings-panel [projectName]="projectName()" />
     }
   }

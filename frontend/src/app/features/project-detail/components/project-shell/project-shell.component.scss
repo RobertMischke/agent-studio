@@ -74,15 +74,57 @@
   flex-direction: column;
   gap: 2px;
 }
+/* Collapsible main-segment header. A button so the whole label toggles. */
 .proj-shell__rail-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 8px 0 4px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
   color: #6c7086;
+  font: inherit;
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  margin: 8px 8px 4px;
+  text-align: left;
+  cursor: pointer;
 }
 .proj-shell__rail-group:first-child { margin-top: 4px; }
+.proj-shell__rail-group:hover { color: #9399b2; }
+.proj-shell__caret {
+  width: 12px;
+  text-align: center;
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+/* Row wrapper pairs the disclosure twisty with a tree-parent label. */
+.proj-shell__rail-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.proj-shell__twisty {
+  flex: 0 0 auto;
+  width: 20px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6c7086;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+.proj-shell__twisty:hover { background: #313244; color: #cdd6f4; }
+.proj-shell__twisty-spacer { flex: 0 0 auto; width: 20px; }
+
 .proj-shell__rail-item {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -102,7 +144,13 @@
   color: #f8fafc;
   font-weight: 600;
 }
-.proj-shell__rail-icon { width: 18px; text-align: center; }
+.proj-shell__rail-item--parent { font-weight: 500; }
+/* Children sit indented under the twisty column; nothing on the left edge. */
+.proj-shell__rail-item--child {
+  margin-left: 22px;
+  font-size: 0.82rem;
+  color: #a6adc8;
+}
 
 .proj-shell__panel {
   background: #1e1e2e;

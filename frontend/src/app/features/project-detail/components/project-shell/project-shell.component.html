@@ -18,17 +18,52 @@
   <div class="proj-shell__body">
     <aside class="proj-shell__rail" data-testid="project-shell-rail" aria-label="Project sections">
       @for (group of railGroups(); track group.id) {
-        <div class="proj-shell__rail-group">{{ group.label }}</div>
-        @for (item of group.items; track item.key) {
-          <button class="proj-shell__rail-item"
-                  type="button"
-                  [class.proj-shell__rail-item--active]="item.key === activeRail()"
-                  [attr.data-testid]="'project-shell-rail-' + item.key"
-                  [attr.aria-current]="item.key === activeRail() ? 'page' : null"
-                  (click)="onRailClick(item.key)">
-            <span class="proj-shell__rail-icon" aria-hidden="true">{{ item.icon }}</span>
-            <span class="proj-shell__rail-label">{{ item.label }}</span>
-          </button>
+        <button class="proj-shell__rail-group"
+                type="button"
+                [attr.data-testid]="'project-shell-group-' + group.id"
+                [attr.aria-expanded]="!isGroupCollapsed(group.id)"
+                (click)="toggleGroup(group.id)">
+          <span class="proj-shell__caret" aria-hidden="true">{{ isGroupCollapsed(group.id) ? '▸' : '▾' }}</span>
+          <span class="proj-shell__rail-group-label">{{ group.label }}</span>
+        </button>
+        @if (!isGroupCollapsed(group.id)) {
+          @for (node of group.nodes; track node.item.key) {
+            <div class="proj-shell__rail-row">
+              @if (node.children.length > 0) {
+                <button class="proj-shell__twisty"
+                        type="button"
+                        [attr.data-testid]="'project-shell-twisty-' + node.item.key"
+                        [attr.aria-label]="(isExpanded(node.item.key) ? 'Collapse ' : 'Expand ') + node.item.label"
+                        [attr.aria-expanded]="isExpanded(node.item.key)"
+                        (click)="toggleParent(node.item.key)">
+                  {{ isExpanded(node.item.key) ? '▾' : '▸' }}
+                </button>
+              } @else {
+                <span class="proj-shell__twisty-spacer" aria-hidden="true"></span>
+              }
+              <button class="proj-shell__rail-item"
+                      type="button"
+                      [class.proj-shell__rail-item--active]="node.item.key === activeRail()"
+                      [class.proj-shell__rail-item--parent]="node.children.length > 0"
+                      [attr.data-testid]="'project-shell-rail-' + node.item.key"
+                      [attr.aria-current]="node.item.key === activeRail() ? 'page' : null"
+                      (click)="onRailClick(node.item)">
+                <span class="proj-shell__rail-label">{{ node.item.label }}</span>
+              </button>
+            </div>
+            @if (node.children.length > 0 && isExpanded(node.item.key)) {
+              @for (child of node.children; track child.key) {
+                <button class="proj-shell__rail-item proj-shell__rail-item--child"
+                        type="button"
+                        [class.proj-shell__rail-item--active]="child.key === activeRail()"
+                        [attr.data-testid]="'project-shell-rail-' + child.key"
+                        [attr.aria-current]="child.key === activeRail() ? 'page' : null"
+                        (click)="onRailClick(child)">
+                  <span class="proj-shell__rail-label">{{ child.label }}</span>
+                </button>
+              }
+            }
+          }
         }
       }
     </aside>

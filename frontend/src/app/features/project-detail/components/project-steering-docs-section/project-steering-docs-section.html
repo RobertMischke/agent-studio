@@ -1,7 +1,7 @@
 <section class="proj-detail__group" data-testid="project-steering-docs-section">
   <h3>
     <span class="psd__icon">🧭</span>
-    Steering Docs
+    Agent Docs
     @if (overview(); as ov) {
       <span class="psd__pill" data-testid="project-steering-docs-count">
         {{ presentCount() }} / {{ ov.sources.length }} present
@@ -15,9 +15,10 @@
   </h3>
 
   <p class="proj-detail__hint">
-    Inventory of the agent-facing instruction files for this project. Raw sources stay
-    visible; the human summary and warnings below help spot stale or missing guidance.
-    Action buttons queue normal 1-preparation tasks - the surface never silently rewrites docs.
+    Inventory of the instruction files agents read of their own accord on this project
+    (AGENTS.md and the agent-facing domain docs). Raw sources stay visible; the human
+    summary and warnings below help spot stale or missing guidance. Action buttons queue
+    normal 1-preparation tasks - the surface never silently rewrites docs.
   </p>
 
   @if (loading() && !overview() && !error()) {

@@ -37,19 +37,25 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'wiki',
   'jobs',
   'settings',
+  // Settings tree sub-pages render the same real settings panel.
+  'settings-defaults',
+  'settings-overrides',
   'orchestrator',
   'activity',
+  // Note: 'steering-docs' (tree container) and 'runtime-prompts' deliberately
+  // fall through to the shell's generic placeholder panel.
 ]);
 
 /**
  * Project Hub tab — the per-project landing surface inside the studio
  * editor. Embeds the legacy <app-project-shell> directly so the full
- * project navigation (Overview / Visual Evidence / Security /
- * Architecture / Drift / UX-UI / Test Quality / Token Usage /
- * Observability / Product Runtime / Steering / Wiki / Audits / Jobs /
- * Settings / Orchestrator / Activity) is reachable from the tab —
- * no need to open a separate overlay, and every rail uses its real
- * content panel where one exists.
+ * project navigation is reachable from the tab — no separate overlay —
+ * and every rail uses its real content panel where one exists.
+ *
+ * The rail is a collapsible-segment tree (ASS-1711): Insight / Quality /
+ * Operations / Config segments fold; the "Steering Docs" container expands
+ * to Architecture / Wiki / Agent Docs; "Runtime Prompts" is its own point;
+ * and Settings expands to Workspace Defaults / Project Overrides.
  */
 @Component({
   selector: 'app-project-hub-view',
@@ -105,6 +111,11 @@ export class ProjectHubViewComponent {
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
     return RAILS_WITH_CUSTOM_PANEL.has(rail);
+  }
+
+  /** Settings and its tree sub-pages all render the one real settings panel. */
+  isSettingsRail(rail: ProjectRailKey): boolean {
+    return rail === 'settings' || rail === 'settings-defaults' || rail === 'settings-overrides';
   }
 
   setRail(rail: ProjectRailKey): void {

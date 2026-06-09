@@ -43,25 +43,34 @@ const RAILS_WITH_CUSTOM_PANEL = new Set<string>([
   'observability',
   'product-runtime',
   'steering',
+  'wiki',
   'settings',
+  'settings-defaults',
+  'settings-overrides',
   'orchestrator',
   'activity',
 ]);
 
-const RAIL_ITEMS: ReadonlyArray<{ key: string; label: string; title: string; descriptionFragment: string }> = [
-  { key: 'overview',     label: 'Overview',        title: 'Overview',        descriptionFragment: 'Snapshot of project health' },
-  { key: 'security',     label: 'Security',        title: 'Security',        descriptionFragment: 'Baseline, reviews, and active findings' },
-  { key: 'architecture', label: 'Architecture',    title: 'Architecture',    descriptionFragment: 'Architectural decisions and drift status' },
-  { key: 'uxui',         label: 'UX/UI',           title: 'UX/UI',           descriptionFragment: 'Design references' },
-  { key: 'test-quality', label: 'Test Quality',    title: 'Test Quality',    descriptionFragment: 'Backend tests, end-to-end tests' },
-  { key: 'token-usage',  label: 'Token Usage',     title: 'Token Usage',     descriptionFragment: 'Inference spend by job' },
-  { key: 'observability',label: 'Observability',   title: 'Observability',   descriptionFragment: 'Agent communication on the message bus' },
-  { key: 'steering',     label: 'Steering Docs',   title: 'Steering Docs',   descriptionFragment: 'Agent-facing instruction sources' },
-  { key: 'audits',       label: 'Audits & Checks', title: 'Audits & Checks', descriptionFragment: 'Review definitions, per-task checks' },
-  { key: 'jobs',         label: 'Jobs',            title: 'Jobs',            descriptionFragment: 'Tasks queued, in progress' },
-  { key: 'settings',     label: 'Settings',        title: 'Settings',        descriptionFragment: 'How the orchestrator behaves' },
-  { key: 'orchestrator', label: 'Orchestrator',    title: 'Orchestrator',    descriptionFragment: 'Live session, recent decisions' },
-  { key: 'activity',     label: 'Activity',        title: 'Activity',        descriptionFragment: 'Decisions, actions, and observations' },
+// ASS-1711 IA: documentation rails (Architecture / Wiki / Agent Docs) are
+// nested under a non-navigable "Steering Docs" tree container, "Runtime
+// Prompts" is its own point, and Settings expands to its sub-pages. The tree
+// seeds fully expanded, so every leaf below is reachable by its testid without
+// first expanding a parent.
+const RAIL_ITEMS: readonly { key: string; label: string; title: string; descriptionFragment: string }[] = [
+  { key: 'overview',         label: 'Overview',          title: 'Overview',         descriptionFragment: 'Snapshot of project health' },
+  { key: 'security',         label: 'Security',          title: 'Security',         descriptionFragment: 'Baseline, reviews, and active findings' },
+  { key: 'architecture',     label: 'Architecture',      title: 'Architecture',     descriptionFragment: 'Architectural decisions and drift status' },
+  { key: 'uxui',             label: 'UX/UI',             title: 'UX/UI',            descriptionFragment: 'Design references' },
+  { key: 'test-quality',     label: 'Test Quality',      title: 'Test Quality',     descriptionFragment: 'Backend tests, end-to-end tests' },
+  { key: 'token-usage',      label: 'Token Usage',       title: 'Token Usage',      descriptionFragment: 'Inference spend by job' },
+  { key: 'observability',    label: 'Observability',     title: 'Observability',    descriptionFragment: 'Agent communication on the message bus' },
+  { key: 'steering',         label: 'Agent Docs',        title: 'Agent Docs',       descriptionFragment: 'Instruction files agents read on their own' },
+  { key: 'runtime-prompts',  label: 'Runtime Prompts',   title: 'Runtime Prompts',  descriptionFragment: 'prompts the platform injects at run time' },
+  { key: 'audits',           label: 'Audits & Checks',   title: 'Audits & Checks',  descriptionFragment: 'Review definitions, per-task checks' },
+  { key: 'jobs',             label: 'Jobs',              title: 'Jobs',             descriptionFragment: 'Tasks queued, in progress' },
+  { key: 'settings',         label: 'Settings',          title: 'Settings',         descriptionFragment: 'How the orchestrator behaves' },
+  { key: 'orchestrator',     label: 'Orchestrator',      title: 'Orchestrator',     descriptionFragment: 'Live session, recent decisions' },
+  { key: 'activity',         label: 'Activity',          title: 'Activity',         descriptionFragment: 'Decisions, actions, and observations' },
 ];
 
 const SCREENSHOT_DIR = (() => {
