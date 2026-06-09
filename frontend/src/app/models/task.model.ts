@@ -456,6 +456,7 @@ export interface TaskDetail {
   promptHistory: TaskPromptHistoryEntry[];
   titleHistory: TaskTitleHistoryEntry[];
   statusMarkdown: string | null;
+  statusGeneration?: FileGenerationMeta | null;
   contextUsage: ContextUsageSnapshot | null;
   log: TaskLogEntry[];
   summaryState: TaskSummaryState | null;
@@ -519,7 +520,23 @@ export interface TaskLogEntry {
  * `TaskArtifactKind` on the backend; values arrive as camel-case strings
  * because of `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`.
  */
-export type TaskArtifactKind = 'prompt' | 'aspect' | 'note' | 'other';
+export type TaskArtifactKind = 'prompt' | 'aspect' | 'codeReview' | 'note' | 'other';
+
+export interface FileGenerationMeta {
+  file: string;
+  kind: string;
+  model?: string | null;
+  cli?: string | null;
+  tokensIn: number;
+  tokensOut: number;
+  tokensTotal: number;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  durationMs: number;
+  runIndex?: number | null;
+  stepId?: string | null;
+  headShaAfter?: string | null;
+}
 
 /**
  * One `.md` file in the job root surfaced by the Files tab. The content
@@ -534,6 +551,7 @@ export interface TaskArtifact {
   kind: TaskArtifactKind;
   /** Set when `kind === 'aspect'`; e.g. `code-quality` for `aspect-code-quality.md`. */
   aspectName?: string | null;
+  generation?: FileGenerationMeta | null;
 }
 
 export interface TaskArtifactsResponse {

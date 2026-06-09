@@ -268,6 +268,13 @@
               </div>
             } @else if (detail().statusMarkdown) {
               <div class="notes-panel__toolbar" data-testid="protocol-toolbar">
+                @if (statusProvenance(); as generation) {
+                  <span class="notes-panel__provenance"
+                        data-testid="protocol-provenance"
+                        [appTooltip]="generation.tooltip">
+                    {{ generation.label }}
+                  </span>
+                }
                 <span class="notes-panel__spacer"></span>
                 <button type="button"
                         class="btn-icon"

@@ -67,6 +67,13 @@
                 <span> &middot; {{ entry.commit.substring(0, 7) }}</span>
               }
               &middot; {{ formatTimestamp(entry.runAt) }}
+              @if (provenanceFor(entry); as generation) {
+                <span class="cr-provenance"
+                      data-testid="code-review-provenance"
+                      [appTooltip]="generation.tooltip">
+                  &middot; {{ generation.label }}
+                </span>
+              }
             </span>
           </button>
           @if (expandedFile() === entry.fileName) {
@@ -88,6 +95,11 @@
                     <span class="cr-body-chip">{{ entry.commit.substring(0, 7) }}</span>
                   }
                   <span class="cr-body-chip">{{ formatTimestamp(entry.runAt) }}</span>
+                  @if (provenanceFor(entry); as generation) {
+                    <span class="cr-body-chip cr-body-chip--provenance"
+                          data-testid="code-review-body-provenance"
+                          [appTooltip]="generation.tooltip">{{ generation.label }}</span>
+                  }
                 </div>
               </header>
               @if (expandedBody(); as body) {

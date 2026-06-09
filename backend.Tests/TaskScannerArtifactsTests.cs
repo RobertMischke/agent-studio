@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.GeneratedFiles;
 using OrchestratorApi.Services.Tasks;
 using Xunit;
 
@@ -32,7 +33,7 @@ public class TaskScannerArtifactsTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private TaskScannerService BuildScanner()
+    private TaskScannerService BuildScanner(FileGenerationIndex? fileGenerationIndex = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -42,7 +43,7 @@ public class TaskScannerArtifactsTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        return new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary, fileGenerationIndex);
     }
 
     private string WriteJobRoot(string slug, string state = "2-ready")
@@ -90,6 +91,7 @@ public class TaskScannerArtifactsTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "prompt.md"), "p");
         File.WriteAllText(Path.Combine(dir, "aspect-requirement-fit.md"), "rf");
         File.WriteAllText(Path.Combine(dir, "aspect-code-quality.md"), "cq");
+        File.WriteAllText(Path.Combine(dir, "code-review-2026-06-09T12-00-00Z.md"), "cr");
         File.WriteAllText(Path.Combine(dir, "REVIEW_NOTE.md"), "rn");
         File.WriteAllText(Path.Combine(dir, "ANOTHER_NOTES.md"), "an");
         File.WriteAllText(Path.Combine(dir, "follow-up-plan.md"), "fu");
@@ -103,6 +105,7 @@ public class TaskScannerArtifactsTests : IDisposable
             "prompt.md",
             "aspect-code-quality.md",
             "aspect-requirement-fit.md",
+            "code-review-2026-06-09T12-00-00Z.md",
             "ANOTHER_NOTES.md",
             "REVIEW_NOTE.md",
             "follow-up-plan.md",
@@ -114,6 +117,9 @@ public class TaskScannerArtifactsTests : IDisposable
 
         var note = response.Files.First(f => f.Name == "REVIEW_NOTE.md");
         Assert.Equal(TaskArtifactKind.Note, note.Kind);
+
+        var codeReview = response.Files.First(f => f.Name == "code-review-2026-06-09T12-00-00Z.md");
+        Assert.Equal(TaskArtifactKind.CodeReview, codeReview.Kind);
 
         var other = response.Files.First(f => f.Name == "follow-up-plan.md");
         Assert.Equal(TaskArtifactKind.Other, other.Kind);
@@ -159,5 +165,65 @@ public class TaskScannerArtifactsTests : IDisposable
         Assert.Null(scanner.ReadJobFile("read-aspect", "../escape.md", _watchPath));
         Assert.Null(scanner.ReadJobFile("read-aspect", "logs/inner.md", _watchPath));
         Assert.Null(scanner.ReadJobFile("read-aspect", "not-markdown.txt", _watchPath));
+    }
+
+    [Fact]
+    public void ListArtifacts_MergesGenerationMetadataFromSidecar()
+    {
+        var dir = WriteJobRoot("generated-aspect");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), "p");
+        File.WriteAllText(Path.Combine(dir, "aspect-code-quality.md"), "cq");
+        var started = new DateTime(2026, 6, 9, 10, 0, 0, DateTimeKind.Utc);
+        var index = new FileGenerationIndex(NullLogger<FileGenerationIndex>.Instance);
+        index.Upsert(dir, new FileGenerationMeta
+        {
+            File = "aspect-code-quality.md",
+            Kind = "aspect",
+            Model = "claude-haiku-4-5",
+            Cli = "claude",
+            TokensIn = 100,
+            TokensOut = 25,
+            TokensTotal = 125,
+            StartedAt = started,
+            EndedAt = started.AddSeconds(2),
+            DurationMs = 2_000,
+            StepId = "aspect-code-quality",
+        });
+
+        var response = BuildScanner(index).ListArtifacts("generated-aspect", _watchPath);
+
+        var aspect = Assert.Single(response!.Files, f => f.Name == "aspect-code-quality.md");
+        Assert.NotNull(aspect.Generation);
+        Assert.Equal("claude-haiku-4-5", aspect.Generation!.Model);
+        Assert.Equal(125, aspect.Generation.TokensTotal);
+        Assert.Equal("aspect-code-quality", aspect.Generation.StepId);
+    }
+
+    [Fact]
+    public void GetJobDetail_MergesStatusGenerationMetadataFromSidecar()
+    {
+        var dir = WriteJobRoot("generated-status");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), "p");
+        File.WriteAllText(Path.Combine(dir, "status.md"), "# Status\n");
+        var index = new FileGenerationIndex(NullLogger<FileGenerationIndex>.Instance);
+        index.Upsert(dir, new FileGenerationMeta
+        {
+            File = "status.md",
+            Kind = "status",
+            Model = "claude-haiku-4-5",
+            Cli = "claude",
+            TokensIn = 42,
+            TokensOut = 12,
+            TokensTotal = 54,
+            DurationMs = 1_250,
+            StepId = "summary-generation",
+        });
+
+        var detail = BuildScanner(index).GetJobDetail("generated-status", _watchPath);
+
+        Assert.NotNull(detail);
+        Assert.NotNull(detail!.StatusGeneration);
+        Assert.Equal("status.md", detail.StatusGeneration!.File);
+        Assert.Equal(54, detail.StatusGeneration.TokensTotal);
     }
 }

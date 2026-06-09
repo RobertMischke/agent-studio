@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.GeneratedFiles;
 using OrchestratorApi.Services.Review;
 using OrchestratorApi.Services.Runner;
 using Xunit;
@@ -161,6 +162,25 @@ public class CodeReviewStepServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_RegistersGeneratedFileMetadata_WhenIndexIsAvailable()
+    {
+        var index = new FileGenerationIndex(NullLogger<FileGenerationIndex>.Instance);
+        var service = BuildService((_, _, _, _, _) =>
+            Task.FromResult("[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"), index);
+
+        var report = await service.RunAsync(BuildRequest("claude-haiku-4-5"), CancellationToken.None);
+
+        var entries = index.ReadForJob(_jobFolder, cacheLegacy: false);
+        var generation = Assert.Single(entries.Values);
+        Assert.Equal(report.FileName, generation.File);
+        Assert.Equal("code-review", generation.Kind);
+        Assert.Equal("claude-haiku-4-5", generation.Model);
+        Assert.Equal("claude", generation.Cli);
+        Assert.Equal("code-review-step", generation.StepId);
+        Assert.Equal("0aa4c5d", generation.HeadShaAfter);
+    }
+
+    [Fact]
     public void TagFor_MapsAllVerdicts()
     {
         Assert.Equal("code-review:pass", CodeReviewStepService.TagFor(AspectStatus.Pass));
@@ -182,13 +202,18 @@ public class CodeReviewStepServiceTests : IDisposable
         Timeout = TimeSpan.FromSeconds(5),
     };
 
-    private CodeReviewStepService BuildService(Func<string, string, string, TimeSpan, CancellationToken, Task<string>> stub)
+    private CodeReviewStepService BuildService(
+        Func<string, string, string, TimeSpan, CancellationToken, Task<string>> stub,
+        FileGenerationIndex? fileGenerationIndex = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>())
             .Build();
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
-        var service = new CodeReviewStepService(prompts, NullLogger<CodeReviewStepService>.Instance);
+        var service = new CodeReviewStepService(
+            prompts,
+            NullLogger<CodeReviewStepService>.Instance,
+            fileGenerationIndex: fileGenerationIndex);
         service.CliRunner = stub;
         return service;
     }

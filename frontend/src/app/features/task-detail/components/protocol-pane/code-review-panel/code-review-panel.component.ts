@@ -15,8 +15,10 @@ import { CodeReviewActivityStore } from '../../../../../services/code-review-act
 
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
+import { TooltipDirective } from '../../../../../components/tooltip';
 import { cleanStepResultMarkdown } from '../../prompt-pane/pipeline-step-result/pipeline-step-result.util';
 import { CLAUDE_FALLBACK_MODEL_ID } from '../../../../cli';
+import { generatedFileProvenance } from '../../generated-file-provenance.util';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -52,7 +54,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, CliModelSelectorComponent, MarkdownViewComponent],
+  imports: [FormsModule, CliModelSelectorComponent, MarkdownViewComponent, TooltipDirective],
   templateUrl: './code-review-panel.component.html',
   styleUrl: './code-review-panel.component.scss',
 })
@@ -253,5 +255,9 @@ export class CodeReviewPanelComponent implements OnInit {
     } catch {
       return iso;
     }
+  }
+
+  provenanceFor(entry: CodeReviewListEntry) {
+    return generatedFileProvenance(entry.generation);
   }
 }

@@ -414,6 +414,8 @@ public class TaskScannerService : ITaskScanner
 
         var dir = info.FolderPath;
         var statusMd = ReadFileOrNull(Path.Combine(dir, "status.md"));
+        var generated = _fileGenerationIndex?.ReadForJob(dir)
+            ?? new Dictionary<string, FileGenerationMeta>(StringComparer.OrdinalIgnoreCase);
         return new TaskDetail
         {
             Info = info,
@@ -421,6 +423,7 @@ public class TaskScannerService : ITaskScanner
             PromptHistory = ReadPromptHistory(dir),
             TitleHistory = TitleHistoryLog.Read(dir),
             StatusMarkdown = statusMd,
+            StatusGeneration = generated.GetValueOrDefault("status.md"),
             ContextUsage = ReadContextUsage(dir),
             Log = BuildLog(dir),
             SummaryState = ResolveSummaryState(info.TaskKey, statusMd),

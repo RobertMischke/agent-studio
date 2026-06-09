@@ -5,6 +5,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Cli.OneShot;
+using OrchestratorApi.Services.GeneratedFiles;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services;
@@ -25,6 +26,7 @@ public sealed class SummaryGenerationService
     private readonly IConfiguration _configuration;
     private readonly RuntimePromptService _prompts;
     private readonly AdHocUsageRecorder? _usage;
+    private readonly FileGenerationIndex? _fileGenerationIndex;
     private readonly ConcurrentDictionary<string, TaskSummaryState> _states = new();
 
     public SummaryGenerationService(ILogger<SummaryGenerationService> logger, IConfiguration configuration)
@@ -37,13 +39,15 @@ public sealed class SummaryGenerationService
         IConfiguration configuration,
         RuntimePromptService prompts,
         AdHocUsageRecorder? usage = null,
-        CliOneShotRegistry? oneShotRegistry = null)
+        CliOneShotRegistry? oneShotRegistry = null,
+        FileGenerationIndex? fileGenerationIndex = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
         _usage = usage;
         _oneShotRegistry = oneShotRegistry;
+        _fileGenerationIndex = fileGenerationIndex;
     }
 
     private readonly CliOneShotRegistry? _oneShotRegistry;
@@ -109,13 +113,14 @@ public sealed class SummaryGenerationService
             var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
                 new Dictionary<string, string?> { ["log"] = truncated });
 
-            var (ok, summary, error) = await RunHaikuAsync(prompt, info.FolderPath, ct);
-            if (!ok || string.IsNullOrWhiteSpace(summary))
+            var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
+            if (!result.Ok || string.IsNullOrWhiteSpace(result.Summary))
             {
-                Fail(key, error ?? "Empty Haiku response");
+                Fail(key, result.Error ?? "Empty Haiku response");
                 return;
             }
 
+            var summary = result.Summary;
             if (runOutcome != null)
             {
                 summary = ApplyOutcomeResultLine(summary, runOutcome.ProtocolResult);
@@ -123,6 +128,7 @@ public sealed class SummaryGenerationService
 
             var target = Path.Combine(info.FolderPath, "status.md");
             WriteAllTextWithRetry(target, summary);
+            RegisterGeneratedStatus(info, result);
 
             _states[key] = new TaskSummaryState
             {
@@ -182,19 +188,19 @@ public sealed class SummaryGenerationService
             new Dictionary<string, string?> { ["log"] = truncated });
 
         var sw = Stopwatch.StartNew();
-        var (ok, summary, error) = await RunHaikuAsync(prompt, info.FolderPath, ct);
+        var result = await RunHaikuAsync(prompt, info.FolderPath, ct);
         sw.Stop();
 
-        if (!ok || string.IsNullOrWhiteSpace(summary))
+        if (!result.Ok || string.IsNullOrWhiteSpace(result.Summary))
         {
             _logger.LogInformation("Interim summary failed for {JobId} after {ElapsedMs}ms: {Error}",
-                info.Id, sw.ElapsedMilliseconds, error);
-            return InterimSummaryResult.Failure(error ?? "Empty Haiku response");
+                info.Id, sw.ElapsedMilliseconds, result.Error);
+            return InterimSummaryResult.Failure(result.Error ?? "Empty Haiku response");
         }
 
         _logger.LogInformation("Interim summary produced for {JobId} ({Bytes} bytes, {ElapsedMs}ms)",
-            info.Id, summary.Length, sw.ElapsedMilliseconds);
-        return InterimSummaryResult.Success(summary, sw.ElapsedMilliseconds);
+            info.Id, result.Summary.Length, sw.ElapsedMilliseconds);
+        return InterimSummaryResult.Success(result.Summary, sw.ElapsedMilliseconds);
     }
 
     private void Fail(string key, string error)
@@ -215,10 +221,12 @@ public sealed class SummaryGenerationService
         return "[earlier output truncated]\n" + tail;
     }
 
-    private async Task<(bool Ok, string? Summary, string? Error)> RunHaikuAsync(
+    private async Task<HaikuSummaryResult> RunHaikuAsync(
         string prompt, string workingDirectory, CancellationToken ct)
     {
         var model = _configuration["ClaudeCli:SummaryModel"] ?? ModelIds.ClaudeHaiku45;
+        var startedAt = DateTime.UtcNow;
+        var sw = Stopwatch.StartNew();
 
         var oneShot = _oneShotRegistry?.Get("claude");
         if (oneShot != null)
@@ -232,10 +240,13 @@ public sealed class SummaryGenerationService
                 RecordUsage = false, // We record below with parsed text + usage
             }, ct).ConfigureAwait(false);
 
+            sw.Stop();
+            var endedAt = DateTime.UtcNow;
             AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SummaryGeneration, model, r.Usage,
                 (long)r.Duration.TotalMilliseconds, ok: r.Ok);
-            if (!r.Ok) return (false, null, r.Error);
-            return (true, SanitizeMarkdown(r.ParsedText), null);
+            if (!r.Ok) return HaikuSummaryResult.Failure(model, r.Error, startedAt, endedAt, sw.ElapsedMilliseconds);
+            return HaikuSummaryResult.Success(model, r.Usage, SanitizeMarkdown(r.ParsedText), startedAt, endedAt,
+                (long)r.Duration.TotalMilliseconds);
         }
 
         var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
@@ -258,11 +269,10 @@ public sealed class SummaryGenerationService
         };
         foreach (var arg in AdHocClaudeInvoker.BuildArgs(model)) psi.ArgumentList.Add(arg);
 
-        var sw = Stopwatch.StartNew();
         try
         {
             using var p = Process.Start(psi);
-            if (p == null) return (false, null, "Process.Start returned null");
+            if (p == null) return HaikuSummaryResult.Failure(model, "Process.Start returned null", startedAt, DateTime.UtcNow, sw.ElapsedMilliseconds);
 
             // Write the prompt up front, then close stdin so Claude can finalise
             // the request. WriteAsync is awaited so the OS pipe buffer can drain
@@ -279,23 +289,56 @@ public sealed class SummaryGenerationService
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
             sw.Stop();
+            var endedAt = DateTime.UtcNow;
             if (p.ExitCode != 0)
             {
                 AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SummaryGeneration, model, null, sw.ElapsedMilliseconds, ok: false);
-                return (false, null, $"claude exited {p.ExitCode}: {stderr.Trim()}");
+                return HaikuSummaryResult.Failure(model, $"claude exited {p.ExitCode}: {stderr.Trim()}", startedAt, endedAt, sw.ElapsedMilliseconds);
             }
 
             var (text, usage) = AdHocClaudeInvoker.ParseOrFallback(stdout, model);
             AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SummaryGeneration, model, usage, sw.ElapsedMilliseconds, ok: true);
-            return (true, SanitizeMarkdown(text), null);
+            return HaikuSummaryResult.Success(model, usage, SanitizeMarkdown(text), startedAt, endedAt, sw.ElapsedMilliseconds);
         }
         catch (OperationCanceledException)
         {
-            return (false, null, $"Haiku timed out after {HaikuTimeoutSeconds}s");
+            sw.Stop();
+            return HaikuSummaryResult.Failure(model, $"Haiku timed out after {HaikuTimeoutSeconds}s", startedAt, DateTime.UtcNow, sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            return (false, null, ex.Message);
+            sw.Stop();
+            return HaikuSummaryResult.Failure(model, ex.Message, startedAt, DateTime.UtcNow, sw.ElapsedMilliseconds);
+        }
+    }
+
+    private void RegisterGeneratedStatus(TaskInfo info, HaikuSummaryResult result)
+    {
+        if (_fileGenerationIndex == null) return;
+        try
+        {
+            var usage = result.Usage;
+            _fileGenerationIndex.Upsert(info.FolderPath, new FileGenerationMeta
+            {
+                File = "status.md",
+                Kind = "status",
+                Model = usage?.Model ?? result.Model,
+                Cli = CliTypes.Claude,
+                TokensIn = usage?.InputTokens ?? 0,
+                TokensOut = usage?.OutputTokens ?? 0,
+                TokensTotal = (usage?.InputTokens ?? 0)
+                    + (usage?.OutputTokens ?? 0)
+                    + (usage?.CacheReadTokens ?? 0)
+                    + (usage?.CacheCreationTokens ?? 0),
+                StartedAt = result.StartedAt,
+                EndedAt = result.EndedAt,
+                DurationMs = result.DurationMs,
+                StepId = AdHocUsageSources.SummaryGeneration,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SummaryGenerationService: failed to register generated status.md for {JobId}", info.Id);
         }
     }
 
@@ -362,6 +405,34 @@ public sealed class SummaryGenerationService
             }
         }
         if (last != null) throw last;
+    }
+
+    private sealed record HaikuSummaryResult(
+        bool Ok,
+        string? Summary,
+        string? Error,
+        string Model,
+        OrchestratorTokenUsage? Usage,
+        long DurationMs,
+        DateTime StartedAt,
+        DateTime EndedAt)
+    {
+        public static HaikuSummaryResult Success(
+            string model,
+            OrchestratorTokenUsage? usage,
+            string? summary,
+            DateTime startedAt,
+            DateTime endedAt,
+            long durationMs)
+            => new(true, summary, null, model, usage, durationMs, startedAt, endedAt);
+
+        public static HaikuSummaryResult Failure(
+            string model,
+            string? error,
+            DateTime startedAt,
+            DateTime endedAt,
+            long durationMs)
+            => new(false, null, error, model, null, durationMs, startedAt, endedAt);
     }
 }
 

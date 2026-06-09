@@ -22,6 +22,9 @@
   &--aspect {
     border-left: 3px solid var(--accent-3, var(--studio-accent));
   }
+  &--code-review {
+    border-left: 3px solid var(--severity-info, var(--studio-accent));
+  }
   &--note {
     border-left: 3px solid var(--accent-warn, var(--studio-accent));
   }
@@ -96,6 +99,24 @@
     color: var(--accent-warn, var(--studio-accent));
     border-color: color-mix(in srgb, var(--accent-warn, var(--studio-accent)) 36%, transparent);
   }
+  &--code-review {
+    background: color-mix(in srgb, var(--severity-info, var(--studio-accent)) 14%, transparent);
+    color: var(--severity-info, var(--studio-accent));
+    border-color: color-mix(in srgb, var(--severity-info, var(--studio-accent)) 32%, transparent);
+  }
+}
+
+.file-card__provenance {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(260px, 32vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
 }
 
 .file-card__meta {

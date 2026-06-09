@@ -4,6 +4,7 @@ import { MarkdownRichEditorComponent } from '../../../../../components/markdown-
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.model';
+import { generatedFileProvenance } from '../../generated-file-provenance.util';
 
 /**
  * Files tab body. Renders every `.md` file directly in the job folder
@@ -145,9 +146,14 @@ export class FilesPaneComponent {
     switch (kind) {
       case 'prompt': return '\u{1F4DD}'; // memo
       case 'aspect': return '\u{1F50D}'; // magnifying-glass
+      case 'codeReview': return 'CR';
       case 'note':   return '\u{1F4CC}'; // pushpin
       default:       return '\u{1F4C4}'; // page-facing-up
     }
+  }
+
+  provenanceFor(file: TaskArtifact) {
+    return generatedFileProvenance(file.generation);
   }
 
   formatBytes(n: number): string {

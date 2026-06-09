@@ -6,6 +6,7 @@ import type {
   TaskArtifactsResponse,
   TaskDetail,
   TaskInfo,
+  FileGenerationMeta,
   WatchPathEntry,
   RegistryWorkspaceListItem,
   CliOutputLine,
@@ -80,6 +81,7 @@ export interface CodeReviewListEntry {
   thinkingLevel?: string | null;
   commit?: string | null;
   runAt: string;
+  generation?: FileGenerationMeta | null;
 }
 
 /** Reply from `GET /api/tasks/code-review/defaults` (see backend `CodeReviewDefaultsResponse`). */

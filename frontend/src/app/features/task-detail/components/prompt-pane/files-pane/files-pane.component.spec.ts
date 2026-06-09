@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { FilesPaneComponent } from './files-pane.component';
@@ -42,5 +42,54 @@ describe('FilesPaneComponent (smoke)', () => {
       console.warn('[smoke] FilesPaneComponent TestBed setup skipped:', (e as Error).message);
       expect(FilesPaneComponent).toBeTruthy();
     }
+  });
+
+  it('renders generated-file provenance in a subtle header affordance', async () => {
+    await TestBed.configureTestingModule({
+      imports: [FilesPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FilesPaneComponent);
+    fixture.componentRef.setInput('jobId', 'demo-job');
+    fixture.componentRef.setInput('watchPath', 'C:/projects/foo');
+    fixture.componentRef.setInput('artifacts', [
+      {
+        name: 'code-review-2026-06-09T12-00-00Z.md',
+        sizeBytes: 2048,
+        mtime: '2026-06-09T12:00:00Z',
+        kind: 'codeReview',
+        generation: {
+          file: 'code-review-2026-06-09T12-00-00Z.md',
+          kind: 'code-review',
+          model: 'claude-haiku-4-5',
+          cli: 'claude',
+          tokensIn: 100,
+          tokensOut: 25,
+          tokensTotal: 125,
+          startedAt: '2026-06-09T11:59:58Z',
+          endedAt: '2026-06-09T12:00:00Z',
+          durationMs: 2000,
+          stepId: 'code-review-step',
+        },
+      },
+    ]);
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne((r) => r.url.includes('/api/tasks/demo-job/files/code-review-2026-06-09T12-00-00Z.md'))
+      .flush('# Review\n');
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const provenance = root.querySelector('[data-testid="file-card-provenance"]');
+    expect(provenance?.textContent).toContain('claude / claude-haiku-4-5');
+    expect(provenance?.textContent).toContain('125 tokens');
+    expect(provenance?.textContent).toContain('2s');
+    http.verify();
   });
 });

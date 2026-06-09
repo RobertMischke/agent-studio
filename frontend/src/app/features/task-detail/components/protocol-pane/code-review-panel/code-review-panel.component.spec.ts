@@ -114,6 +114,19 @@ describe('CodeReviewPanelComponent', () => {
           cliType: 'claude',
           commit: '0aa4c5d',
           runAt: '2026-05-14T12:00:00Z',
+          generation: {
+            file: 'code-review-2026-05-14T12-00-00Z.md',
+            kind: 'code-review',
+            model: 'claude-haiku-4-5',
+            cli: 'claude',
+            tokensIn: 100,
+            tokensOut: 25,
+            tokensTotal: 125,
+            startedAt: '2026-05-14T11:59:58Z',
+            endedAt: '2026-05-14T12:00:00Z',
+            durationMs: 2000,
+            stepId: 'code-review-step',
+          },
         },
         {
           fileName: 'code-review-2026-05-13T18-30-00Z.md',
@@ -134,6 +147,9 @@ describe('CodeReviewPanelComponent', () => {
     expect(list?.querySelectorAll('.cr-row').length).toBe(2);
     const verdicts = Array.from(list?.querySelectorAll('.cr-verdict') ?? []).map((el) => el.textContent?.trim());
     expect(verdicts).toEqual(['pass', 'concerns']);
+    const provenance = root.querySelector('[data-testid="code-review-provenance"]');
+    expect(provenance?.textContent).toContain('claude / claude-haiku-4-5');
+    expect(provenance?.textContent).toContain('125 tokens');
     httpCtrl.verify();
   });
 

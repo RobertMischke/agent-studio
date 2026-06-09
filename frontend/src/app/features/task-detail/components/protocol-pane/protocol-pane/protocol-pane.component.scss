@@ -439,6 +439,19 @@
   margin-bottom: 6px;
 }
 
+.notes-panel__provenance {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(360px, 46vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
 .notes-panel__spacer {
   flex: 1 1 auto;
 }

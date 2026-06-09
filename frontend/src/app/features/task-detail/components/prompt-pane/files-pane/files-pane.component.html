@@ -3,6 +3,7 @@
     <article class="file-card"
              [class.file-card--prompt]="file.kind === 'prompt'"
              [class.file-card--aspect]="file.kind === 'aspect'"
+             [class.file-card--code-review]="file.kind === 'codeReview'"
              [class.file-card--note]="file.kind === 'note'"
              [class.file-card--collapsed]="!isExpanded(file.name)"
              [class.file-card--expanded]="isExpanded(file.name)"
@@ -19,8 +20,17 @@
         <span class="file-card__name">{{ file.name }}</span>
         @if (file.kind === 'aspect') {
           <span class="file-card__chip file-card__chip--aspect">{{ file.aspectName }}</span>
+        } @else if (file.kind === 'codeReview') {
+          <span class="file-card__chip file-card__chip--code-review">code review</span>
         } @else if (file.kind === 'note') {
           <span class="file-card__chip file-card__chip--note">note</span>
+        }
+        @if (provenanceFor(file); as generation) {
+          <span class="file-card__provenance"
+                data-testid="file-card-provenance"
+                [appTooltip]="generation.tooltip">
+            {{ generation.label }}
+          </span>
         }
         <span class="file-card__meta">{{ formatBytes(file.sizeBytes) }} · {{ formatRelative(file.mtime) }}</span>
 

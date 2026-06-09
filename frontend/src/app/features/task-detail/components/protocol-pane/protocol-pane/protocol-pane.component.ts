@@ -62,6 +62,7 @@ import {
   outcomeIssueExplanation,
   rateLimitTooltip,
 } from './protocol-pane-view-model';
+import { generatedFileProvenance } from '../../generated-file-provenance.util';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { PaneHeaderComponent } from '../../../../../components/pane-header/pane-header.component';
@@ -391,6 +392,9 @@ export class ProtocolPaneComponent implements OnDestroy {
    */
   readonly statusMarkdownBody = computed<string>(() =>
     stripStatusHeader(this.detail().statusMarkdown),
+  );
+  readonly statusProvenance = computed(() =>
+    generatedFileProvenance(this.detail().statusGeneration),
   );
 
   /**
