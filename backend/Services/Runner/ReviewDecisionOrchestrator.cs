@@ -122,6 +122,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     };
 
     private readonly Queue<DateTime> _callTimestamps = new();
+    private readonly SemaphoreSlim _tickGate = new(1, 1);
 
     // Guards _callTimestamps: the read-only review pool processes several DONE
     // tasks concurrently, each charging the per-hour rate budget, so the
@@ -337,6 +338,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// workspace.
     /// </summary>
     public async Task TickOnceAsync(string workspace, CancellationToken ct)
+    {
+        await _tickGate.WaitAsync(ct);
+        try
+        {
+            await TickOnceCoreAsync(workspace, ct);
+        }
+        finally
+        {
+            _tickGate.Release();
+        }
+    }
+
+    private async Task TickOnceCoreAsync(string workspace, CancellationToken ct)
     {
         var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", "claude");

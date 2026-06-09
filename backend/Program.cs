@@ -211,6 +211,9 @@ builder.Services.AddSingleton<TokenSummaryService>();
 builder.Services.AddSingleton<ProjectTokenUsageService>();
 builder.Services.AddSingleton<WorkspaceTokensTimelineService>();
 builder.Services.AddSingleton<WorkspaceSummaryService>();
+builder.Services.AddSingleton<AutoReviewPostProcessingQueue>();
+builder.Services.AddSingleton<IAutoReviewPostProcessingQueue>(sp =>
+    sp.GetRequiredService<AutoReviewPostProcessingQueue>());
 builder.Services.AddSingleton<TaskTransitionService>();
 builder.Services.AddSingleton<TaskWatcherService>();
 // Cycle 1: in-memory snapshot of all jobs across watch paths. Reads from
@@ -311,7 +314,9 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WorkspaceArtifac
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
 builder.Services.AddSingleton<OrchestratorApi.Services.Runner.PostAbortReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
-builder.Services.AddHostedService<ReviewDecisionOrchestrator>();
+builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewDecisionOrchestrator>());
+builder.Services.AddHostedService<AutoReviewPostProcessingWorker>();
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
 // project; see ProjectSettings.IntakeEnabled. The hosted service is cheap
 // (heuristic only, no LLM) and skips projects that have not opted in.

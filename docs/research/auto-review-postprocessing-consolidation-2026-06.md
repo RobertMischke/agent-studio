@@ -1,8 +1,8 @@
 # Auto-Review Consolidation: synchronous orchestrator post-processing, review as its own task/step
 
-Status: research / design proposal. No production code lands in this task.
+Status: design plus first implementation slice. This task now ships the event-driven handoff from the progress-to-auto-review transition into a post-processing worker, while the larger service extraction and phase-model convergence remain follow-up work.
 Author target: implementer of the `post-processing-orchestrator-lane` epic (roadmap "Orchestrator Post Processing", ASS-176) and a future ADR that supersedes the decoupled-review decision in ADR-0025/0026/0027.
-Scope: pure design. This document maps the current code, diagnoses why `4-auto-review` stalls, and proposes consolidating the review into the synchronous orchestrator post-processing as its own task/step, decoupled from runner throughput.
+Scope: this document maps the current code, diagnoses why `4-auto-review` stalls, and proposes consolidating the review into the synchronous orchestrator post-processing as its own task/step, decoupled from runner throughput. The first implementation slice keeps `4-auto-review` as the durable lane and triggers review from the run-boundary post-processing queue instead of waiting for the recurring poll.
 
 ## 1. Problem
 
@@ -146,11 +146,11 @@ Today the boot sweep re-drives anything stuck in `4-auto-review`. In the target,
 
 ## 6. Concrete code-change map (per file)
 
-- `backend/Services/Runner/ProjectRunner.cs`: in the finalize block, after the move, enqueue the task onto the post-processing channel. Keep the `finally` latch clear unchanged.
-- `backend/Services/Tasks/TaskTransitionService.cs`: keep `RunCommitAttribution` synchronous; keep / relocate `TriggerDriftPostSteps`; add the enqueue/handoff hook for the review pipeline (the single seam where the boundary is crossed).
-- New `backend/Services/Pipeline/PostProcessingService.cs` + `PostProcessingWorker` (hosted): the per-project queue and drainer; orchestrates aspects -> lint -> regression-radar -> decision; writes phase, `lifecycle.json` checks, and pipeline-execution rows.
+- `backend/Services/Tasks/TaskTransitionService.cs`: keeps `RunCommitAttribution` synchronous, keeps `TriggerDriftPostSteps` fire-and-forget, and now enqueues the moved task onto the auto-review post-processing queue after `3-progress -> 4-auto-review`.
+- `backend/Services/Runner/AutoReviewPostProcessingQueue.cs`: first implementation slice of the post-processing queue and hosted worker. The worker records the review-decision step as running in `lifecycle.json` and invokes the existing review decision engine immediately, outside the runner latch.
+- Future `PostProcessingService` extraction: the broader per-project executor remains the target for the epic; it should eventually own aspects -> lint -> regression-radar -> decision, phase writes, and crash recovery as one typed pipeline.
 - New / extracted `ReviewDecisionService` (or `PostProcessingPipeline`): the decision engine lifted out of `ReviewDecisionOrchestrator.ProcessDoneAsync` and the deterministic branches, made injectable and unit-testable.
-- `backend/Services/Runner/ReviewDecisionOrchestrator.cs`: demote to (a) the boot/backfill sweep that enqueues rather than processing inline, plus (b) thin delegation to the extracted service; retire the 30s recurring loop in steady state. Eventually fold entirely into `PostProcessingService`.
+- `backend/Services/Runner/ReviewDecisionOrchestrator.cs`: the existing engine is now injectable and guarded against overlapping ticks. Demote it further to (a) the boot/backfill sweep that enqueues rather than processing inline, plus (b) thin delegation to the extracted service; retire the 30s recurring loop in steady state. Eventually fold entirely into `PostProcessingService`.
 - `src/AgentTaskboard.Shared/Models/TaskModels.cs` (`LifecyclePhases` / `LifecycleSnapshot`): no shape change needed; the post-processing phases and check list already exist. Add the writer that populates them.
 - `backend/Services/Runner/AutoReviewStatusSnapshot.cs`: replace the per-tick global with a per-task status projection (or keep it for the boot sweep only and add a per-task surface).
 - `backend/Program.cs`: register `PostProcessingService` (singleton) + `PostProcessingWorker` (hosted). `AspectRunnerService` is already a singleton.
@@ -161,7 +161,7 @@ Today the boot sweep re-drives anything stuck in `4-auto-review`. In the target,
 Each phase ships with tests and a doc update. Worker CLIs do not commit; the platform owns the commit/push boundary.
 
 1. Extract the decision engine. Move the aspect-plus-decision and deterministic branches out of `ReviewDecisionOrchestrator` into an injectable `ReviewDecisionService`. No behavior change; the poll still calls it. Existing `ReviewDecisionOrchestratorTests` and `ReviewDecisionOrchestrator_NoWrapperCardTests` must stay green.
-2. Event-driven trigger. Add the per-project queue + hosted worker; enqueue from the finalize/transition path; the worker calls the Phase-1 service. Keep the poll as a boot/backstop only. Make status per-task. Regression tests: a DONE task is reviewed within a small bound without waiting a poll interval; the runner picks the next task while review runs.
+2. Event-driven trigger. First slice landed: add the queue + hosted worker; enqueue from the transition path; the worker calls the existing review engine immediately. Follow-up: narrow the worker to a per-project item processor, keep the poll as boot/backstop only, and make status fully per-task. Regression tests: a DONE task is reviewed within a small bound without waiting a poll interval; the runner picks the next task while review runs.
 3. Lifecycle-phase modelling. Write `post-processing-running` / `post-processing-blocked` and populate `PostProcessingChecks`; surface per-task review status on the API. (Frontend lane work is a separate roadmap item.)
 4. Retire the poll. Replace the recurring loop with a boot-resume pass; add crash-recovery resume of mid-flight items; flip the enable flag default-on behind the ADR + per-project setting.
 5. (Optional) Converge on Option B. Collapse `4-auto-review` into the `3-progress` post-processing phase; align drift / lint / regression-radar ordering and the Overview pipeline view with the phase model.
@@ -196,7 +196,7 @@ Each phase ships with tests and a doc update. Worker CLIs do not commit; the pla
 
 ## 12. Out of scope (intentionally)
 
-- Implementing the pipeline. That is the follow-up tasks above.
+- Completing the full extracted pipeline. This task ships the event-driven handoff and worker; the service extraction, boot-only backstop, and phase-model convergence are follow-up tasks above.
 - Changing the multi-aspect prompt content or the `[[ORCHESTRATOR_DECISION]]` grammar.
 - Frontend lane grouping / collapse (a separate roadmap item).
 - Per-task parallel coding work or branch/worktree management (hard product boundaries).

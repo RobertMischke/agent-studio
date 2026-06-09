@@ -282,7 +282,24 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         Assert.Contains("\"performer\":\"orchestrator\"", outcomes);
     }
 
-    private Deps BuildDeps()
+    [Fact]
+    public async Task MoveProgressToAutoReview_EnqueuesAutoReviewPostProcessing()
+    {
+        WriteJob(TaskStates.Progress, "queued-review-task");
+        var queue = new RecordingAutoReviewQueue();
+
+        var deps = BuildDeps(queue);
+        var outcome = await deps.Transitions.MoveAsync("queued-review-task", TaskStates.AutoReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var request = Assert.Single(queue.Requests);
+        Assert.Equal(ProjectName, request.ProjectName);
+        Assert.Equal("queued-review-task", request.JobId);
+        Assert.Equal(_watchPath, request.WatchPath);
+        Assert.Equal("progress-to-auto-review", request.Source);
+    }
+
+    private Deps BuildDeps(IAutoReviewPostProcessingQueue? autoReviewQueue = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -310,7 +327,8 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         var transitions = new TaskTransitionService(
             scanner, states, mutations, git, settings,
             NullLogger<TaskTransitionService>.Instance,
-            sessions);
+            sessions,
+            autoReviewQueue: autoReviewQueue);
         return new Deps(scanner, transitions, git, settings);
     }
 
@@ -386,4 +404,15 @@ public sealed class TaskTransitionAutoCommitAttributionTests : IDisposable
         TaskTransitionService Transitions,
         GitService Git,
         ProjectSettingsService Settings);
+
+    private sealed class RecordingAutoReviewQueue : IAutoReviewPostProcessingQueue
+    {
+        public List<AutoReviewPostProcessingRequest> Requests { get; } = [];
+
+        public bool Enqueue(AutoReviewPostProcessingRequest request)
+        {
+            Requests.Add(request);
+            return true;
+        }
+    }
 }

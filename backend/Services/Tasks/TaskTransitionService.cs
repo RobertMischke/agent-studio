@@ -21,6 +21,7 @@ public sealed class TaskTransitionService
     private readonly CompletedPushQueue? _pushQueue;
     private readonly OrchestratorApi.Services.Drift.DriftPostStepRunner? _driftRunner;
     private readonly CliRouter? _cliRouter;
+    private readonly IAutoReviewPostProcessingQueue? _autoReviewQueue;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -44,7 +45,8 @@ public sealed class TaskTransitionService
         TaskSessionLog? sessions = null,
         CompletedPushQueue? pushQueue = null,
         OrchestratorApi.Services.Drift.DriftPostStepRunner? driftRunner = null,
-        CliRouter? cliRouter = null)
+        CliRouter? cliRouter = null,
+        IAutoReviewPostProcessingQueue? autoReviewQueue = null)
     {
         _scanner = scanner;
         _states = states;
@@ -56,6 +58,7 @@ public sealed class TaskTransitionService
         _pushQueue = pushQueue;
         _driftRunner = driftRunner;
         _cliRouter = cliRouter;
+        _autoReviewQueue = autoReviewQueue;
     }
 
     /// <summary>
@@ -153,6 +156,11 @@ public sealed class TaskTransitionService
             if (attributed != null && _driftRunner != null && targetState == TaskStates.AutoReview)
             {
                 TriggerDriftPostSteps(attributed, settings);
+            }
+
+            if (attributed != null && targetState == TaskStates.AutoReview)
+            {
+                EnqueueAutoReviewPostProcessing(attributed);
             }
         }
 
@@ -421,6 +429,32 @@ public sealed class TaskTransitionService
                 _logger.LogWarning(ex, "drift post-step trigger failed for {JobId}", moved.Id);
             }
         });
+    }
+
+    private void EnqueueAutoReviewPostProcessing(TaskInfo moved)
+    {
+        var queue = _autoReviewQueue;
+        if (queue == null) return;
+
+        var accepted = queue.Enqueue(new AutoReviewPostProcessingRequest(
+            ProjectName: moved.ProjectName,
+            JobId: moved.Id,
+            WatchPath: moved.WatchPath,
+            EnqueuedAtUtc: DateTime.UtcNow,
+            Source: "progress-to-auto-review"));
+
+        if (accepted)
+        {
+            _logger.LogInformation(
+                "auto-review-postprocessing-enqueued project={Project} job={JobId} source=progress-to-auto-review",
+                moved.ProjectName, moved.Id);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "auto-review-postprocessing-enqueue-failed project={Project} job={JobId}",
+                moved.ProjectName, moved.Id);
+        }
     }
 
     private async Task<TaskCommitInfo?> TryAutoCommitAsync(string jobId, string? watchPath, CancellationToken ct)
