@@ -188,8 +188,20 @@ public sealed class CodexModelDiscovery
         return models;
     }
 
+    internal static CliModelCatalog WithCurrentCodexCapabilities(CliModelCatalog cat)
+    {
+        var models = cat.Models.Select(m => m with
+        {
+            ThinkingLevels = CliThinkingLevels.For(CliTypes.Codex, m.Id).ToList(),
+            DefaultThinkingLevel = CliThinkingLevels.DefaultFor(CliTypes.Codex, m.Id)
+        }).ToList();
+
+        return cat with { Models = models };
+    }
+
     private CliModelCatalog WithActiveModelApplied(CliModelCatalog cat)
     {
+        cat = WithCurrentCodexCapabilities(cat);
         var active = ReadActiveModel();
         if (string.IsNullOrWhiteSpace(active)) return cat;
 

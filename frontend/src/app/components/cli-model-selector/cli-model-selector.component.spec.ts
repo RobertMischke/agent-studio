@@ -247,6 +247,74 @@ describe('CliModelSelectorComponent', () => {
     expect(fixture.componentInstance.loadingCatalog()).toBe(false);
   });
 
+  it('silently refreshes a stale Codex catalog on open so gpt-5.5 exposes xhigh', async () => {
+    const staleCodexModels: CliModelInfo[] = [
+      { id: 'gpt-5.5', label: 'GPT-5.5', multiplier: null, vendor: 'openai', isDefault: true, thinkingLevels: ['minimal', 'low', 'medium', 'high'], defaultThinkingLevel: 'medium' },
+      { id: 'gpt-5.4', label: 'GPT-5.4', multiplier: null, vendor: 'openai', isDefault: false, thinkingLevels: ['minimal', 'low', 'medium', 'high'], defaultThinkingLevel: 'medium' },
+      { id: 'gpt-5-codex', label: 'GPT-5 Codex', multiplier: null, vendor: 'openai', isDefault: false, thinkingLevels: ['minimal', 'low', 'medium', 'high'], defaultThinkingLevel: 'medium' },
+    ];
+    const freshCodexModels: CliModelInfo[] = [
+      { ...staleCodexModels[0], thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'] },
+      staleCodexModels[1],
+      staleCodexModels[2],
+    ];
+    const calls: { cli: string; refresh?: boolean }[] = [];
+
+    TestBed.configureTestingModule({
+      imports: [CliModelSelectorComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: TaskService,
+          useValue: {
+            getCliModelCatalog: (cli: string, refresh?: boolean) => {
+              calls.push({ cli, refresh });
+              return of({
+                models: cli === 'codex'
+                  ? (refresh ? freshCodexModels : staleCodexModels)
+                  : claudeModels,
+                source: 'test',
+                fetchedAt: '2026-06-09T00:00:00Z',
+              });
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const store = TestBed.inject(CliCatalogStore);
+    store.hydrateAll();
+
+    const fixture = TestBed.createComponent(CliModelSelectorComponent);
+    fixture.componentRef.setInput('cliType', 'codex');
+    fixture.componentRef.setInput('model', 'gpt-5.5');
+    fixture.componentRef.setInput('thinkingLevel', 'high');
+    fixture.componentRef.setInput('availableModels', []);
+    fixture.componentRef.setInput('disabled', false);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+
+    expect(calls).toContainEqual({ cli: 'codex', refresh: true });
+    expect(fixture.componentInstance.draftThinkingLevels()).toEqual(['minimal', 'low', 'medium', 'high', 'xhigh']);
+    expect(fixture.componentInstance.draftThinkingLevel()).toBe('high');
+
+    fixture.componentInstance.onThinkingLevelPillClick('xhigh');
+    expect(fixture.componentInstance.draftThinkingLevel()).toBe('xhigh');
+    expect(fixture.componentInstance.draftThinkingLevels()).toContain('xhigh');
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+    fixture.componentInstance.onModelPillClick('gpt-5.4');
+    expect(fixture.componentInstance.draftThinkingLevels()).toEqual(['minimal', 'low', 'medium', 'high']);
+
+    fixture.componentInstance.openPicker(new MouseEvent('click'));
+    fixture.componentInstance.onModelPillClick('gpt-5-codex');
+    expect(fixture.componentInstance.draftThinkingLevels()).toEqual(['minimal', 'low', 'medium', 'high']);
+  });
+
   it('exposes thinking levels only for capable models and resets on model change', async () => {
     await configure();
     const fixture = TestBed.createComponent(CliModelSelectorComponent);

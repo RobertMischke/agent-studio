@@ -81,6 +81,31 @@ describe('CliCatalogStore', () => {
     expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(2);
   });
 
+  it('picker-open refresh is forceful but throttled per CLI', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-09T12:00:00Z'));
+    try {
+      const stub: JobsStub = {
+        getCliModelCatalog: vi.fn(() => of(catalog(claudeModels))),
+      };
+      const store = configure(stub);
+
+      let observed: readonly CliModelInfo[] = [];
+      store.refreshForPickerOpen('codex')?.subscribe((m) => (observed = m));
+      expect(observed).toEqual(claudeModels);
+      expect(stub.getCliModelCatalog).toHaveBeenCalledWith('codex', true);
+
+      expect(store.refreshForPickerOpen('codex')).toBeNull();
+      expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+      store.refreshForPickerOpen('codex')?.subscribe();
+      expect(stub.getCliModelCatalog).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('hydrateAll triggers one fetch per CLI type but skips fresh entries on re-call', () => {
     const stub: JobsStub = {
       getCliModelCatalog: vi.fn(() => of(catalog(claudeModels))),

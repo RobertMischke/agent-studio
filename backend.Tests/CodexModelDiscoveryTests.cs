@@ -1,3 +1,4 @@
+using OrchestratorApi.Models;
 using OrchestratorApi.Services.Pty;
 using Xunit;
 
@@ -25,11 +26,13 @@ public class CodexModelDiscoveryTests
         Assert.DoesNotContain(models, m => m.Id == "codex-auto-review");
         Assert.Equal("gpt-5.4", Assert.Single(models, m => m.IsDefault).Id);
         Assert.All(models, m => Assert.Equal("openai", m.Vendor));
-        Assert.All(models, m =>
-        {
-            Assert.Equal(["minimal", "low", "medium", "high"], m.ThinkingLevels);
-            Assert.Equal("medium", m.DefaultThinkingLevel);
-        });
+        Assert.Equal(["minimal", "low", "medium", "high", "xhigh"],
+            Assert.Single(models, m => m.Id == "gpt-5.5").ThinkingLevels);
+        Assert.Equal(["minimal", "low", "medium", "high"],
+            Assert.Single(models, m => m.Id == "gpt-5.4").ThinkingLevels);
+        Assert.Equal(["minimal", "low", "medium", "high"],
+            Assert.Single(models, m => m.Id == "gpt-5.4-mini").ThinkingLevels);
+        Assert.All(models, m => Assert.Equal("medium", m.DefaultThinkingLevel));
     }
 
     [Fact]
@@ -45,5 +48,41 @@ public class CodexModelDiscoveryTests
         var models = CodexModelDiscovery.ParseDebugModelsJson(output);
 
         Assert.Equal("gpt-5.5", Assert.Single(models, m => m.IsDefault).Id);
+    }
+
+    [Fact]
+    public void WithCurrentCodexCapabilities_RecomputesThinkingLevelsForCachedCatalogs()
+    {
+        var stale = new CliModelCatalog
+        {
+            Source = "disk-cache",
+            FetchedAt = DateTime.UtcNow,
+            Models =
+            [
+                new CliModelInfo
+                {
+                    Id = "gpt-5.5",
+                    Label = "GPT-5.5",
+                    Vendor = "openai",
+                    ThinkingLevels = ["minimal", "low", "medium", "high"],
+                    DefaultThinkingLevel = "medium"
+                },
+                new CliModelInfo
+                {
+                    Id = "gpt-5-codex",
+                    Label = "GPT-5 Codex",
+                    Vendor = "openai",
+                    ThinkingLevels = ["minimal", "low", "medium", "high", "xhigh"],
+                    DefaultThinkingLevel = "medium"
+                }
+            ]
+        };
+
+        var updated = CodexModelDiscovery.WithCurrentCodexCapabilities(stale);
+
+        Assert.Equal(["minimal", "low", "medium", "high", "xhigh"],
+            Assert.Single(updated.Models, m => m.Id == "gpt-5.5").ThinkingLevels);
+        Assert.Equal(["minimal", "low", "medium", "high"],
+            Assert.Single(updated.Models, m => m.Id == "gpt-5-codex").ThinkingLevels);
     }
 }

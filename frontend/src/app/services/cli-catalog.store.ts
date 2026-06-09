@@ -26,10 +26,12 @@ interface CatalogEntry {
 @Injectable({ providedIn: 'root' })
 export class CliCatalogStore {
   private static readonly TTL_MS = 60 * 60 * 1000; // 1h
+  private static readonly OPEN_REFRESH_COOLDOWN_MS = 5 * 60 * 1000; // 5 min
 
   private readonly jobs = inject(TaskService);
   private readonly entries = signal<ReadonlyMap<CliType, CatalogEntry>>(new Map());
-  private readonly inFlight = new Map<CliType, ReplaySubject<readonly CliModelInfo[]>>();
+  private readonly inFlight = new Map<string, ReplaySubject<readonly CliModelInfo[]>>();
+  private readonly pickerOpenRefreshAt = new Map<CliType, number>();
 
   /** Live signal of every CLI's cached model list. Consumers should prefer `modelsFor(cliType)`. */
   readonly catalogs = this.entries.asReadonly();
@@ -58,7 +60,7 @@ export class CliCatalogStore {
    */
   hydrateAll(): void {
     for (const cli of CLI_TYPES) {
-      if (this.hasFresh(cli) || this.inFlight.has(cli)) continue;
+      if (this.hasFresh(cli) || this.hasInFlight(cli)) continue;
       this.fetch(cli, false).subscribe({ error: () => void 0 });
     }
   }
@@ -81,6 +83,20 @@ export class CliCatalogStore {
     return this.fetch(cliType, true);
   }
 
+  /**
+   * Bounded automatic refresh for picker opens. The selector still renders the
+   * cached catalog immediately, then asks the backend for a forced refresh at
+   * most once per CLI per cooldown window so already-open browser tabs see
+   * newly deployed capability data without hammering PTY discovery.
+   */
+  refreshForPickerOpen(cliType: CliType): Observable<readonly CliModelInfo[]> | null {
+    const now = Date.now();
+    const previous = this.pickerOpenRefreshAt.get(cliType);
+    if (previous !== undefined && now - previous < CliCatalogStore.OPEN_REFRESH_COOLDOWN_MS) return null;
+    this.pickerOpenRefreshAt.set(cliType, now);
+    return this.refresh(cliType);
+  }
+
   /** Drops every cached entry. Reserved for SignalR `CatalogChanged` invalidation. */
   invalidateAll(): void {
     this.entries.set(new Map());
@@ -97,11 +113,12 @@ export class CliCatalogStore {
   readonly cachedCount = computed(() => this.entries().size);
 
   private fetch(cliType: CliType, force: boolean): Observable<readonly CliModelInfo[]> {
-    const existing = this.inFlight.get(cliType);
+    const key = this.inFlightKey(cliType, force);
+    const existing = this.inFlight.get(key);
     if (existing) return existing.asObservable();
 
     const subject = new ReplaySubject<readonly CliModelInfo[]>(1);
-    this.inFlight.set(cliType, subject);
+    this.inFlight.set(key, subject);
 
     this.jobs
       .getCliModelCatalog(cliType, force)
@@ -120,7 +137,7 @@ export class CliCatalogStore {
           return of(null);
         }),
         finalize(() => {
-          this.inFlight.delete(cliType);
+          this.inFlight.delete(key);
         }),
       )
       .subscribe({
@@ -133,5 +150,14 @@ export class CliCatalogStore {
       });
 
     return subject.asObservable();
+  }
+
+  private hasInFlight(cliType: CliType): boolean {
+    return this.inFlight.has(this.inFlightKey(cliType, false))
+      || this.inFlight.has(this.inFlightKey(cliType, true));
+  }
+
+  private inFlightKey(cliType: CliType, force: boolean): string {
+    return `${cliType}:${force ? 'force' : 'normal'}`;
   }
 }

@@ -198,6 +198,9 @@ export class CliModelSelectorComponent {
     this.draftAvailableModels.set(this.selectableModels(cached.length > 0 ? cached : this.availableModels()));
     this.draftThinkingLevel.set(this.normalizeThinkingLevel(currentModel, this.thinkingLevel()));
     this.pickerOpen.set(true);
+    if (currentCli && cached.length > 0) {
+      this.refreshCatalogAfterOpen(currentCli);
+    }
   }
 
   closePicker(): void {
@@ -207,10 +210,14 @@ export class CliModelSelectorComponent {
   }
 
   onCliPillClick(t: CliType): void {
-    if (t === this.draftCliType() && this.catalogStore.hasFresh(t)) return;
+    if (t === this.draftCliType() && this.catalogStore.hasFresh(t)) {
+      this.refreshCatalogAfterOpen(t);
+      return;
+    }
     this.draftCliType.set(t);
     if (this.catalogStore.hasFresh(t)) {
       this.applyCatalog(this.catalogStore.modelsFor(t));
+      this.refreshCatalogAfterOpen(t);
       return;
     }
     this.catalogError.set(null);
@@ -347,6 +354,21 @@ export class CliModelSelectorComponent {
     if (levels.length === 0) return null;
     if (requested && levels.includes(requested)) return requested;
     return info?.defaultThinkingLevel ?? levels[0] ?? null;
+  }
+
+  private refreshCatalogAfterOpen(cli: CliType): void {
+    const refresh = this.catalogStore.refreshForPickerOpen(cli);
+    if (!refresh) return;
+    refresh.subscribe({
+      next: (models) => {
+        if (!this.pickerOpen() || this.draftCliType() !== cli) return;
+        this.applyCatalog(models);
+      },
+      error: () => {
+        // Keep the synchronous cached catalog visible; explicit Refresh still
+        // surfaces errors when the operator asks for it.
+      },
+    });
   }
 
   private moveRadioSelection<T>(event: KeyboardEvent, items: readonly T[], current: T, commit: (next: T) => void): void {
