@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OrchestratorApi.Services.Tasks;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Services.Companion;
 
@@ -25,7 +26,7 @@ public sealed class CompanionSyncService : BackgroundService
     private readonly TaskScannerService _jobs;
     private readonly TaskRunnerService _runner;
     private readonly OrchestratorApi.Services.Quota.QuotaService _quota;
-    private readonly OrchestratorApi.Services.Runner.TokenSummaryService _tokens;
+    private readonly ITokenAggregator _tokens;
     private readonly CompanionCommandDispatcher _dispatcher;
     private readonly ILogger<CompanionSyncService> _log;
     private readonly IHttpClientFactory _httpFactory;
@@ -40,7 +41,7 @@ public sealed class CompanionSyncService : BackgroundService
         TaskScannerService jobs,
         TaskRunnerService runner,
         OrchestratorApi.Services.Quota.QuotaService quota,
-        OrchestratorApi.Services.Runner.TokenSummaryService tokens,
+        ITokenAggregator tokens,
         CompanionCommandDispatcher dispatcher,
         IHttpClientFactory httpFactory,
         ILogger<CompanionSyncService> log)
@@ -168,7 +169,7 @@ public sealed class CompanionSyncService : BackgroundService
         {
             foreach (var entry in _jobs.GetWatchPaths())
             {
-                var summary = _tokens.Summarize(entry.Name, entry.Path);
+                var summary = _tokens.LifetimeSummary(entry.Name, entry.Path);
                 input += summary.TotalInputTokens;
                 output += summary.TotalOutputTokens;
                 cacheRead += summary.TotalCacheReadTokens;
