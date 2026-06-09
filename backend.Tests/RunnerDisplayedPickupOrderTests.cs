@@ -44,6 +44,7 @@ public sealed class RunnerDisplayedPickupOrderTests : IDisposable
         WriteJob(TaskStates.Ready, "visible-ready-head", order: 10);
 
         var (runner, _) = BuildRunner();
+        runner.SetMode("auto-continuous");
 
         var picked = InvokeDisplayedPicker(runner, slotMax: 1);
 
@@ -62,6 +63,7 @@ public sealed class RunnerDisplayedPickupOrderTests : IDisposable
 
         var (runner, settings) = BuildRunner();
         settings.SetMaxParallelism(ProjectName, 2);
+        runner.SetMode("auto-continuous");
         runner.SetActiveJobForTest("already-running", "codex", ["backend/services"]);
 
         var picked = InvokeDisplayedPicker(runner, slotMax: 2);

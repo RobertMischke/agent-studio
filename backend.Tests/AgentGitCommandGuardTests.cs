@@ -59,6 +59,8 @@ public class AgentGitCommandGuardTests
             FileName = "agent",
             UseShellExecute = false
         };
+        psi.Environment.Remove(AgentGitCommandGuard.GuardDirEnv);
+        psi.Environment.Remove(AgentGitCommandGuard.RealGitEnv);
         psi.Environment[AgentGitCommandGuard.AllowEnv] = "1";
         var before = psi.Environment["PATH"];
 

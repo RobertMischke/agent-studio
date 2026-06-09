@@ -172,6 +172,6 @@ public class CliRunEventTests
             new CliRunEvent.RunStarted(1, "claude", null)));
         Assert.False(RunPhaseTransitions.IsActivitySignal(new CliRunEvent.SessionInitializing()));
         Assert.False(RunPhaseTransitions.IsActivitySignal(new CliRunEvent.NeedsInput("x")));
-        Assert.False(RunPhaseTransitions.IsActivitySignal(new CliRunEvent.Unknown("x")));
+        Assert.True(RunPhaseTransitions.IsActivitySignal(new CliRunEvent.Unknown("x")));
     }
 }
