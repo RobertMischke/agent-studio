@@ -12,15 +12,16 @@ using OrchestratorApi.Services.TaskAccess;
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
-/// Boot-time sweep that surfaces <c>3-progress</c> folders the orchestrator
+/// Stale-progress sweep that surfaces <c>3-progress</c> folders the orchestrator
 /// has lost track of (ADR-0001: at most one running task per project).
 ///
-/// <para>Pairs with <see cref="CrashRecoveryService"/>: that one rescues
-/// uncommitted file changes and finishes pending transitions. This one moves
-/// the *folders* themselves so the lane visually returns to the one-job
-/// promise after a backend that died mid-run, an <c>update-stable.sh</c>
-/// cycle that killed the runner, or a progress-first pickup that failed to
-/// resume.</para>
+/// <para>Pairs with <see cref="CrashRecoveryService"/> at boot and
+/// <see cref="StaleProgressSweepHostedService"/> during uptime: crash recovery
+/// rescues uncommitted file changes and finishes pending transitions. This
+/// sweep moves the *folders* themselves so the lane visually returns to the
+/// one-job promise after a backend that died mid-run, an
+/// <c>update-stable.sh</c> cycle that killed the runner, or a progress-first
+/// pickup that failed to resume.</para>
 ///
 /// Decision shape per folder:
 /// <list type="bullet">
@@ -247,7 +248,7 @@ public sealed class StaleProgressArchiver
             d.Kind == StaleProgressDecisionKinds.MidMoveCasualtyRemoved ||
             d.Kind == StaleProgressDecisionKinds.MidMoveCasualtyRemovalFailed);
         _logger.LogInformation(
-            "StaleProgressArchiver: completed boot sweep with {Total} candidate(s), {Actionable} actionable.",
+            "StaleProgressArchiver: completed stale-progress sweep with {Total} candidate(s), {Actionable} actionable.",
             decisions.Count, actionable);
 
         return decisions;
@@ -524,7 +525,7 @@ public sealed class StaleProgressArchiver
                 _chatLog.AppendSupervisor(
                     movedInfo,
                     "recovered-from-stuck-progress",
-                    $"Boot sweep finished a missed transition: agent had emitted [[TASK_{keyword}]] " +
+                    $"Stale-progress sweep finished a missed transition: agent had emitted [[TASK_{keyword}]] " +
                     "in 3-progress and the orchestrator never moved the folder. Promoted to 4-auto-review.");
             }
 
@@ -599,7 +600,7 @@ public sealed class StaleProgressArchiver
                 _chatLog.AppendSupervisor(
                     moved,
                     "requeued-from-stuck-progress",
-                    "Boot sweep found this task in 3-progress past the resume window with no completion " +
+                    "Stale-progress sweep found this task in 3-progress past the resume window with no completion " +
                     "sentinel. The run was interrupted, not failed; requeued to 2-ready so the orchestrator " +
                     "retries the same task. This interruption does not count as a task failure.");
             }
@@ -648,7 +649,7 @@ public sealed class StaleProgressArchiver
     /// <summary>
     /// Move <paramref name="jobFolder"/> to <c>7-archive</c> under a
     /// collision-safe <c>&lt;slug&gt;-debris-&lt;utc-date&gt;</c> name. Shared
-    /// by the live boot sweep (a no-<c>task.json</c> <c>3-progress</c> folder)
+    /// by the stale-progress sweep (a no-<c>task.json</c> <c>3-progress</c> folder)
     /// and the one-time failed-pickup drain (a no-<c>task.json</c> folder left
     /// in the retired lane). The move goes through
     /// <see cref="TaskStateMachine.ArchiveFolder"/>, which works without a
@@ -705,7 +706,7 @@ public sealed class StaleProgressArchiver
                 ? lastActivity.ToString("u", CultureInfo.InvariantCulture)
                 : "unknown";
             var line =
-                $"[{sweepAt:HH:mm:ss.fff}] [system] [taskboard] Boot sweep found this run stuck in 3-progress " +
+                $"[{sweepAt:HH:mm:ss.fff}] [system] [taskboard] Stale-progress sweep found this run stuck in 3-progress " +
                 $"(last activity {lastSeen}, no completion sentinel). Requeued to 2-ready to retry the same task; " +
                 "this interruption does not count as a task failure.";
             if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
@@ -720,7 +721,7 @@ public sealed class StaleProgressArchiver
     }
 
     /// <summary>
-    /// Lanes the boot sweep checks for a downstream twin of a no-<c>task.json</c>
+    /// Lanes the stale-progress sweep checks for a downstream twin of a no-<c>task.json</c>
     /// 3-progress folder. A match means the real task already completed its
     /// move and the source-side residue is a mid-move casualty, not an orphan.
     /// 3a-failed-pickup is deliberately excluded so a previous phantom marker

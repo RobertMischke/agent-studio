@@ -11,7 +11,7 @@ one of three symptom shapes:
 - Two writers race to rename the same source; the second arrives after
   the first finished, the source slug is gone, and the collision handler
   produces a sibling with a `-2` suffix.
-- The boot sweep runs concurrently with crash-recovery's transition
+- The stale-progress sweep runs concurrently with crash-recovery's transition
   completion and marks a job as stuck that another sweep is about to
   finish promoting.
 
@@ -26,7 +26,7 @@ bearing reference for the per-project `LaneMutexRegistry` (F21).
 | `JobTransitionService.BatchMoveAsync` | API `POST /api/tasks/batch-move` | Many jobs in one call (per-item atomic). Each item routes through `MoveAsync`. | same file |
 | `JobStateMachine.MoveJob` / `MoveFolderToState` / `DeleteJob` / `ChangeProject` | Called by every higher-level mover. The lowest-level lane mutator. | Direct `Directory.Move` / `Directory.Delete`. | `backend/Services/Jobs/JobStateMachine.cs` |
 | `CrashRecoveryService.RecoverAsync` | Boot (before first runner tick) | Finishes a transition whose `completion-marker.json` survived a backend crash. Calls `JobTransitionService.MoveAsync`. | `backend/Services/Runner/CrashRecoveryService.cs` |
-| `StaleProgressArchiver.SweepAsync` | Boot (after crash recovery), and could be invoked later by the supervisor | Per ADR-0051: requeues a stale `3-progress` folder that still has `job.json` back to `2-ready` (`RequeueOrphanToReadyAsync`), archives an empty/no-`job.json` folder to `7-archive` (`ArchiveOrphanFolder`), or finishes a missed `3-progress -> 4-auto-review` transition when the sentinel survived. Never dead-letters. | `backend/Services/Runner/StaleProgressArchiver.cs` |
+| `StaleProgressArchiver.SweepAsync` | Boot (after crash recovery) and periodically through `StaleProgressSweepHostedService` | Per ADR-0051: requeues a stale `3-progress` folder that still has `job.json` back to `2-ready` (`RequeueOrphanToReadyAsync`), archives an empty/no-`job.json` folder to `7-archive` (`ArchiveOrphanFolder`), or finishes a missed `3-progress -> 4-auto-review` transition when the sentinel survived. Never dead-letters. | `backend/Services/Runner/StaleProgressArchiver.cs` |
 | `ProjectRunner` pickup / reroute | Per-project tick (~1 s) | Picks a job from `2-ready` into `3-progress`; per ADR-0051 reroutes an over-budget folder via `RerouteOverBudgetFolder` (spawn failure -> `2-ready` + runner pause; silent run / zombie -> `5-human-review`); archives a no-`job.json` orphan to `7-archive` (`ITaskAccess.ArchiveOrphanFolder`); cleans up post-move skeleton folders left behind by Windows file-handle races (`ITaskAccess.DeleteLaneFolder`). Never dead-letters. | `backend/Services/Runner/ProjectRunner.cs` |
 | `ITaskAccess.ArchiveOrphanFolder` / `DeleteLaneFolder` | Typed escape hatches for orphan moves (called by the runner and the boot sweep). | Move debris into `7-archive` with a reason file; recursive directory delete. | `backend/Services/TaskAccess/TaskAccessService.cs` |
 
@@ -90,7 +90,7 @@ Trade-offs documented:
 ## Race scenarios that this closes
 
 1. **Boot race**: `CrashRecoveryService` and `StaleProgressArchiver` both
-   iterate `3-progress` at boot. Without the mutex, crash-recovery's
+   iterate `3-progress`. Without the mutex, crash-recovery's
    `JobTransitionService.MoveAsync` and the archiver's
    `MoveOrphanToFailedPickup` could rename the same source folder
    simultaneously. With the mutex, the archiver always sees either

@@ -334,6 +334,10 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 // reaper alone cannot: those survivors hold job-folder handles and wedge the
 // next lane move with "file in use by another process".
 builder.Services.AddHostedService<OrphanReaperHostedService>();
+// Runtime stale-progress sweep. The boot sweep handles already-stuck
+// 3-progress folders; this closes the gap where a folder crosses the resume
+// window while the backend stays up.
+builder.Services.AddHostedService<StaleProgressSweepHostedService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<SkillReadinessService>();

@@ -6259,7 +6259,7 @@ public class ProjectRunner
     /// pick the next task and end up with two folders in <c>3-progress</c> at
     /// <c>maxParallelism=1</c>. This rolls the lane move straight back to
     /// <c>2-ready</c> the moment the start fails, instead of waiting for the
-    /// 60-minute boot sweep (<see cref="StaleProgressArchiver"/>) or the next
+    /// 60-minute stale-progress sweep (<see cref="StaleProgressArchiver"/>) or the next
     /// pickup tick to notice.
     ///
     /// <para>Bounded by the existing per-slug spawn budget so a persistently
@@ -6290,7 +6290,7 @@ public class ProjectRunner
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "[taskboard] could not revert failed-start job {JobId} on {Project} from 3-progress to 2-ready: {Status} {Message}; folder left for the over-budget reroute / boot sweep",
+                "[taskboard] could not revert failed-start job {JobId} on {Project} from 3-progress to 2-ready: {Status} {Message}; folder left for the over-budget reroute / stale-progress sweep",
                 jobId, ProjectName, move.Status, move.Message);
             return;
         }

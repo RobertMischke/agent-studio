@@ -127,6 +127,31 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
+    public async Task HostedService_RunOnce_RequeuesStaleProgressFolderWithoutRestart()
+    {
+        WriteJob(TaskStates.Progress, "runtime-zombie");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "runtime-zombie");
+        WriteCliLog(folder, "runtime run stopped without a sentinel");
+        SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
+        SetMtimeOldEnough(Path.Combine(folder, "task.json"));
+
+        var (archiver, _) = Build();
+        var service = new StaleProgressSweepHostedService(
+            archiver,
+            new ConfigurationBuilder().Build(),
+            NullLogger<StaleProgressSweepHostedService>.Instance);
+
+        var decisions = await service.RunOnceAsync();
+
+        Assert.False(Directory.Exists(folder), "hosted sweep must move the stale 3-progress folder");
+        var requeued = Path.Combine(_watchPath, TaskStates.Ready, "runtime-zombie");
+        Assert.True(Directory.Exists(requeued), "runtime stale-progress sweep must requeue without a backend restart");
+        var d = Assert.Single(decisions);
+        Assert.Equal(StaleProgressDecisionKinds.RequeuedToReady, d.Kind);
+        Assert.Equal(TaskStates.Ready, d.TargetState);
+    }
+
+    [Fact]
     public async Task Sweep_EmptyStaleFolderNoJobJson_IsArchivedAsDebrisNotDeadLettered()
     {
         // ADR-0051 (failed-pickup elimination): an empty stale folder with no
