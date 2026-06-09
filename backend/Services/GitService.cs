@@ -1162,6 +1162,88 @@ public class GitService
         return Task.FromResult(new GitPushResult(false, sha, status, err));
     }
 
+    public async Task<GitPushResult> PushShaWithRetryAsync(
+        string sha,
+        string? watchPath,
+        CancellationToken ct = default,
+        string targetBranch = "main",
+        int attempts = 3,
+        TimeSpan? retryDelay = null)
+    {
+        attempts = Math.Max(1, attempts);
+        var delay = retryDelay ?? TimeSpan.FromSeconds(1);
+        GitPushResult? last = null;
+
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            if (ct.IsCancellationRequested)
+                return new GitPushResult(false, sha, "cancelled", "Push cancelled.");
+
+            last = await PushShaAsync(sha, watchPath, ct, targetBranch);
+            if (last.Success || !IsRetryablePushStatus(last.Status) || attempt == attempts)
+                return last;
+
+            _logger.LogWarning(
+                "Push of {Sha} to origin/{Branch} failed with {Status}; retrying attempt {Attempt}/{Attempts}: {Error}",
+                sha,
+                targetBranch,
+                last.Status,
+                attempt + 1,
+                attempts,
+                last.Error ?? "<no error>");
+            if (delay > TimeSpan.Zero)
+            {
+                try { await Task.Delay(delay, ct); }
+                catch (TaskCanceledException)
+                {
+                    return new GitPushResult(false, sha, "cancelled", "Push cancelled.");
+                }
+            }
+        }
+
+        return last ?? new GitPushResult(false, sha, "failed", "Push did not run.");
+    }
+
+    public GitWorktreeResult DeleteRemoteBranch(string repoRoot, string branch, string remote = "origin")
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitWorktreeResult(false, null, "Repo root does not exist.");
+        if (!IsLikelyBranchName(branch))
+            return new GitWorktreeResult(false, null, $"Invalid branch name '{branch}'.");
+        if (string.IsNullOrWhiteSpace(remote) || !IsLikelyBranchName(remote))
+            return new GitWorktreeResult(false, null, $"Invalid remote name '{remote}'.");
+
+        if (!HasRemote(repoRoot, remote))
+            return new GitWorktreeResult(true, repoRoot, null);
+
+        var (lsOut, lsErr, lsCode) = RunGitArgs(repoRoot, "ls-remote", "--exit-code", "--heads", remote, branch);
+        if (lsCode == 2)
+            return new GitWorktreeResult(true, repoRoot, null);
+        if (lsCode != 0)
+        {
+            var lsError = string.IsNullOrWhiteSpace(lsErr) ? $"Could not inspect {remote}/{branch}." : lsErr.Trim();
+            _logger.LogWarning("Remote branch lookup failed for {Remote}/{Branch} at {Path}: {Error}", remote, branch, repoRoot, lsError);
+            return new GitWorktreeResult(false, repoRoot, lsError);
+        }
+        if (string.IsNullOrWhiteSpace(lsOut))
+            return new GitWorktreeResult(true, repoRoot, null);
+
+        var (pushOut, pushErr, pushCode) = RunGitArgs(repoRoot, "push", remote, "--delete", branch);
+        if (pushCode == 0)
+        {
+            _logger.LogInformation("Deleted remote branch {Remote}/{Branch} at {Path}", remote, branch, repoRoot);
+            return new GitWorktreeResult(true, repoRoot, null);
+        }
+
+        var err = string.IsNullOrWhiteSpace(pushErr) ? pushOut.Trim() : pushErr.Trim();
+        if (err.Contains("remote ref does not exist", StringComparison.OrdinalIgnoreCase)
+            || err.Contains("unable to delete", StringComparison.OrdinalIgnoreCase) && err.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            return new GitWorktreeResult(true, repoRoot, null);
+
+        _logger.LogWarning("Remote branch delete failed for {Remote}/{Branch} at {Path}: {Error}", remote, branch, repoRoot, err);
+        return new GitWorktreeResult(false, repoRoot, err);
+    }
+
     // ADR-0052 worktree + integration primitives. These are low-level git
     // plumbing for the parallel-task model (worktree-per-task on task/<id>
     // branches off the integration branch). They take an explicit repo or
@@ -1902,6 +1984,14 @@ public class GitService
         return true;
     }
 
+    private static bool IsRetryablePushStatus(string status)
+        => !string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase)
+           && !string.Equals(status, "invalid-sha", StringComparison.OrdinalIgnoreCase)
+           && !string.Equals(status, "invalid-branch", StringComparison.OrdinalIgnoreCase)
+           && !string.Equals(status, "missing-sha", StringComparison.OrdinalIgnoreCase)
+           && !string.Equals(status, "repo-missing", StringComparison.OrdinalIgnoreCase)
+           && !string.Equals(status, "already-remote", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// True when <paramref name="s"/> is a safe local branch name. Like
     /// <see cref="IsLikelyShaOrRef"/> but additionally allows the slash that
@@ -1923,6 +2013,16 @@ public class GitService
             if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '/')) return false;
         }
         return true;
+    }
+
+    private static bool HasRemote(string repoRoot, string remote)
+    {
+        var (remotesOut, _, remotesCode) = RunGitArgs(repoRoot, "remote");
+        if (remotesCode != 0 || string.IsNullOrWhiteSpace(remotesOut)) return false;
+        return remotesOut
+            .Replace("\r\n", "\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Contains(remote, StringComparer.Ordinal);
     }
 
     /// <summary>

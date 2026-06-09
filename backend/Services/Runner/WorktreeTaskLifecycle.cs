@@ -261,17 +261,42 @@ public sealed class WorktreeTaskLifecycle
         return new IntegrationResult(IntegrationOutcome.Merged, sha, null);
     }
 
+    public Task<GitPushResult> PushTaskBranchWithRetryAsync(
+        string repoRoot,
+        string taskSha,
+        string taskBranch,
+        CancellationToken ct = default,
+        int attempts = 3,
+        TimeSpan? retryDelay = null)
+    {
+        return _git.PushShaWithRetryAsync(
+            taskSha,
+            repoRoot,
+            ct,
+            targetBranch: taskBranch,
+            attempts: attempts,
+            retryDelay: retryDelay);
+    }
+
     /// <summary>
     /// Cleanup post-step: remove the task worktree and, when
     /// <paramref name="deleteBranch"/> is set, drop the task branch ref. The
     /// worktree is removed first because git refuses to delete a branch that is
-    /// still checked out in a live worktree. <paramref name="force"/> chooses an
-    /// unconditional branch delete (used after the work has been integrated or
-    /// abandoned) over the safe merged-only delete. Best-effort: a failure on one
-    /// step does not skip the other, and both errors are reported together.
+    /// still checked out in a live worktree. When
+    /// <paramref name="deleteRemoteBranch"/> is set, <c>origin/task/&lt;id&gt;</c>
+    /// is dropped before the local ref so a merged task branch does not linger
+    /// on the shared remote. <paramref name="force"/> chooses an unconditional
+    /// branch delete (used after the work has been integrated or abandoned) over
+    /// the safe merged-only delete. Best-effort: a failure on one step does not
+    /// skip the other, and all errors are reported together.
     /// </summary>
     public TeardownResult Teardown(
-        string repoRoot, string worktreePath, string? taskBranch, bool deleteBranch, bool force = false)
+        string repoRoot,
+        string worktreePath,
+        string? taskBranch,
+        bool deleteBranch,
+        bool force = false,
+        bool deleteRemoteBranch = false)
     {
         string? error = null;
 
@@ -280,6 +305,12 @@ public sealed class WorktreeTaskLifecycle
 
         if (deleteBranch && !string.IsNullOrWhiteSpace(taskBranch))
         {
+            if (deleteRemoteBranch)
+            {
+                var remoteDel = _git.DeleteRemoteBranch(repoRoot, taskBranch!);
+                if (!remoteDel.Success) error = error is null ? remoteDel.Error : $"{error}; {remoteDel.Error}";
+            }
+
             var del = _git.DeleteBranch(repoRoot, taskBranch!, force);
             if (!del.Success) error = error is null ? del.Error : $"{error}; {del.Error}";
         }
@@ -320,7 +351,7 @@ public sealed class WorktreeTaskLifecycle
 
         var path = _git.WorktreePathForBranch(repoRoot, branch)
                    ?? Path.Combine(worktreeRoot, WorktreeDirName(taskId));
-        return Teardown(repoRoot, path, branch, deleteBranch: true, force: true);
+        return Teardown(repoRoot, path, branch, deleteBranch: true, force: true, deleteRemoteBranch: true);
     }
 
     /// <summary>

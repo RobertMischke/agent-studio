@@ -896,6 +896,7 @@ public class ProjectRunner
                 _logger.LogInformation("[taskboard] parallel run {Job} committed agent edits on {Branch} at {Sha}",
                     run.JobId, run.Branch, commit.Sha ?? "<unknown>");
             var branchHeadAfterRun = _git.ReadHeadShaAt(run.WorktreePath!);
+            var pushResult = await PushTaskBranchForPortabilityAsync(info, run, branchHeadAfterRun);
             // 2) serialize integration into the shared work branch (merge-queue).
             //    Do NOT tear down here: the worktree survives for resume/reissue.
             _integrateLock.Wait();
@@ -904,7 +905,10 @@ public class ProjectRunner
                 var integrateStarted = DateTime.UtcNow;
                 var integrationBaseSha = _git.ReadHeadShaAt(Entry.RootPath);
                 RecordIntegrationStep(info, PipelineStepStatus.Running, "running",
-                    $"Integrating `{run.Branch}` into `{workBranch}`.", integrateStarted);
+                    pushResult.Success
+                        ? $"Integrating `{run.Branch}` into `{workBranch}` after pushing it to `origin`."
+                        : $"Integrating `{run.Branch}` into `{workBranch}` locally; branch push to `origin` is still pending.",
+                    integrateStarted);
                 var res = Worktree.Integrate(
                     Entry.RootPath,
                     run.WorktreePath!,
@@ -1002,6 +1006,69 @@ public class ProjectRunner
         var beforeSha = _sessions.ReadSessionEvents(run.JobId, Entry.Path).LastOrDefault()?.HeadShaBefore;
         if (string.IsNullOrWhiteSpace(beforeSha)) return null;
         return new WorktreeCommitRange(beforeSha, afterSha);
+    }
+
+    private async Task<GitPushResult> PushTaskBranchForPortabilityAsync(TaskInfo info, ActiveRun run, string? branchHeadAfterRun)
+    {
+        if (string.IsNullOrWhiteSpace(run.Branch))
+        {
+            var missingBranch = new GitPushResult(false, branchHeadAfterRun ?? "<unknown>", "missing-branch", "Task branch is not known.");
+            AppendTaskBranchUnpushedIssue(info, run, missingBranch);
+            return missingBranch;
+        }
+
+        if (string.IsNullOrWhiteSpace(branchHeadAfterRun))
+        {
+            var missingHead = new GitPushResult(false, "<unknown>", "missing-head", "Could not read task branch HEAD.");
+            AppendTaskBranchUnpushedIssue(info, run, missingHead);
+            return missingHead;
+        }
+
+        var pushed = await Worktree.PushTaskBranchWithRetryAsync(
+            Entry.RootPath,
+            branchHeadAfterRun,
+            run.Branch,
+            CancellationToken.None,
+            attempts: 3,
+            retryDelay: TimeSpan.FromSeconds(1));
+
+        if (pushed.Success)
+        {
+            _logger.LogInformation(
+                "[taskboard] parallel run {Job} pushed task branch {Branch} to origin at {Sha} ({Status})",
+                run.JobId,
+                run.Branch,
+                branchHeadAfterRun,
+                pushed.Status);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "[taskboard] parallel run {Job} could not push task branch {Branch} to origin after retry: {Status} {Error}",
+                run.JobId,
+                run.Branch,
+                pushed.Status,
+                pushed.Error ?? "<no error>");
+            AppendTaskBranchUnpushedIssue(info, run, pushed);
+        }
+
+        return pushed;
+    }
+
+    private void AppendTaskBranchUnpushedIssue(TaskInfo info, ActiveRun run, GitPushResult result)
+    {
+        _chatLog.Append(info, OrchestratorMessageKind.TaskBranchUnpushed,
+            BuildTaskBranchUnpushedIssueMessage(run.Branch, result));
+    }
+
+    internal static string BuildTaskBranchUnpushedIssueMessage(string? taskBranch, GitPushResult result)
+    {
+        var error = string.IsNullOrWhiteSpace(result.Error)
+            ? "No git error text was reported."
+            : result.Error.Trim();
+        return $"Task branch `{taskBranch ?? "<unknown>"}` could not be pushed to `origin` after retry. " +
+               $"The run continued locally, but the per-task branch is not durable on the remote. " +
+               $"Push status: {result.Status}. SHA: `{result.Sha}`. Error: {error}";
     }
 
     private void AppendWorktreeIntegrationIssue(

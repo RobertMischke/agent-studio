@@ -84,6 +84,7 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.GiveUp, "High", "giveup")]
     [InlineData(OrchestratorMessageKind.IntegrationConflict, "High", "integration-conflict")]
     [InlineData(OrchestratorMessageKind.IntegrationError, "High", "integration-error")]
+    [InlineData(OrchestratorMessageKind.TaskBranchUnpushed, "Warn", "task-branch-unpushed")]
     public async Task EmitOrchestratorChatAsync_MapsKindToSeverityAndTopic(OrchestratorMessageKind kind, string expectedSeverity, string expectedTopic)
     {
         var info = NewJobInfo();

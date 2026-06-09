@@ -235,6 +235,20 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void TaskBranchUnpushedMarker_SurfacesWarnOutcome()
+    {
+        SeedJob("task-branch-unpushed", TaskStates.AutoReview,
+            $"[09:10:00.000] [orchestrator] [task-branch-unpushed] Task branch `task/ASS-1666` could not be pushed to `origin` after retry. Push status: failed. Error: network unavailable{Environment.NewLine}");
+
+        var issue = Outcome("task-branch-unpushed");
+
+        Assert.NotNull(issue);
+        Assert.Equal("task-branch-unpushed", issue!.Kind);
+        Assert.Equal("Warn", issue.Severity);
+        Assert.Contains("network unavailable", issue.Summary);
+    }
+
+    [Fact]
     public void AgentStdoutMentioningContainmentInProse_DoesNotFalselySurface()
     {
         // ASS-914 regression (scanner self-reference): a self-modifying task whose

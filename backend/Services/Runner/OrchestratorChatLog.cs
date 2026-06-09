@@ -223,7 +223,11 @@ public enum OrchestratorMessageKind
     /// <summary>
     /// A parallel worktree integration step failed for a non-conflict git error.
     /// </summary>
-    IntegrationError
+    IntegrationError,
+    /// <summary>
+    /// The runner could not push a finished task branch to origin after retry.
+    /// </summary>
+    TaskBranchUnpushed
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -252,6 +256,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
         OrchestratorMessageKind.IntegrationError  => "integration-error",
+        OrchestratorMessageKind.TaskBranchUnpushed => "task-branch-unpushed",
         _ => "info"
     };
 
@@ -275,6 +280,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.AgentGitViolation => "agent-git-violation",
         OrchestratorMessageKind.IntegrationConflict => "integration-conflict",
         OrchestratorMessageKind.IntegrationError  => "integration-error",
+        OrchestratorMessageKind.TaskBranchUnpushed => "task-branch-unpushed",
         _ => kind.ToString().ToLowerInvariant()
     };
 }

@@ -81,6 +81,60 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task PushTaskBranchWithRetry_PushesTaskBranchToOrigin()
+    {
+        var (repo, life) = SeedWithDevelop("branch-push");
+        var bare = AddBareOrigin(repo, "branch-push-origin");
+        var prep = life.Prepare(repo, "task-push", "develop", WorktreeRoot());
+        Assert.True(prep.Success, prep.Error);
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "feature.txt"), "task work");
+        Commit(prep.WorktreePath!, "feat: task work");
+        var taskTip = RunGit(prep.WorktreePath!, "rev-parse HEAD").Out.Trim();
+
+        var pushed = await life.PushTaskBranchWithRetryAsync(
+            repo,
+            taskTip,
+            prep.Branch!,
+            CancellationToken.None,
+            attempts: 2,
+            retryDelay: TimeSpan.Zero);
+
+        Assert.True(pushed.Success, pushed.Error);
+        Assert.Equal(taskTip, RunGit(_tempDir, $"--git-dir=\"{bare}\" rev-parse refs/heads/{prep.Branch}").Out.Trim());
+    }
+
+    [Fact]
+    public async Task TeardownIfIntegrated_RemovesRemoteTaskBranch_WhenMerged()
+    {
+        var (repo, life) = SeedWithDevelop("remote-cleanup");
+        var bare = AddBareOrigin(repo, "remote-cleanup-origin");
+        var wtRoot = WorktreeRoot();
+        var prep = life.PrepareOrReuse(repo, "task-remote-cleanup", "develop", wtRoot);
+        Assert.True(prep.Success, prep.Error);
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "feature.txt"), "task work");
+        Commit(prep.WorktreePath!, "feat: task work");
+        var taskTip = RunGit(prep.WorktreePath!, "rev-parse HEAD").Out.Trim();
+        var push = await life.PushTaskBranchWithRetryAsync(
+            repo,
+            taskTip,
+            prep.Branch!,
+            CancellationToken.None,
+            attempts: 2,
+            retryDelay: TimeSpan.Zero);
+        Assert.True(push.Success, push.Error);
+        Assert.Equal(taskTip, RunGit(_tempDir, $"--git-dir=\"{bare}\" rev-parse refs/heads/{prep.Branch}").Out.Trim());
+        Assert.Equal(IntegrationOutcome.Merged,
+            life.Integrate(repo, prep.WorktreePath!, prep.Branch!, "develop", IntegrationStrategies.DirectMerge).Outcome);
+
+        var td = life.TeardownIfIntegrated(repo, "task-remote-cleanup", "develop", wtRoot);
+
+        Assert.True(td.Success, td.Error);
+        Assert.False(Directory.Exists(prep.WorktreePath));
+        Assert.NotEqual(0, RunGit(repo, "rev-parse --verify task/task-remote-cleanup").Code);
+        Assert.NotEqual(0, RunGit(_tempDir, $"--git-dir=\"{bare}\" rev-parse --verify refs/heads/{prep.Branch}").Code);
+    }
+
+    [Fact]
     public void DirectMerge_RebasesOntoAdvancedDevelop_KeepsLinearHistory()
     {
         var (repo, life) = SeedWithDevelop("advance");
@@ -468,6 +522,14 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         var git = BuildGitService(repo);
         var life = new WorktreeTaskLifecycle(git, NullLogger<WorktreeTaskLifecycle>.Instance);
         return (repo, life);
+    }
+
+    private string AddBareOrigin(string repo, string name)
+    {
+        var bare = Path.Combine(_tempDir, name + ".git");
+        Assert.Equal(0, RunGit(_tempDir, $"init -q --bare \"{bare}\"").Code);
+        Assert.Equal(0, RunGit(repo, $"remote add origin \"{bare}\"").Code);
+        return bare;
     }
 
     private static void Commit(string cwd, string message)

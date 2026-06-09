@@ -142,6 +142,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.ClassifierUnknown => "Warn",
             OrchestratorMessageKind.CliLaunchFailed   => "Warn",
             OrchestratorMessageKind.Steer             => "Warn",
+            OrchestratorMessageKind.TaskBranchUnpushed => "Warn",
             _                                         => "Info"
         };
         var topic = kind.ToBusTopic();

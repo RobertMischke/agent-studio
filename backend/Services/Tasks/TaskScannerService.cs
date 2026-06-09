@@ -896,6 +896,11 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("integration-error", "Integration error", "High", line, lastSeenAt);
             return true;
         }
+        if (lower.Contains("[task-branch-unpushed]"))
+        {
+            issue = BuildOutcomeIssue("task-branch-unpushed", "Task branch unpushed", "Warn", line, lastSeenAt);
+            return true;
+        }
         if (lower.Contains("context-overflow"))
         {
             issue = BuildOutcomeIssue("context-overflow", "Context overflow", "High", line, lastSeenAt);
