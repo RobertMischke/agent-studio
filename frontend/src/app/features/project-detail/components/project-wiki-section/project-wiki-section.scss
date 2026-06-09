@@ -1,0 +1,107 @@
+:host { display: block; }
+
+.pwiki__head { display: flex; align-items: baseline; gap: 10px; }
+.pwiki__title { margin: 0; }
+.pwiki__icon { margin-right: 6px; }
+.pwiki__count {
+  font-size: 0.74rem;
+  color: var(--studio-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pwiki__body {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 14px;
+  margin-top: 12px;
+  align-items: start;
+}
+@media (max-width: 880px) {
+  .pwiki__body { grid-template-columns: 1fr; }
+}
+
+.pwiki__tree {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.pwiki__filter {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--studio-bg-overlay);
+  color: var(--studio-fg);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+
+.pwiki__group { display: flex; flex-direction: column; gap: 3px; }
+.pwiki__group-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg-muted);
+  font-family: var(--font-mono, monospace);
+  padding: 2px 2px 0;
+}
+.pwiki__files { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.pwiki__file-btn {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 9px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  color: var(--studio-fg);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+}
+.pwiki__file-btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.20); }
+.pwiki__file--active .pwiki__file-btn { border-color: rgba(137,180,250,0.55); background: rgba(137,180,250,0.10); }
+.pwiki__file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwiki__file-ts { color: var(--studio-fg-muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.pwiki__viewer {
+  min-width: 0;
+  background: var(--studio-bg-overlay);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pwiki__viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.78rem;
+}
+.pwiki__viewer-head code { color: var(--studio-accent-4-strong); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.pwiki__viewer-close {
+  background: rgba(255,255,255,0.06);
+  color: var(--studio-fg);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.pwiki__viewer-body {
+  display: block;
+  padding: 12px 16px;
+  color: var(--studio-fg);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.pwiki__viewer-empty { margin: 0; padding: 24px 16px; }

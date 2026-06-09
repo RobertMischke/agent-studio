@@ -1,0 +1,73 @@
+<section class="pwiki" data-testid="project-wiki-section">
+  <header class="pwiki__head">
+    <h3 class="pwiki__title"><span class="pwiki__icon" aria-hidden="true">📚</span> Wiki / Docs</h3>
+    @if (overview()) {
+      <span class="pwiki__count" data-testid="project-wiki-count">{{ docCount() }} docs</span>
+    }
+  </header>
+
+  @if (loading()) {
+    <p class="studio-empty">Loading…</p>
+  } @else if (!overview()) {
+    <p class="studio-empty">No data.</p>
+  } @else if (docCount() === 0) {
+    <p class="studio-empty">
+      No documents under <code>{{ overview()!.baseDir }}</code> yet.
+    </p>
+  } @else {
+    <div class="pwiki__body">
+      <nav class="pwiki__tree" data-testid="project-wiki-tree" aria-label="Wiki documents">
+        <input class="pwiki__filter"
+               type="search"
+               [ngModel]="filter()"
+               (ngModelChange)="filter.set($event)"
+               placeholder="Filter docs…"
+               data-testid="project-wiki-filter">
+        @for (group of groups(); track group.dir) {
+          <div class="pwiki__group">
+            <div class="pwiki__group-label" [attr.title]="group.dir">{{ group.label }}</div>
+            <ul class="pwiki__files">
+              @for (f of group.files; track f.relPath) {
+                <li class="pwiki__file" [class.pwiki__file--active]="openedRel() === f.relPath">
+                  <button class="pwiki__file-btn"
+                          type="button"
+                          (click)="openFile(f.relPath)"
+                          [attr.data-testid]="'project-wiki-file-' + f.relPath"
+                          [attr.title]="f.relPath">
+                    <span class="pwiki__file-name">{{ f.title }}</span>
+                    <span class="pwiki__file-ts">{{ formatTime(f.updatedAt) }}</span>
+                  </button>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+        @if (groups().length === 0) {
+          <p class="studio-empty" data-testid="project-wiki-no-match">No docs match “{{ filter() }}”.</p>
+        }
+      </nav>
+
+      <div class="pwiki__viewer">
+        @if (openedRel(); as rel) {
+          <header class="pwiki__viewer-head">
+            <code data-testid="project-wiki-viewer-path">{{ rel }}</code>
+            <button class="pwiki__viewer-close" type="button" (click)="closeFile()"
+                    data-testid="project-wiki-close">Close</button>
+          </header>
+          @if (loadingDoc()) {
+            <p class="studio-empty">Loading document…</p>
+          } @else {
+            <app-markdown class="pwiki__viewer-body"
+                          data-testid="project-wiki-viewer"
+                          [source]="openedContent()"
+                          [resolveImageSrc]="imageResolver()" />
+          }
+        } @else {
+          <p class="studio-empty pwiki__viewer-empty" data-testid="project-wiki-viewer-empty">
+            Select a document to read it here.
+          </p>
+        }
+      </div>
+    </div>
+  }
+</section>

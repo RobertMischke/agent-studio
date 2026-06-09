@@ -12,6 +12,7 @@ import { ProjectObservabilityPanelComponent } from '../project-observability/pro
 import { ProjectProductRuntimePanelComponent } from '../project-product-runtime/project-product-runtime-panel.component';
 import { ProjectSteeringDocsSectionComponent } from '../project-steering-docs-section/project-steering-docs-section';
 import { ProjectSkillReadinessSectionComponent } from '../project-skill-readiness-section/project-skill-readiness-section';
+import { ProjectWikiSectionComponent } from '../project-wiki-section/project-wiki-section';
 import { AnalysisReportDrilldownComponent } from '../analysis-report-drilldown/analysis-report-drilldown';
 import { ProjectRailKey } from '../project-shell/project-shell.config';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
@@ -45,6 +46,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
     ProjectProductRuntimePanelComponent,
     ProjectSteeringDocsSectionComponent,
     ProjectSkillReadinessSectionComponent,
+    ProjectWikiSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
     TooltipDirective,
@@ -80,6 +82,7 @@ export class ProjectOverlaysComponent {
       || rail === 'observability'
       || rail === 'product-runtime'
       || rail === 'steering'
+      || rail === 'wiki'
       || rail === 'settings'
       || rail === 'orchestrator'
       || rail === 'activity';

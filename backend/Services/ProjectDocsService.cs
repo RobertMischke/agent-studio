@@ -21,6 +21,22 @@ public class ProjectDocsService
     private const string SecurityRel = "docs/security";
     private const string SecurityStateFile = "state.json";
     private const string AdrRel = "docs/architecture-decisions.md";
+    private const string WikiRel = "docs";
+
+    // Image/diagram extensions the wiki asset endpoint is allowed to serve so
+    // relative `![](images/foo.png)` references in a doc render in place.
+    private static readonly Dictionary<string, string> WikiAssetContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".png"] = "image/png",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".gif"] = "image/gif",
+        [".svg"] = "image/svg+xml",
+        [".webp"] = "image/webp",
+        [".avif"] = "image/avif",
+        [".bmp"] = "image/bmp",
+        [".ico"] = "image/x-icon",
+    };
 
     public ProjectDocsService(TaskScannerService scanner, ILogger<ProjectDocsService> logger)
     {
@@ -151,6 +167,123 @@ public class ProjectDocsService
         return results;
     }
 
+    // -------- Wiki (docs/ tree) --------
+
+    /// <summary>
+    /// Read-only browse surface over the project's <c>docs/</c> tree: every
+    /// <c>.md</c> file (recursive), relative to the docs root, so the UI can
+    /// render the navigation card, the domain documents, and the accumulated
+    /// learnings from the wiki post-processing step. Title is the first H1
+    /// heading when present, otherwise the file name.
+    /// </summary>
+    public WikiOverview? GetWikiOverview(string projectName)
+    {
+        var entry = FindProject(projectName);
+        if (entry == null) return null;
+        var baseDir = ResolveBaseDir(entry);
+        if (baseDir == null) return null;
+
+        var wikiDir = Path.Combine(baseDir, WikiRel);
+        return new WikiOverview(
+            ProjectName: projectName,
+            BaseDir: wikiDir,
+            Exists: Directory.Exists(wikiDir),
+            Files: ListWikiDocs(wikiDir));
+    }
+
+    public WikiFileContent? ReadWikiFile(string projectName, string relPath)
+    {
+        var full = ResolveWikiPath(projectName, relPath, requireMarkdown: true);
+        if (full == null || !File.Exists(full)) return null;
+        return new WikiFileContent(relPath.Replace('\\', '/'), File.ReadAllText(full));
+    }
+
+    /// <summary>
+    /// Resolves a non-markdown asset (image/diagram) referenced from a wiki
+    /// doc. Returns the absolute file path plus a content type, or null when
+    /// the path is unsafe, the extension is not an allowed image type, or the
+    /// file is missing. Bytes are streamed by the endpoint via Results.File.
+    /// </summary>
+    public (string Path, string ContentType)? ReadWikiAsset(string projectName, string relPath)
+    {
+        if (string.IsNullOrWhiteSpace(relPath)) return null;
+        var ext = Path.GetExtension(relPath);
+        if (!WikiAssetContentTypes.TryGetValue(ext, out var contentType)) return null;
+        var full = ResolveWikiPath(projectName, relPath, requireMarkdown: false);
+        if (full == null || !File.Exists(full)) return null;
+        return (full, contentType);
+    }
+
+    /// <summary>
+    /// Joins a caller-supplied relative path onto the docs root and confirms
+    /// the resolved absolute path stays inside it (traversal guard). When
+    /// <paramref name="requireMarkdown"/> is set, only <c>.md</c> files pass.
+    /// </summary>
+    private string? ResolveWikiPath(string projectName, string relPath, bool requireMarkdown)
+    {
+        if (string.IsNullOrWhiteSpace(relPath)) return null;
+        if (relPath.Contains("..", StringComparison.Ordinal)) return null;
+        if (Path.IsPathRooted(relPath)) return null;
+        if (requireMarkdown && !string.Equals(Path.GetExtension(relPath), ".md", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var entry = FindProject(projectName);
+        if (entry == null) return null;
+        var baseDir = ResolveBaseDir(entry);
+        if (baseDir == null) return null;
+
+        var root = Path.GetFullPath(Path.Combine(baseDir, WikiRel));
+        var full = Path.GetFullPath(Path.Combine(root, relPath));
+        // Append a separator to the root so "docs-other/" can't satisfy the prefix.
+        var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        return full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) ? full : null;
+    }
+
+    private static List<WikiFileEntry> ListWikiDocs(string wikiDir)
+    {
+        if (!Directory.Exists(wikiDir)) return [];
+        var root = Path.GetFullPath(wikiDir);
+        var results = new List<WikiFileEntry>();
+        foreach (var f in Directory.EnumerateFiles(wikiDir, "*.md", SearchOption.AllDirectories))
+        {
+            var fi = new FileInfo(f);
+            var rel = Path.GetRelativePath(root, f).Replace('\\', '/');
+            results.Add(new WikiFileEntry(
+                Name: Path.GetFileName(f),
+                RelPath: rel,
+                Title: ExtractFirstHeading(f) ?? Path.GetFileNameWithoutExtension(f),
+                UpdatedAt: fi.LastWriteTimeUtc,
+                Size: fi.Length));
+        }
+        results.Sort((a, b) => string.Compare(a.RelPath, b.RelPath, StringComparison.OrdinalIgnoreCase));
+        return results;
+    }
+
+    /// <summary>
+    /// Cheap first-H1 sniff for a nicer label than the file name. Reads at
+    /// most the first handful of lines so listing a large tree stays fast.
+    /// </summary>
+    private static string? ExtractFirstHeading(string path)
+    {
+        try
+        {
+            using var reader = new StreamReader(path);
+            for (int i = 0; i < 40; i++)
+            {
+                var line = reader.ReadLine();
+                if (line == null) break;
+                var trimmed = line.TrimStart();
+                if (trimmed.StartsWith("# ", StringComparison.Ordinal))
+                    return trimmed[2..].Trim();
+            }
+        }
+        catch
+        {
+            // Unreadable file: fall back to the file name in the caller.
+        }
+        return null;
+    }
+
     // -------- Architecture decisions --------
 
     public ArchitectureOverview? GetArchitectureOverview(string projectName)
@@ -252,6 +385,10 @@ public class ProjectDocsService
         return string.IsNullOrWhiteSpace(s) ? null : s;
     }
 }
+
+public record WikiFileEntry(string Name, string RelPath, string Title, DateTime UpdatedAt, long Size);
+public record WikiOverview(string ProjectName, string BaseDir, bool Exists, List<WikiFileEntry> Files);
+public record WikiFileContent(string RelPath, string Content);
 
 public record SecurityMeta(string? LastReviewDate, string? Rating, string? Summary);
 public record SecurityFileEntry(string Name, string RelPath, DateTime UpdatedAt, long Size);

@@ -20,6 +20,7 @@ export type ProjectRailKey =
   | 'observability'
   | 'product-runtime'
   | 'steering'
+  | 'wiki'
   | 'audits'
   | 'jobs'
   | 'settings'
@@ -183,6 +184,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Agent-facing instruction sources, human summary, drift warnings, and propose-update actions',
     empty: 'No steering inventory yet. The Steering Docs slice lists README, AGENTS, ROADMAP, the task contract, the skills lookup, the ADR archive, runtime prompts, and project settings.',
     icon: '⊕',
+  },
+  {
+    key: 'wiki',
+    group: 'config',
+    label: 'Wiki / Docs',
+    panelTitle: 'Wiki / Docs',
+    description: 'Browse the project docs/ tree: navigation card, domain docs, and accumulated learnings',
+    empty: 'No docs found. Once the project has a docs/ folder, its tree and rendered documents appear here.',
+    icon: '📚',
   },
   {
     key: 'orchestrator',

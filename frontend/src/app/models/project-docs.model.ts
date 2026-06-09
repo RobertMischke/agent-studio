@@ -24,6 +24,26 @@ export interface SecurityFileContent {
   content: string;
 }
 
+export interface WikiFileEntry {
+  name: string;
+  relPath: string;
+  title: string;
+  updatedAt: string;
+  size: number;
+}
+
+export interface WikiOverview {
+  projectName: string;
+  baseDir: string;
+  exists: boolean;
+  files: WikiFileEntry[];
+}
+
+export interface WikiFileContent {
+  relPath: string;
+  content: string;
+}
+
 export interface ArchitectureDecisionSummary {
   id: string;
   title: string;

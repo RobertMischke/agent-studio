@@ -4,7 +4,8 @@ namespace OrchestratorApi.Endpoints;
 
 /// <summary>
 /// Project-level docs surface (prototype): security archive +
-/// architecture decision browser. See <see cref="ProjectDocsService"/>
+/// architecture decision browser + a read-only wiki view over the
+/// project's <c>docs/</c> tree. See <see cref="ProjectDocsService"/>
 /// for storage layout and resolution rules.
 /// </summary>
 public static class ProjectDocsEndpoints
@@ -54,6 +55,35 @@ public static class ProjectDocsEndpoints
             var ok = docs.WriteSecurityMeta(projectName, meta);
             return ok ? Results.Ok(new { saved = true })
                       : Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+        });
+
+        // ---- Wiki (docs/ tree) ----
+
+        app.MapGet("/api/projects/{projectName}/wiki", (string projectName, ProjectDocsService docs) =>
+        {
+            var ov = docs.GetWikiOverview(projectName);
+            return ov == null
+                ? Results.NotFound(new { error = $"Unknown project '{projectName}'" })
+                : Results.Ok(ov);
+        });
+
+        app.MapGet("/api/projects/{projectName}/wiki/files/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
+        {
+            var file = docs.ReadWikiFile(projectName, relPath);
+            return file == null
+                ? Results.NotFound(new { error = "File not found or path rejected" })
+                : Results.Ok(file);
+        });
+
+        // Serves images/diagrams referenced from wiki docs so relative
+        // `![](images/foo.png)` paths render in place. Markdown-only docs go
+        // through /wiki/files; binary assets stream here with a content type.
+        app.MapGet("/api/projects/{projectName}/wiki/assets/{**relPath}", (string projectName, string relPath, ProjectDocsService docs) =>
+        {
+            var asset = docs.ReadWikiAsset(projectName, relPath);
+            return asset == null
+                ? Results.NotFound(new { error = "Asset not found or type not allowed" })
+                : Results.File(asset.Value.Path, asset.Value.ContentType);
         });
 
         // ---- Architecture decisions ----

@@ -4,7 +4,9 @@ import {
   ArchitectureOverview,
   SecurityFileContent,
   SecurityMeta,
-  SecurityOverview
+  SecurityOverview,
+  WikiFileContent,
+  WikiOverview
 } from '../models/project-docs.model';
 
 /**
@@ -41,6 +43,23 @@ export class ProjectDocsService {
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/security/meta`,
       meta
     );
+  }
+
+  getWikiOverview(projectName: string) {
+    return this.http.get<WikiOverview>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki`
+    );
+  }
+
+  getWikiFile(projectName: string, relPath: string) {
+    return this.http.get<WikiFileContent>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/files/${this.encodeRelPath(relPath)}`
+    );
+  }
+
+  /** Absolute API URL for a wiki image/diagram asset (used by the image resolver). */
+  wikiAssetUrl(projectName: string, relPath: string): string {
+    return `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/wiki/assets/${this.encodeRelPath(relPath)}`;
   }
 
   getArchitectureOverview(projectName: string) {

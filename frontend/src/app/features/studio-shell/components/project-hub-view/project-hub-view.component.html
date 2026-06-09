@@ -90,6 +90,11 @@
       <app-project-skill-readiness-section [projectName]="projectName()" />
     }
   }
+  @defer (when activeRail() === 'wiki') {
+    @if (activeRail() === 'wiki') {
+      <app-project-wiki-section [projectName]="projectName()" />
+    }
+  }
   @defer (when activeRail() === 'settings') {
     @if (activeRail() === 'settings') {
       <app-project-settings-panel [projectName]="projectName()" />

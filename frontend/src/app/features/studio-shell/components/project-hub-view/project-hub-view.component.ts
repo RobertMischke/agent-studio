@@ -11,6 +11,7 @@ import {
   ProjectProductRuntimePanelComponent,
   ProjectSteeringDocsSectionComponent,
   ProjectSkillReadinessSectionComponent,
+  ProjectWikiSectionComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
@@ -33,6 +34,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'observability',
   'product-runtime',
   'steering',
+  'wiki',
   'jobs',
   'settings',
   'orchestrator',
@@ -44,7 +46,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
  * editor. Embeds the legacy <app-project-shell> directly so the full
  * project navigation (Overview / Visual Evidence / Security /
  * Architecture / Drift / UX-UI / Test Quality / Token Usage /
- * Observability / Product Runtime / Steering / Audits / Jobs /
+ * Observability / Product Runtime / Steering / Wiki / Audits / Jobs /
  * Settings / Orchestrator / Activity) is reachable from the tab —
  * no need to open a separate overlay, and every rail uses its real
  * content panel where one exists.
@@ -63,6 +65,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     ProjectProductRuntimePanelComponent,
     ProjectSteeringDocsSectionComponent,
     ProjectSkillReadinessSectionComponent,
+    ProjectWikiSectionComponent,
     WorkspaceScreenshotsComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
