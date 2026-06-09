@@ -42,9 +42,9 @@ public sealed record RunRecord
     public int? LineStart { get; init; }
     /// <summary>1-based line number in <c>cli-output.log</c> where this run ends (the <c>[taskboard] ... CLI exited</c> marker, or the file's last line for the still-running tail).</summary>
     public int? LineEnd { get; init; }
-    /// <summary>HEAD SHA captured immediately before this run's CLI started (see <see cref="SessionEvent.HeadShaBefore"/>).</summary>
+    /// <summary>Lower bound of the run's deterministic commit range. For worktree runs this may be the integration HEAD captured under the merge lock.</summary>
     public string? HeadShaBefore { get; init; }
-    /// <summary>HEAD SHA captured after the run finished. Equal to <see cref="HeadShaBefore"/> when the agent did not commit.</summary>
+    /// <summary>Upper bound of the run's deterministic commit range. Equal to <see cref="HeadShaBefore"/> when the agent did not commit.</summary>
     public string? HeadShaAfter { get; init; }
     /// <summary>
     /// Relative path (under the job folder) to the captured context this run

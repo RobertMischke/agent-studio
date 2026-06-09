@@ -187,6 +187,47 @@ public class RunCommitsLinkageTests : IDisposable
         Assert.Contains(files, f => f.Path == "b.txt");
     }
 
+    [Fact]
+    public void WorktreeIntegrationRange_ExcludesSiblingMergedWhileTaskRan()
+    {
+        var (repoRoot, _, jobId, watchPath) = SetupRepoAndJob();
+
+        WriteFile(repoRoot, "README.md", "seed");
+        RunGit(repoRoot, "add", "-A");
+        RunGit(repoRoot, "commit", "-q", "-m", "seed");
+        var runStartedAtDevelop = RunGitCapture(repoRoot, "rev-parse", "HEAD").Trim();
+
+        RunGit(repoRoot, "checkout", "-q", "-b", "task/ASS-1690", runStartedAtDevelop);
+        WriteFile(repoRoot, "task-a.txt", "task a work");
+        RunGit(repoRoot, "add", "-A");
+        RunGit(repoRoot, "commit", "-q", "-m", "feat: task ASS-1690");
+
+        RunGit(repoRoot, "checkout", "-q", "main");
+        RunGit(repoRoot, "checkout", "-q", "-b", "task/ASS-1685", runStartedAtDevelop);
+        WriteFile(repoRoot, "task-b.txt", "sibling task work");
+        RunGit(repoRoot, "add", "-A");
+        RunGit(repoRoot, "commit", "-q", "-m", "fix: sibling ASS-1685");
+
+        RunGit(repoRoot, "checkout", "-q", "main");
+        RunGit(repoRoot, "merge", "--ff-only", "task/ASS-1685");
+        var integrationBaseAtMergeStart = RunGitCapture(repoRoot, "rev-parse", "HEAD").Trim();
+
+        RunGit(repoRoot, "checkout", "-q", "task/ASS-1690");
+        RunGit(repoRoot, "rebase", "main");
+        RunGit(repoRoot, "checkout", "-q", "main");
+        RunGit(repoRoot, "merge", "--ff-only", "task/ASS-1690");
+        var integratedTaskTip = RunGitCapture(repoRoot, "rev-parse", "HEAD").Trim();
+
+        var (git, _, _) = BuildServices(repoRoot, watchPath, jobId);
+        var broadDevelopRange = git.GetCommitsInShaRange(jobId, watchPath, runStartedAtDevelop, integratedTaskTip);
+        Assert.Contains(broadDevelopRange, c => c.Subject == "fix: sibling ASS-1685");
+        Assert.Contains(broadDevelopRange, c => c.Subject == "feat: task ASS-1690");
+
+        var scopedIntegrationRange = git.GetCommitsInShaRange(jobId, watchPath, integrationBaseAtMergeStart, integratedTaskTip);
+        var commit = Assert.Single(scopedIntegrationRange);
+        Assert.Equal("feat: task ASS-1690", commit.Subject);
+    }
+
     private (string repoRoot, string jobFolder, string jobId, string watchPath) SetupRepoAndJob()
     {
         var repoRoot = Path.Combine(_tempDir, "repo");

@@ -182,9 +182,10 @@ public static class TaskRunnerEndpoints
 
         // Per-run software-side change set: the commits authored during
         // this run. Prefers the deterministic SHA range
-        // HeadShaBefore..HeadShaAfter captured by ProjectRunner around
-        // the CLI invocation; falls back to the wall-clock window for
-        // older runs that don't have the SHAs persisted. The
+        // HeadShaBefore..HeadShaAfter captured by ProjectRunner for the
+        // run's deterministic commit range; worktree runs stamp the
+        // integration-branch range that landed for this task. Falls back
+        // to the wall-clock window for older runs without SHAs. The
         // wall-clock fallback is best-effort - the SHA-range path is
         // the source of truth for new runs and is what the integration
         // test pins. Index is 1-based to match RunRecord.Index.
