@@ -1,17 +1,17 @@
 import { Injectable, computed, signal } from '@angular/core';
 
 /**
- * Sections of the global Workspace-settings home ("Dach"). The four
- * content sections were previously independent, scattered overlays
- * (token timeline, visual-evidence reel, executive summary, CLI usage
- * caps). ASS-695 folds them into one rail+panel home so they are
- * centrally findable instead of strewn across the status bar, mirroring
- * the project-level settings layout. `overview` is the landing rail item
- * that links into each section.
+ * Sections of the global Workspace-settings home ("Dach"). Several sections
+ * were previously independent, scattered overlays (token timeline,
+ * visual-evidence reel, executive summary, CLI usage caps). ASS-695 folds
+ * those into one rail+panel home so they are centrally findable instead of
+ * strewn across the status bar, mirroring the project-level settings layout.
+ * `overview` is the landing rail item that links into each section.
  */
 export type WorkspaceSettingsSection =
   | 'overview'
   | 'caps'
+  | 'prompts'
   | 'tokens'
   | 'screenshots'
   | 'summary';
@@ -47,6 +47,7 @@ export class WorkspaceOverlaysService {
   readonly screenshotsOpen = computed(() => this.settingsOpen() && this.section() === 'screenshots');
   readonly summaryOpen = computed(() => this.settingsOpen() && this.section() === 'summary');
   readonly cliAdminOpen = computed(() => this.settingsOpen() && this.section() === 'caps');
+  readonly promptAdminOpen = computed(() => this.settingsOpen() && this.section() === 'prompts');
 
   /** True iff the home is open in any section. */
   readonly anyOpen = computed(() => this.settingsOpen());
@@ -116,6 +117,10 @@ export class WorkspaceOverlaysService {
   closeCliAdmin(): void { this.close(); }
   toggleCliAdmin(): void { this.toggle('caps'); }
 
+  openPromptAdmin(): void { this.open('prompts'); }
+  closePromptAdmin(): void { this.close(); }
+  togglePromptAdmin(): void { this.toggle('prompts'); }
+
   /**
    * Reconcile open state with the current URL hash. Call once on app boot
    * and on every `hashchange` event. A recognised section hash opens (or
@@ -142,6 +147,8 @@ export class WorkspaceOverlaysService {
       case '#/summary': return 'summary';
       case '#/workspace/settings/caps':
       case '#/workspace/caps': return 'caps';
+      case '#/workspace/settings/prompts':
+      case '#/workspace/prompts': return 'prompts';
       case '#/workspace/settings': return 'overview';
       default: return null;
     }
@@ -153,6 +160,7 @@ export class WorkspaceOverlaysService {
       case 'screenshots': return '#/workspace/screenshots';
       case 'summary': return '#/workspace/summary';
       case 'caps': return '#/workspace/settings/caps';
+      case 'prompts': return '#/workspace/settings/prompts';
       case 'overview': return '#/workspace/settings';
     }
   }
@@ -160,7 +168,9 @@ export class WorkspaceOverlaysService {
   private readonly ownHashes = new Set<string>([
     '#/workspace/settings',
     '#/workspace/settings/caps',
+    '#/workspace/settings/prompts',
     '#/workspace/caps',
+    '#/workspace/prompts',
     '#/workspace/tokens',
     '#/workspace/screenshots',
     '#/workspace/summary',

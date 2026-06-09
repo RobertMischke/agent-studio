@@ -26,6 +26,7 @@ export interface PromptDetail {
   hasOverride: boolean;
   defaultContent: string | null;
   overrideContent: string | null;
+  baseDefaultContent: string | null;
   effectiveContent: string;
   defaultSha: string | null;
   baseDefaultSha: string | null;

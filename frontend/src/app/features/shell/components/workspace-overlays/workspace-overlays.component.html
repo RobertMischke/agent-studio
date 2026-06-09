@@ -77,6 +77,9 @@
               <app-cli-admin-panel (openProjectSettings)="openProjectSettings.emit($event)"
                                    (openJobDetail)="openJobDetail.emit($event)" />
             }
+            @case ('prompts') {
+              <app-prompt-admin-panel />
+            }
             @case ('tokens') {
               <app-workspace-token-timeline />
             }

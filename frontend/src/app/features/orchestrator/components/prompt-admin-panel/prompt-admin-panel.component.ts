@@ -19,6 +19,12 @@ interface PromptGroup {
   items: PromptCatalogItem[];
 }
 
+interface PromptDiffLine {
+  kind: 'same' | 'added' | 'removed';
+  prefix: string;
+  text: string;
+}
+
 /**
  * Admin surface for the application-wide system prompts (the
  * `prompts/runtime/*.md` templates). Lists every template with a description
@@ -66,6 +72,12 @@ export class PromptAdminPanelComponent implements OnInit {
   readonly dirty = computed(() => {
     const d = this.detail();
     return d != null && this.draft() !== d.effectiveContent;
+  });
+
+  readonly diffLines = computed<PromptDiffLine[]>(() => {
+    const d = this.detail();
+    if (!d?.hasOverride || d.defaultContent == null || d.overrideContent == null) return [];
+    return this.buildDiff(d.defaultContent, d.overrideContent);
   });
 
   ngOnInit(): void {
@@ -121,6 +133,13 @@ export class PromptAdminPanelComponent implements OnInit {
     await this.run(() => this.api.rebaseline(name));
   }
 
+  openMergeDraft(): void {
+    const d = this.detail();
+    if (!d?.hasOverride || d.defaultContent == null || d.overrideContent == null) return;
+    this.draft.set(this.buildMergeDraft(d));
+    this.showDefault.set(true);
+  }
+
   private async run(op: () => Promise<PromptDetail>): Promise<void> {
     this.busy.set(true);
     this.actionError.set(null);
@@ -147,6 +166,98 @@ export class PromptAdminPanelComponent implements OnInit {
 
   shortSha(sha: string | null): string {
     return sha ? sha.slice(0, 8) : '-';
+  }
+
+  private buildMergeDraft(d: PromptDetail): string {
+    const baseLabel = d.baseDefaultSha ? this.shortSha(d.baseDefaultSha) : 'unknown';
+    const currentLabel = d.defaultSha ? this.shortSha(d.defaultSha) : 'unknown';
+    const baseContent = d.baseDefaultContent
+      ?? 'Base default content was not recorded for this older override.';
+    return [
+      `<<<<<<< Your override, based on default ${baseLabel}`,
+      d.overrideContent ?? '',
+      `||||||| Default when this override was created, ${baseLabel}`,
+      baseContent,
+      '=======',
+      d.defaultContent ?? '',
+      `>>>>>>> Current shipped default, ${currentLabel}`,
+      '',
+    ].join('\n');
+  }
+
+  private buildDiff(defaultText: string, overrideText: string): PromptDiffLine[] {
+    const oldLines = this.splitLines(defaultText);
+    const newLines = this.splitLines(overrideText);
+    if (oldLines.length > 700 || newLines.length > 700) {
+      return this.buildCompactDiff(oldLines, newLines);
+    }
+
+    const table = Array.from(
+      { length: oldLines.length + 1 },
+      () => new Uint16Array(newLines.length + 1)
+    );
+    for (let i = oldLines.length - 1; i >= 0; i--) {
+      for (let j = newLines.length - 1; j >= 0; j--) {
+        table[i][j] = oldLines[i] === newLines[j]
+          ? table[i + 1][j + 1] + 1
+          : Math.max(table[i + 1][j], table[i][j + 1]);
+      }
+    }
+
+    const lines: PromptDiffLine[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < oldLines.length && j < newLines.length) {
+      if (oldLines[i] === newLines[j]) {
+        lines.push({ kind: 'same', prefix: ' ', text: oldLines[i] });
+        i++;
+        j++;
+      } else if (table[i + 1][j] >= table[i][j + 1]) {
+        lines.push({ kind: 'removed', prefix: '-', text: oldLines[i++] });
+      } else {
+        lines.push({ kind: 'added', prefix: '+', text: newLines[j++] });
+      }
+    }
+    while (i < oldLines.length) lines.push({ kind: 'removed', prefix: '-', text: oldLines[i++] });
+    while (j < newLines.length) lines.push({ kind: 'added', prefix: '+', text: newLines[j++] });
+    return lines;
+  }
+
+  private buildCompactDiff(oldLines: string[], newLines: string[]): PromptDiffLine[] {
+    let prefix = 0;
+    while (
+      prefix < oldLines.length &&
+      prefix < newLines.length &&
+      oldLines[prefix] === newLines[prefix]
+    ) {
+      prefix++;
+    }
+
+    let suffix = 0;
+    while (
+      suffix < oldLines.length - prefix &&
+      suffix < newLines.length - prefix &&
+      oldLines[oldLines.length - suffix - 1] === newLines[newLines.length - suffix - 1]
+    ) {
+      suffix++;
+    }
+
+    const lines: PromptDiffLine[] = [];
+    for (let i = 0; i < prefix; i++) lines.push({ kind: 'same', prefix: ' ', text: oldLines[i] });
+    for (let i = prefix; i < oldLines.length - suffix; i++) {
+      lines.push({ kind: 'removed', prefix: '-', text: oldLines[i] });
+    }
+    for (let i = prefix; i < newLines.length - suffix; i++) {
+      lines.push({ kind: 'added', prefix: '+', text: newLines[i] });
+    }
+    for (let i = oldLines.length - suffix; i < oldLines.length; i++) {
+      lines.push({ kind: 'same', prefix: ' ', text: oldLines[i] });
+    }
+    return lines;
+  }
+
+  private splitLines(text: string): string[] {
+    return text.replace(/\r\n/g, '\n').split('\n');
   }
 
   private describe(err: unknown, fallback: string): string {

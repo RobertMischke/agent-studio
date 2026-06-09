@@ -79,6 +79,7 @@ public sealed class PromptAdminService
             HasOverride = hasOverride,
             DefaultContent = defaultContent,
             OverrideContent = overrideContent,
+            BaseDefaultContent = hasOverride ? sidecar?.BaseDefaultContent : null,
             EffectiveContent = overrideContent ?? defaultContent ?? string.Empty,
             DefaultSha = defaultSha,
             BaseDefaultSha = hasOverride ? sidecar?.BaseDefaultSha : null,
@@ -98,6 +99,7 @@ public sealed class PromptAdminService
         WriteSidecar(name, new PromptOverrideSidecar
         {
             BaseDefaultSha = defaultContent == null ? null : Sha(defaultContent),
+            BaseDefaultContent = defaultContent,
             UpdatedAt = DateTimeOffset.UtcNow,
         });
         return GetDetail(name);
@@ -125,6 +127,7 @@ public sealed class PromptAdminService
         WriteSidecar(name, new PromptOverrideSidecar
         {
             BaseDefaultSha = defaultContent == null ? null : Sha(defaultContent),
+            BaseDefaultContent = defaultContent,
             UpdatedAt = DateTimeOffset.UtcNow,
         });
         _logger.LogInformation("prompt-override-rebaselined template={Template}", name);
@@ -215,6 +218,7 @@ public sealed class PromptDetail
     public bool HasOverride { get; set; }
     public string? DefaultContent { get; set; }
     public string? OverrideContent { get; set; }
+    public string? BaseDefaultContent { get; set; }
     public string EffectiveContent { get; set; } = "";
     public string? DefaultSha { get; set; }
     public string? BaseDefaultSha { get; set; }
@@ -225,6 +229,7 @@ public sealed class PromptDetail
 internal sealed class PromptOverrideSidecar
 {
     public string? BaseDefaultSha { get; set; }
+    public string? BaseDefaultContent { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 }
 

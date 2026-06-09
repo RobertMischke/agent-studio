@@ -70,6 +70,8 @@
                       data-testid="prompt-admin-keep-mine" (click)="keepMine()">Keep mine</button>
               <button type="button" class="prompts__btn" [disabled]="busy()"
                       data-testid="prompt-admin-take-default" (click)="takeNewDefault()">Take new default</button>
+              <button type="button" class="prompts__btn prompts__btn--primary" [disabled]="busy()"
+                      data-testid="prompt-admin-merge" (click)="openMergeDraft()">Open merge draft</button>
             </div>
           </div>
         }
@@ -105,6 +107,23 @@
             </button>
           }
         </div>
+
+        @if (d.defaultChangedSinceOverride && diffLines().length) {
+          <div class="prompts__compare" data-testid="prompt-admin-diff-view">
+            <div class="prompts__compare-head">Diff: current shipped default vs your override</div>
+            <div class="prompts__diff" role="log" aria-label="Prompt diff">
+              @for (line of diffLines(); track $index) {
+                <div class="prompts__diff-line"
+                     [class.prompts__diff-line--added]="line.kind === 'added'"
+                     [class.prompts__diff-line--removed]="line.kind === 'removed'"
+                     [class.prompts__diff-line--same]="line.kind === 'same'">
+                  <span class="prompts__diff-prefix">{{ line.prefix }}</span>
+                  <span>{{ line.text || ' ' }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
 
         @if (showDefault() && d.hasDefault) {
           <div class="prompts__compare" data-testid="prompt-admin-default-view">

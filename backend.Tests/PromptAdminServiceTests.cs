@@ -1,0 +1,125 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Services;
+using Xunit;
+
+namespace OrchestratorApi.Tests;
+
+public sealed class PromptAdminServiceTests
+{
+    [Fact]
+    public void Render_UsesOverrideAndResetReturnsToDefault()
+    {
+        using var home = new PromptTestHome();
+        const string name = "runner-fresh-start.md";
+        home.WriteDefault(name, "Default {{name}}");
+
+        var prompts = home.CreatePromptService();
+        var admin = home.CreateAdminService(prompts);
+
+        Assert.Equal("Default Ada", prompts.Render(name, new Dictionary<string, string?> { ["name"] = "Ada" }));
+
+        var saved = admin.SaveOverride(name, "Override {{name}}");
+
+        Assert.NotNull(saved);
+        Assert.True(saved.HasOverride);
+        Assert.Equal("Default {{name}}", saved.BaseDefaultContent);
+        Assert.Equal("Override Ada", prompts.Render(name, new Dictionary<string, string?> { ["name"] = "Ada" }));
+
+        var reset = admin.ResetToDefault(name);
+
+        Assert.NotNull(reset);
+        Assert.False(reset.HasOverride);
+        Assert.Equal("Default Ada", prompts.Render(name, new Dictionary<string, string?> { ["name"] = "Ada" }));
+    }
+
+    [Fact]
+    public void DetailAndCatalog_FlagOverrideWhenDefaultChangedSinceBase()
+    {
+        using var home = new PromptTestHome();
+        const string name = "review-aspect-code-quality.md";
+        home.WriteDefault(name, "Default v1");
+
+        var prompts = home.CreatePromptService();
+        var admin = home.CreateAdminService(prompts);
+        admin.SaveOverride(name, "Custom override");
+
+        home.WriteDefault(name, "Default v2");
+
+        var detail = admin.GetDetail(name);
+        var catalog = admin.GetCatalog();
+
+        Assert.NotNull(detail);
+        Assert.True(detail.DefaultChangedSinceOverride);
+        Assert.Equal("Default v1", detail.BaseDefaultContent);
+        Assert.Equal("Default v2", detail.DefaultContent);
+        Assert.Equal("Custom override", detail.EffectiveContent);
+        Assert.Contains(catalog.Items, item => item.Name == name && item.DefaultChangedSinceOverride);
+
+        var rebaselined = admin.RebaselineOverride(name);
+
+        Assert.NotNull(rebaselined);
+        Assert.False(rebaselined.DefaultChangedSinceOverride);
+        Assert.Equal("Default v2", rebaselined.BaseDefaultContent);
+    }
+
+    [Fact]
+    public void Catalog_IncludesOverrideOnlyTemplates()
+    {
+        using var home = new PromptTestHome();
+        const string defaultName = "summary-protocol.md";
+        const string overrideOnlyName = "custom-runtime.md";
+        home.WriteDefault(defaultName, "Default");
+        home.WriteOverrideFile(overrideOnlyName, "Override only");
+
+        var admin = home.CreateAdminService(home.CreatePromptService());
+
+        var catalog = admin.GetCatalog();
+        var detail = admin.GetDetail(overrideOnlyName);
+
+        Assert.Contains(catalog.Items, item => item.Name == defaultName && item.HasDefault);
+        Assert.Contains(catalog.Items, item => item.Name == overrideOnlyName && item.HasOverride && !item.HasDefault);
+        Assert.NotNull(detail);
+        Assert.Equal("Override only", detail.EffectiveContent);
+    }
+
+    private sealed class PromptTestHome : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), $"prompt-admin-tests-{Guid.NewGuid():N}");
+
+        public PromptTestHome()
+        {
+            Directory.CreateDirectory(DefaultDir);
+            Directory.CreateDirectory(OverrideDir);
+        }
+
+        private string DefaultDir => Path.Combine(_root, "defaults");
+        private string OverrideDir => Path.Combine(_root, "overrides");
+
+        public void WriteDefault(string name, string content) =>
+            File.WriteAllText(Path.Combine(DefaultDir, name), content);
+
+        public void WriteOverrideFile(string name, string content) =>
+            File.WriteAllText(Path.Combine(OverrideDir, name), content);
+
+        public RuntimePromptService CreatePromptService()
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["PromptTemplates:RuntimePath"] = DefaultDir,
+                    ["PromptTemplates:OverridePath"] = OverrideDir,
+                })
+                .Build();
+            return new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        }
+
+        public PromptAdminService CreateAdminService(RuntimePromptService prompts) =>
+            new(prompts, NullLogger<PromptAdminService>.Instance);
+
+        public void Dispose()
+        {
+            try { Directory.Delete(_root, recursive: true); } catch { }
+        }
+    }
+}

@@ -3,6 +3,7 @@ export { OrchestratorFeedComponent } from './components/orchestrator-feed/orches
 export { GlobalOrchestratorCardComponent } from './components/global-orchestrator-card/global-orchestrator-card';
 export { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 export { OrchestratorSettingsModalComponent } from './components/orchestrator-settings-modal/orchestrator-settings-modal.component';
+export { PromptAdminPanelComponent } from './components/prompt-admin-panel/prompt-admin-panel.component';
 export type {
   OrchestratorLogEntry,
   OrchestratorTokenUsage,

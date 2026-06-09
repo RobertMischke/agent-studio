@@ -5,6 +5,7 @@ import { WorkspaceTokenTimelineComponent } from '../../../tokens';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { WorkspaceSummaryComponent } from '../../../summary';
 import { CliAdminPanelComponent } from '../../../cli';
+import { PromptAdminPanelComponent } from '../../../orchestrator';
 import type { TaskScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
@@ -38,7 +39,7 @@ interface SettingsRailItem {
 @Component({
   selector: 'app-workspace-overlays',
   standalone: true,
-  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, TooltipDirective, OverlayPortalDirective],
+  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceSummaryComponent, CliAdminPanelComponent, PromptAdminPanelComponent, TooltipDirective, OverlayPortalDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-overlays.component.html',
   styleUrl: './workspace-overlays.component.scss',
@@ -63,6 +64,7 @@ export class WorkspaceOverlaysComponent {
   readonly railItems: readonly SettingsRailItem[] = [
     { key: 'overview', label: 'Overview', description: 'Global defaults and usage surfaces, in one place.', icon: '\u{1F3E0}' },
     { key: 'caps', label: 'Usage caps', description: 'Per-CLI quota caps and runner rules, with full usage detail.', icon: '⚙' },
+    { key: 'prompts', label: 'System prompts', description: 'Application-wide runtime prompt defaults and overrides.', icon: 'T' },
     { key: 'tokens', label: 'Token usage', description: 'Orchestrator token spend across every watched project.', icon: '\u{1F4CA}' },
     { key: 'screenshots', label: 'Visual evidence', description: 'Screenshots captured by tasks across all projects.', icon: '\u{1F441}' },
     { key: 'summary', label: 'Summary', description: 'Executive summary of what happened recently.', icon: '\u{1F4D6}' },
@@ -96,6 +98,7 @@ export class WorkspaceOverlaysComponent {
   panelTestid(): string {
     switch (this.overlays.section()) {
       case 'caps': return 'cli-admin-overlay';
+      case 'prompts': return 'prompt-admin-overlay';
       case 'tokens': return 'workspace-tokens-overlay';
       case 'screenshots': return 'workspace-screenshots-overlay';
       case 'summary': return 'workspace-summary-overlay';

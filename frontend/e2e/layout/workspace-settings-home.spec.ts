@@ -7,10 +7,11 @@ import { dismissDevErrorDialog } from '../helpers/theme';
  * Global Workspace-settings home ("Dach") - ASS-695.
  *
  * The formerly scattered workspace overlays (CLI usage caps, token
- * timeline, visual-evidence reel, executive summary) now live as
- * sections of one rail+panel home, mirroring the project-level settings
- * layout. The status bar exposes a single "Settings" entry instead of
- * three separate buttons; deep-links still resolve to the right section.
+ * timeline, visual-evidence reel, executive summary) now live with
+ * system prompts as sections of one rail+panel home, mirroring the
+ * project-level settings layout. The status bar exposes a single
+ * "Settings" entry instead of three separate buttons; deep-links still
+ * resolve to the right section.
  *
  * This spec stubs every backend route the sections poll so it runs
  * against a clean dev frontend with no backend up. It asserts:
@@ -42,6 +43,36 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   await page.route('**/api/cli/quota/caps', json({ defaultCapPct: 95, caps: {} }));
   await page.route('**/api/cli/usage', json({ entries: [] }));
+  await page.route('**/api/admin/prompts', json({
+    overrideDirectory: 'stubbed',
+    items: [
+      {
+        name: 'runner-fresh-start.md',
+        title: 'Runner: fresh start',
+        description: 'Bootstrap prompt handed to the CLI agent when a task starts from scratch.',
+        group: 'Runner',
+        hasDefault: true,
+        hasOverride: false,
+        defaultChangedSinceOverride: false,
+      },
+    ],
+  }));
+  await page.route('**/api/admin/prompts/runner-fresh-start.md', json({
+    name: 'runner-fresh-start.md',
+    title: 'Runner: fresh start',
+    description: 'Bootstrap prompt handed to the CLI agent when a task starts from scratch.',
+    group: 'Runner',
+    hasDefault: true,
+    hasOverride: false,
+    defaultContent: 'Default prompt',
+    overrideContent: null,
+    baseDefaultContent: null,
+    effectiveContent: 'Default prompt',
+    defaultSha: '0123456789abcdef',
+    baseDefaultSha: null,
+    defaultChangedSinceOverride: false,
+    overrideUpdatedAt: null,
+  }));
   await page.route('**/api/dev-tools/flags', json({ updateStableEnabled: false, deleteE2EJobsEnabled: false }));
   await page.route('**/api/clients', json([]));
   await page.route('**/api/workspace/tokens/timeline*', json({
@@ -61,6 +92,7 @@ async function stubBackgroundApis(page: Page) {
 
 const SECTIONS: { key: string; overlayTestid: string; innerTestid: string }[] = [
   { key: 'caps', overlayTestid: 'cli-admin-overlay', innerTestid: 'cli-admin-panel' },
+  { key: 'prompts', overlayTestid: 'prompt-admin-overlay', innerTestid: 'prompt-admin-panel' },
   { key: 'tokens', overlayTestid: 'workspace-tokens-overlay', innerTestid: 'workspace-token-timeline' },
   { key: 'screenshots', overlayTestid: 'workspace-screenshots-overlay', innerTestid: 'workspace-screenshots' },
   { key: 'summary', overlayTestid: 'workspace-summary-overlay', innerTestid: 'workspace-summary' },
