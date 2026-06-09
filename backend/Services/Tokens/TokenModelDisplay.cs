@@ -8,6 +8,7 @@ internal static class TokenModelDisplay
     {
         var id = ModelMetadataRegistry.NormalizeId(modelId);
         if (string.IsNullOrWhiteSpace(id)) return null;
+        if (IsPlaceholder(id)) return null;
         return ModelMetadataRegistry.Find(id)?.Label ?? id;
     }
 
@@ -23,4 +24,12 @@ internal static class TokenModelDisplay
     private static bool HasPrefix(string? value, string prefix)
         => !string.IsNullOrWhiteSpace(value)
            && value.Trim().StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPlaceholder(string value)
+    {
+        var trimmed = value.Trim();
+        return string.Equals(trimmed, "unknown", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(trimmed, "(unknown)", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(trimmed, "?", StringComparison.Ordinal);
+    }
 }

@@ -11,6 +11,7 @@
 export interface TaskTokenCall {
   ts: string;
   model: string | null;
+  participantId?: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;

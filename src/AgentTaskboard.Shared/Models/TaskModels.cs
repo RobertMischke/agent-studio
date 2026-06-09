@@ -623,22 +623,24 @@ public record TaskTokenSummary
     public long CacheCreationTokens { get; init; }
     /// <summary>Sum of all four token counts. Drives the bubble label.</summary>
     public long TotalTokens { get; init; }
-    /// <summary>Most recent model used by an attributed orchestrator call. Null when no model was recorded.</summary>
+    /// <summary>Most recent coding-agent model when present, otherwise the most recent recorded model. Null when no model was recorded.</summary>
     public string? LastModel { get; init; }
-    /// <summary>Timestamp of the most recent attributed orchestrator entry. Null when never updated.</summary>
+    /// <summary>Timestamp of the most recent attributed token usage entry. Null when never updated.</summary>
     public DateTime? LastUpdate { get; init; }
     /// <summary>Per-call rows for the popover, oldest first.</summary>
     public List<TaskTokenCall> Entries { get; init; } = [];
 }
 
 /// <summary>
-/// One orchestrator LLM call attributed to a job. Used by the popover to
-/// list per-run rows below the aggregate.
+/// One token usage call attributed to a job. Used by the popover to list
+/// per-run rows below the aggregate.
 /// </summary>
 public record TaskTokenCall
 {
     public DateTime Ts { get; init; }
     public string? Model { get; init; }
+    /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
+    public string? ParticipantId { get; init; }
     public long InputTokens { get; init; }
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }

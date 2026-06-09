@@ -14,6 +14,7 @@ import {
   buildHumanReviewBadge,
   buildGitStateBadge,
   buildPhaseBadge,
+  buildTokenBubble,
 } from './task-card-view-model';
 
 /**
@@ -867,6 +868,47 @@ describe('buildEffectiveModelChip', () => {
     expect(chip.source).toBe('default');
     expect(chip.cliLabel).toBe('Claude Code');
     expect(chip.tooltip.body).toContain('Claude Code');
+  });
+});
+
+describe('buildTokenBubble', () => {
+  it('uses backend-resolved model labels for aggregate and per-run rows', () => {
+    const bubble = buildTokenBubble({
+      calls: 2,
+      inputTokens: 3000,
+      outputTokens: 300,
+      cacheReadTokens: 1000,
+      cacheCreationTokens: 0,
+      totalTokens: 4300,
+      lastModel: 'GPT-5 Codex',
+      lastUpdate: '2026-06-09T08:05:00Z',
+      entries: [
+        {
+          ts: '2026-06-09T08:00:00Z',
+          model: 'GPT-5 Codex',
+          participantId: 'agent:codex',
+          inputTokens: 2000,
+          outputTokens: 200,
+          cacheReadTokens: 1000,
+          cacheCreationTokens: 0,
+        },
+        {
+          ts: '2026-06-09T08:05:00Z',
+          model: 'Claude Haiku 4.5',
+          participantId: 'orchestrator:Test',
+          inputTokens: 1000,
+          outputTokens: 100,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+        },
+      ],
+    });
+
+    expect(bubble?.model).toBe('GPT-5 Codex');
+    expect(bubble?.entries.map((entry) => entry.model)).toEqual([
+      'GPT-5 Codex',
+      'Claude Haiku 4.5',
+    ]);
   });
 });
 

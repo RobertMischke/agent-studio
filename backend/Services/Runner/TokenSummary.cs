@@ -132,18 +132,26 @@ public class TokenSummaryService
             if (entry.Ts > (bucket.LastUpdate ?? DateTime.MinValue))
             {
                 bucket.LastUpdate = entry.Ts;
-                bucket.LastAnyModel = displayModel;
             }
-            if (TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)
-                && entry.Ts > (bucket.LastAgentUpdate ?? DateTime.MinValue))
+            if (!string.IsNullOrWhiteSpace(displayModel))
             {
-                bucket.LastAgentUpdate = entry.Ts;
-                bucket.LastAgentModel = displayModel;
+                if (entry.Ts > (bucket.LastAnyUpdate ?? DateTime.MinValue))
+                {
+                    bucket.LastAnyUpdate = entry.Ts;
+                    bucket.LastAnyModel = displayModel;
+                }
+                if (TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)
+                    && entry.Ts > (bucket.LastAgentUpdate ?? DateTime.MinValue))
+                {
+                    bucket.LastAgentUpdate = entry.Ts;
+                    bucket.LastAgentModel = displayModel;
+                }
             }
             bucket.Entries.Add(new TaskTokenCall
             {
                 Ts = entry.Ts,
                 Model = displayModel,
+                ParticipantId = entry.ParticipantId,
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
                 CacheReadTokens = u.CacheReadTokens,
@@ -177,17 +185,24 @@ public class TokenSummaryService
         if (string.IsNullOrWhiteSpace(fallback)) return summary;
 
         var entries = summary.Entries
-            .Select(e => string.IsNullOrWhiteSpace(e.Model)
+            .Select(e => ShouldApplyRunModelFallback(e)
                 ? e with { Model = fallback }
                 : e)
             .ToList();
+        var hasAgentFallbackRow = entries.Any(e =>
+            string.Equals(e.Model, fallback, StringComparison.Ordinal)
+            && TokenModelDisplay.IsAgentParticipant(e.ParticipantId));
 
         return summary with
         {
-            LastModel = string.IsNullOrWhiteSpace(summary.LastModel) ? fallback : summary.LastModel,
+            LastModel = string.IsNullOrWhiteSpace(summary.LastModel) && hasAgentFallbackRow ? fallback : summary.LastModel,
             Entries = entries,
         };
     }
+
+    private static bool ShouldApplyRunModelFallback(TaskTokenCall entry)
+        => TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)
+           && string.IsNullOrWhiteSpace(TokenModelDisplay.Label(entry.Model));
 
     private sealed class Bucket
     {
@@ -199,6 +214,7 @@ public class TokenSummaryService
         public string? LastAnyModel;
         public string? LastAgentModel;
         public DateTime? LastUpdate;
+        public DateTime? LastAnyUpdate;
         public DateTime? LastAgentUpdate;
         public List<TaskTokenCall> Entries { get; } = [];
     }
@@ -264,7 +280,7 @@ public class TokenSummaryService
             {
                 if (!perModel.TryGetValue(m.Model, out var bucket))
                 {
-                    bucket = new ModelBucket(m.Model);
+                    bucket = new ModelBucket(m.Model, m.Model);
                     perModel[m.Model] = bucket;
                 }
                 bucket.Calls += m.Calls;
