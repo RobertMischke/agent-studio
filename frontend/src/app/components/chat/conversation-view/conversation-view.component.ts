@@ -60,6 +60,13 @@ interface MessageGroupRow {
   items: MessageGroupItem[];
   meta: SessionMeta;
   /**
+   * Generating model for this group's outputs, when attributable in-band
+   * (per-run `[taskboard] Started ... model=` marker). A model switch closes
+   * the open group so every bubble is model-uniform; `null` when the log does
+   * not name a model (user turns, orchestrator decisions, aspect reviews).
+   */
+  model: string | null;
+  /**
    * True when this group's actor differs from the previous role-bearing row,
    * so the actor header should be shown. Consecutive same-actor groups (a tool
    * burst between two agent turns preserves the role) suppress the repeated
@@ -245,6 +252,10 @@ export class ConversationViewComponent {
     // turn → burst → agent turn stays one role); any other rendered event
     // resets it to null so the next message group re-announces its actor.
     let lastRole: MessageEvent['kind'] | null = null;
+    // Generating model of the previous role-bearing bubble. A model switch
+    // re-shows the header even when the actor is unchanged, so the new bubble
+    // can name its model next to the timestamp (the header carries the badge).
+    let lastModel: string | null = null;
     const sessionCard: { row: SessionMetaRow | null } = { row: null };
 
     const closeGroup = (): void => {
@@ -254,8 +265,9 @@ export class ConversationViewComponent {
       // and zero payload) would paint an empty bubble — drop it instead so
       // the user never sees a hollow "Agent" frame.
       if (open.items.length > 0) {
-        open.showHeader = lastRole !== open.actor;
+        open.showHeader = lastRole !== open.actor || lastModel !== open.model;
         lastRole = open.actor;
+        lastModel = open.model;
         out.push(open);
       }
       cell.open = null;
@@ -295,9 +307,16 @@ export class ConversationViewComponent {
       return row;
     };
 
-    const ensureGroup = (actor: MessageEvent['kind'], ts: string): MessageGroupRow => {
+    const ensureGroup = (
+      actor: MessageEvent['kind'],
+      ts: string,
+      model: string | null,
+    ): MessageGroupRow => {
       const current = cell.open;
-      if (current && current.actor === actor) return current;
+      // Same actor *and* same model stays in the bubble. A mid-run model switch
+      // (core agent → recovery model) closes the group so each bubble names a
+      // single generating model next to its timestamp.
+      if (current && current.actor === actor && current.model === model) return current;
       closeGroup();
       const next: MessageGroupRow = {
         kind: 'messageGroup',
@@ -306,6 +325,7 @@ export class ConversationViewComponent {
         firstTs: ts,
         lastTs: ts,
         items: [],
+        model,
         showHeader: true,
         meta: {
           sessionIdShort: lastSeenSessionId ? shortenSessionId(lastSeenSessionId) : undefined,
@@ -391,7 +411,7 @@ export class ConversationViewComponent {
           closeGroup();
         }
 
-        const group = ensureGroup(m.kind, ts);
+        const group = ensureGroup(m.kind, ts, m.model ?? null);
 
         const body = classified.payload !== undefined ? classified.payload : m.body;
         // task_started with no payload is pure bookkeeping — its timing

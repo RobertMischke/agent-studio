@@ -619,4 +619,56 @@ describe('ConversationViewComponent', () => {
       el.querySelector('[data-testid="conversation-feedback-open-trace"]')
     ).toBeTruthy();
   });
+
+  it('renders the generating model subtly next to the timestamp', async () => {
+    const events: ConversationEvent[] = [
+      { ...agentMsg('a1', 1, 'building the badge'), model: 'claude-opus-4-8' },
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const head = el.querySelector('[data-testid="conversation-message-head"]');
+    const badge = el.querySelector('[data-testid="conversation-message-model"]');
+    expect(badge).toBeTruthy();
+    expect(badge?.textContent?.trim()).toBe('claude-opus-4-8');
+    // The badge sits inside the same header as the timestamp.
+    expect(head?.contains(badge as Node)).toBe(true);
+  });
+
+  it('omits the model badge when the output has no attributable model', async () => {
+    const fixture = await makeFixture([agentMsg('a1', 1, 'no model here')]);
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('[data-testid="conversation-message-model"]')).toBeFalsy();
+  });
+
+  it('breaks the bubble on a mid-task model switch so each bubble names one model', async () => {
+    // Same actor, different model: the switch must close the first bubble so a
+    // recovery run on another model renders its own model next to its time.
+    const events: ConversationEvent[] = [
+      { ...agentMsg('a1', 1, 'first run reply'), model: 'gpt-5-codex' },
+      { ...agentMsg('a2', 2, 'recovery run reply'), model: 'claude-opus-4-7' },
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const bubbles = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(bubbles.length).toBe(2);
+    const badges = el.querySelectorAll('[data-testid="conversation-message-model"]');
+    expect(Array.from(badges).map((b) => b.textContent?.trim())).toEqual([
+      'gpt-5-codex',
+      'claude-opus-4-7',
+    ]);
+  });
+
+  it('keeps same-actor same-model messages in one bubble with a single model badge', async () => {
+    const events: ConversationEvent[] = [
+      { ...agentMsg('a1', 1, 'first'), model: 'claude-opus-4-8' },
+      { ...agentMsg('a2', 2, 'second'), model: 'claude-opus-4-8' },
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+    const bubbles = el.querySelectorAll('[data-testid="conversation-message-message.taskAgent"]');
+    expect(bubbles.length).toBe(1);
+    const badges = el.querySelectorAll('[data-testid="conversation-message-model"]');
+    expect(badges.length).toBe(1);
+    expect(badges[0].textContent?.trim()).toBe('claude-opus-4-8');
+  });
 });

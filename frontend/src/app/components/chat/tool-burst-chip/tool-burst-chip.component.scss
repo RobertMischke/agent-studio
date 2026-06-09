@@ -70,6 +70,13 @@
   white-space: nowrap;
 }
 .burst__chip--time { background: color-mix(in srgb, currentColor 4%, transparent); }
+.burst__chip--model {
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  border-color: color-mix(in srgb, currentColor 12%, transparent);
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  letter-spacing: 0.01em;
+}
 .burst__chip--art { background: rgba(56,189,248,0.14); border-color: rgba(125,211,252,0.45); }
 .burst__chip--file { background: rgba(167,139,250,0.14); border-color: rgba(196,181,253,0.45); }
 .burst__chip[data-family='read'] { background: rgba(94,234,212,0.14); border-color: rgba(45,212,191,0.45); }

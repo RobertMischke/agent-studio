@@ -236,6 +236,21 @@
   letter-spacing: 0.01em;
 }
 
+/* Dezent generating-model chip: sits next to the time, same subdued register
+ * as the session chip (mono, dimmed) so it reads as secondary metadata. A
+ * hairline pill demarcates the model id without competing with the body. */
+.msg__model {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 /* Coalesced items list. One <li> per notification; the bullet is a thin
  * dot on the left, padding is tight, and items wrap their body markdown
  * directly so the inline render path stays canonical. No per-item border,

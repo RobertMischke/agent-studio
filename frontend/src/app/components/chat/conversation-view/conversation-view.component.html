@@ -85,6 +85,11 @@
                           data-testid="conversation-message-count">{{ row.items.length }} events</span>
                   }
                   <time class="msg__time">{{ formatGroupTime(row) }}</time>
+                  @if (row.model) {
+                    <span class="msg__model"
+                          data-testid="conversation-message-model"
+                          [appTooltip]="'Generating model for this output'">{{ row.model }}</span>
+                  }
                   @if (row.meta.sessionIdFull) {
                     <span class="msg__session"
                           data-testid="conversation-message-session">session {{ formatSessionIdShort(row.meta.sessionIdFull) }}</span>

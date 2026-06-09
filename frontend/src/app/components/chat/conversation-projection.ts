@@ -95,18 +95,34 @@ export function projectConversation(
   let currentRun: RunContext = pickInitialRun(ctx.runTimeline ?? null);
   const runByLineIndex = buildRunIndex(ctx.lines, ctx.runTimeline ?? null);
   const seenParserDedupeKeys = new Set<string>();
+  // The generating model for the current run. Updated whenever a
+  // `[taskboard] Started ... model=` marker is seen so agent outputs in the
+  // run carry that run's model — which is what makes mid-task model switches
+  // (a continue / recovery run on a different model) render correctly.
+  let currentModel: string | null = null;
 
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i];
     const range = rangeForGroup(group, indexByLine, ctx.source);
     const startLineIdx = range.start;
+
+    // `[taskboard]` runtime markers carry the per-run model on the system
+    // stream. Capture the model before the run switch so the run marker and
+    // the run's agent outputs both see it, then drop the marker line itself —
+    // it is run bookkeeping, not a chat message (the legacy
+    // buildConversationTurns view filters it the same way).
+    const marker = readTaskboardMarker(group);
+    if (marker?.model) currentModel = marker.model;
+
     const matchedRun = runByLineIndex.get(startLineIdx);
     if (matchedRun?.run && matchedRun.run.index !== currentRun?.run?.index) {
       currentRun = matchedRun;
       if (ctx.emitRunMarkers) {
-        events.push(toRunMarker(matchedRun, range));
+        events.push(toRunMarker(matchedRun, range, currentModel));
       }
     }
+
+    if (marker) continue;
 
     // Contiguous tool / failed-tool groups collapse into a single ToolBurst
     // event so the chat does not paint a wall of chips. The window stops at
@@ -133,12 +149,12 @@ export function projectConversation(
         start: range.start,
         end: Math.max(range.end, lastRange.end)
       };
-      events.push(toMergedToolBurst(burstGroups, mergedRange, currentRun?.run?.index));
+      events.push(toMergedToolBurst(burstGroups, mergedRange, currentRun?.run?.index, currentModel));
       i = lastIdx;
       continue;
     }
 
-    const ev = projectGroup(group, range, currentRun, seenParserDedupeKeys);
+    const ev = projectGroup(group, range, currentRun, seenParserDedupeKeys, currentModel);
     if (ev) events.push(...ev);
   }
 
@@ -185,7 +201,8 @@ function projectGroup(
   group: ActivityLogGroup,
   range: RawLineRange,
   currentRun: RunContext,
-  seenParserDedupeKeys: Set<string>
+  seenParserDedupeKeys: Set<string>,
+  model: string | null
 ): ConversationEvent[] | null {
   const firstLine = group.lines[0];
   if (!firstLine) return null;
@@ -407,6 +424,7 @@ function projectGroup(
         kind: 'message.taskAgent',
         timestamp: ts,
         runId,
+        model,
         rawRange: range,
         severity: 'error',
         actor: 'Agent',
@@ -422,6 +440,7 @@ function projectGroup(
       kind: 'message.taskAgent',
       timestamp: ts,
       runId,
+      model,
       rawRange: range,
       actor: 'Agent',
       body: joinGroupBody(group)
@@ -480,7 +499,8 @@ interface BurstMember {
 function toMergedToolBurst(
   members: readonly BurstMember[],
   range: RawLineRange,
-  runId: number | undefined
+  runId: number | undefined,
+  model: string | null
 ) {
   const families: Partial<Record<ToolFamily, number>> = {};
   const samples: Record<string, string | undefined> = {};
@@ -528,6 +548,7 @@ function toMergedToolBurst(
     kind: 'toolBurst' as const,
     timestamp: members[0].group.lines[0].timestamp,
     runId,
+    model,
     rawRange: range,
     severity: failures > 0 ? ('error' as const) : ('info' as const),
     count,
@@ -831,6 +852,23 @@ function joinGroupBody(group: ActivityLogGroup): string {
   return group.lines.map((l) => l.text).filter((t) => t !== undefined).join('\n').trim();
 }
 
+/**
+ * Detect a `[taskboard]`-prefixed runtime marker on the system stream (CLI
+ * started / exited). Returns `{ model }` for any such marker so the caller can
+ * both update the run's model (from a `Started ... model=X` line) and drop the
+ * marker line from the chat. Returns `null` for non-marker groups. The model
+ * segment is only present on the Started line; exit markers yield `model: null`
+ * and leave the running model unchanged.
+ */
+function readTaskboardMarker(group: ActivityLogGroup): { model: string | null } | null {
+  const first = group.lines[0];
+  if (!first || first.stream !== 'system') return null;
+  const text = first.text ?? '';
+  if (!/^\s*\[taskboard\]/i.test(text)) return null;
+  const m = /\bmodel=([^\s,]+)/i.exec(text);
+  return { model: m ? m[1] : null };
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Range / run helpers
 // ──────────────────────────────────────────────────────────────────────────
@@ -956,13 +994,14 @@ function toVisualPreview(
   };
 }
 
-function toRunMarker(matched: RunContext, range: RawLineRange) {
+function toRunMarker(matched: RunContext, range: RawLineRange, model: string | null) {
   const run = matched.run!;
   return {
     id: `${range.source}:run:${run.index}`,
     kind: 'runMarker' as const,
     timestamp: run.startedAt,
     runId: run.index,
+    model,
     rawRange: range,
     marker: run.intent,
     cli: run.cli,

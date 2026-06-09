@@ -27,6 +27,13 @@
           {{ formattedDuration() }}
         </span>
       }
+      @if (event().model) {
+        <span class="burst__chip burst__chip--model"
+              data-testid="tool-burst-model"
+              [appTooltip]="'Generating model for this tool run'">
+          {{ event().model }}
+        </span>
+      }
       @if (artifactCount() > 0) {
         <span class="burst__chip burst__chip--art" data-testid="tool-burst-artifacts">
           {{ artifactCount() }} artifact{{ artifactCount() === 1 ? '' : 's' }}

@@ -114,6 +114,17 @@ interface ConversationEventBase {
   severity?: ConversationEventSeverity;
   /** Run index from the run timeline, when known. */
   runId?: number;
+  /**
+   * Model that generated this output, when it can be attributed in-band.
+   * Sourced from the per-run `[taskboard] Started ... model=` marker in
+   * cli-output.log, so it tracks model switches between runs (a continue /
+   * recovery run on a different model carries that run's model, not a single
+   * global task model). Left undefined for outputs whose model is not
+   * recoverable from the log (user turns, orchestrator decisions, aspect
+   * reviews — those run on a separate decision/fast model the log does not
+   * record per line).
+   */
+  model?: string | null;
   /** Job id when the host has cross-task context (project side sheet). */
   jobId?: string;
   /** Back-reference to raw log lines. Required so Trace stays one click away. */

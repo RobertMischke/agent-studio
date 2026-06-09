@@ -5,11 +5,14 @@ import {
   compositeFragment,
   heuristicWarningFragment,
   imageArtifactFragment,
+  modelSwitchFragment,
   needsInputLoopFragment,
   orchestratorReissueFragment,
   resetFixtureClock,
   runTimelineForComposite,
+  runTimelineForModelSwitch,
   schemaDriftFragment,
+  taskboardStartedFragment,
   supervisorAdvisoryFragment,
   testFailRetryFragment,
   tokenSpikeFragment,
@@ -261,6 +264,61 @@ describe('projectConversation', () => {
     expect(runs).toHaveLength(0);
     // But every event should carry the run id.
     expect(events.every((e) => e.runId === 1 || e.kind === 'taskMarker')).toBe(true);
+  });
+
+  it('reads the per-run model from a [taskboard] Started marker and drops the marker line', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: taskboardStartedFragment('claude-opus-4-8')
+    });
+    // The marker is run bookkeeping, not a chat row: only the agent turn
+    // survives, and it carries the model the marker announced.
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('message.taskAgent');
+    expect(events[0].model).toBe('claude-opus-4-8');
+    // No event should echo the raw [taskboard] marker text.
+    expect(events.some((e) => probe(e).body?.includes('[taskboard]'))).toBe(false);
+  });
+
+  it('attributes the model per output across a mid-task model switch', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: modelSwitchFragment('gpt-5-codex', 'claude-opus-4-7'),
+      runTimeline: runTimelineForModelSwitch(),
+      emitRunMarkers: true
+    });
+    const agents = events.filter((e) => e.kind === 'message.taskAgent');
+    // Each run's reply keeps its OWN run model — never one global value.
+    expect(agents.map((e) => e.model)).toEqual(['gpt-5-codex', 'claude-opus-4-7']);
+    // The second run-boundary emits a runMarker carrying the switched model.
+    const runs = events.filter((e) => e.kind === 'runMarker');
+    expect(runs).toHaveLength(1);
+    expect(runs[0].model).toBe('claude-opus-4-7');
+  });
+
+  it('does not fabricate a model for orchestrator or user rows the log never names', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        ...taskboardStartedFragment('claude-opus-4-8'),
+        ...orchestratorReissueFragment(),
+        ...userMessageFragment()
+      ]
+    });
+    const orchestrator = events.find((e) => e.kind === 'decision.orchestrator');
+    const user = events.find((e) => e.kind === 'message.user');
+    // The core agent model must not leak onto rows the log cannot attribute.
+    expect(orchestrator?.model ?? null).toBeNull();
+    expect(user?.model ?? null).toBeNull();
+  });
+
+  it('attaches the current run model to a contiguous tool burst', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [...taskboardStartedFragment('claude-opus-4-8'), ...toolBurstFragment()]
+    });
+    const burst = events.find((e) => e.kind === 'toolBurst');
+    expect(burst?.model).toBe('claude-opus-4-8');
   });
 
   it('emits artifact.image events from companion screenshot evidence', () => {

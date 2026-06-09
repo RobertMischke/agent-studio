@@ -99,4 +99,61 @@ describe('ToolBurstChipComponent (smoke)', () => {
     expect(el.querySelector('[data-testid="tool-burst-command-output"]')?.textContent).toContain('line 29');
     expect(el.querySelector('[data-testid="tool-burst-output-toggle"]')?.textContent).toContain('show less');
   });
+
+  it('shows the generating model as a subtle chip on the collapsed burst row', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ToolBurstChipComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ToolBurstChipComponent);
+    fixture.componentRef.setInput('event', {
+      id: 'burst-model',
+      kind: 'toolBurst',
+      timestamp: '2026-04-26T12:00:00.000Z',
+      rawRange: { source: 'cli-output.log', start: 1, end: 6 },
+      count: 3,
+      families: { read: 3 },
+      failures: 0,
+      durationMs: 900,
+      model: 'claude-opus-4-8',
+      collapsedByDefault: true,
+    });
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const chip = el.querySelector('[data-testid="tool-burst-model"]');
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent?.trim()).toBe('claude-opus-4-8');
+  });
+
+  it('omits the model chip when the burst has no attributable model', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ToolBurstChipComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ToolBurstChipComponent);
+    fixture.componentRef.setInput('event', {
+      id: 'burst-nomodel',
+      kind: 'toolBurst',
+      timestamp: '2026-04-26T12:00:00.000Z',
+      rawRange: { source: 'cli-output.log', start: 1, end: 6 },
+      count: 3,
+      families: { read: 3 },
+      failures: 0,
+      durationMs: 900,
+      collapsedByDefault: true,
+    });
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="tool-burst-model"]')).toBeFalsy();
+  });
 });

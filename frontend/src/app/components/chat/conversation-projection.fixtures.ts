@@ -198,6 +198,89 @@ export function testFailRetryFragment(): CliOutputLine[] {
   ];
 }
 
+/**
+ * A `[taskboard] Started ... model=` runtime marker on the system stream
+ * followed by an agent prose turn. This is the canonical per-output model
+ * source: the marker sets the run's generating model and is itself dropped
+ * from the chat (run bookkeeping, not a message), so the agent turn carries
+ * `model` while no fabricated row appears for the marker.
+ */
+export function taskboardStartedFragment(model: string = MODEL_IDS.claudeOpus47): CliOutputLine[] {
+  resetFixtureClock();
+  return [
+    line(
+      `[taskboard] Started claude CLI (PID 4242), model=${model}, thinkingLevel=high, session=sess-abc`,
+      'system'
+    ),
+    line('Implementing the model badge now.')
+  ];
+}
+
+/**
+ * Two consecutive runs whose `[taskboard] Started` markers name *different*
+ * models — the "Modelle wechseln innerhalb eines Tasks" case. Each run's
+ * agent output must carry its own run's model, never one global value.
+ */
+export function modelSwitchFragment(
+  first: string = MODEL_IDS.gpt5Codex,
+  second: string = MODEL_IDS.claudeOpus47
+): CliOutputLine[] {
+  resetFixtureClock();
+  return [
+    line(`[taskboard] Started codex CLI (PID 11), model=${first}, thinkingLevel=high`, 'system'),
+    line('First run reply on the initial model.'),
+    line(`[taskboard] Started claude CLI (PID 22), model=${second}, thinkingLevel=high`, 'system'),
+    line('Recovery run reply on the switched model.')
+  ];
+}
+
+/**
+ * Run timeline matching {@link modelSwitchFragment}: two runs whose
+ * `lineStart` boundaries align with the two `[taskboard]` markers so the
+ * projection emits a `runMarker` (carrying the switched model) on the
+ * second run's transition.
+ */
+export function runTimelineForModelSwitch(): RunTimeline {
+  const run1: RunRecord = {
+    index: 1,
+    intent: 'start',
+    startedAt: '2026-05-05T12:00:00Z',
+    endedAt: '2026-05-05T12:01:00Z',
+    status: 'completed',
+    cli: 'codex',
+    exitCode: 0,
+    durationSeconds: 60,
+    inputSessionId: null,
+    capturedSessionId: 'sess-one',
+    resumed: false,
+    reason: null,
+    userFollowup: null,
+    lineStart: 1,
+    lineEnd: 2,
+    headShaBefore: null,
+    headShaAfter: null,
+    contextRef: null
+  };
+  const run2: RunRecord = {
+    ...run1,
+    index: 2,
+    intent: 'recovery',
+    startedAt: '2026-05-05T12:01:30Z',
+    endedAt: '2026-05-05T12:02:30Z',
+    cli: 'claude',
+    capturedSessionId: 'sess-two',
+    lineStart: 3,
+    lineEnd: 4
+  };
+  return {
+    runCount: 2,
+    firstStartedAt: run1.startedAt,
+    lastActivityAt: run2.endedAt,
+    hasActiveRun: false,
+    runs: [run1, run2]
+  };
+}
+
 /** Composite sample mixing user → tools → agent with a watchdog quiet event. */
 export function compositeFragment(): CliOutputLine[] {
   resetFixtureClock();
