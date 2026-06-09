@@ -99,6 +99,42 @@ export function flattenGrouped(grouped: GroupedJobs): TaskInfo[] {
 }
 
 /**
+ * Board display contract: an epic is a container, not a board work-item, so it
+ * must never render as a card in any lane (operator request 2026-06-09). This
+ * strips `kind === 'epic'` cards from every lane of a grouped feed so the flat
+ * lane board shows tasks only. The "Group by epic" view consumes the unfiltered
+ * feed and keeps rendering epics as group headers, and epics stay reachable via
+ * the Epic navigation. Mirrors the pickup rule that epics are not pickable.
+ *
+ * Pure so it stays testable without TestBed. The `review` lane is the legacy
+ * alias for `autoReview`; both are pointed at the same filtered array so a
+ * downstream `flattenGrouped` does not double-count. Spread first so any lane
+ * not enumerated here (e.g. `codeNotComplete`) is preserved before the known
+ * lanes are filtered.
+ */
+export function excludeEpics(grouped: GroupedJobs): GroupedJobs {
+  const tasksOnly = (jobs: TaskInfo[] | undefined): TaskInfo[] =>
+    (jobs ?? []).filter((t) => t.kind !== 'epic');
+  const autoReview = tasksOnly(grouped.autoReview ?? grouped.review);
+  return {
+    ...grouped,
+    backlog: tasksOnly(grouped.backlog),
+    preparation: tasksOnly(grouped.preparation),
+    orchestratorPrep: tasksOnly(grouped.orchestratorPrep),
+    ready: tasksOnly(grouped.ready),
+    progress: tasksOnly(grouped.progress),
+    failedPickup: tasksOnly(grouped.failedPickup),
+    codeNotComplete: tasksOnly(grouped.codeNotComplete),
+    autoReview,
+    humanReview: tasksOnly(grouped.humanReview),
+    escalated: tasksOnly(grouped.escalated),
+    review: autoReview,
+    completed: tasksOnly(grouped.completed),
+    archive: tasksOnly(grouped.archive),
+  };
+}
+
+/**
  * Build the epic tree from a flat task list. Order: epics first (by project,
  * then board order, then title), then the "No epic" catch-all, then the orphan
  * bucket. Synthetic groups are omitted when empty so a board with no orphans

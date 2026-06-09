@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEpicGroups, flattenGrouped } from './epic-grouping.util';
+import { buildEpicGroups, excludeEpics, flattenGrouped } from './epic-grouping.util';
 import { GroupedJobs, TaskInfo } from '../../../models/task.model';
 
 interface TaskOverrides {
@@ -130,6 +130,58 @@ describe('buildEpicGroups', () => {
       task('e-a1', { kind: 'epic', projectName: 'alpha', order: 1 }),
     ]);
     expect(groups.map((g) => g.id)).toEqual(['e-a1', 'e-a2', 'e-z']);
+  });
+});
+
+describe('excludeEpics', () => {
+  it('drops epic cards from every lane while keeping tasks', () => {
+    const grouped = emptyGrouped();
+    grouped.backlog = [task('epic-b', { kind: 'epic' }), task('t-b')];
+    grouped.ready = [task('epic-r', { kind: 'epic' }), task('t-r')];
+    grouped.progress = [task('epic-p', { kind: 'epic' }), task('t-p')];
+    grouped.humanReview = [task('epic-h', { kind: 'epic' }), task('t-h')];
+    grouped.escalated = [task('epic-e', { kind: 'epic' }), task('t-e')];
+
+    const out = excludeEpics(grouped);
+
+    expect(out.backlog.map((t) => t.id)).toEqual(['t-b']);
+    expect(out.ready.map((t) => t.id)).toEqual(['t-r']);
+    expect(out.progress.map((t) => t.id)).toEqual(['t-p']);
+    expect(out.humanReview.map((t) => t.id)).toEqual(['t-h']);
+    expect(out.escalated.map((t) => t.id)).toEqual(['t-e']);
+  });
+
+  it('keeps the review alias pointed at the filtered autoReview array', () => {
+    const grouped = emptyGrouped();
+    const epic = task('epic-a', { kind: 'epic', state: '4-auto-review' });
+    const card = task('t-a', { state: '4-auto-review' });
+    grouped.autoReview = [epic, card];
+    grouped.review = grouped.autoReview;
+
+    const out = excludeEpics(grouped);
+
+    expect(out.autoReview.map((t) => t.id)).toEqual(['t-a']);
+    expect(out.review).toBe(out.autoReview);
+    // flattenGrouped must not resurrect the epic via the alias
+    expect(flattenGrouped(out).map((t) => t.id)).toEqual(['t-a']);
+  });
+
+  it('preserves the codeNotComplete park lane (filtered, not dropped)', () => {
+    const grouped = emptyGrouped();
+    grouped.codeNotComplete = [task('epic-c', { kind: 'epic' }), task('t-c')];
+
+    const out = excludeEpics(grouped);
+
+    expect(out.codeNotComplete.map((t) => t.id)).toEqual(['t-c']);
+  });
+
+  it('is a no-op for a board with no epics', () => {
+    const grouped = emptyGrouped();
+    grouped.backlog = [task('t1'), task('t2')];
+
+    const out = excludeEpics(grouped);
+
+    expect(out.backlog.map((t) => t.id)).toEqual(['t1', 't2']);
   });
 });
 

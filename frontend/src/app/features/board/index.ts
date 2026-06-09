@@ -37,4 +37,4 @@ export {
 // utilities
 export { splitReadyByPhase } from './components/ready-lane-split.util';
 export { groupReviewJobs } from './components/review-grouping.util';
-export { buildEpicGroups, flattenGrouped, type EpicGroupView } from './components/epic-grouping.util';
+export { buildEpicGroups, flattenGrouped, excludeEpics, type EpicGroupView } from './components/epic-grouping.util';

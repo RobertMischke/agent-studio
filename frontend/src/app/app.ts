@@ -32,6 +32,7 @@ import {
   CreateTaskFormService,
   buildProjectTokenChip,
   flattenGrouped,
+  excludeEpics,
   projectAutoInfo,
   projectRunnerIndicator,
   splitReadyByPhase,
@@ -534,7 +535,11 @@ export class App implements OnInit, OnDestroy {
   // ProjectRunner.GetNextReadyJob picks by. Keeping a single source of truth
   // here means "what's at the top of Ready runs first" is structurally true,
   // not just usually true.
-  readonly displayGrouped = computed(() => this.filteredGrouped());
+  // Board display contract: epics are containers, not board work-items, so the
+  // flat lane board (focusGroups / laneGroups) renders tasks only. The
+  // "Group by epic" view binds the unfiltered `epicBoardTasks` feed instead, so
+  // epics still surface there and via the Epic navigation. See `excludeEpics`.
+  readonly displayGrouped = computed(() => excludeEpics(this.filteredGrouped()));
 
   readonly focusGroups = computed(() => {
     const grouped = this.displayGrouped();
