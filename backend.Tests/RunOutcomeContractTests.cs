@@ -320,4 +320,36 @@ public class RunOutcomeContractTests
         Assert.Contains("- Result: NoOp", updated);
         Assert.DoesNotContain("- Result: Failed", updated);
     }
+
+    [Fact]
+    public void SummaryResultLine_RewritePreservesProtocolImagesSection()
+    {
+        var summary = """
+            # Status
+
+            - Result: Failed
+            - Duration: 4 sec
+
+            ## What Was Done
+            - Captured screenshots and reviewed the supplied image.
+
+            ## Open Items
+            - None.
+
+            ## Images
+            - ![](results/run-proof.png)
+            - ![](results/playwright/spec-name/nested-proof.png)
+            - ![](attachments/input-wireframe.png)
+            """;
+
+        var updated = OrchestratorApi.Services.SummaryGenerationService.ApplyOutcomeResultLine(summary, "Success");
+
+        Assert.Contains("- Result: Success", updated);
+        Assert.DoesNotContain("- Result: Failed", updated);
+        Assert.Contains("## Images", updated);
+        Assert.Contains("![](results/run-proof.png)", updated);
+        Assert.Contains("![](results/playwright/spec-name/nested-proof.png)", updated);
+        Assert.Contains("![](attachments/input-wireframe.png)", updated);
+        Assert.Equal(1, updated.Split("## Images", StringSplitOptions.None).Length - 1);
+    }
 }

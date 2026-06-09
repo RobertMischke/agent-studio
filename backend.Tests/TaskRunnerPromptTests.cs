@@ -295,6 +295,27 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void SummaryProtocolTemplate_PinsImageSectionContract()
+    {
+        var rendered = Prompts().Render(RuntimePromptService.SummaryProtocol, new Dictionary<string, string?>
+        {
+            ["log"] = string.Join('\n',
+                "Captured result screenshot at results/run-proof.png",
+                "Used supplied reference image attachments/input-wireframe.png")
+        });
+
+        Assert.Contains("## Images", rendered);
+        Assert.Contains("list every unique hit as `![](<path>)`", rendered);
+        Assert.Contains("Prefer `results/<name>` for screenshots produced during the run.", rendered);
+        Assert.Contains("Prefer `attachments/<name>` for images supplied in the task prompt.", rendered);
+        Assert.Contains("Omit this section when no images appear.", rendered);
+        Assert.Contains("Images do not count.", rendered);
+        Assert.Contains("results/run-proof.png", rendered);
+        Assert.Contains("attachments/input-wireframe.png", rendered);
+        Assert.DoesNotContain("{{log}}", rendered);
+    }
+
+    [Fact]
     public void RunnerTemplates_DoNotContainEmDashes()
     {
         var prompts = Prompts();
