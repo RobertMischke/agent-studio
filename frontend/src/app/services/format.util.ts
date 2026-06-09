@@ -50,6 +50,13 @@ export function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
+export function formatCompactDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const day = date.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `${day} ${time}`;
+}
+
 /**
  * Compact human-readable "time since" string for timestamps shown next to
  * job titles. `now` is passed in (not Date.now()) so the result is stable

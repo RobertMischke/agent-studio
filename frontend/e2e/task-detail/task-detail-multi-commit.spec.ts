@@ -55,7 +55,7 @@ const COMMITS: CommitFixture[] = [
     message: 'fix: handle empty input edge case',
     filesChanged: 1,
     files: ['src/feature.ts'],
-    at: '2026-05-09T10:30:00Z'
+    at: '2026-05-10T10:30:00Z'
   },
   {
     sha: '3333333333333333333333333333333333333333',
@@ -63,7 +63,7 @@ const COMMITS: CommitFixture[] = [
     message: 'chore: update docs after operator steer',
     filesChanged: 3,
     files: ['src/feature.ts', 'README.md', 'CHANGELOG.md'],
-    at: '2026-05-09T11:15:00Z'
+    at: '2026-05-11T11:15:00Z'
   }
 ];
 
@@ -105,7 +105,7 @@ function makeDetail() {
 
 async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
   await page.route('**/api/tasks', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
@@ -202,7 +202,7 @@ async function installRoutes(page: Page) {
 
 async function installWorktreeRoutes(page: Page) {
   await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
   });
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
@@ -295,6 +295,18 @@ async function installWorktreeRoutes(page: Page) {
 
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
 
+async function expectedCommitChainMetas(page: Page): Promise<string[]> {
+  return page.evaluate((commits) =>
+    commits.map((commit) => {
+      const date = new Date(commit.at);
+      const day = date.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+      const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `${commit.filesChanged}f · ${day} ${time}`;
+    }),
+    COMMITS
+  );
+}
+
 test.describe('Task-detail multi-commit chain', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -349,6 +361,12 @@ test.describe('Task-detail multi-commit chain', () => {
     await expect(items.nth(0)).toContainText(COMMITS[0].shortSha);
     await expect(items.nth(1)).toContainText(COMMITS[1].shortSha);
     await expect(items.nth(2)).toContainText(COMMITS[2].shortSha);
+    const expectedMetas = await expectedCommitChainMetas(page);
+    const metas = page.getByTestId('git-commit-chain-meta');
+    await expect(metas.nth(0)).toHaveText(expectedMetas[0]);
+    await expect(metas.nth(1)).toHaveText(expectedMetas[1]);
+    await expect(metas.nth(2)).toHaveText(expectedMetas[2]);
+    expect(new Set(expectedMetas.map(meta => meta.split(' · ')[1].split(' ')[0])).size).toBe(3);
     // Subjects render alongside the SHA.
     await expect(items.nth(0)).toContainText('feat: initial slice');
     await expect(items.nth(2)).toContainText('chore: update docs');
@@ -364,7 +382,7 @@ test.describe('Task-detail multi-commit chain', () => {
     // click on the chain chip below.
     const filterClose = page.locator('[data-testid="kanban-filter-sidesheet-close"], dialog [aria-label="Close filter panel"]').first();
     if (await filterClose.isVisible().catch(() => false)) {
-      await filterClose.click().catch(() => {});
+      await filterClose.click().catch(() => undefined);
     }
 
     const items = page.getByTestId('git-commit-chain-item');

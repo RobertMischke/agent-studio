@@ -9,6 +9,7 @@ import { GitPaneComponent } from './git-pane.component';
 import { GitPaneService } from '../../../services/git-pane.service';
 import type { GitFileChange, TaskCommitDetail, TaskCommitInfo } from '../../../../git';
 import { LARGE_DIFF_LINE_THRESHOLD } from '../../../../../utils/large-diff-gate';
+import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
 
 const commits: TaskCommitInfo[] = [
   {
@@ -124,6 +125,35 @@ describe('GitPaneComponent', () => {
     expect(root.querySelector('[data-testid="git-commit-chain"]')).not.toBeNull();
     expect(root.querySelector('[data-testid="git-commit-chain-all"]')?.textContent).toContain('All 2 commits');
     expect(root.querySelector('[data-testid="git-commit-aggregate-header"]')).toBeNull();
+  });
+
+  it('shows compact date and time for each expanded commit chain row', async () => {
+    const git = makeGitPaneMock();
+    await TestBed.configureTestingModule({
+      imports: [GitPaneComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: GitPaneService, useValue: git },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(GitPaneComponent);
+    fixture.componentRef.setInput('isActiveJob', true);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('[data-testid="git-commit-group-toggle"]')?.click();
+    fixture.detectChanges();
+
+    const meta = root.querySelectorAll<HTMLElement>('[data-testid="git-commit-chain-meta"]');
+    expect(meta).toHaveLength(2);
+    expect(meta[0].textContent?.trim()).toBe(`1f · ${formatCompactDateTime(commits[0].at)}`);
+    expect(meta[1].textContent?.trim()).toBe(`1f · ${formatCompactDateTime(commits[1].at)}`);
+    expect(meta[0].textContent).not.toBe(`1f · ${new Date(commits[0].at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    expect(fixture.componentInstance.commitChainTooltip(commits[0], 0)).toContain(formatDateTime(commits[0].at));
   });
 
   it('gates a large selected diff until the operator reveals it', async () => {

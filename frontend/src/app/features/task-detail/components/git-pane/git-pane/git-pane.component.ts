@@ -6,6 +6,7 @@ import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
 import type { TaskCommitInfo } from '../../../../git';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
+import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
 import { isLargeDiff, describeDiffSize } from '../../../../../utils/large-diff-gate';
 import { currentDiff2Html, hasDiff2HtmlLoaded, loadDiff2Html } from '../../../../../utils/diff2html-lazy';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
@@ -179,7 +180,11 @@ export class GitPaneComponent {
   }
 
   commitChainTooltip(entry: TaskCommitInfo, index: number): string {
-    return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${entry.message}`;
+    return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${formatDateTime(entry.at)} · ${entry.message}`;
+  }
+
+  commitChainTimestamp(entry: TaskCommitInfo): string {
+    return formatCompactDateTime(entry.at);
   }
 
   selectedCommitSummary(): string {

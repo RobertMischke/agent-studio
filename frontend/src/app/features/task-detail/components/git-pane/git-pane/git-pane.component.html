@@ -69,7 +69,8 @@
                             data-testid="git-commit-confidence"
                             [appTooltip]="attributionTooltip(entry)">{{ pct }}</span>
                     }
-                    <span class="git-view__commit-chain-meta">{{ entry.filesChanged }}f · {{ entry.at | date:'shortTime' }}</span>
+                    <span class="git-view__commit-chain-meta"
+                          data-testid="git-commit-chain-meta">{{ entry.filesChanged }}f · {{ commitChainTimestamp(entry) }}</span>
                   </button>
                 </li>
               }

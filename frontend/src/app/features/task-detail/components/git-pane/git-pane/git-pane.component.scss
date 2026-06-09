@@ -537,6 +537,7 @@
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 .git-view__commit-confidence {
   flex: 0 0 auto;
