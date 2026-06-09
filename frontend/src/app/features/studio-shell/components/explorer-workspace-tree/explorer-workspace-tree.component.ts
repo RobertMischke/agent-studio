@@ -23,14 +23,9 @@ import { MenuComponent, type MenuItem, type MenuItemClickEvent } from '../../../
 import { ProjectDragDropService } from '../../../shell';
 import { ExplorerSectionsService } from '../../services/explorer-sections.service';
 import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
+import { boardLaneCountsLabel, laneCountsFor, type ExplorerLaneCounts } from '../../studio-shell.project-rows';
 
 /** Flat project row as computed by the shell (`ProjectSidebarRow`). */
-export interface ExplorerLaneCounts {
-  ready: number;
-  progress: number;
-  humanReview: number;
-}
-
 export interface ExplorerProjectRow {
   name: string;
   initial: string;
@@ -279,14 +274,8 @@ export class ExplorerWorkspaceTreeComponent {
     return this.expandedProjects().has(name);
   }
 
-  laneCountsFor(p: ExplorerProjectNode): ExplorerLaneCounts {
-    return p.laneCounts ?? { ready: 0, progress: 0, humanReview: 0 };
-  }
-
-  boardLaneCountsLabel(p: ExplorerProjectNode): string {
-    const counts = this.laneCountsFor(p);
-    return `${counts.ready} ready, ${counts.progress} in progress, ${counts.humanReview} human review`;
-  }
+  readonly laneCountsFor = laneCountsFor;
+  readonly boardLaneCountsLabel = boardLaneCountsLabel;
 
   /** Enter inline-rename for a real workspace header (synthetic groups no-op). */
   startRenameWorkspace(g: ExplorerWorkspaceGroup): void {
