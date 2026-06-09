@@ -77,6 +77,7 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.SoftIntervention, "Warn", "soft-intervention")]
     [InlineData(OrchestratorMessageKind.PermissionBlocked, "High", "permission-blocked")]
     [InlineData(OrchestratorMessageKind.WatchdogTimeout, "High", "watchdog-timeout")]
+    [InlineData(OrchestratorMessageKind.EmptyFastExit, "High", "empty-fast-exit")]
     [InlineData(OrchestratorMessageKind.MissingTerminalSentinel, "Warn", "missing-terminal-sentinel")]
     [InlineData(OrchestratorMessageKind.ClassifierUnknown, "Warn", "classifier-unknown")]
     [InlineData(OrchestratorMessageKind.CliLaunchFailed, "Warn", "cli-launch-failed")]

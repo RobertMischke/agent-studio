@@ -58,6 +58,16 @@ public static class TerminalRunOutcomeClassifier
                 Reason: agentOutcome.Reason ?? "worker agent advanced git HEAD before the platform commit step");
         }
 
+        if (agentOutcome.IssueKind == RunIssueKind.EmptyFastExit)
+        {
+            return new TerminalRunOutcome(
+                TerminalRunOutcomeKinds.Failed,
+                "Failed",
+                ShouldMoveToReview: false,
+                ShouldShowFailureToast: true,
+                Reason: agentOutcome.Summary ?? agentOutcome.Reason ?? "agent CLI exited almost immediately without producing agent output");
+        }
+
         if (agentOutcome.MatchedSentinel)
         {
             return agentOutcome.Kind switch
@@ -143,9 +153,14 @@ public static class TerminalRunOutcomeClassifier
         return UnknownTerminal(agentOutcome.Reason ?? "unknown execution status");
     }
 
-    public static TerminalRunOutcome Classify(string? executionStatus, IReadOnlyList<CliOutputLine> lines, double durationSeconds, int commitsDuringRun = 0)
+    public static TerminalRunOutcome Classify(
+        string? executionStatus,
+        IReadOnlyList<CliOutputLine> lines,
+        double durationSeconds,
+        int commitsDuringRun = 0,
+        int? exitCode = null)
     {
-        var analyzed = AgentOutcomeAnalyzer.Analyze(lines, executionStatus ?? string.Empty, durationSeconds);
+        var analyzed = AgentOutcomeAnalyzer.Analyze(lines, executionStatus ?? string.Empty, durationSeconds, exitCode);
         return Classify(executionStatus, analyzed, commitsDuringRun);
     }
 
@@ -155,6 +170,7 @@ public static class TerminalRunOutcomeClassifier
 
         var lines = new List<CliOutputLine>();
         string? status = null;
+        int? exitCode = null;
         var durationSeconds = 0.0;
 
         foreach (var rawLine in rawLog.Split('\n'))
@@ -174,6 +190,11 @@ public static class TerminalRunOutcomeClassifier
             var exit = ExitLineRegex.Match(text);
             if (!exit.Success) continue;
             status = exit.Groups["status"].Value;
+            if (exit.Groups["code"].Success
+                && int.TryParse(exit.Groups["code"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedCode))
+            {
+                exitCode = parsedCode;
+            }
             if (exit.Groups["duration"].Success)
             {
                 var rawDuration = exit.Groups["duration"].Value.Replace(',', '.');
@@ -183,13 +204,15 @@ public static class TerminalRunOutcomeClassifier
         }
 
         if (lines.Count == 0) return null;
-        var analyzed = AgentOutcomeAnalyzer.Analyze(lines, status ?? string.Empty, durationSeconds);
+        var analyzed = AgentOutcomeAnalyzer.Analyze(lines, status ?? string.Empty, durationSeconds, exitCode);
         return (Classify(status, analyzed), analyzed);
     }
 
     public static string ExecutionStatusFor(TerminalRunOutcome outcome, string currentStatus)
     {
         if (outcome.ShouldMoveToReview) return RunStatuses.Completed;
+        if (string.Equals(outcome.Kind, TerminalRunOutcomeKinds.Failed, StringComparison.OrdinalIgnoreCase))
+            return RunStatuses.Failed;
         return currentStatus;
     }
 

@@ -20,7 +20,7 @@ public enum AgentOutcomeKind
     NeedsInput,
     /// <summary>Agent is mid-task (run was cut short while still working).</summary>
     Progress,
-    /// <summary>The CLI exited without producing user-visible work (no agent text, very short duration).</summary>
+    /// <summary>The agent explicitly reported that there was no work to do.</summary>
     NoOp,
     /// <summary>Could not classify - no sentinel match and no clear heuristic signal.</summary>
     Unknown
@@ -41,6 +41,13 @@ public enum RunIssueKind
     HeuristicDone,
     ClassifierUnknown,
     NoAgentOutput,
+    /// <summary>
+    /// The CLI process exited almost immediately with no agent turn. Unlike an
+    /// explicit <c>[[TASK_NOOP]]</c>, this is not an agent judgement that there
+    /// was nothing to do; it is a failed-start shape (spawn/env/quota/immediate
+    /// exit) that must remain visible and retry/escalate through runner policy.
+    /// </summary>
+    EmptyFastExit,
     /// <summary>
     /// The agent CLI itself failed before any real agent turn could happen:
     /// it could not launch, or its <c>--resume</c> target was rejected
@@ -139,9 +146,9 @@ public sealed record AgentOutcome(
 ///   <c>[[TASK_NEEDS_INPUT:&lt;reason&gt;]]</c>, <c>[[TASK_NOOP]]</c>).
 ///   These are authoritative. The agent contract is documented in
 ///   <c>docs/agent-task-contract.md</c>.</item>
-///   <item>Structural no-op: empty output buffer or no agent text plus a
-///   sub-threshold duration. The CLI exited cleanly but produced nothing
-///   the user can review.</item>
+///   <item>Empty fast exit: empty output buffer or no agent text plus a
+///   sub-threshold duration. The CLI exited before an agent turn produced
+///   reviewable output; this is a failed-start issue, not a no-op.</item>
 ///   <item>Heuristic regex: same shape as the frontend's
 ///   <c>agent-outcome.util.ts</c>. Used as a fallback so we never return
 ///   <see cref="AgentOutcomeKind.Unknown"/> when the text is informative.
@@ -152,7 +159,7 @@ public sealed record AgentOutcome(
 /// </summary>
 public static class AgentOutcomeAnalyzer
 {
-    /// <summary>Sub-threshold duration below which a run with no agent text is treated as no-op.</summary>
+    /// <summary>Sub-threshold duration below which a run with no agent text is treated as a failed start.</summary>
     public const double NoOpDurationThresholdSeconds = 10.0;
 
     /// <summary>
@@ -181,7 +188,8 @@ public static class AgentOutcomeAnalyzer
     public static AgentOutcome Analyze(
         IReadOnlyList<CliOutputLine> lines,
         string status,
-        double durationSeconds)
+        double durationSeconds,
+        int? exitCode = null)
     {
         lines ??= Array.Empty<CliOutputLine>();
         var agentText = JoinAgentText(lines);
@@ -326,21 +334,22 @@ public static class AgentOutcomeAnalyzer
             { IssueKind = RunIssueKind.CliLaunchFailed };
         }
 
-        // 2) Structural no-op - the CLI exited cleanly without producing
-        //    anything the user can review. Subscriber-side proof the agent
-        //    didn't actually attempt the task.
+        // 2) Empty fast exit - the CLI exited without producing anything the
+        //    user can review. This used to masquerade as NoOp, but an actual
+        //    no-op is an explicit agent verdict. Empty+fast is a failed-start
+        //    shape: spawn/env/quota/immediate-exit until proven otherwise.
         if (!failed && agentText.Length == 0 && durationSeconds < NoOpDurationThresholdSeconds)
         {
             return new AgentOutcome(
-                Kind: AgentOutcomeKind.NoOp,
-                Summary: "CLI exited without producing agent output.",
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: BuildEmptyFastExitSummary(rawText, status, durationSeconds, exitCode, lineCount),
                 MatchedSentinel: false,
                 SentinelKeyword: null,
-                Reason: $"duration {durationSeconds:F1}s, no agent text",
+                Reason: "CLI exited before producing an agent turn",
                 AgentTextChars: 0,
                 OutputLineCount: lineCount,
                 DurationSeconds: durationSeconds)
-            { IssueKind = RunIssueKind.NoAgentOutput };
+            { IssueKind = RunIssueKind.EmptyFastExit };
         }
 
         // 3) Heuristic regex fallback over the tail of the agent text. Mirrors
@@ -647,12 +656,70 @@ public static class AgentOutcomeAnalyzer
             ? "The agent CLI rejected the resume target; rebuilding from disk on the next attempt."
             : "The agent CLI failed to launch or resume before producing any agent output; rebuilding from disk on the next attempt.";
 
+    private static string BuildEmptyFastExitSummary(
+        string rawText,
+        string status,
+        double durationSeconds,
+        int? exitCode,
+        int outputLineCount)
+    {
+        var details = new List<string>
+        {
+            $"status={NormalizeDetail(status, "unknown")}",
+            $"exitCode={exitCode?.ToString() ?? "unknown"}",
+            $"duration={durationSeconds:F1}s",
+            $"outputLines={outputLineCount}"
+        };
+
+        var marker = DetectEmptyFastExitMarker(rawText);
+        if (marker != null) details.Add($"marker={marker}");
+
+        var stderr = ExtractFirstNonEmptyLine(rawText);
+        if (stderr != null) details.Add($"firstOutput={stderr}");
+
+        return "The agent CLI exited almost immediately without producing an agent turn; treating this as a failed start, not as [[TASK_NOOP]]. "
+             + string.Join("; ", details) + ".";
+    }
+
+    private static string NormalizeDetail(string? value, string fallback)
+        => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static string? ExtractFirstNonEmptyLine(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        foreach (var line in text.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0) continue;
+            return trimmed.Length <= 160 ? trimmed : trimmed[..160] + "...";
+        }
+        return null;
+    }
+
+    private static string? DetectEmptyFastExitMarker(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return null;
+        if (rawText.Contains("quota", StringComparison.OrdinalIgnoreCase)
+            || rawText.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+            || rawText.Contains("rate-limit", StringComparison.OrdinalIgnoreCase))
+            return "quota-or-rate-limit";
+        if (rawText.Contains("sandbox", StringComparison.OrdinalIgnoreCase)
+            || rawText.Contains("CreateProcessAsUser", StringComparison.OrdinalIgnoreCase)
+            || rawText.Contains("EPERM", StringComparison.OrdinalIgnoreCase))
+            return "sandbox-or-host";
+        if (rawText.Contains("authentication", StringComparison.OrdinalIgnoreCase)
+            || rawText.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
+            || rawText.Contains("login", StringComparison.OrdinalIgnoreCase))
+            return "auth";
+        return null;
+    }
+
     /// <summary>
     /// Joins the parts of the buffer that look like agent (assistant) text.
     /// We exclude lines from the <c>system</c> stream (taskboard markers and
-    /// orchestrator meta messages) and the <c>user</c> stream (the user's own
-    /// follow-ups echoed into the log) so the analysis only sees what the
-    /// agent itself produced.
+    /// orchestrator meta messages), the <c>user</c> stream (the user's own
+    /// follow-ups echoed into the log), and <c>stderr</c> (process diagnostics)
+    /// so the analysis only sees what the agent itself produced.
     /// </summary>
     private static string JoinAgentText(IReadOnlyList<CliOutputLine> lines)
     {
@@ -664,6 +731,7 @@ public static class AgentOutcomeAnalyzer
             if (string.Equals(stream, "system", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(stream, "user", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(stream, "orchestrator", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(stream, "stderr", StringComparison.OrdinalIgnoreCase)) continue;
             if (!string.IsNullOrWhiteSpace(line.Text)) parts.Add(line.Text);
         }
         return string.Join("\n", parts).Trim();

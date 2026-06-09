@@ -17,6 +17,7 @@ public static class HumanReviewEscalationCategories
     public const string EnvironmentBlocker = "environment-blocker";
     public const string AutoFailurePark = "auto-failure-park";
     public const string PickupZombie = "pickup-zombie";
+    public const string EmptyFastExit = "empty-fast-exit";
 
     /// <summary>The run exceeded the model's input window (prompt too long /
     /// context length). Non-retryable, so it is routed straight to human review

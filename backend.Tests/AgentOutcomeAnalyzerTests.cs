@@ -57,22 +57,27 @@ public class AgentOutcomeAnalyzerTests
     [Fact]
     public void Sentinel_Noop_Recognised()
     {
-        var lines = Lines("Nothing to do.", "[[TASK_NOOP]]");
+        var lines = Lines("Nothing to do.", "[[TASK_NOOP: already implemented]]");
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 4.0);
         Assert.Equal(AgentOutcomeKind.NoOp, outcome.Kind);
         Assert.True(outcome.MatchedSentinel);
+        Assert.Equal("already implemented", outcome.Reason);
+        Assert.Equal(RunIssueKind.None, outcome.IssueKind);
     }
 
     [Fact]
-    public void NoOutput_ShortDuration_ClassifiesNoOp()
+    public void NoOutput_ShortDuration_ClassifiesEmptyFastExit()
     {
         // The exact failure shape the user reported: backend ran for 4.6s and
-        // produced nothing. This must be a clear NoOp so policy can re-issue.
+        // produced nothing. This is a failed start, not an agent no-op.
         var lines = new List<CliOutputLine>();
-        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 4.6);
-        Assert.Equal(AgentOutcomeKind.NoOp, outcome.Kind);
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 4.6, exitCode: 0);
+        Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
         Assert.False(outcome.MatchedSentinel);
+        Assert.Equal(RunIssueKind.EmptyFastExit, outcome.IssueKind);
         Assert.Equal(0, outcome.AgentTextChars);
+        Assert.Contains("exitCode=0", outcome.Summary ?? string.Empty);
+        Assert.Contains("failed start", outcome.Summary ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -115,10 +120,28 @@ public class AgentOutcomeAnalyzerTests
             new() { Timestamp = ts, Stream = "system", Text = "[taskboard] Started claude CLI" },
             new() { Timestamp = ts, Stream = "orchestrator", Text = "[reissue] previous run no-op'd" }
         };
-        // No agent text and a short duration => NoOp.
+        // No agent text and a short duration => failed start, not NoOp.
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 4.6);
-        Assert.Equal(AgentOutcomeKind.NoOp, outcome.Kind);
+        Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
+        Assert.Equal(RunIssueKind.EmptyFastExit, outcome.IssueKind);
         Assert.Equal(0, outcome.AgentTextChars);
+    }
+
+    [Fact]
+    public void StderrOnly_QuotaFastExit_IsEmptyFastExitWithDiagnostics()
+    {
+        var lines = new List<CliOutputLine>
+        {
+            new() { Timestamp = DateTime.UtcNow, Stream = "stderr", Text = "quota exceeded: rate limit reset later" }
+        };
+
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 1.2, exitCode: 0);
+
+        Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
+        Assert.Equal(RunIssueKind.EmptyFastExit, outcome.IssueKind);
+        Assert.Equal(0, outcome.AgentTextChars);
+        Assert.Contains("marker=quota-or-rate-limit", outcome.Summary ?? string.Empty);
+        Assert.Contains("firstOutput=quota exceeded", outcome.Summary ?? string.Empty);
     }
 
     [Fact]

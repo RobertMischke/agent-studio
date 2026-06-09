@@ -3624,7 +3624,8 @@ public class ProjectRunner
             var outcome = AgentOutcomeAnalyzer.Analyze(
                 liveOutputSnapshot,
                 execution.Status ?? "completed",
-                execution.DurationSeconds ?? 0.0);
+                execution.DurationSeconds ?? 0.0,
+                execution.ExitCode);
 
             // Count the commits this run actually produced (HeadShaBefore..After).
             // A run that committed real work but exited non-zero without a
@@ -4234,6 +4235,7 @@ public class ProjectRunner
         => issueKind is RunIssueKind.PermissionBlocked
                      or RunIssueKind.WatchdogTimeout
                      or RunIssueKind.EnvironmentBlocker
+                     or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
                      or RunIssueKind.Quarantined
                      or RunIssueKind.AgentGitViolation;
@@ -4271,6 +4273,7 @@ public class ProjectRunner
         RunIssueKind.HeuristicDone             => "heuristic-done",
         RunIssueKind.ClassifierUnknown        => "classifier-unknown",
         RunIssueKind.CliLaunchFailed          => "cli-launch-failed",
+        RunIssueKind.EmptyFastExit            => "empty-fast-exit",
         RunIssueKind.NoAgentOutput            => "no-agent-output",
         RunIssueKind.EnvironmentBlocker       => "environment-blocker",
         RunIssueKind.SilentCompletion         => "codex-silent-completion",
@@ -4288,6 +4291,7 @@ public class ProjectRunner
         RunIssueKind.WatchdogTimeout    => HumanReviewEscalationCategories.WatchdogKill,
         RunIssueKind.PermissionBlocked  => HumanReviewEscalationCategories.PermissionBlocked,
         RunIssueKind.EnvironmentBlocker => HumanReviewEscalationCategories.EnvironmentBlocker,
+        RunIssueKind.EmptyFastExit      => HumanReviewEscalationCategories.EmptyFastExit,
         RunIssueKind.ContextOverflow    => HumanReviewEscalationCategories.ContextOverflow,
         RunIssueKind.Quarantined        => HumanReviewEscalationCategories.Quarantined,
         RunIssueKind.AgentGitViolation  => HumanReviewEscalationCategories.AgentGitViolation,

@@ -169,6 +169,19 @@ public class TaskScannerOutcomeIssueTests : IDisposable
     }
 
     [Fact]
+    public void EmptyFastExitMarker_SurfacesHighSeverityOutcome()
+    {
+        SeedJob("empty-fast-exit", TaskStates.HumanReview,
+            $"[09:10:00.000] [orchestrator] [empty-fast-exit] The agent CLI exited almost immediately without producing an agent turn; treating this as a failed start, not as [[TASK_NOOP]].{Environment.NewLine}");
+
+        var issue = Outcome("empty-fast-exit");
+
+        Assert.NotNull(issue);
+        Assert.Equal("empty-fast-exit", issue!.Kind);
+        Assert.Equal("High", issue.Severity);
+    }
+
+    [Fact]
     public void WorktreeContainmentMarker_SurfacesHighSeverityOutcome()
     {
         SeedJob("worktree-containment", TaskStates.HumanReview,

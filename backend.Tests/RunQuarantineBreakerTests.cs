@@ -30,6 +30,7 @@ public class RunQuarantineBreakerTests
     [InlineData(RunIssueKind.PermissionBlocked)]
     [InlineData(RunIssueKind.WatchdogTimeout)]
     [InlineData(RunIssueKind.EnvironmentBlocker)]
+    [InlineData(RunIssueKind.EmptyFastExit)]
     [InlineData(RunIssueKind.ContextOverflow)]
     [InlineData(RunIssueKind.CliLaunchFailed)]
     [InlineData(RunIssueKind.SilentCompletion)]

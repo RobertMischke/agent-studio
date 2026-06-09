@@ -794,6 +794,11 @@ public class TaskScannerService : ITaskScanner
             issue = BuildOutcomeIssue("watchdog-timeout", "Watchdog timeout", "High", line, lastSeenAt);
             return true;
         }
+        if (lower.Contains("empty-fast-exit"))
+        {
+            issue = BuildOutcomeIssue("empty-fast-exit", "Empty fast exit", "High", line, lastSeenAt);
+            return true;
+        }
         // Quarantined / context-overflow are terminal, non-retryable circuit-breaker
         // outcomes (the run was parked in human review to stop an endless reissue
         // loop), so they rank High like the other unrecoverable runner outcomes.

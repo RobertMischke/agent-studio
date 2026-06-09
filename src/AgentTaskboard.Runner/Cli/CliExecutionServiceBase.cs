@@ -955,7 +955,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             var terminalOutcome = TerminalRunOutcomeClassifier.Classify(
                 status,
                 info.OutputBuffer.ToList(),
-                duration);
+                duration,
+                exitCode: exitCode);
             status = TerminalRunOutcomeClassifier.ExecutionStatusFor(terminalOutcome, status);
 
             var finalExecution = info.Execution with

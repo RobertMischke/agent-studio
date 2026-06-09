@@ -167,6 +167,11 @@ public enum OrchestratorMessageKind
     /// attempt, rather than surfacing a terminal classifier-unknown FAILURE.
     /// </summary>
     CliLaunchFailed,
+    /// <summary>
+    /// The agent CLI exited almost immediately without producing an agent turn.
+    /// This is a failed start, not an explicit agent no-op.
+    /// </summary>
+    EmptyFastExit,
     /// <summary>The orchestrator gave up after a retry budget; user attention required.</summary>
     GiveUp,
     /// <summary>The orchestrator could not pick a path on its own but identified a concrete unblocking ask the user can resolve. Renders distinctly so the user sees a productive escalation, not a silent deferral.</summary>
@@ -236,6 +241,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
         OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
+        OrchestratorMessageKind.EmptyFastExit     => "empty-fast-exit",
         OrchestratorMessageKind.GiveUp            => "giveup",
         OrchestratorMessageKind.Steer             => "steer",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
@@ -260,6 +266,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
         OrchestratorMessageKind.CliLaunchFailed   => "cli-launch-failed",
+        OrchestratorMessageKind.EmptyFastExit     => "empty-fast-exit",
         OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
         OrchestratorMessageKind.SilentCompletion  => "codex-silent-completion",
         OrchestratorMessageKind.ContextOverflow   => "context-overflow",

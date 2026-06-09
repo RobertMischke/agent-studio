@@ -242,6 +242,19 @@ public static class RunOutcomePolicy
             };
         }
 
+        if (outcome.IssueKind == RunIssueKind.EmptyFastExit)
+        {
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: outcome.Summary
+                    ?? "The agent CLI exited almost immediately without producing an agent turn. This is a failed start, not an agent no-op.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.EmptyFastExit,
+                MessageKind = OrchestratorMessageKind.EmptyFastExit
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.PermissionBlocked)
         {
             if (reissueAttempt < MaxSoftInterventionAttempts)

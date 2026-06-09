@@ -44,6 +44,7 @@ public static class RunQuarantineBreaker
         RunIssueKind.PermissionBlocked  => false,
         RunIssueKind.WatchdogTimeout    => false,
         RunIssueKind.EnvironmentBlocker => false,
+        RunIssueKind.EmptyFastExit      => false,
         RunIssueKind.ContextOverflow    => false,
         RunIssueKind.CliLaunchFailed    => false,
         RunIssueKind.SilentCompletion   => false,

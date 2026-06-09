@@ -65,6 +65,24 @@ public class RunOutcomeContractTests
         Assert.True(terminal.ShouldShowFailureToast);
     }
 
+    [Fact]
+    public void EmptyFastExit_CompletedStatus_IsFailedStartNotNoOp()
+    {
+        var terminal = TerminalRunOutcomeClassifier.Classify(
+            RunStatuses.Completed,
+            new List<CliOutputLine>(),
+            durationSeconds: 1.2,
+            exitCode: 0);
+
+        Assert.Equal(TerminalRunOutcomeKinds.Failed, terminal.Kind);
+        Assert.Equal("Failed", terminal.ProtocolResult);
+        Assert.False(terminal.ShouldMoveToReview);
+        Assert.True(terminal.ShouldShowFailureToast);
+        Assert.Equal(RunStatuses.Failed, TerminalRunOutcomeClassifier.ExecutionStatusFor(terminal, RunStatuses.Completed));
+        Assert.Contains("exitCode=0", terminal.Reason);
+        Assert.Contains("failed start", terminal.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
     // Regression for the bug "Codex exit=-1 trotz erfolgreichem Commit landet in
     // 4-auto-review verdict=reissue + ATP-manual": a run that committed real work
     // (commitCount > 0) but then exited -1 because its downstream test runs were
@@ -265,6 +283,20 @@ public class RunOutcomeContractTests
         Assert.Equal("NoOp", terminal.ProtocolResult);
         Assert.True(terminal.ShouldMoveToReview);
         Assert.False(terminal.ShouldShowFailureToast);
+    }
+
+    [Fact]
+    public void RenderedLog_CompletedEmptyFastExit_IsFailedStart()
+    {
+        var renderedLog = "[2026-06-01T18:00:05.000Z] [system] [taskboard] codex CLI exited: status=completed, exitCode=0, duration=1.2s";
+
+        var classified = TerminalRunOutcomeClassifier.TryClassifyRenderedLog(renderedLog);
+
+        Assert.NotNull(classified);
+        Assert.Equal(RunIssueKind.EmptyFastExit, classified!.Value.AgentOutcome.IssueKind);
+        Assert.Equal(TerminalRunOutcomeKinds.Failed, classified.Value.Outcome.Kind);
+        Assert.False(classified.Value.Outcome.ShouldMoveToReview);
+        Assert.Contains("exitCode=0", classified.Value.AgentOutcome.Summary ?? string.Empty);
     }
 
     [Fact]

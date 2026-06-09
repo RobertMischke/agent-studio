@@ -420,6 +420,28 @@ public class RunOutcomePolicyTests
         Assert.NotEqual(OrchestratorMessageKind.ClassifierUnknown, action.MessageKind);
     }
 
+    [Fact]
+    public void EmptyFastExit_StopsAsVisibleFailedStart_NotNoOp()
+    {
+        var diagnosis = "The agent CLI exited almost immediately without producing an agent turn; treating this as a failed start, not as [[TASK_NOOP]]. status=completed; exitCode=0; duration=1.2s; outputLines=0.";
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 1.2, agentChars: 0) with
+            {
+                IssueKind = RunIssueKind.EmptyFastExit,
+                Summary = diagnosis
+            },
+            followupPrompt: "please continue",
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.EmptyFastExit, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.EmptyFastExit, action.MessageKind);
+        Assert.Equal(diagnosis, action.MetaMessage);
+        Assert.False(action.IsHeuristicFallback);
+    }
+
     /// <summary>
     /// Case (b): a failed run with a real (but unclassifiable) agent turn.
     /// classifier-unknown is never terminal: the orchestrator re-issues once
