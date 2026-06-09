@@ -23,6 +23,7 @@ const LANE_DOC_TOPIC: Record<string, string> = {
   '4-review': 'lane-4-auto-review',
   [TaskState.AutoReview]: 'lane-4-auto-review',
   [TaskState.HumanReview]: 'lane-5-human-review',
+  [TaskState.Escalated]: 'lane-5e-escalated',
   [TaskState.Completed]: 'lane-6-completed',
   [TaskState.Archive]: 'lane-7-archive',
 };

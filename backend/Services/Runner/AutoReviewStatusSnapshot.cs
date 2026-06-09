@@ -11,6 +11,9 @@ namespace OrchestratorApi.Services.Runner;
 /// </summary>
 public sealed class AutoReviewStatusSnapshot
 {
+    public const double DefaultEscalationRateAlertThreshold = 0.5;
+    public const int DefaultEscalationRateMinimumDecisions = 3;
+
     private readonly object _lock = new();
     private DateTime _lastTickAt = DateTime.MinValue;
     private int _accept;
@@ -18,6 +21,8 @@ public sealed class AutoReviewStatusSnapshot
     private int _escalate;
     private int _aspectsRun;
     private int _pending;
+    private double _escalationRateAlertThreshold = DefaultEscalationRateAlertThreshold;
+    private int _escalationRateMinimumDecisions = DefaultEscalationRateMinimumDecisions;
     private string? _currentJob;
     private string? _currentProject;
 
@@ -26,6 +31,10 @@ public sealed class AutoReviewStatusSnapshot
     {
         lock (_lock)
         {
+            var decisionCount = _accept + _escalate;
+            var escalationRate = decisionCount == 0 ? 0 : (double)_escalate / decisionCount;
+            var escalationRateAlert = decisionCount >= _escalationRateMinimumDecisions
+                && escalationRate > _escalationRateAlertThreshold;
             return new AutoReviewStatusView(
                 LastTickAt: _lastTickAt == DateTime.MinValue ? null : _lastTickAt,
                 Accept: _accept,
@@ -33,8 +42,23 @@ public sealed class AutoReviewStatusSnapshot
                 Escalate: _escalate,
                 AspectsRun: _aspectsRun,
                 Pending: _pending,
+                EscalationRate: escalationRate,
+                EscalationRateDecisionCount: decisionCount,
+                EscalationRateAlertThreshold: _escalationRateAlertThreshold,
+                EscalationRateAlert: escalationRateAlert,
                 CurrentJob: _currentJob,
                 CurrentProject: _currentProject);
+        }
+    }
+
+    public void ConfigureEscalationRateAlert(double threshold, int minimumDecisions)
+    {
+        lock (_lock)
+        {
+            if (threshold is >= 0 and <= 1)
+                _escalationRateAlertThreshold = threshold;
+            if (minimumDecisions > 0)
+                _escalationRateMinimumDecisions = minimumDecisions;
         }
     }
 
@@ -85,5 +109,9 @@ public sealed record AutoReviewStatusView(
     int Escalate,
     int AspectsRun,
     int Pending,
+    double EscalationRate,
+    int EscalationRateDecisionCount,
+    double EscalationRateAlertThreshold,
+    bool EscalationRateAlert,
     string? CurrentJob,
     string? CurrentProject);

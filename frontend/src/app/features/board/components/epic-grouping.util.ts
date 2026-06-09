@@ -80,6 +80,7 @@ export function flattenGrouped(grouped: GroupedJobs): TaskInfo[] {
     grouped.failedPickup,
     grouped.autoReview,
     grouped.humanReview,
+    grouped.escalated,
     grouped.review,
     grouped.completed,
     grouped.archive,

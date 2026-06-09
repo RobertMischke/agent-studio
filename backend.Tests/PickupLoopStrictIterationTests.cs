@@ -216,8 +216,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         {
             Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, slug)),
                 $"{slug} must have been moved out of 3-progress");
-            Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, slug)),
-                $"{slug} must have been escalated to 5-human-review under its original slug");
+            Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, slug)),
+                $"{slug} must have been escalated to 5e-escalated under its original slug");
         }
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.FailedPickup))
             && Directory.EnumerateDirectories(Path.Combine(_watchPath, TaskStates.FailedPickup)).Any(),
@@ -267,7 +267,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // 'exhausted' escalated to 5-human-review; 'second-oldest' and 'newest'
         // remain in 3-progress because a single tick starts ONE job (ADR-0001).
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "exhausted")));
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "exhausted")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "exhausted")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "second-oldest")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "newest")));
 
@@ -620,8 +620,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Null(picked);
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "zombie-a")),
             "the session-less zombie must leave 3-progress once its resume budget is spent");
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "zombie-a")),
-            "the zombie escalates to 5-human-review under its original slug");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "zombie-a")),
+            "the zombie escalates to 5e-escalated under its original slug");
 
         // The due ready task is untouched and is what runs next.
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "due-b")));

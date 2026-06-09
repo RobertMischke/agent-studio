@@ -186,6 +186,7 @@
   --lane-progress:     var(--color-blue-400);
   --lane-auto-review:  var(--color-yellow-200);
   --lane-human-review: var(--color-purple-vscode);
+  --lane-escalated:    var(--studio-accent-6);
   --lane-completed:    #5fbf80;
   --lane-archive:      #6e6e6e;
   --lane-failed:       var(--color-mocha-red);
@@ -599,6 +600,7 @@
   --lane-progress:     var(--color-blue-700);
   --lane-auto-review:  var(--color-yellow-700);
   --lane-human-review: #7c3aed;
+  --lane-escalated:    var(--color-red-700);
   --lane-completed:    var(--color-green-700);
   --lane-archive:      var(--color-grey-850);
   --lane-failed:       var(--color-red-700);

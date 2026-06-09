@@ -18,6 +18,7 @@ export const TaskState = {
   CodeNotComplete: '3b-code-not-complete',
   AutoReview: '4-auto-review',
   HumanReview: '5-human-review',
+  Escalated: '5e-escalated',
   Completed: '6-completed',
   Archive: '7-archive',
 } as const;
@@ -592,6 +593,8 @@ export interface GroupedJobs {
   autoReview: TaskInfo[];
   /** ADR-0025 lane: waiting for the user (5-human-review). */
   humanReview: TaskInfo[];
+  /** Decision lane: true escalations that need operator input (5e-escalated). */
+  escalated: TaskInfo[];
   /** Legacy alias for pre-ADR-0025 clients; equal to `autoReview`. */
   review: TaskInfo[];
   completed: TaskInfo[];

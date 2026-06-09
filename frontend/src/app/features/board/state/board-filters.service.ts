@@ -159,6 +159,7 @@ export class BoardFiltersService {
       failedPickup: filterJobs(grouped.failedPickup ?? []),
       autoReview: autoReviewFiltered,
       humanReview: filterJobs(grouped.humanReview ?? []),
+      escalated: filterJobs(grouped.escalated ?? []),
       review: autoReviewFiltered,
       completed: filterJobs(grouped.completed),
       archive: filterJobs(grouped.archive ?? []),
@@ -176,6 +177,7 @@ export class BoardFiltersService {
       + (g.failedPickup?.length ?? 0)
       + (g.autoReview?.length ?? 0)
       + (g.humanReview?.length ?? 0)
+      + (g.escalated?.length ?? 0)
       + (g.completed?.length ?? 0)
       + (g.archive?.length ?? 0)
     );
@@ -192,6 +194,7 @@ export class BoardFiltersService {
       + (g.failedPickup?.length ?? 0)
       + (g.autoReview?.length ?? (g.review?.length ?? 0))
       + (g.humanReview?.length ?? 0)
+      + (g.escalated?.length ?? 0)
       + (g.completed?.length ?? 0)
       + (g.archive?.length ?? 0)
     );

@@ -463,6 +463,7 @@ export class OverviewPaneComponent {
   private static readonly FINISHED_STATES = new Set([
     '4-auto-review',
     '5-human-review',
+    '5e-escalated',
     '6-completed',
   ]);
 
@@ -1485,6 +1486,7 @@ export class OverviewPaneComponent {
       case '3-progress':             return 'In Progress';
       case '4-auto-review':          return 'Post Processing';
       case '5-human-review':         return 'Review';
+      case '5e-escalated':           return 'Escalated';
       case '6-completed':            return 'Completed';
       case '7-archive':              return 'Archive';
       default:                       return state ?? '';

@@ -104,6 +104,7 @@ export const SORTABLE_LANES: readonly SortableLaneMeta[] = [
   { state: '3-progress', label: 'In Progress', icon: '🔵' },
   { state: '4-auto-review', label: 'Post Processing', icon: '🤖' },
   { state: '5-human-review', label: 'Review', icon: '👁️' },
+  { state: '5e-escalated', label: 'Escalated', icon: '⚠️' },
   { state: '6-completed', label: 'Completed', icon: '🟢' },
   { state: '7-archive', label: 'Archive', icon: '🗄️' },
 ];

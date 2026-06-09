@@ -16,9 +16,10 @@ export class AutoReviewIndicatorComponent implements OnInit, OnDestroy {
 
   readonly status = this.statusStore.status;
 
-  readonly tone = computed<'active' | 'idle' | 'stale'>(() => {
+  readonly tone = computed<'active' | 'idle' | 'stale' | 'alert'>(() => {
     const s = this.status();
     if (!s?.lastTickAt) return 'stale';
+    if (s.escalationRateAlert) return 'alert';
     if (s.currentJob) return 'active';
     const age = Date.now() - Date.parse(s.lastTickAt);
     return age > this.staleMs ? 'stale' : 'idle';
@@ -27,6 +28,7 @@ export class AutoReviewIndicatorComponent implements OnInit, OnDestroy {
   readonly label = computed(() => {
     const s = this.status();
     if (!s?.lastTickAt) return 'Auto-review starting';
+    if (s.escalationRateAlert) return `Escalation ${(s.escalationRate ?? 0).toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 0 })}`;
     if (s.currentJob) return 'Auto-review running';
     const pending = s.pending ?? 0;
     if (pending > 0) return `Auto-review ${pending} queued`;
@@ -39,9 +41,16 @@ export class AutoReviewIndicatorComponent implements OnInit, OnDestroy {
     if (!s.lastTickAt) return 'Auto-review has not completed its first tick since backend start.';
     const tick = new Date(s.lastTickAt).toLocaleString();
     const current = s.currentJob ? `\nCurrent: ${s.currentProject ?? 'unknown project'} / ${s.currentJob}` : '';
+    const rate = (s.escalationRate ?? 0).toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 0 });
+    const threshold = (s.escalationRateAlertThreshold ?? 0).toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 0 });
+    const alert = s.escalationRateAlert
+      ? `\nEscalation-rate alert: ${rate} is above ${threshold}.`
+      : '';
     return `Auto-review last tick: ${tick}\n` +
       `Candidates: ${s.pending ?? 0}\n` +
-      `Accept: ${s.accept}, reissue: ${s.reissue}, escalate: ${s.escalate}, aspects: ${s.aspectsRun}` +
+      `Accept: ${s.accept}, reissue: ${s.reissue}, escalate: ${s.escalate}, aspects: ${s.aspectsRun}\n` +
+      `Escalation rate: ${rate} (${s.escalationRateDecisionCount ?? 0} accept/escalate decisions)` +
+      alert +
       current;
   });
 

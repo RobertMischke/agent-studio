@@ -205,6 +205,7 @@
     &[data-lane="4-auto-review"]  { --lane-color: var(--lane-auto-review); }
     &[data-lane="4-review"]       { --lane-color: var(--lane-auto-review); }
     &[data-lane="5-human-review"] { --lane-color: var(--lane-human-review); }
+    &[data-lane="5e-escalated"]   { --lane-color: var(--lane-escalated); }
     &[data-lane="6-completed"]    { --lane-color: var(--lane-completed); }
     &[data-lane="7-archive"]      { --lane-color: var(--lane-archive); }
   }

@@ -266,7 +266,7 @@ public class LintScssPostStepTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "lint-double-fail")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "lint-double-fail")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "lint-double-fail")));
 
         var records = ReviewDecisionLog.ReadAll(_workspace, Project);

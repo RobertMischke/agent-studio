@@ -22,7 +22,8 @@ import {
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**
  * Per-task hygiene strip rendered at the top of the protocol pane for
- * jobs in `4-auto-review`, `5-human-review`, `6-completed`, or `7-archive`.
+ * jobs in `4-auto-review`, `5-human-review`, `5e-escalated`,
+ * `6-completed`, or `7-archive`.
  *
  * Scope is intentionally narrow: this strip answers "is THIS task in
  * good shape?" - did the platform stamp a commit, and (only on the
@@ -65,6 +66,7 @@ export class HygieneStripComponent implements OnDestroy {
   private static readonly VISIBLE_STATES = new Set([
     '4-auto-review',
     '5-human-review',
+    '5e-escalated',
     '6-completed',
     '7-archive',
   ]);

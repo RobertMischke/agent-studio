@@ -432,6 +432,7 @@
     .state--4-review { background: color-mix(in srgb, var(--lane-auto-review) 15%, transparent); color: var(--lane-auto-review); }
     .state--4-auto-review { background: color-mix(in srgb, var(--lane-auto-review) 15%, transparent); color: var(--lane-auto-review); }
     .state--5-human-review { background: color-mix(in srgb, var(--lane-human-review) 15%, transparent); color: var(--lane-human-review); }
+    .state--5e-escalated { background: color-mix(in srgb, var(--lane-escalated) 15%, transparent); color: var(--lane-escalated); }
     .state--5-completed { background: color-mix(in srgb, var(--lane-completed) 15%, transparent); color: var(--lane-completed); }
     .state--6-completed { background: color-mix(in srgb, var(--lane-completed) 15%, transparent); color: var(--lane-completed); }
     .state--6-archive { background: color-mix(in srgb, var(--lane-archive) 15%, transparent); color: var(--lane-archive); }

@@ -113,6 +113,15 @@ public sealed class TaskTransitionService
         var fromState = info.State;
         var projectName = info.ProjectName;
 
+        if (fromState == TaskStates.Escalated
+            && targetState == TaskStates.Completed
+            && !CanCompleteEscalatedJob(info, settings))
+        {
+            return new MoveJobOutcome(
+                MoveJobStatus.Failure,
+                $"Escalated tasks can only be accepted after their latest task commit is integrated into {settings.IntegrationBranch}.");
+        }
+
         ReleaseCliOutputResourcesBeforeMove(info);
         var outcome = _states.MoveJob(jobId, targetState, watchPath);
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
@@ -195,6 +204,23 @@ public sealed class TaskTransitionService
         }
 
         return outcome;
+    }
+
+    private bool CanCompleteEscalatedJob(TaskInfo info, ProjectSettings settings)
+    {
+        // Read-only/no-code escalations have nothing to integrate; they can be
+        // accepted once the operator has made the decision.
+        if (TaskModes.IsReadOnly(info.Mode)) return true;
+        if (info.Commits.Count == 0 && !info.CodeActivityDetected) return true;
+        if (string.IsNullOrWhiteSpace(info.WatchPath) || !Directory.Exists(info.WatchPath)) return false;
+
+        var latest = info.Commits.LastOrDefault()?.Sha ?? info.Commit?.Sha;
+        if (string.IsNullOrWhiteSpace(latest)) return false;
+
+        var integrationBranch = string.IsNullOrWhiteSpace(settings.IntegrationBranch)
+            ? new ProjectSettings().IntegrationBranch
+            : settings.IntegrationBranch;
+        return _git.IsAncestor(info.WatchPath, latest, integrationBranch);
     }
 
     private void EnterPostProcessingPhase(TaskInfo info)

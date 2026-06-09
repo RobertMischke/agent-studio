@@ -14,7 +14,7 @@ namespace OrchestratorApi.Tests;
 /// <summary>
 /// Pins the contract behind the bug
 /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
-/// a SYSTEM-initiated move into <c>5-human-review</c> through
+/// a SYSTEM-initiated move into <c>5e-escalated</c> through
 /// <see cref="HumanReviewEscalation"/> ALWAYS leaves the card with an
 /// orchestrator verdict (an <see cref="ReviewDecisionKind.Escalate"/> record in
 /// the decision journal, which <see cref="TaskEndpointHelpers.BuildOrchestratorVerdictLookup"/>
@@ -87,11 +87,11 @@ public sealed class HumanReviewEscalationTests : IDisposable
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
 
-        // (a) folder physically left 3-progress and landed in 5-human-review.
+        // (a) folder physically left 3-progress and landed in 5e-escalated.
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, jobId)),
             "the card must have left 3-progress");
-        var parked = Path.Combine(_watchPath, TaskStates.HumanReview, jobId);
-        Assert.True(Directory.Exists(parked), "the card must have landed in 5-human-review");
+        var parked = Path.Combine(_watchPath, TaskStates.Escalated, jobId);
+        Assert.True(Directory.Exists(parked), "the card must have landed in 5e-escalated");
 
         // (b) verdict: the decision journal carries an Escalate record whose
         // reason encodes the category, and the endpoint-derived verdict reads
@@ -130,14 +130,14 @@ public sealed class HumanReviewEscalationTests : IDisposable
             "Resume budget exhausted on a session-less folder");
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, jobId)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, jobId)));
 
         var latest = ReviewDecisionLog.ReadAll(_workspaceRoot, ProjectName).LastOrDefault(r => r.JobId == jobId);
         Assert.NotNull(latest);
         Assert.Equal(ReviewDecisionKind.Escalate, latest!.Kind);
         Assert.Contains(HumanReviewEscalationCategories.PickupZombie, latest.Reason);
 
-        var status = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, jobId, "status.md"));
+        var status = File.ReadAllText(Path.Combine(_watchPath, TaskStates.Escalated, jobId, "status.md"));
         Assert.False(string.IsNullOrWhiteSpace(status));
     }
 

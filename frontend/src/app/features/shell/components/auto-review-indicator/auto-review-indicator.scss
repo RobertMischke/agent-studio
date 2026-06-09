@@ -51,6 +51,12 @@
   color: #fecaca;
 }
 
+.auto-review-indicator--alert {
+  border-color: rgba(248, 113, 113, 0.50);
+  background: rgba(248, 113, 113, 0.16);
+  color: #fecaca;
+}
+
 @keyframes auto-review-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(0.72); }

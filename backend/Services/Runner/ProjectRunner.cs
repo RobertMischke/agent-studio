@@ -5004,16 +5004,14 @@ public class ProjectRunner
 
     /// <summary>
     /// Relocate any <see cref="TaskSlugs.HumanDecisionNeededPrefix"/> card that
-    /// has come to rest in <c>2-ready</c> into <c>5-human-review</c> before the
+    /// has come to rest in <c>2-ready</c> into <c>5e-escalated</c> before the
     /// pickup selection runs. Such a card is a marker for a human call, not a
     /// unit of agent work: auto-picking it spawns a CLI run the agent correctly
     /// NOOPs (exit=1 after a few seconds), which burns tokens and trips the
     /// cross-slug infra circuit breaker into a manual demotion. The retired
     /// 1b-needs-human-review lane used to hold these; with that lane gone, the
     /// move goes through <see cref="HumanReviewEscalation"/> so the card lands
-    /// in 5-human-review with a verdict + status stub (the
-    /// <c>HumanReviewVerdictDriftTest</c> requires every system move into the
-    /// lane to use this funnel).
+    /// in 5e-escalated with a verdict + status stub.
     /// </summary>
     private void RelocateStrayHumanDecisionCards()
     {
@@ -5042,20 +5040,20 @@ public class ProjectRunner
             {
                 _logger.LogWarning(
                     "[taskboard] human-decision-needed card {JobId} on {Project} could not be moved 2-ready -> {Target}: {Status} {Message}; it stays parked and is skipped by pickup",
-                    job.Id, ProjectName, TaskStates.HumanReview, move.Status, move.Message);
+                    job.Id, ProjectName, TaskStates.Escalated, move.Status, move.Message);
                 continue;
             }
 
             _logger.LogInformation(
                 "[taskboard] routed human-decision-needed card {JobId} on {Project} from 2-ready -> {Target} (never auto-run: it is a human-decision marker)",
-                job.Id, ProjectName, TaskStates.HumanReview);
+                job.Id, ProjectName, TaskStates.Escalated);
 
             try
             {
                 var moved = _scanner.FindJob(job.Id, Entry.Path);
                 if (moved != null)
                     _chatLog.AppendSupervisor(moved, "human-decision-routed",
-                        "Routed to 5-human-review: this card is a human-decision marker, so the runner will not spawn a CLI run for it.");
+                        "Routed to 5e-escalated: this card is a human-decision marker, so the runner will not spawn a CLI run for it.");
             }
             catch (Exception ex)
             {
@@ -5672,6 +5670,7 @@ public class ProjectRunner
     [
         TaskStates.AutoReview,
         TaskStates.HumanReview,
+        TaskStates.Escalated,
         TaskStates.Completed,
         TaskStates.Archive,
     ];
@@ -5791,7 +5790,7 @@ public class ProjectRunner
     ///   <item><b>Task-shaped / zombie</b> (the CLI did spawn but produced no
     ///   output, or a session-less folder exhausted its resume budget):
     ///   terminal, but the task still deserves a person, so it is escalated to
-    ///   <see cref="TaskStates.HumanReview"/>. The folder leaves 3-progress so
+    ///   <see cref="TaskStates.Escalated"/>. The folder leaves 3-progress so
     ///   the loop ends without a dead-letter lane, and the runner continues to
     ///   the next candidate. (failed-pickup-elimination causes #7, #8)</item>
     /// </list>
@@ -5830,18 +5829,18 @@ public class ProjectRunner
             && historySnapshot.Count > 0
             && historySnapshot.All(h => string.Equals(h.ExecutionStatus, SpawnFailedExecutionStatus, StringComparison.Ordinal));
 
-        var targetState = spawnFailure ? TaskStates.Ready : TaskStates.HumanReview;
+        var targetState = spawnFailure ? TaskStates.Ready : TaskStates.Escalated;
 
         // Computed up front so the zombie escalation can carry the reason into
         // the decision journal + status.md stub written by the funnel.
         var reason = reasonOverride
             ?? (spawnFailure
                 ? $"Auto-pickup could not start the {cliTypeBeforeMove ?? "agent"} CLI for '{slug}': {attempts} consecutive attempts (budget {threshold}) failed to spawn a process. The task is unchanged and was returned to {TaskStates.Ready}; the runner paused so it does not spin against an unavailable CLI."
-                : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated to human review for a person to look at.");
+                : $"Auto-pickup ran the CLI for '{slug}' on {attempts} consecutive attempts (budget {threshold}) but the run never produced a CLI output line within {PickupOutputDeadlineSeconds}s. The task was escalated for a person to decide.");
 
         // Spawn failure returns the unchanged task to 2-ready (no verdict - it
         // is re-picked once the CLI is fixed). A task-shaped / zombie folder is
-        // terminal: route it through the escalation funnel so 5-human-review
+        // terminal: route it through the escalation funnel so 5e-escalated
         // always carries an Escalate verdict + status.md stub.
         var moveResult = spawnFailure
             ? _states.MoveJob(jobIdBeforeMove, TaskStates.Ready, Entry.Path)

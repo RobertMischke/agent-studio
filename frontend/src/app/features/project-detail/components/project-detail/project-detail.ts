@@ -349,6 +349,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       { state: '3-progress',    label: 'Progress',    count: c(grouped.progress) },
       { state: '4-auto-review', label: 'Post Processing', count: c(grouped.autoReview ?? grouped.review) },
       { state: '5-human-review',label: 'Review',      count: c(grouped.humanReview ?? []) },
+      { state: '5e-escalated',   label: 'Escalated',  count: c(grouped.escalated ?? []) },
       { state: '6-completed',   label: 'Completed',   count: c(grouped.completed) },
       { state: '7-archive',     label: 'Archive',     count: c(grouped.archive) }
     ];
@@ -368,6 +369,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       ['Progress', grouped.progress ?? []],
       ['Post Processing', grouped.autoReview ?? grouped.review],
       ['Review', grouped.humanReview ?? []],
+      ['Escalated', grouped.escalated ?? []],
       ['Completed', grouped.completed],
       ['Archive', grouped.archive],
     ];

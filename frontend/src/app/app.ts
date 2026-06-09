@@ -564,6 +564,7 @@ export class App implements OnInit, OnDestroy {
     lanes.push(
       { state: '4-auto-review', title: 'Post Processing', icon: '🤖', jobs: grouped.autoReview },
       { state: '5-human-review', title: 'Review', icon: '👁️', jobs: grouped.humanReview },
+      { state: '5e-escalated', title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
       { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
     );
@@ -575,7 +576,7 @@ export class App implements OnInit, OnDestroy {
    *
    *  - backlog: 0-backlog, 1-preparation, 2-ready
    *  - active:  3-progress, 4-auto-review
-   *  - decide:  5-human-review, 6-completed, 7-archive ("Done & Decide" -
+   *  - decide:  5-human-review, 5e-escalated, 6-completed, 7-archive ("Done & Decide" -
    *             the user-owned tail of the pipeline; sign-off plus the
    *             archive sit together because they all wait on the user.)
    *
@@ -668,6 +669,7 @@ export class App implements OnInit, OnDestroy {
           // ADR-0025: human-review waits on the user; it sits alongside
           // completed and archive in the user-owned tail.
           { state: '5-human-review', title: 'Review', icon: '👁️', jobs: grouped.humanReview },
+          { state: '5e-escalated', title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
           { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
           { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
         ],
@@ -719,6 +721,7 @@ export class App implements OnInit, OnDestroy {
     { state: '1-preparation',         label: 'Preparation' },
     { state: '2-ready',               label: 'Ready' },
     { state: '5-human-review',        label: 'Review' },
+    { state: '5e-escalated',          label: 'Escalated' },
     { state: '6-completed',           label: 'Completed' },
     { state: '7-archive',             label: 'Archive' },
   ];

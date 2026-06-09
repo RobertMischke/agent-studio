@@ -730,6 +730,7 @@ public sealed class StaleProgressArchiver
     {
         TaskStates.AutoReview,
         TaskStates.HumanReview,
+        TaskStates.Escalated,
         TaskStates.Completed,
         TaskStates.Archive,
     };

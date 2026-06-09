@@ -104,6 +104,12 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
     { id: 'send-back-to-ready', label: 'Send back to Ready (re-do)',                variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Ready } },
     SEND_TO_BACKLOG,
   ],
+  [TaskState.Escalated]: [
+    { id: 'reissue-escalated',        label: 'Continue (reissue)',      variant: 'primary',   intent: { kind: 'move', targetState: TaskState.Ready } },
+    { id: 'accept-escalated',         label: 'Accept',                  variant: 'secondary', intent: { kind: 'move', targetState: TaskState.Completed } },
+    { id: 'manual-resolve-escalated', label: 'Resolve manually',        variant: 'secondary', intent: { kind: 'move', targetState: TaskState.HumanReview } },
+    { id: 'discard-escalated',        label: 'Discard',                 variant: 'danger',    intent: { kind: 'move', targetState: TaskState.Archive } },
+  ],
   [TaskState.Completed]: [
     // "Archive & Next" mirrors the review lanes' Complete-and-advance primary:
     // the move to 7-archive auto-advances the detail view to the next card in
@@ -126,6 +132,7 @@ export const LANE_LABELS: Record<string, string> = {
   [TaskState.CodeNotComplete]:  'Code not complete',
   [TaskState.AutoReview]:       'Post Processing',
   [TaskState.HumanReview]:      'Review',
+  [TaskState.Escalated]:        'Escalated',
   [TaskState.Completed]:        'Completed',
   [TaskState.Archive]:          'Archive',
 };

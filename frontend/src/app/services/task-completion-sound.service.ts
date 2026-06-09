@@ -39,11 +39,12 @@ export class TaskCompletionSoundService {
 
       const autoReview = new Set((grouped.autoReview ?? grouped.review ?? []).map((j: TaskInfo) => j.id));
       const humanReview = new Set((grouped.humanReview ?? []).map((j: TaskInfo) => j.id));
+      const escalated = new Set((grouped.escalated ?? []).map((j: TaskInfo) => j.id));
       const completed = new Set((grouped.completed ?? []).map((j: TaskInfo) => j.id));
       const completedJobs: TaskInfo[] = [];
       for (const id of this.previousProgressIds) {
         if (inProgress.has(id)) continue;
-        if (autoReview.has(id) || humanReview.has(id) || completed.has(id)) {
+        if (autoReview.has(id) || humanReview.has(id) || escalated.has(id) || completed.has(id)) {
           const j = this.findJob(grouped, id);
           if (j) completedJobs.push(j);
         }
@@ -66,11 +67,12 @@ export class TaskCompletionSoundService {
   }
 
   private findJob(
-    grouped: { autoReview?: TaskInfo[]; humanReview?: TaskInfo[]; review?: TaskInfo[]; completed?: TaskInfo[] },
+    grouped: { autoReview?: TaskInfo[]; humanReview?: TaskInfo[]; escalated?: TaskInfo[]; review?: TaskInfo[]; completed?: TaskInfo[] },
     id: string,
   ): TaskInfo | undefined {
     return (grouped.autoReview ?? grouped.review ?? []).find(j => j.id === id)
       ?? (grouped.humanReview ?? []).find(j => j.id === id)
+      ?? (grouped.escalated ?? []).find(j => j.id === id)
       ?? (grouped.completed ?? []).find(j => j.id === id);
   }
 

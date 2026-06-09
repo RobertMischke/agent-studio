@@ -67,6 +67,7 @@ public static class TaskCrudEndpoints
             // populated bucket and don't crash on a missing field.
             var autoReview = SortLane(TaskStates.AutoReview);
             var humanReview = SortLane(TaskStates.HumanReview);
+            var escalated = SortLane(TaskStates.Escalated);
             var grouped = new
             {
                 // Backlog: triage staging area, the leftmost lane and the
@@ -89,6 +90,7 @@ public static class TaskCrudEndpoints
                 CodeNotComplete = SortLane(TaskStates.CodeNotComplete),
                 AutoReview = autoReview,
                 HumanReview = humanReview,
+                Escalated = escalated,
                 Review = autoReview, // legacy alias for pre-ADR-0025 clients
                 Completed = SortLane(TaskStates.Completed),
                 Archive = SortLane(TaskStates.Archive)

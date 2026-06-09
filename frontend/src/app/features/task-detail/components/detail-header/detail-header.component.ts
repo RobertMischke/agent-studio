@@ -126,6 +126,7 @@ export class DetailHeaderComponent {
     { state: '1-preparation',         label: 'Preparation' },
     { state: '2-ready',               label: 'Ready' },
     { state: '5-human-review',        label: 'Review' },
+    { state: '5e-escalated',          label: 'Escalated' },
     { state: '6-completed',           label: 'Completed' },
     { state: '7-archive',             label: 'Archive' },
   ];

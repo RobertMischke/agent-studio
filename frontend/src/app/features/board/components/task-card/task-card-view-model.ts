@@ -162,8 +162,8 @@ function buildMoreCommitsTooltip(rest: TaskCommitInfo[]): StructuredTooltip {
 // `review` variant; 3-progress shows the `full` variant that prefixes each row
 // with the ⏺ glyph so the working agent can correlate it with its own
 // auto-commit. Every other lane hides the chain entirely.
-const COMMIT_PILL_LANES = new Set(['3-progress', '4-auto-review', '5-human-review', '4-review']);
-const COMMIT_REVIEW_LANES = new Set(['4-auto-review', '5-human-review', '4-review']);
+const COMMIT_PILL_LANES = new Set(['3-progress', '4-auto-review', '5-human-review', '5e-escalated', '4-review']);
+const COMMIT_REVIEW_LANES = new Set(['4-auto-review', '5-human-review', '5e-escalated', '4-review']);
 
 /** Which commit-chain variant a lane renders, or null when the lane shows no
  *  chain. Keeps the lane->variant policy in one testable place instead of as
@@ -427,6 +427,7 @@ const LANE_MIRROR_CARD_TAG_TEXT: Record<string, readonly string[]> = {
   '4-auto-review': ['autoreview', 'review'],
   '4-review': ['review', 'autoreview'],
   '5-human-review': ['humanreview', 'review', 'reviewready', 'readytosignoff'],
+  '5e-escalated': ['escalated', 'escalate', 'humanreview', 'decisionneeded'],
   '6-completed': ['completed', 'complete', 'done'],
   '7-archive': ['archive', 'archived'],
 };
@@ -547,6 +548,7 @@ const GIT_STATE_BY_LANE: Readonly<Record<string, GitStateBadgeKind>> = {
   [TaskState.CodeNotComplete]: 'pre-merge',
   [TaskState.AutoReview]: 'pre-merge',
   [TaskState.HumanReview]: 'pre-merge',
+  [TaskState.Escalated]: 'pre-merge',
   [TaskState.Completed]: 'post-merge',
   [TaskState.Archive]: 'tagged',
 };
@@ -729,7 +731,7 @@ export function buildAutoReviewProcessBadge(job: TaskInfo, status: AutoReviewSta
 // verdict the operator must act on. 4-auto-review is deliberately excluded — it
 // lives in the "active" column and already surfaces its verdict via the
 // auto-review process badge.
-const HUMAN_DECISION_LANES = new Set(['5-human-review', '4-review']);
+const HUMAN_DECISION_LANES = new Set(['5-human-review', '5e-escalated', '4-review']);
 
 export interface HumanReviewBadge { label: string; tone: 'attention' | 'accept'; tooltip: string; }
 

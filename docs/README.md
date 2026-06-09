@@ -78,6 +78,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [visual/](visual/README.md) | Visual Documentation Library: screenshot manifest, feature pages, Playwright reproduction recipes, and downstream marketing usage mapping. |
 | [companion-app-design.md](companion-app-design.md) | The outbound-only companion-app relay (ADR-0018). |
 | [concept-docs/](concept-docs/) | Short in-product explainers, one per topic. Served by `GET /api/concept-docs/{topic}` and rendered in the `<app-info-button>` side-drawer next to surfaces whose behaviour is non-obvious (e.g. lane headers). |
+| [concept-docs/lane-5e-escalated.md](concept-docs/lane-5e-escalated.md) | In-product explainer for the escalated decision lane, including the four operator actions and the low-escalation expectation. |
 
 ## Mockups (locked design references)
 

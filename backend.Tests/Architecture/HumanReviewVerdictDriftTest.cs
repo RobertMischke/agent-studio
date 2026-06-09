@@ -7,7 +7,7 @@ namespace OrchestratorApi.Tests.Architecture;
 /// <summary>
 /// Mechanically enforces the rule behind the bug
 /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
-/// a card may only land in <c>5-human-review</c> through a code path that also
+/// a card may only land in <c>5e-escalated</c> through a code path that also
 /// records an orchestrator verdict. A move into the human-review lane with no
 /// accompanying <see cref="OrchestratorApi.Services.Runner.ReviewDecisionRecord"/>
 /// produces a card the board cannot explain - <c>orchestratorVerdict == null</c>
@@ -15,7 +15,7 @@ namespace OrchestratorApi.Tests.Architecture;
 ///
 /// <para>
 /// The guarantee is structural, not textual-co-location: the ONLY files allowed
-/// to move a job into <c>TaskStates.HumanReview</c> are the two that pair every
+/// to move a job into <c>TaskStates.Escalated</c> are the two that pair every
 /// such move with a verdict write -
 /// <list type="number">
 ///   <item><c>ReviewDecisionOrchestrator.cs</c> - the agent-driven review path;
@@ -32,13 +32,13 @@ namespace OrchestratorApi.Tests.Architecture;
 ///
 /// <para>The funnel also covers the runner's stray human-decision-needed
 /// relocation, which used to move cards into the now-retired
-/// <c>1b-needs-human-review</c> lane and now routes them to <c>5-human-review</c>
+/// <c>1b-needs-human-review</c> lane and now routes them to <c>5e-escalated</c>
 /// through <c>HumanReviewEscalation</c> like every other system escalation.</para>
 /// </summary>
 public class HumanReviewVerdictDriftTest
 {
     /// <summary>
-    /// Files allowed to move a job into <c>5-human-review</c>, each because it
+    /// Files allowed to move a job into <c>5e-escalated</c>, each because it
     /// writes the orchestrator verdict alongside the move.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> Whitelist =
@@ -52,28 +52,28 @@ public class HumanReviewVerdictDriftTest
 
     /// <summary>
     /// Detects a move call (<c>MoveAsync</c> / <c>MoveJob</c>) whose arguments
-    /// target the human-review lane, by either the typed constant
-    /// <c>TaskStates.HumanReview</c> or the raw lane literal
-    /// <c>"5-human-review"</c>. The <c>TaskStates\.HumanReview</c> branch is
+    /// target the escalated lane, by either the typed constant
+    /// <c>TaskStates.Escalated</c> or the raw lane literal
+    /// <c>"5e-escalated"</c>. The <c>TaskStates\.Escalated</c> branch is
     /// dot- and word-boundary-anchored so it only matches the exact constant,
     /// and the <c>MoveAsync|MoveJob</c> prefix keeps plain state comparisons /
     /// downstream-lane arrays from matching.
     /// </summary>
-    internal static readonly Regex HumanReviewMove = new(
-        @"\b(?:MoveAsync|MoveJob)\s*\([^;]*?(?:TaskStates\.HumanReview\b|""5-human-review"")",
+    internal static readonly Regex EscalatedMove = new(
+        @"\b(?:MoveAsync|MoveJob)\s*\([^;]*?(?:TaskStates\.Escalated\b|""5e-escalated"")",
         RegexOptions.Compiled);
 
     [Fact]
-    public void NoMoveToHumanReview_OutsideWhitelist()
+    public void NoMoveToEscalated_OutsideWhitelist()
     {
         var repoRoot = ResolveRepoRoot();
-        var violations = ScanForViolations(repoRoot, HumanReviewMove);
+        var violations = ScanForViolations(repoRoot, EscalatedMove);
 
         Assert.True(
             violations.Count == 0,
             BuildFailureMessage(
-                "move-to-5-human-review",
-                "Route the escalation through HumanReviewEscalation (Escalate/EscalateAsync) so the move always records an orchestrator verdict and a status.md stub; otherwise the card lands in 5-human-review with orchestratorVerdict==null and empty StatusMarkdown.",
+                "move-to-5e-escalated",
+                "Route system escalations through HumanReviewEscalation (Escalate/EscalateAsync) so the move always records an orchestrator verdict and a status.md stub; otherwise the card lands in 5e-escalated with orchestratorVerdict==null and empty StatusMarkdown.",
                 violations));
     }
 
@@ -95,19 +95,19 @@ public class HumanReviewVerdictDriftTest
     }
 
     [Fact]
-    public void HumanReviewMoveRegex_MatchesLaneMoves_AndIgnoresComparisons()
+    public void EscalatedMoveRegex_MatchesLaneMoves_AndIgnoresComparisons()
     {
-        // Moves into 5-human-review - must match.
-        Assert.Matches(HumanReviewMove,
-            "var move = await _transitions.MoveAsync(jobId, TaskStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);");
-        Assert.Matches(HumanReviewMove,
-            "var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);");
-        Assert.Matches(HumanReviewMove,
-            "_states.MoveJob(jobId, \"5-human-review\", watchPath);");
+        // Moves into 5e-escalated - must match.
+        Assert.Matches(EscalatedMove,
+            "var move = await _transitions.MoveAsync(jobId, TaskStates.Escalated, activeInfo.WatchPath, CancellationToken.None);");
+        Assert.Matches(EscalatedMove,
+            "var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);");
+        Assert.Matches(EscalatedMove,
+            "_states.MoveJob(jobId, \"5e-escalated\", watchPath);");
 
         // Not a move - plain state comparison and downstream-lane arrays.
-        Assert.DoesNotMatch(HumanReviewMove, "if (job.State == TaskStates.HumanReview) {}");
-        Assert.DoesNotMatch(HumanReviewMove, "var lanes = new[] { \"4-auto-review\", \"5-human-review\" };");
+        Assert.DoesNotMatch(EscalatedMove, "if (job.State == TaskStates.Escalated) {}");
+        Assert.DoesNotMatch(EscalatedMove, "var lanes = new[] { \"5-human-review\", \"5e-escalated\" };");
     }
 
     private static List<Violation> ScanForViolations(string repoRoot, Regex pattern)

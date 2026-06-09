@@ -193,6 +193,7 @@ export class TaskSelectionService {
       case '3a-failed-pickup':       return g.failedPickup ?? [];
       case '4-auto-review':          return g.autoReview ?? [];
       case '5-human-review':         return g.humanReview ?? [];
+      case '5e-escalated':           return g.escalated ?? [];
       case '6-completed':            return g.completed ?? [];
       case '7-archive':              return g.archive ?? [];
       default:                       return [];

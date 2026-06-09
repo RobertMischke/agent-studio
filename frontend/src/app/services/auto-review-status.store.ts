@@ -19,6 +19,10 @@ export interface AutoReviewStatusView {
   escalate: number;
   aspectsRun: number;
   pending?: number;
+  escalationRate?: number;
+  escalationRateDecisionCount?: number;
+  escalationRateAlertThreshold?: number;
+  escalationRateAlert?: boolean;
   currentJob: string | null;
   currentProject: string | null;
 }

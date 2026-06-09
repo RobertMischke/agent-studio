@@ -5,7 +5,7 @@ using OrchestratorApi.Services.Tasks;
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
-/// Categories for a system-initiated escalation to <c>5-human-review</c>. The
+/// Categories for a system-initiated escalation to <c>5e-escalated</c>. The
 /// value is carried in the <see cref="ReviewDecisionRecord.Reason"/> (see
 /// <see cref="HumanReviewEscalation.FormatReason"/>) and in the status.md stub
 /// so the board can say WHY a card was parked even though no agent review ran.
@@ -33,7 +33,7 @@ public static class HumanReviewEscalationCategories
     public const string AgentGitViolation = "agent-git-violation";
 
     /// <summary>A card carrying the human-decision-needed marker: it exists for
-    /// a person to decide, never for an agent to run. Routed to 5-human-review
+    /// a person to decide, never for an agent to run. Routed to 5e-escalated
     /// after the retired 1b-needs-human-review lane was removed.</summary>
     public const string HumanDecisionNeeded = "human-decision-needed";
 
@@ -43,7 +43,7 @@ public static class HumanReviewEscalationCategories
 }
 
 /// <summary>
-/// The single funnel every SYSTEM-initiated move into <c>5-human-review</c>
+/// The single funnel every SYSTEM-initiated move into <c>5e-escalated</c>
 /// must pass through. It writes both halves of the board contract that the
 /// agent-driven <see cref="ReviewDecisionOrchestrator"/> already writes for its
 /// own promotions:
@@ -102,7 +102,7 @@ public sealed class HumanReviewEscalation
     }
 
     /// <summary>
-    /// Move <paramref name="jobId"/> into 5-human-review through
+    /// Move <paramref name="jobId"/> into 5e-escalated through
     /// <see cref="TaskTransitionService.MoveAsync"/> (so the
     /// <c>OnJobMoved</c> side effects fire: the runner's active-job latch is
     /// cleared and the board gets a live SignalR push), then record the verdict
@@ -113,12 +113,12 @@ public sealed class HumanReviewEscalation
         string jobId, string watchPath, string project,
         string category, string reason, CancellationToken ct = default)
     {
-        var outcome = await _transitions.MoveAsync(jobId, TaskStates.HumanReview, watchPath, ct);
+        var outcome = await _transitions.MoveAsync(jobId, TaskStates.Escalated, watchPath, ct);
         if (outcome.Status == MoveJobStatus.Success)
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);
         else
             _logger.LogWarning(
-                "HumanReviewEscalation: move of {Project}/{JobId} to 5-human-review failed: {Status} {Message}",
+                "HumanReviewEscalation: move of {Project}/{JobId} to 5e-escalated failed: {Status} {Message}",
                 project, jobId, outcome.Status, outcome.Message);
         return outcome;
     }
@@ -132,12 +132,12 @@ public sealed class HumanReviewEscalation
         string jobId, string watchPath, string project,
         string category, string reason)
     {
-        var outcome = _states.MoveJob(jobId, TaskStates.HumanReview, watchPath);
+        var outcome = _states.MoveJob(jobId, TaskStates.Escalated, watchPath);
         if (outcome.Status == MoveJobStatus.Success)
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason);
         else
             _logger.LogWarning(
-                "HumanReviewEscalation: move of {Project}/{JobId} to 5-human-review failed: {Status} {Message}",
+                "HumanReviewEscalation: move of {Project}/{JobId} to 5e-escalated failed: {Status} {Message}",
                 project, jobId, outcome.Status, outcome.Message);
         return outcome;
     }
@@ -205,8 +205,8 @@ public sealed class HumanReviewEscalation
         var nl = Environment.NewLine;
         var sb = new System.Text.StringBuilder();
         sb.Append("# Status").Append(nl).Append(nl);
-        sb.Append("- Result: Escalated to human review (").Append(c).Append(')').Append(nl).Append(nl);
-        sb.Append("This card was routed to 5-human-review by the orchestrator runtime without an automated quality review, so there is no agent-written summary.")
+        sb.Append("- Result: Escalated to human decision (").Append(c).Append(')').Append(nl).Append(nl);
+        sb.Append("This card was routed to 5e-escalated by the orchestrator runtime without an automated quality review, so there is no agent-written summary.")
           .Append(nl).Append(nl);
         sb.Append("- Category: ").Append(c).Append(nl);
         if (r.Length > 0)

@@ -123,6 +123,7 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
   [TaskState.CodeNotComplete]: 'codeNotComplete',
   [TaskState.AutoReview]: 'autoReview',
   [TaskState.HumanReview]: 'humanReview',
+  [TaskState.Escalated]: 'escalated',
   [TaskState.Completed]: 'completed',
   [TaskState.Archive]: 'archive',
 };
@@ -191,6 +192,7 @@ export class TaskService {
     review: [],
     autoReview: [],
     humanReview: [],
+    escalated: [],
     completed: [],
     archive: [],
   });

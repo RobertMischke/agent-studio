@@ -241,7 +241,7 @@ public static class TaskGitEndpoints
     // alias for folders that never migrated.)
     private static readonly HashSet<string> AttributionFinalLanes = new(StringComparer.OrdinalIgnoreCase)
     {
-        TaskStates.AutoReview, TaskStates.HumanReview, "4-review",
+        TaskStates.AutoReview, TaskStates.HumanReview, TaskStates.Escalated, "4-review",
         TaskStates.Completed, TaskStates.Archive,
     };
 

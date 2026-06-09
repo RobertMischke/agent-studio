@@ -1421,7 +1421,7 @@ public record ProjectSettings
     /// <c>0</c> manual, <c>1</c> cautious, <c>2</c> balanced (default),
     /// <c>3</c> confident, <c>4</c> fully-auto. Governs whether the
     /// orchestrator-prep loop accepts borderline tasks, iterates, or
-    /// escalates them to <c>5-human-review</c> (the retired
+    /// escalates them to <c>5e-escalated</c> (the retired
     /// <c>1b-needs-human-review</c> lane is gone). Null means "use the
     /// default (balanced, level 2)". The setting is consulted on each
     /// pickup tick; mid-iteration policy switches do not happen.
@@ -2791,7 +2791,7 @@ public static class TaskSlugs
     /// Prefix the orchestrator stamps on a card that exists only so a human
     /// can make a call the automation must not. Such a card is never
     /// machine-actionable: the runner's pickup sweep herds it to
-    /// <see cref="TaskStates.HumanReview"/> regardless of autonomy level (the
+    /// <see cref="TaskStates.Escalated"/> regardless of autonomy level (the
     /// former 1b-needs-human-review bounce lane was retired), and the runner
     /// refuses to auto-pick it out of
     /// <see cref="TaskStates.Ready"/> (which would NOOP-burn a CLI run and
@@ -2826,7 +2826,7 @@ public static class TaskStates
     // The former 1b-needs-human-review bounce lane has been retired: the
     // "Human decision needed" concept was obsoleted. Prep now admits actionable
     // cards straight to 2-ready, and genuine "a human must decide" cases are
-    // escalated to 5-human-review by the orchestrator / the human-review funnel.
+    // escalated to 5e-escalated by the orchestrator / the human-review funnel.
     // Boot migration in TaskStateMachine moves any stray 1b folder to 2-ready.
     public const string OrchestratorPrep = "1a-orchestrator-prep";
 
@@ -2859,18 +2859,19 @@ public static class TaskStates
     public const string CodeNotComplete = "3b-code-not-complete";
 
     // 4-auto-review is the orchestrator's lane: ReviewDecisionOrchestrator
-    // can reissue, accept-as-done, or escalate. Anything that has crossed
-    // the "ready for the user" line lives in 5-human-review instead, so
-    // the kanban can split "machine still chewing" from "waiting on you".
+    // can reissue, accept-as-done, or escalate. Accepted work crosses into
+    // 5-human-review for quick operator approval; escalations cross into
+    // 5e-escalated because they need an operator decision, not a rubber stamp.
     // The legacy single 4-review lane is migrated on backend boot via
     // TaskStateMachine.EnsureStateFoldersAndMigrate. See ADR-0025.
     public const string AutoReview = "4-auto-review";
     public const string HumanReview = "5-human-review";
+    public const string Escalated = "5e-escalated";
     public const string Completed = "6-completed";
     public const string Archive = "7-archive";
 
     public static readonly string[] All =
-        [Backlog, Preparation, OrchestratorPrep, Ready, Progress, FailedPickup, CodeNotComplete, AutoReview, HumanReview, Completed, Archive];
+        [Backlog, Preparation, OrchestratorPrep, Ready, Progress, FailedPickup, CodeNotComplete, AutoReview, HumanReview, Escalated, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()

@@ -18,9 +18,9 @@ namespace OrchestratorApi.Services.Runner;
 /// running job - the race where the runner saw an empty
 /// <c>3-progress</c> mid-verdict and picked the next ready job is gone.
 /// Accept-as-done moves the task forward to <c>5-human-review</c> (the
-/// user always gets the final say on completion); escalate also moves
-/// it to <c>5-human-review</c> with a <c>[supervisor]</c> chat-note
-/// explaining why the orchestrator could not decide.
+/// user always gets the final say on completion); escalate moves it to
+/// <c>5e-escalated</c> with a <c>[supervisor]</c> chat-note explaining why
+/// the orchestrator could not decide.
 ///
 /// <para>
 /// The user framing: when a job lands in 4-review with an unanswered
@@ -213,6 +213,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _projectSettings = projectSettings;
         _humanReviewEscalation = humanReviewEscalation;
         _regressionRadar = regressionRadar;
+
+        _statusSnapshot.ConfigureEscalationRateAlert(
+            _configuration.GetValue(
+                "ReviewDecisionOrchestrator:EscalationRateAlertThreshold",
+                AutoReviewStatusSnapshot.DefaultEscalationRateAlertThreshold),
+            _configuration.GetValue(
+                "ReviewDecisionOrchestrator:EscalationRateMinimumDecisions",
+                AutoReviewStatusSnapshot.DefaultEscalationRateMinimumDecisions));
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -457,6 +465,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         finally
         {
             _statusSnapshot.EndTick();
+            var status = _statusSnapshot.Read();
+            if (status.EscalationRateAlert)
+            {
+                _logger.LogWarning(
+                    "Auto-review escalation-rate alert: rate={EscalationRate:P0} threshold={Threshold:P0} decisions={DecisionCount} accept={Accept} escalate={Escalate} reissue={Reissue}",
+                    status.EscalationRate,
+                    status.EscalationRateAlertThreshold,
+                    status.EscalationRateDecisionCount,
+                    status.Accept,
+                    status.Escalate,
+                    status.Reissue);
+            }
         }
     }
 
@@ -684,11 +704,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// <summary>
     /// One-shot boot repair for the bug
     /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
-    /// every card parked in <c>5-human-review</c> whose per-project decision
+    /// every legacy card parked in <c>5-human-review</c> whose per-project decision
     /// journal holds NO record for that job gets a retroactive
     /// <see cref="ReviewDecisionKind.Escalate"/> verdict (category
     /// <see cref="HumanReviewEscalationCategories.UnknownLegacy"/>) and a minimal
-    /// <c>status.md</c> stub, written through <see cref="HumanReviewEscalation"/>.
+    /// <c>status.md</c> stub, written through <see cref="HumanReviewEscalation"/>
+    /// while moving it to <c>5e-escalated</c>.
     /// These are the cards that reached the lane through the pre-funnel
     /// ProjectRunner paths, so the board showed them as done-but-blank with
     /// <c>orchestratorVerdict == null</c>. Idempotent: the gate is "no existing
@@ -736,15 +757,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             if (records.Any(r => r.JobId == job.Id)) continue;
             if (!repairedKeys.Add($"{job.ProjectName} {job.Id}")) continue;
 
-            _humanReviewEscalation.RecordVerdictAndStatus(
-                job.ProjectName, job.Id, job.FolderPath,
+            _humanReviewEscalation.Escalate(
+                job.Id, job.WatchPath, job.ProjectName,
                 HumanReviewEscalationCategories.UnknownLegacy,
                 "Parked in human review before the escalation funnel existed; no automated review ran.");
 
             repaired++;
             _logger.LogInformation(
-                "ReviewDecisionOrchestrator: verdict-less backfill gave {Project}/{JobId} a retroactive escalate verdict (category={Category}).",
-                job.ProjectName, job.Id, HumanReviewEscalationCategories.UnknownLegacy);
+                "ReviewDecisionOrchestrator: verdict-less backfill moved {Project}/{JobId} to {TargetState} with a retroactive escalate verdict (category={Category}).",
+                job.ProjectName, job.Id, TaskStates.Escalated, HumanReviewEscalationCategories.UnknownLegacy);
         }
 
         if (repaired > 0)
@@ -937,14 +958,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {TaskStates.HumanReview}.");
+            $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator: failed to move {JobId} to {TargetState} after NOOP escalate: {Status} {Message}",
-                current.Id, TaskStates.HumanReview, move.Status, move.Message);
+                current.Id, TaskStates.Escalated, move.Status, move.Message);
         }
 
         // ADR-0049: escalation records the event on the original card's
@@ -1167,13 +1188,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator could not obtain a deterministic completion signal. Reason: {reason}. Promoted to 5-human-review.");
+            $"Orchestrator could not obtain a deterministic completion signal. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after no-completion-signal escalate: {Status} {Message}",
+                "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after no-completion-signal escalate: {Status} {Message}",
                 current.Id, move.Status, move.Message);
         }
 
@@ -1211,14 +1232,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             : $"Agent emitted [[TASK_BLOCKED]]: {pending.Reason}";
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator escalated BLOCKED to human review. Reason: {reason}. Promoted to 5-human-review.");
+            $"Orchestrator escalated BLOCKED for human decision. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
-        // ADR-0025: BLOCKED escalations move the task to 5-human-review.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        // BLOCKED escalations move to the decision lane, not acceptance review.
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after BLOCKED: {Status} {Message}",
+                "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after BLOCKED: {Status} {Message}",
                 current.Id, move.Status, move.Message);
         }
 
@@ -1309,7 +1330,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// verdict paths lacked: they warned-but-continued on a failed move and left
     /// the card verdict-but-stuck. Performs ONLY the due move
     /// (<see cref="ReviewDecisionKind.Reissue"/> -> 2-ready,
-    /// <see cref="ReviewDecisionKind.Escalate"/> /
+    /// <see cref="ReviewDecisionKind.Escalate"/> -> 5e-escalated /
     /// <see cref="ReviewDecisionKind.AcceptAsDone"/> -> 5-human-review), appends
     /// NO new verdict record (the original is the source of truth), and writes
     /// the operator-facing chat-log / timeline line only AFTER the move sticks -
@@ -1352,18 +1373,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return Task.CompletedTask;
         }
 
-        // Escalate / AcceptAsDone both land in 5-human-review.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var targetState = verdict == ReviewDecisionKind.AcceptAsDone
+            ? TaskStates.HumanReview
+            : TaskStates.Escalated;
+        var move = _stateMachine.MoveJob(current.Id, targetState, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: stale-with-verdict backfill could not move {Project}/{JobId} ({Verdict}) to 5-human-review: {Status} {Message}; leaving for next-tick retry",
-                entry.Name, current.Id, verdict, move.Status, move.Message);
+                "ReviewDecisionOrchestrator: stale-with-verdict backfill could not move {Project}/{JobId} ({Verdict}) to {TargetState}: {Status} {Message}; leaving for next-tick retry",
+                entry.Name, current.Id, verdict, targetState, move.Status, move.Message);
             return Task.CompletedTask;
         }
 
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-        var movedInfo = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        var movedInfo = current with { FolderPath = movedFolderPath, State = targetState };
         var titleH = string.IsNullOrWhiteSpace(movedInfo.Title) ? movedInfo.Id : movedInfo.Title;
 
         if (verdict == ReviewDecisionKind.AcceptAsDone)
@@ -1386,10 +1409,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         else
         {
             _chatLog.AppendSupervisor(movedInfo, "escalate",
-                $"Auto-review backfill: a recorded escalate verdict for \"{titleH}\" never completed its lane move; promoted to 5-human-review.");
+                $"Auto-review backfill: a recorded escalate verdict for \"{titleH}\" never completed its lane move; promoted to {TaskStates.Escalated}.");
             EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
                 TimelineActors.Orchestrator,
-                "Backfill: recorded escalate verdict had no lane move; moved to 5-human-review.",
+                "Backfill: recorded escalate verdict had no lane move; moved to 5e-escalated.",
                 BuildEscalateDetails("stale-verdict-backfill",
                     "Recorded escalate verdict never completed its lane move.",
                     CountPriorReissues(workspace, entry.Name, current.Id)));
@@ -1397,8 +1420,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         _logger.LogInformation(
-            "ReviewDecisionOrchestrator: stale-with-verdict backfill moved {Project}/{JobId} ({Verdict}) to 5-human-review",
-            entry.Name, current.Id, verdict);
+            "ReviewDecisionOrchestrator: stale-with-verdict backfill moved {Project}/{JobId} ({Verdict}) to {TargetState}",
+            entry.Name, current.Id, verdict, targetState);
         return Task.CompletedTask;
     }
 
@@ -1456,7 +1479,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // compile / test failures, or a success claim contradicted by a build
         // error. A hit short-circuits the accept and drives the task to a
         // conclusion: reissue with the items foregrounded while the shared reissue
-        // budget allows, otherwise escalate to 5-human-review. This closes the
+        // budget allows, otherwise escalate to 5e-escalated. This closes the
         // silent-completion gap (ASS-764 self-reported build error accepted with
         // concerns; ASS-766 silent finish + open items parked without a verdict)
         // where a run says done while its own evidence still lists open work.
@@ -1586,7 +1609,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // aspect is not clean (failing build/tests, missing evidence, +0/-0
         // "test" commit), demand verification instead of accepting with concerns:
         // reissue with a screenshot/e2e + green-build demand while the shared
-        // reissue budget allows, otherwise escalate to 5-human-review.
+        // reissue budget allows, otherwise escalate to 5e-escalated.
         var evidenceGate = EvidenceGate.Evaluate(
             EvidenceGate.RequiresVisualEvidence(current.TaskType, current.Tags, current.Title),
             EvidenceGate.HasVisualEvidence(current.FolderPath),
@@ -1887,7 +1910,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// <summary>
     /// Loop-break escalate (ASS-794): the shared reissue budget is spent, so the
     /// card must not loop back to <c>2-ready</c> again. Hand it to
-    /// <c>5-human-review</c> with the blocking aspect concerns surfaced and record
+    /// <c>5e-escalated</c> with the blocking aspect concerns surfaced and record
     /// the final Orchestrator-Review escalate row.
     /// </summary>
     private void EscalateOnLoopBreak(
@@ -1900,13 +1923,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Auto-review reissue budget spent; not reissuing again. Reason: {loopBreak.Reason}. Promoted to 5-human-review.");
+            $"Auto-review reissue budget spent; not reissuing again. Reason: {loopBreak.Reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after loop-break escalate: {Status} {Message}",
+                "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after loop-break escalate: {Status} {Message}",
                 current.Id, move.Status, move.Message);
         }
 
@@ -1938,7 +1961,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// unverified: a UI/bug task with no visual proof, or an unclean
     /// tests-and-evidence aspect. Reissue (budget left) sends the card back to
     /// 2-ready with a verification demand foregrounded; escalate (budget spent)
-    /// hands it to 5-human-review. Records the final
+    /// hands it to 5e-escalated. Records the final
     /// <see cref="PipelineCatalogue.OrchestratorDecisionStepId"/> row so the
     /// Overview pipeline shows the ruling. The in-flight pipeline run was already
     /// completed by the caller, so the record travels with the lane move.
@@ -1963,13 +1986,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
 
             _chatLog.AppendSupervisor(current, "escalate",
-                $"Auto-review could not verify this task's result. Reason: {gate.Reason}. Promoted to 5-human-review.");
+                $"Auto-review could not verify this task's result. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
-                    "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after evidence-gate escalate: {Status} {Message}",
+                    "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after evidence-gate escalate: {Status} {Message}",
                     current.Id, move.Status, move.Message);
             }
 
@@ -2342,7 +2365,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// Drive a non-clean completion-gate decision to a conclusion so the task can
     /// never park in 4-auto-review without a verdict. Reissue (budget left) sends
     /// the card back to 2-ready with the gate's findings foregrounded into a
-    /// follow-up; escalate (budget spent) hands it to 5-human-review. Both record
+    /// follow-up; escalate (budget spent) hands it to 5e-escalated. Both record
     /// the post-core <see cref="PipelineCatalogue.OrchestratorReviewStepId"/> row
     /// so the gate's ruling is visible in the Overview pipeline. The in-flight
     /// pipeline run is completed before the lane move so the record travels with
@@ -2364,18 +2387,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (gate.Action == CompletionGate.CompletionGateAction.Escalate)
         {
             _chatLog.AppendSupervisor(current, "escalate",
-                $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {gate.Reason}. Promoted to 5-human-review.");
+                $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
-                    "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after completion-gate escalate: {Status} {Message}",
+                    "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after completion-gate escalate: {Status} {Message}",
                     current.Id, move.Status, move.Message);
             }
 
             var escalatedFolder = move.NewFolderPath ?? current.FolderPath;
-            var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.HumanReview };
+            var escalated = current with { FolderPath = escalatedFolder, State = TaskStates.Escalated };
             RecordOrchestratorReviewStep(escalatedFolder, PipelineStepStatus.Failed,
                 DecisionVerdictEscalate, gate.Reason);
             WritePostProcessingOutcome(escalated, PostProcessingOutcomes.NeedsHumanInput,
@@ -2793,11 +2816,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (priorBuildGateReissues >= 1)
         {
             var reason = $"build-test gate failed twice in a row ({result.Reason}); escalating per post-step loop guard.";
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-                var escalated = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+                var escalated = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
                 RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
                     DecisionVerdictEscalate, reason);
                 WritePostProcessingOutcome(escalated, PostProcessingOutcomes.FailedPostProcessing,
@@ -2806,7 +2829,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     stepId: PipelineCatalogue.BuildTestGateStepId,
                     evidenceRef: "post-steps/build-test-gate.log");
                 _chatLog.AppendSupervisor(escalated, "escalate",
-                    $"Build/test gate failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
+                    $"Build/test gate failed twice in a row. Promoted to {TaskStates.Escalated}. Output:\n{result.Output}");
                 EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
                     TimelineActors.Orchestrator, reason,
                     BuildEscalateDetails("build-test-gate-double-fail", reason,
@@ -2887,7 +2910,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// no prior lint-scss reissue, send it back to <c>2-ready</c> with a
     /// follow-up that includes the truncated stylelint output. If a prior
     /// reissue already exists in the decision journal, the budget is
-    /// spent and the job escalates to <c>5-human-review</c> instead — the
+    /// spent and the job escalates to <c>5e-escalated</c> instead - the
     /// spec's infinite-spin guard.
     /// </summary>
     private async Task HandleLintScssFailureAsync(
@@ -2907,16 +2930,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (priorLintReissues >= 1)
         {
             var reason = $"lint-scss failed twice in a row (exit {result.ExitCode}); escalating per ASS-46 infinite-spin guard.";
-            var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+            var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-                var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+                var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
                 // Final verdict step: escalate (lint double-fail infinite-spin guard).
                 RecordOrchestratorDecisionStep(movedFolderPath, PipelineStepStatus.Failed,
                     DecisionVerdictEscalate, reason);
                 _chatLog.AppendSupervisor(moved, "escalate",
-                    $"Lint-scss post-step failed twice in a row. Promoted to 5-human-review. Output:\n{result.Output}");
+                    $"Lint-scss post-step failed twice in a row. Promoted to {TaskStates.Escalated}. Output:\n{result.Output}");
                 // ADR-0049: timeline event on the original card, no wrapper card.
                 EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
                     TimelineActors.Orchestrator, reason,
@@ -3639,16 +3662,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         // ADR-0049: the orchestrator could not decide this 4-auto-review
-        // task unattended. It flips the *original* card to 5-human-review
+        // task unattended. It flips the *original* card to 5e-escalated
         // (a genuine "a human must decide" case) and records one
         // orchestrator_escalated event on that card's timeline - the timeline
         // is the explanation. No sibling human-decision-needed-<slug> card is
         // spawned: the wrapper-card pattern (ASS-30) is the bug this ADR ends.
-        var move = _stateMachine.MoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, TaskStates.Escalated, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after escalate: {Status} {Message}",
+                "ReviewDecisionOrchestrator: failed to move {JobId} to escalated after escalate: {Status} {Message}",
                 current.Id, move.Status, move.Message);
             return Task.CompletedTask;
         }
@@ -3659,7 +3682,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // the chat-log auto-creates its parent folder on write — so a
         // stale path resurrects the source lane as a one-line skeleton.
         var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
-        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.HumanReview };
+        var moved = current with { FolderPath = movedFolderPath, State = TaskStates.Escalated };
         WritePostProcessingOutcome(moved, PostProcessingOutcomes.NeedsHumanInput,
             summary: verdict.Reason,
             performerCliType: CliTypes.Claude,
@@ -3667,7 +3690,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             evidenceRef: "pipeline-execution.json");
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
-            $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
+            $"Auto-review escalated \"{title}\" to {TaskStates.Escalated} for human attention. Reason: {verdict.Reason}.");
 
         EmitVerdictTimeline(movedFolderPath, TimelineEventKinds.OrchestratorEscalated,
             TimelineActors.Orchestrator, verdict.Reason,

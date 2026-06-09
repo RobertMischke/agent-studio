@@ -15,7 +15,8 @@ namespace OrchestratorApi.Tests;
 /// <c>karten-landen-in-5-human-review-ohne-verdict-und-ohne-statusmarkdown</c>:
 /// the boot-time sweep <see cref="ReviewDecisionOrchestrator.BackfillVerdictlessHumanReview"/>
 /// gives every <c>5-human-review</c> card that carries NO decision-journal
-/// record a retroactive <see cref="ReviewDecisionKind.Escalate"/> verdict
+/// record a retroactive <see cref="ReviewDecisionKind.Escalate"/> verdict,
+/// moves it to <c>5e-escalated</c>,
 /// (category <see cref="HumanReviewEscalationCategories.UnknownLegacy"/>) and a
 /// <c>status.md</c> stub, while leaving already-explained cards untouched. The
 /// sweep is idempotent: a second run is a no-op.
@@ -94,13 +95,17 @@ public sealed class HumanReviewVerdictBackfillTests : IDisposable
 
         _orchestrator.BackfillVerdictlessHumanReview(_workspaceRoot, CancellationToken.None);
 
-        // Legacy card got an escalate verdict (unknown-legacy) + a status stub.
+        // Legacy card got an escalate verdict (unknown-legacy), moved to
+        // 5e-escalated, and received a status stub.
         var legacy = ReviewDecisionLog.ReadAll(_workspaceRoot, ProjectName)
             .Where(r => r.JobId == "legacy-verdictless").ToList();
         Assert.Single(legacy);
         Assert.Equal(ReviewDecisionKind.Escalate, legacy[0].Kind);
         Assert.Contains(HumanReviewEscalationCategories.UnknownLegacy, legacy[0].Reason);
-        var stub = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "legacy-verdictless", "status.md"));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "legacy-verdictless")));
+        var escalatedPath = Path.Combine(_watchPath, TaskStates.Escalated, "legacy-verdictless");
+        Assert.True(Directory.Exists(escalatedPath));
+        var stub = File.ReadAllText(Path.Combine(escalatedPath, "status.md"));
         Assert.False(string.IsNullOrWhiteSpace(stub));
 
         // Explained card untouched: no extra verdict, summary preserved.

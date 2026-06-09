@@ -51,7 +51,7 @@ export class ProjectWorkspaceSectionComponent implements OnInit {
       grouped.backlog, grouped.preparation, grouped.orchestratorPrep,
       grouped.ready, grouped.progress,
       grouped.failedPickup, grouped.review, grouped.autoReview,
-      grouped.humanReview, grouped.completed, grouped.archive,
+      grouped.humanReview, grouped.escalated, grouped.completed, grouped.archive,
     ];
     const seen = new Set<string>();
     const out: TaskInfo[] = [];

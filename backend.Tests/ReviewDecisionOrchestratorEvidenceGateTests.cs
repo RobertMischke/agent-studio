@@ -147,8 +147,8 @@ public class ReviewDecisionOrchestratorEvidenceGateTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "escalate-bug");
-        Assert.True(Directory.Exists(folder), "missing evidence with no budget left should escalate to 5-human-review");
+        var folder = Path.Combine(_watchPath, TaskStates.Escalated, "escalate-bug");
+        Assert.True(Directory.Exists(folder), "missing evidence with no budget left should escalate to 5e-escalated");
 
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.OrchestratorDecisionStepId + "\"", pipelineJson);
@@ -172,13 +172,13 @@ public class ReviewDecisionOrchestratorEvidenceGateTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "loop-block")),
-            "a blocked task with no reissue budget left must escalate to 5-human-review, not reissue");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "loop-block")),
+            "a blocked task with no reissue budget left must escalate to 5e-escalated, not reissue");
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "loop-block")),
             "the loop-breaker must prevent a pendulum back to 2-ready");
 
         var pipelineJson = File.ReadAllText(
-            Path.Combine(_watchPath, TaskStates.HumanReview, "loop-block", PipelineExecutionLog.FileName));
+            Path.Combine(_watchPath, TaskStates.Escalated, "loop-block", PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.OrchestratorDecisionStepId + "\"", pipelineJson);
         Assert.Contains("\"verdict\": \"escalate\"", pipelineJson);
     }

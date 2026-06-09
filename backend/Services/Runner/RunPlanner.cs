@@ -103,7 +103,7 @@ public static class RunPlanner
                 : !compatible ? $"recorded id is not a valid {cliType} session"
                 : placeholder ? "recorded id is a legacy placeholder slug"
                 : null;
-            var moveToProgress = initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Completed or TaskStates.Ready;
+            var moveToProgress = initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Escalated or TaskStates.Completed or TaskStates.Ready;
 
             if (canResume)
             {
@@ -155,7 +155,7 @@ public static class RunPlanner
         // matches the actual situation (a process is working on it).
         var moveStartToProgress =
             initialState == TaskStates.Ready
-            || initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Completed;
+            || initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Escalated or TaskStates.Completed;
         var startSession = sessionName;
         var sessionDropped = false;
         var clearStale = false;
@@ -194,7 +194,7 @@ public static class RunPlanner
             evtKind = "recovery";
             evtReason = "previous session was for another CLI. Files reconstructed.";
         }
-        else if (resume && initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Completed)
+        else if (resume && initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Escalated or TaskStates.Completed)
         {
             // Re-starting an already-finished task with the same session is
             // almost always a "user updated the prompt and wants the agent to
@@ -267,7 +267,7 @@ public static class RunPlanner
     {
         if (ShouldUseResumePrompt(initialState, resume, sessionDropped))
             return RuntimePromptService.RunnerResumeInterrupted;
-        if (resume && initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Completed)
+        if (resume && initialState is TaskStates.AutoReview or TaskStates.HumanReview or TaskStates.Escalated or TaskStates.Completed)
             return RuntimePromptService.RunnerResumeRestart;
         return RuntimePromptService.RunnerFreshStart;
     }

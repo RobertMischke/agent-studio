@@ -389,7 +389,8 @@ export interface SystemSchemaDriftEvent extends ConversationEventBase {
 /**
  * A `feedback.queued` row is the compact marker the user sees after typing
  * into the chat of a task that is no longer being actively worked
- * (`4-auto-review`, `5-human-review`, `6-completed`, `7-archive`). It does
+ * (`4-auto-review`, `5-human-review`, `5e-escalated`, `6-completed`,
+ * `7-archive`). It does
  * not restart the task; it records what the composer decided to do with the
  * comment. The grammar is specified in
  * `docs/mockups/chat-window-next-gen/feedback-queued-from-chat.md`.
@@ -404,7 +405,7 @@ export interface FeedbackQueuedEvent extends ConversationEventBase {
   /** Which composer mode produced this row. */
   mode: 'ask' | 'defer' | 'promote';
   /** Lane the parent task was in when the user pressed Send. */
-  parentLane: '4-auto-review' | '5-human-review' | '6-completed' | '7-archive';
+  parentLane: '4-auto-review' | '5-human-review' | '5e-escalated' | '6-completed' | '7-archive';
   /**
    * Human-readable marker copy ("I'll get to this when there's bandwidth",
    * "answered inline · no code changes", "merged into follow-up #98"). Plain

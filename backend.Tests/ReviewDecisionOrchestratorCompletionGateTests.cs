@@ -95,8 +95,8 @@ public class ReviewDecisionOrchestratorCompletionGateTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        var folder = Path.Combine(_watchPath, TaskStates.HumanReview, "escalate-job");
-        Assert.True(Directory.Exists(folder), "open items with no budget left should escalate to 5-human-review");
+        var folder = Path.Combine(_watchPath, TaskStates.Escalated, "escalate-job");
+        Assert.True(Directory.Exists(folder), "open items with no budget left should escalate to 5e-escalated");
 
         var pipelineJson = File.ReadAllText(Path.Combine(folder, PipelineExecutionLog.FileName));
         Assert.Contains("\"stepId\": \"" + PipelineCatalogue.OrchestratorReviewStepId + "\"", pipelineJson);

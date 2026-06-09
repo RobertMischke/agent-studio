@@ -127,12 +127,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // ADR-0049: an orchestrator that cannot decide unattended flips the
-        // *original* card to 5-human-review (the retired 1b-needs-human-review
+        // *original* card to 5e-escalated (the retired 1b-needs-human-review
         // lane is gone); the legacy auto-review folder must no longer hold the job.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "auth-rewrite")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "auth-rewrite")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "auth-rewrite")));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "auth-rewrite");
+        var log = ReadCliLog(TaskStates.Escalated, "auth-rewrite");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("strategic call", log);
@@ -159,11 +159,11 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(1, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "malformed-decision")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "malformed-decision")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "malformed-decision")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "malformed-decision")));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "malformed-decision");
+        var log = ReadCliLog(TaskStates.Escalated, "malformed-decision");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("no parseable [[ORCHESTRATOR_DECISION]]", log);
 
@@ -294,7 +294,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     [Theory]
     [InlineData(ReviewDecisionKind.Reissue, TaskStates.Ready)]
-    [InlineData(ReviewDecisionKind.Escalate, TaskStates.HumanReview)]
+    [InlineData(ReviewDecisionKind.Escalate, TaskStates.Escalated)]
     [InlineData(ReviewDecisionKind.AcceptAsDone, TaskStates.HumanReview)]
     public async Task StaleWithVerdict_BackfillsDueLaneMove_ForEachVerdictType(
         ReviewDecisionKind verdict, string expectedLane)
@@ -305,7 +305,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // 4-auto-review WITH a journalled verdict. Every other guard skips it
         // (sentinel resolved; IsStaleWithoutVerdict only covers the no-verdict
         // case), so it hangs. The backfill nudges the due move after the grace
-        // window: reissue -> 2-ready, escalate / accept -> 5-human-review.
+        // window: reissue -> 2-ready, escalate -> 5e-escalated, accept -> 5-human-review.
         var slug = $"stuck-{verdict}".ToLowerInvariant();
         SeedResolvedReviewCardPastGrace(slug);
         ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
@@ -458,8 +458,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        // Moved exactly once to 5-human-review; second tick finds nothing to do.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "idempotent-stuck")));
+        // Moved exactly once to 5e-escalated; second tick finds nothing to do.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "idempotent-stuck")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "idempotent-stuck")));
 
         // No new verdict records were appended by the backfill (only the seed).
@@ -524,12 +524,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "double-noop")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "double-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "double-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "double-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "double-noop")));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "double-noop");
+        var log = ReadCliLog(TaskStates.Escalated, "double-noop");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("Escalated: 2 consecutive NOOPs without progress", log);
@@ -553,12 +553,11 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         Assert.Equal(0, calls);
 
-        // ADR-0025: NOOP escalations also move to 5-human-review.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "placeholder-task")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "placeholder-task")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "placeholder-task")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "placeholder-task")));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "placeholder-task");
+        var log = ReadCliLog(TaskStates.Escalated, "placeholder-task");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("empty or placeholder", log);
@@ -599,8 +598,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        // Budget-exhausted NOOP must escalate to 5-human-review (ADR-0025).
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "repeated-noop")));
+        // Budget-exhausted NOOP must escalate to 5e-escalated.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "repeated-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "repeated-noop")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "repeated-noop")));
 
@@ -608,7 +607,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-repeated-noop");
         Assert.False(Directory.Exists(intake));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "repeated-noop");
+        var log = ReadCliLog(TaskStates.Escalated, "repeated-noop");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("prior orchestrator reissue", log);
@@ -719,12 +718,12 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "stubborn-no-signal")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "stubborn-no-signal")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "stubborn-no-signal")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stubborn-no-signal")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Completed, "stubborn-no-signal")));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "stubborn-no-signal");
+        var log = ReadCliLog(TaskStates.Escalated, "stubborn-no-signal");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("deterministic completion signal", log);
@@ -762,7 +761,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         Assert.Equal(0, calls);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "empty-scope-no-signal")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "empty-scope-no-signal")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "empty-scope-no-signal")));
 
         var record = ReadOnlyDecisionRecord();
@@ -805,15 +804,14 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // BLOCKED is deterministic: no fast-model call.
         Assert.Equal(0, calls);
 
-        // ADR-0025: BLOCKED escalations move the task to 5-human-review.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, "bug-commit-hangs")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "bug-commit-hangs")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.AutoReview, "bug-commit-hangs")));
 
         // ADR-0049: no human-decision-needed wrapper card is spawned.
         var intake = Path.Combine(_watchPath, TaskStates.Preparation, "human-decision-needed-bug-commit-hangs");
         Assert.False(Directory.Exists(intake));
 
-        var log = ReadCliLog(TaskStates.HumanReview, "bug-commit-hangs");
+        var log = ReadCliLog(TaskStates.Escalated, "bug-commit-hangs");
         Assert.Contains("[supervisor]", log);
         Assert.Contains("[escalate]", log);
         Assert.Contains("BLOCKED", log);
@@ -1467,8 +1465,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
         // ADR-0049: the escalate event travels with the original card, which
-        // is now in 5-human-review (the retired 1b-needs-human-review lane is gone).
-        var events = ReadTimeline(TaskStates.HumanReview, "escalate-timeline");
+        // is now in 5e-escalated.
+        var events = ReadTimeline(TaskStates.Escalated, "escalate-timeline");
         var escalate = Assert.Single(
             events.Where(e => e.Kind == TimelineEventKinds.OrchestratorEscalated).ToList());
         Assert.Equal(TimelineActors.Orchestrator, escalate.Actor);

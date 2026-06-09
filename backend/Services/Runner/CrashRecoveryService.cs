@@ -564,6 +564,7 @@ public sealed class CrashRecoveryService
     {
         TaskStates.AutoReview,
         TaskStates.HumanReview,
+        TaskStates.Escalated,
         TaskStates.Completed,
         TaskStates.Archive,
     };

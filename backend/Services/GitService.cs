@@ -339,6 +339,7 @@ public class GitService
         var isPostProgress =
             lane == TaskStates.AutoReview ||
             lane == TaskStates.HumanReview ||
+            lane == TaskStates.Escalated ||
             lane == TaskStates.Completed ||
             lane == TaskStates.Archive;
         var acceptedUncommitted = isActiveJob && isPostProgress && project.IsRepo && project.IsDirty;
