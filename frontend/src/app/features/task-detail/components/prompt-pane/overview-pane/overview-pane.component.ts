@@ -182,8 +182,9 @@ interface TokenBreakdownRowVm {
  * archives the prior run's record; this is the compact summary the operator
  * scans to tell an old run apart from the current one.
  */
-interface PreviousRunVm {
+interface PipelineRunOptionVm {
   attempt: number;
+  current: boolean;
   startedAt: string | null;
   completedAt: string | null;
   durationMs: number;
@@ -437,6 +438,7 @@ export class OverviewPaneComponent {
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
   readonly selectedTokenStepId = signal<string | null>(null);
+  readonly selectedPipelineAttempt = signal<number | null>(null);
   private readonly optimisticTitle = signal<string | null>(null);
   private modalStackDisposer: (() => void) | null = null;
   private tokenModalStackDisposer: (() => void) | null = null;
@@ -745,8 +747,10 @@ export class OverviewPaneComponent {
       res.pipeline.allSteps ??
       [...res.pipeline.pre, ...res.pipeline.core, ...res.pipeline.post];
 
-    const exec = new Map((res.execution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
-    const cost = new Map((res.cost?.steps ?? []).map(c => [c.stepId.toLowerCase(), c]));
+    const selectedExecution = this.selectedPipelineExecution();
+    const isCurrentRun = this.selectedPipelineIsCurrent();
+    const exec = new Map((selectedExecution?.steps ?? []).map(s => [s.stepId.toLowerCase(), s]));
+    const cost = new Map((isCurrentRun ? (res.cost?.steps ?? []) : []).map(c => [c.stepId.toLowerCase(), c]));
 
     const rows = steps.map(step => {
       const key = step.id.toLowerCase();
@@ -777,6 +781,11 @@ export class OverviewPaneComponent {
       const tokenTooltip = this.buildStepTokenTooltip(label, c ?? null);
       const costTooltip = this.buildStepCostTooltip(label, c ?? null);
       const phase = pipelinePhaseForKind(step.kind);
+      const inputTokens = c?.inputTokens ?? e?.inputTokens ?? 0;
+      const outputTokens = c?.outputTokens ?? e?.outputTokens ?? 0;
+      const cacheReadTokens = c?.cacheReadTokens ?? e?.cacheReadTokens ?? 0;
+      const cacheCreationTokens = c?.cacheCreationTokens ?? e?.cacheCreationTokens ?? 0;
+      const totalTokens = c?.totalTokens ?? (inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens);
       return {
         id: step.id,
         label,
@@ -803,17 +812,17 @@ export class OverviewPaneComponent {
         startedAt: e?.startedAt ?? null,
         completedAt: e?.completedAt ?? null,
         tokenUsageSource: c?.tokenUsageSource ?? e?.tokenUsageSource ?? null,
-        inputTokens: c?.inputTokens ?? 0,
-        outputTokens: c?.outputTokens ?? 0,
-        cacheReadTokens: c?.cacheReadTokens ?? 0,
-        cacheCreationTokens: c?.cacheCreationTokens ?? 0,
-        totalTokens: c?.totalTokens ?? 0,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+        totalTokens,
         inputCostUsd: c?.inputCostUsd ?? 0,
         outputCostUsd: c?.outputCostUsd ?? 0,
         cacheReadCostUsd: c?.cacheReadCostUsd ?? 0,
         cacheCreationCostUsd: c?.cacheCreationCostUsd ?? 0,
         costUsd: c?.costUsd ?? 0,
-        costKnown: c ? c.modelKnown : true,
+        costKnown: c ? c.modelKnown : isCurrentRun,
         tokenTooltip,
         costTooltip,
       };
@@ -972,6 +981,7 @@ export class OverviewPaneComponent {
    * steps have no per-job markdown.
    */
   resultForRow(row: PipelineRowVm): { fileName: string; header: PipelineStepResultHeader } | null {
+    if (!this.selectedPipelineIsCurrent()) return null;
     let fileName: string | null = null;
     if (row.kind === 'core') fileName = 'status.md';
     else if (row.kind === 'aspect') fileName = `${row.id}.md`;
@@ -1021,7 +1031,7 @@ export class OverviewPaneComponent {
   }
 
   tokenStepCallsLabel(row: PipelineRowVm): string {
-    if (row.kind === 'core') {
+    if (row.kind === 'core' && this.selectedPipelineIsCurrent()) {
       const n = this.agentRunCount();
       if (n > 0) return n === 1 ? '1 agent run' : `${n} agent runs`;
     }
@@ -1049,6 +1059,7 @@ export class OverviewPaneComponent {
 
   /** Task-total tokens + cost across all recorded steps. */
   readonly pipelineTotal = computed<PipelineTotalVm | null>(() => {
+    if (!this.selectedPipelineIsCurrent()) return null;
     const c = this.pipelinePoll.pipeline()?.cost ?? null;
     if (c == null) return null;
     return {
@@ -1273,6 +1284,32 @@ export class OverviewPaneComponent {
   /** 1-based run counter for the current pipeline run (1 when never restarted). */
   readonly pipelineAttempt = computed<number>(() => this.pipelineExecution()?.attempt ?? 1);
 
+  private readonly selectedPipelineExecution = computed<PipelineExecutionRecord | null>(() => {
+    const current = this.pipelineExecution();
+    if (current == null) return null;
+    const selected = this.selectedPipelineAttempt();
+    const currentAttempt = current.attempt ?? 1;
+    if (selected == null || selected === currentAttempt) return current;
+    return current.previousAttempts?.find(rec => (rec.attempt ?? 1) === selected) ?? current;
+  });
+
+  readonly selectedPipelineIsCurrent = computed<boolean>(() => {
+    const current = this.pipelineExecution();
+    const selected = this.selectedPipelineExecution();
+    if (current == null || selected == null) return true;
+    return (selected.attempt ?? 1) === (current.attempt ?? 1);
+  });
+
+  readonly selectedPipelineAttemptNumber = computed<number>(
+    () => this.selectedPipelineExecution()?.attempt ?? this.pipelineAttempt(),
+  );
+
+  selectPipelineRun(attempt: number): void {
+    const currentAttempt = this.pipelineAttempt();
+    this.selectedPipelineAttempt.set(attempt === currentAttempt ? null : attempt);
+    this.selectedTokenStepId.set(null);
+  }
+
   /**
    * True when this job's pipeline has been restarted at least once, so the
    * Overview can flag the current run as a fresh attempt and surface the
@@ -1291,22 +1328,27 @@ export class OverviewPaneComponent {
   );
 
   /**
-   * Compact summaries of prior runs, most-recent first, so an operator can
-   * tell old step runs apart from the current ones after a restart. Empty
-   * when the pipeline never restarted.
+   * Compact summaries for the run switcher. The current run stays first, then
+   * prior runs follow most-recent first so an operator can swap the step table
+   * between attempts after a restart.
    */
-  readonly previousRuns = computed<PreviousRunVm[]>(() => {
-    const prior = this.pipelineExecution()?.previousAttempts ?? [];
-    return prior.map(rec => this.toPreviousRunVm(rec));
+  readonly pipelineRunOptions = computed<PipelineRunOptionVm[]>(() => {
+    const current = this.pipelineExecution();
+    if (current == null) return [];
+    return [
+      this.toPipelineRunOptionVm(current, true),
+      ...(current.previousAttempts ?? []).map(rec => this.toPipelineRunOptionVm(rec, false)),
+    ];
   });
 
-  private toPreviousRunVm(rec: PipelineExecutionRecord): PreviousRunVm {
+  private toPipelineRunOptionVm(rec: PipelineExecutionRecord, current: boolean): PipelineRunOptionVm {
     const steps = rec.steps ?? [];
     const passed = steps.filter(s => s.status === 'passed').length;
     const failed = steps.filter(s => s.status === 'failed').length;
     const durationMs = this.recordDurationMs(rec);
     return {
       attempt: rec.attempt ?? 1,
+      current,
       startedAt: rec.startedAt ?? null,
       completedAt: rec.completedAt ?? null,
       durationMs,

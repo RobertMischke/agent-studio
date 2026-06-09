@@ -124,6 +124,43 @@ public sealed class PipelineExecutionLog
     }
 
     /// <summary>
+    /// Return the execution record for a just-starting agent run. This is
+    /// stricter than <see cref="EnsureRun"/>: a pre-only record from
+    /// orchestrator prep is reused, but any record that already reached the
+    /// core or post bracket is archived and a new attempt is opened even when
+    /// <see cref="PipelineExecutionRecord.CompletedAt"/> was never stamped.
+    /// Re-open / reissue paths can short-circuit before post-processing marks
+    /// the previous record complete; the next Ready pickup still must be a new
+    /// pipeline run, not a continuation of the old step table.
+    /// </summary>
+    public PipelineExecutionRecord EnsureAgentRunStart(
+        string jobFolderPath,
+        TaskPipeline pipeline,
+        string project,
+        string jobId,
+        DateTime? nowUtc = null)
+    {
+        var lockObj = _locks.GetOrAdd(NormalizeKey(jobFolderPath), _ => new object());
+        lock (lockObj)
+        {
+            var current = TryRead(jobFolderPath);
+            if (current != null
+                && !current.IsComplete
+                && string.Equals(current.PipelineId, pipeline.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(current.JobId, jobId, StringComparison.Ordinal)
+                && !HasReachedAgentRunBoundary(current, pipeline))
+            {
+                return current;
+            }
+
+            var prior = PriorAttemptOf(current, pipeline, jobId);
+            var record = BuildFresh(pipeline, project, jobId, nowUtc ?? DateTime.UtcNow, prior);
+            WriteAtomic(jobFolderPath, record);
+            return record;
+        }
+    }
+
+    /// <summary>
     /// Treat an existing on-disk record as the prior attempt of THIS job only
     /// when it belongs to the same job + pipeline. A leftover record from a
     /// different job or pipeline is not a restart of this one, so it is ignored
@@ -138,6 +175,33 @@ public sealed class PipelineExecutionLog
         var sameJob = string.Equals(existing.JobId, jobId, StringComparison.Ordinal)
             && string.Equals(existing.PipelineId, pipeline.Id, StringComparison.OrdinalIgnoreCase);
         return sameJob ? existing : null;
+    }
+
+    public static bool HasReachedAgentRunBoundary(PipelineExecutionRecord record, TaskPipeline pipeline)
+    {
+        var coreStepIds = pipeline.Core
+            .Select(s => s.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var postStepIds = pipeline.Post
+            .Select(s => s.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var step in record.Steps)
+        {
+            if (coreStepIds.Contains(step.StepId)
+                && step.Status is not (PipelineStepStatus.Pending or PipelineStepStatus.Planned))
+            {
+                return true;
+            }
+
+            if (postStepIds.Contains(step.StepId)
+                && step.Status is not (PipelineStepStatus.Pending or PipelineStepStatus.Planned))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static PipelineExecutionRecord BuildFresh(

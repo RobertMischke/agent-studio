@@ -62,9 +62,10 @@ public static class ReissueOpenItemsPreCheck
         /// (<see cref="ReviewDecisionOrchestrator.ReissueTagId"/>).</summary>
         public bool HasReissueTag { get; init; }
 
-        /// <summary>A prior pipeline run for this card has already completed -
-        /// i.e. we are starting another attempt, not the first run. Together
-        /// with <see cref="HasReissueTag"/> this is the deterministic "this is a
+        /// <summary>A prior pipeline run for this card has crossed the agent
+        /// boundary - either completed normally or recorded core/post work
+        /// before a short-circuit moved it back to Ready. Together with
+        /// <see cref="HasReissueTag"/> this is the deterministic "this is a
         /// re-issue restart" signal.</summary>
         public bool PriorRunCompleted { get; init; }
 

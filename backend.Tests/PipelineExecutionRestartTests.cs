@@ -106,6 +106,65 @@ public class PipelineExecutionRestartTests : IDisposable
     }
 
     [Fact]
+    public void EnsureAgentRunStart_CoreAlreadyTouchedButIncomplete_StartsNewAttempt()
+    {
+        _log.Begin(_jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1");
+        var startedAt = DateTime.UtcNow.AddMinutes(-10);
+        _log.RecordStep(_jobFolder, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.CoreAgentRunStepId,
+            Kind = StepKind.Core,
+            Status = PipelineStepStatus.Passed,
+            StartedAt = startedAt,
+            CompletedAt = startedAt.AddMinutes(2),
+            DurationMs = 120_000,
+        });
+        // Deliberately no Complete(): this is the re-open bug shape. Some
+        // short-circuit reissue paths move the card back to Ready before the
+        // post bracket stamps CompletedAt.
+
+        var second = _log.EnsureAgentRunStart(
+            _jobFolder,
+            PipelineCatalogue.Standard,
+            project: "demo",
+            jobId: "job-1");
+
+        Assert.Equal(2, second.Attempt);
+        var archived = Assert.Single(second.PreviousAttempts);
+        Assert.Equal(1, archived.Attempt);
+        Assert.Null(archived.CompletedAt);
+        Assert.Equal(PipelineStepStatus.Passed,
+            archived.Steps.First(s => s.StepId == PipelineCatalogue.CoreAgentRunStepId).Status);
+        Assert.Equal(PipelineStepStatus.Pending,
+            second.Steps.First(s => s.StepId == PipelineCatalogue.CoreAgentRunStepId).Status);
+    }
+
+    [Fact]
+    public void EnsureAgentRunStart_PreOnlyRecord_ReusesSameAttempt()
+    {
+        var first = _log.Begin(_jobFolder, PipelineCatalogue.Standard, project: "demo", jobId: "job-1");
+        var now = DateTime.UtcNow;
+        _log.RecordStep(_jobFolder, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.LoopGuardStepId,
+            Kind = StepKind.Module,
+            Status = PipelineStepStatus.Passed,
+            StartedAt = now,
+            CompletedAt = now,
+        });
+
+        var same = _log.EnsureAgentRunStart(
+            _jobFolder,
+            PipelineCatalogue.Standard,
+            project: "demo",
+            jobId: "job-1");
+
+        Assert.Equal(1, same.Attempt);
+        Assert.Empty(same.PreviousAttempts);
+        Assert.Equal(first.StartedAt, same.StartedAt);
+    }
+
+    [Fact]
     public void MultipleRestarts_KeepNewestFirstOrder_AndFlattenHistory()
     {
         // Run three times, completing each, so the third run carries two

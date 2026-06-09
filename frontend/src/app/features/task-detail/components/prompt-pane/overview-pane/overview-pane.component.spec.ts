@@ -336,6 +336,142 @@ describe('OverviewPaneComponent (smoke)', () => {
     expect(c.formatCost(1.5)).toBe('$1.50');
   });
 
+  it('pipeline block: run switcher shows archived attempts from pipeline history', async () => {
+    const fixture = await build(baseJob({ state: '4-auto-review' }));
+    const pipe = agentPipeline('claude-opus-4-8');
+    const run1Start = '2026-06-08T08:00:00.000Z';
+    const run1Done = '2026-06-08T08:03:00.000Z';
+    const run2Start = '2026-06-09T09:00:00.000Z';
+
+    pipe.execution = {
+      ...pipe.execution!,
+      attempt: 2,
+      startedAt: run2Start,
+      completedAt: null,
+      steps: [
+        {
+          stepId: 'core-agent-run',
+          kind: 'core',
+          model: 'claude-opus-4-8',
+          status: 'running',
+          startedAt: run2Start,
+          completedAt: null,
+          durationMs: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+        },
+      ],
+      previousAttempts: [
+        {
+          pipelineId: 'standard-task-pipeline',
+          pipelineVersion: 1,
+          jobId: 'test-1',
+          project: 'test',
+          attempt: 1,
+          startedAt: run1Start,
+          completedAt: run1Done,
+          previousAttempts: [],
+          steps: [
+            {
+              stepId: 'core-agent-run',
+              kind: 'core',
+              model: 'claude-opus-4-8',
+              status: 'passed',
+              startedAt: run1Start,
+              completedAt: run1Done,
+              durationMs: 180_000,
+              inputTokens: 10,
+              outputTokens: 20,
+              cacheReadTokens: 0,
+              cacheCreationTokens: 0,
+              tokenUsageSource: 'ARCHIVED ATTEMPT',
+            },
+            {
+              stepId: 'aspect-code-quality',
+              kind: 'aspect',
+              model: 'claude-haiku-4-5',
+              status: 'failed',
+              startedAt: '2026-06-08T08:03:10.000Z',
+              completedAt: '2026-06-08T08:04:00.000Z',
+              durationMs: 50_000,
+              inputTokens: 5,
+              outputTokens: 7,
+              cacheReadTokens: 0,
+              cacheCreationTokens: 0,
+              verdict: 'concerns',
+            },
+          ],
+        },
+      ],
+    };
+    pipe.cost = emptyCost({
+      steps: [
+        stepCost({
+          stepId: 'core-agent-run',
+          kind: 'core',
+          model: 'claude-opus-4-8',
+          modelKnown: true,
+          inputTokens: 99,
+          outputTokens: 1,
+          totalTokens: 100,
+          costUsd: 0.5,
+        }),
+      ],
+      totalInputTokens: 99,
+      totalOutputTokens: 1,
+      totalTokens: 100,
+      totalCostUsd: 0.5,
+    });
+    TestBed.inject(TaskPipelinePollService).pipeline.set(pipe);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const c = fixture.componentInstance;
+    expect(c.pipelineRunOptions().map(r => r.attempt)).toEqual([2, 1]);
+    expect(c.selectedPipelineAttemptNumber()).toBe(2);
+    expect(c.selectedPipelineIsCurrent()).toBe(true);
+    expect(c.pipelineRows().find(r => r.id === 'core-agent-run')!.status).toBe('running');
+    expect(c.pipelineRows().find(r => r.id === 'core-agent-run')!.totalTokens).toBe(100);
+    expect(c.pipelineTotal()?.totalTokens).toBe(100);
+
+    const host = fixture.nativeElement as HTMLElement;
+    const options = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('[data-testid="overview-pipeline-run-option"]'),
+    );
+    expect(options.length).toBe(2);
+    expect(options[0].getAttribute('data-attempt')).toBe('2');
+    expect(options[0].getAttribute('data-current')).toBe('true');
+    expect(options[0].getAttribute('aria-selected')).toBe('true');
+
+    const archivedRun = options.find(button => button.getAttribute('data-attempt') === '1')!;
+    archivedRun.click();
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+
+    const archivedRows = c.pipelineRows();
+    expect(c.selectedPipelineAttemptNumber()).toBe(1);
+    expect(c.selectedPipelineIsCurrent()).toBe(false);
+    expect(archivedRows.find(r => r.id === 'core-agent-run')!.status).toBe('passed');
+    expect(archivedRows.find(r => r.id === 'core-agent-run')!.totalTokens).toBe(30);
+    expect(archivedRows.find(r => r.id === 'aspect-code-quality')!.status).toBe('failed');
+    expect(c.pipelineTotal()).toBeNull();
+    expect(host.querySelector('[data-testid="overview-pipeline-total"]')).toBeNull();
+    expect(
+      host.querySelector('[data-step-id="core-agent-run"] [data-testid="overview-pipeline-step-tokens"]')
+        ?.textContent
+        ?.trim(),
+    ).toBe('30');
+    expect(
+      host.querySelector('[data-testid="overview-pipeline-run-option"][aria-selected="true"]')
+        ?.getAttribute('data-attempt'),
+    ).toBe('1');
+
+    c.selectPipelineRun(2);
+    try { fixture.detectChanges(); } catch { /* ignore */ }
+    expect(c.selectedPipelineAttemptNumber()).toBe(2);
+    expect(c.selectedPipelineIsCurrent()).toBe(true);
+  });
+
   it('pipeline block: CORE CLI-footer tokens render with source, API-price tooltip, run count, and SUM footer', async () => {
     const fixture = await build(baseJob({ state: '4-auto-review' }));
     const pipe = agentPipeline('claude-opus-4-8');

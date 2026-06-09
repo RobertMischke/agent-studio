@@ -1756,8 +1756,9 @@ public class ProjectRunner
             // Open / resume the pipeline-execution record and mark the CORE
             // "Agent execution" step Running so the Overview pipeline table
             // shows a live running indicator on the most important step from
-            // t=0 instead of "- -". EnsureRun starts a fresh record when the
-            // prior run already completed (re-issue), so a restart is visible.
+            // t=0 instead of "- -". EnsureAgentRunStart starts a fresh record
+            // when the prior run completed or crossed core/post before a
+            // reissue short-circuit, so a restart is visible.
             RecordCoreRunStart(info, execution);
 
             // Record the deterministic reissue open-items pre-step next to the
@@ -2824,9 +2825,10 @@ public class ProjectRunner
     /// <summary>
     /// Open (or resume) the job's pipeline-execution record and mark the CORE
     /// "Agent execution" step <see cref="PipelineStepStatus.Running"/> at spawn,
-    /// stamping its start time. <see cref="OrchestratorApi.Services.Pipeline.PipelineExecutionLog.EnsureRun"/>
-    /// begins a fresh record only when the prior run already completed, so a
-    /// re-issue surfaces as a new record rather than overwriting silently.
+    /// stamping its start time. <see cref="OrchestratorApi.Services.Pipeline.PipelineExecutionLog.EnsureAgentRunStart"/>
+    /// begins a fresh record when the prior run completed or reached core/post
+    /// before a short-circuit moved it back to Ready, so a re-issue surfaces as
+    /// a new record rather than overwriting silently.
     /// Best-effort: the record is observability, never a state-machine input,
     /// so any write failure is swallowed with a debug log.
     /// </summary>
@@ -2835,7 +2837,7 @@ public class ProjectRunner
         if (_pipelineLog == null) return;
         try
         {
-            var record = _pipelineLog.EnsureRun(
+            var record = _pipelineLog.EnsureAgentRunStart(
                 info.FolderPath,
                 OrchestratorApi.Services.Pipeline.ProjectPipelineOrder.Apply(
                     OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
@@ -2929,10 +2931,17 @@ public class ProjectRunner
             var hasReissueTag = info.Tags.Any(t =>
                 string.Equals(t, ReviewDecisionOrchestrator.ReissueTagId, StringComparison.OrdinalIgnoreCase));
 
-            // Read() returns the PRIOR run's record (this run's record is opened
-            // later in RecordCoreRunStart), so IsComplete here means "an earlier
-            // run finished" - i.e. we are starting a re-issued attempt.
+            // Read() returns the prior run's record here; this run's fresh
+            // record is opened later in RecordCoreRunStart. A prior record can
+            // be a re-issued attempt even when it was short-circuited before
+            // Complete() stamped it, as long as it already crossed core/post.
             var prior = _pipelineLog?.Read(info.FolderPath);
+            var pipeline = OrchestratorApi.Services.Pipeline.ProjectPipelineOrder.Apply(
+                OrchestratorApi.Services.Pipeline.PipelineCatalogue.ForMode(info.Mode),
+                _projectSettings.Get(ProjectName));
+            var priorRunExists = prior != null
+                && (prior.IsComplete
+                    || OrchestratorApi.Services.Pipeline.PipelineExecutionLog.HasReachedAgentRunBoundary(prior, pipeline));
 
             var followUpPath = Path.Combine(info.FolderPath, "orchestrator-follow-up.md");
             var followUpText = File.Exists(followUpPath) ? File.ReadAllText(followUpPath) : string.Empty;
@@ -2951,7 +2960,7 @@ public class ProjectRunner
             return ReissueOpenItemsPreCheck.Evaluate(new ReissueOpenItemsPreCheck.PreCheckInput
             {
                 HasReissueTag = hasReissueTag,
-                PriorRunCompleted = prior?.IsComplete == true,
+                PriorRunCompleted = priorRunExists,
                 PriorRunCount = prior?.Attempt ?? 0,
                 FollowUpText = followUpText,
                 AspectConcernSummaries = reviewFindings,

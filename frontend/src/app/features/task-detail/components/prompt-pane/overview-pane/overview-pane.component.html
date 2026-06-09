@@ -172,6 +172,45 @@
            in the Timeline tab. -->
       <app-completion-loop-indicator />
 
+      @if (pipelineRunOptions().length > 1) {
+        <div class="ov-pl-switcher"
+             role="tablist"
+             aria-label="Pipeline runs"
+             data-testid="overview-pipeline-run-switcher">
+          <span class="ov-pl-switcher__label">Runs</span>
+          <div class="ov-pl-switcher__list">
+            @for (run of pipelineRunOptions(); track run.attempt) {
+              <button type="button"
+                      class="ov-pl-switcher__run"
+                      [class.ov-pl-switcher__run--active]="selectedPipelineAttemptNumber() === run.attempt"
+                      role="tab"
+                      [attr.aria-selected]="selectedPipelineAttemptNumber() === run.attempt"
+                      [attr.data-attempt]="run.attempt"
+                      [attr.data-current]="run.current ? 'true' : null"
+                      data-testid="overview-pipeline-run-option"
+                      [appTooltip]="run.tooltip"
+                      (click)="selectPipelineRun(run.attempt)">
+                <span class="ov-pl-switcher__run-name">Run #{{ run.attempt }}</span>
+                @if (run.current) {
+                  <span class="ov-pl-switcher__current">Current</span>
+                }
+                @if (run.startedAt) {
+                  <span class="ov-pl-switcher__time ov-dim">{{ formatRelativeTime(run.startedAt) }}</span>
+                }
+                <span class="ov-pl-switcher__outcome ov-value--mono">
+                  @if (run.passed > 0) {
+                    <span class="ov-pl-switcher__pass">{{ run.passed }}✓</span>
+                  }
+                  @if (run.failed > 0) {
+                    <span class="ov-pl-switcher__fail">{{ run.failed }}✗</span>
+                  }
+                </span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+
       @if (hasPipeline()) {
       <div class="ov-pipeline" data-testid="overview-pipeline-steps">
         <!-- Column headers for the right-aligned per-step metric cells. Widths
@@ -240,7 +279,7 @@
                 Running
               </span>
             }
-            @if (row.kind === 'core' && agentRunCount() > 0) {
+            @if (selectedPipelineIsCurrent() && row.kind === 'core' && agentRunCount() > 0) {
               <button type="button"
                       class="ov-pl-step__runs"
                       data-testid="overview-pipeline-agent-runs"
@@ -356,32 +395,6 @@
         </div>
       }
 
-      @if (previousRuns().length > 0) {
-        <div class="ov-pl-history" data-testid="overview-pipeline-previous-runs">
-          <span class="ov-pl-history__label">Previous runs</span>
-          <div class="ov-pl-history__list">
-            @for (run of previousRuns(); track run.attempt) {
-              <span class="ov-pl-history__run"
-                    data-testid="overview-pipeline-previous-run"
-                    [attr.data-attempt]="run.attempt"
-                    [appTooltip]="run.tooltip">
-                <span class="ov-pl-history__run-name">Run #{{ run.attempt }}</span>
-                @if (run.startedAt) {
-                  <span class="ov-pl-history__run-time ov-dim">{{ formatRelativeTime(run.startedAt) }}</span>
-                }
-                <span class="ov-pl-history__run-outcome ov-value--mono">
-                  @if (run.passed > 0) {
-                    <span class="ov-pl-history__pass">{{ run.passed }}✓</span>
-                  }
-                  @if (run.failed > 0) {
-                    <span class="ov-pl-history__fail">{{ run.failed }}✗</span>
-                  }
-                </span>
-              </span>
-            }
-          </div>
-        </div>
-      }
       }
     </section>
   }
