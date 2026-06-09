@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { ToolBurstEvent, ToolFamily, ToolOutputHit } from '../conversation-event';
+import { TooltipDirective } from '../../tooltip';
 
 /**
  * Dense, collapsed-by-default renderer for `ToolBurst` events in the
@@ -19,6 +20,7 @@ import type { ToolBurstEvent, ToolFamily, ToolOutputHit } from '../conversation-
   selector: 'app-tool-burst-chip',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [TooltipDirective],
   templateUrl: './tool-burst-chip.component.html',
   styleUrl: './tool-burst-chip.component.scss'
 })

@@ -42,7 +42,7 @@
              data-testid="media-lightbox-image"
              [src]="media.src"
              [alt]="media.alt"
-             [attr.title]="zoomed() ? 'Klick: einpassen' : 'Klick: Originalgröße'"
+             [appTooltip]="zoomed() ? 'Fit image to viewer' : 'Show original size'"
              role="button"
              tabindex="0"
              (click)="toggleZoom($event)"

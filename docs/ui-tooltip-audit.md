@@ -1,6 +1,6 @@
 # UI Tooltip Audit & Canonical Standard
 
-Last sweep: 2026-06-08.
+Last sweep: 2026-06-09.
 
 ## The canonical pattern
 
@@ -157,13 +157,24 @@ These concrete native-title or divergent tooltip sites were rechecked or migrate
 Verification grep for native DOM-title patterns:
 
 ```powershell
-rg -n "<(?!app-|ng-|mat-|cdk-)[a-z][\\w-]*(?=[^>]*(?:\\s(?:title|\\[title\\]|\\[attr\\.title\\])\\s*=))|` title=\\`\\\"" frontend/src/app -S
+rg --pcre2 -n "<(?!app-|ng-|mat-|cdk-)[a-z][\\w-]*(?=[^>]*(?:\\s(?:title|\\[title\\]|\\[attr\\.title\\])\\s*=))|` title=\\`\\\"" frontend/src/app -S
 ```
 
 This grep intentionally allows component inputs named `title`.
+
+### 2026-06-09 residual native-title sweep
+
+These residual native DOM-title sites were removed after the canonical standard landed:
+
+| Site | Previous pattern | Current pattern |
+|------|------------------|-----------------|
+| `components/media-lightbox/media-lightbox.component.html` | Native `[attr.title]` on the zoomable image | `[appTooltip]` with English zoom-state text |
+| `components/chat/tool-burst-chip/tool-burst-chip.component.html` | Native `[title]` on command and source-hit text | `[appTooltip]` on both truncated text hosts |
+
+Visual regression coverage now lives at [`frontend/e2e/board/tooltip-standard.spec.ts`](../frontend/e2e/board/tooltip-standard.spec.ts). It verifies lazy singleton creation, instant hover visibility, no native `title` attributes on the sampled hosts, and screenshot evidence for board-control, status-bar, and structured commit tooltips.
 
 ## Drift enforcement
 
 A `tooltip-canonical-directive` rule lives in [`docs/code-patterns.md`](code-patterns.md). The deterministic [`CodePatternDriftAnalysisService`](../backend/Services/Drift/CodePatternDriftAnalysisService.cs) will flag any new `title=`, `[title]=`, `[attr.title]=`, or `[appTip]` usage under `frontend/src/app/` until the offender is rewritten to `[appTooltip]`.
 
-The Vitest suite at [`tooltip.directive.spec.ts`](../frontend/src/app/components/tooltip/tooltip.directive.spec.ts) covers the instant trigger, lazy-render, sanitisation, focus + touch, severity class, viewport placement, and `position: fixed` invariants. The Playwright spec at [`frontend/e2e/tooltip-standard.spec.ts`](../frontend/e2e/tooltip-standard.spec.ts) covers the live-browser visual contract.
+The Vitest suite at [`tooltip.directive.spec.ts`](../frontend/src/app/components/tooltip/tooltip.directive.spec.ts) covers the instant trigger, lazy-render, sanitisation, focus + touch, severity class, viewport placement, and `position: fixed` invariants. The Playwright spec at [`frontend/e2e/board/tooltip-standard.spec.ts`](../frontend/e2e/board/tooltip-standard.spec.ts) covers the live-browser visual contract.

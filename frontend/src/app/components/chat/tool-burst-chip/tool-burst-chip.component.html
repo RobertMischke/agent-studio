@@ -85,7 +85,7 @@
                      [attr.data-exit-code]="cmd.exitCode"
                      data-testid="tool-burst-command-card">
               <div class="burst__command-head">
-                <code class="burst__command-text" [title]="cmd.command">{{ shortCommand(cmd.command) }}</code>
+                <code class="burst__command-text" [appTooltip]="cmd.command">{{ shortCommand(cmd.command) }}</code>
                 <span class="burst__command-badge" data-testid="tool-burst-command-exit">{{ statusLabel(cmd.status, cmd.exitCode) }}</span>
                 @if (formattedDuration()) {
                   <span class="burst__command-time">{{ formattedDuration() }}</span>
@@ -101,7 +101,7 @@
                       <button type="button"
                               class="burst__hit-path"
                               data-testid="tool-burst-hit-path"
-                              [title]="hit.path"
+                              [appTooltip]="hit.path"
                               (click)="emitSourceLocation($event, hit)">
                         {{ hit.path }}:{{ hit.line }}{{ hit.column ? ':' + hit.column : '' }}
                       </button>
