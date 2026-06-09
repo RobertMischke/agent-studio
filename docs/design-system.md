@@ -326,8 +326,18 @@ They are grouped into four buckets:
   Audits & Checks).
 - **Operations** — what's running right now (Jobs, Token Usage,
   Product Runtime, Activity).
-- **Config** — how the project is set up (Steering Docs, Orchestrator,
-  Settings).
+- **Config** — how the project is set up. Documentation surfaces nest
+  under a non-navigable "Steering Docs" tree container (Architecture,
+  Wiki / Docs, and "Agent Docs", the AGENTS.md-style instructions agents
+  read on their own). "Runtime Prompts" (the run-time CLI-behaviour
+  prompts under `prompts/runtime/`) is its own top-level point, alongside
+  Orchestrator and Settings (which expands to Workspace Defaults and
+  Project Overrides).
+
+The four buckets render as collapsible segments, and some Config rows are
+tree parents with a disclosure twisty (Steering Docs, Settings).
+`project-shell.config.ts` is the authoritative inventory; its `parent` and
+`navigable` flags decide nesting and whether a row routes to a panel.
 
 Each rail item carries a monochrome Unicode icon (`▤ ◇ ◉ ⊞ ↯ ◐ ⌁ ⊡ ✓ ⊟
 ☰ ▦ ⊜ ⌖ ⊕ ◈ ⚙`), a panel title, a one-line description, and an empty

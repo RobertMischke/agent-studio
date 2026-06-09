@@ -29,7 +29,16 @@ coverage.
 - `frontend/src/app/features/task-detail/`: task detail shell, protocol pane,
   prompt pane, git pane, timeline, pipeline overview, and command surfaces.
 - `frontend/src/app/features/project-detail/`: project shell and project-level
-  quality, settings, architecture, runtime, drift, and supervisor panels.
+  quality, settings, architecture, runtime, drift, and supervisor panels. The
+  left rail (`project-shell`) is a collapsible-segment tree
+  (Insight / Quality / Operations / Config). Its inventory and grouping are
+  defined once in `project-shell/project-shell.config.ts`; edit that file, not
+  the template, to add or move a rail entry. Under Config, three rails group
+  under one non-navigable "Steering Docs" tree container (Architecture,
+  Wiki / Docs, and "Agent Docs" - the AGENTS.md-style instructions agents read
+  on their own, key `steering`). "Runtime Prompts" (the `prompts/runtime/*.md`
+  CLI-behaviour prompts) is a separate top-level point, not a child of that
+  container; keep the two distinct.
 - `frontend/src/app/services/task.service.ts`: task API integration, optimistic
   lane moves, reorder, and rollback.
 - `frontend/src/app/services/cli-catalog.store.ts`: boot-hydrated CLI model
