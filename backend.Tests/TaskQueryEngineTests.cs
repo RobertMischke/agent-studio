@@ -35,8 +35,8 @@ public class TaskQueryEngineTests : IDisposable
 
         Assert.Null(response.Error);
         Assert.Equal(2, response.Total);
-        Assert.Equal(1, response.Items.Count);
-        var item = Assert.IsType<Dictionary<string, object?>>(response.Items[0]);
+        var only = Assert.Single(response.Items);
+        var item = Assert.IsType<Dictionary<string, object?>>(only);
         Assert.Equal("c", item["id"]);
         Assert.Equal(4, item["commits"]);
         Assert.Equal(TaskStates.AutoReview, item["state"]);
@@ -59,11 +59,24 @@ public class TaskQueryEngineTests : IDisposable
         Assert.Equal(2, literalItem.Match.Line);
         Assert.Contains("EACCES", literalItem.Match.Snippet);
 
-        var regexResponse = TaskQueryEngine.Execute([literal, regex], Query("q=ATP-[0-9]+&regex=true&in=prompt"));
+        var regexResponse = TaskQueryEngine.Execute(
+            [literal, regex],
+            Query($"q={Uri.EscapeDataString("ATP-[0-9]+")}&regex=true&in=prompt"));
         Assert.Equal(1, regexResponse.Total);
         var regexItem = Assert.IsType<TaskSearchResult>(regexResponse.Items[0]);
         Assert.Equal("regex", regexItem.Id);
         Assert.Equal("prompt.md", regexItem.Match.File);
+    }
+
+    [Fact]
+    public void Execute_InvalidRegexReturnsBadRequestPayload()
+    {
+        var job = Job("a", TaskStates.Ready, "alpha");
+
+        var response = TaskQueryEngine.Execute([job], Query("q=%5B&regex=true"));
+
+        Assert.StartsWith("Invalid regex:", response.Error);
+        Assert.Empty(response.Items);
     }
 
     [Fact]

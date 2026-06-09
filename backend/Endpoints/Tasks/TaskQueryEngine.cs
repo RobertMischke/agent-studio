@@ -1,9 +1,8 @@
 using System.Globalization;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.WebUtilities;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Tasks;
 
 namespace OrchestratorApi.Endpoints.Tasks;
 
@@ -136,6 +135,7 @@ internal static partial class TaskQueryEngine
 
     public static TaskQueryResponse Execute(IReadOnlyList<TaskInfo> source, TaskQueryRequest query)
     {
+        var needsDuration = NeedsDuration(query);
         Regex? regex = null;
         if (!string.IsNullOrWhiteSpace(query.Q) && query.Regex)
         {
@@ -150,9 +150,16 @@ internal static partial class TaskQueryEngine
         }
 
         var rows = source
-            .Select(job => new TaskQueryRow(job, LatestDurationSeconds(job)))
-            .Where(row => MatchesFilters(row, query))
+            .Select(job => new TaskQueryRow(job, null))
+            .Where(row => MatchesNonDurationFilters(row, query))
             .ToList();
+        if (needsDuration)
+        {
+            rows = rows
+                .Select(row => row with { DurationSeconds = LatestDurationSeconds(row.Job) })
+                .Where(row => MatchesDurationFilters(row, query))
+                .ToList();
+        }
 
         List<(TaskQueryRow Row, TaskSearchMatch? Match)> matched;
         if (string.IsNullOrWhiteSpace(query.Q))
@@ -178,7 +185,7 @@ internal static partial class TaskQueryEngine
         var page = sorted
             .Skip(query.Offset)
             .Take(query.Limit)
-            .Select(item => ShapeItem(item.Row.Job, item.Match, query))
+            .Select(item => ShapeItem(item.Row, item.Match, query))
             .ToList();
 
         return new TaskQueryResponse
@@ -191,7 +198,7 @@ internal static partial class TaskQueryEngine
         };
     }
 
-    private static bool MatchesFilters(TaskQueryRow row, TaskQueryRequest q)
+    private static bool MatchesNonDurationFilters(TaskQueryRow row, TaskQueryRequest q)
     {
         var j = row.Job;
         return In(q.Project, j.ProjectName)
@@ -211,10 +218,12 @@ internal static partial class TaskQueryEngine
                && (q.ActivitySince is null || j.LastActivity >= q.ActivitySince.Value)
                && (q.ActivityBefore is null || j.LastActivity <= q.ActivityBefore.Value)
                && (q.CreatedSince is null || j.CreatedAt >= q.CreatedSince.Value)
-               && (q.CreatedBefore is null || j.CreatedAt <= q.CreatedBefore.Value)
-               && (q.DurationMin is null || row.DurationSeconds >= q.DurationMin.Value)
-               && (q.DurationMax is null || row.DurationSeconds <= q.DurationMax.Value);
+               && (q.CreatedBefore is null || j.CreatedAt <= q.CreatedBefore.Value);
     }
+
+    private static bool MatchesDurationFilters(TaskQueryRow row, TaskQueryRequest q)
+        => (q.DurationMin is null || row.DurationSeconds >= q.DurationMin.Value)
+           && (q.DurationMax is null || row.DurationSeconds <= q.DurationMax.Value);
 
     private static IEnumerable<(TaskQueryRow Row, TaskSearchMatch? Match)> Sort(
         IEnumerable<(TaskQueryRow Row, TaskSearchMatch? Match)> rows,
@@ -231,8 +240,9 @@ internal static partial class TaskQueryEngine
         };
     }
 
-    private static object ShapeItem(TaskInfo job, TaskSearchMatch? match, TaskQueryRequest q)
+    private static object ShapeItem(TaskQueryRow row, TaskSearchMatch? match, TaskQueryRequest q)
     {
+        var job = row.Job;
         if (match != null && q.Fields.Length == 0)
             return new TaskSearchResult(job.Key ?? job.Id, job.Id, job.Title, job.State, job.ProjectName, match);
 
@@ -240,32 +250,32 @@ internal static partial class TaskQueryEngine
 
         var shaped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var field in q.Fields)
-            shaped[field] = FieldValue(job, field, match);
+            shaped[field] = FieldValue(row, field, match);
         if (match != null && !shaped.ContainsKey("match")) shaped["match"] = match;
         return shaped;
     }
 
-    private static object? FieldValue(TaskInfo job, string field, TaskSearchMatch? match) => field.ToLowerInvariant() switch
+    private static object? FieldValue(TaskQueryRow row, string field, TaskSearchMatch? match) => field.ToLowerInvariant() switch
     {
-        "id" => job.Id,
-        "key" => job.Key ?? job.Id,
-        "title" => job.Title,
-        "state" => job.State,
-        "project" or "projectname" => job.ProjectName,
-        "kind" => job.Kind,
-        "clitype" => job.CliType,
-        "model" => job.Model,
-        "epicid" => job.EpicId,
-        "mode" => job.Mode,
-        "phase" => job.Phase,
-        "tags" => job.Tags,
-        "verdict" or "orchestratorverdict" => job.OrchestratorVerdict,
-        "issuekind" => job.OutcomeIssue?.Kind,
-        "hasissue" => job.OutcomeIssue != null,
-        "commits" or "commitcount" => job.CommitCount,
-        "lastactivity" => job.LastActivity,
-        "createdat" => job.CreatedAt,
-        "duration" => LatestDurationSeconds(job),
+        "id" => row.Job.Id,
+        "key" => row.Job.Key ?? row.Job.Id,
+        "title" => row.Job.Title,
+        "state" => row.Job.State,
+        "project" or "projectname" => row.Job.ProjectName,
+        "kind" => row.Job.Kind,
+        "clitype" => row.Job.CliType,
+        "model" => row.Job.Model,
+        "epicid" => row.Job.EpicId,
+        "mode" => row.Job.Mode,
+        "phase" => row.Job.Phase,
+        "tags" => row.Job.Tags,
+        "verdict" or "orchestratorverdict" => row.Job.OrchestratorVerdict,
+        "issuekind" => row.Job.OutcomeIssue?.Kind,
+        "hasissue" => row.Job.OutcomeIssue != null,
+        "commits" or "commitcount" => row.Job.CommitCount,
+        "lastactivity" => row.Job.LastActivity,
+        "createdat" => row.Job.CreatedAt,
+        "duration" => row.DurationSeconds,
         "match" => match,
         _ => null
     };
@@ -384,16 +394,16 @@ internal static partial class TaskQueryEngine
     private static string? ReadTail(string path, int maxChars)
     {
         if (!File.Exists(path)) return null;
-        try
-        {
-            var text = File.ReadAllText(path);
-            return text.Length <= maxChars ? text : text[^maxChars..];
-        }
-        catch
-        {
-            return null;
-        }
+        var text = TaskScannerService.ReadTailUtf8(path, maxChars * 4);
+        if (text.Length == 0) return "";
+        return text.Length <= maxChars ? text : text[^maxChars..];
     }
+
+    private static bool NeedsDuration(TaskQueryRequest q)
+        => q.DurationMin is not null
+           || q.DurationMax is not null
+           || string.Equals(q.SortBy, "duration", StringComparison.OrdinalIgnoreCase)
+           || q.Fields.Any(field => string.Equals(field, "duration", StringComparison.OrdinalIgnoreCase));
 
     private static bool In(string[] accepted, string? value)
         => accepted.Length == 0 || accepted.Any(x => Eq(x, value));

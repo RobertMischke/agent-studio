@@ -747,7 +747,7 @@ public class TaskScannerService : ITaskScanner
             || lower.Contains("reconciled on accept");
     }
 
-    private static string ReadTailUtf8(string path, int maxBytes)
+    internal static string ReadTailUtf8(string path, int maxBytes)
     {
         try
         {
