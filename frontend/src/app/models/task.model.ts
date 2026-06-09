@@ -560,6 +560,25 @@ export interface TaskArtifactsResponse {
   files: TaskArtifact[];
 }
 
+export type TaskFileSourceScope = 'auto' | 'workspace' | 'code';
+
+export interface TaskFileVersionProvenance {
+  source: TaskFileSourceScope | string;
+  path: string;
+  steps?: string | null;
+  generation?: FileGenerationMeta | null;
+}
+
+export interface TaskFileHistoryEntry {
+  sha: string;
+  at?: string | null;
+  runIndex?: number | null;
+  verdict?: string | null;
+  message: string;
+  author: string;
+  provenance: TaskFileVersionProvenance;
+}
+
 export interface GroupedJobs {
   /** Triage staging area; default landing for new jobs, never auto-picked. */
   backlog: TaskInfo[];

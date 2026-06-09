@@ -7,6 +7,7 @@ import {
 } from '../../../../../models/task.model';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
+import { formatDateTimeUtc } from '../../../../../services/format.util';
 /**
  * Renders the per-task **review evidence** panel: findings from security
  * audits, code-review passes, task checks, or human notes that landed in
@@ -81,13 +82,7 @@ export class ReviewEvidencePanelComponent {
   }
 
   formatTime(iso: string): string {
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return iso;
-      return d.toISOString().replace('T', ' ').slice(0, 16) + 'Z';
-    } catch {
-      return iso;
-    }
+    return formatDateTimeUtc(iso);
   }
 
   onToggleAck(e: ReviewEvidenceEntry): void {

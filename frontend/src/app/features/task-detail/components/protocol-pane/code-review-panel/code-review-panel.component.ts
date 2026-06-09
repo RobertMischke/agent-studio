@@ -14,12 +14,13 @@ import { CodeReviewListEntry, TaskService } from '../../../../../services/task.s
 import { CodeReviewActivityStore } from '../../../../../services/code-review-activity.store';
 
 import { CliModelSelectorComponent } from '../../../../../components/cli-model-selector';
-import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
+import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { cleanStepResultMarkdown } from '../../prompt-pane/pipeline-step-result/pipeline-step-result.util';
 import { CLAUDE_FALLBACK_MODEL_ID } from '../../../../cli';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
 import { describeDiffSize, isLargeDiff } from '../../../../../utils/large-diff-gate';
+import { formatDateTimeUtc } from '../../../../../services/format.util';
 
 /** localStorage key holding the last CLI+model the operator ran a review with. */
 const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
@@ -55,7 +56,7 @@ const LAST_AGENT_STORAGE_KEY = 'atp.codeReview.lastAgent';
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, CliModelSelectorComponent, MarkdownViewComponent, TooltipDirective],
+  imports: [FormsModule, CliModelSelectorComponent, FileSourceHistoryComponent, TooltipDirective],
   templateUrl: './code-review-panel.component.html',
   styleUrl: './code-review-panel.component.scss',
 })
@@ -85,6 +86,7 @@ export class CodeReviewPanelComponent implements OnInit {
   readonly bodyIsLarge = computed<boolean>(() => isLargeDiff(this.expandedBody()));
   readonly bodySizeLabel = computed<string>(() => describeDiffSize(this.expandedBody()));
   readonly bodyGated = computed<boolean>(() => this.bodyIsLarge() && !this.expandedBodyRevealed());
+  readonly reviewContentTransform = cleanStepResultMarkdown;
 
   ngOnInit(): void {
     // Seed precedence (directly serves the operator's "remember the last
@@ -258,14 +260,7 @@ export class CodeReviewPanelComponent implements OnInit {
   }
 
   formatTimestamp(iso: string): string {
-    if (!iso) return '';
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return iso;
-      return d.toISOString().replace('T', ' ').slice(0, 16) + 'Z';
-    } catch {
-      return iso;
-    }
+    return formatDateTimeUtc(iso);
   }
 
   provenanceFor(entry: CodeReviewListEntry) {

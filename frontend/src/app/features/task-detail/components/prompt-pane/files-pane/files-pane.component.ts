@@ -2,9 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { TaskService } from '../../../../../services/task.service';
 import { MarkdownRichEditorComponent } from '../../../../../components/markdown-rich-editor/markdown-rich-editor';
 import { MarkdownViewComponent } from '../../../../../components/markdown-view/markdown-view.component';
+import { FileSourceHistoryComponent } from '../../../../../components/file-source-history/file-source-history.component';
 import { TooltipDirective } from '../../../../../components/tooltip';
 import type { TaskArtifact, TaskArtifactKind } from '../../../../../models/task.model';
 import { generatedFileProvenance } from '../../generated-file-provenance.util';
+import { NowTickService } from '../../../../../services/now-tick.service';
+import { formatRelativeTime } from '../../../../../services/format.util';
 
 /**
  * Files tab body. Renders every `.md` file directly in the job folder
@@ -33,12 +36,13 @@ import { generatedFileProvenance } from '../../generated-file-provenance.util';
   selector: 'app-files-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownViewComponent, TooltipDirective],
+  imports: [FileSourceHistoryComponent, MarkdownRichEditorComponent, MarkdownViewComponent, TooltipDirective],
   templateUrl: './files-pane.component.html',
   styleUrl: './files-pane.component.scss',
 })
 export class FilesPaneComponent {
   private readonly jobs = inject(TaskService);
+  private readonly nowTick = inject(NowTickService);
 
   readonly artifacts = input<TaskArtifact[]>([]);
   /** Prefilled body for `prompt.md` so we don't re-fetch what `TaskDetail` already loaded. */
@@ -163,20 +167,7 @@ export class FilesPaneComponent {
   }
 
   formatRelative(iso: string): string {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    const diffMs = Date.now() - d.getTime();
-    const minutes = Math.round(diffMs / 60_000);
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.round(hours / 24);
-    if (days < 30) return `${days}d ago`;
-    const months = Math.round(days / 30);
-    if (months < 12) return `${months}mo ago`;
-    return `${Math.round(months / 12)}y ago`;
+    return formatRelativeTime(iso, this.nowTick.now());
   }
 
   isPromptFile(name: string): boolean {

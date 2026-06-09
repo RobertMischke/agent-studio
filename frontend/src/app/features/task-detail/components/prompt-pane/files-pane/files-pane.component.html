@@ -61,16 +61,23 @@
                                         [watchPath]="watchPath()"
                                         (save)="onPromptSave($event)" />
             } @else {
-              <app-markdown class="file-card__markdown"
-                            [source]="promptContent()" />
+              <app-file-source-history class="file-card__markdown"
+                                       [jobId]="jobId()"
+                                       [watchPath]="watchPath()"
+                                       [path]="file.name"
+                                       [content]="promptContent()"
+                                       [dense]="true" />
             }
           } @else {
             @if (isLoading(file.name)) {
               <div class="file-card__loading">Loading…</div>
             } @else if (bodyFor(file); as content) {
-              <app-markdown class="file-card__markdown"
-                            [source]="content"
-                            [dense]="true" />
+              <app-file-source-history class="file-card__markdown"
+                                       [jobId]="jobId()"
+                                       [watchPath]="watchPath()"
+                                       [path]="file.name"
+                                       [content]="content"
+                                       [dense]="true" />
             } @else {
               <div class="file-card__error">Could not load this file.</div>
             }

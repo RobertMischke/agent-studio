@@ -5,6 +5,8 @@ import type {
   CreateJobRequest,
   GroupedJobs,
   TaskArtifactsResponse,
+  TaskFileHistoryEntry,
+  TaskFileSourceScope,
   TaskDetail,
   TaskInfo,
   FileGenerationMeta,
@@ -432,6 +434,28 @@ export class TaskService {
     return { params: (base.params ?? new HttpParams()).set('path', path) };
   }
 
+  private withFileSourceParams(
+    watchPath: string | undefined,
+    scope: TaskFileSourceScope | undefined,
+    extra?: Record<string, string | undefined>,
+  ): { params?: HttpParams } {
+    let params = this.withWatchPath(watchPath).params ?? new HttpParams();
+    if (scope && scope !== 'auto') params = params.set('scope', scope);
+    for (const [key, value] of Object.entries(extra ?? {})) {
+      if (value) params = params.set(key, value);
+    }
+    return params.keys().length ? { params } : {};
+  }
+
+  private encodeTaskFilePath(path: string): string {
+    return path
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+  }
+
   private getUtf8Text(url: string, opts: { params?: HttpParams } = {}) {
     return this.http.get(url, { ...opts, responseType: 'arraybuffer' as const }).pipe(
       map((buffer) => new TextDecoder('utf-8').decode(buffer)),
@@ -761,6 +785,48 @@ export class TaskService {
     return this.getUtf8Text(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
       opts,
+    );
+  }
+
+  /** Git-backed history for one task file, served by the Slice 2 file-source API. */
+  getTaskFileHistory(
+    jobId: string,
+    path: string,
+    watchPath?: string,
+    scope: TaskFileSourceScope = 'auto',
+  ) {
+    return this.http.get<TaskFileHistoryEntry[]>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${this.encodeTaskFilePath(path)}/history`,
+      this.withFileSourceParams(watchPath, scope),
+    );
+  }
+
+  /** Read one file version at a specific commit SHA. */
+  readTaskFileAt(
+    jobId: string,
+    path: string,
+    sha: string,
+    watchPath?: string,
+    scope: TaskFileSourceScope = 'auto',
+  ) {
+    return this.getUtf8Text(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${this.encodeTaskFilePath(path)}`,
+      this.withFileSourceParams(watchPath, scope, { at: sha }),
+    );
+  }
+
+  /** Unified diff for one task file between two commit SHAs. */
+  diffTaskFileVersions(
+    jobId: string,
+    path: string,
+    from: string,
+    to: string,
+    watchPath?: string,
+    scope: TaskFileSourceScope = 'auto',
+  ) {
+    return this.getUtf8Text(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${this.encodeTaskFilePath(path)}/diff`,
+      this.withFileSourceParams(watchPath, scope, { from, to }),
     );
   }
 

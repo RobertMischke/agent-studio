@@ -116,11 +116,14 @@
                             (click)="revealExpandedBody()">Show review body</button>
                   </div>
                 } @else {
-                  <app-markdown
+                  <app-file-source-history
                     class="cr-body-markdown"
-                    [source]="body"
+                    [jobId]="job().id"
+                    [watchPath]="job().watchPath"
+                    [path]="entry.fileName"
+                    [content]="body"
                     [dense]="true"
-                    testId="code-review-body-markdown" />
+                    [contentTransform]="reviewContentTransform" />
                 }
               } @else {
                 <p class="cr-body-state">Loading...</p>

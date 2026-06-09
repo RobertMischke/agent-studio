@@ -1,0 +1,140 @@
+<section class="fsh" [class.fsh--dense]="dense()" data-testid="file-source-history">
+  <header class="fsh__toolbar">
+    <div class="fsh__mode" role="group" aria-label="File source view">
+      <button type="button"
+              class="fsh__mode-button"
+              data-testid="file-source-current"
+              [class.fsh__mode-button--active]="mode() === 'file'"
+              (click)="showFile()">File</button>
+      <button type="button"
+              class="fsh__mode-button"
+              data-testid="file-source-history-toggle"
+              [class.fsh__mode-button--active]="mode() === 'history'"
+              (click)="showHistory()">History</button>
+    </div>
+    <span class="fsh__path">{{ path() }}</span>
+  </header>
+
+  @if (mode() === 'file') {
+    @if (displayContent(); as body) {
+      <app-markdown class="fsh__markdown"
+                    [source]="body"
+                    [dense]="dense()" />
+    } @else if (content() === null) {
+      <div class="fsh__state fsh__state--error">Could not load this file.</div>
+    } @else {
+      <div class="fsh__state">Loading file...</div>
+    }
+  } @else {
+    <div class="fsh__history" data-testid="file-source-history-panel">
+      @if (historyState() === 'loading') {
+        <div class="fsh__state">Loading history...</div>
+      } @else if (historyState() === 'error') {
+        <div class="fsh__state fsh__state--error">{{ historyError() }}</div>
+      } @else if (history().length === 0) {
+        <div class="fsh__state">No git history found for this file source.</div>
+      } @else {
+        <ol class="fsh__timeline" data-testid="file-source-history-timeline">
+          @for (entry of history(); track entry.sha) {
+            <li class="fsh__timeline-item">
+              <button type="button"
+                      class="fsh__timeline-button"
+                      [class.fsh__timeline-button--active]="selectedSha() === entry.sha"
+                      [attr.data-verdict]="verdictTone(entry.verdict)"
+                      (click)="selectVersion(entry.sha)">
+                <span class="fsh__run">{{ runLabel(entry) }}</span>
+                <span class="fsh__time">{{ formatTimestamp(entry.at) || shortSha(entry.sha) }}</span>
+                @if (entry.verdict) {
+                  <span class="fsh__verdict" [attr.data-verdict]="verdictTone(entry.verdict)">
+                    {{ entry.verdict }}
+                  </span>
+                }
+                <span class="fsh__message">{{ entry.message }}</span>
+              </button>
+            </li>
+          }
+        </ol>
+
+        <div class="fsh__history-grid">
+          <section class="fsh__version" data-testid="file-source-version">
+            <header class="fsh__section-head">
+              <span>Version</span>
+              <label class="fsh__select-label">
+                <span class="fsh__label-text">Show</span>
+                <select class="fsh__select"
+                        data-testid="file-source-version-select"
+                        [value]="selectedSha() ?? ''"
+                        (change)="onVersionSelect($event)">
+                  @for (entry of history(); track entry.sha) {
+                    <option [value]="entry.sha">{{ versionLabel(entry) }}</option>
+                  }
+                </select>
+              </label>
+            </header>
+
+            @if (selectedEntry(); as entry) {
+              <div class="fsh__version-meta">
+                <span>{{ runLabel(entry) }}</span>
+                <span>{{ formatRelative(entry.at) }}</span>
+                <code>{{ shortSha(entry.sha) }}</code>
+              </div>
+            }
+
+            @if (versionState() === 'loading') {
+              <div class="fsh__state">Loading version...</div>
+            } @else if (versionState() === 'error') {
+              <div class="fsh__state fsh__state--error">{{ versionError() }}</div>
+            } @else if (versionContent(); as versionBody) {
+              <app-markdown class="fsh__markdown"
+                            [source]="versionBody"
+                            [dense]="true" />
+            }
+          </section>
+
+          <section class="fsh__diff" data-testid="file-source-diff-panel">
+            <header class="fsh__section-head">
+              <span>Diff</span>
+              <div class="fsh__diff-selects">
+                <label class="fsh__select-label">
+                  <span class="fsh__label-text">From</span>
+                  <select class="fsh__select"
+                          data-testid="file-source-diff-from"
+                          [value]="diffFrom() ?? ''"
+                          (change)="onDiffFromSelect($event)">
+                    @for (entry of history(); track entry.sha) {
+                      <option [value]="entry.sha">{{ versionLabel(entry) }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="fsh__select-label">
+                  <span class="fsh__label-text">To</span>
+                  <select class="fsh__select"
+                          data-testid="file-source-diff-to"
+                          [value]="diffTo() ?? ''"
+                          (change)="onDiffToSelect($event)">
+                    @for (entry of history(); track entry.sha) {
+                      <option [value]="entry.sha">{{ versionLabel(entry) }}</option>
+                    }
+                  </select>
+                </label>
+              </div>
+            </header>
+
+            @if (diffState() === 'loading') {
+              <div class="fsh__state">Loading diff...</div>
+            } @else if (diffState() === 'error') {
+              <div class="fsh__state fsh__state--error">{{ diffError() }}</div>
+            } @else if (diffFrom() === diffTo()) {
+              <div class="fsh__state">Pick two different versions to compare.</div>
+            } @else if (!diffText()) {
+              <div class="fsh__state">No diff for this version pair.</div>
+            } @else {
+              <pre class="fsh__diff-body" data-testid="file-source-diff"><code>@for (line of diffLines(); track $index) {<span [class]="'fsh__diff-line fsh__diff-line--' + line.kind">{{ line.text }}</span>
+}</code></pre>
+            }
+          </section>
+        </div>
+      }
+    </div>
+  }
+</section>

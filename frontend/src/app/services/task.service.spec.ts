@@ -127,6 +127,55 @@ describe('TaskService', () => {
     expect(service.runnerStatus().projects['demo'].mode).toBe('auto-continuous');
     service.stopLiveUpdates();
   });
+
+  it('calls the file-source history endpoints with encoded paths and source params', () => {
+    let historyCount = 0;
+    service
+      .getTaskFileHistory('demo-job', 'results/review note.md', 'C:/projects/demo', 'workspace')
+      .subscribe((entries) => {
+        historyCount = entries.length;
+      });
+
+    const historyReq = http.expectOne((request) =>
+      request.url === '/api/tasks/demo-job/files/results/review%20note.md/history' &&
+      request.params.get('watchPath') === 'C:/projects/demo' &&
+      request.params.get('scope') === 'workspace');
+    historyReq.flush([{ sha: 'abcdef1', at: '2026-06-09T12:00:00Z', message: 'capture', author: 'A', provenance: { source: 'workspace', path: 'results/review note.md' } }]);
+    expect(historyCount).toBe(1);
+
+    let version = '';
+    service
+      .readTaskFileAt('demo-job', 'results/review note.md', 'abcdef1', 'C:/projects/demo', 'workspace')
+      .subscribe((text) => {
+        version = text;
+      });
+
+    const versionReq = http.expectOne((request) =>
+      request.url === '/api/tasks/demo-job/files/results/review%20note.md' &&
+      request.params.get('watchPath') === 'C:/projects/demo' &&
+      request.params.get('scope') === 'workspace' &&
+      request.params.get('at') === 'abcdef1');
+    expect(versionReq.request.responseType).toBe('arraybuffer');
+    versionReq.flush(utf8Buffer('# Old review\n'));
+    expect(version).toBe('# Old review\n');
+
+    let diff = '';
+    service
+      .diffTaskFileVersions('demo-job', 'results/review note.md', 'abcdef1', 'abcdef2', 'C:/projects/demo', 'workspace')
+      .subscribe((text) => {
+        diff = text;
+      });
+
+    const diffReq = http.expectOne((request) =>
+      request.url === '/api/tasks/demo-job/files/results/review%20note.md/diff' &&
+      request.params.get('watchPath') === 'C:/projects/demo' &&
+      request.params.get('scope') === 'workspace' &&
+      request.params.get('from') === 'abcdef1' &&
+      request.params.get('to') === 'abcdef2');
+    expect(diffReq.request.responseType).toBe('arraybuffer');
+    diffReq.flush(utf8Buffer('-old\n+new\n'));
+    expect(diff).toBe('-old\n+new\n');
+  });
 });
 
 function utf8Buffer(value: string): ArrayBuffer {
