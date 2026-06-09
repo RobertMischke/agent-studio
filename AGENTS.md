@@ -218,7 +218,7 @@ When you change a CLI driver, prompt template, or the runner's post-run path, ke
 
 ### Run history and re-open contract
 
-A task can have multiple runs. A transition back to Ready, an auto-review reissue, or any explicit re-open starts a **new run**, not a continuation of the previous pipeline attempt. The new run must execute the pre steps again (Admission, Loop Guard, Build Profile), then the core agent run, then the post steps again (Aspect reviews, Code Review, Build Gate, Orchestrator Decision). Treat step artifacts and workspace-git captures as per-run evidence: the new run appends a new history entry and must not overwrite or flatten the earlier run's record.
+A task can have multiple runs. A transition back to Ready, a Post Processing reissue, or any explicit re-open starts a **new run**, not a continuation of the previous pipeline attempt. The new run must execute the pre steps again (Admission, Loop Guard, Build Profile), then the core agent run, then the post steps again (Aspect reviews, Code Review, Build Gate, Orchestrator Decision). Treat step artifacts and workspace-git captures as per-run evidence: the new run appends a new history entry and must not overwrite or flatten the earlier run's record.
 
 The frontend reflects this contract in two places. The Timeline tab renders each CLI invocation as a chronological run segment with a re-open transition between adjacent runs. The Overview pipeline block keeps the current run first and exposes older pipeline attempts through the Run-Switcher (`Run #1`, `Run #2`, etc.) backed by the archived pipeline execution history. When changing re-open, review, or pipeline-history behavior, keep both surfaces in sync and add tests that prove a re-open re-runs the visible pre and post steps.
 
@@ -397,6 +397,8 @@ Each task folder contains:
 - `prompt.md`: task description.
 - `status.md`: generated review protocol.
 - `logs/`: optional log files (CLI stdout/stderr lives here as `cli-output.log`).
+- `lifecycle.json`: optional application-owned phase history for Intake and Post Processing checks.
+- `post-processing-outcomes.jsonl`: optional append-only evidence log for orchestrator-owned post-processing outcomes.
 
 States (ADR-0025: three-stage review pipeline):
 
@@ -404,9 +406,22 @@ States (ADR-0025: three-stage review pipeline):
 1-preparation -> 2-ready -> 3-progress -> 4-auto-review -> 5-human-review -> 6-completed -> 7-archive
 ```
 
-`4-auto-review` is the orchestrator's lane (machine icon in the kanban): the `ReviewDecisionOrchestrator` decides reissue / accept-as-done / escalate. `5-human-review` is the lane that waits for the user (eye icon). The user always gets the final say on completion - the orchestrator never moves a task directly from `4-auto-review` to `6-completed`.
+`4-auto-review` is the durable compatibility key for the visible **Post Processing** lane (machine icon in the kanban). The key is not renamed on disk or over the API. The `ReviewDecisionOrchestrator` and supporting post-processing workers decide reissue / accept-as-done / escalate after the coding CLI has finished. `5-human-review` is the lane that waits for the user (eye icon). The user always gets the final say on completion - the orchestrator never moves a task directly from `4-auto-review` to `6-completed`.
 
-When the orchestrator accepts a task as done on its own judgment (advancing it to `5-human-review` rather than a human accepting it), it stamps the workspace provenance tag `orchestrator-moved` (label "Orchestrator: moved", text-only) on the card so a glance shows who advanced it. The tag is seeded in `TagRegistryService` and applied by `ReviewDecisionOrchestrator` on both the multi-aspect (`ProcessDoneAsync`) and single-verdict (`HandleAcceptAsDone`) accept paths; tasks a human accepts carry no such tag. `TagDriftRule` treats it as a provenance tag that survives aspect-concern reconciliation. The kanban lane labels themselves are display-only ("Ready", "Review", "Auto Review") and never rename the underlying `2-ready` / `5-human-review` / `4-auto-review` state keys, which are part of the on-disk + API contract.
+When the orchestrator accepts a task as done on its own judgment (advancing it to `5-human-review` rather than a human accepting it), it stamps the workspace provenance tag `orchestrator-moved` (label "Orchestrator: moved", text-only) on the card so a glance shows who advanced it. The tag is seeded in `TagRegistryService` and applied by `ReviewDecisionOrchestrator` on both the multi-aspect (`ProcessDoneAsync`) and single-verdict (`HandleAcceptAsDone`) accept paths; tasks a human accepts carry no such tag. `TagDriftRule` treats it as a provenance tag that survives aspect-concern reconciliation. The kanban lane labels themselves are display-only ("Ready", "Post Processing", "Human Review") and never rename the underlying `2-ready` / `4-auto-review` / `5-human-review` state keys, which are part of the on-disk + API contract.
+
+### Orchestrator Post Processing
+
+Post Processing is the orchestrator-owned phase after task execution and before Human Review. It may run deterministic checks, configured supporting-agent passes, token summaries, finding extraction, follow-up suggestions, QA, security, design, or runtime-observability checks. It is performed by the orchestrator or a supporting identity, not silently by the same coding identity that just edited source. Coding agents do not auto-fix findings from this phase unless a later task explicitly enables that behavior.
+
+The evidence contract is append-only:
+
+- `lifecycle.json` records `phase = post-processing-running` / `post-processing-blocked` plus `postProcessingChecks[]`.
+- `post-processing-outcomes.jsonl` records typed outcomes with `performer`, optional `performerCliType`, `stepId`, `summary`, `evidenceRef`, `findingRefs[]`, and `followUpTaskIds[]`.
+- Valid outcomes are `pass-to-human-review`, `findings-added`, `needs-follow-up-task`, `needs-human-input`, and `failed-post-processing`.
+- Valid performers are `orchestrator`, `supporting-agent`, and `tool`.
+
+The current rollout deliberately keeps `4-auto-review` as the compatibility lane while the UI labels it Post Processing. Step 3 (`kanban-lane-grouping-collapse`) and Step 4 (`ready-orchestrator-intake-lane`) are sibling rollout work for the expanded lifecycle lanes theme. This slice must operate with or without those surfaces active: lane grouping is a projection/ergonomics layer, and intake defaults to pass-through until enabled per project. Do not block Post Processing changes on those sibling tasks unless the code path actually depends on their runtime behavior.
 
 **Evidence gate (ASS-764).** Before the orchestrator accepts a DONE run on its own judgment, two evidence rules can convert a would-be accept / accept-with-concerns into a reissue (or an escalation once the shared reissue budget is spent). The policy is the pure [`EvidenceGate`](backend/Services/Runner/EvidenceGate.cs), evaluated in `ProcessDoneAsync` after the parallel aspect run and handled by `HandleEvidenceGateAsync`:
 
@@ -417,7 +432,7 @@ A task that ships its proof and passes a clean `tests-and-evidence` aspect is un
 
 Only tasks in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New tasks default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
 
-Successful CLI runs move from `3-progress` to `4-auto-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation. The pre-ADR-0025 single `4-review` lane is migrated automatically on backend boot via `JobStateMachine.EnsureStateFoldersAndMigrate`.
+Successful CLI runs move from `3-progress` to `4-auto-review` through application code, where the visible lane is Post Processing. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation. The pre-ADR-0025 single `4-review` lane is migrated automatically on backend boot via `JobStateMachine.EnsureStateFoldersAndMigrate`. Preserve this compatibility path until the lifecycle-lanes migration intentionally changes the durable state model.
 
 ### Orchestrator intake / Preparation step
 

@@ -44,7 +44,7 @@ Never select by CSS class names; they belong to styling and change often.
 
 ## Run-Switcher UI contract
 
-The task detail view treats every re-open, transition back to Ready, and auto-review reissue as a new run. The Timeline tab renders chronological run cards with the transition between adjacent runs. The Overview pipeline block renders the current run first, then older archived attempts through the Run-Switcher (`Run #1`, `Run #2`, etc.).
+The task detail view treats every re-open, transition back to Ready, and Post Processing reissue as a new run. The Timeline tab renders chronological run cards with the transition between adjacent runs. The Overview pipeline block renders the current run first, then older archived attempts through the Run-Switcher (`Run #1`, `Run #2`, etc.).
 
 When changing run history or pipeline display code, keep the Run-Switcher backed by archived pipeline execution records, not by the current in-memory record alone. Tests must cover that older runs stay selectable and that the current run remains the active/default pipeline view.
 
@@ -89,7 +89,7 @@ The task-detail header carries a lane `<select>` (studio shell: `data-testid="st
 
 **Moving a task to another lane** lives in the `⋯` overflow context menu (`data-testid="triage-overflow-btn"` → `triage-overflow-item-*`), built by `overflowActionsFor` in `features/task-detail/state/triage-actions.model.ts`. Per the menu-text-only rule above, these rows carry no icons.
 
-**Orchestrator-controlled lanes are never manual targets.** `3-progress` (In Progress) and `4-auto-review` (Auto Review) are owned by the runner / `ReviewDecisionOrchestrator` — a task lands there because it was picked up or is being judged, never because an operator parked it. They are therefore excluded from **both** surfaces:
+**Orchestrator-controlled lanes are never manual targets.** `3-progress` (In Progress) and `4-auto-review` (Post Processing, compatibility key) are owned by the runner / `ReviewDecisionOrchestrator` - a task lands there because it was picked up or is being judged, never because an operator parked it. They are therefore excluded from **both** surfaces:
 - the navigation dropdown options (`App.studioLaneOptions`, and the legacy `DetailHeaderComponent.laneOptions`) omit them;
 - the context-menu move targets are stripped by `overflowActionsFor`, which filters any move action whose target is in `ORCHESTRATOR_CONTROLLED_LANES` (the canonical set in `triage-actions.model.ts`).
 

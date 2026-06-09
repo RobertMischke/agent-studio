@@ -53,7 +53,7 @@ The visible task states are (ADR-0025: three-stage review pipeline):
 
 State transitions are application-controlled. A task can sit in `3-progress` without a live CLI process after a stop, crash, or backend restart. Treat the live CLI execution state as the real signal for whether work is currently running.
 
-Only successful CLI runs move automatically from `3-progress` to `4-auto-review`. The orchestrator's review-decision pass then reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review`). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` so the user can inspect the log, restart, or continue the task.
+Only successful CLI runs move automatically from `3-progress` to `4-auto-review`. The durable state key stays `4-auto-review` for compatibility, but the visible board lane is Post Processing. The orchestrator's review-decision pass then reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review`). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` so the user can inspect the log, restart, or continue the task.
 
 ## Task Files
 
@@ -63,11 +63,14 @@ Each task folder may contain:
 - `prompt.md`: task description and follow-up notes.
 - `status.md`: generated review protocol owned by the application.
 - `lifecycle.json` (optional): application-owned sidecar with richer phase history. Absent on legacy folders.
+- `post-processing-outcomes.jsonl` (optional): append-only evidence rows for the orchestrator-owned Post Processing phase.
 - `logs/cli-output.log`: durable CLI output.
 - `attachments/`: input images or files supplied with the task.
 - `results/`: output screenshots or files produced during the task.
 
 Agents may read all task files. Agents may write evidence files when useful, but must not change queue state. Do not rely on hand-written `status.md` content for durable evidence because the application may regenerate it from logs.
+
+`post-processing-outcomes.jsonl` rows use the typed outcomes `pass-to-human-review`, `findings-added`, `needs-follow-up-task`, `needs-human-input`, and `failed-post-processing`. Each row records the performer (`orchestrator`, `supporting-agent`, or `tool`) and may include `performerCliType` when a supporting CLI such as Claude, Codex, Copilot, or Gemini performed the check. This identity is evidence only. It does not transfer source-editing authority to the supporting agent.
 
 ## Skill Lookup
 

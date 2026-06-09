@@ -63,7 +63,7 @@ Each visible state is a folder, and each job is a subfolder inside one state:
 
 `0-backlog` is the triage staging area: it is the default landing lane for new jobs created via `POST /api/tasks` without an explicit `targetState`. Auto-pickup never reaches into the backlog; promoting a job to `1-preparation` or `2-ready` is an explicit user action.
 
-The review lanes are explicit (ADR-0025): `4-auto-review` is the orchestrator's machine pass, `5-human-review` is the lane for operator approval of accepted work, and `5e-escalated` is the lane for operator decisions the orchestrator could not resolve. The pre-ADR-0025 numbered lanes (`4-review`, `5-completed`, `6-archive`) are migrated automatically on backend boot.
+The review lanes are explicit (ADR-0025): `4-auto-review` is the durable compatibility key for the visible Post Processing lane, `5-human-review` is the lane for operator approval of accepted work, and `5e-escalated` is the lane for operator decisions the orchestrator could not resolve. The pre-ADR-0025 numbered lanes (`4-review`, `5-completed`, `6-archive`) are migrated automatically on backend boot.
 
 Each job folder uses this structure:
 
@@ -73,6 +73,8 @@ Each job folder uses this structure:
   prompt.md         # Task description for the CLI agent
   status.md         # Generated review protocol
   lifecycle.json    # Optional: richer phase history (intake / post-processing checks)
+  post-processing-outcomes.jsonl
+                    # Optional: typed Post Processing outcomes
   attachments/      # Input files supplied with the task
   results/          # Output evidence such as screenshots
                     # Optional: results/review-evidence.jsonl (audit / review findings)
@@ -105,7 +107,7 @@ Each job folder uses this structure:
 - `taskType` - structural classification, one of `bug`, `feature`, or `chore` (default for legacy and technical work). Drives the small chip rendered on the kanban card and the type filter pill in the header. Legacy `user-story` values on disk are silently normalised to `feature` on read; no bulk re-write is performed.
 - `tags` - string array of workspace tag ids. The label and colour for each id come from `<workspace>/tags.json` served by `GET /api/tags`. The registry seeds seven default tags on first read (`ui-ux`, `performance`, `quality`, `architecture`, `security`, `docs`, `observability`), each carrying a `description` field that surfaces in tooltips and the filter dropdown. On boot, missing seed ids are merged into an existing registry by id; user-customised rows are never overwritten. Unknown ids on a job (registry entries that were soft-deleted) render as a faint ghost chip on the card.
 
-The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (forward to `5e-escalated` with a `[supervisor]` chat-note and an escalation verdict). The user always confirms accepted work before it moves from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
+The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`, whose visible label is Post Processing; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (forward to `5e-escalated` with a `[supervisor]` chat-note and an escalation verdict). The user always confirms accepted work before it moves from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 
 **Optional substate:** `job.json` may also carry a `"phase"` string that distinguishes orchestrator-driven substates within the same folder-level state. The hybrid V1 model (see `docs/research/expanded-lifecycle-lanes-plan-2026-05.md`) keeps the seven folder-level states above as the durable skeleton and uses `phase` plus the optional sidecar `lifecycle.json` for the Intake / Post Processing lanes the kanban projects on top.
 
@@ -134,6 +136,17 @@ The application owns transitions between these states. Successful CLI runs move 
 ```
 
 Optional sidecar carrying the richer phase history that does not fit on the wire-level `phase` field: which intake or post-processing checks were scheduled, when the current phase was entered, and the last blocking reason. Absent on legacy job folders; the wire-level `phase` field is the source of truth. The follow-up tasks `ready-orchestrator-intake-lane` and `post-processing-orchestrator-lane` populate this file.
+
+### post-processing-outcomes.jsonl (optional)
+
+Append-only JSON-Lines file holding orchestrator-owned Post Processing outcomes. This file records what happened between the coding CLI finishing and the task reaching Human Review; it does not authorize source edits or lane moves by the supporting identity.
+
+```jsonl
+{"version":1,"at":"2026-06-09T12:34:00Z","jobId":"feature-task","project":"agent-taskboard","outcome":"pass-to-human-review","performer":"supporting-agent","performerCliType":"claude","stepId":"orchestrator-decision","summary":"All aspects passed.","evidenceRef":"aspect-tests-and-evidence.md","findingRefs":[],"followUpTaskIds":[]}
+{"version":1,"at":"2026-06-09T12:35:00Z","jobId":"feature-task","project":"agent-taskboard","outcome":"findings-added","performer":"tool","stepId":"security-analysis","summary":"One non-blocking finding was recorded.","evidenceRef":"results/review-evidence.jsonl","findingRefs":["finding-1"],"followUpTaskIds":[]}
+```
+
+Valid `outcome` values are `pass-to-human-review`, `findings-added`, `needs-follow-up-task`, `needs-human-input`, and `failed-post-processing`. Valid `performer` values are `orchestrator`, `supporting-agent`, and `tool`. `performerCliType` is optional and should be one of the supported CLI values when a supporting CLI performed the check.
 
 ### results/review-evidence.jsonl (optional)
 
