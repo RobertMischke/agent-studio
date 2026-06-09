@@ -560,6 +560,22 @@ public class GitService
         if (root == null)
             return new GitStatusResult(false, null, 0, 0, 0, [], $"Not a git repository: {configured}");
 
+        return ReadStatusAtRoot(root);
+    }
+
+    public GitStatusResult GetStatusForRepoRoot(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitStatusResult(false, null, 0, 0, 0, [], $"Repo root missing: {repoRoot}");
+        var root = ResolveGitToplevel(repoRoot);
+        if (root == null)
+            return new GitStatusResult(false, null, 0, 0, 0, [], $"Not a git repository: {repoRoot}");
+
+        return ReadStatusAtRoot(root);
+    }
+
+    private GitStatusResult ReadStatusAtRoot(string root)
+    {
         var (statusOut, statusErr, statusCode) = RunGit(root, "status --porcelain=v1");
         if (statusCode != 0)
             return new GitStatusResult(true, null, 0, 0, 0, [], statusErr.Trim());
@@ -655,10 +671,37 @@ public class GitService
     /// Returns a clean <c>"Nothing to commit"</c> result when the tree is empty;
     /// callers treat that as success-with-info.
     /// </summary>
-    public GitCommitResult CrashRecoveryCommit(string projectName, string repoRoot, string message)
+    public GitCommitResult CrashRecoveryCommit(
+        string projectName,
+        string repoRoot,
+        string message,
+        IReadOnlyCollection<string>? pathspecs = null)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
             return new GitCommitResult(false, null, $"Repo root missing: {repoRoot}");
+
+        if (pathspecs is { Count: > 0 })
+        {
+            var addArgs = new List<string> { "add", "-A", "--" };
+            addArgs.AddRange(pathspecs);
+            var (_, scopedAddErr, scopedAddCode) = RunGitArgs(repoRoot, addArgs.ToArray());
+            if (scopedAddCode != 0)
+                return new GitCommitResult(false, null, $"git add failed: {scopedAddErr.Trim()}");
+
+            const string scopedAuthor = "Crash Recovery <crash-recovery@agent-taskboard>";
+            var commitArgs = new List<string> { "commit", $"--author={scopedAuthor}", "-F", "-", "--" };
+            commitArgs.AddRange(pathspecs);
+            var (_, scopedCommitErr, scopedCommitCode) = RunGitArgs(repoRoot, commitArgs.ToArray(), stdin: message);
+            if (scopedCommitCode != 0)
+            {
+                if (scopedCommitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                    return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
+                return new GitCommitResult(false, null, scopedCommitErr.Trim());
+            }
+
+            var (scopedSha, _, _) = RunGit(repoRoot, "rev-parse HEAD");
+            return new GitCommitResult(true, scopedSha.Trim(), null);
+        }
 
         var (_, addErr, addCode) = RunGit(repoRoot, "add -A");
         if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");

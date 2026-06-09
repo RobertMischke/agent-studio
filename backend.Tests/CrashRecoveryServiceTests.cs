@@ -118,7 +118,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "modified post-crash");
         File.WriteAllText(Path.Combine(_repoRoot, "new-file.txt"), "agent left this behind");
 
-        var (recovery, _) = BuildRecovery();
+        var (recovery, scanner) = BuildRecovery();
         var decisions = await recovery.RecoverAsync();
 
         // Working tree must be clean now.
@@ -141,6 +141,55 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var dailyLog = Path.Combine(_logDir, $"{DateTime.UtcNow:yyyy-MM-dd}.log");
         Assert.True(File.Exists(dailyLog), "daily backend log must exist after recovery sweep");
         Assert.Contains("Backend.CrashRecovery", File.ReadAllText(dailyLog));
+    }
+
+    [Fact]
+    public async Task RecoverAsync_OrphanWorkingTreeChanges_ScopesCommitToActiveTaskFiles()
+    {
+        WriteJob(TaskStates.Progress, "active-task");
+        var jobFolder = Path.Combine(_watchPath, TaskStates.Progress, "active-task");
+        StampLastProgressAt(jobFolder, DateTime.UtcNow);
+
+        // Foreign dirty changes existed before this run started. They must
+        // remain dirty, not ride along in the active task's recovery commit.
+        var oldDirtyAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "foreign edit");
+        File.SetLastWriteTimeUtc(Path.Combine(_repoRoot, "README.md"), oldDirtyAt);
+        File.WriteAllText(Path.Combine(_repoRoot, "foreign.txt"), "foreign new file");
+        File.SetLastWriteTimeUtc(Path.Combine(_repoRoot, "foreign.txt"), oldDirtyAt);
+
+        var runStartedAt = DateTime.UtcNow;
+        AppendSessionEvent(jobFolder, runStartedAt);
+
+        File.WriteAllText(Path.Combine(_repoRoot, "alpha.txt"), "agent alpha");
+        File.SetLastWriteTimeUtc(Path.Combine(_repoRoot, "alpha.txt"), runStartedAt.AddSeconds(30));
+        File.WriteAllText(Path.Combine(_repoRoot, "beta.txt"), "agent beta");
+        File.SetLastWriteTimeUtc(Path.Combine(_repoRoot, "beta.txt"), runStartedAt.AddSeconds(30));
+
+        var (recovery, _) = BuildRecovery();
+        var decisions = await recovery.RecoverAsync();
+
+        var commitDecision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanCommitted);
+        Assert.Equal("active-task", commitDecision.JobId);
+
+        var committed = RunGitCapture(_repoRoot, "show --name-only --pretty=format: HEAD")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        Assert.Equal(2, committed.Count);
+        Assert.Contains("alpha.txt", committed);
+        Assert.Contains("beta.txt", committed);
+        Assert.DoesNotContain("README.md", committed);
+        Assert.DoesNotContain("foreign.txt", committed);
+
+        var status = RunGitCapture(_repoRoot, "status --porcelain=v1");
+        Assert.Contains("README.md", status);
+        Assert.Contains("foreign.txt", status);
+
+        var moved = scanner.FindJob("active-task", _watchPath);
+        Assert.NotNull(moved);
+        Assert.Equal(2, moved!.Commit?.FilesChanged);
+        Assert.Contains("alpha.txt", moved.Commit!.Files);
+        Assert.Contains("beta.txt", moved.Commit!.Files);
     }
 
     [Fact]
@@ -312,6 +361,19 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         foreach (var kv in dict) newDict[kv.Key] = kv.Value;
         newDict["lastProgressAt"] = utc.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
         File.WriteAllText(jsonPath, JsonSerializer.Serialize(newDict, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void AppendSessionEvent(string jobFolder, DateTime utc)
+    {
+        var logsDir = Path.Combine(jobFolder, TaskPaths.LogsDirName);
+        Directory.CreateDirectory(logsDir);
+        var line = JsonSerializer.Serialize(new SessionEvent
+        {
+            Ts = utc,
+            Kind = "start",
+            Cli = "copilot"
+        }) + Environment.NewLine;
+        File.AppendAllText(Path.Combine(logsDir, TaskPaths.SessionEventsLogFileName), line);
     }
 
     private static void RunGit(string cwd, string args)

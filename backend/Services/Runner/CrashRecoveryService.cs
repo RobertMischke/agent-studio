@@ -275,7 +275,34 @@ public sealed class CrashRecoveryService
               $"Recovered uncommitted working-tree state after a backend crash. Last active\n" +
               $"3-progress job in project {entry.Name} (by lastProgressAt) was {jobId}.";
 
-        var commit = _git.CrashRecoveryCommit(entry.Name, repoRoot, message);
+        var scope = PlanCrashRecoveryCommitScope(entry, jobId, jobFolder, repoRoot);
+        if (scope.Scope == CrashRecoveryCommitScope.None)
+        {
+            var skipped = new RecoveryDecision
+            {
+                At = DateTime.UtcNow,
+                Kind = RecoveryDecisionKinds.OrphanSkipped,
+                ProjectName = entry.Name,
+                JobId = jobId,
+                Reason = "uncommitted changes present but every dirty path predates the active job's first session event; skipped to avoid sweeping foreign work into crash recovery"
+            };
+            decisions.Add(skipped);
+            AppendRecoveryEntry(skipped);
+            _logger.LogInformation(
+                "CrashRecoveryService: project {Project} has uncommitted changes for active job {JobId}, but no dirty path belongs to the session window; leaving them untouched.",
+                entry.Name, jobId);
+            return;
+        }
+
+        var pathspecs = scope.Scope == CrashRecoveryCommitScope.Scoped ? scope.Paths : null;
+        if (pathspecs is { Count: > 0 })
+        {
+            _logger.LogInformation(
+                "CrashRecoveryService: scoped orphan recovery for project {Project} job {JobId} to {Count} task-attributable path(s); foreign dirty changes left untouched.",
+                entry.Name, jobId, pathspecs.Count);
+        }
+
+        var commit = _git.CrashRecoveryCommit(entry.Name, repoRoot, message, pathspecs);
         if (!commit.Success)
         {
             // "Nothing to commit" can race in if a concurrent process committed
@@ -326,11 +353,91 @@ public sealed class CrashRecoveryService
                 Sha = commit.Sha!,
                 ShortSha = commit.Sha!.Length > 7 ? commit.Sha[..7] : commit.Sha,
                 Message = $"crash-recovery: orphan changes for {jobId}",
-                FilesChanged = 0,
-                Files = new List<string>(),
+                FilesChanged = pathspecs?.Count ?? 0,
+                Files = pathspecs?.ToList() ?? new List<string>(),
                 At = DateTime.UtcNow
             });
         }
+    }
+
+    private enum CrashRecoveryCommitScope
+    {
+        All,
+        None,
+        Scoped,
+    }
+
+    private sealed record CrashRecoveryCommitPlan(CrashRecoveryCommitScope Scope, IReadOnlyList<string> Paths);
+
+    private CrashRecoveryCommitPlan PlanCrashRecoveryCommitScope(
+        WatchPathEntry entry,
+        string? jobId,
+        string? jobFolder,
+        string repoRoot)
+    {
+        var all = new CrashRecoveryCommitPlan(CrashRecoveryCommitScope.All, []);
+        if (string.IsNullOrWhiteSpace(jobId) || string.IsNullOrWhiteSpace(jobFolder))
+            return all;
+
+        var firstActivityUtc = ReadFirstSessionEventAt(jobFolder);
+        if (firstActivityUtc == null)
+            return all;
+
+        var status = _git.GetStatusForRepoRoot(repoRoot);
+        if (!status.IsRepo || status.Files.Count == 0)
+            return all;
+
+        var scoped = new List<string>();
+        foreach (var file in status.Files)
+        {
+            if (string.IsNullOrWhiteSpace(file.Path)) continue;
+            var fullPath = Path.Combine(repoRoot, file.Path.Replace('/', Path.DirectorySeparatorChar));
+            try
+            {
+                if (!File.Exists(fullPath))
+                {
+                    scoped.Add(file.Path);
+                    continue;
+                }
+
+                if (File.GetLastWriteTimeUtc(fullPath) >= firstActivityUtc.Value)
+                    scoped.Add(file.Path);
+            }
+            catch
+            {
+                scoped.Add(file.Path);
+            }
+        }
+
+        if (scoped.Count == 0)
+            return new CrashRecoveryCommitPlan(CrashRecoveryCommitScope.None, []);
+
+        return new CrashRecoveryCommitPlan(CrashRecoveryCommitScope.Scoped, scoped);
+    }
+
+    private static DateTime? ReadFirstSessionEventAt(string jobFolder)
+    {
+        var path = TaskPaths.SessionEventsLog(jobFolder);
+        if (!File.Exists(path)) return null;
+
+        DateTime? first = null;
+        foreach (var line in File.ReadAllLines(path))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            try
+            {
+                var evt = JsonSerializer.Deserialize<SessionEvent>(line, TaskJsonFile.ReadOpts);
+                if (evt == null || evt.Ts == default) continue;
+                var ts = evt.Ts.Kind == DateTimeKind.Utc ? evt.Ts : evt.Ts.ToUniversalTime();
+                if (first == null || ts < first.Value) first = ts;
+            }
+            catch
+            {
+                // Best-effort recovery: ignore torn session-event rows.
+            }
+        }
+
+        return first;
     }
 
     /// <summary>
