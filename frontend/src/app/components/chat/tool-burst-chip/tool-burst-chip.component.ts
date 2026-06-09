@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import type { ToolBurstEvent, ToolFamily } from '../conversation-event';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import type { ToolBurstEvent, ToolFamily, ToolOutputHit } from '../conversation-event';
 
 /**
  * Dense, collapsed-by-default renderer for `ToolBurst` events in the
@@ -26,6 +26,7 @@ export class ToolBurstChipComponent {
   readonly event = input.required<ToolBurstEvent>();
   readonly density = input<'comfortable' | 'compact'>('comfortable');
   readonly initialOpen = input<boolean>(false);
+  readonly openSourceLocation = output<ToolOutputHit>();
 
   readonly open = signal<boolean>(false);
   private readonly expandedCommandOutputs = signal<ReadonlySet<string>>(new Set());
@@ -138,22 +139,43 @@ export class ToolBurstChipComponent {
     const command = this.commands()[commandIndex];
     if (!command) return '';
     if (this.isCommandOutputExpanded(commandIndex)) return command.output;
-    return command.output.split(/\r?\n/).slice(0, 24).join('\n');
+    return command.output.split(/\r?\n/).slice(0, COMMAND_OUTPUT_PREVIEW_LINES).join('\n');
   }
 
   commandHiddenLines(commandIndex: number): number {
     const command = this.commands()[commandIndex];
     if (!command || this.isCommandOutputExpanded(commandIndex)) return 0;
-    return Math.max(0, command.outputLineCount - 24);
+    const actualLineCount = command.output ? command.output.split(/\r?\n/).length : 0;
+    const total = Math.max(command.outputLineCount, actualLineCount);
+    return Math.max(0, total - COMMAND_OUTPUT_PREVIEW_LINES);
+  }
+
+  hasCommandOverflow(commandIndex: number): boolean {
+    const command = this.commands()[commandIndex];
+    if (!command) return false;
+    return this.commandHiddenLines(commandIndex) > 0 || command.outputTruncated || this.isCommandOutputExpanded(commandIndex);
+  }
+
+  commandToggleLabel(commandIndex: number): string {
+    if (this.isCommandOutputExpanded(commandIndex)) return 'show less';
+    const hidden = this.commandHiddenLines(commandIndex);
+    if (hidden > 0) return `show ${hidden} more lines`;
+    return 'show full output';
   }
 
   shortCommand(command: string): string {
-    return command.length > 140 ? `${command.slice(0, 137)}...` : command;
+    return command.length > 112 ? `${command.slice(0, 109)}...` : command;
   }
 
   statusLabel(status: string, exitCode: number | null): string {
     if (exitCode !== null) return `exit ${exitCode}`;
     return status;
+  }
+
+  emitSourceLocation(event: MouseEvent, hit: ToolOutputHit): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.openSourceLocation.emit(hit);
   }
 }
 
@@ -164,6 +186,8 @@ interface DetailRow {
   statusLabel: string;
   meta: string;
 }
+
+const COMMAND_OUTPUT_PREVIEW_LINES = 24;
 
 function iconFor(family: ToolFamily): string {
   switch (family) {

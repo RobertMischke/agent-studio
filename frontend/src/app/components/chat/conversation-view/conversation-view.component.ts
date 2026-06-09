@@ -25,6 +25,7 @@ import type {
   SystemStatusEvent,
   TaskMarkerEvent,
   ToolBurstEvent,
+  ToolOutputHit,
   TraceLinkEvent,
 } from '../conversation-event';
 
@@ -212,6 +213,8 @@ export class ConversationViewComponent {
   readonly openVerboseDebug = output<void>();
   /** Raised when the user opens the queued / re-opened follow-up of a `feedback.queued` row. */
   readonly openFollowUp = output<string>();
+  /** Raised when a rendered tool output hit is clicked. The host may open a richer file viewer later. */
+  readonly openSourceLocation = output<ToolOutputHit & { rawRange: RawLineRange }>();
 
   // Sets stay small enough that copy-on-write is fine; they only mutate on
   // user clicks ("show more", "expand"), not on every signal pass.
@@ -523,6 +526,11 @@ export class ConversationViewComponent {
 
   emitOpenTrace(range?: RawLineRange | null): void {
     this.openTrace.emit(range ?? null);
+  }
+
+  emitOpenSourceLocation(hit: ToolOutputHit, rawRange: RawLineRange): void {
+    this.openSourceLocation.emit({ ...hit, rawRange });
+    this.openTrace.emit(rawRange);
   }
 
   emitOpenFollowUp(jobId: string | null | undefined): void {

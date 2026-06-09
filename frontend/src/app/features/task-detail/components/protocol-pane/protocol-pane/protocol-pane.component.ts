@@ -813,7 +813,11 @@ export class ProtocolPaneComponent implements OnDestroy {
         this.setActivityView('trace');
         break;
       case 'debug':
-        this.activityDebugEnabled.update((v) => !v);
+        if (this.nextGenConversationEnabled() && this.activityView() === 'conversation') {
+          this.verboseDebugOpen.set(true);
+        } else {
+          this.activityDebugEnabled.update((v) => !v);
+        }
         break;
       case 'copy':
         void this.copyActivityView();

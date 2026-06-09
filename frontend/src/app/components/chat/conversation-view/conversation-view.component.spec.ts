@@ -55,6 +55,31 @@ function toolBurst(): ToolBurstEvent {
   };
 }
 
+function commandToolBurst(): ToolBurstEvent {
+  return {
+    id: 'evt-command',
+    kind: 'toolBurst',
+    timestamp: '2026-05-05T12:00:10.000Z',
+    rawRange: range(20, 35),
+    count: 1,
+    families: { command: 1 },
+    failures: 0,
+    durationMs: 1_500,
+    collapsedByDefault: true,
+    commands: [
+      {
+        command: 'rg -n "needle" frontend/src/app',
+        status: 'completed',
+        exitCode: 0,
+        output: 'frontend/src/app/a.ts:12:const needle = true;',
+        outputLineCount: 1,
+        outputTruncated: false,
+        hits: [{ path: 'frontend/src/app/a.ts', line: 12, text: 'const needle = true;' }],
+      },
+    ],
+  };
+}
+
 function agentMsg(id: string, secondsOffset: number, body: string): MessageEvent {
   return {
     id,
@@ -130,6 +155,64 @@ describe('ConversationViewComponent', () => {
     const el: HTMLElement = fixture.nativeElement;
     expect(el.querySelector('[data-testid="conversation-tool-burst"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="tool-burst-chip"]')).toBeTruthy();
+  });
+
+  it('opens Trace when a command-output file hit is clicked', async () => {
+    const event = commandToolBurst();
+    const fixture = await makeFixture([event]);
+    const el: HTMLElement = fixture.nativeElement;
+    const traceEmissions: (RawLineRange | null)[] = [];
+    const sourceEmissions: unknown[] = [];
+    fixture.componentInstance.openTrace.subscribe((r) => traceEmissions.push(r));
+    fixture.componentInstance.openSourceLocation.subscribe((hit) => sourceEmissions.push(hit));
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tool-burst-row"]')?.click();
+    fixture.detectChanges();
+    el.querySelector<HTMLButtonElement>('[data-testid="tool-burst-hit-path"]')?.click();
+
+    expect(traceEmissions).toEqual([event.rawRange]);
+    expect(sourceEmissions).toEqual([
+      { path: 'frontend/src/app/a.ts', line: 12, text: 'const needle = true;', rawRange: event.rawRange },
+    ]);
+  });
+
+  it('renders typed system status and parser-warning rows without raw-frame chrome', async () => {
+    const events: ConversationEvent[] = [
+      {
+        id: 'status-1',
+        kind: 'system.status',
+        timestamp: '2026-05-05T12:00:20.000Z',
+        rawRange: range(40, 40),
+        severity: 'warn',
+        category: 'codex-silent-completion',
+        label: 'Silent completion recovery',
+        explanation: 'Codex stopped after final tool call.',
+        nextStep: 'Review the result evidence.',
+      },
+      {
+        id: 'warn-1',
+        kind: 'system.parserWarning',
+        timestamp: '2026-05-05T12:00:21.000Z',
+        rawRange: range(41, 41),
+        severity: 'warn',
+        expectedKind: 'tool-result',
+        message: 'Tool router reported exit code 1.',
+        dedupeKey: 'tool-router:1',
+      },
+    ];
+    const fixture = await makeFixture(events);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const status = el.querySelector('[data-testid="conversation-system-status"]');
+    expect(status?.getAttribute('data-category')).toBe('codex-silent-completion');
+    expect(status?.textContent).toContain('Silent completion recovery');
+    expect(status?.textContent).toContain('Review the result evidence.');
+    expect(status?.textContent).not.toContain('[codex-silent-completion]');
+
+    const warning = el.querySelector('[data-testid="conversation-parser-warning"]');
+    expect(warning?.textContent).toContain('Tool router reported exit code 1.');
+    expect(warning?.textContent).toContain('expected: tool-result');
+    expect(warning?.textContent).not.toContain('codex_core::tools::router');
   });
 
   it('emits openTrace when the user clicks the Trace header button', async () => {

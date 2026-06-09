@@ -156,7 +156,8 @@
         @case ('toolBurst') {
           @if (showTools()) {
             <li class="conv__row conv__row--burst" data-testid="conversation-tool-burst">
-              <app-tool-burst-chip [event]="row.event" />
+              <app-tool-burst-chip [event]="row.event"
+                                   (openSourceLocation)="emitOpenSourceLocation($event, row.event.rawRange)" />
             </li>
           }
         }

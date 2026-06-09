@@ -88,5 +88,15 @@ describe('ToolBurstChipComponent (smoke)', () => {
     expect(el.querySelector('.burst__command-badge')?.textContent).toContain('exit 0');
     expect(el.querySelector('[data-testid="tool-burst-output-hits"]')?.textContent).toContain('frontend/src/app/a.ts:12');
     expect(el.querySelector('[data-testid="tool-burst-output-toggle"]')?.textContent).toContain('show 6 more lines');
+
+    const emitted: unknown[] = [];
+    fixture.componentInstance.openSourceLocation.subscribe((hit) => emitted.push(hit));
+    el.querySelector<HTMLButtonElement>('[data-testid="tool-burst-hit-path"]')?.click();
+    expect(emitted).toEqual([{ path: 'frontend/src/app/a.ts', line: 12, text: 'const needle = true;' }]);
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tool-burst-output-toggle"]')?.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="tool-burst-command-output"]')?.textContent).toContain('line 29');
+    expect(el.querySelector('[data-testid="tool-burst-output-toggle"]')?.textContent).toContain('show less');
   });
 });
