@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TooltipDirective } from './tooltip.directive';
 
 const TIP_TESTID = 'app-tooltip';
+const TIP_SELECTOR = `[data-testid="${TIP_TESTID}"], .app-tooltip`;
 
 @Component({
   standalone: true,
@@ -23,7 +24,7 @@ function getTooltip(): HTMLElement | null {
 }
 
 function removeTooltipDom(): void {
-  document.querySelectorAll(`[data-testid="${TIP_TESTID}"]`).forEach(node => node.remove());
+  document.querySelectorAll(TIP_SELECTOR).forEach(node => node.remove());
 }
 
 function fireHover(el: HTMLElement, type: 'mouseenter' | 'mouseleave' | 'focusin' | 'focusout' | 'click' | 'touchstart') {
@@ -48,11 +49,25 @@ describe('TooltipDirective', () => {
   });
 
   afterEach(() => {
+    fixture?.destroy();
     removeTooltipDom();
   });
 
   it('does NOT create tooltip DOM before first hover (lazy render)', () => {
     expect(getTooltip()).toBeNull();
+  });
+
+  it('test cleanup removes every stale tooltip node', () => {
+    const staleWithTestId = document.createElement('div');
+    staleWithTestId.className = 'app-tooltip';
+    staleWithTestId.dataset['testid'] = TIP_TESTID;
+    const staleClassOnly = document.createElement('div');
+    staleClassOnly.className = 'app-tooltip';
+    document.body.append(staleWithTestId, staleClassOnly);
+
+    removeTooltipDom();
+
+    expect(document.querySelectorAll(TIP_SELECTOR).length).toBe(0);
   });
 
   it('creates a single shared tooltip element on first hover and reuses it', () => {
