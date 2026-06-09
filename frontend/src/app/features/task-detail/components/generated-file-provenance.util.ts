@@ -1,19 +1,26 @@
 import type { FileGenerationMeta } from '../../../models/task.model';
 
 export interface GeneratedFileProvenanceView {
+  /** Compact one-line summary, kept stable for back-compat callers. */
   label: string;
   tooltip: string;
+  /** "<cli> / <model>" (or "generated" when neither is known). */
+  producer: string;
+  model: string | null;
+  cli: string | null;
+  /** Pre-formatted "Nk tokens" chip, or null when not recorded. */
+  tokens: string | null;
+  /** Pre-formatted duration chip (e.g. "2s"), or null when not recorded. */
+  duration: string | null;
 }
 
 export function generatedFileProvenance(meta: FileGenerationMeta | null | undefined): GeneratedFileProvenanceView | null {
   if (!meta) return null;
 
   const cliModel = [meta.cli, meta.model].filter(Boolean).join(' / ') || 'generated';
-  const shortParts = [
-    cliModel,
-    meta.tokensTotal > 0 ? `${formatCount(meta.tokensTotal)} tokens` : null,
-    meta.durationMs > 0 ? formatDuration(meta.durationMs) : null,
-  ].filter((v): v is string => !!v);
+  const tokens = meta.tokensTotal > 0 ? `${formatCount(meta.tokensTotal)} tokens` : null;
+  const duration = meta.durationMs > 0 ? formatDuration(meta.durationMs) : null;
+  const shortParts = [cliModel, tokens, duration].filter((v): v is string => !!v);
 
   const tooltipParts = [
     `File: ${meta.file || 'unknown'}`,
@@ -33,6 +40,11 @@ export function generatedFileProvenance(meta: FileGenerationMeta | null | undefi
   return {
     label: shortParts.length > 0 ? shortParts.join(' | ') : 'Generated',
     tooltip: tooltipParts.join('\n'),
+    producer: cliModel,
+    model: meta.model || null,
+    cli: meta.cli || null,
+    tokens,
+    duration,
   };
 }
 

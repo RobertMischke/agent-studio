@@ -35,6 +35,7 @@ import { Marked, type MarkedExtension, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import { html as diff2htmlRender } from 'diff2html';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
+import { detectSourceRef } from './source-ref';
 
 export interface BeautifulRendererContext {
   jobId: string | null | undefined;
@@ -183,18 +184,48 @@ function buildMarkedExtension(context: BeautifulRendererContext): MarkedExtensio
           + `<img class="results-figure__img" src="${escapeAttr(resolved)}" alt="${escapeAttr(alt)}" loading="lazy">`
           + `</button>${caption}</figure>`;
       },
+      // Inline code: a span that looks like a repo source path (e.g.
+      // `backend/Services/Runner/SolutionQualityGate.cs` or `foo.ts:42`)
+      // becomes a clickable source link the host opens in the source
+      // viewer; everything else renders as a plain inline <code>.
+      codespan(token: Tokens.Codespan): string {
+        const text = token.text ?? '';
+        const ref = detectSourceRef(text);
+        if (ref) return renderSourceLink(ref.path, ref.line, `<code>${escapeHtml(text)}</code>`);
+        return `<code>${escapeHtml(text)}</code>`;
+      },
       // External links open in a new tab; internal anchors stay in place.
+      // A relative href that resolves to a repo source path is upgraded to
+      // the same clickable source link as inline code.
       link(token: Tokens.Link): string {
-        const href = safeLinkUrl(token.href ?? '');
+        const rawHref = token.href ?? '';
         const inner = token.tokens && token.tokens.length
           ? this.parser.parseInline(token.tokens)
           : escapeHtml(token.text ?? '');
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(rawHref)) {
+          const ref = detectSourceRef(rawHref);
+          if (ref) return renderSourceLink(ref.path, ref.line, inner);
+        }
+        const href = safeLinkUrl(rawHref);
         const external = /^https?:/i.test(href);
         const attrs = external ? ' target="_blank" rel="noopener noreferrer"' : '';
         return `<a href="${escapeAttr(href)}"${attrs}>${inner}</a>`;
       }
     }
   };
+}
+
+// Clickable source reference. The host (beautiful-results.component) listens
+// for clicks on `[data-results-source]` via event delegation and emits an
+// `openSource` event with the path + line, so no Angular binding has to be
+// threaded into the sanitized HTML.
+function renderSourceLink(path: string, line: number | null, inner: string): string {
+  const lineAttr = line != null ? ` data-results-line="${escapeAttr(String(line))}"` : '';
+  const label = line != null ? `${path}:${line}` : path;
+  return `<button type="button" class="results-source-link"`
+    + ` data-results-source="${escapeAttr(path)}"${lineAttr}`
+    + ` title="Open ${escapeAttr(label)} in source viewer"`
+    + ` aria-label="Open ${escapeAttr(label)} in source viewer">${inner}</button>`;
 }
 
 function renderCodeBlock(source: string, lang: string | null): string {
@@ -254,6 +285,8 @@ function sanitize(raw: string): string {
       'data-results-copy',
       'data-results-code',
       'data-results-diff',
+      'data-results-source',
+      'data-results-line',
       'data-source',
       'data-lang',
       'loading'

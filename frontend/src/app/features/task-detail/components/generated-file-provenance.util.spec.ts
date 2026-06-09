@@ -27,6 +27,57 @@ describe('generatedFileProvenance', () => {
     expect(view?.tooltip).toContain('Commit: abcdef012345');
   });
 
+  it('exposes structured fields for the integrated header provenance', () => {
+    const view = generatedFileProvenance({
+      file: 'status.md',
+      kind: 'status',
+      model: 'claude-haiku-4-5',
+      cli: 'claude',
+      tokensIn: 1200,
+      tokensOut: 300,
+      tokensTotal: 1500,
+      durationMs: 2000,
+    });
+
+    expect(view?.producer).toBe('claude / claude-haiku-4-5');
+    expect(view?.model).toBe('claude-haiku-4-5');
+    expect(view?.cli).toBe('claude');
+    expect(view?.tokens).toBe('1.5k tokens');
+    expect(view?.duration).toBe('2s');
+  });
+
+  it('nulls the token/duration chips when not recorded', () => {
+    const view = generatedFileProvenance({
+      file: 'status.md',
+      kind: 'status',
+      model: 'claude-haiku-4-5',
+      cli: 'claude',
+      tokensIn: 0,
+      tokensOut: 0,
+      tokensTotal: 0,
+      durationMs: 0,
+    });
+
+    expect(view?.tokens).toBeNull();
+    expect(view?.duration).toBeNull();
+    expect(view?.label).toBe('claude / claude-haiku-4-5');
+  });
+
+  it('falls back to "generated" when neither cli nor model is known', () => {
+    const view = generatedFileProvenance({
+      file: 'status.md',
+      kind: 'status',
+      tokensIn: 0,
+      tokensOut: 0,
+      tokensTotal: 0,
+      durationMs: 0,
+    });
+
+    expect(view?.producer).toBe('generated');
+    expect(view?.model).toBeNull();
+    expect(view?.cli).toBeNull();
+  });
+
   it('returns null when no provenance exists', () => {
     expect(generatedFileProvenance(null)).toBeNull();
   });

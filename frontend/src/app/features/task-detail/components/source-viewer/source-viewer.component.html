@@ -1,0 +1,51 @@
+@if (visible()) {
+  <div class="sv__portal" appOverlayPortal="modal">
+    <div class="sv__backdrop"
+         (click)="closeRequest.emit()"
+         tabindex="0"
+         (keydown.enter)="closeRequest.emit()"
+         (keydown.space)="closeRequest.emit(); $event.preventDefault()"></div>
+    <div class="sv"
+         role="dialog"
+         aria-label="Source viewer"
+         data-testid="source-viewer"
+         (click)="$event.stopPropagation()"
+         (keydown.escape)="closeRequest.emit()"
+         (keydown.enter)="$event.stopPropagation()"
+         (keydown.space)="$event.stopPropagation()">
+      <header class="sv__header">
+        <div class="sv__title">
+          <span class="sv__title-file" data-testid="source-viewer-file">{{ fileName() }}</span>
+          <code class="sv__title-path" [attr.title]="path()">{{ path() }}</code>
+          @if (activeLine(); as ln) {
+            <span class="sv__title-line">:{{ ln }}</span>
+          }
+        </div>
+        <div class="sv__actions">
+          <button type="button"
+                  class="sv__copy"
+                  data-testid="source-viewer-copy"
+                  [disabled]="state() !== 'loaded'"
+                  (click)="copyContent()">{{ copyLabel() }}</button>
+          <button type="button"
+                  class="sv__close"
+                  data-testid="source-viewer-close"
+                  aria-label="Close source viewer"
+                  (click)="closeRequest.emit()">✕</button>
+        </div>
+      </header>
+
+      <div #bodyRef class="sv__body" data-testid="source-viewer-body">
+        @if (state() === 'loading') {
+          <div class="sv__placeholder">Loading <code>{{ path() }}</code>…</div>
+        } @else if (state() === 'error') {
+          <div class="sv__placeholder sv__placeholder--error" data-testid="source-viewer-error">{{ error() }}</div>
+        } @else if (lines().length === 0) {
+          <div class="sv__placeholder">This file is empty.</div>
+        } @else {
+          <pre class="sv__code"><code>@for (l of lines(); track l.num) {<span class="sv__row" [class.sv__row--active]="l.num === activeLine()" [attr.data-line]="l.num"><span class="sv__ln">{{ l.num }}</span><span class="sv__line" [innerHTML]="l.html"></span></span>}</code></pre>
+        }
+      </div>
+    </div>
+  </div>
+}

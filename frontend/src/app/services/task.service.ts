@@ -801,6 +801,25 @@ export class TaskService {
     );
   }
 
+  /**
+   * Read the current (live) content of a task file. With `scope: 'code'`
+   * this reads an arbitrary source file relative to the repo root (the
+   * backend resolves + guards it with `IsWithin`), which is what the
+   * clickable protocol source references use to open a file in the
+   * source viewer. Returns the body as plain UTF-8 text.
+   */
+  readTaskFile(
+    jobId: string,
+    path: string,
+    watchPath?: string,
+    scope: TaskFileSourceScope = 'auto',
+  ) {
+    return this.getUtf8Text(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/files/${this.encodeTaskFilePath(path)}`,
+      this.withFileSourceParams(watchPath, scope),
+    );
+  }
+
   /** Read one file version at a specific commit SHA. */
   readTaskFileAt(
     jobId: string,

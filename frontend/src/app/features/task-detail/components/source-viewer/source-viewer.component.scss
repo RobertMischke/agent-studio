@@ -1,0 +1,129 @@
+:host { contain: layout; display: block; }
+
+/* ========================================================================
+ * Read-only single-file source viewer overlay. Mirrors the run-git-viewer
+ * portal/backdrop pattern so dismissal + elevation feel consistent.
+ * ======================================================================== */
+
+.sv__portal { position: fixed; inset: 0; pointer-events: none; }
+.sv__backdrop { position: fixed; inset: 0; background: var(--studio-scrim); pointer-events: auto; }
+
+.sv {
+  position: fixed; inset: 24px;
+  background: var(--studio-bg-editor);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 12px;
+  display: flex; flex-direction: column;
+  pointer-events: auto;
+  box-shadow: var(--elevation-floating);
+  color: var(--studio-fg);
+  overflow: hidden;
+}
+
+.sv__header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg-titlebar);
+}
+
+.sv__title { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.sv__title-file { font-size: 14px; font-weight: 600; color: var(--studio-fg-strong); flex: 0 0 auto; }
+.sv__title-path {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--studio-fg-dim);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sv__title-line { font-size: 11.5px; color: var(--studio-accent); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
+.sv__actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.sv__copy,
+.sv__close {
+  background: transparent;
+  border: 1px solid var(--studio-border-strong);
+  color: var(--studio-fg);
+  padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 12px;
+}
+.sv__copy:hover:not(:disabled),
+.sv__close:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+.sv__copy:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.sv__body { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--studio-bg-editor); }
+
+.sv__placeholder { padding: 16px; color: var(--studio-fg-dim); font-style: italic; font-size: 12.5px; }
+.sv__placeholder--error { color: var(--severity-high); white-space: pre-wrap; }
+.sv__placeholder code { font-family: var(--font-mono); }
+
+.sv__code {
+  margin: 0;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 4;
+}
+
+.sv__row {
+  display: flex;
+  align-items: flex-start;
+  min-height: 1.55em;
+}
+.sv__row--active { background: color-mix(in srgb, var(--studio-accent) 16%, transparent); }
+.sv__row--active .sv__ln { color: var(--studio-accent); }
+
+.sv__ln {
+  flex: 0 0 auto;
+  width: 4ch;
+  padding: 0 12px 0 8px;
+  text-align: right;
+  color: var(--studio-fg-muted, var(--studio-fg-dim));
+  user-select: none;
+  position: sticky;
+  left: 0;
+  background: var(--studio-bg-editor);
+  font-variant-numeric: tabular-nums;
+}
+
+.sv__line {
+  flex: 1 1 auto;
+  white-space: pre;
+  padding-right: 14px;
+}
+
+/* highlight.js token colours via the central --syntax-* palette
+ * (_tokens-semantic.scss); theme-aware for dark + light surfaces. */
+.sv__line .hljs-comment,
+.sv__line .hljs-quote { color: var(--syntax-comment); font-style: italic; }
+.sv__line .hljs-keyword,
+.sv__line .hljs-selector-tag,
+.sv__line .hljs-section { color: var(--syntax-keyword); }
+.sv__line .hljs-built_in,
+.sv__line .hljs-type { color: var(--syntax-type); }
+.sv__line .hljs-string,
+.sv__line .hljs-attr,
+.sv__line .hljs-template-tag,
+.sv__line .hljs-template-variable { color: var(--syntax-string); }
+.sv__line .hljs-number,
+.sv__line .hljs-literal { color: var(--syntax-number); }
+.sv__line .hljs-title,
+.sv__line .hljs-title.class_,
+.sv__line .hljs-title.function_ { color: var(--syntax-title); }
+.sv__line .hljs-variable,
+.sv__line .hljs-name,
+.sv__line .hljs-attribute { color: var(--syntax-variable); }
+.sv__line .hljs-symbol,
+.sv__line .hljs-bullet,
+.sv__line .hljs-meta { color: var(--syntax-meta); }
+.sv__line .hljs-tag { color: var(--syntax-tag); }
+.sv__line .hljs-emphasis { font-style: italic; }
+.sv__line .hljs-strong { font-weight: 700; }
+
+@media (max-width: 720px) {
+  .sv { inset: 12px; }
+}

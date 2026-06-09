@@ -7,6 +7,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal
 } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -48,6 +49,9 @@ export class BeautifulResultsComponent {
   readonly markdown = input<string>('');
   readonly jobId = input<string | null>(null);
   readonly watchPath = input<string | null>(null);
+
+  /** Emitted when the operator clicks a detected source reference. */
+  readonly openSource = output<{ path: string; line: number | null }>();
 
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -102,6 +106,16 @@ export class BeautifulResultsComponent {
     if (copyBtn) {
       event.preventDefault();
       this.copyCodeFor(copyBtn);
+      return;
+    }
+    const sourceBtn = target.closest<HTMLElement>('[data-results-source]');
+    if (sourceBtn) {
+      event.preventDefault();
+      const path = sourceBtn.getAttribute('data-results-source');
+      if (!path) return;
+      const rawLine = sourceBtn.getAttribute('data-results-line');
+      const line = rawLine ? Number.parseInt(rawLine, 10) : NaN;
+      this.openSource.emit({ path, line: Number.isFinite(line) ? line : null });
     }
   }
 

@@ -50,6 +50,7 @@ import type {
 import { ConversationViewComponent } from '../../../../../components/chat/conversation-view/conversation-view.component';
 import { projectConversation } from '../../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import { SourceViewerComponent, type SourceViewerRequest } from '../../source-viewer/source-viewer.component';
 import { MenuComponent } from '../../../../../components/menu';
 import type { MenuItem, MenuItemClickEvent } from '../../../../../components/menu';
 import { deriveProtocolVerdict, stripStatusHeader, type ProtocolVerdict } from '../protocol-verdict';
@@ -111,6 +112,7 @@ interface InterimSummaryState {
     RunGitViewerComponent,
     VerboseDebugOverlayComponent,
     BeautifulResultsComponent,
+    SourceViewerComponent,
     MenuComponent,
     TooltipDirective,
     PaneHeaderComponent,
@@ -312,6 +314,20 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   closeGitViewer(): void {
     this.gitViewerRun.set(null);
+  }
+
+  // Source viewer overlay, opened from a clickable source reference in the
+  // protocol / interim-summary markdown. Held in a signal so re-clicking a
+  // different file/line re-binds the viewer without closing it first.
+  readonly sourceViewerRequest = signal<SourceViewerRequest | null>(null);
+
+  openSource(ref: { path: string; line: number | null }): void {
+    if (!ref?.path) return;
+    this.sourceViewerRequest.set({ path: ref.path, line: ref.line });
+  }
+
+  closeSourceViewer(): void {
+    this.sourceViewerRequest.set(null);
   }
 
   /**

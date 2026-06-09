@@ -310,6 +310,40 @@ $ctp-crust:     #11111b;
   font-style: italic;
 }
 
+/* ---------- Clickable source references ------------------------------ *
+ * A `code`-wrapped repo path the renderer recognised as a source file.
+ * Reads like inline code but tinted + dotted-underlined so it advertises
+ * "click to open in the source viewer". */
+.results-source-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+
+  code {
+    color: $ctp-blue;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    transition: color 0.12s ease, text-decoration-color 0.12s ease;
+  }
+
+  &:hover code,
+  &:focus-visible code {
+    color: $ctp-sapphire;
+    text-decoration-style: solid;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba($ctp-blue, 0.6);
+    outline-offset: 1px;
+    border-radius: 3px;
+  }
+}
+
 /* ---------- Light mode (follows existing app theming) --------------- */
 @media (prefers-color-scheme: light) {
   /* The host app is dark-by-default with Catppuccin Mocha. If a future
