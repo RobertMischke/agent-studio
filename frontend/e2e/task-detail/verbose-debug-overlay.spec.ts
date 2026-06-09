@@ -19,16 +19,15 @@ import { setTheme } from '../helpers/theme';
  *   1. Task Chat workbench → "🐞 Verbose Debug" button in the protocol pane.
  *   2. Project side sheet header bug button when a task tab is in scope.
  *
- * Screenshots land under the running task's `results/` folder (per the
- * project doctrine) so review-relevant evidence stays close to the activity
- * log; `test-results/` is scratch and gets overwritten.
+ * Screenshots land under JOB_RESULTS_DIR during orchestrated task runs so
+ * review-relevant evidence stays close to the activity log; `test-results/`
+ * is scratch and gets overwritten during local development.
  */
 
-const RESULTS_DIR = path.resolve(
-  __dirname,
-  '../../../../agent-taskboard-workspace/projects/agent-taskboard/tasks/000/ASS-894/results'
-);
+const RESULTS_DIR = process.env.JOB_RESULTS_DIR?.trim()
+  || path.resolve(__dirname, '../../test-results/verbose-debug-overlay');
 fs.mkdirSync(RESULTS_DIR, { recursive: true });
+const JOB_RESULTS_DIR = process.env.JOB_RESULTS_DIR?.trim();
 
 interface OutLine { timestamp: string; stream: string; text: string; }
 
@@ -67,7 +66,9 @@ function buildJobDetail(jobId: string, watchPath: string) {
   return {
     info: {
       id: jobId,
+      taskKey: `${watchPath}::${jobId}`,
       jobKey: `${watchPath}::${jobId}`,
+      kind: 'task',
       title: 'Verbose debug spec fixture',
       state: '4-auto-review',
       agent: 'claude',
@@ -102,6 +103,9 @@ function buildJobDetail(jobId: string, watchPath: string) {
     statusMarkdown: null,
     log: [],
     promptHistory: [],
+    titleHistory: [],
+    contextUsage: null,
+    reviewEvidence: [],
     summaryState: { status: 'none', startedAt: null, finishedAt: null, errorMessage: null }
   };
 }
@@ -178,10 +182,56 @@ function buildScreenshots(jobId: string) {
   };
 }
 
+function recordReviewEvidence(): void {
+  if (!JOB_RESULTS_DIR) return;
+
+  fs.appendFileSync(
+    path.join(RESULTS_DIR, 'review-evidence.jsonl'),
+    JSON.stringify({
+      id: 'verbose-debug-overlay-theme-screenshots',
+      source: 'task-check',
+      severity: 'info',
+      title: 'Verbose Debug overlay follows the global light and dark themes',
+      body: 'Playwright opened the overlay from the protocol pane, verified the local theme toggle is absent, switched the global studio theme, and captured the overlay in dark and light mode.',
+      createdAt: new Date().toISOString(),
+      artifacts: [
+        'results/verbose-debug-overlay-overview-dark.png',
+        'results/verbose-debug-overlay-overview-light.png',
+      ],
+    }) + '\n',
+    'utf8',
+  );
+}
+
 async function pickAnyJob(): Promise<{ id: string; watchPath: string } | null> {
   const jobs = await listJobs();
   if (jobs.length === 0) return null;
   return { id: jobs[0].id, watchPath: jobs[0].watchPath };
+}
+
+async function enableNextGenChat(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('atp.flag.nextGenChat', '1');
+      localStorage.removeItem('atp.studio.tabs.v1');
+    } catch { /* ignore */ }
+  });
+}
+
+async function openVerboseDebugFromActivityMenu(page: Page) {
+  const activityTab = page.getByTestId('inspector-tab-activity');
+  await expect(activityTab).toBeVisible({ timeout: 10_000 });
+  await activityTab.click();
+
+  await page.getByTestId('activity-toolbar-menu').click();
+  const debugItem = page.getByTestId('activity-toolbar-menu-item-debug');
+  await expect(debugItem).toBeVisible({ timeout: 5_000 });
+  await expect(debugItem).toBeEnabled();
+  await debugItem.click();
+
+  const overlay = page.getByTestId('verbose-debug-overlay');
+  await expect(overlay).toBeVisible({ timeout: 5_000 });
+  return overlay;
 }
 
 async function installMocks(
@@ -194,25 +244,26 @@ async function installMocks(
   const screenshotsBody = JSON.stringify(buildScreenshots(target.id));
 
   const escId = encodeURIComponent(target.id);
-  await page.route(`**/api/jobs/${escId}?**`, async (route) => {
+  const taskEndpoint = (suffix = '') => new RegExp(`/api/(?:jobs|tasks)/${escId}${suffix}(?:\\?.*)?$`);
+  await page.route(taskEndpoint(''), async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: detailBody });
   });
-  await page.route(`**/api/jobs/${escId}/output?**`, async (route) => {
+  await page.route(taskEndpoint('/output'), async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: outputBody });
   });
-  await page.route(`**/api/jobs/${escId}/runs?**`, async (route) => {
+  await page.route(taskEndpoint('/runs'), async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: runsBody });
   });
-  await page.route(`**/api/jobs/${escId}/screenshots?**`, async (route) => {
+  await page.route(taskEndpoint('/screenshots'), async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: screenshotsBody });
   });
-  await page.route(`**/api/jobs/${escId}/session-events?**`, async (route) => {
+  await page.route(taskEndpoint('/session-events'), async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [], currentSessionId: null }) });
   });
-  await page.route(`**/api/jobs/${escId}/claude/session-info?**`, async (route) => {
+  await page.route(taskEndpoint('/claude/session-info'), async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessionInfo: null, rateLimit: null }) });
   });
-  await page.route(`**/api/jobs/${escId}/git/status?**`, async (route) => {
+  await page.route(taskEndpoint('/git/status'), async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ isRepo: false, branch: null, filesChanged: 0, totalAdded: 0, totalRemoved: 0, files: [], error: null }) });
   });
 }
@@ -224,22 +275,13 @@ test.describe('Verbose Debug overlay - task workbench', () => {
       test.skip(true, 'No jobs on the board to attach mocks to.');
       return;
     }
+    await enableNextGenChat(page);
     await installMocks(page, target);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await setTheme(page, 'dark');
 
-    // Land on the activity tab so the open button is reachable.
-    const activityTab = page.getByTestId('inspector-tab-activity');
-    await expect(activityTab).toBeVisible({ timeout: 10_000 });
-    await activityTab.click();
-
-    const openBtn = page.getByTestId('protocol-open-verbose-debug');
-    await expect(openBtn).toBeVisible({ timeout: 5_000 });
-    await openBtn.click();
-
-    const overlay = page.getByTestId('verbose-debug-overlay');
-    await expect(overlay).toBeVisible({ timeout: 5_000 });
+    const overlay = await openVerboseDebugFromActivityMenu(page);
     await expect(page.getByTestId('verbose-debug-theme-toggle')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', 'dark');
     // Default tab is Overview with run-stat metric populated.
@@ -310,6 +352,7 @@ test.describe('Verbose Debug overlay - task workbench', () => {
       path: path.join(RESULTS_DIR, 'verbose-debug-overlay-overview-light.png'),
       fullPage: false
     });
+    recordReviewEvidence();
 
     // Raw trace routing still works from other tabs: a click on the task-run
     // trace button closes the overlay and hands the range off to the host.
@@ -327,20 +370,12 @@ test.describe('Verbose Debug overlay - task workbench', () => {
       test.skip(true, 'No jobs on the board to attach mocks to.');
       return;
     }
+    await enableNextGenChat(page);
     await installMocks(page, target);
     await page.setViewportSize({ width: 412, height: 880 });
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
 
-    const activityTab = page.getByTestId('inspector-tab-activity');
-    await expect(activityTab).toBeVisible({ timeout: 10_000 });
-    await activityTab.click();
-
-    const openBtn = page.getByTestId('protocol-open-verbose-debug');
-    await expect(openBtn).toBeVisible();
-    await openBtn.click();
-
-    const overlay = page.getByTestId('verbose-debug-overlay');
-    await expect(overlay).toBeVisible();
+    const overlay = await openVerboseDebugFromActivityMenu(page);
 
     // Tabs must be reachable on mobile (single-column layout).
     await page.getByTestId('verbose-debug-tab-actors').click();
@@ -366,6 +401,7 @@ test.describe('Verbose Debug overlay - project side sheet', () => {
       test.skip(true, 'No jobs on the board to attach mocks to.');
       return;
     }
+    await enableNextGenChat(page);
     await installMocks(page, target);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
