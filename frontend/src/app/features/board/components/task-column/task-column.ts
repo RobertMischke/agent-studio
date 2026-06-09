@@ -145,12 +145,15 @@ export class TaskColumnComponent {
     const role = status?.role ?? null;
     const pendingMode = status?.pendingMode ?? null;
     const pendingAfter = status?.pendingModeWillApplyAfter ?? null;
+    const breakerState = status?.breakerState ?? null;
+    const breakerCooldownUntil = status?.breakerCooldownUntil ?? null;
+    const breakerReason = status?.breakerReason ?? null;
 
     // PAUSED kind: explicit `paused` mode OR `manual` mode that was
     // flipped by a circuit-breaker / supervisor. The visible chip is the
     // same in both cases, but the tooltip names the actual cause.
     const isCircuitBreaker =
-      source === 'circuit-breaker' || (reason ?? '').includes('circuit-breaker');
+      source === 'circuit-breaker' || breakerState === 'cooldown' || (reason ?? '').includes('circuit-breaker');
     const isSupervisorPause = source === 'supervisor';
     let modeKind: 'auto' | 'manual' | 'paused';
     let modeLabel: string;
@@ -167,7 +170,11 @@ export class TaskColumnComponent {
       modeKind = 'paused';
       modeLabel = 'PAUSED';
       if (isCircuitBreaker) {
-        modeTooltip = `Auto-pickup paused by circuit-breaker (${reason ?? 'consecutive failures'}). Click the auto toggle to re-enable.`;
+        if (breakerState === 'cooldown') {
+          modeTooltip = `Auto-pickup is cooling down after a circuit-breaker trip (${breakerReason ?? reason ?? 'consecutive failures'}). It will auto-resume${breakerCooldownUntil ? ` at ${this.formatLongDate(breakerCooldownUntil)}` : ' after cooldown'}.`;
+        } else {
+          modeTooltip = `Auto-pickup paused by circuit-breaker (${reason ?? 'consecutive failures'}). Click the auto toggle to re-enable.`;
+        }
       } else if (isSupervisorPause) {
         modeTooltip = `Auto-pickup paused by supervisor (${reason ?? 'supervisor intervention'}). Click the auto toggle to re-enable.`;
       } else {

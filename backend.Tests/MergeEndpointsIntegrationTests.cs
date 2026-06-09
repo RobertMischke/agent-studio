@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services;
 using Xunit;
 
 namespace OrchestratorApi.Tests;

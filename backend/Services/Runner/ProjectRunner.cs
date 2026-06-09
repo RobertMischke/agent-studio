@@ -115,7 +115,7 @@ public class ProjectRunner
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
-    // The single funnel for SYSTEM-initiated moves into 5-human-review (watchdog
+    // The single funnel for SYSTEM-initiated moves into 5e-escalated (watchdog
     // kill, permission/environment block, auto-failure park, pickup zombie). It
     // pairs every move with an Escalate verdict in the decision journal and a
     // status.md stub, so an escalated card never lands verdict-less / blank. DI
@@ -255,7 +255,7 @@ public class ProjectRunner
     private readonly Queue<string> _recentAutoFailureJobIds = new();
 
     // Distinct tasks that have each failed AutoFailureHaltThreshold times and
-    // been parked in 5-human-review. A single bad task is parked and auto-mode
+    // been parked in 5e-escalated. A single bad task is parked and auto-mode
     // CONTINUES with the next task (no project-wide halt on one offender). Only
     // a systemic pattern - AutoFailureDistinctTaskHaltThreshold distinct tasks
     // parked this way without a success in between ("3x3") - flips the project
@@ -279,7 +279,7 @@ public class ProjectRunner
     // reach review, produced no commit, was not a deliberate stop) across BOTH
     // the auto-pickup run and the UserContinue re-issue it spawns - the
     // ping-pong that bypassed every existing breaker. Once a task reaches
-    // QuarantineFailThreshold it is parked in 5-human-review instead of being
+    // QuarantineFailThreshold it is parked in 5e-escalated instead of being
     // re-issued again. Reset on any progress (a new commit) or on reaching
     // review. In-memory by design: a backend restart is a recovery boundary
     // and clears the streak, mirroring the capture-fail breaker above. See
@@ -5308,7 +5308,7 @@ public class ProjectRunner
         => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
 
     /// <summary>Test seam: number of distinct tasks the auto-failure breaker has
-    /// parked in 5-human-review without a success in between - the "3x3"
+    /// parked in 5e-escalated without a success in between - the "3x3"
     /// cooldown counter that temporarily flips the project to manual at
     /// <see cref="AutoFailureDistinctTaskHaltThreshold"/>.</summary>
     internal int GetParkedFailedTaskCountForTest() => _parkedFailedJobIds.Count;
@@ -5317,7 +5317,7 @@ public class ProjectRunner
     /// Auto-failure handling for a finished auto-pickup run that did NOT reach
     /// review and was not a deliberate stop. Park-and-continue: a task that
     /// fails <see cref="AutoFailureHaltThreshold"/> times in a row is parked in
-    /// 5-human-review and auto-mode KEEPS running with the next task; only
+    /// 5e-escalated and auto-mode KEEPS running with the next task; only
     /// when <see cref="AutoFailureDistinctTaskHaltThreshold"/> DISTINCT tasks have
     /// each failed out without a success in between ("3x3") does the project
     /// enter a self-healing cooldown. <paramref name="activeInfo"/> may be null (e.g. in tests):
@@ -5339,19 +5339,14 @@ public class ProjectRunner
         if (sameJobRepeated && IsAutoMode(_mode))
         {
             // QUARANTINE-AND-CONTINUE (not a project-wide halt on one bad task).
-            // Route the offender out of 3-progress into 5-human-review through
+            // Route the offender out of 3-progress into 5e-escalated through
             // the same escalation funnel as other system moves. Only a systemic
             // pattern trips the global cooldown below.
             if (activeInfo != null)
             {
                 _mutations.AddJobTag(jobId, "auto-halted", activeInfo.WatchPath);
-                _ = _humanReviewEscalation.EscalateAsync(
-                    jobId,
-                    activeInfo.WatchPath,
-                    activeInfo.ProjectName,
-                    HumanReviewEscalationCategories.AutoFailurePark,
-                    $"auto-halted: {jobId} did not reach review after {_circuitBreakerOptions.PerTaskFailureThreshold} auto-pickup runs",
-                    CancellationToken.None);
+                var parkReason = $"auto-halted: {jobId} did not reach review after {_circuitBreakerOptions.PerTaskFailureThreshold} auto-pickup runs";
+                _ = EscalateAutoFailureParkAsync(jobId, activeInfo.WatchPath, activeInfo.ProjectName, parkReason);
             }
 
             _parkedFailedJobIds.Add(jobId);
@@ -5364,7 +5359,7 @@ public class ProjectRunner
                 var parked = string.Join(", ", _parkedFailedJobIds);
                 if (activeInfo != null)
                     _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                        $"Auto-mode cooldown: {_parkedFailedJobIds.Count} distinct tasks each failed {_circuitBreakerOptions.PerTaskFailureThreshold}x without reaching review and were moved to human review ({parked}). Looks systemic; the runner will resume automatically after cooldown.");
+                        $"Auto-mode cooldown: {_parkedFailedJobIds.Count} distinct tasks each failed {_circuitBreakerOptions.PerTaskFailureThreshold}x without reaching review and were moved to 5e-escalated ({parked}). Looks systemic; the runner will resume automatically after cooldown.");
                 _logger.LogWarning(
                     "Runner '{Project}' cooling down auto-mode: {Count} distinct tasks failed out (3x{Threshold}): {Parked}",
                     ProjectName, _parkedFailedJobIds.Count, _circuitBreakerOptions.PerTaskFailureThreshold, parked);
@@ -5376,9 +5371,9 @@ public class ProjectRunner
             else if (activeInfo != null)
             {
                 _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                    $"Job '{jobId}' did not reach review after {_circuitBreakerOptions.PerTaskFailureThreshold} runs; moved to human review with tag auto-halted. Auto-mode continues with the next task ({_parkedFailedJobIds.Count}/{AutoFailureDistinctTaskHaltThreshold} distinct tasks quarantined before a systemic cooldown).");
+                    $"Job '{jobId}' did not reach review after {_circuitBreakerOptions.PerTaskFailureThreshold} runs; moved to 5e-escalated with tag auto-halted. Auto-mode continues with the next task ({_parkedFailedJobIds.Count}/{AutoFailureDistinctTaskHaltThreshold} distinct tasks quarantined before a systemic cooldown).");
                 _logger.LogWarning(
-                    "Runner '{Project}' moved '{JobId}' to human-review after {N} failures; auto-mode continues ({Count}/{Halt} distinct quarantined).",
+                    "Runner '{Project}' moved '{JobId}' to 5e-escalated after {N} failures; auto-mode continues ({Count}/{Halt} distinct quarantined).",
                     ProjectName, jobId, _circuitBreakerOptions.PerTaskFailureThreshold, _parkedFailedJobIds.Count, AutoFailureDistinctTaskHaltThreshold);
             }
         }
@@ -5393,6 +5388,38 @@ public class ProjectRunner
                 ProjectName, _consecutiveAutoFailureCount);
             _consecutiveAutoFailureCount = 0;
             _recentAutoFailureJobIds.Clear();
+        }
+    }
+
+    private async Task EscalateAutoFailureParkAsync(string jobId, string watchPath, string projectName, string parkReason)
+    {
+        try
+        {
+            var outcome = await _humanReviewEscalation.EscalateAsync(
+                jobId,
+                watchPath,
+                projectName,
+                HumanReviewEscalationCategories.AutoFailurePark,
+                parkReason,
+                CancellationToken.None);
+            if (outcome.Status == MoveJobStatus.Success && !string.IsNullOrWhiteSpace(outcome.NewFolderPath))
+            {
+                _timeline?.Append(
+                    outcome.NewFolderPath!,
+                    TimelineEventKinds.OrchestratorEscalated,
+                    TimelineActors.Orchestrator,
+                    parkReason,
+                    details: new()
+                    {
+                        ["category"] = HumanReviewEscalationCategories.AutoFailurePark,
+                        ["tag"] = "auto-halted",
+                        ["threshold"] = _circuitBreakerOptions.PerTaskFailureThreshold.ToString(CultureInfo.InvariantCulture),
+                    });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auto-failure park escalation crashed for {Project}/{JobId}", ProjectName, jobId);
         }
     }
 
@@ -5434,7 +5461,7 @@ public class ProjectRunner
         _logger.LogWarning(
             "Runner '{Project}' global circuit breaker cooling down until {Until:o} after trip {TripCount}: {Reason}",
             ProjectName, _globalBreakerCooldownUntil, _globalBreakerTripCount, reason);
-        SetMode("manual", $"auto-failure cooldown: {reason}; resumes at {_globalBreakerCooldownUntil:O}");
+        SetMode("manual", $"auto-failure circuit-breaker cooldown: {reason}; resumes at {_globalBreakerCooldownUntil:O}");
     }
 
     private void TryAutoResumeGlobalBreaker()
@@ -5458,6 +5485,9 @@ public class ProjectRunner
     /// decision.</summary>
     internal void RecordAutoPickupFailureForTest(string jobId, TaskInfo? activeInfo = null)
         => HandleAutoPickupFailure(jobId, activeInfo);
+
+    internal void RecordRateLimitAutoPickupFailureForTest(string jobId, TaskInfo? activeInfo = null)
+        => ScheduleGlobalBreakerCooldown($"rate-limit or transient CLI quota failure on '{jobId}'", activeInfo);
 
     internal void ForceGlobalBreakerCooldownElapsedForTest()
     {
@@ -5508,7 +5538,7 @@ public class ProjectRunner
     {
         var info = _scanner.FindJob(jobId, Entry.Path);
         // A job that moved out of 3-progress (e.g. quarantined in
-        // 5-human-review by HandleAutoPickupFailure) is no longer a
+        // 5e-escalated by HandleAutoPickupFailure) is no longer a
         // resume candidate, so there is nothing to count.
         if (info == null || info.State != TaskStates.Progress) return;
 
@@ -5593,7 +5623,7 @@ public class ProjectRunner
                 // mode flip also short-circuits the next TickAsync via the
                 // "manual" gate at the head of the tick, so this guard is
                 // mid-iteration only. A task-shaped or zombie escalation does
-                // not pause: the folder leaves the loop (5-human-review), so we
+                // not pause: the folder leaves the loop (5e-escalated), so we
                 // simply continue to the next candidate.
                 if (pausedDuringReroute) return null;
                 continue;

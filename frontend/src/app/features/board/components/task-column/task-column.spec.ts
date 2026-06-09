@@ -131,6 +131,26 @@ describe('TaskColumnComponent (smoke)', () => {
     expect(cluster!.running!.jobId).toBe('task-7');
   });
 
+  it('cluster: circuit-breaker cooldown tooltip includes auto-resume time', async () => {
+    const fixture = await buildColumn({
+      mode: 'manual',
+      status: makeStatus({
+        mode: 'manual',
+        modeReason: 'auto-failure circuit-breaker cooldown: rate-limit; resumes at 2026-05-27T15:20:00Z',
+        modeSource: 'circuit-breaker',
+        breakerState: 'cooldown',
+        breakerReason: 'rate-limit or transient CLI quota failure',
+        breakerCooldownUntil: '2026-05-27T15:20:00Z'
+      })
+    });
+
+    const cluster = fixture.componentInstance.statusCluster();
+    expect(cluster!.mode.kind).toBe('paused');
+    expect(cluster!.mode.tooltip).toContain('auto-resume');
+    expect(cluster!.mode.tooltip).toContain('rate-limit');
+    expect(cluster!.mode.tooltip).toContain('2026-05-27');
+  });
+
   it('cluster: mode=manual without circuit-breaker reason renders as MANUAL', async () => {
     const fixture = await buildColumn({
       mode: 'manual',

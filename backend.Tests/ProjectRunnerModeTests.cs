@@ -216,12 +216,12 @@ public sealed class ProjectRunnerModeTests : IDisposable
 
     /// <summary>
     /// Quarantine destination: a task that fails out is MOVED out of
-    /// 3-progress into 5-human-review through the escalation funnel, and the
+    /// 3-progress into 5e-escalated through the escalation funnel, and the
     /// project stays auto so the next Ready task is picked up. The move runs
     /// fire-and-forget, so the assertion polls the on-disk lane folder.
     /// </summary>
     [Fact]
-    public async Task AutoFailure_SingleTaskFailsOut_MovesToHumanReviewAndKeepsAuto()
+    public async Task AutoFailure_SingleTaskFailsOut_MovesToEscalatedAndKeepsAuto()
     {
         WriteJob(TaskStates.Progress, "job-a");
         var runner = BuildRunner();
@@ -239,14 +239,21 @@ public sealed class ProjectRunnerModeTests : IDisposable
         for (var i = 0; i < ProjectRunner.AutoFailureHaltThreshold; i++)
             runner.RecordAutoPickupFailureForTest("job-a", info);
 
-        var movedToReview = await WaitForFolderAsync(TaskStates.HumanReview, "job-a");
-        Assert.True(movedToReview, "expected 'job-a' to be moved into 5-human-review");
+        var movedToEscalated = await WaitForFolderAsync(TaskStates.Escalated, "job-a");
+        Assert.True(movedToEscalated, "expected 'job-a' to be moved into 5e-escalated");
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "job-a")),
             "expected 'job-a' to have left 3-progress");
         Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.CodeNotComplete, "job-a")),
             "quarantine must not route into 3b-code-not-complete");
-        var movedJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.HumanReview, "job-a", "task.json"));
+        var movedJson = File.ReadAllText(Path.Combine(_watchPath, TaskStates.Escalated, "job-a", "task.json"));
         Assert.Contains("auto-halted", movedJson);
+        var movedFolder = Path.Combine(_watchPath, TaskStates.Escalated, "job-a");
+        var timelineEvent = await WaitForTimelineEventAsync(movedFolder, TimelineEventKinds.OrchestratorEscalated);
+        Assert.NotNull(timelineEvent);
+        Assert.Equal(TimelineActors.Orchestrator, timelineEvent!.Actor);
+        Assert.Contains("auto-halted", timelineEvent.Summary);
+        Assert.Equal(HumanReviewEscalationCategories.AutoFailurePark, timelineEvent.Details?["category"]);
+        Assert.Equal("auto-halted", timelineEvent.Details?["tag"]);
         Assert.Equal(1, runner.GetParkedFailedTaskCountForTest());
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
     }
@@ -278,6 +285,8 @@ public sealed class ProjectRunnerModeTests : IDisposable
         Assert.Equal("cooldown", runner.GetStatus().BreakerState);
         Assert.NotNull(runner.GetStatus().BreakerCooldownUntil);
         Assert.Contains("distinct tasks failed out", runner.GetStatus().BreakerReason);
+        Assert.Equal("circuit-breaker", runner.GetStatus().ModeSource);
+        Assert.Contains("circuit-breaker cooldown", runner.GetStatus().ModeReason);
     }
 
     [Fact]
@@ -295,6 +304,26 @@ public sealed class ProjectRunnerModeTests : IDisposable
         Assert.Equal("manual", runner.GetStatus().Mode);
         runner.ForceGlobalBreakerCooldownElapsedForTest();
 
+        await runner.TickAsync(CancellationToken.None);
+
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.Null(runner.GetStatus().BreakerState);
+    }
+
+    [Fact]
+    public async Task AutoFailure_RateLimitCluster_CoolsDownWithoutQuarantiningTask()
+    {
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        runner.RecordRateLimitAutoPickupFailureForTest("job-a");
+
+        Assert.Equal(0, runner.GetParkedFailedTaskCountForTest());
+        Assert.Equal("manual", runner.GetStatus().Mode);
+        Assert.Equal("cooldown", runner.GetStatus().BreakerState);
+        Assert.Contains("rate-limit", runner.GetStatus().BreakerReason);
+
+        runner.ForceGlobalBreakerCooldownElapsedForTest();
         await runner.TickAsync(CancellationToken.None);
 
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
@@ -324,6 +353,45 @@ public sealed class ProjectRunnerModeTests : IDisposable
     public void AutoFailureDistinctTaskHaltThreshold_Is3()
         => Assert.Equal(3, ProjectRunner.AutoFailureDistinctTaskHaltThreshold);
 
+    [Fact]
+    public void RunnerCircuitBreakerOptions_FromConfig_LoadsThresholdCooldownAndBackoff()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Runner:CircuitBreaker:PerTaskFailureThreshold"] = "2",
+                ["Runner:CircuitBreaker:GlobalCooldownMinutes"] = "5",
+                ["Runner:CircuitBreaker:GlobalCooldownBackoffMultiplier"] = "3",
+                ["Runner:CircuitBreaker:GlobalCooldownMaxMinutes"] = "25",
+            })
+            .Build();
+
+        var options = RunnerCircuitBreakerOptions.FromConfig(config);
+
+        Assert.Equal(2, options.PerTaskFailureThreshold);
+        Assert.Equal(TimeSpan.FromMinutes(5), options.GlobalCooldownBase);
+        Assert.Equal(3.0, options.GlobalCooldownBackoffMultiplier);
+        Assert.Equal(TimeSpan.FromMinutes(25), options.GlobalCooldownMax);
+    }
+
+    [Fact]
+    public void AutoFailure_ConfiguredPerTaskThreshold_ParksAtConfiguredCount()
+    {
+        var runner = BuildRunner(configOverrides: new Dictionary<string, string?>
+        {
+            ["Runner:CircuitBreaker:PerTaskFailureThreshold"] = "2",
+        });
+        runner.SetMode("auto-continuous");
+
+        runner.RecordAutoPickupFailureForTest("job-a");
+        Assert.Equal(0, runner.GetParkedFailedTaskCountForTest());
+
+        runner.RecordAutoPickupFailureForTest("job-a");
+
+        Assert.Equal(1, runner.GetParkedFailedTaskCountForTest());
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+    }
+
     private void WriteJob(string state, string slug)
     {
         var dir = Path.Combine(_watchPath, state, slug);
@@ -347,17 +415,37 @@ public sealed class ProjectRunnerModeTests : IDisposable
         return Directory.Exists(target);
     }
 
-    private ProjectRunner BuildRunner(ILogger? logger = null)
+    private async Task<TimelineEvent?> WaitForTimelineEventAsync(string folder, string kind, int timeoutMs = 5000)
     {
+        var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            var evt = timeline.ReadAll(folder).LastOrDefault(e => e.Kind == kind);
+            if (evt != null) return evt;
+            await Task.Delay(25);
+        }
+        return timeline.ReadAll(folder).LastOrDefault(e => e.Kind == kind);
+    }
+
+    private ProjectRunner BuildRunner(ILogger? logger = null, Dictionary<string, string?>? configOverrides = null)
+    {
+        var configValues = new Dictionary<string, string?>
+        {
+            ["WatchPaths:0:Name"] = ProjectName,
+            ["WatchPaths:0:Path"] = _watchPath,
+            ["WatchPaths:0:RootPath"] = _watchPath,
+            ["WatchPaths:0:RepositoryPath"] = _watchPath,
+            ["TaskRepository"] = _workspaceRoot
+        };
+        if (configOverrides != null)
+        {
+            foreach (var item in configOverrides)
+                configValues[item.Key] = item.Value;
+        }
+
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["WatchPaths:0:Name"] = ProjectName,
-                ["WatchPaths:0:Path"] = _watchPath,
-                ["WatchPaths:0:RootPath"] = _watchPath,
-                ["WatchPaths:0:RepositoryPath"] = _watchPath,
-                ["TaskRepository"] = _workspaceRoot
-            })
+            .AddInMemoryCollection(configValues)
             .Build();
 
         var entry = new WatchPathEntry
@@ -408,13 +496,17 @@ public sealed class ProjectRunnerModeTests : IDisposable
         var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
         var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
 
-        return new ProjectRunner(
+        var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+        var runner = new ProjectRunner(
             ProjectName, entry,
             logger ?? NullLogger<ProjectRunner>.Instance,
             scanner, states, sessions, router,
             summary, prompts, transitions, chatLog, mutations,
             orchestratorLog, orchestratorRunner, orchestratorSessions,
-            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess, bus: null);
+            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess, bus: null,
+            timeline: timeline);
+        runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(config));
+        return runner;
     }
 
     /// <summary>
