@@ -5,6 +5,9 @@ frontend/build_log.txt
 .api.*.log
 .frontend.*.pid
 .frontend.*.log
+# ASS-1715: isolated per-worktree test stack state (ports env, frontend pid/log,
+# isolated-workspace pointer). Runtime only; never committed.
+.worktree-test-stack/
 .orchestrator/
 .claude/
 # tools/ holds local binary tooling (PtyProbe, etc.). Use tools/* so we can

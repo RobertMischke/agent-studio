@@ -81,6 +81,7 @@ The root agent navigation card lives in [AGENTS.md](../AGENTS.md). Domain maps b
 | [setup/onboard-an-agent-cli.md](setup/onboard-an-agent-cli.md) | Per-CLI install / config / quirks (Claude, Codex, Copilot, Gemini). Includes the load-bearing Codex Windows-sandbox quirk and the cross-CLI sentinel-awareness note. |
 | [setup/your-first-task.md](setup/your-first-task.md) | "Project Overview Doc" pattern as a good first task, anti-patterns, where to watch the run, pointer to the Job API skill for scripted creation. |
 | [setup/troubleshooting.md](setup/troubleshooting.md) | FAQ-style: sandbox-only errors, auto-mode flip to manual, two jobs in 3-progress, missing-terminal-sentinel, crash-recovery auto-commits, `watchPath` quirk on the API. |
+| [setup/worktree-test-stack.md](setup/worktree-test-stack.md) | Isolated per-worktree test stack on dynamic free ports: `scripts/worktree-test-stack.sh` (`up`/`down`/`env`/`status`), the free-port allocator, the dynamic dev-server proxy, the `api.sh` worktree-backend guard, and the no-shared-workspace safety invariants. |
 
 ## Process surfaces (what each app surface owns)
 

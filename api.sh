@@ -174,7 +174,9 @@ cmd_start() {
   case "$(basename "${SCRIPT_DIR}")" in
     *-stable) ;;
     *)
-      if [[ "${ATP_DEV_BACKEND_FROM_FIXTURE:-}" != "1" && "${ATP_ALLOW_DEV_BACKEND:-}" != "1" ]]; then
+      if [[ "${ATP_DEV_BACKEND_FROM_FIXTURE:-}" != "1" \
+         && "${ATP_ALLOW_DEV_BACKEND:-}" != "1" \
+         && "${ATP_WORKTREE_TEST_BACKEND:-}" != "1" ]]; then
         echo "ERROR: refusing to start the dev backend." >&2
         echo "       AGENTS.md 'Dev backend lifecycle: Playwright-only' (ADR-0044) says the dev" >&2
         echo "       checkout is offline by default. The only path that may bring it up is the" >&2
@@ -184,9 +186,29 @@ cmd_start() {
         echo "       To boot dev manually for interactive debugging, re-run with" >&2
         echo "       ATP_ALLOW_DEV_BACKEND=1 set in the environment as a policy acknowledgement:" >&2
         echo "         ATP_ALLOW_DEV_BACKEND=1 ./api.sh start" >&2
+        echo "" >&2
+        echo "       To boot an ISOLATED worktree test backend on a dynamic port, use" >&2
+        echo "       scripts/worktree-test-stack.sh (sets ATP_WORKTREE_TEST_BACKEND=1 +" >&2
+        echo "       an isolated TaskRepository)." >&2
         exit 1
       fi
-      if [[ "${ATP_DEV_BACKEND_FROM_FIXTURE:-}" == "1" ]]; then
+      if [[ "${ATP_WORKTREE_TEST_BACKEND:-}" == "1" ]]; then
+        # ASS-1715: isolated per-worktree test backend on a dynamic port. The
+        # dev-backend gate exists to stop a SECOND pickup driver from booting on
+        # the SHARED workspace. A worktree test backend is only safe when it
+        # points at an isolated workspace, so refuse unless TaskRepository is set
+        # to an isolated path (the lifecycle script always points it at a unique
+        # temp dir). This mirrors the in-process xunit isolation guard in
+        # backend/Program.cs.
+        if [[ -z "${TaskRepository:-}" ]]; then
+          echo "ERROR: ATP_WORKTREE_TEST_BACKEND=1 requires an isolated TaskRepository." >&2
+          echo "       Refusing to boot a worktree test backend against the shared workspace." >&2
+          echo "       Set TaskRepository to a dedicated temp dir (scripts/worktree-test-stack.sh" >&2
+          echo "       does this for you)." >&2
+          exit 1
+        fi
+        echo "[api.sh] worktree test backend boot: isolated TaskRepository=${TaskRepository} on :${PORT}."
+      elif [[ "${ATP_DEV_BACKEND_FROM_FIXTURE:-}" == "1" ]]; then
         echo "[api.sh] dev backend boot: Playwright fixture (ATP_DEV_BACKEND_FROM_FIXTURE=1)."
       else
         echo "[api.sh] dev backend boot: operator acknowledged (ATP_ALLOW_DEV_BACKEND=1)."
