@@ -24,9 +24,33 @@
   // that cap and pushing time / tokens / cost to the far edge.
   --ov-pipeline-name-col: fit-content(360px);
   --ov-pipeline-meta-col: minmax(0, max-content);
+  // Slack-absorbing track between the step metadata and the right-pinned
+  // metric block. Every step is its own grid; without one flexible track the
+  // grid left-packs and the leftover space lands AFTER cost, so the
+  // Time / Duration / Tokens / Cost block sits at a different x on each row
+  // (the "krumm und schief" misalignment). A single `1fr` here eats the
+  // remainder identically on every row, anchoring the metric columns to one
+  // shared right edge across all phase groups.
+  --ov-pipeline-flex-col: minmax(0, 1fr);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
   --ov-pipeline-cost-col: 64px;
+
+  // Single source of truth for the per-step / header grid. Header and step
+  // rows are separate grids; sharing this one template (not redefining tracks
+  // per row) is what keeps the columns aligned. Container queries below drop
+  // trailing tracks from this list on narrow panes.
+  --ov-pl-grid-cols:
+    var(--ov-pipeline-status-col)
+    var(--ov-pipeline-kind-col)
+    var(--ov-pipeline-name-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-meta-col)
+    var(--ov-pipeline-flex-col)
+    var(--ov-pipeline-time-col)
+    var(--ov-pipeline-tokens-col)
+    var(--ov-pipeline-cost-col);
 
   padding: var(--studio-spacing-2) var(--studio-spacing-4);
   display: flex;
@@ -509,6 +533,12 @@
   gap: 1px;
   width: 100%;
   max-width: 100%;
+  // Drive the metric-column responsiveness off the pipeline's own width, not
+  // the viewport: this block lives inside a split task-detail pane whose width
+  // is independent of the window. Descendant header/step rows query this via
+  // the `@container ov-pipeline` rules at the bottom of the grid block.
+  container-type: inline-size;
+  container-name: ov-pipeline;
 }
 
 .ov-pl-phase {
@@ -589,17 +619,7 @@
 // uppercase captions in the label idiom used elsewhere in this panel.
 .ov-pl-header {
   display: grid;
-  grid-template-columns:
-    var(--ov-pipeline-status-col)
-    var(--ov-pipeline-kind-col)
-    var(--ov-pipeline-name-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-time-col)
-    var(--ov-pipeline-tokens-col)
-    var(--ov-pipeline-cost-col);
+  grid-template-columns: var(--ov-pl-grid-cols);
   align-items: baseline;
   column-gap: var(--studio-spacing-1);
   padding-block: var(--studio-row-pad-block);
@@ -656,17 +676,7 @@
   --ov-pl-phase-accent: var(--studio-accent-2);
 
   display: grid;
-  grid-template-columns:
-    var(--ov-pipeline-status-col)
-    var(--ov-pipeline-kind-col)
-    var(--ov-pipeline-name-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-meta-col)
-    var(--ov-pipeline-time-col)
-    var(--ov-pipeline-tokens-col)
-    var(--ov-pipeline-cost-col);
+  grid-template-columns: var(--ov-pl-grid-cols);
   align-items: center;
   column-gap: var(--studio-spacing-1);
   max-width: 100%;
