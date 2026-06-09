@@ -157,6 +157,22 @@ public static class TaskGitEndpoints
                 : Results.BadRequest(new { error = result.Error ?? "Could not load diff." });
         });
 
+        // Commit-provenance & landed-state (ASS-1724). Returns the persisted
+        // append-only provenance facts plus everything derived live off the
+        // graph: the landed-state (on-branch-only / merged-to-develop /
+        // released-to-main via merge-base --is-ancestor), the landed ladder
+        // (task/<id> -> develop @sha -> main @sha with "HEAD now"), and per-commit
+        // branch membership. Recomputed on every read so it never lies about
+        // where develop / main currently are.
+        group.MapGet("/{jobId}/provenance", (
+            string jobId, string? watchPath,
+            TaskScannerService scanner, TaskProvenanceService provenance) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            return Results.Ok(provenance.BuildView(info));
+        });
+
         // Per-job hygiene: project-level snapshot overlaid with whether the
         // job carries a platform-owned commit stamp and whether accepted task
         // work appears uncommitted. The job-detail review/completed strip

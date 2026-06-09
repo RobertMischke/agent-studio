@@ -549,3 +549,127 @@
   color: var(--severity-info);
   border: 1px solid color-mix(in srgb, var(--severity-info) 30%, var(--studio-border));
 }
+
+/*
+ * Commit-provenance landed-ladder (ASS-1724). A compact, text-only strip
+ * (no menu icons) showing the task's overall landed state plus the
+ * task/<id> -> develop -> main rungs with each rung's live HEAD sha and a
+ * reached/pending marker. Below it, per-commit branch membership tells the
+ * operator which commits are still task-only vs already on develop/main.
+ */
+.git-view__landed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-spacing-1);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-elevated);
+}
+.git-view__landed-head {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+}
+.git-view__landed-state {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--studio-border);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+}
+.git-view__landed-state[data-state='merged-to-develop'] {
+  background: color-mix(in srgb, var(--severity-info) 16%, var(--studio-bg-elevated));
+  color: var(--severity-info);
+  border-color: color-mix(in srgb, var(--severity-info) 30%, var(--studio-border));
+}
+.git-view__landed-state[data-state='released-to-main'] {
+  background: color-mix(in srgb, var(--severity-pass) 16%, var(--studio-bg-elevated));
+  color: var(--severity-pass);
+  border-color: color-mix(in srgb, var(--severity-pass) 30%, var(--studio-border));
+}
+.git-view__ladder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  font-size: 12px;
+}
+.git-view__ladder-rung {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--studio-fg-dim);
+}
+.git-view__ladder-rung--reached { color: var(--studio-fg-strong); }
+.git-view__ladder-arrow {
+  color: var(--studio-fg-muted);
+  margin-right: 2px;
+}
+.git-view__ladder-name {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+.git-view__ladder-sha {
+  font-family: var(--font-mono, monospace);
+  color: var(--studio-accent);
+}
+.git-view__ladder-flag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg-muted);
+}
+.git-view__ladder-rung--reached .git-view__ladder-flag { color: var(--severity-pass); }
+.git-view__membership {
+  list-style: none;
+  margin: 0;
+  padding: var(--studio-spacing-1) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--studio-border);
+}
+.git-view__membership-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  font-size: 11px;
+}
+.git-view__membership-sha {
+  font-family: var(--font-mono, monospace);
+  color: var(--studio-accent);
+  flex: 0 0 auto;
+}
+.git-view__membership-where {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0 5px;
+  border-radius: 6px;
+  border: 1px solid var(--studio-border);
+  color: var(--studio-fg-dim);
+  flex: 0 0 auto;
+}
+.git-view__membership-where[data-membership='on develop'] {
+  color: var(--severity-info);
+  border-color: color-mix(in srgb, var(--severity-info) 30%, var(--studio-border));
+}
+.git-view__membership-where[data-membership='on main'] {
+  color: var(--severity-pass);
+  border-color: color-mix(in srgb, var(--severity-pass) 30%, var(--studio-border));
+}
+.git-view__membership-subject {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--studio-fg-dim);
+}

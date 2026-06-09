@@ -372,7 +372,8 @@ public class TaskScannerService : ITaskScanner
                 Phase = ReadPhase(raw, resolvedState, jobDir),
                 TaskType = ReadTaskType(raw),
                 Tags = ReadTags(raw),
-                References = ReadReferences(raw)
+                References = ReadReferences(raw),
+                Provenance = ReadProvenance(raw)
             };
         }
         catch (Exception ex)
@@ -710,6 +711,24 @@ public class TaskScannerService : ITaskScanner
         catch
         {
             return new TaskReferences();
+        }
+    }
+
+    /// <summary>
+    /// Reads the append-only <c>provenance</c> object (ASS-1724) if present.
+    /// Returns null on legacy <c>task.json</c> files that predate the field.
+    /// </summary>
+    private static TaskProvenance? ReadProvenance(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("provenance", out var prov) || prov.ValueKind != JsonValueKind.Object)
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<TaskProvenance>(prov.GetRawText(), TaskJsonFile.ReadOpts);
+        }
+        catch
+        {
+            return null;
         }
     }
 

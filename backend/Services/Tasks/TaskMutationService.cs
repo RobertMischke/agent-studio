@@ -436,6 +436,22 @@ public class TaskMutationService
         return Updated();
     }
 
+    /// <summary>
+    /// Application-owned write of the append-only <c>provenance</c> object on a
+    /// job's <c>task.json</c> (ASS-1724). The caller
+    /// (<see cref="TaskProvenanceService"/>) owns the append semantics - it reads
+    /// the current provenance off <see cref="TaskInfo"/>, adds one transition, and
+    /// hands the merged record here for a replace-all write. Folder-only
+    /// invalidation: provenance is not surfaced on the kanban card, so no SignalR
+    /// push is needed; the read endpoint pulls it fresh on demand.
+    /// </summary>
+    public bool SetProvenanceOnFolder(string folderPath, TaskProvenance provenance)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        TaskJsonFile.UpdateField(folderPath, "provenance", provenance, _logger);
+        return Updated();
+    }
+
     public string? CreateJob(CreateJobRequest req)
     {
         var watchPaths = _scanner.GetWatchPaths();

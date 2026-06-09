@@ -23,6 +23,7 @@ public sealed class TaskTransitionService
     private readonly OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner? _mergeRunner;
     private readonly CliRouter? _cliRouter;
     private readonly IAutoReviewPostProcessingQueue? _autoReviewQueue;
+    private readonly TaskProvenanceService? _provenance;
 
     /// <summary>
     /// Fires after a successful folder move with the resolved project name,
@@ -48,7 +49,8 @@ public sealed class TaskTransitionService
         OrchestratorApi.Services.Drift.DriftPostStepRunner? driftRunner = null,
         CliRouter? cliRouter = null,
         IAutoReviewPostProcessingQueue? autoReviewQueue = null,
-        OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner? mergeRunner = null)
+        OrchestratorApi.Services.Pipeline.MergeIntoDevelopRunner? mergeRunner = null,
+        TaskProvenanceService? provenance = null)
     {
         _scanner = scanner;
         _states = states;
@@ -62,6 +64,7 @@ public sealed class TaskTransitionService
         _cliRouter = cliRouter;
         _autoReviewQueue = autoReviewQueue;
         _mergeRunner = mergeRunner;
+        _provenance = provenance;
     }
 
     /// <summary>
@@ -180,6 +183,18 @@ public sealed class TaskTransitionService
 
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
         {
+            // ASS-1724: the ONE commit-provenance recording hook. Anchor the
+            // task/<id> tip + integration head at this lane crossing so the board
+            // can graph "where does this work live" historically. Best-effort and
+            // fully guarded inside the service - it runs after the move has landed,
+            // so it can never undo the transition. Re-find post-move so the record
+            // is written to the folder's new location with fresh provenance.
+            if (_provenance != null)
+            {
+                var anchored = _scanner.FindJob(jobId, watchPath);
+                if (anchored != null) _provenance.RecordTransition(anchored, targetState);
+            }
+
             if (targetState == TaskStates.Completed && autoPushStrategy != AutoPushStrategies.Never && !isReadOnly)
             {
                 var moved = _scanner.FindJob(jobId, watchPath);

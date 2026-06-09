@@ -28,7 +28,7 @@ import type {
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
-import type { GitFileChange, GitStatus, TaskCommitDetail } from '../features/git';
+import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
 import type {
   OrchestratorLogResponse,
   OrchestratorSessionResponse,
@@ -911,6 +911,18 @@ export class TaskService {
     return this.http.post<{ message: string }>(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/git/generate-message`,
       {},
+      this.withWatchPath(watchPath),
+    );
+  }
+
+  /**
+   * Commit-provenance & landed-state (ASS-1724). Persisted append-only facts
+   * plus the live graph-derived landed-state, ladder, and per-commit membership.
+   * Recomputed server-side on every call so it tracks develop/main as they move.
+   */
+  getTaskProvenance(jobId: string, watchPath?: string) {
+    return this.http.get<TaskProvenanceView>(
+      `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/provenance`,
       this.withWatchPath(watchPath),
     );
   }

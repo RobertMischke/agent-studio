@@ -240,6 +240,16 @@ public record TaskInfo
     /// validation (keys must exist, no self-reference, dependsOn stays a DAG).
     /// </summary>
     public TaskReferences References { get; init; } = new();
+
+    /// <summary>
+    /// Append-only commit-provenance record (ASS-1724): the task's worktree
+    /// branch, its fork-point base, the per-lane-transition anchors, and the
+    /// develop-merge block. Written by the single recording hook in
+    /// <c>TaskTransitionService.MoveAsync</c>; the derived landed-state is NOT
+    /// stored here but recomputed live by the provenance read endpoint. Null on
+    /// legacy <c>task.json</c> files that predate the field.
+    /// </summary>
+    public TaskProvenance? Provenance { get; init; }
 }
 
 public record TaskOutcomeIssue

@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
-import type { TaskCommitInfo } from '../../../../git';
+import type { TaskCommitInfo, TaskCommitMembership, TaskProvenanceView } from '../../../../git';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 import { formatCompactDateTime, formatDateTime } from '../../../../../services/format.util';
@@ -213,6 +213,55 @@ export class GitPaneComponent {
         : 'Legacy attribution (pre-rule-engine)';
     const pct = this.confidencePercent(entry);
     return pct ? `${kind} · confidence ${pct}` : kind;
+  }
+
+  // --- Commit-provenance / landed-state (ASS-1724) ----------------------
+  // The landed ladder (task/<id> -> develop -> main) and per-commit branch
+  // membership are derived live off the git graph by the backend and read
+  // through git.provenance(). Labels are text-only per the slice's UI rule.
+
+  /** Short-SHA display; em-dash placeholder when a rung has no resolved HEAD. */
+  short(sha: string | null | undefined): string {
+    if (!sha) return '—';
+    return sha.length > 7 ? sha.slice(0, 7) : sha;
+  }
+
+  /** Human label for the task's overall landed state. */
+  landedStateLabel(state: string): string {
+    switch (state) {
+      case 'released-to-main': return 'Released to main';
+      case 'merged-to-develop': return 'Merged to develop';
+      case 'on-branch-only': return 'On task branch only';
+      default: return 'Landed state unknown';
+    }
+  }
+
+  /** Spells out where the task's work currently lives across the ladder. */
+  landedStateTooltip(prov: TaskProvenanceView): string {
+    const l = prov.ladder;
+    switch (prov.landedState) {
+      case 'released-to-main':
+        return `This task's work is contained in ${l.releaseBranch} (${this.short(l.releaseHead)}).`;
+      case 'merged-to-develop':
+        return `This task's work is contained in ${l.integrationBranch} (${this.short(l.integrationHead)}) but not yet in ${l.releaseBranch}.`;
+      default:
+        return `This task's commits live only on ${l.branch} (${this.short(l.branchTip)}); not yet merged into ${l.integrationBranch}.`;
+    }
+  }
+
+  /** Where a single commit currently lives, furthest rung first. */
+  membershipLabel(m: TaskCommitMembership): string {
+    if (m.alsoOnRelease) return 'on main';
+    if (m.alsoOnIntegration) return 'on develop';
+    return 'task only';
+  }
+
+  /** Hover detail listing every branch a commit is reachable from. */
+  membershipTooltip(m: TaskCommitMembership, prov: TaskProvenanceView): string {
+    const where: string[] = [prov.ladder.branch];
+    if (m.alsoOnIntegration) where.push(prov.ladder.integrationBranch);
+    if (m.alsoOnRelease) where.push(prov.ladder.releaseBranch);
+    return `${m.shortSha} present on: ${where.join(', ')}`;
   }
 }
 

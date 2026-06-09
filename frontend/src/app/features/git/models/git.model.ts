@@ -100,3 +100,61 @@ export interface TaskCommitDetail {
   commit: TaskCommitInfo | null;
   files: GitFileChange[];
 }
+
+/**
+ * Commit-provenance & landed-state (ASS-1724). The derived view returned by
+ * `GET /api/tasks/{id}/provenance`: persisted append-only facts (branch, base,
+ * transitions, merge) plus everything recomputed live off the git graph
+ * (landedState, ladder, per-commit membership). Never persisted; always read
+ * fresh because develop/main move under it.
+ */
+export type LandedState = 'on-branch-only' | 'merged-to-develop' | 'released-to-main';
+
+export interface TaskProvenanceTransition {
+  lane: string;
+  atUtc: string;
+  branchTip: string | null;
+  workBranchHead: string | null;
+}
+
+export interface TaskProvenanceMerge {
+  mergeCommit: string | null;
+  workBranchHeadBefore: string | null;
+  workBranchHeadAfter: string | null;
+  atUtc: string;
+}
+
+/**
+ * The landed-ladder rungs: task/<id> -> develop @sha -> main @sha, each with
+ * the live "HEAD now" SHA and whether the task's work has reached that rung.
+ */
+export interface TaskLandedLadder {
+  branch: string;
+  branchTip: string | null;
+  integrationBranch: string;
+  integrationHead: string | null;
+  mergedToIntegration: boolean;
+  releaseBranch: string;
+  releaseHead: string | null;
+  releasedToRelease: boolean;
+}
+
+/** One commit in the task's merge-set with its branch membership. */
+export interface TaskCommitMembership {
+  sha: string;
+  shortSha: string;
+  message: string;
+  onTaskBranch: boolean;
+  alsoOnIntegration: boolean;
+  alsoOnRelease: boolean;
+}
+
+export interface TaskProvenanceView {
+  branch: string;
+  base: string | null;
+  transitions: TaskProvenanceTransition[];
+  merge: TaskProvenanceMerge | null;
+  landedState: LandedState;
+  ladder: TaskLandedLadder;
+  commits: TaskCommitMembership[];
+}

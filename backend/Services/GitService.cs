@@ -1590,6 +1590,92 @@ public class GitService
     }
 
     /// <summary>
+    /// The merge-base (fork point) SHA of two refs, or null when either ref is
+    /// missing / they share no history. ASS-1724 uses this to capture a task
+    /// branch's <c>base</c> - the commit <c>task/&lt;id&gt;</c> was cut from off the
+    /// integration branch - so the graph merge-set (<c>base..branch</c>) is exact.
+    /// </summary>
+    public string? GetMergeBase(string repoRoot, string refA, string refB)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(refA) || !IsLikelyBranchName(refB)) return null;
+        var (output, _, code) = RunGitArgs(repoRoot, "merge-base", refA, refB);
+        if (code != 0) return null;
+        var sha = output.Trim();
+        return string.IsNullOrWhiteSpace(sha) ? null : sha;
+    }
+
+    /// <summary>
+    /// Tip SHA of a local or remote-tracking ref (<c>rev-parse --verify</c>), or
+    /// null when the ref does not exist. ASS-1724 reads the <c>task/&lt;id&gt;</c>
+    /// tip and the develop/main heads to anchor each lane transition and to build
+    /// the landed ladder's "HEAD now" rungs.
+    /// </summary>
+    public string? GetBranchTip(string repoRoot, string branch)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        if (!IsLikelyBranchName(branch)) return null;
+        var (output, _, code) = RunGitArgs(repoRoot, "rev-parse", "--verify", "--quiet", branch);
+        if (code != 0) return null;
+        var sha = output.Trim();
+        return string.IsNullOrWhiteSpace(sha) ? null : sha;
+    }
+
+    /// <summary>
+    /// Commits reachable from <paramref name="toRef"/> but not
+    /// <paramref name="fromRef"/> (<c>git log fromRef..toRef --no-merges</c>),
+    /// newest first. This is the graph merge-set ASS-1724 displays: with
+    /// <c>fromRef = base</c> and <c>toRef = task/&lt;id&gt;</c> it is exactly the
+    /// commits the task branch is ahead of its fork point - no wall-clock window,
+    /// no boundary slack. Returns an empty list when either ref is missing.
+    /// </summary>
+    public List<GitCommitInfo> GetCommitsInRangeAtRoot(string repoRoot, string fromRef, string toRef)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return [];
+        if (!IsLikelyBranchName(fromRef) || !IsLikelyBranchName(toRef)) return [];
+        var root = ResolveGitToplevel(repoRoot) ?? repoRoot;
+
+        const char US = '\x1f';
+        var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var args = $"log --no-merges --shortstat --pretty=format:\"{fmt}\" {fromRef}..{toRef}";
+        var (output, _, code) = RunGit(root, args);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<GitCommitInfo>();
+        var raw = output.Replace("\r\n", "\n");
+        foreach (var block in raw.Split("\n\n", StringSplitOptions.None))
+        {
+            if (string.IsNullOrWhiteSpace(block)) continue;
+            string? recordLine = null;
+            string? shortstatLine = null;
+            foreach (var l in block.Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(l)) continue;
+                if (recordLine == null) recordLine = l;
+                else { shortstatLine = l.Trim(); break; }
+            }
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 5) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var ts))
+                continue;
+            var (files, added, removed) = ParseShortstat(shortstatLine);
+            list.Add(new GitCommitInfo(
+                Sha: parts[0],
+                ShortSha: parts[1],
+                AuthorDateUtc: DateTime.SpecifyKind(ts, DateTimeKind.Utc),
+                Author: parts[3],
+                Subject: parts[4],
+                FilesChanged: files,
+                Added: added,
+                Removed: removed));
+        }
+        return list;
+    }
+
+    /// <summary>
     /// Merges <paramref name="taskBranch"/> (e.g. <c>task/&lt;id&gt;</c>) into
     /// <paramref name="integrationBranch"/> (e.g. <c>develop</c>) with an explicit
     /// merge commit (<c>git merge --no-ff --no-edit</c>) so an accepted task lands

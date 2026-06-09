@@ -20,6 +20,63 @@
        [class.git-view--split]="maximized()"
        data-testid="git-view-body">
     @if (git.viewMode() === 'commit') {
+      @if (git.provenance(); as prov) {
+        <section class="git-view__landed" data-testid="git-landed-ladder">
+          <div class="git-view__landed-head">
+            <span class="git-view__landed-state"
+                  data-testid="git-landed-state"
+                  [attr.data-state]="prov.landedState"
+                  [appTooltip]="landedStateTooltip(prov)">{{ landedStateLabel(prov.landedState) }}</span>
+          </div>
+          <ol class="git-view__ladder" role="list" aria-label="Landed ladder (task branch to develop to main)">
+            <li class="git-view__ladder-rung git-view__ladder-rung--reached"
+                data-testid="git-ladder-branch">
+              <span class="git-view__ladder-name">{{ prov.ladder.branch }}</span>
+              <span class="git-view__ladder-sha">{{ short(prov.ladder.branchTip) }}</span>
+            </li>
+            <li class="git-view__ladder-rung"
+                [class.git-view__ladder-rung--reached]="prov.ladder.mergedToIntegration"
+                data-testid="git-ladder-integration"
+                [appTooltip]="prov.ladder.mergedToIntegration
+                  ? 'Merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'
+                  : 'Not yet merged into ' + prov.ladder.integrationBranch + ' (HEAD now ' + short(prov.ladder.integrationHead) + ')'">
+              <span class="git-view__ladder-arrow">→</span>
+              <span class="git-view__ladder-name">{{ prov.ladder.integrationBranch }}</span>
+              <span class="git-view__ladder-sha">{{ short(prov.ladder.integrationHead) }}</span>
+              <span class="git-view__ladder-flag">{{ prov.ladder.mergedToIntegration ? 'merged' : 'pending' }}</span>
+            </li>
+            <li class="git-view__ladder-rung"
+                [class.git-view__ladder-rung--reached]="prov.ladder.releasedToRelease"
+                data-testid="git-ladder-release"
+                [appTooltip]="prov.ladder.releasedToRelease
+                  ? 'Released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'
+                  : 'Not yet released into ' + prov.ladder.releaseBranch + ' (HEAD now ' + short(prov.ladder.releaseHead) + ')'">
+              <span class="git-view__ladder-arrow">→</span>
+              <span class="git-view__ladder-name">{{ prov.ladder.releaseBranch }}</span>
+              <span class="git-view__ladder-sha">{{ short(prov.ladder.releaseHead) }}</span>
+              <span class="git-view__ladder-flag">{{ prov.ladder.releasedToRelease ? 'released' : 'pending' }}</span>
+            </li>
+          </ol>
+          @if (prov.commits.length) {
+            <ul class="git-view__membership"
+                data-testid="git-commit-membership"
+                role="list"
+                aria-label="Per-commit branch membership">
+              @for (m of prov.commits; track m.sha) {
+                <li class="git-view__membership-item"
+                    [attr.data-sha]="m.sha"
+                    [attr.data-membership]="membershipLabel(m)">
+                  <span class="git-view__membership-sha"
+                        [appTooltip]="membershipTooltip(m, prov)">{{ m.shortSha }}</span>
+                  <span class="git-view__membership-where"
+                        [attr.data-membership]="membershipLabel(m)">{{ membershipLabel(m) }}</span>
+                  <span class="git-view__membership-subject">{{ m.message.split('\n')[0] }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      }
       @if (git.commitChain().length > 1) {
         <section class="git-view__commit-group"
                  [class.git-view__commit-group--collapsed]="commitGroupCollapsed()"

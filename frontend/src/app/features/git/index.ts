@@ -7,4 +7,10 @@ export type {
   TaskHygieneContext,
   TaskCommitInfo,
   TaskCommitDetail,
+  LandedState,
+  TaskProvenanceTransition,
+  TaskProvenanceMerge,
+  TaskLandedLadder,
+  TaskCommitMembership,
+  TaskProvenanceView,
 } from './models/git.model';

@@ -5,6 +5,7 @@ import type {
   GitStatus,
   TaskCommitDetail,
   TaskCommitInfo,
+  TaskProvenanceView,
 } from '../../../features/git';
 import { TaskService } from '../../../services/task.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
@@ -86,6 +87,15 @@ export class GitPaneService implements OnDestroy {
   // That data survives future work in the repo and is what the user wants
   // to see when reviewing a finished task.
   readonly commitDetail = signal<TaskCommitDetail | null>(null);
+
+  /**
+   * Commit-provenance & landed-state (ASS-1724): the live, graph-derived view
+   * of where this task's work lives (task/<id> -> develop -> main) plus
+   * per-commit branch membership. Loaded lazily when the job is set / changes;
+   * recomputed by the backend on every fetch so it never lies about how far
+   * develop / main have advanced.
+   */
+  readonly provenance = signal<TaskProvenanceView | null>(null);
 
   /**
    * Ordered chain of commits attributed to this task (oldest -&gt; newest).
@@ -183,6 +193,9 @@ export class GitPaneService implements OnDestroy {
       const newChainLen = chain.length;
       if ((oldChainLen === 0 && newChainLen > 0) || newChainLen > oldChainLen) {
         this.applyCommitDefault(chain);
+        // A new commit (or a just-landed merge) can move the landed-state, so
+        // re-pull the graph-derived provenance when the chain grows.
+        this.loadProvenance();
       }
       return;
     }
@@ -196,10 +209,27 @@ export class GitPaneService implements OnDestroy {
     this.loading.set(false);
     this.committing.set(false);
     this.generatingMsg.set(false);
+    this.provenance.set(null);
     this.clearDiffCache();
     const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
     this.commitChain.set(chain);
     this.applyCommitDefault(chain);
+    this.loadProvenance();
+  }
+
+  /**
+   * Load the graph-derived commit-provenance view for the current job. Silent
+   * on error (the ladder + membership strip simply stays hidden): provenance is
+   * a read-only "where does this live" overlay, never load-bearing for the
+   * pane's primary diff/commit flow.
+   */
+  loadProvenance(): void {
+    const info = this.currentJob;
+    if (!info) return;
+    this.jobService.getTaskProvenance(info.id, info.watchPath).subscribe({
+      next: (view) => this.provenance.set(view),
+      error: () => this.provenance.set(null),
+    });
   }
 
   /**

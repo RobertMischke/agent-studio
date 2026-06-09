@@ -214,6 +214,7 @@ builder.Services.AddSingleton<WorkspaceSummaryService>();
 builder.Services.AddSingleton<AutoReviewPostProcessingQueue>();
 builder.Services.AddSingleton<IAutoReviewPostProcessingQueue>(sp =>
     sp.GetRequiredService<AutoReviewPostProcessingQueue>());
+builder.Services.AddSingleton<TaskProvenanceService>();
 builder.Services.AddSingleton<TaskTransitionService>();
 builder.Services.AddSingleton<TaskWatcherService>();
 // Cycle 1: in-memory snapshot of all jobs across watch paths. Reads from
