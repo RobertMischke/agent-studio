@@ -64,6 +64,44 @@ schreiben), die über den Scope dieses FE-Tasks hinausgeht.
   - Tool-Burst-Chip: Modell-Chip in collapsed Row; kein Chip ohne Modell.
 - Produktions-Typecheck grün: `tsc -p tsconfig.app.json --noEmit` → exit 0.
 
+## Reissue-Verifikation (2026-06-09)
+
+Auto-Review hatte den tests-and-evidence-Gate mit *concerns* markiert: „Unit tests
+cover data projection but lack UI verification (screenshot or component test) that
+model name displays next to timestamps." Daher hier die erneute, vollständige
+Beweisführung — Build grün, Tests grün, **plus** Render-Pfad-Komponententests und
+ein Screenshot.
+
+### Build / Typecheck grün
+- Produktions-Typecheck: `tsc -p tsconfig.app.json --noEmit` → **exit 0**.
+- Spec-Build (`@angular/build:unit-test`): „Application bundle generation complete" →
+  **NGTEST_EXIT=0**.
+
+### Tests grün
+- `ng test` über die drei betroffenen Specs → **Test Files 3 passed (3), Tests 70 passed (70)**.
+- Davon decken die folgenden **Render-Pfad-Komponententests** (TestBed mountet die
+  echte `app-conversation-view`, Assertions gegen das gerenderte DOM via
+  `[data-testid="conversation-message-model"]`) explizit die UI-Darstellung ab —
+  also genau das, was der Reviewer als fehlend bemängelt hatte:
+  - `renders the generating model subtly next to the timestamp`
+  - `omits the model badge when the output has no attributable model`
+  - `breaks the bubble on a mid-task model switch so each bubble names one model`
+  - `keeps same-actor same-model messages in one bubble with a single model badge`
+  - (Tool-Burst-Chip, gerendert: `shows the generating model as a subtle chip on the
+    collapsed burst row`, `omits the model chip when the burst has no attributable model`)
+
+### Visueller Nachweis (Screenshot)
+- `results/ui-evidence/model-badge-next-to-timestamp.png` — gerenderte Ansicht.
+- Harness: `results/ui-evidence/model-badge-harness.html` — reproduziert die echte
+  `app-conversation-view` + `app-tool-burst-chip` BEM-Struktur (1:1 aus den
+  Component-Templates) mit den relevanten SCSS-Regeln **verbatim** aus
+  `conversation-view.component.scss` / `tool-burst-chip.component.scss`; statisches,
+  backend-freies Ziel für den Screenshot.
+- Der Screenshot zeigt: einen **User**-Turn (kein Badge — Mensch), eine **Agent**-Bubble
+  mit `gpt-5-codex` direkt neben der Zeit `12:00–12:02`, eine **Tools 3**-Burst-Zeile mit
+  `gpt-5-codex`-Chip und eine **zweite Agent-Bubble** mit `claude-opus-4-8` neben `12:05`
+  — d. h. **pro Output, switch-aware** (Modellwechsel mitten im Task), subtil neben der Uhrzeit.
+
 ## Geänderte Dateien
 - `frontend/src/app/components/chat/conversation-event.ts` (model auf Base/RunMarker)
 - `frontend/src/app/components/chat/conversation-projection.ts` (Marker-Lesen, currentModel)
