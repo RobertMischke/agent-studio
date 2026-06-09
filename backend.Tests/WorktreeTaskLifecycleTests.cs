@@ -134,6 +134,94 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void DirectMerge_Conflict_WhenPreserved_LeavesRebaseInProgress_ForResolver()
+    {
+        var (repo, life) = SeedWithDevelop("conflict-preserved", seedShared: true);
+        var prep = life.Prepare(repo, "task-preserve", "develop", WorktreeRoot());
+        Assert.True(prep.Success, prep.Error);
+
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "shared.txt"), "task version");
+        Commit(prep.WorktreePath!, "feat: task edits shared");
+
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "develop version");
+        Commit(repo, "chore: develop edits shared");
+        var developTipBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var result = life.Integrate(
+            repo,
+            prep.WorktreePath!,
+            prep.Branch!,
+            "develop",
+            IntegrationStrategies.DirectMerge,
+            preserveConflictForResolution: true);
+
+        Assert.Equal(IntegrationOutcome.Conflict, result.Outcome);
+        Assert.Contains("shared.txt", result.ConflictedFiles ?? Array.Empty<string>());
+        Assert.Equal(developTipBefore, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.Contains("UU shared.txt", RunGit(prep.WorktreePath!, "status --porcelain").Out);
+        Assert.Contains("<<<<<<<", File.ReadAllText(Path.Combine(prep.WorktreePath!, "shared.txt")));
+    }
+
+    [Fact]
+    public void CompleteIntegrationAfterResolution_UnresolvedConflict_ReportsConflictFiles()
+    {
+        var (repo, life) = SeedWithDevelop("conflict-unresolved", seedShared: true);
+        var prep = life.Prepare(repo, "task-unresolved", "develop", WorktreeRoot());
+        Assert.True(prep.Success, prep.Error);
+
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "shared.txt"), "task version");
+        Commit(prep.WorktreePath!, "feat: task edits shared");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "develop version");
+        Commit(repo, "chore: develop edits shared");
+        var developTipBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        Assert.Equal(IntegrationOutcome.Conflict, life.Integrate(
+            repo,
+            prep.WorktreePath!,
+            prep.Branch!,
+            "develop",
+            IntegrationStrategies.DirectMerge,
+            preserveConflictForResolution: true).Outcome);
+
+        var result = life.CompleteIntegrationAfterResolution(repo, prep.WorktreePath!, prep.Branch!, "develop");
+
+        Assert.Equal(IntegrationOutcome.Conflict, result.Outcome);
+        Assert.Contains("shared.txt", result.ConflictedFiles ?? Array.Empty<string>());
+        Assert.Equal(developTipBefore, RunGit(repo, "rev-parse develop").Out.Trim());
+    }
+
+    [Fact]
+    public void CompleteIntegrationAfterResolution_ResolvedRebase_FastForwardsDevelop()
+    {
+        var (repo, life) = SeedWithDevelop("conflict-resolved", seedShared: true);
+        var prep = life.Prepare(repo, "task-resolved", "develop", WorktreeRoot());
+        Assert.True(prep.Success, prep.Error);
+
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "shared.txt"), "task version");
+        Commit(prep.WorktreePath!, "feat: task edits shared");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "develop version");
+        Commit(repo, "chore: develop edits shared");
+
+        Assert.Equal(IntegrationOutcome.Conflict, life.Integrate(
+            repo,
+            prep.WorktreePath!,
+            prep.Branch!,
+            "develop",
+            IntegrationStrategies.DirectMerge,
+            preserveConflictForResolution: true).Outcome);
+
+        File.WriteAllText(Path.Combine(prep.WorktreePath!, "shared.txt"), "develop version + task version");
+        RunGit(prep.WorktreePath!, "add shared.txt");
+
+        var result = life.CompleteIntegrationAfterResolution(repo, prep.WorktreePath!, prep.Branch!, "develop");
+
+        Assert.Equal(IntegrationOutcome.Merged, result.Outcome);
+        Assert.Equal("develop version + task version", File.ReadAllText(Path.Combine(repo, "shared.txt")));
+        Assert.True(string.IsNullOrWhiteSpace(RunGit(prep.WorktreePath!, "status --porcelain").Out));
+        Assert.Equal(RunGit(prep.WorktreePath!, "rev-parse HEAD").Out.Trim(), RunGit(repo, "rev-parse develop").Out.Trim());
+    }
+
+    [Fact]
     public void PullRequestStrategy_DoesNotAutoMerge()
     {
         var (repo, life) = SeedWithDevelop("pr");

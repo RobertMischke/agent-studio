@@ -168,12 +168,20 @@ public sealed class WorktreeTaskLifecycle
     /// fast-forward the integration branch (which must be checked out in
     /// <paramref name="repoRoot"/>). A rebase conflict returns
     /// <see cref="IntegrationOutcome.Conflict"/> with the branch and worktree left
-    /// intact for the conflict-resolution agent / PR fallback. For
+    /// intact for the conflict-resolution agent / PR fallback. Pass
+    /// <paramref name="preserveConflictForResolution"/> to keep the conflicted
+    /// rebase in place for a managed resolver; the default aborts and leaves the
+    /// worktree clean for callers that only need conflict evidence. For
     /// <c>pull-request</c>: returns <see cref="IntegrationOutcome.PushedForReview"/>
     /// without merging.
     /// </summary>
     public IntegrationResult Integrate(
-        string repoRoot, string worktreePath, string taskBranch, string integrationBranch, string strategy)
+        string repoRoot,
+        string worktreePath,
+        string taskBranch,
+        string integrationBranch,
+        string strategy,
+        bool preserveConflictForResolution = false)
     {
         if (string.Equals(strategy, IntegrationStrategies.PullRequest, StringComparison.OrdinalIgnoreCase))
         {
@@ -183,7 +191,10 @@ public sealed class WorktreeTaskLifecycle
             return new IntegrationResult(IntegrationOutcome.PushedForReview, null, null);
         }
 
-        var rebase = _git.RebaseOnto(worktreePath, integrationBranch);
+        var rebase = _git.RebaseOnto(
+            worktreePath,
+            integrationBranch,
+            abortOnConflict: !preserveConflictForResolution);
         if (!rebase.Success)
         {
             _logger.LogWarning("Integration of {Branch} hit a rebase conflict onto {Integration}: {Error}",
@@ -201,6 +212,57 @@ public sealed class WorktreeTaskLifecycle
 
         var sha = _git.ReadHeadShaAt(repoRoot);
         _logger.LogInformation("Integrated {Branch} into {Integration} at {Sha}", taskBranch, integrationBranch, sha ?? "<unknown>");
+        return new IntegrationResult(IntegrationOutcome.Merged, sha, null);
+    }
+
+    /// <summary>
+    /// Completes a previously conflicted direct-merge integration after the
+    /// orchestrator-owned resolver has edited the worktree. If a rebase is still
+    /// active, the lifecycle continues it first, then fast-forwards the shared
+    /// integration branch. No force merge is attempted.
+    /// </summary>
+    public IntegrationResult CompleteIntegrationAfterResolution(
+        string repoRoot,
+        string worktreePath,
+        string taskBranch,
+        string integrationBranch)
+    {
+        var unmerged = _git.ListUnmergedFiles(worktreePath);
+        if (unmerged.Count > 0)
+        {
+            return new IntegrationResult(
+                IntegrationOutcome.Conflict,
+                null,
+                "Unmerged files remain after conflict-resolution.",
+                unmerged);
+        }
+
+        if (_git.IsRebaseInProgress(worktreePath))
+        {
+            var cont = _git.ContinueRebase(worktreePath);
+            if (!cont.Success)
+            {
+                return new IntegrationResult(
+                    IntegrationOutcome.Conflict,
+                    null,
+                    string.IsNullOrWhiteSpace(cont.Error) ? "Could not continue the resolved rebase." : cont.Error,
+                    cont.ConflictedFiles);
+            }
+        }
+
+        var ff = _git.MergeFastForward(repoRoot, taskBranch);
+        if (!ff.Success)
+        {
+            return new IntegrationResult(
+                IntegrationOutcome.Error,
+                null,
+                string.IsNullOrWhiteSpace(ff.Error) ? "Fast-forward merge failed after conflict-resolution." : ff.Error);
+        }
+
+        var sha = _git.ReadHeadShaAt(repoRoot);
+        _logger.LogInformation(
+            "Completed resolved integration of {Branch} into {Integration} at {Sha}",
+            taskBranch, integrationBranch, sha ?? "<unknown>");
         return new IntegrationResult(IntegrationOutcome.Merged, sha, null);
     }
 

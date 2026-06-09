@@ -25,7 +25,8 @@ public record GitPushResult(bool Success, string Sha, string Status, string? Err
 /// <summary>
 /// ADR-0052: result of a worktree / integration primitive
 /// (<see cref="GitService.WorktreeAdd"/>, <see cref="GitService.WorktreeRemove"/>,
-/// <see cref="GitService.RebaseOnto"/>, <see cref="GitService.MergeFastForward"/>).
+/// <see cref="GitService.RebaseOnto"/>, <see cref="GitService.ContinueRebase"/>,
+/// <see cref="GitService.MergeFastForward"/>).
 /// <paramref name="Path"/> is the worktree path for add; null otherwise.
 /// </summary>
 public record GitWorktreeResult(
@@ -1152,11 +1153,13 @@ public class GitService
     /// <summary>
     /// Rebases the branch currently checked out at <paramref name="worktreePath"/>
     /// onto <paramref name="ontoRef"/> (<c>git rebase &lt;ontoRef&gt;</c>),
-    /// replaying the task commits on top of the latest integration tip. On
-    /// conflict the rebase is aborted so the worktree is left clean and the
-    /// caller can fall back to the merge-queue / pull-request path.
+    /// replaying the task commits on top of the latest integration tip. By
+    /// default, conflicts are aborted so the worktree is left clean. The
+    /// parallel integration pipeline can pass <paramref name="abortOnConflict"/>
+    /// as <c>false</c> so a managed conflict-resolution step gets the actual
+    /// conflicted index and conflict markers to resolve.
     /// </summary>
-    public GitWorktreeResult RebaseOnto(string worktreePath, string ontoRef)
+    public GitWorktreeResult RebaseOnto(string worktreePath, string ontoRef, bool abortOnConflict = true)
     {
         if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
             return new GitWorktreeResult(false, null, "Worktree path does not exist.");
@@ -1167,11 +1170,65 @@ public class GitService
         if (code != 0)
         {
             var conflictedFiles = ListUnmergedFiles(worktreePath);
-            RunGitArgs(worktreePath, "rebase", "--abort");
-            _logger.LogWarning("Rebase onto {OntoRef} failed at {Path}, aborted: {Error}", ontoRef, worktreePath, err.Trim());
+            if (abortOnConflict)
+            {
+                RunGitArgs(worktreePath, "rebase", "--abort");
+                _logger.LogWarning("Rebase onto {OntoRef} failed at {Path}, aborted: {Error}", ontoRef, worktreePath, err.Trim());
+            }
+            else
+            {
+                _logger.LogWarning("Rebase onto {OntoRef} failed at {Path}, preserving conflict state: {Error}", ontoRef, worktreePath, err.Trim());
+            }
             return new GitWorktreeResult(false, worktreePath, err.Trim(), conflictedFiles);
         }
         _logger.LogInformation("Rebased worktree {Path} onto {OntoRef}", worktreePath, ontoRef);
+        return new GitWorktreeResult(true, worktreePath, null);
+    }
+
+    /// <summary>
+    /// Returns true when a rebase is active in <paramref name="worktreePath"/>.
+    /// Used by the conflict-resolution pipeline step after the resolver has
+    /// edited conflict files but before the harness attempts the final
+    /// fast-forward merge.
+    /// </summary>
+    public bool IsRebaseInProgress(string worktreePath)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return false;
+        var (gitDirRaw, _, code) = RunGitArgs(worktreePath, "rev-parse", "--git-dir");
+        if (code != 0 || string.IsNullOrWhiteSpace(gitDirRaw))
+            return false;
+
+        var gitDir = gitDirRaw.Trim();
+        if (!Path.IsPathRooted(gitDir))
+            gitDir = Path.GetFullPath(Path.Combine(worktreePath, gitDir));
+
+        return Directory.Exists(Path.Combine(gitDir, "rebase-merge"))
+            || Directory.Exists(Path.Combine(gitDir, "rebase-apply"));
+    }
+
+    /// <summary>
+    /// Continues an active rebase after conflict files have been resolved and
+    /// staged. The editor is disabled so git reuses the original commit message
+    /// in headless runner contexts.
+    /// </summary>
+    public GitWorktreeResult ContinueRebase(string worktreePath)
+    {
+        if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            return new GitWorktreeResult(false, null, "Worktree path does not exist.");
+
+        var conflictedFiles = ListUnmergedFiles(worktreePath);
+        if (conflictedFiles.Count > 0)
+            return new GitWorktreeResult(false, worktreePath, "Unmerged files remain; cannot continue rebase.", conflictedFiles);
+
+        var (_, err, code) = RunGitArgs(worktreePath, "-c", "core.editor=true", "rebase", "--continue");
+        if (code != 0)
+        {
+            var stillConflicted = ListUnmergedFiles(worktreePath);
+            _logger.LogWarning("Rebase --continue failed at {Path}: {Error}", worktreePath, err.Trim());
+            return new GitWorktreeResult(false, worktreePath, err.Trim(), stillConflicted);
+        }
+        _logger.LogInformation("Continued rebase at {Path}", worktreePath);
         return new GitWorktreeResult(true, worktreePath, null);
     }
 

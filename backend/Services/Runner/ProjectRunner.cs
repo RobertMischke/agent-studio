@@ -900,7 +900,13 @@ public class ProjectRunner
                 var integrateStarted = DateTime.UtcNow;
                 RecordIntegrationStep(info, PipelineStepStatus.Running, "running",
                     $"Integrating `{run.Branch}` into `{workBranch}`.", integrateStarted);
-                var res = Worktree.Integrate(Entry.RootPath, run.WorktreePath!, run.Branch!, workBranch, strategy);
+                var res = Worktree.Integrate(
+                    Entry.RootPath,
+                    run.WorktreePath!,
+                    run.Branch!,
+                    workBranch,
+                    strategy,
+                    preserveConflictForResolution: true);
                 if (res.Outcome == IntegrationOutcome.Merged)
                 {
                     _logger.LogInformation("[taskboard] parallel run {Job} integrated into {Branch} at {Sha}",
@@ -1075,7 +1081,11 @@ public class ProjectRunner
                 _logger.LogInformation("[taskboard] conflict resolver committed changes for {Job} at {Sha}",
                     run.JobId, commit.Sha ?? "<unknown>");
 
-            var retry = Worktree.Integrate(Entry.RootPath, run.WorktreePath!, run.Branch!, workBranch, IntegrationStrategies.DirectMerge);
+            var retry = Worktree.CompleteIntegrationAfterResolution(
+                Entry.RootPath,
+                run.WorktreePath!,
+                run.Branch!,
+                workBranch);
             if (retry.Outcome == IntegrationOutcome.Merged)
             {
                 RecordConflictResolutionStep(info, PipelineStepStatus.Passed, "resolved",
@@ -1123,8 +1133,9 @@ public class ProjectRunner
             $"Integration branch: {workBranch}\n" +
             $"Worktree: {run.WorktreePath}\n\n" +
             "Resolve the rebase/merge conflict from outside the core task agent. Work only in this worktree. " +
-            $"Rebase `{run.Branch}` onto `{workBranch}`, resolve conflicts with judgment, run focused verification if practical, " +
-            "and leave the task branch clean and ready for a fast-forward merge into the integration branch. " +
+            "A rebase is expected to be paused here already; resolve the conflict files, stage the resolutions, " +
+            "and run `git rebase --continue`. If no rebase is active, rebase the task branch onto the integration branch yourself. " +
+            "Run focused verification if practical, and leave the task branch clean and ready for a fast-forward merge into the integration branch. " +
             "Do not force-push, do not force-merge, and do not edit the shared main checkout.\n\n" +
             "Conflicted files from the failed integration attempt:\n" +
             files + "\n\n" +

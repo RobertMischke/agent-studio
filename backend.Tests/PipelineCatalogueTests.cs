@@ -38,7 +38,7 @@ public class PipelineCatalogueTests
         // Post includes the deterministic review/build gates, four aspects,
         // implemented tool steps, final orchestrator decision, and opt-in drift
         // dimensions.
-        Assert.Equal(17, p.Post.Count);
+        Assert.Equal(19, p.Post.Count);
     }
 
     [Fact]
@@ -236,6 +236,40 @@ public class PipelineCatalogueTests
         {
             Assert.Contains(aspectId, commitStep.DependsOn);
         }
+    }
+
+    [Fact]
+    public void StandardPipeline_WorktreeIntegrationSteps_AreVisibleGitSteps()
+    {
+        var p = PipelineCatalogue.Standard;
+        var containment = p.Post.First(s => s.Id == PipelineCatalogue.WorktreeContainmentStepId);
+        var integrate = p.Post.First(s => s.Id == PipelineCatalogue.IntegrateMergeStepId);
+        var resolution = p.Post.First(s => s.Id == PipelineCatalogue.ConflictResolutionStepId);
+
+        Assert.Equal("Worktree containment", containment.DisplayName);
+        Assert.Equal(StepKind.Tool, containment.Kind);
+        Assert.False(containment.Stub);
+
+        Assert.Equal("Integrate merge", integrate.DisplayName);
+        Assert.Equal(StepKind.Tool, integrate.Kind);
+        Assert.False(integrate.Stub);
+        Assert.Contains(PipelineCatalogue.WorktreeContainmentStepId, integrate.DependsOn);
+
+        Assert.Equal("Conflict resolution", resolution.DisplayName);
+        Assert.Equal(StepKind.Orchestrator, resolution.Kind);
+        Assert.False(resolution.Stub);
+        Assert.False(resolution.Idempotent);
+        Assert.Contains(PipelineCatalogue.IntegrateMergeStepId, resolution.DependsOn);
+
+        var containmentIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.WorktreeContainmentStepId);
+        var integrateIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.IntegrateMergeStepId);
+        var resolutionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.ConflictResolutionStepId);
+        Assert.True(containmentIndex < integrateIndex);
+        Assert.True(integrateIndex < resolutionIndex);
+
+        Assert.Contains(PipelineCatalogue.WorktreeContainmentStepId, PipelineCatalogue.GitStepIds);
+        Assert.Contains(PipelineCatalogue.IntegrateMergeStepId, PipelineCatalogue.GitStepIds);
+        Assert.Contains(PipelineCatalogue.ConflictResolutionStepId, PipelineCatalogue.GitStepIds);
     }
 
     [Fact]
