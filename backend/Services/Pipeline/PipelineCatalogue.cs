@@ -172,6 +172,24 @@ public static class PipelineCatalogue
     public const string WikiMaintenanceStepId = "post-wiki-maintenance";
 
     /// <summary>
+    /// Opt-in deterministic post-step that distills the run's learnings - the
+    /// derived review verdict, the per-aspect orchestrator-review findings, the
+    /// agent's own close-out notes, and any typed outcome stumbling block - into
+    /// a per-task page under the watched project's
+    /// <c>docs/wiki/learnings/&lt;task&gt;.md</c> tree, then regenerates the
+    /// learnings index. It is CLI-agnostic (no model call - it reads structured
+    /// run evidence the orchestrator already has) and idempotent: a re-run dedupes
+    /// by run signature so it merges/augments the page rather than overwriting it,
+    /// and reissues append a fresh dated run block so nothing is lost (git keeps
+    /// the file history). Reporting-only - it never changes the lane decision.
+    /// Implemented by <c>WikiLearningsPostStepRunner</c>; defaults
+    /// <c>DefaultEnabled = false</c> because knowledge distillation is a pass an
+    /// operator turns on per project (same opt-in switch the wiki-maintenance and
+    /// drift steps use).
+    /// </summary>
+    public const string WikiLearningsStepId = "post-wiki-learnings";
+
+    /// <summary>
     /// Post-core completeness check that runs immediately after the core agent
     /// run, before the aspect verdicts. It is the deterministic
     /// <c>CompletionGate</c> scan of the run's own close-out evidence
@@ -487,6 +505,18 @@ public static class PipelineCatalogue
                     Kind = StepKind.Tool,
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [CoreAgentRunStepId],
+                    Idempotent = true,
+                    DefaultEnabled = false,
+                },
+                new PipelineStep
+                {
+                    Id = WikiLearningsStepId,
+                    DisplayName = "Wiki learnings",
+                    Kind = StepKind.Tool,
+                    RunMode = StepRunMode.Sequential,
+                    // Reads the aspect verdicts (the orchestrator-review findings)
+                    // it distills, so it must schedule after the aspects.
+                    DependsOn = [.. AspectStepIds],
                     Idempotent = true,
                     DefaultEnabled = false,
                 },

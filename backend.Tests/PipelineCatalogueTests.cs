@@ -36,9 +36,10 @@ public class PipelineCatalogueTests
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
         // Post includes the deterministic review/build gates, four aspects,
-        // implemented tool steps, final orchestrator decision, and opt-in drift
-        // dimensions.
-        Assert.Equal(19, p.Post.Count);
+        // implemented tool steps (incl. the opt-in wiki-maintenance and
+        // wiki-learnings distillation steps), final orchestrator decision, and
+        // opt-in drift dimensions.
+        Assert.Equal(20, p.Post.Count);
     }
 
     [Fact]
@@ -351,6 +352,51 @@ public class PipelineCatalogueTests
             $"lint-scss (idx {lintIndex}) must precede regression-radar (idx {radarIndex})");
         Assert.True(radarIndex < decisionIndex,
             $"regression-radar (idx {radarIndex}) must precede orchestrator-decision (idx {decisionIndex})");
+    }
+
+    [Fact]
+    public void StandardPipeline_WikiLearnings_IsOptInToolStep_AfterAspects_BeforeDecision()
+    {
+        // ASS-1694: the wiki-learnings distillation ships as a deterministic
+        // (no model) Tool post-step that defaults OFF - knowledge distillation is
+        // an opt-in pass an operator turns on per project, like wiki-maintenance.
+        // It reads the aspect verdicts it distills, so it depends on every aspect
+        // and is ordered after them but before the final orchestrator decision.
+        var p = PipelineCatalogue.Standard;
+        var step = p.Post.First(s => s.Id == PipelineCatalogue.WikiLearningsStepId);
+        Assert.Equal("post-wiki-learnings", step.Id);
+        Assert.Equal(StepKind.Tool, step.Kind);
+        Assert.Equal(StepRunMode.Sequential, step.RunMode);
+        Assert.False(step.Stub);
+        Assert.True(step.Idempotent);
+        Assert.False(step.DefaultEnabled); // opt-in
+        Assert.Null(step.Model); // deterministic, no LLM
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            Assert.Contains(aspectId, step.DependsOn);
+        }
+
+        var learningsIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.WikiLearningsStepId);
+        var decisionIndex = p.Post.FindIndex(s => s.Id == PipelineCatalogue.OrchestratorDecisionStepId);
+        Assert.True(learningsIndex < decisionIndex,
+            $"wiki-learnings (idx {learningsIndex}) must precede orchestrator-decision (idx {decisionIndex})");
+        foreach (var aspectId in PipelineCatalogue.AspectStepIds)
+        {
+            var aspectIndex = p.Post.FindIndex(s => s.Id == aspectId);
+            Assert.True(aspectIndex < learningsIndex,
+                $"aspect {aspectId} (idx {aspectIndex}) must precede wiki-learnings (idx {learningsIndex})");
+        }
+
+        // Opt-in gate: default off, but a per-project override turns it on.
+        Assert.False(PipelineStepConfigResolver.IsEnabled((ProjectSettings?)null, step));
+        var settings = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>
+            {
+                [PipelineCatalogue.WikiLearningsStepId] = new() { Enabled = true },
+            },
+        };
+        Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
     }
 
     [Fact]

@@ -142,6 +142,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly ILintScssRunner? _lintScssRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
+    private readonly WikiLearningsPostStepRunner? _wikiLearnings;
     private readonly RegressionRadarService? _regressionRadar;
 
     /// <summary>
@@ -189,6 +190,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         ILintScssRunner? lintScssRunner = null,
         IBuildTestGateRunner? buildTestGateRunner = null,
         WikiMaintenancePostStepRunner? wikiMaintenance = null,
+        WikiLearningsPostStepRunner? wikiLearnings = null,
         TimelineLog? timeline = null,
         ProjectSettingsService? projectSettings = null,
         HumanReviewEscalation? humanReviewEscalation = null,
@@ -212,6 +214,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _lintScssRunner = lintScssRunner;
         _buildTestGateRunner = buildTestGateRunner;
         _wikiMaintenance = wikiMaintenance;
+        _wikiLearnings = wikiLearnings;
         _timeline = timeline;
         _projectSettings = projectSettings;
         _humanReviewEscalation = humanReviewEscalation;
@@ -1597,6 +1600,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reporting-only and never changes the task lane decision.
         RunWikiMaintenancePostStep(entry, current);
 
+        // Wiki learnings post-step: opt-in project-scoped knowledge distillation.
+        // It folds the derived verdict, the per-aspect review findings, the
+        // agent's close-out notes, and the typed outcome stumbling block into a
+        // per-task page under docs/wiki/learnings and regenerates that index. It
+        // is reporting-only and never changes the task lane decision.
+        RunWikiLearningsPostStep(entry, current, report, statusSummary, diffSummary);
+
         _pipelineLog?.Complete(current.FolderPath);
 
         if (report.Overall == AspectStatus.Block)
@@ -2940,6 +2950,195 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
         {
             StepId = PipelineCatalogue.WikiMaintenanceStepId,
+            Kind = StepKind.Tool,
+            Status = status,
+            StartedAt = now - TimeSpan.FromMilliseconds(durationMs),
+            CompletedAt = now,
+            DurationMs = durationMs,
+            Verdict = verdictToken,
+            Reason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+        });
+    }
+
+    /// <summary>
+    /// Opt-in wiki-learnings post-step (<c>post-wiki-learnings</c>). Distills the
+    /// settled review into a per-task page under <c>docs/wiki/learnings</c> via
+    /// the injected <see cref="WikiLearningsPostStepRunner"/>. Disabled by default
+    /// and gated by per-project config (same switch the wiki-maintenance step
+    /// uses). Reporting-only and fully non-gating: any failure records a
+    /// failed / skipped step and the review decision continues unchanged.
+    /// </summary>
+    private void RunWikiLearningsPostStep(
+        WatchPathEntry entry,
+        TaskInfo current,
+        AspectRunReport report,
+        string statusSummary,
+        string diffSummary)
+    {
+        if (_wikiLearnings == null) return;
+
+        var settings = _projectSettings?.Get(entry.Name);
+        var step = PipelineCatalogue.Standard.Post.FirstOrDefault(s =>
+            string.Equals(s.Id, PipelineCatalogue.WikiLearningsStepId, StringComparison.OrdinalIgnoreCase));
+        var ctx = new PipelineStepConditionContext
+        {
+            Aborted = false,
+            ExitCode = 0,
+            AnyAspectFailed = report.Overall == AspectStatus.Block,
+            TaskType = current.TaskType,
+            Tags = current.Tags,
+        };
+        var shouldRun = step is null
+            ? PipelineStepConfigResolver.ShouldRun(settings, PipelineCatalogue.WikiLearningsStepId, ctx)
+            : PipelineStepConfigResolver.ShouldRun(settings, step, ctx);
+        if (!shouldRun)
+        {
+            RecordWikiLearningsStep(current.FolderPath, PipelineStepStatus.Skipped,
+                durationMs: 0, verdictToken: "off", reason: "post-step disabled by config or condition");
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+        WikiLearningsResult result;
+        try
+        {
+            var run = BuildWikiLearningsRun(report, current, statusSummary, diffSummary);
+            result = _wikiLearnings.Run(current, entry, run);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: wiki-learnings post-step threw for {Project}/{JobId}; recording failure",
+                entry.Name, current.Id);
+            RecordWikiLearningsStep(current.FolderPath, PipelineStepStatus.Failed,
+                sw.ElapsedMilliseconds, "error", ex.Message);
+            return;
+        }
+        sw.Stop();
+
+        var status = result.Verdict == WikiLearningsVerdict.Error
+            ? PipelineStepStatus.Failed
+            : result.Verdict == WikiLearningsVerdict.Skipped
+                ? PipelineStepStatus.Skipped
+                : PipelineStepStatus.Passed;
+        var verdict = result.Verdict.ToString().ToLowerInvariant();
+        var reason = result.Slug == null ? result.Reason : $"{result.Reason}: {result.Slug}";
+        RecordWikiLearningsStep(current.FolderPath, status, sw.ElapsedMilliseconds, verdict, reason);
+    }
+
+    /// <summary>
+    /// Pure mapping from the settled aspect report plus the run's evidence
+    /// strings into the structured <see cref="WikiLearningsRun"/> the runner
+    /// distills. Static + internal so the mapping (verdict derivation, finding
+    /// projection, evidence trimming) is unit-testable without the orchestrator.
+    /// </summary>
+    internal static WikiLearningsRun BuildWikiLearningsRun(
+        AspectRunReport report,
+        TaskInfo current,
+        string statusSummary,
+        string diffSummary)
+    {
+        var verdict = report.Overall switch
+        {
+            AspectStatus.Block => "reissue",
+            AspectStatus.Concerns => "accept-with-concerns",
+            _ => "accept",
+        };
+
+        var findings = report.Verdicts
+            .Select(v => new WikiLearningFinding(
+                v.Aspect,
+                AspectVerdictParsing.StatusToken(v.Status),
+                v.Summary ?? string.Empty))
+            .ToList();
+
+        var verdictReason = string.IsNullOrWhiteSpace(report.FollowUpSummary)
+            ? null
+            : report.FollowUpSummary;
+
+        var stumblingBlock = current.OutcomeIssue is { } issue
+            ? string.IsNullOrWhiteSpace(issue.Summary)
+                ? issue.Label
+                : $"{issue.Label}: {issue.Summary}"
+            : null;
+
+        return new WikiLearningsRun(
+            Verdict: verdict,
+            VerdictReason: verdictReason,
+            Findings: findings,
+            AgentNotes: DistillStatusNotes(statusSummary),
+            StumblingBlock: stumblingBlock,
+            ChangedSummary: BuildChangedSummary(current, diffSummary));
+    }
+
+    /// <summary>
+    /// Reduce the full status.md text to a short, single-paragraph note for the
+    /// learnings page: drop headings, HTML comments, and blank lines, then take
+    /// the first few meaningful lines capped at a readable length. Null when the
+    /// status carries nothing distillable.
+    /// </summary>
+    private static string? DistillStatusNotes(string statusSummary)
+    {
+        if (string.IsNullOrWhiteSpace(statusSummary)) return null;
+        var lines = statusSummary
+            .Replace("\r", string.Empty)
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0
+                && !l.StartsWith('#')
+                && !l.StartsWith("---", StringComparison.Ordinal)
+                && !l.StartsWith("<!--", StringComparison.Ordinal))
+            .Take(3)
+            .ToList();
+        if (lines.Count == 0) return null;
+        var joined = string.Join(" ", lines).Trim();
+        return joined.Length <= 360 ? joined : joined[..359].TrimEnd() + "...";
+    }
+
+    /// <summary>
+    /// Build a one-line "what changed" headline from the task's attributed
+    /// commit chain (newest subject + commit count). Falls back to the diff
+    /// summary's first non-empty line when no commit is attributed, and null
+    /// when neither is available so the runner records "no commit recorded".
+    /// </summary>
+    private static string? BuildChangedSummary(TaskInfo current, string diffSummary)
+    {
+        if (current.Commits.Count > 0)
+        {
+            var newest = current.Commits[^1];
+            var subject = (newest.Message ?? string.Empty).Split('\n', 2)[0].Trim();
+            if (subject.Length == 0) subject = "(no subject)";
+            var count = current.Commits.Count;
+            var plural = count == 1 ? "commit" : "commits";
+            return $"{count} {plural}; latest {newest.ShortSha}: {subject}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(diffSummary))
+        {
+            var firstLine = diffSummary
+                .Replace("\r", string.Empty)
+                .Split('\n')
+                .Select(l => l.Trim())
+                .FirstOrDefault(l => l.Length > 0);
+            if (!string.IsNullOrWhiteSpace(firstLine)) return firstLine;
+        }
+
+        return null;
+    }
+
+    private void RecordWikiLearningsStep(
+        string jobFolderPath,
+        PipelineStepStatus status,
+        long durationMs,
+        string verdictToken,
+        string? reason)
+    {
+        if (_pipelineLog == null) return;
+        var now = DateTime.UtcNow;
+        _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.WikiLearningsStepId,
             Kind = StepKind.Tool,
             Status = status,
             StartedAt = now - TimeSpan.FromMilliseconds(durationMs),

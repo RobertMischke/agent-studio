@@ -308,6 +308,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.ILintScssRunner,
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.IBuildTestGateRunner,
     OrchestratorApi.Services.Pipeline.BuildTestGateRunner>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WikiMaintenancePostStepRunner>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WikiLearningsPostStepRunner>();
 builder.Services.AddSingleton<AspectRunnerService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Pipeline.WorkspaceArtifactCommitService>();
