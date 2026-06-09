@@ -18,7 +18,7 @@ namespace OrchestratorApi.Services.Cli;
 /// </summary>
 public sealed class CodexCliService : CliExecutionServiceBase
 {
-    internal const string FallbackModel = "gpt-5-codex";
+    internal const string FallbackModel = ModelIds.Gpt5Codex;
 
     private readonly CodexModelDiscovery _modelDiscovery;
     private readonly CliUsageParserRegistry _usageParsers;

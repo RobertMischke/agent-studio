@@ -13,6 +13,7 @@
 
 import type { CliOutputLine } from '../../models/task.model';
 import type { RunRecord, RunTimeline } from '../../features/run-timeline';
+import { MODEL_IDS } from '../../features/cli/models/model-ids';
 
 let TS_COUNTER = 0;
 function ts(offsetSec = 0): string {
@@ -160,7 +161,7 @@ export function tokenSpikeSummary(): import('../../features/tokens').TaskTokenSu
     cacheReadTokens: 9_400,
     cacheCreationTokens: 0,
     totalTokens: 303_900,
-    lastModel: 'claude-opus-4-7',
+    lastModel: MODEL_IDS.claudeOpus47,
     lastUpdate: '2026-05-05T12:05:00Z',
     entries: []
   };

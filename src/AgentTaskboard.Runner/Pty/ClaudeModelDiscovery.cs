@@ -12,8 +12,12 @@ namespace OrchestratorApi.Services.Pty;
 public sealed class ClaudeModelDiscovery
 {
     private static readonly Regex ModelLineRegex = new(
-        @"^\s*(?:[\u276F>\?\*\u2713\u2714\u2705]\s*)?(?<label>Claude\s+[A-Za-z0-9 .\-_]+?)(?:\s+\((?:default|selected)\))?\s*$",
+        @"^\s*(?:[\u276F>\?\*\u2713\u2714\u2705]\s*)?(?<label>(?:Claude\s+)?(?:Opus|Sonnet|Haiku)\s+[A-Za-z0-9 .\-_]+?)(?:\s+\((?:default|selected)\))?\s*$",
         RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+    private static readonly Regex TrustPromptRegex = new(
+        @"\btrust(?:ed)?\b|do you want to proceed",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly ILogger<ClaudeModelDiscovery> _logger;
     private readonly IConfiguration _config;
@@ -105,6 +109,7 @@ public sealed class ClaudeModelDiscovery
             ct: ct);
 
         await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: 8000, ct);
+        await DismissTrustPromptIfPresentAsync(pty, ct);
         await pty.SendKeysAsync("/model<Enter>", ct);
 
         var appeared = await pty.WaitForPatternAsync(
@@ -206,8 +211,25 @@ public sealed class ClaudeModelDiscovery
 
     private static string LabelToId(string label)
     {
-        var id = Regex.Replace(label.Trim().ToLowerInvariant(), @"\s+", "-");
+        var normalized = Regex.Replace(label.Trim(), @"\s+", " ");
+        if (!normalized.StartsWith("Claude ", StringComparison.OrdinalIgnoreCase)
+            && (normalized.StartsWith("Opus ", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith("Sonnet ", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith("Haiku ", StringComparison.OrdinalIgnoreCase)))
+        {
+            normalized = "Claude " + normalized;
+        }
+        var id = Regex.Replace(normalized.ToLowerInvariant(), @"\s+", "-");
         return Regex.Replace(id, @"(?<=\d)\.(?=\d)", "-");
+    }
+
+    private static async Task DismissTrustPromptIfPresentAsync(PtySession pty, CancellationToken ct)
+    {
+        var snapshot = pty.SnapshotStripped();
+        if (!TrustPromptRegex.IsMatch(snapshot)) return;
+
+        await pty.SendKeysAsync("1<Enter>", ct);
+        await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: 8000, ct);
     }
 
     private static (string App, string[] Args, bool VerbatimCommandLine) BuildInteractiveCommand(string cliPath)

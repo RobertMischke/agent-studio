@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Pty;
+using OrchestratorApi.Services.Runner;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -12,7 +13,7 @@ public class ClaudeModelDiscoveryTests
         var models = ClaudeModelDiscovery.ParsePickerSnapshot("""
         Select Model
         > Claude Opus 4.8
-          Claude Sonnet 4.6
+          Sonnet 4.6
           Claude Haiku 4.5
         """);
 
@@ -49,5 +50,17 @@ public class ClaudeModelDiscoveryTests
         Assert.All(catalog.Models, m => Assert.True(m.Available));
         Assert.Single(catalog.Models, m => m.IsDefault);
         Assert.Contains(catalog.Models, m => m.Id == ModelIds.ClaudeOpus48);
+    }
+
+    [Fact]
+    public void FallbackCatalog_SelectableModelsHavePriceAndContextMetadata()
+    {
+        var catalog = ClaudeModelDiscovery.FallbackCatalog();
+
+        foreach (var model in catalog.Models.Where(m => m.Available))
+        {
+            Assert.True(TokenPricing.Catalog.ContainsKey(model.Id), model.Id);
+            Assert.NotNull(ModelMetadataRegistry.ContextWindowFor(model.Id));
+        }
     }
 }

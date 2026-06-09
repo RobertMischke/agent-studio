@@ -7,6 +7,7 @@ import {
   AgentMessageSummary,
   TokenAggregateResponse,
 } from '../models/agent-bus.model';
+import { MODEL_IDS } from '../features/cli/models/model-ids';
 
 /**
  * Read-only client for the project-screen Observability panel. Wraps the
@@ -139,7 +140,7 @@ export const AgentBusFixture = {
         cliSessionId: 'claude-sess-aaaa',
         summary: 'Read AGENTS.md and the runner architecture section.',
         body: 'Skimmed AGENTS.md sections 1-4 plus README.md to ground the task.',
-        tokens: { input: 4200, output: 220, model: 'claude-haiku-4-5' },
+        tokens: { input: 4200, output: 220, model: MODEL_IDS.claudeHaiku45 },
         tags: [...baseTags, 'cli:claude', 'skill:cli-claude'],
       },
       {
@@ -155,7 +156,7 @@ export const AgentBusFixture = {
         runId: 'run-1',
         cliSessionId: 'claude-sess-aaaa',
         summary: 'Token report after first pass.',
-        tokens: { input: 12500, output: 2900, cacheRead: 8400, model: 'claude-haiku-4-5', dollars: 0.0124 },
+        tokens: { input: 12500, output: 2900, cacheRead: 8400, model: MODEL_IDS.claudeHaiku45, dollars: 0.0124 },
         tags: [...baseTags, 'cli:claude'],
       },
       {
@@ -232,7 +233,7 @@ export const AgentBusFixture = {
         runId: 'run-1',
         cliSessionId: 'codex-sess-bbbb',
         summary: 'Codex inspected the meta-cycle report header.',
-        tokens: { input: 1800, output: 150, model: 'gpt-5-codex' },
+        tokens: { input: 1800, output: 150, model: MODEL_IDS.gpt5Codex },
         tags: [...baseTags, 'cli:codex'],
       },
       {
@@ -248,7 +249,7 @@ export const AgentBusFixture = {
         runId: 'run-1',
         cliSessionId: 'codex-sess-bbbb',
         summary: 'Token report after planning pass.',
-        tokens: { input: 7900, output: 950, model: 'gpt-5-codex', dollars: 0.0089 },
+        tokens: { input: 7900, output: 950, model: MODEL_IDS.gpt5Codex, dollars: 0.0089 },
         tags: [...baseTags, 'cli:codex'],
       },
       {
@@ -326,7 +327,7 @@ export const AgentBusFixture = {
         runId: 'run-2',
         cliSessionId: 'claude-sess-cccc',
         summary: 'Re-run token report.',
-        tokens: { input: 10100, output: 3300, cacheRead: 6200, model: 'claude-sonnet-4-6', dollars: 0.0341 },
+        tokens: { input: 10100, output: 3300, cacheRead: 6200, model: MODEL_IDS.claudeSonnet46, dollars: 0.0341 },
         tags: [...baseTags, 'cli:claude'],
       },
       {
@@ -413,7 +414,7 @@ export const AgentBusFixture = {
         runId: 'run-3',
         cliSessionId: 'claude-sess-aaaa',
         summary: 'Closing token report after acceptance.',
-        tokens: { input: 5400, output: 800, cacheRead: 3100, model: 'claude-haiku-4-5', dollars: 0.0061 },
+        tokens: { input: 5400, output: 800, cacheRead: 3100, model: MODEL_IDS.claudeHaiku45, dollars: 0.0061 },
         tags: [...baseTags, 'cli:claude'],
       },
     ];
