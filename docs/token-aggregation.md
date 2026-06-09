@@ -1,5 +1,11 @@
 # Token Aggregation — Audit and Consolidation Plan
 
+> **Concept + living knowledge page:**
+> [`docs/wiki/concepts/token-aggregation.md`](wiki/concepts/token-aggregation.md)
+> explains the aggregator -> bus-shim concept for operators and LLM instances and
+> is the knowledge-collection point for this area. This document is the
+> system-of-record plan and migration record.
+
 > **Status (2026-05-11):** Phase 4+5 complete. Every surface that
 > `ITokenAggregator` exposes now reads through a bus-backed reader; the
 > legacy services (`TokenSummaryService`, `WorkspaceTokensTimelineService`,
