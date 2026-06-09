@@ -58,11 +58,23 @@ describe('RunTimelineComponent (smoke)', () => {
     ]);
     fixture.detectChanges();
 
+    const cards = fixture.nativeElement.querySelectorAll('[data-testid^="run-card-"]');
+    const transitions = fixture.nativeElement.querySelectorAll('[data-testid^="run-transition-"]');
+    expect(cards).toHaveLength(3);
+    expect(transitions).toHaveLength(2);
+
+    expect(cards[0].getAttribute('data-testid')).toBe('run-card-1');
+    expect(cards[1].getAttribute('data-testid')).toBe('run-card-2');
+    expect(cards[2].getAttribute('data-testid')).toBe('run-card-3');
+    expect(transitions[0].getAttribute('data-testid')).toBe('run-transition-1-2');
+    expect(transitions[1].getAttribute('data-testid')).toBe('run-transition-2-3');
+
     const text = fixture.nativeElement.textContent as string;
     expect(text.indexOf('Attempt 1')).toBeLessThan(text.indexOf('Attempt 2'));
     expect(text.indexOf('Attempt 2')).toBeLessThan(text.indexOf('Attempt 3'));
     expect(text).toContain('Run #1 re-opened into #2 via user follow-up');
     expect(text).toContain('Run #2 re-opened into #3 via user follow-up');
+    expect(text).toContain('🌀');
     expect(text).toContain('2m5s');
     expect(text).toContain('2.5k tok');
   });

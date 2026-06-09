@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import type { TaskInfo } from '../../../../../models/task.model';
+import type { CliType, TaskInfo } from '../../../../../models/task.model';
 import type { RunCommitInfo, RunRecord } from '../../../../../features/run-timeline';
 import type { TaskTokenSummary } from '../../../../../features/tokens';
 import { TaskService } from '../../../../../services/task.service';
+import { cliTypeIcon, cliTypeLabel } from '../../../../../services/format.util';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**
@@ -134,17 +135,13 @@ export class RunTimelineComponent {
   }
 
   cliIcon(cli: string | null): string {
-    switch ((cli ?? '').toLowerCase()) {
-      case 'codex': return 'Cx';
-      case 'claude': return 'C';
-      case 'copilot': return 'GH';
-      case 'gemini': return 'G';
-      default: return 'CLI';
-    }
+    const type = this.cliType(cli);
+    return type ? cliTypeIcon(type) : 'CLI';
   }
 
   cliLabel(cli: string | null): string {
-    return cli?.trim() || 'CLI';
+    const type = this.cliType(cli);
+    return type ? cliTypeLabel(type) : (cli?.trim() || 'CLI');
   }
 
   emitFilter(r: RunRecord): void {
@@ -188,6 +185,16 @@ export class RunTimelineComponent {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
     if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
     return value.toFixed(0);
+  }
+
+  private cliType(cli: string | null): CliType | null {
+    const normalized = (cli ?? '').trim().toLowerCase();
+    return normalized === 'copilot' ||
+      normalized === 'claude' ||
+      normalized === 'codex' ||
+      normalized === 'gemini'
+        ? normalized
+        : null;
   }
 
   formatTime(iso: string): string {
