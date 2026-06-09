@@ -25,11 +25,18 @@ import { ExplorerSectionsService } from '../../services/explorer-sections.servic
 import { ExplorerProjectActionsService } from '../../services/explorer-project-actions.service';
 
 /** Flat project row as computed by the shell (`ProjectSidebarRow`). */
+export interface ExplorerLaneCounts {
+  ready: number;
+  progress: number;
+  humanReview: number;
+}
+
 export interface ExplorerProjectRow {
   name: string;
   initial: string;
   color: string;
   totalJobs: number;
+  laneCounts?: ExplorerLaneCounts;
   isActive: boolean;
 }
 
@@ -270,6 +277,15 @@ export class ExplorerWorkspaceTreeComponent {
 
   isExpanded(name: string): boolean {
     return this.expandedProjects().has(name);
+  }
+
+  laneCountsFor(p: ExplorerProjectNode): ExplorerLaneCounts {
+    return p.laneCounts ?? { ready: 0, progress: 0, humanReview: 0 };
+  }
+
+  boardLaneCountsLabel(p: ExplorerProjectNode): string {
+    const counts = this.laneCountsFor(p);
+    return `${counts.ready} ready, ${counts.progress} in progress, ${counts.humanReview} human review`;
   }
 
   /** Enter inline-rename for a real workspace header (synthetic groups no-op). */

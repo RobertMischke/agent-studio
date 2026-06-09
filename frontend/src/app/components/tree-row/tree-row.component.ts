@@ -40,6 +40,7 @@ export class TreeRowComponent {
   readonly label = input('');
   readonly count = input<string | number | null>(null);
   readonly meta = input<string | null>(null);
+  readonly ariaLabel = input<string | null>(null);
   readonly active = input(false);
   readonly level = input<'root' | 'child'>('root');
   readonly testid = input<string | null>(null);

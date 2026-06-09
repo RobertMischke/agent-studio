@@ -37,7 +37,7 @@ import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { WorkspaceSettingsService } from '../shell/state/workspace-settings.service';
 import { ProjectLookupService } from '../../services/project-lookup.service';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
-import { ExplorerWorkspaceTreeComponent } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
+import { ExplorerWorkspaceTreeComponent, type ExplorerLaneCounts } from './components/explorer-workspace-tree/explorer-workspace-tree.component';
 import { MenuComponent, MenuItem, MenuItemClickEvent } from '../../components/menu';
 import { TooltipDirective } from '../../components/tooltip/tooltip.directive';
 import { TaskStatusPopoverDirective } from '../../components/task-status-card';
@@ -52,6 +52,7 @@ interface ProjectSidebarRow {
   initial: string;
   color: string;
   totalJobs: number;
+  laneCounts: ExplorerLaneCounts;
   isActive: boolean;
 }
 
@@ -652,31 +653,45 @@ export class StudioShellComponent {
    *  the host passes in app.html. */
   readonly projectRows = computed<ProjectSidebarRow[]>(() => {
     const grouped = this.grouped();
-    const projects = new Map<string, number>();
+    const emptyCounts = (): ExplorerLaneCounts => ({ ready: 0, progress: 0, humanReview: 0 });
+    const ensureProject = (name: string): { totalJobs: number; laneCounts: ExplorerLaneCounts } => {
+      let value = projects.get(name);
+      if (!value) {
+        value = { totalJobs: 0, laneCounts: emptyCounts() };
+        projects.set(name, value);
+      }
+      return value;
+    };
+    const projects = new Map<string, { totalJobs: number; laneCounts: ExplorerLaneCounts }>();
     for (const [laneKey, lane] of Object.entries(grouped)) {
       if (laneKey === 'archive') continue; // A2: archive excluded from working-set count
       for (const job of lane as TaskInfo[]) {
         const name = job.projectName ?? '';
-        projects.set(name, (projects.get(name) ?? 0) + 1);
+        const project = ensureProject(name);
+        project.totalJobs++;
+        if (laneKey === 'ready') project.laneCounts.ready++;
+        else if (laneKey === 'progress') project.laneCounts.progress++;
+        else if (laneKey === 'humanReview') project.laneCounts.humanReview++;
       }
     }
     // Ensure every backend-known project gets a row, even when its
     // working-set count is zero. Without this the project disappears
     // from the picker until it has at least one non-archive job.
     for (const name of this.knownProjectNames()) {
-      if (!projects.has(name)) projects.set(name, 0);
+      ensureProject(name);
     }
     // Light up the pill for whichever project the active tab is contextually
     // "in" — board, hub, task, and activity tabs all map to a project.
     const active = this.currentProjectName();
     return Array.from(projects.entries())
-      .map(([name, count]) => {
+      .map(([name, project]) => {
         const id = projectIdentity(name);
         return {
           name,
           initial: id.initial,
           color: id.color,
-          totalJobs: count,
+          totalJobs: project.totalJobs,
+          laneCounts: project.laneCounts,
           isActive: active === name,
         };
       })

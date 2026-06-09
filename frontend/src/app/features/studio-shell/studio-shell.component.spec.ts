@@ -252,6 +252,102 @@ describe('StudioShellComponent titlebar breadcrumb', () => {
   });
 });
 
+describe('StudioShellComponent project lane counts', () => {
+  function configure(): { component: StudioShellComponent; taskService: TaskService } {
+    localStorage.removeItem('atp.studio.tabs.v1');
+    TestBed.configureTestingModule({
+      imports: [StudioShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    });
+    const fixture = TestBed.createComponent(StudioShellComponent);
+    return {
+      component: fixture.componentInstance,
+      taskService: TestBed.inject(TaskService),
+    };
+  }
+
+  function task(over: Partial<TaskInfo>): TaskInfo {
+    return {
+      id: 'task-a',
+      taskKey: 'watch::task-a',
+      title: 'Task One',
+      state: '2-ready',
+      order: 1,
+      agent: 'codex',
+      createdAt: '2026-01-01T00:00:00Z',
+      watchPath: 'C:/watch',
+      projectName: 'Project A',
+      folderPath: 'C:/watch/.orchestrator/jobs/task-a',
+      lastActivity: '2026-01-01T00:00:00Z',
+      sessionName: null,
+      model: null,
+      cliType: 'codex',
+      useOwnSession: null,
+      lastUsage: null,
+      execution: null,
+      commit: null,
+      ...over,
+    } as TaskInfo;
+  }
+
+  it('derives Ready, In Progress, and Human Review counts per project from grouped lanes', () => {
+    const { component, taskService } = configure();
+    taskService.grouped.set({
+      backlog: [],
+      preparation: [],
+      orchestratorPrep: [],
+      ready: [
+        task({ id: 'a-ready-1', taskKey: 'watch::a-ready-1', projectName: 'Project A', state: '2-ready' }),
+        task({ id: 'a-ready-2', taskKey: 'watch::a-ready-2', projectName: 'Project A', state: '2-ready' }),
+        task({ id: 'b-ready-1', taskKey: 'watch::b-ready-1', projectName: 'Project B', state: '2-ready' }),
+      ],
+      progress: [
+        task({ id: 'a-progress-1', taskKey: 'watch::a-progress-1', projectName: 'Project A', state: '3-progress' }),
+      ],
+      failedPickup: [],
+      codeNotComplete: [],
+      autoReview: [],
+      humanReview: [
+        task({ id: 'a-review-1', taskKey: 'watch::a-review-1', projectName: 'Project A', state: '5-human-review' }),
+        task({ id: 'a-review-2', taskKey: 'watch::a-review-2', projectName: 'Project A', state: '5-human-review' }),
+        task({ id: 'a-review-3', taskKey: 'watch::a-review-3', projectName: 'Project A', state: '5-human-review' }),
+      ],
+      escalated: [],
+      review: [],
+      completed: [],
+      archive: [
+        task({ id: 'a-archive-1', taskKey: 'watch::a-archive-1', projectName: 'Project A', state: '7-archive' }),
+      ],
+    });
+    const rows = component.projectRows();
+    const projectA = rows.find(row => row.name === 'Project A');
+    const projectB = rows.find(row => row.name === 'Project B');
+
+    expect(projectA?.totalJobs).toBe(6);
+    expect(projectA?.laneCounts).toEqual({ ready: 2, progress: 1, humanReview: 3 });
+    expect(projectB?.laneCounts).toEqual({ ready: 1, progress: 0, humanReview: 0 });
+
+    taskService.grouped.set({
+      ...taskService.grouped(),
+      ready: [],
+      progress: [
+        task({ id: 'a-progress-1', taskKey: 'watch::a-progress-1', projectName: 'Project A', state: '3-progress' }),
+        task({ id: 'a-progress-2', taskKey: 'watch::a-progress-2', projectName: 'Project A', state: '3-progress' }),
+      ],
+      humanReview: [],
+      archive: [],
+    });
+
+    expect(component.projectRows().find(row => row.name === 'Project A')?.laneCounts)
+      .toEqual({ ready: 0, progress: 2, humanReview: 0 });
+  });
+});
+
 describe('StudioShellComponent epic tabs', () => {
   function configure(): { fixture: ComponentFixture<StudioShellComponent>; component: StudioShellComponent; taskService: TaskService; tabState: StudioTabStateService } {
     localStorage.removeItem('atp.studio.tabs.v1');

@@ -38,13 +38,13 @@
 .studio-explorer-tree__ws-rename {
   display: block;
   margin-top: var(--studio-spacing-1);
-  padding: 2px var(--studio-spacing-2);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
 }
 
 .studio-explorer-tree__ws-rename-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 2px 6px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   font: inherit;
   color: var(--studio-text-strong, inherit);
   background: var(--studio-surface-inset, rgba(255, 255, 255, 0.06));
@@ -69,4 +69,45 @@
 .studio-explorer-tree__add-project:focus-visible {
   background: var(--studio-bg-hover);
   color: var(--studio-fg);
+}
+
+.studio-board-lane-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  flex: 0 0 auto;
+}
+
+.studio-board-lane-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--studio-spacing-1);
+  border: 1px solid var(--studio-board-nav-lane-border);
+  border-radius: 999px;
+  background: var(--studio-board-nav-lane-bg);
+  color: var(--studio-board-nav-lane-fg);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0;
+  text-align: center;
+
+  &--ready {
+    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-ready-fg);
+    --studio-board-nav-lane-bg: var(--studio-board-nav-lane-ready-bg);
+    --studio-board-nav-lane-border: var(--studio-board-nav-lane-ready-border);
+  }
+
+  &--progress {
+    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-progress-fg);
+    --studio-board-nav-lane-bg: var(--studio-board-nav-lane-progress-bg);
+    --studio-board-nav-lane-border: var(--studio-board-nav-lane-progress-border);
+  }
+
+  &--human-review {
+    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-human-review-fg);
+    --studio-board-nav-lane-bg: var(--studio-board-nav-lane-human-review-bg);
+    --studio-board-nav-lane-border: var(--studio-board-nav-lane-human-review-border);
+  }
 }

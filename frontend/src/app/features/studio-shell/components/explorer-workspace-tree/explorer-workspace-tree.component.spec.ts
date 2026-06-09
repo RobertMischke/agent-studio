@@ -35,8 +35,15 @@ function workspace(
   return { id, displayName, sortOrder, isDefault: id === 'ws-default', color: null, createdAt: '2026-01-01T00:00:00Z', projects };
 }
 
-function row(name: string): ExplorerProjectRow {
-  return { name, initial: name[0]?.toUpperCase() ?? '?', color: '#888', totalJobs: 0, isActive: false };
+function row(name: string, over: Partial<ExplorerProjectRow> = {}): ExplorerProjectRow {
+  return {
+    name,
+    initial: name[0]?.toUpperCase() ?? '?',
+    color: '#888',
+    totalJobs: 0,
+    isActive: false,
+    ...over,
+  };
 }
 
 function mount() {
@@ -50,6 +57,8 @@ function mount() {
   });
   return TestBed.createComponent(ExplorerWorkspaceTreeComponent);
 }
+
+const noop = (): void => { return; };
 
 describe('ExplorerWorkspaceTreeComponent', () => {
   it('constructs and wires its injected services', () => {
@@ -117,6 +126,30 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     expect(groups[0].projects.map(p => p.name)).toEqual(['Alpha', 'Beta']);
   });
 
+  it('renders Board lane counters with a descriptive aria label', () => {
+    const fixture = mount();
+    fixture.componentRef.setInput('registryWorkspaces', []);
+    fixture.componentRef.setInput('projectRows', [
+      row('Alpha', { laneCounts: { ready: 3, progress: 2, humanReview: 5 } }),
+    ]);
+    fixture.componentRef.setInput('expandedProjects', new Set(['Alpha']));
+
+    fixture.detectChanges();
+
+    const root: HTMLElement = fixture.nativeElement;
+    const board = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-Alpha"]');
+    const counts = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-counts-Alpha"]');
+    const ready = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-count-ready-Alpha"]');
+    const progress = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-count-progress-Alpha"]');
+    const review = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-count-human-review-Alpha"]');
+
+    expect(board?.getAttribute('aria-label')).toBe('Board, 3 ready, 2 in progress, 5 human review');
+    expect(counts?.getAttribute('aria-label')).toBe('3 ready, 2 in progress, 5 human review');
+    expect(ready?.textContent?.trim()).toBe('3');
+    expect(progress?.textContent?.trim()).toBe('2');
+    expect(review?.textContent?.trim()).toBe('5');
+  });
+
   it('right-click opens a text-only Rename menu that starts the inline rename', () => {
     const fixture = mount();
     const cmp = fixture.componentInstance;
@@ -126,7 +159,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     fixture.componentRef.setInput('projectRows', [row('Alpha')]);
 
     const g = cmp.groups()[0];
-    const ev = { preventDefault: () => {}, clientX: 12, clientY: 34 } as MouseEvent;
+    const ev = { preventDefault: noop, clientX: 12, clientY: 34 } as MouseEvent;
     cmp.openWsContextMenu(ev, g);
 
     expect(cmp.wsContextMenu()).toEqual({ id: 'ws-default', x: 12, y: 34 });
@@ -204,11 +237,11 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     ]);
     fixture.componentRef.setInput('projectRows', [row('Alpha')]);
 
-    const emitted: Array<{ projectId: string; displayName: string; shortCode: string | null }> = [];
+    const emitted: { projectId: string; displayName: string; shortCode: string | null }[] = [];
     cmp.deleteProject.subscribe(v => emitted.push(v));
     cmp.onProjectContextMenu({
-      preventDefault() {},
-      stopPropagation() {},
+      preventDefault: noop,
+      stopPropagation: noop,
       clientX: 1,
       clientY: 2,
     } as unknown as MouseEvent, cmp.groups()[0].projects[0]);
@@ -234,7 +267,7 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
   }
 
   const dragEvent = () =>
-    ({ effectAllowed: '', dropEffect: '', setData() {} });
+    ({ effectAllowed: '', dropEffect: '', setData: noop });
 
   it('attaches the registry projectId + owning workspaceId to matched nodes', () => {
     const fixture = mount();
@@ -261,14 +294,14 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
     const sideGroup = groups[1];         // ws-2
 
     const dt = dragEvent();
-    cmp.onDragStart({ dataTransfer: dt, preventDefault() {} } as unknown as DragEvent, alpha);
+    cmp.onDragStart({ dataTransfer: dt, preventDefault: noop } as unknown as DragEvent, alpha);
     expect(cmp.projectDrag.draggingProjectId()).toBe('PROJ-Alpha');
     expect(cmp.canDropOnWorkspace('ws-2')).toBe(true);
     expect(cmp.canDropOnWorkspace('ws-default')).toBe(false); // same workspace = no-op
 
     let emitted: { projectId: string; targetWorkspaceId: string } | null = null;
     const sub = cmp.projectDrop.subscribe(e => (emitted = e));
-    cmp.onWorkspaceDrop({ preventDefault() {}, dataTransfer: dt } as unknown as DragEvent, sideGroup);
+    cmp.onWorkspaceDrop({ preventDefault: noop, dataTransfer: dt } as unknown as DragEvent, sideGroup);
     sub.unsubscribe();
 
     expect(emitted).toEqual({ projectId: 'PROJ-Alpha', targetWorkspaceId: 'ws-2' });
@@ -283,11 +316,11 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
 
     const groups = cmp.groups();
     const alpha = groups[0].projects[0]; // ws-default
-    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault() {} } as unknown as DragEvent, alpha);
+    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault: noop } as unknown as DragEvent, alpha);
 
     let emitted = false;
     const sub = cmp.projectDrop.subscribe(() => (emitted = true));
-    cmp.onWorkspaceDrop({ preventDefault() {}, dataTransfer: dragEvent() } as unknown as DragEvent, groups[0]);
+    cmp.onWorkspaceDrop({ preventDefault: noop, dataTransfer: dragEvent() } as unknown as DragEvent, groups[0]);
     sub.unsubscribe();
 
     expect(emitted).toBe(false);
@@ -314,7 +347,7 @@ describe('ExplorerWorkspaceTreeComponent — project drag-and-drop (F46 workspac
     twoWorkspaces(cmp, fixture);
 
     const alpha = cmp.groups()[0].projects[0];
-    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault() {} } as unknown as DragEvent, alpha);
+    cmp.onDragStart({ dataTransfer: dragEvent(), preventDefault: noop } as unknown as DragEvent, alpha);
     expect(cmp.canDropOnWorkspace('__unassigned__')).toBe(false);
     expect(cmp.canDropOnWorkspace('__all__')).toBe(false);
   });

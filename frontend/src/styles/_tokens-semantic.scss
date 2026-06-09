@@ -191,6 +191,18 @@
   --lane-archive:      #6e6e6e;
   --lane-failed:       var(--color-mocha-red);
 
+  // Board nav lane counters. Subtle, titlebar/sidebar-grade pigments distinct
+  // from the saturated kanban lane colours so the Explorer stays calm.
+  --studio-board-nav-lane-ready-fg:        var(--color-slate-300);
+  --studio-board-nav-lane-ready-bg:        color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 12%, transparent);
+  --studio-board-nav-lane-ready-border:    color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 24%, transparent);
+  --studio-board-nav-lane-progress-fg:     var(--studio-accent-warn-strong);
+  --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 12%, transparent);
+  --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 24%, transparent);
+  --studio-board-nav-lane-human-review-fg: var(--studio-accent-success-strong);
+  --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 12%, transparent);
+  --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 24%, transparent);
+
   // ---------------------------------------------------------------------------
   // Diff palette — unified diff & side-by-side renderers (F18 / F53)
   // ---------------------------------------------------------------------------
@@ -604,6 +616,16 @@
   --lane-completed:    var(--color-green-700);
   --lane-archive:      var(--color-grey-850);
   --lane-failed:       var(--color-red-700);
+
+  --studio-board-nav-lane-ready-fg:        var(--color-slate-600);
+  --studio-board-nav-lane-ready-bg:        color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 10%, transparent);
+  --studio-board-nav-lane-ready-border:    color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 22%, transparent);
+  --studio-board-nav-lane-progress-fg:     var(--color-amber-700);
+  --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 10%, transparent);
+  --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 22%, transparent);
+  --studio-board-nav-lane-human-review-fg: var(--color-green-700);
+  --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 10%, transparent);
+  --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 22%, transparent);
 
   // Diff palette — soft pastel tint + dark text so diff content stays legible
   // (WCAG AA against --diff-add-bg / --diff-rem-bg). F18 / F53.
