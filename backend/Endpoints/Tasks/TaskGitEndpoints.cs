@@ -290,18 +290,13 @@ public static class TaskGitEndpoints
     /// and the persisted attribution chain + auto-commit. Shared by the
     /// <c>/commits</c> list, drill-down validation, and the combined files/diff
     /// endpoints so every surface agrees on which commits belong to the job.
+    /// Delegates to <see cref="JobCommitsAggregation.Build"/> - the single
+    /// binding reused by the task-detail endpoint (ASS-1712) so both surfaces
+    /// agree on a job's commit set.
     /// </summary>
     private static TaskCommitsAggregate BuildJobCommitsAggregate(
         TaskInfo info, TaskSessionLog sessions, string jobId, string? watchPath, GitService git)
-    {
-        var events = sessions.ReadSessionEvents(jobId, watchPath);
-        var lines = CliOutputLogParser.ParseFile(TaskPaths.CliOutputLog(info.FolderPath));
-        var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-        var taskRunCommits = git.GetTaskRunCommits(jobId, watchPath);
-        return TaskCommitsAggregator.Aggregate(info, timeline.Runs,
-            (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after),
-            taskRunCommits);
-    }
+        => JobCommitsAggregation.Build(info, sessions, jobId, watchPath, git);
 
     private static bool IsKnownJobCommit(
         TaskInfo info, TaskSessionLog sessions,

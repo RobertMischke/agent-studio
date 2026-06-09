@@ -98,10 +98,17 @@ public static class TaskCrudEndpoints
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, TaskScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration, GitService git, TaskSessionLog sessions) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
             if (detail is null) return Results.NotFound();
+            // ASS-1712: an in-progress per-task-worktree task's persisted commits[]
+            // chain collapses to empty/singular (per-run ranges track the shared
+            // develop HEAD; attribution only stamps once it leaves 3-progress).
+            // Fold the reconstructed task-branch history into TaskInfo.Commits so
+            // the git-pane chain + header badge show the full history, not one
+            // commit. No-op for any other lane / an already-populated chain.
+            detail = JobCommitsAggregation.WithReconstructedInProgressCommits(detail, sessions, watchPath, git);
             var tokenLookup = BuildTokenLookup(new[] { detail.Info }, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(new[] { detail.Info }, configuration);
             return Results.Ok(WithRuntime(detail, router, runners, tokenLookup, verdictLookup));
