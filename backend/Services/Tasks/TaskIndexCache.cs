@@ -131,7 +131,9 @@ public sealed class TaskIndexCache
                 // happens during the disk walk gets stomped by `_dirty = false`
                 // and the cache serves stale data for the rest of the safety TTL.
                 var genBefore = Volatile.Read(ref _invalidationGen);
-                var fresh = _scanner.ScanAllJobsRaw();
+                var fresh = _scanner.ScanAllJobsRaw()
+                    .Where(j => !string.Equals(j.State, TaskStates.Archive, StringComparison.Ordinal))
+                    .ToList();
                 lock (_lock)
                 {
                     _snapshot = fresh.ToImmutableList();

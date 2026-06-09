@@ -360,7 +360,10 @@ public class JobsEndpointPerfTests : IDisposable
             new BusBackedAdHocUsageReader(store, config),
             new BusBackedTokenSummaryReader(store, config),
             new BusBackedWorkspaceTimelineReader(store, config),
-            new BusBackedProjectTokenUsageReader(store, config, BuildScannerFor(workspace)));
+            new BusBackedProjectTokenUsageReader(
+                store,
+                config,
+                new JobStatsMetadataCache(BuildScannerFor(workspace), config, NullLogger<JobStatsMetadataCache>.Instance)));
     }
 
     private static TaskScannerService BuildScannerFor(string watchPath)

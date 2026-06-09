@@ -217,6 +217,7 @@ builder.Services.AddSingleton<TaskWatcherService>();
 // events and by mutation services. Wired into TaskScannerService below via
 // SetIndexCache so existing ScanAllJobs callers transparently benefit.
 builder.Services.AddSingleton<TaskIndexCache>();
+builder.Services.AddSingleton<JobStatsMetadataCache>();
 // TaskAccess layer (ADR-0024 phase 2-4): the typed façade in front of
 // TaskScannerService / TaskMutationService / TaskStateMachine /
 // TaskTransitionService. Outside callers (endpoints, runner, supervisor)
@@ -602,8 +603,12 @@ jobHubBroadcaster.AttachMoveSource(app.Services.GetRequiredService<TaskTransitio
 // Without this two-line bridge the cache exists but nothing fills or
 // invalidates it, and ScanAllJobs falls back to per-call disk walks.
 var jobIndexCache = app.Services.GetRequiredService<TaskIndexCache>();
-app.Services.GetRequiredService<TaskScannerService>().SetIndexCache(jobIndexCache);
+var jobStatsMetadataCache = app.Services.GetRequiredService<JobStatsMetadataCache>();
+var taskScanner = app.Services.GetRequiredService<TaskScannerService>();
+taskScanner.SetIndexCache(jobIndexCache);
+taskScanner.SetStatsMetadataCache(jobStatsMetadataCache);
 watcher.OnJobChanged += _ => jobIndexCache.Invalidate(TaskIndexCache.InvalidationSource.External);
+watcher.OnJobChanged += _ => jobStatsMetadataCache.Invalidate();
 
 // TaskAccess layer (ADR-0024): force a synchronous first index read so
 // boot-time disk problems surface here rather than on the first HTTP

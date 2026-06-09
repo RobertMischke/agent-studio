@@ -84,7 +84,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
             AgentOutcome = "Done"
         });
 
-        var (recovery, _) = BuildRecovery();
+        var (recovery, scanner) = BuildRecovery();
         var decisions = await recovery.RecoverAsync();
 
         Assert.False(Directory.Exists(jobFolder), "job folder must move out of 3-progress");
@@ -166,7 +166,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         File.WriteAllText(Path.Combine(_repoRoot, "beta.txt"), "agent beta");
         File.SetLastWriteTimeUtc(Path.Combine(_repoRoot, "beta.txt"), runStartedAt.AddSeconds(30));
 
-        var (recovery, _) = BuildRecovery();
+        var (recovery, scanner) = BuildRecovery();
         var decisions = await recovery.RecoverAsync();
 
         var commitDecision = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanCommitted);

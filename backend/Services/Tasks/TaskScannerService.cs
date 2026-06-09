@@ -35,6 +35,7 @@ public class TaskScannerService : ITaskScanner
     /// scanner needs cache for hot-path reads).
     /// </summary>
     private TaskIndexCache? _indexCache;
+    private JobStatsMetadataCache? _statsMetadataCache;
 
     /// <summary>
     /// Watch paths that resolved to a non-existent folder and have already
@@ -70,6 +71,8 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     public void SetIndexCache(TaskIndexCache cache) => _indexCache = cache;
 
+    public void SetStatsMetadataCache(JobStatsMetadataCache cache) => _statsMetadataCache = cache;
+
     /// <summary>
     /// Invalidates the in-memory snapshot, if a cache is wired. Mutation
     /// services call this right after a folder move / task.json rewrite so
@@ -77,8 +80,11 @@ public class TaskScannerService : ITaskScanner
     /// the FileSystemWatcher's debounce window. No-op when no cache is
     /// registered (test fixtures that build the scanner directly).
     /// </summary>
-    public void InvalidateCache() =>
+    public void InvalidateCache()
+    {
         _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        _statsMetadataCache?.Invalidate();
+    }
 
     public List<WatchPathEntry> GetWatchPaths()
     {
@@ -404,7 +410,62 @@ public class TaskScannerService : ITaskScanner
                 .First();
         }
 
+        if (_indexCache != null)
+        {
+            resolved = FindArchivedJobs(jobId, watchPath);
+            if (resolved.Count == 1) return resolved[0];
+            if (resolved.Count > 1)
+            {
+                _logger.LogWarning("Duplicate archived job id {JobId} found in {Count} locations; returning first archive match", jobId, resolved.Count);
+                return resolved.First();
+            }
+        }
+
         return null;
+    }
+
+    private List<TaskInfo> FindArchivedJobs(string jobId, string? watchPath)
+    {
+        var matches = new List<TaskInfo>();
+        if (string.IsNullOrWhiteSpace(jobId)) return matches;
+
+        foreach (var entry in GetWatchPaths())
+        {
+            if (!string.IsNullOrWhiteSpace(watchPath)
+                && !string.Equals(entry.Path, watchPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
+
+            foreach (var jobDir in EnumerateArchiveCandidateDirs(entry.Path))
+            {
+                var info = ScanJobFolder(jobDir, entry, TaskStates.Archive);
+                if (info == null) continue;
+                if (!string.Equals(info.State, TaskStates.Archive, StringComparison.Ordinal)) continue;
+                if (string.Equals(info.Id, jobId, StringComparison.Ordinal)) matches.Add(info);
+            }
+        }
+
+        return matches;
+    }
+
+    private static IEnumerable<string> EnumerateArchiveCandidateDirs(string watchPath)
+    {
+        var flatJobs = TaskStorageLayout.EnumerateJobDirs(watchPath).ToList();
+        if (flatJobs.Count > 0)
+        {
+            foreach (var jobDir in flatJobs) yield return jobDir;
+            yield break;
+        }
+
+        var archiveDir = Path.Combine(watchPath, TaskStates.Archive);
+        if (!Directory.Exists(archiveDir)) yield break;
+        foreach (var jobDir in Directory.EnumerateDirectories(archiveDir))
+        {
+            if (Path.GetFileName(jobDir).StartsWith('_')) continue;
+            yield return jobDir;
+        }
     }
 
     public TaskDetail? GetJobDetail(string jobId, string? watchPath = null)

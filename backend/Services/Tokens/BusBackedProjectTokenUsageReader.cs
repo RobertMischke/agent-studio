@@ -35,13 +35,16 @@ public sealed class BusBackedProjectTokenUsageReader
 {
     private readonly AgentMessageBusStore _store;
     private readonly IConfiguration _config;
-    private readonly TaskScannerService _scanner;
+    private readonly JobStatsMetadataCache _jobStatsMetadata;
 
-    public BusBackedProjectTokenUsageReader(AgentMessageBusStore store, IConfiguration config, TaskScannerService scanner)
+    public BusBackedProjectTokenUsageReader(
+        AgentMessageBusStore store,
+        IConfiguration config,
+        JobStatsMetadataCache jobStatsMetadata)
     {
         _store = store;
         _config = config;
-        _scanner = scanner;
+        _jobStatsMetadata = jobStatsMetadata;
     }
 
     public ProjectTokenUsageSummary BuildSummary(string projectName, string watchPath, DateTime? nowUtc = null)
@@ -118,14 +121,5 @@ public sealed class BusBackedProjectTokenUsageReader
     }
 
     private IReadOnlyDictionary<string, TaskInfo> BuildJobsById(string watchPath)
-    {
-        var map = new Dictionary<string, TaskInfo>(StringComparer.Ordinal);
-        if (string.IsNullOrWhiteSpace(watchPath)) return map;
-        foreach (var job in _scanner.ScanAllJobs())
-        {
-            if (!string.Equals(job.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase)) continue;
-            map[job.Id] = job;
-        }
-        return map;
-    }
+        => _jobStatsMetadata.JobsById(watchPath);
 }

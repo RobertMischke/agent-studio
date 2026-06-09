@@ -122,6 +122,26 @@ public class TaskIndexCacheTests : IDisposable
     }
 
     [Fact]
+    public void CachedSnapshot_ExcludesArchive_ButRawAndLazyFindStillResolveIt()
+    {
+        WriteJob(TaskStates.Ready, "job-1", "First");
+        WriteJob(TaskStates.Archive, "archived-1", "Archived");
+
+        var raw = _scanner.ScanAllJobsRaw();
+        Assert.Equal(2, raw.Count);
+        Assert.Contains(raw, j => j.State == TaskStates.Archive);
+
+        var cached = _scanner.ScanAllJobs();
+        Assert.Single(cached);
+        Assert.DoesNotContain(cached, j => j.State == TaskStates.Archive);
+
+        var archived = _scanner.FindJob("archived-1", _watchPath);
+        Assert.NotNull(archived);
+        Assert.Equal(TaskStates.Archive, archived!.State);
+        Assert.Equal("Archived", archived.Title);
+    }
+
+    [Fact]
     public void WithoutCache_ScanAllJobs_AlwaysHitsDisk()
     {
         // Build a scanner without a cache (mimics test fixtures that don't
