@@ -350,6 +350,27 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void PrepareOrReuse_ReAttachesExistingBranch_AfterOrphanDirectoryAtCanonicalPath()
+    {
+        var (repo, life) = SeedWithDevelop("por-orphan");
+        var wtRoot = WorktreeRoot();
+        var taskId = "task-orphan";
+        var orphanPath = Path.Combine(wtRoot, taskId);
+
+        Assert.Equal(0, RunGit(repo, $"branch {WorktreeTaskLifecycle.BranchFor(taskId)} develop").Code);
+        Directory.CreateDirectory(orphanPath);
+        File.WriteAllText(Path.Combine(orphanPath, "orphan.txt"), "stale worktree directory");
+
+        var prep = life.PrepareOrReuse(repo, taskId, "develop", wtRoot);
+
+        Assert.True(prep.Success, prep.Error);
+        Assert.Equal(WorktreeTaskLifecycle.BranchFor(taskId), prep.Branch);
+        Assert.Equal(orphanPath, prep.WorktreePath);
+        Assert.False(File.Exists(Path.Combine(orphanPath, "orphan.txt")));
+        Assert.Equal(WorktreeTaskLifecycle.BranchFor(taskId), RunGit(prep.WorktreePath!, "branch --show-current").Out.Trim());
+    }
+
+    [Fact]
     public void CommitInWorktree_ThenIntegrate_BringsTaskCommitToDevelop()
     {
         // Fix-acceptance #3: after a worktree run the task branch has >= 1 commit

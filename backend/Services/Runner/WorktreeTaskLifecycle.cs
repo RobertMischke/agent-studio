@@ -137,7 +137,7 @@ public sealed class WorktreeTaskLifecycle
         {
             // A stale dir at the canonical path (registered-but-orphaned, or a
             // leftover from a partial teardown) would block the attach; clear it.
-            if (Directory.Exists(path)) _git.WorktreeRemove(repoRoot, path);
+            ClearStaleCanonicalWorktreePath(repoRoot, taskId, branch, path);
             var attach = _git.WorktreeAddExisting(repoRoot, path, branch);
             if (attach.Success)
             {
@@ -152,12 +152,7 @@ public sealed class WorktreeTaskLifecycle
         //    A stale dir at the canonical path (leftover from a crashed/partial
         //    run whose branch was already pruned/deleted) makes `git worktree
         //    add` fail with "already exists"; clear it so the fresh cut succeeds.
-        if (Directory.Exists(path))
-        {
-            _git.WorktreeRemove(repoRoot, path);
-            if (Directory.Exists(path))
-                try { Directory.Delete(path, recursive: true); } catch { /* best-effort */ }
-        }
+        ClearStaleCanonicalWorktreePath(repoRoot, taskId, branch, path);
         return Prepare(repoRoot, taskId, integrationBranch, worktreeRoot);
     }
 
@@ -363,5 +358,83 @@ public sealed class WorktreeTaskLifecycle
             System.Security.Cryptography.SHA1.HashData(
                 System.Text.Encoding.UTF8.GetBytes(taskId)))[..8].ToLowerInvariant();
         return sane[..24] + "-" + hash;
+    }
+
+    private void ClearStaleCanonicalWorktreePath(string repoRoot, string taskId, string branch, string path)
+    {
+        if (!Directory.Exists(path))
+            return;
+
+        var remove = _git.WorktreeRemove(repoRoot, path);
+        if (!Directory.Exists(path))
+            return;
+
+        try
+        {
+            DeleteDirectoryWithoutFollowingReparsePoints(path);
+            if (!Directory.Exists(path))
+            {
+                _logger.LogInformation(
+                    "Deleted stale worktree directory for task {TaskId}: branch {Branch} at {Path} after git worktree remove returned {RemoveSuccess} ({RemoveError})",
+                    taskId,
+                    branch,
+                    path,
+                    remove.Success,
+                    remove.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to delete stale worktree directory for task {TaskId}: branch {Branch} at {Path} after git worktree remove returned {RemoveSuccess} ({RemoveError})",
+                taskId,
+                branch,
+                path,
+                remove.Success,
+                remove.Error);
+        }
+    }
+
+    private static void DeleteDirectoryWithoutFollowingReparsePoints(string path)
+    {
+        var attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            ClearReadOnly(path, attributes);
+            Directory.Delete(path);
+            return;
+        }
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path))
+        {
+            var entryAttributes = File.GetAttributes(entry);
+            if ((entryAttributes & FileAttributes.Directory) == 0)
+            {
+                ClearReadOnly(entry, entryAttributes);
+                File.Delete(entry);
+                continue;
+            }
+
+            if ((entryAttributes & FileAttributes.ReparsePoint) != 0)
+            {
+                ClearReadOnly(entry, entryAttributes);
+                Directory.Delete(entry);
+                continue;
+            }
+
+            DeleteDirectoryWithoutFollowingReparsePoints(entry);
+        }
+
+        ClearReadOnly(path, attributes);
+        Directory.Delete(path);
+    }
+
+    private static void ClearReadOnly(string path, FileAttributes attributes)
+    {
+        if ((attributes & FileAttributes.ReadOnly) == 0)
+            return;
+
+        File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
     }
 }
