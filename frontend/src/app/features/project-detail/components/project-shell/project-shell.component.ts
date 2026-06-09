@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { SectionHeaderComponent } from '../../../../components/section-header/section-header.component';
+import { TreeRowComponent } from '../../../../components/tree-row/tree-row.component';
 import {
   PROJECT_RAIL_ITEMS,
   PROJECT_RAIL_PARENT_KEYS,
@@ -31,6 +33,7 @@ export interface ProjectRailGroupView {
 @Component({
   selector: 'app-project-shell',
   standalone: true,
+  imports: [SectionHeaderComponent, TreeRowComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-shell.component.html',
   styleUrl: './project-shell.component.scss',
@@ -98,10 +101,11 @@ export class ProjectShellComponent {
     return this.collapsedGroups().has(id);
   }
 
-  toggleGroup(id: ProjectRailGroup): void {
+  /** Adapter for the shared section-header, whose `collapsedChange` emits the next state. */
+  setGroupCollapsed(id: ProjectRailGroup, collapsed: boolean): void {
     const next = new Set(this.collapsedGroups());
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (collapsed) next.add(id);
+    else next.delete(id);
     this.collapsedGroups.set(next);
   }
 

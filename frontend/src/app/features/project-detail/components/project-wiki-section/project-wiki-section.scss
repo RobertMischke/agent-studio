@@ -1,6 +1,21 @@
-:host { display: block; }
+// Fill the host's flex slot so the doc browser uses the panel's full height
+// top-to-bottom (no offset short box). Degrades gracefully in a non-flex
+// parent: `flex` is ignored and the section sizes to its content.
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
-.pwiki__head { display: flex; align-items: baseline; gap: 10px; }
+.pwiki {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pwiki__head { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; }
 .pwiki__title { margin: 0; }
 .pwiki__icon { margin-right: 6px; }
 .pwiki__count {
@@ -14,7 +29,10 @@
   grid-template-columns: minmax(220px, 320px) 1fr;
   gap: 14px;
   margin-top: 12px;
-  align-items: start;
+  // Fill the remaining height; let the two columns stretch so the tree and
+  // viewer own their own scroll instead of growing the whole section.
+  flex: 1 1 auto;
+  min-height: 0;
 }
 @media (max-width: 880px) {
   .pwiki__body { grid-template-columns: 1fr; }
@@ -24,7 +42,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 70vh;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -71,12 +89,16 @@
 
 .pwiki__viewer {
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--studio-bg-overlay);
   border: 1px solid color-mix(in srgb, var(--studio-fg) 10%, transparent);
   border-radius: 6px;
   overflow: hidden;
 }
 .pwiki__viewer-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -97,11 +119,12 @@
 }
 .pwiki__viewer-body {
   display: block;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 12px 16px;
   color: var(--studio-fg);
   font-size: 0.88rem;
   line-height: 1.55;
-  max-height: 70vh;
   overflow-y: auto;
 }
 .pwiki__viewer-empty { margin: 0; padding: 24px 16px; }

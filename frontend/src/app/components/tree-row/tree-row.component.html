@@ -5,11 +5,13 @@
         [class.tree-row--child]="level() === 'child'"
         [attr.data-testid]="testid()"
         [attr.aria-label]="ariaLabel()"
+        [attr.aria-current]="ariaCurrent()"
         [attr.aria-expanded]="chevron() === null ? null : (chevron() === 'expanded')"
         (click)="onSelect($event)"
         (dblclick)="onSecondary($event)">
   @if (chevron(); as c) {
     <span class="tree-row__chev"
+          [attr.data-testid]="chevronTestid()"
           [attr.aria-label]="c === 'expanded' ? 'Collapse' : 'Expand'"
           (click)="onChevronClick($event)" tabindex="0" (keydown.enter)="onChevronClick($event)" (keydown.space)="onChevronClick($event); $event.preventDefault()">
       <app-studio-icon [name]="c === 'expanded' ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>

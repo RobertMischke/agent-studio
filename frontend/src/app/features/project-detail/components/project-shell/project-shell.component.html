@@ -18,49 +18,35 @@
   <div class="proj-shell__body">
     <aside class="proj-shell__rail" data-testid="project-shell-rail" aria-label="Project sections">
       @for (group of railGroups(); track group.id) {
-        <button class="proj-shell__rail-group"
-                type="button"
-                [attr.data-testid]="'project-shell-group-' + group.id"
-                [attr.aria-expanded]="!isGroupCollapsed(group.id)"
-                (click)="toggleGroup(group.id)">
-          <span class="proj-shell__caret" aria-hidden="true">{{ isGroupCollapsed(group.id) ? '▸' : '▾' }}</span>
-          <span class="proj-shell__rail-group-label">{{ group.label }}</span>
-        </button>
+        <app-section-header
+          [collapsible]="true"
+          [collapsed]="isGroupCollapsed(group.id)"
+          [title]="group.label"
+          [testid]="'project-shell-group-' + group.id"
+          (collapsedChange)="setGroupCollapsed(group.id, $event)" />
         @if (!isGroupCollapsed(group.id)) {
           @for (node of group.nodes; track node.item.key) {
-            <div class="proj-shell__rail-row">
-              @if (node.children.length > 0) {
-                <button class="proj-shell__twisty"
-                        type="button"
-                        [attr.data-testid]="'project-shell-twisty-' + node.item.key"
-                        [attr.aria-label]="(isExpanded(node.item.key) ? 'Collapse ' : 'Expand ') + node.item.label"
-                        [attr.aria-expanded]="isExpanded(node.item.key)"
-                        (click)="toggleParent(node.item.key)">
-                  {{ isExpanded(node.item.key) ? '▾' : '▸' }}
-                </button>
-              } @else {
-                <span class="proj-shell__twisty-spacer" aria-hidden="true"></span>
-              }
-              <button class="proj-shell__rail-item"
-                      type="button"
-                      [class.proj-shell__rail-item--active]="node.item.key === activeRail()"
-                      [class.proj-shell__rail-item--parent]="node.children.length > 0"
-                      [attr.data-testid]="'project-shell-rail-' + node.item.key"
-                      [attr.aria-current]="node.item.key === activeRail() ? 'page' : null"
-                      (click)="onRailClick(node.item)">
-                <span class="proj-shell__rail-label">{{ node.item.label }}</span>
-              </button>
-            </div>
+            <app-tree-row
+              level="root"
+              [label]="node.item.label"
+              [chevron]="node.children.length > 0 ? (isExpanded(node.item.key) ? 'expanded' : 'collapsed') : null"
+              [chevronTestid]="node.children.length > 0 ? ('project-shell-twisty-' + node.item.key) : null"
+              [active]="node.item.key === activeRail()"
+              [ariaCurrent]="node.item.key === activeRail() ? 'page' : null"
+              [ariaLabel]="node.item.label"
+              [testid]="'project-shell-rail-' + node.item.key"
+              (chevronClick)="toggleParent(node.item.key)"
+              (selectRequest)="onRailClick(node.item)" />
             @if (node.children.length > 0 && isExpanded(node.item.key)) {
               @for (child of node.children; track child.key) {
-                <button class="proj-shell__rail-item proj-shell__rail-item--child"
-                        type="button"
-                        [class.proj-shell__rail-item--active]="child.key === activeRail()"
-                        [attr.data-testid]="'project-shell-rail-' + child.key"
-                        [attr.aria-current]="child.key === activeRail() ? 'page' : null"
-                        (click)="onRailClick(child)">
-                  <span class="proj-shell__rail-label">{{ child.label }}</span>
-                </button>
+                <app-tree-row
+                  level="child"
+                  [label]="child.label"
+                  [active]="child.key === activeRail()"
+                  [ariaCurrent]="child.key === activeRail() ? 'page' : null"
+                  [ariaLabel]="child.label"
+                  [testid]="'project-shell-rail-' + child.key"
+                  (selectRequest)="onRailClick(child)" />
               }
             }
           }

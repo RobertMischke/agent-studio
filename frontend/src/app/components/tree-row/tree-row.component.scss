@@ -114,6 +114,13 @@
  * indented rows — projects and lane children are visually
  * indistinguishable.
  */
+// Base indents for use OUTSIDE the studio shell (e.g. the project-shell
+// rendered in a body-portaled overlay, where no `.studio` ancestor exists
+// and so the scoped rules below never match). Harmless inside `.studio`:
+// the scoped rules carry the same values at higher specificity.
+.tree-row--root  { padding-left: 8px;  }
+.tree-row--child { padding-left: 44px; }
+
 .studio .tree-row--root  { padding-left: 8px;  }
 .studio .tree-row--child { padding-left: 44px; font-size: 12px; }
 

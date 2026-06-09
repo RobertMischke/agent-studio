@@ -1,163 +1,103 @@
-:host { display: block; height: 100%; overflow: hidden; }
+:host { display: block; height: 100%; min-height: 0; overflow: hidden; }
 
 .proj-shell {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #181825;
-  color: #cdd6f4;
+  min-height: 0;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg);
 }
 
+// -------------------------------------------------------------------------
+// Header — connects flush to the body via a single border, no gap below.
+// -------------------------------------------------------------------------
 .proj-shell__head {
-  padding: 14px 22px;
-  border-bottom: 1px solid #313244;
-  background: #1e1e2e;
+  flex: 0 0 auto;
+  padding: var(--studio-spacing-2) var(--studio-spacing-4);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg-sidebar);
 }
 .proj-shell__title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--studio-spacing-3);
   flex-wrap: wrap;
 }
 .proj-shell__back {
   background: transparent;
-  color: #a6adc8;
+  color: var(--studio-fg-dim);
   border: 1px solid transparent;
-  padding: 4px 10px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
   font-size: 0.82rem;
 }
-.proj-shell__back:hover { background: #313244; color: #cdd6f4; }
-.proj-shell__title { margin: 0; font-size: 1.15rem; color: #f8fafc; font-weight: 600; }
+.proj-shell__back:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+.proj-shell__title { margin: 0; font-size: 1.05rem; color: var(--studio-fg-strong); font-weight: 600; }
 .proj-shell__chip {
   font-size: 0.72rem;
   letter-spacing: 0.02em;
-  padding: 2px 8px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border-radius: 999px;
-  background: #313244;
-  color: #bac2de;
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-dim);
 }
 .proj-shell__spacer { flex: 1; }
 .proj-shell__feed {
-  background: rgba(249, 226, 175, 0.14);
-  color: #fcd34d;
-  border: 1px solid rgba(249, 226, 175, 0.40);
-  padding: 5px 12px;
+  background: color-mix(in srgb, var(--studio-accent-warn) 14%, transparent);
+  color: var(--studio-accent-warn);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 40%, transparent);
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
   font-size: 0.80rem;
 }
-.proj-shell__feed:hover { background: rgba(249, 226, 175, 0.22); }
+.proj-shell__feed:hover { background: color-mix(in srgb, var(--studio-accent-warn) 22%, transparent); }
 
+// -------------------------------------------------------------------------
+// Body — flush flex: rail + panel abut with no padding/gap so nothing
+// floats, and the rail sits at the editor's left edge. When the workspace
+// sidebar is hidden the editor expands left and the rail connects
+// seamlessly to the activity bar (no empty strip).
+// -------------------------------------------------------------------------
 .proj-shell__body {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 22px;
-  padding: 22px 26px 32px;
-  overflow: auto;
-  flex: 1;
+  display: flex;
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
 
+// Rail — mirrors the workspace `.studio-sidebar`: a flush column on the
+// sidebar surface with a single right border and its own internal scroll.
+// No card (border-radius / inset margin) so it reads as one continuous nav
+// with the workspace tree, using the SAME section-header + tree-row controls.
 .proj-shell__rail {
-  background: #1e1e2e;
-  border: 1px solid #313244;
-  border-radius: 8px;
-  padding: 10px;
-  align-self: start;
-  position: sticky;
-  top: 0;
+  flex: 0 0 auto;
+  width: 220px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-/* Collapsible main-segment header. A button so the whole label toggles. */
-.proj-shell__rail-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin: 8px 0 4px;
-  padding: 2px 6px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #6c7086;
-  font: inherit;
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  text-align: left;
-  cursor: pointer;
-}
-.proj-shell__rail-group:first-child { margin-top: 4px; }
-.proj-shell__rail-group:hover { color: #9399b2; }
-.proj-shell__caret {
-  width: 12px;
-  text-align: center;
-  font-size: 0.6rem;
-  line-height: 1;
+  background: var(--studio-bg-sidebar);
+  border-right: 1px solid var(--studio-border);
+  overflow-y: auto;
+  padding: var(--studio-spacing-1) 0;
 }
 
-/* Row wrapper pairs the disclosure twisty with a tree-parent label. */
-.proj-shell__rail-row {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-}
-.proj-shell__twisty {
-  flex: 0 0 auto;
-  width: 20px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #6c7086;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.62rem;
-  line-height: 1;
-}
-.proj-shell__twisty:hover { background: #313244; color: #cdd6f4; }
-.proj-shell__twisty-spacer { flex: 0 0 auto; width: 20px; }
-
-.proj-shell__rail-item {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: #bac2de;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  font-size: 0.85rem;
-}
-.proj-shell__rail-item:hover { background: #313244; color: #cdd6f4; }
-.proj-shell__rail-item--active {
-  background: #313244;
-  color: #f8fafc;
-  font-weight: 600;
-}
-.proj-shell__rail-item--parent { font-weight: 500; }
-/* Children sit indented under the twisty column; nothing on the left edge. */
-.proj-shell__rail-item--child {
-  margin-left: 22px;
-  font-size: 0.82rem;
-  color: #a6adc8;
-}
-
+// Panel — fills the remaining width and the full height top-to-bottom.
+// No boxed card (no border / radius / min-height); it owns its own scroll
+// so long panels scroll internally while doc views fill the height.
 .proj-shell__panel {
-  background: #1e1e2e;
-  border: 1px solid #313244;
-  border-radius: 8px;
-  padding: 22px 24px;
-  min-height: 240px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--studio-bg-editor);
+  padding: var(--studio-spacing-5) var(--studio-spacing-6);
 }
 
 /*
@@ -165,37 +105,45 @@
  * panel (and the placeholder header/empty state) caps every rail at one
  * shared max width, left-aligned at the panel's padding edge, so the
  * content's left edge and max width stay put as you tab between rails.
- * Replaces the per-panel one-offs — project-detail used to cap itself at
- * 760px + center while the data panels ran full-bleed, which made the
- * left edge and column width jump rail to rail. The wrapper lives in this
- * component's own template, so the cap reaches ng-content projected from
- * the hub/overlay hosts (a .proj-shell__panel > * rule could not, because
- * emulated view-encapsulation scopes it away from projected content).
+ * It is also a full-height flex column so a doc-style panel (Wiki) whose
+ * host sets `flex: 1` fills the available height instead of floating in a
+ * short box. The wrapper lives in this component's own template so the cap
+ * reaches ng-content projected from the hub/overlay hosts.
  */
 .proj-shell__panel-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   max-width: var(--studio-panel-content-max);
 }
 .proj-shell__panel-head {
-  padding-bottom: 12px;
-  border-bottom: 1px solid #313244;
-  margin-bottom: 16px;
+  flex: 0 0 auto;
+  padding-bottom: var(--studio-spacing-3);
+  border-bottom: 1px solid var(--studio-border);
+  margin-bottom: var(--studio-spacing-4);
 }
 .proj-shell__panel-title {
-  margin: 0 0 4px;
+  margin: 0 0 var(--studio-spacing-1);
   font-size: 1.05rem;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--studio-fg-strong);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--studio-spacing-2);
 }
 .proj-shell__panel-desc {
   margin: 0;
-  color: #a6adc8;
+  color: var(--studio-fg-dim);
   font-size: 0.85rem;
 }
+
 @media (max-width: 720px) {
-  .proj-shell__body { grid-template-columns: 1fr; }
-  .proj-shell__rail { position: static; }
+  .proj-shell__body { flex-direction: column; }
+  .proj-shell__rail {
+    width: auto;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--studio-border);
+  }
 }
-  

@@ -44,6 +44,10 @@ export class TreeRowComponent {
   readonly active = input(false);
   readonly level = input<'root' | 'child'>('root');
   readonly testid = input<string | null>(null);
+  /** `aria-current` value for the row button (e.g. 'page' for the active nav item). */
+  readonly ariaCurrent = input<'page' | 'true' | null>(null);
+  /** data-testid for the chevron control — lets callers assert on the disclosure twisty. */
+  readonly chevronTestid = input<string | null>(null);
 
   readonly chevronClick = output<Event>();
   readonly selectRequest = output<Event>();
